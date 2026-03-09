@@ -373,102 +373,172 @@ class PrototypeStore {
       return this.listOpenPeerWatchAlerts(filters);
     }
 
-    const limit = parseLimit(filters.limit);
+    const limit = parseOptionalLimit(filters.limit);
 
-    return this.events
-      .filter((event) => event.event_type.startsWith('peer_watch_alert_'))
-      .map((event) => createPeerWatchAlertRecord(event))
-      .filter((alert) => matchesPeerWatchAlertFilters(alert, filters))
-      .slice()
-      .sort((left, right) => Date.parse(right.ts) - Date.parse(left.ts))
-      .slice(0, limit);
+    return applyOptionalLimit(
+      this.events
+        .filter((event) => event.event_type.startsWith('peer_watch_alert_'))
+        .map((event) => createPeerWatchAlertRecord(event))
+        .filter((alert) => matchesPeerWatchAlertFilters(alert, filters))
+        .slice()
+        .sort((left, right) => Date.parse(right.ts) - Date.parse(left.ts)),
+      limit
+    );
   }
 
   listOpenPeerWatchAlerts(filters = {}) {
-    const limit = parseLimit(filters.limit);
+    const limit = parseOptionalLimit(filters.limit);
 
-    return deriveOpenPeerWatchAlerts(this.events)
-      .filter((alert) => matchesPeerWatchAlertFilters(alert, {
-        ...filters,
-        status: 'open'
-      }))
-      .slice()
-      .sort((left, right) => Date.parse(right.ts) - Date.parse(left.ts))
-      .slice(0, limit);
+    return applyOptionalLimit(
+      deriveOpenPeerWatchAlerts(this.events)
+        .filter((alert) => matchesPeerWatchAlertFilters(alert, {
+          ...filters,
+          status: 'open'
+        }))
+        .slice()
+        .sort((left, right) => Date.parse(right.ts) - Date.parse(left.ts)),
+      limit
+    );
   }
 
   listHandoffs(filters = {}) {
-    const limit = parseLimit(filters.limit);
+    const limit = parseOptionalLimit(filters.limit);
 
-    return this.events
-      .filter((event) => event.event_type.startsWith('agent_handoff_'))
-      .filter((event) => {
-        if (filters.agent_id && event.agent_id !== filters.agent_id) {
-          return false;
-        }
+    return applyOptionalLimit(
+      this.events
+        .filter((event) => event.event_type.startsWith('agent_handoff_'))
+        .filter((event) => {
+          if (filters.agent_id && event.agent_id !== filters.agent_id) {
+            return false;
+          }
 
-        if (
-          filters.correlation_id &&
-          event.correlation_id !== filters.correlation_id
-        ) {
-          return false;
-        }
+          if (
+            filters.correlation_id &&
+            event.correlation_id !== filters.correlation_id
+          ) {
+            return false;
+          }
 
-        return true;
-      })
-      .slice()
-      .sort((left, right) => Date.parse(right.ts) - Date.parse(left.ts))
-      .map((event) => ({
-        handoff_id: event.event_id,
-        ts: event.ts,
-        agent_id: event.agent_id,
-        actor_id: event.actor_id,
-        phase: event.event_type.endsWith('_completed') ? 'completed' : 'started',
-        summary: event.summary,
-        counterparty_agent_ids: event.counterparty_agent_ids,
-        evidence_refs: event.evidence_refs,
-        correlation_id: event.correlation_id
-      }))
-      .slice(0, limit);
+          return true;
+        })
+        .slice()
+        .sort((left, right) => Date.parse(right.ts) - Date.parse(left.ts))
+        .map((event) => ({
+          handoff_id: event.event_id,
+          ts: event.ts,
+          agent_id: event.agent_id,
+          actor_id: event.actor_id,
+          phase: event.event_type.endsWith('_completed') ? 'completed' : 'started',
+          status: event.event_type.endsWith('_completed') ? 'completed' : 'started',
+          severity: event.severity,
+          summary: event.summary,
+          counterparty_agent_ids: event.counterparty_agent_ids,
+          evidence_refs: event.evidence_refs,
+          correlation_id: event.correlation_id,
+          source_kind: event.source_kind
+        })),
+      limit
+    );
   }
 
   listReboots(filters = {}) {
-    const limit = parseLimit(filters.limit);
+    const limit = parseOptionalLimit(filters.limit);
 
-    return this.events
-      .filter((event) => event.event_type.startsWith('agent_reboot_'))
-      .filter((event) => {
-        if (filters.agent_id && event.agent_id !== filters.agent_id) {
-          return false;
-        }
+    return applyOptionalLimit(
+      this.events
+        .filter((event) => event.event_type.startsWith('agent_reboot_'))
+        .filter((event) => {
+          if (filters.agent_id && event.agent_id !== filters.agent_id) {
+            return false;
+          }
 
-        if (filters.severity && event.severity !== filters.severity) {
-          return false;
-        }
+          if (filters.severity && event.severity !== filters.severity) {
+            return false;
+          }
 
-        if (
-          filters.correlation_id &&
-          event.correlation_id !== filters.correlation_id
-        ) {
-          return false;
-        }
+          if (
+            filters.correlation_id &&
+            event.correlation_id !== filters.correlation_id
+          ) {
+            return false;
+          }
 
-        return true;
-      })
-      .slice()
-      .sort((left, right) => Date.parse(right.ts) - Date.parse(left.ts))
-      .map((event) => ({
-        reboot_id: event.event_id,
-        ts: event.ts,
-        agent_id: event.agent_id,
-        actor_id: event.actor_id,
-        phase: event.event_type.endsWith('_completed') ? 'completed' : 'requested',
-        severity: event.severity,
-        summary: event.summary,
-        evidence_refs: event.evidence_refs,
-        correlation_id: event.correlation_id
-      }))
-      .slice(0, limit);
+          return true;
+        })
+        .slice()
+        .sort((left, right) => Date.parse(right.ts) - Date.parse(left.ts))
+        .map((event) => ({
+          reboot_id: event.event_id,
+          ts: event.ts,
+          agent_id: event.agent_id,
+          actor_id: event.actor_id,
+          phase: event.event_type.endsWith('_completed') ? 'completed' : 'requested',
+          status: event.event_type.endsWith('_completed') ? 'completed' : 'requested',
+          severity: event.severity,
+          summary: event.summary,
+          counterparty_agent_ids: event.counterparty_agent_ids,
+          evidence_refs: event.evidence_refs,
+          correlation_id: event.correlation_id,
+          source_kind: event.source_kind
+        })),
+      limit
+    );
+  }
+
+  listIncidents(filters = {}) {
+    const limit = parseOptionalLimit(filters.limit);
+    const durationMs = filters.window ? parseWindow(filters.window) : null;
+    const nowMs = durationMs === null ? null : parseNowMs(filters.now);
+    const incidents = [];
+
+    if (!filters.kind || filters.kind === 'peer_watch_alert') {
+      incidents.push(
+        ...this.listPeerWatchAlerts({
+          agent_id: filters.agent_id,
+          severity: filters.severity,
+          status: filters.status,
+          correlation_id: filters.correlation_id,
+          limit: null
+        }).map(createIncidentFromPeerWatchAlert)
+      );
+    }
+
+    if (!filters.kind || filters.kind === 'handoff') {
+      incidents.push(
+        ...this.listHandoffs({
+          agent_id: filters.agent_id,
+          correlation_id: filters.correlation_id,
+          limit: null
+        }).map(createIncidentFromHandoff)
+      );
+    }
+
+    if (!filters.kind || filters.kind === 'reboot') {
+      incidents.push(
+        ...this.listReboots({
+          agent_id: filters.agent_id,
+          severity: filters.severity,
+          correlation_id: filters.correlation_id,
+          limit: null
+        }).map(createIncidentFromReboot)
+      );
+    }
+
+    return applyOptionalLimit(
+      incidents
+        .filter((incident) => matchesIncidentFilters(incident, filters, { durationMs, nowMs }))
+        .sort((left, right) => {
+          const rightTs = getIncidentSortMs(right);
+          const leftTs = getIncidentSortMs(left);
+
+          if (rightTs !== leftTs) {
+            return rightTs - leftTs;
+          }
+
+          return right.incident_id.localeCompare(left.incident_id);
+        }),
+      limit
+    );
   }
 
   getOfficeOverview({ now }) {
@@ -1473,6 +1543,63 @@ function createPeerWatchAlertRecord(event) {
   };
 }
 
+function createIncidentFromPeerWatchAlert(alert) {
+  return {
+    incident_id: alert.alert_id,
+    kind: 'peer_watch_alert',
+    ts: alert.ts,
+    agent_id: alert.target_agent_id,
+    actor_id: alert.observer_agent_id,
+    status: alert.status,
+    severity: alert.severity,
+    summary: alert.summary,
+    correlation_id: alert.correlation_id,
+    evidence_refs: normalizeEvidenceRefs(alert.evidence_refs),
+    counterparty_agent_ids: Array.isArray(alert.watcher_agent_ids)
+      ? alert.watcher_agent_ids.slice()
+      : [],
+    source_kind: alert.source_kind
+  };
+}
+
+function createIncidentFromHandoff(handoff) {
+  return {
+    incident_id: handoff.handoff_id,
+    kind: 'handoff',
+    ts: handoff.ts,
+    agent_id: handoff.agent_id,
+    actor_id: handoff.actor_id,
+    status: handoff.status || handoff.phase,
+    severity: handoff.severity,
+    summary: handoff.summary,
+    correlation_id: handoff.correlation_id,
+    evidence_refs: normalizeEvidenceRefs(handoff.evidence_refs),
+    counterparty_agent_ids: Array.isArray(handoff.counterparty_agent_ids)
+      ? handoff.counterparty_agent_ids.slice()
+      : [],
+    source_kind: handoff.source_kind
+  };
+}
+
+function createIncidentFromReboot(reboot) {
+  return {
+    incident_id: reboot.reboot_id,
+    kind: 'reboot',
+    ts: reboot.ts,
+    agent_id: reboot.agent_id,
+    actor_id: reboot.actor_id,
+    status: reboot.status || reboot.phase,
+    severity: reboot.severity,
+    summary: reboot.summary,
+    correlation_id: reboot.correlation_id,
+    evidence_refs: normalizeEvidenceRefs(reboot.evidence_refs),
+    counterparty_agent_ids: Array.isArray(reboot.counterparty_agent_ids)
+      ? reboot.counterparty_agent_ids.slice()
+      : [],
+    source_kind: reboot.source_kind
+  };
+}
+
 function matchesPeerWatchAlertFilters(alert, filters = {}) {
   const targetAgentId = filters.target_agent_id || filters.agent_id;
 
@@ -1512,6 +1639,38 @@ function matchesPeerWatchAlertFilters(alert, filters = {}) {
   return true;
 }
 
+function matchesIncidentFilters(incident, filters = {}, { durationMs = null, nowMs = null } = {}) {
+  if (filters.kind && incident.kind !== filters.kind) {
+    return false;
+  }
+
+  if (filters.agent_id && incident.agent_id !== filters.agent_id) {
+    return false;
+  }
+
+  if (filters.severity && incident.severity !== filters.severity) {
+    return false;
+  }
+
+  if (filters.status && incident.status !== filters.status) {
+    return false;
+  }
+
+  if (filters.correlation_id && incident.correlation_id !== filters.correlation_id) {
+    return false;
+  }
+
+  if (
+    durationMs !== null &&
+    nowMs !== null &&
+    getIncidentSortMs(incident) < nowMs - durationMs
+  ) {
+    return false;
+  }
+
+  return true;
+}
+
 function createPeerWatchAlertKey(event) {
   return [
     event.agent_id,
@@ -1541,6 +1700,10 @@ function matchesEventFilters(event, filters = {}) {
   return true;
 }
 
+function getIncidentSortMs(incident) {
+  return Date.parse(incident.ts || 0);
+}
+
 function parseLimit(value) {
   const parsed = Number.parseInt(value, 10);
   if (!Number.isFinite(parsed) || parsed <= 0) {
@@ -1548,6 +1711,14 @@ function parseLimit(value) {
   }
 
   return Math.min(parsed, 200);
+}
+
+function parseOptionalLimit(value) {
+  return value === null ? null : parseLimit(value);
+}
+
+function applyOptionalLimit(items, limit) {
+  return limit === null ? items : items.slice(0, limit);
 }
 
 function parseWindow(value) {

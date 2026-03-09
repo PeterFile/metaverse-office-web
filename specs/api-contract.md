@@ -12,6 +12,7 @@
 - `GET /office/overview`
 - `GET /timeline?window=&agent_id=&event_type=&severity=&correlation_id=&limit=`
 - `GET /peer-watch/alerts?status=&target_agent_id=&agent_id=&watcher_agent_id=&observer_agent_id=&correlation_id=&severity=&limit=`
+- `GET /incidents?kind=&agent_id=&severity=&status=&correlation_id=&limit=&window=`
 - `GET /handoffs`
 - `GET /reboots`
 
@@ -127,6 +128,16 @@
 - `status=resolved` returns historical resolution events; omitting `status` returns the full alert event history
 - each alert item exposes `alert_id`, `target_agent_id`, `observer_agent_id`, `watcher_agent_ids`, `status`, `current_state`, `active_task`, `severity`, `summary`, `evidence_refs`, `evidence_count`, `correlation_id`, `source_kind`, and `metadata`
 
+## Incident feed query semantics
+- `GET /incidents` is read-only and normalizes existing peer-watch alert, handoff, and reboot read models into one operator feed
+- supported `kind` values are `peer_watch_alert`, `handoff`, and `reboot`
+- supported filters are `kind`, `agent_id`, `severity`, `status`, `correlation_id`, `limit`, and `window`
+- output is always descending by incident timestamp
+- `status=open` for peer-watch incidents keeps the unresolved-alert semantics from `GET /peer-watch/alerts`
+- `status=started` / `completed` maps to handoff records, and `status=requested` / `completed` maps to reboot records
+- `window` filters by normalized incident `ts` relative to request time without creating a new stored incident projection
+- each incident item exposes `incident_id`, `kind`, `ts`, `agent_id`, `actor_id`, `status`, `severity`, `summary`, `correlation_id`, `evidence_refs`, `counterparty_agent_ids`, and `source_kind`
+
 ## Peer-watch alert response shape
 ```json
 {
@@ -146,6 +157,28 @@
       "correlation_id": "corr-other",
       "source_kind": "controller_event",
       "metadata": {}
+    }
+  ]
+}
+```
+
+## Incident feed response shape
+```json
+{
+  "items": [
+    {
+      "incident_id": "evt_incident_reboot_requested",
+      "kind": "reboot",
+      "ts": "2026-03-09T18:18:00.000Z",
+      "agent_id": "market-intel",
+      "actor_id": "team-lead",
+      "status": "requested",
+      "severity": "red",
+      "summary": "Lead requested a reboot for the incident follow-up",
+      "correlation_id": "corr-incident-reboot",
+      "evidence_refs": ["/tmp/incident-reboot.md"],
+      "counterparty_agent_ids": [],
+      "source_kind": "controller_event"
     }
   ]
 }
@@ -237,6 +270,10 @@
   }
 }
 ```
+
+## Handoff and reboot normalization note
+- handoff and reboot read models stay derived from canonical events
+- their shapes now also carry `status`, `severity`, `source_kind`, and `counterparty_agent_ids` so `GET /incidents` can normalize them without a new persistence layer
 
 ## Canonical enums
 ### states

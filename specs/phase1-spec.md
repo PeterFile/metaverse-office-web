@@ -1,7 +1,7 @@
 # Repo-local Phase 1 Spec Mirror
 
 Source of truth: `/Users/cwp/.hermes/teams/web3-company/controller/phase1-spec-package.md`
-Last mirrored: 2026-03-10T04:22:21+08:00
+Last mirrored: 2026-03-10T05:20:12+08:00
 
 This repository mirrors the controller-approved Phase 1 scope so implementation stays under `/Users/cwp/Projects/metaverse-office-web` instead of `~/.hermes/teams/...`.
 
@@ -21,6 +21,7 @@ This repository mirrors the controller-approved Phase 1 scope so implementation 
 - controller snapshot collector that can emit evidence-backed peer-watch alerts from collected heartbeats without inventing new event types
 - collector-derived canonical activity events for observed state changes and newer workspace writes, with duplicate suppression across unchanged snapshots
 - enriched agent detail and peer-watch evidence queries over the existing append-only read models
+- operator incident feed query derived from existing alert/handoff/reboot read models
 
 ## Canonical state enum
 - idle
@@ -83,3 +84,11 @@ This repository mirrors the controller-approved Phase 1 scope so implementation 
 - `GET /agents/:id` exposes the current projection plus `latest_heartbeat`, `open_peer_watch_alerts`, `recent_events`, `recent_interactions`, `recent_handoffs`, and `recent_reboots`
 - the detail query stays evidence-first: it reuses append-only heartbeats/events instead of adding a write path
 - `GET /peer-watch/alerts?status=open` returns only currently unresolved alerts; omit `status` to inspect historical alert events
+
+## Incident feed addendum
+- `GET /incidents` stays read-only and derives one descending operator feed from existing peer-watch alert, handoff, and reboot read models
+- supported filters are `kind`, `agent_id`, `severity`, `status`, `correlation_id`, `limit`, and `window`
+- supported `kind` values are `peer_watch_alert`, `handoff`, and `reboot`
+- normalized incident items expose `incident_id`, `kind`, `ts`, `agent_id`, `actor_id`, `status`, `severity`, `summary`, `correlation_id`, `evidence_refs`, `counterparty_agent_ids`, and `source_kind`
+- peer-watch `status=open` keeps the unresolved-alert semantics from the existing alert read model
+- handoff and reboot records extend their derived shapes minimally so incident normalization can reuse them instead of inventing a new storage layer

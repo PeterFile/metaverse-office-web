@@ -1,6 +1,6 @@
 # Metaverse Office Web
 
-Updated: 2026-03-10T04:22:21+08:00
+Updated: 2026-03-10T05:20:12+08:00
 
 This repository is the implementation home for the Hermes-Agent metaverse-office project.
 
@@ -22,11 +22,13 @@ This repository is the implementation home for the Hermes-Agent metaverse-office
 - derived interaction read models now expose communication records without adding a new write path
 - enriched agent detail and peer-watch alert queries now expose current evidence surfaces without adding new writes
 - timeline replay slices now support evidence-first filtering by agent, event type, severity, correlation, and recent slice limit
+- operator incident feed now exposes a descending read-only view over peer-watch alerts, handoffs, and reboots without adding new persistence
 
 ## Key documents
 - `specs/phase1-spec.md`
 - `specs/api-contract.md`
 - `docs/plans/phase1-kickoff-plan.md`
+- `docs/plans/phase1-incident-feed-plan.md`
 - `docs/plans/phase1-timeline-replay-plan.md`
 - `docs/plans/phase1-supervision-events-plan.md`
 - `docs/adr/0001-phase1-stack.md`
@@ -66,6 +68,7 @@ Optional env:
 - `GET /office/overview`
 - `GET /timeline?window=&agent_id=&event_type=&severity=&correlation_id=&limit=`
 - `GET /peer-watch/alerts?status=&target_agent_id=&agent_id=&watcher_agent_id=&observer_agent_id=&correlation_id=&severity=&limit=`
+- `GET /incidents?kind=&agent_id=&severity=&status=&correlation_id=&limit=&window=`
 - `GET /handoffs`
 - `GET /reboots`
 - `POST /events`
@@ -102,6 +105,18 @@ Optional env:
 - `GET /peer-watch/alerts` stays read-only and derives its evidence view from canonical peer-watch events
 - supported filters are `status`, `target_agent_id`, backward-compatible `agent_id`, `watcher_agent_id`, `observer_agent_id`, `correlation_id`, `severity`, and `limit`
 - `status=open` returns only currently unresolved alerts; omit `status` to inspect the full alert event history
+
+### Incident feed notes
+- `GET /incidents` is a read-only operator feed derived from existing peer-watch alert, handoff, and reboot read models
+- supported `kind` values are `peer_watch_alert`, `handoff`, and `reboot`
+- supported filters are `kind`, `agent_id`, `severity`, `status`, `correlation_id`, `limit`, and `window`
+- output stays descending by `ts` so operators see the newest incident first
+- incident items expose `incident_id`, `kind`, `ts`, `agent_id`, `actor_id`, `status`, `severity`, `summary`, `correlation_id`, `evidence_refs`, `counterparty_agent_ids`, and `source_kind`
+- the feed does not add persisted incident records; it reuses the existing append-only event log and derived read models
+
+### Handoff and reboot read-model notes
+- `GET /handoffs` and `GET /reboots` remain read-only derived views
+- both derived shapes now carry `status`, `severity`, `source_kind`, and `counterparty_agent_ids` so the incident feed can normalize them without a parallel persistence layer
 
 ### Controlled write rule
 Prototype writes require `x-actor-id: <agent_id>`.

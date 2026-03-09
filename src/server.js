@@ -172,6 +172,22 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
     return;
   }
 
+  if (method === 'GET' && pathname === '/incidents') {
+    sendJson(res, 200, {
+      items: store.listIncidents({
+        kind: url.searchParams.get('kind'),
+        agent_id: url.searchParams.get('agent_id'),
+        severity: url.searchParams.get('severity'),
+        status: url.searchParams.get('status'),
+        correlation_id: url.searchParams.get('correlation_id'),
+        limit: url.searchParams.get('limit'),
+        window: url.searchParams.get('window'),
+        now: now()
+      })
+    });
+    return;
+  }
+
   if (method === 'GET' && pathname === '/handoffs') {
     sendJson(res, 200, { items: store.listHandoffs() });
     return;

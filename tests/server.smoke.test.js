@@ -741,6 +741,209 @@ test('GET /peer-watch/alerts supports evidence-oriented filters and fields', asy
   assert.deepEqual(currentlyOpen.body.items, []);
 });
 
+test('GET /incidents exposes a descending normalized incident feed with read-only filters', async (t) => {
+  const { baseUrl, store } = await createHarness(t, {
+    now: () => '2026-03-09T18:20:00.000Z'
+  });
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_incident_old',
+      ts: '2026-03-09T17:40:00.000Z',
+      agentId: 'market-intel',
+      actorId: 'team-lead',
+      eventType: 'peer_watch_alert_raised',
+      currentState: 'blocked',
+      activeTask: 'Investigate stale notes',
+      summary: 'Old incident outside the feed window',
+      severity: 'yellow',
+      correlationId: 'corr-old-incident',
+      counterpartyAgentIds: ['growth-revenue'],
+      evidenceRefs: ['/tmp/incident-old.md']
+    })
+  );
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_incident_alert_unresolved',
+      ts: '2026-03-09T18:07:00.000Z',
+      agentId: 'app-engineering',
+      actorId: 'team-lead',
+      eventType: 'peer_watch_alert_raised',
+      currentState: 'blocked',
+      activeTask: 'Track unresolved incident',
+      summary: 'Protocol engineering left a second incident open',
+      severity: 'orange',
+      correlationId: 'corr-incident-open',
+      counterpartyAgentIds: ['protocol-engineering'],
+      evidenceRefs: ['/tmp/incident-alert-unresolved.md']
+    })
+  );
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_incident_alert_open',
+      ts: '2026-03-09T18:08:00.000Z',
+      agentId: 'app-engineering',
+      actorId: 'team-lead',
+      eventType: 'peer_watch_alert_raised',
+      currentState: 'blocked',
+      activeTask: 'Fix incident query',
+      summary: 'Protocol engineering raised an active incident',
+      severity: 'orange',
+      correlationId: 'corr-incident-feed',
+      counterpartyAgentIds: ['protocol-engineering'],
+      evidenceRefs: ['/tmp/incident-alert-open.md']
+    })
+  );
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_incident_alert_resolved',
+      ts: '2026-03-09T18:09:00.000Z',
+      agentId: 'app-engineering',
+      actorId: 'team-lead',
+      eventType: 'peer_watch_alert_resolved',
+      currentState: 'coding',
+      activeTask: 'Fix incident query',
+      summary: 'Protocol engineering cleared the active incident',
+      severity: 'orange',
+      correlationId: 'corr-incident-feed',
+      counterpartyAgentIds: ['protocol-engineering'],
+      evidenceRefs: ['/tmp/incident-alert-resolved.md']
+    })
+  );
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_incident_handoff_started',
+      ts: '2026-03-09T18:12:00.000Z',
+      agentId: 'app-engineering',
+      actorId: 'team-lead',
+      eventType: 'agent_handoff_started',
+      currentState: 'planning',
+      activeTask: 'Hand off the incident follow-up',
+      summary: 'Lead started an incident handoff',
+      severity: 'yellow',
+      correlationId: 'corr-incident-feed',
+      counterpartyAgentIds: ['growth-revenue'],
+      evidenceRefs: ['/tmp/incident-handoff-started.md']
+    })
+  );
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_incident_handoff_completed',
+      ts: '2026-03-09T18:13:00.000Z',
+      agentId: 'app-engineering',
+      actorId: 'team-lead',
+      eventType: 'agent_handoff_completed',
+      currentState: 'planning',
+      activeTask: 'Hand off the incident follow-up',
+      summary: 'Lead completed the incident handoff',
+      severity: 'normal',
+      correlationId: 'corr-incident-feed',
+      counterpartyAgentIds: ['growth-revenue'],
+      evidenceRefs: ['/tmp/incident-handoff-completed.md']
+    })
+  );
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_incident_reboot_requested',
+      ts: '2026-03-09T18:18:00.000Z',
+      agentId: 'market-intel',
+      actorId: 'team-lead',
+      eventType: 'agent_reboot_requested',
+      currentState: 'rebooting',
+      activeTask: 'Reset stale incident context',
+      summary: 'Lead requested a reboot for the incident follow-up',
+      severity: 'red',
+      correlationId: 'corr-incident-reboot',
+      evidenceRefs: ['/tmp/incident-reboot.md']
+    })
+  );
+
+  const feed = await requestJson(`${baseUrl}/incidents?limit=4`);
+  assert.equal(feed.response.status, 200);
+  assert.deepEqual(
+    feed.body.items.map((item) => item.incident_id),
+    [
+      'evt_incident_reboot_requested',
+      'evt_incident_handoff_completed',
+      'evt_incident_handoff_started',
+      'evt_incident_alert_resolved'
+    ]
+  );
+  assert.deepEqual(feed.body.items[0], {
+    incident_id: 'evt_incident_reboot_requested',
+    kind: 'reboot',
+    ts: '2026-03-09T18:18:00.000Z',
+    agent_id: 'market-intel',
+    actor_id: 'team-lead',
+    status: 'requested',
+    severity: 'red',
+    summary: 'Lead requested a reboot for the incident follow-up',
+    correlation_id: 'corr-incident-reboot',
+    evidence_refs: ['/tmp/incident-reboot.md'],
+    counterparty_agent_ids: [],
+    source_kind: 'controller_event'
+  });
+
+  const handoffOnly = await requestJson(
+    `${baseUrl}/incidents?kind=handoff&agent_id=app-engineering&severity=yellow&status=started&correlation_id=corr-incident-feed&limit=2`
+  );
+  assert.equal(handoffOnly.response.status, 200);
+  assert.deepEqual(handoffOnly.body.items, [
+    {
+      incident_id: 'evt_incident_handoff_started',
+      kind: 'handoff',
+      ts: '2026-03-09T18:12:00.000Z',
+      agent_id: 'app-engineering',
+      actor_id: 'team-lead',
+      status: 'started',
+      severity: 'yellow',
+      summary: 'Lead started an incident handoff',
+      correlation_id: 'corr-incident-feed',
+      evidence_refs: ['/tmp/incident-handoff-started.md'],
+      counterparty_agent_ids: ['growth-revenue'],
+      source_kind: 'controller_event'
+    }
+  ]);
+
+  const recentWindow = await requestJson(`${baseUrl}/incidents?window=10m`);
+  assert.equal(recentWindow.response.status, 200);
+  assert.deepEqual(
+    recentWindow.body.items.map((item) => item.incident_id),
+    [
+      'evt_incident_reboot_requested',
+      'evt_incident_handoff_completed',
+      'evt_incident_handoff_started'
+    ]
+  );
+
+  const openPeerWatch = await requestJson(
+    `${baseUrl}/incidents?kind=peer_watch_alert&status=open&agent_id=app-engineering&severity=orange&correlation_id=corr-incident-open`
+  );
+  assert.equal(openPeerWatch.response.status, 200);
+  assert.deepEqual(openPeerWatch.body.items, [
+    {
+      incident_id: 'evt_incident_alert_unresolved',
+      kind: 'peer_watch_alert',
+      ts: '2026-03-09T18:07:00.000Z',
+      agent_id: 'app-engineering',
+      actor_id: 'team-lead',
+      status: 'open',
+      severity: 'orange',
+      summary: 'Protocol engineering left a second incident open',
+      correlation_id: 'corr-incident-open',
+      evidence_refs: ['/tmp/incident-alert-unresolved.md'],
+      counterparty_agent_ids: ['protocol-engineering'],
+      source_kind: 'controller_event'
+    }
+  ]);
+});
+
 test('write endpoints reject missing headers, invalid payloads, and actor-boundary violations', async (t) => {
   const { baseUrl } = await createHarness(t);
 

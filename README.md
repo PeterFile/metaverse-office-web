@@ -1,6 +1,6 @@
 # Metaverse Office Web
 
-Updated: 2026-03-10T05:20:12+08:00
+Updated: 2026-03-10T06:05:34+08:00
 
 This repository is the implementation home for the Hermes-Agent metaverse-office project.
 
@@ -23,12 +23,14 @@ This repository is the implementation home for the Hermes-Agent metaverse-office
 - enriched agent detail and peer-watch alert queries now expose current evidence surfaces without adding new writes
 - timeline replay slices now support evidence-first filtering by agent, event type, severity, correlation, and recent slice limit
 - operator incident feed now exposes a descending read-only view over peer-watch alerts, handoffs, and reboots without adding new persistence
+- correlation drill-down now exposes one read-only evidence/replay surface per `correlation_id` by aggregating existing incident, interaction, and timeline read models
 
 ## Key documents
 - `specs/phase1-spec.md`
 - `specs/api-contract.md`
 - `docs/plans/phase1-kickoff-plan.md`
 - `docs/plans/phase1-incident-feed-plan.md`
+- `docs/plans/phase1-correlation-drilldown-plan.md`
 - `docs/plans/phase1-timeline-replay-plan.md`
 - `docs/plans/phase1-supervision-events-plan.md`
 - `docs/adr/0001-phase1-stack.md`
@@ -69,6 +71,7 @@ Optional env:
 - `GET /timeline?window=&agent_id=&event_type=&severity=&correlation_id=&limit=`
 - `GET /peer-watch/alerts?status=&target_agent_id=&agent_id=&watcher_agent_id=&observer_agent_id=&correlation_id=&severity=&limit=`
 - `GET /incidents?kind=&agent_id=&severity=&status=&correlation_id=&limit=&window=`
+- `GET /correlations/:correlation_id?limit=&window=`
 - `GET /handoffs`
 - `GET /reboots`
 - `POST /events`
@@ -113,6 +116,13 @@ Optional env:
 - output stays descending by `ts` so operators see the newest incident first
 - incident items expose `incident_id`, `kind`, `ts`, `agent_id`, `actor_id`, `status`, `severity`, `summary`, `correlation_id`, `evidence_refs`, `counterparty_agent_ids`, and `source_kind`
 - the feed does not add persisted incident records; it reuses the existing append-only event log and derived read models
+
+### Correlation drill-down notes
+- `GET /correlations/:correlation_id` is a read-only aggregate over existing incident, interaction, and timeline read models
+- when `window` is present, it reuses the existing `Nm|Nh` filter format; when omitted, the drill-down keeps the full correlation history
+- when `limit` is present, it caps `incidents`, `interactions`, and `timeline` individually using their existing ordering semantics; `incident_count`, `interaction_count`, and `event_count` remain the full filtered totals
+- the response also exposes deduped `participant_agent_ids`, deduped `evidence_refs`, and `first_ts` / `last_ts` bounds for the full filtered correlation slice
+- the route returns `404` when the `correlation_id` matches no incidents, interactions, or events
 
 ### Handoff and reboot read-model notes
 - `GET /handoffs` and `GET /reboots` remain read-only derived views

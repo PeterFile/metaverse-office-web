@@ -1,7 +1,7 @@
 # Repo-local Phase 1 Spec Mirror
 
 Source of truth: `/Users/cwp/.hermes/teams/web3-company/controller/phase1-spec-package.md`
-Last mirrored: 2026-03-10T05:20:12+08:00
+Last mirrored: 2026-03-10T06:05:34+08:00
 
 This repository mirrors the controller-approved Phase 1 scope so implementation stays under `/Users/cwp/Projects/metaverse-office-web` instead of `~/.hermes/teams/...`.
 
@@ -22,6 +22,7 @@ This repository mirrors the controller-approved Phase 1 scope so implementation 
 - collector-derived canonical activity events for observed state changes and newer workspace writes, with duplicate suppression across unchanged snapshots
 - enriched agent detail and peer-watch evidence queries over the existing append-only read models
 - operator incident feed query derived from existing alert/handoff/reboot read models
+- correlation drill-down query that aggregates incident, interaction, and replay evidence by `correlation_id`
 
 ## Canonical state enum
 - idle
@@ -92,3 +93,11 @@ This repository mirrors the controller-approved Phase 1 scope so implementation 
 - normalized incident items expose `incident_id`, `kind`, `ts`, `agent_id`, `actor_id`, `status`, `severity`, `summary`, `correlation_id`, `evidence_refs`, `counterparty_agent_ids`, and `source_kind`
 - peer-watch `status=open` keeps the unresolved-alert semantics from the existing alert read model
 - handoff and reboot records extend their derived shapes minimally so incident normalization can reuse them instead of inventing a new storage layer
+
+## Correlation drill-down addendum
+- `GET /correlations/:correlation_id` stays read-only and aggregates one evidence-first drill-down surface from existing incident, interaction, and timeline/event read models
+- the route does not add a new write path, persisted table, or event type; it only reuses append-only events and existing derived reads
+- the response exposes `correlation_id`, deduped `participant_agent_ids`, deduped `evidence_refs`, `first_ts`, `last_ts`, `incident_count`, `interaction_count`, `event_count`, `incidents`, `interactions`, and `timeline`
+- `window` reuses the existing `Nm|Nh` filter format; when omitted the drill-down keeps the full correlation history
+- `limit` caps each returned detail slice while leaving aggregate counts bound to the full filtered correlation match set
+- the route returns `404` when no incidents, interactions, or events match the requested `correlation_id`

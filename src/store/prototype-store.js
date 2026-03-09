@@ -262,65 +262,7 @@ class PrototypeStore {
   }
 
   listInteractions(filters = {}) {
-    const limit = parseLimit(filters.limit);
-    const durationMs = filters.window ? parseWindow(filters.window) : null;
-    const nowMs = durationMs === null ? null : parseNowMs(filters.now);
-
-    return deriveInteractions(this.events)
-      .filter((interaction) => {
-        if (
-          filters.agent_id &&
-          !interaction.participant_agent_ids.includes(filters.agent_id)
-        ) {
-          return false;
-        }
-
-        if (
-          filters.counterparty_agent_id &&
-          !interaction.participant_agent_ids.includes(filters.counterparty_agent_id)
-        ) {
-          return false;
-        }
-
-        if (
-          filters.interaction_type &&
-          interaction.interaction_type !== filters.interaction_type
-        ) {
-          return false;
-        }
-
-        if (filters.severity && interaction.severity !== filters.severity) {
-          return false;
-        }
-
-        if (
-          filters.correlation_id &&
-          interaction.correlation_id !== filters.correlation_id
-        ) {
-          return false;
-        }
-
-        if (
-          durationMs !== null &&
-          nowMs !== null &&
-          getInteractionSortMs(interaction) < nowMs - durationMs
-        ) {
-          return false;
-        }
-
-        return true;
-      })
-      .sort((left, right) => {
-        const rightTs = getInteractionSortMs(right);
-        const leftTs = getInteractionSortMs(left);
-
-        if (rightTs !== leftTs) {
-          return rightTs - leftTs;
-        }
-
-        return right.interaction_id.localeCompare(left.interaction_id);
-      })
-      .slice(0, limit);
+    return listInteractionItems(this.events, filters);
   }
 
   listAgentInteractions(agentId, filters = {}) {
@@ -328,44 +270,7 @@ class PrototypeStore {
   }
 
   listTimeline(filters = {}) {
-    const { window = '60m', now } = filters;
-    const durationMs = parseWindow(window);
-    const nowMs = parseNowMs(now);
-    const limit =
-      filters.limit === null || filters.limit === undefined || filters.limit === ''
-        ? null
-        : parseLimit(filters.limit);
-
-    return this.events
-      .filter((event) => {
-        if (!matchesEventFilters(event, filters)) {
-          return false;
-        }
-
-        if (durationMs !== null && nowMs !== null && Date.parse(event.ts) < nowMs - durationMs) {
-          return false;
-        }
-
-        return true;
-      })
-      .slice()
-      .sort((left, right) => Date.parse(left.ts) - Date.parse(right.ts))
-      .slice(limit === null ? 0 : -limit)
-      .map((event) => ({
-        event_id: event.event_id,
-        ts: event.ts,
-        agent_id: event.agent_id,
-        actor_id: event.actor_id,
-        event_type: event.event_type,
-        severity: event.severity,
-        current_state: event.current_state,
-        location: event.location,
-        summary: event.summary,
-        correlation_id: event.correlation_id,
-        counterparty_agent_ids: event.counterparty_agent_ids,
-        evidence_refs: event.evidence_refs,
-        source_kind: event.source_kind
-      }));
+    return listTimelineItems(this.events, filters);
   }
 
   listPeerWatchAlerts(filters = {}) {
@@ -539,6 +444,60 @@ class PrototypeStore {
         }),
       limit
     );
+  }
+
+  getCorrelationDrilldown(correlationId, filters = {}) {
+    const baseFilters = {
+      correlation_id: correlationId,
+      window: filters.window,
+      now: filters.now
+    };
+    const allIncidents = this.listIncidents({ ...baseFilters, limit: null });
+    const allInteractions = listInteractionItems(this.events, baseFilters, null);
+    const allTimeline = listTimelineItems(this.events, { ...baseFilters, limit: null });
+
+    if (
+      allIncidents.length === 0 &&
+      allInteractions.length === 0 &&
+      allTimeline.length === 0
+    ) {
+      return null;
+    }
+
+    const limit =
+      filters.limit === null || filters.limit === undefined || filters.limit === ''
+        ? null
+        : filters.limit;
+    const interactionLimit = limit === null ? null : parseLimit(limit);
+    const timestamps = collectCorrelationTimestamps({
+      incidents: allIncidents,
+      interactions: allInteractions,
+      timeline: allTimeline
+    });
+
+    return {
+      correlation_id: correlationId,
+      participant_agent_ids: normalizeAgentIds([
+        ...allIncidents.flatMap(getIncidentParticipantAgentIds),
+        ...allInteractions.flatMap((interaction) => interaction.participant_agent_ids || []),
+        ...allTimeline.flatMap(getTimelineParticipantAgentIds)
+      ]),
+      evidence_refs: normalizeEvidenceRefs(
+        [
+          ...allIncidents.flatMap((incident) => incident.evidence_refs || []),
+          ...allInteractions.flatMap((interaction) => interaction.evidence_refs || []),
+          ...allTimeline.flatMap((event) => event.evidence_refs || [])
+        ].sort()
+      ),
+      first_ts: timestamps[0] || null,
+      last_ts: timestamps[timestamps.length - 1] || null,
+      incident_count: allIncidents.length,
+      interaction_count: allInteractions.length,
+      event_count: allTimeline.length,
+      incidents: this.listIncidents({ ...baseFilters, limit }),
+      interactions: listInteractionItems(this.events, baseFilters, interactionLimit),
+      timeline: listTimelineItems(this.events, { ...baseFilters, limit })
+    };
   }
 
   getOfficeOverview({ now }) {
@@ -1215,6 +1174,16 @@ function normalizeEvidenceRefs(evidenceRefs) {
   return Array.from(new Set(evidenceRefs.filter((ref) => typeof ref === 'string' && ref.length > 0)));
 }
 
+function normalizeAgentIds(agentIds) {
+  if (!Array.isArray(agentIds)) {
+    return [];
+  }
+
+  return Array.from(
+    new Set(agentIds.filter((agentId) => typeof agentId === 'string' && agentId.length > 0))
+  ).sort();
+}
+
 function createCollectorBlockedSummary({ heartbeat }) {
   if (heartbeat.current_blocker) {
     return `Collector observed blocked execution: ${heartbeat.current_blocker}`;
@@ -1702,6 +1671,142 @@ function matchesEventFilters(event, filters = {}) {
 
 function getIncidentSortMs(incident) {
   return Date.parse(incident.ts || 0);
+}
+
+function listInteractionItems(events, filters = {}, limit = parseLimit(filters.limit)) {
+  const durationMs = filters.window ? parseWindow(filters.window) : null;
+  const nowMs = durationMs === null ? null : parseNowMs(filters.now);
+
+  const items = deriveInteractions(events)
+    .filter((interaction) => {
+      if (
+        filters.agent_id &&
+        !interaction.participant_agent_ids.includes(filters.agent_id)
+      ) {
+        return false;
+      }
+
+      if (
+        filters.counterparty_agent_id &&
+        !interaction.participant_agent_ids.includes(filters.counterparty_agent_id)
+      ) {
+        return false;
+      }
+
+      if (
+        filters.interaction_type &&
+        interaction.interaction_type !== filters.interaction_type
+      ) {
+        return false;
+      }
+
+      if (filters.severity && interaction.severity !== filters.severity) {
+        return false;
+      }
+
+      if (
+        filters.correlation_id &&
+        interaction.correlation_id !== filters.correlation_id
+      ) {
+        return false;
+      }
+
+      if (
+        durationMs !== null &&
+        nowMs !== null &&
+        getInteractionSortMs(interaction) < nowMs - durationMs
+      ) {
+        return false;
+      }
+
+      return true;
+    })
+    .sort((left, right) => {
+      const rightTs = getInteractionSortMs(right);
+      const leftTs = getInteractionSortMs(left);
+
+      if (rightTs !== leftTs) {
+        return rightTs - leftTs;
+      }
+
+      return right.interaction_id.localeCompare(left.interaction_id);
+    });
+
+  return limit === null ? items : items.slice(0, limit);
+}
+
+function listTimelineItems(events, filters = {}) {
+  const durationMs = filters.window ? parseWindow(filters.window) : null;
+  const nowMs = durationMs === null ? null : parseNowMs(filters.now);
+  const limit =
+    filters.limit === null || filters.limit === undefined || filters.limit === ''
+      ? null
+      : parseLimit(filters.limit);
+
+  return events
+    .filter((event) => {
+      if (!matchesEventFilters(event, filters)) {
+        return false;
+      }
+
+      if (durationMs !== null && nowMs !== null && Date.parse(event.ts) < nowMs - durationMs) {
+        return false;
+      }
+
+      return true;
+    })
+    .slice()
+    .sort((left, right) => Date.parse(left.ts) - Date.parse(right.ts))
+    .slice(limit === null ? 0 : -limit)
+    .map(createTimelineItem);
+}
+
+function createTimelineItem(event) {
+  return {
+    event_id: event.event_id,
+    ts: event.ts,
+    agent_id: event.agent_id,
+    actor_id: event.actor_id,
+    event_type: event.event_type,
+    severity: event.severity,
+    current_state: event.current_state,
+    location: event.location,
+    summary: event.summary,
+    correlation_id: event.correlation_id,
+    counterparty_agent_ids: event.counterparty_agent_ids,
+    evidence_refs: event.evidence_refs,
+    source_kind: event.source_kind
+  };
+}
+
+function getIncidentParticipantAgentIds(incident) {
+  return normalizeAgentIds([
+    incident.agent_id,
+    incident.actor_id,
+    ...((incident && incident.counterparty_agent_ids) || [])
+  ]);
+}
+
+function getTimelineParticipantAgentIds(event) {
+  return normalizeAgentIds([
+    event.agent_id,
+    event.actor_id,
+    ...((event && event.counterparty_agent_ids) || [])
+  ]);
+}
+
+function collectCorrelationTimestamps({ incidents = [], interactions = [], timeline = [] }) {
+  return Array.from(
+    new Set(
+      [
+        ...incidents.map((incident) => incident.ts),
+        ...interactions.flatMap((interaction) =>
+          [interaction.started_at, interaction.ended_at].filter(Boolean)
+        ),
+        ...timeline.map((event) => event.ts)
+      ].filter((ts) => typeof ts === 'string' && ts.length > 0)
+    )
+  ).sort((left, right) => Date.parse(left) - Date.parse(right));
 }
 
 function parseLimit(value) {

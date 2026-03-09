@@ -13,6 +13,7 @@
 - `GET /timeline?window=&agent_id=&event_type=&severity=&correlation_id=&limit=`
 - `GET /peer-watch/alerts?status=&target_agent_id=&agent_id=&watcher_agent_id=&observer_agent_id=&correlation_id=&severity=&limit=`
 - `GET /incidents?kind=&agent_id=&severity=&status=&correlation_id=&limit=&window=`
+- `GET /correlations/:correlation_id?limit=&window=`
 - `GET /handoffs`
 - `GET /reboots`
 
@@ -138,6 +139,17 @@
 - `window` filters by normalized incident `ts` relative to request time without creating a new stored incident projection
 - each incident item exposes `incident_id`, `kind`, `ts`, `agent_id`, `actor_id`, `status`, `severity`, `summary`, `correlation_id`, `evidence_refs`, `counterparty_agent_ids`, and `source_kind`
 
+## Correlation drill-down query semantics
+- `GET /correlations/:correlation_id` is read-only and aggregates existing incident, interaction, and timeline/event read models into one evidence-first drill-down surface
+- the route path `:correlation_id` is required and is matched against existing append-only events plus the read models derived from them
+- supported query params are `limit` and `window`
+- `window` reuses the existing `Nm|Nh` parsing; when omitted the drill-down keeps the full correlation history instead of forcing a default replay window
+- `limit`, when provided, caps `incidents`, `interactions`, and `timeline` individually using their existing endpoint ordering semantics
+- `incident_count`, `interaction_count`, and `event_count` are computed from the full filtered match set before `limit` is applied
+- `participant_agent_ids` and `evidence_refs` are deduped across the full filtered correlation slice
+- `first_ts` and `last_ts` expose the temporal bounds of the full filtered correlation slice
+- the route returns `404` when the `correlation_id` matches no incidents, interactions, or events
+
 ## Peer-watch alert response shape
 ```json
 {
@@ -178,6 +190,89 @@
       "correlation_id": "corr-incident-reboot",
       "evidence_refs": ["/tmp/incident-reboot.md"],
       "counterparty_agent_ids": [],
+      "source_kind": "controller_event"
+    }
+  ]
+}
+```
+
+## Correlation drill-down response shape
+```json
+{
+  "correlation_id": "corr-drilldown",
+  "participant_agent_ids": [
+    "app-engineering",
+    "growth-revenue",
+    "protocol-engineering",
+    "team-lead"
+  ],
+  "evidence_refs": [
+    "/tmp/corr-alert-open.md",
+    "/tmp/corr-handoff-start.md",
+    "/tmp/corr-reboot.md"
+  ],
+  "first_ts": "2026-03-09T18:06:00.000Z",
+  "last_ts": "2026-03-09T18:12:00.000Z",
+  "incident_count": 4,
+  "interaction_count": 3,
+  "event_count": 6,
+  "incidents": [
+    {
+      "incident_id": "evt_corr_reboot_requested",
+      "kind": "reboot",
+      "ts": "2026-03-09T18:12:00.000Z",
+      "agent_id": "app-engineering",
+      "actor_id": "team-lead",
+      "status": "requested",
+      "severity": "red",
+      "summary": "Lead requested a reboot after the evidence review",
+      "correlation_id": "corr-drilldown",
+      "evidence_refs": ["/tmp/corr-reboot.md"],
+      "counterparty_agent_ids": [],
+      "source_kind": "controller_event"
+    }
+  ],
+  "interactions": [
+    {
+      "interaction_id": "interaction:evt_corr_handoff_started",
+      "interaction_type": "handoff",
+      "correlation_id": "corr-drilldown",
+      "started_at": "2026-03-09T18:10:00.000Z",
+      "ended_at": "2026-03-09T18:11:00.000Z",
+      "participant_agent_ids": [
+        "app-engineering",
+        "growth-revenue",
+        "team-lead"
+      ],
+      "trigger_event_id": "evt_corr_handoff_started",
+      "before_state": "planning",
+      "after_state": "planning",
+      "severity": "yellow",
+      "evidence_refs": [
+        "/tmp/corr-handoff-start.md",
+        "/tmp/corr-handoff-complete.md"
+      ],
+      "summary": "Lead completed the evidence handoff",
+      "related_event_ids": [
+        "evt_corr_handoff_started",
+        "evt_corr_handoff_completed"
+      ]
+    }
+  ],
+  "timeline": [
+    {
+      "event_id": "evt_corr_handoff_completed",
+      "ts": "2026-03-09T18:11:00.000Z",
+      "agent_id": "app-engineering",
+      "actor_id": "team-lead",
+      "event_type": "agent_handoff_completed",
+      "severity": "normal",
+      "current_state": "planning",
+      "location": "meeting-zone",
+      "summary": "Lead completed the evidence handoff",
+      "correlation_id": "corr-drilldown",
+      "counterparty_agent_ids": ["growth-revenue"],
+      "evidence_refs": ["/tmp/corr-handoff-complete.md"],
       "source_kind": "controller_event"
     }
   ]

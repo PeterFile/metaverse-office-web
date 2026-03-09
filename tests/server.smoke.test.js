@@ -944,6 +944,314 @@ test('GET /incidents exposes a descending normalized incident feed with read-onl
   ]);
 });
 
+test('GET /correlations/:correlation_id aggregates incident, interaction, and replay evidence', async (t) => {
+  const { baseUrl, store } = await createHarness(t, {
+    now: () => '2026-03-09T18:20:00.000Z'
+  });
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_corr_old',
+      ts: '2026-03-09T17:50:00.000Z',
+      agentId: 'app-engineering',
+      eventType: 'agent_wrote_file',
+      currentState: 'coding',
+      activeTask: 'Old correlation artifact',
+      summary: 'Outside the requested correlation window',
+      correlationId: 'corr-drilldown',
+      evidenceRefs: ['/tmp/corr-old.md']
+    })
+  );
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_corr_review_started',
+      ts: '2026-03-09T18:06:00.000Z',
+      agentId: 'app-engineering',
+      actorId: 'team-lead',
+      eventType: 'review_started',
+      currentState: 'reviewing',
+      activeTask: 'Review the drill-down evidence',
+      location: 'review-zone',
+      summary: 'Lead started the drill-down review',
+      severity: 'yellow',
+      correlationId: 'corr-drilldown',
+      counterpartyAgentIds: ['protocol-engineering'],
+      evidenceRefs: ['/tmp/corr-review-start.md']
+    })
+  );
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_corr_peer_watch_open',
+      ts: '2026-03-09T18:07:00.000Z',
+      agentId: 'app-engineering',
+      actorId: 'team-lead',
+      eventType: 'peer_watch_alert_raised',
+      currentState: 'blocked',
+      activeTask: 'Fix the missing evidence trail',
+      location: 'review-zone',
+      summary: 'Protocol engineering flagged missing evidence',
+      severity: 'orange',
+      correlationId: 'corr-drilldown',
+      counterpartyAgentIds: ['protocol-engineering'],
+      evidenceRefs: ['/tmp/corr-alert-open.md']
+    })
+  );
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_corr_review_completed',
+      ts: '2026-03-09T18:08:00.000Z',
+      agentId: 'app-engineering',
+      actorId: 'team-lead',
+      eventType: 'review_completed',
+      currentState: 'reviewing',
+      activeTask: 'Review the drill-down evidence',
+      location: 'review-zone',
+      summary: 'Lead completed the drill-down review',
+      correlationId: 'corr-drilldown',
+      counterpartyAgentIds: ['protocol-engineering'],
+      evidenceRefs: ['/tmp/corr-review-end.md']
+    })
+  );
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_corr_handoff_started',
+      ts: '2026-03-09T18:10:00.000Z',
+      agentId: 'app-engineering',
+      actorId: 'team-lead',
+      eventType: 'agent_handoff_started',
+      currentState: 'planning',
+      activeTask: 'Hand off evidence follow-up',
+      summary: 'Lead started the evidence handoff',
+      severity: 'yellow',
+      correlationId: 'corr-drilldown',
+      counterpartyAgentIds: ['growth-revenue'],
+      evidenceRefs: ['/tmp/corr-handoff-start.md']
+    })
+  );
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_corr_handoff_completed',
+      ts: '2026-03-09T18:11:00.000Z',
+      agentId: 'app-engineering',
+      actorId: 'team-lead',
+      eventType: 'agent_handoff_completed',
+      currentState: 'planning',
+      activeTask: 'Hand off evidence follow-up',
+      summary: 'Lead completed the evidence handoff',
+      correlationId: 'corr-drilldown',
+      counterpartyAgentIds: ['growth-revenue'],
+      evidenceRefs: ['/tmp/corr-handoff-complete.md']
+    })
+  );
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_corr_reboot_requested',
+      ts: '2026-03-09T18:12:00.000Z',
+      agentId: 'app-engineering',
+      actorId: 'team-lead',
+      eventType: 'agent_reboot_requested',
+      currentState: 'rebooting',
+      activeTask: 'Reset the evidence replay context',
+      location: 'reboot-zone',
+      summary: 'Lead requested a reboot after the evidence review',
+      severity: 'red',
+      correlationId: 'corr-drilldown',
+      evidenceRefs: ['/tmp/corr-reboot.md']
+    })
+  );
+
+  const response = await requestJson(
+    `${baseUrl}/correlations/corr-drilldown?window=15m&limit=2`
+  );
+  assert.equal(response.response.status, 200);
+  assert.deepEqual(response.body, {
+    correlation_id: 'corr-drilldown',
+    participant_agent_ids: [
+      'app-engineering',
+      'growth-revenue',
+      'protocol-engineering',
+      'team-lead'
+    ],
+    evidence_refs: [
+      '/tmp/corr-alert-open.md',
+      '/tmp/corr-handoff-complete.md',
+      '/tmp/corr-handoff-start.md',
+      '/tmp/corr-reboot.md',
+      '/tmp/corr-review-end.md',
+      '/tmp/corr-review-start.md'
+    ],
+    first_ts: '2026-03-09T18:06:00.000Z',
+    last_ts: '2026-03-09T18:12:00.000Z',
+    incident_count: 4,
+    interaction_count: 3,
+    event_count: 6,
+    incidents: [
+      {
+        incident_id: 'evt_corr_reboot_requested',
+        kind: 'reboot',
+        ts: '2026-03-09T18:12:00.000Z',
+        agent_id: 'app-engineering',
+        actor_id: 'team-lead',
+        status: 'requested',
+        severity: 'red',
+        summary: 'Lead requested a reboot after the evidence review',
+        correlation_id: 'corr-drilldown',
+        evidence_refs: ['/tmp/corr-reboot.md'],
+        counterparty_agent_ids: [],
+        source_kind: 'controller_event'
+      },
+      {
+        incident_id: 'evt_corr_handoff_completed',
+        kind: 'handoff',
+        ts: '2026-03-09T18:11:00.000Z',
+        agent_id: 'app-engineering',
+        actor_id: 'team-lead',
+        status: 'completed',
+        severity: 'normal',
+        summary: 'Lead completed the evidence handoff',
+        correlation_id: 'corr-drilldown',
+        evidence_refs: ['/tmp/corr-handoff-complete.md'],
+        counterparty_agent_ids: ['growth-revenue'],
+        source_kind: 'controller_event'
+      }
+    ],
+    interactions: [
+      {
+        interaction_id: 'interaction:evt_corr_handoff_started',
+        interaction_type: 'handoff',
+        correlation_id: 'corr-drilldown',
+        started_at: '2026-03-09T18:10:00.000Z',
+        ended_at: '2026-03-09T18:11:00.000Z',
+        participant_agent_ids: ['app-engineering', 'growth-revenue', 'team-lead'],
+        trigger_event_id: 'evt_corr_handoff_started',
+        before_state: 'planning',
+        after_state: 'planning',
+        severity: 'yellow',
+        evidence_refs: ['/tmp/corr-handoff-start.md', '/tmp/corr-handoff-complete.md'],
+        summary: 'Lead completed the evidence handoff',
+        related_event_ids: ['evt_corr_handoff_started', 'evt_corr_handoff_completed']
+      },
+      {
+        interaction_id: 'interaction:evt_corr_review_started',
+        interaction_type: 'review',
+        correlation_id: 'corr-drilldown',
+        started_at: '2026-03-09T18:06:00.000Z',
+        ended_at: '2026-03-09T18:08:00.000Z',
+        participant_agent_ids: ['app-engineering', 'protocol-engineering', 'team-lead'],
+        trigger_event_id: 'evt_corr_review_started',
+        before_state: 'reviewing',
+        after_state: 'reviewing',
+        severity: 'yellow',
+        evidence_refs: ['/tmp/corr-review-start.md', '/tmp/corr-review-end.md'],
+        summary: 'Lead completed the drill-down review',
+        related_event_ids: ['evt_corr_review_started', 'evt_corr_review_completed']
+      }
+    ],
+    timeline: [
+      {
+        event_id: 'evt_corr_handoff_completed',
+        ts: '2026-03-09T18:11:00.000Z',
+        agent_id: 'app-engineering',
+        actor_id: 'team-lead',
+        event_type: 'agent_handoff_completed',
+        severity: 'normal',
+        current_state: 'planning',
+        location: 'meeting-zone',
+        summary: 'Lead completed the evidence handoff',
+        correlation_id: 'corr-drilldown',
+        counterparty_agent_ids: ['growth-revenue'],
+        evidence_refs: ['/tmp/corr-handoff-complete.md'],
+        source_kind: 'controller_event'
+      },
+      {
+        event_id: 'evt_corr_reboot_requested',
+        ts: '2026-03-09T18:12:00.000Z',
+        agent_id: 'app-engineering',
+        actor_id: 'team-lead',
+        event_type: 'agent_reboot_requested',
+        severity: 'red',
+        current_state: 'rebooting',
+        location: 'reboot-zone',
+        summary: 'Lead requested a reboot after the evidence review',
+        correlation_id: 'corr-drilldown',
+        counterparty_agent_ids: [],
+        evidence_refs: ['/tmp/corr-reboot.md'],
+        source_kind: 'controller_event'
+      }
+    ]
+  });
+
+  const missing = await requestJson(`${baseUrl}/correlations/missing-correlation`);
+  assert.equal(missing.response.status, 404);
+  assert.equal(missing.body.error, 'not_found');
+});
+
+
+
+test('GET /correlations/:correlation_id keeps full interaction counts when slices are limited or omitted', async (t) => {
+  const { baseUrl, store } = await createHarness(t, {
+    now: () => '2026-03-09T19:30:00.000Z'
+  });
+  const baseTs = Date.parse('2026-03-09T18:00:00.000Z');
+
+  for (let index = 0; index < 55; index += 1) {
+    const startedAt = new Date(baseTs + index * 60_000).toISOString();
+    const completedAt = new Date(baseTs + index * 60_000 + 5_000).toISOString();
+
+    await store.appendEvent(
+      createEvent({
+        eventId: `evt_corr_many_review_started_${index}`,
+        ts: startedAt,
+        agentId: 'app-engineering',
+        actorId: 'team-lead',
+        eventType: 'review_started',
+        currentState: 'reviewing',
+        activeTask: `Review correlation batch ${index}`,
+        location: 'review-zone',
+        summary: `Lead started review batch ${index}`,
+        severity: 'yellow',
+        correlationId: 'corr-many',
+        counterpartyAgentIds: ['protocol-engineering'],
+        evidenceRefs: [`/tmp/corr-many-review-start-${index}.md`]
+      })
+    );
+
+    await store.appendEvent(
+      createEvent({
+        eventId: `evt_corr_many_review_completed_${index}`,
+        ts: completedAt,
+        agentId: 'app-engineering',
+        actorId: 'team-lead',
+        eventType: 'review_completed',
+        currentState: 'reviewing',
+        activeTask: `Review correlation batch ${index}`,
+        location: 'review-zone',
+        summary: `Lead completed review batch ${index}`,
+        severity: 'yellow',
+        correlationId: 'corr-many',
+        counterpartyAgentIds: ['protocol-engineering'],
+        evidenceRefs: [`/tmp/corr-many-review-complete-${index}.md`]
+      })
+    );
+  }
+
+  const unlimited = await requestJson(`${baseUrl}/correlations/corr-many`);
+  assert.equal(unlimited.response.status, 200);
+  assert.equal(unlimited.body.interaction_count, 55);
+  assert.equal(unlimited.body.interactions.length, 55);
+
+  const limited = await requestJson(`${baseUrl}/correlations/corr-many?limit=10`);
+  assert.equal(limited.response.status, 200);
+  assert.equal(limited.body.interaction_count, 55);
+  assert.equal(limited.body.interactions.length, 10);
+});
+
 test('write endpoints reject missing headers, invalid payloads, and actor-boundary violations', async (t) => {
   const { baseUrl } = await createHarness(t);
 

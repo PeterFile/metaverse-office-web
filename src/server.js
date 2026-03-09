@@ -188,6 +188,27 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
     return;
   }
 
+  const correlationMatch = pathname.match(/^\/correlations\/([^/]+)$/);
+  if (method === 'GET' && correlationMatch) {
+    const correlationId = decodeURIComponent(correlationMatch[1]);
+    const item = store.getCorrelationDrilldown(correlationId, {
+      limit: url.searchParams.get('limit'),
+      window: url.searchParams.get('window'),
+      now: now()
+    });
+
+    if (!item) {
+      sendJson(res, 404, {
+        error: 'not_found',
+        details: `unknown correlation ${correlationId}`
+      });
+      return;
+    }
+
+    sendJson(res, 200, item);
+    return;
+  }
+
   if (method === 'GET' && pathname === '/handoffs') {
     sendJson(res, 200, { items: store.listHandoffs() });
     return;

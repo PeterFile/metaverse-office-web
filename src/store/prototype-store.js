@@ -251,25 +251,7 @@ class PrototypeStore {
     const limit = parseLimit(filters.limit);
 
     return this.events
-      .filter((event) => {
-        if (filters.agent_id && event.agent_id !== filters.agent_id) {
-          return false;
-        }
-
-        if (filters.event_type && event.event_type !== filters.event_type) {
-          return false;
-        }
-
-        if (filters.severity && event.severity !== filters.severity) {
-          return false;
-        }
-
-        if (filters.correlation_id && event.correlation_id !== filters.correlation_id) {
-          return false;
-        }
-
-        return true;
-      })
+      .filter((event) => matchesEventFilters(event, filters))
       .slice()
       .sort((left, right) => Date.parse(right.ts) - Date.parse(left.ts))
       .slice(0, limit);
@@ -345,14 +327,30 @@ class PrototypeStore {
     return this.listInteractions({ ...filters, agent_id: agentId });
   }
 
-  listTimeline({ window = '60m', now }) {
+  listTimeline(filters = {}) {
+    const { window = '60m', now } = filters;
     const durationMs = parseWindow(window);
-    const nowMs = Date.parse(now);
+    const nowMs = parseNowMs(now);
+    const limit =
+      filters.limit === null || filters.limit === undefined || filters.limit === ''
+        ? null
+        : parseLimit(filters.limit);
 
     return this.events
-      .filter((event) => Date.parse(event.ts) >= nowMs - durationMs)
+      .filter((event) => {
+        if (!matchesEventFilters(event, filters)) {
+          return false;
+        }
+
+        if (durationMs !== null && nowMs !== null && Date.parse(event.ts) < nowMs - durationMs) {
+          return false;
+        }
+
+        return true;
+      })
       .slice()
       .sort((left, right) => Date.parse(left.ts) - Date.parse(right.ts))
+      .slice(limit === null ? 0 : -limit)
       .map((event) => ({
         event_id: event.event_id,
         ts: event.ts,
@@ -363,7 +361,10 @@ class PrototypeStore {
         current_state: event.current_state,
         location: event.location,
         summary: event.summary,
-        correlation_id: event.correlation_id
+        correlation_id: event.correlation_id,
+        counterparty_agent_ids: event.counterparty_agent_ids,
+        evidence_refs: event.evidence_refs,
+        source_kind: event.source_kind
       }));
   }
 
@@ -1518,6 +1519,26 @@ function createPeerWatchAlertKey(event) {
     event.correlation_id,
     normalizeEvidenceRefs(event.counterparty_agent_ids).sort().join('|')
   ].join('::');
+}
+
+function matchesEventFilters(event, filters = {}) {
+  if (filters.agent_id && event.agent_id !== filters.agent_id) {
+    return false;
+  }
+
+  if (filters.event_type && event.event_type !== filters.event_type) {
+    return false;
+  }
+
+  if (filters.severity && event.severity !== filters.severity) {
+    return false;
+  }
+
+  if (filters.correlation_id && event.correlation_id !== filters.correlation_id) {
+    return false;
+  }
+
+  return true;
 }
 
 function parseLimit(value) {

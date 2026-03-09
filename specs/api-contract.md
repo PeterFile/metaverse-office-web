@@ -10,7 +10,7 @@
 - `GET /events?agent_id=&event_type=&severity=&correlation_id=&limit=`
 - `GET /interactions?interaction_type=&counterparty_agent_id=&severity=&correlation_id=&limit=&window=`
 - `GET /office/overview`
-- `GET /timeline?window=60m`
+- `GET /timeline?window=&agent_id=&event_type=&severity=&correlation_id=&limit=`
 - `GET /peer-watch/alerts?status=&target_agent_id=&agent_id=&watcher_agent_id=&observer_agent_id=&correlation_id=&severity=&limit=`
 - `GET /handoffs`
 - `GET /reboots`
@@ -42,6 +42,7 @@
 - repeated unchanged collector conditions must not append duplicate activity or `peer_watch_alert_raised` events
 - when a previously open collector-derived alert clears in a later snapshot, append `peer_watch_alert_resolved`
 - time alone must never fabricate `red`; `red` remains explicit event-driven supervision
+- collector-derived activity and supervision remain queryable through `/timeline` using the same evidence/source fields as the canonical event log
 
 ## Agent detail query semantics
 - `GET /agents/:id` returns the current agent projection plus evidence-first detail slices
@@ -75,6 +76,38 @@
     "recent_handoffs": [],
     "recent_reboots": []
   }
+}
+```
+
+## Timeline query semantics
+- timeline replay is read-only and derived directly from the append-only event log
+- `GET /timeline` supports `window`, `agent_id`, `event_type`, `severity`, `correlation_id`, and `limit`
+- the default `window` remains `60m`
+- output is always chronological ascending for replay readability
+- when `limit` is provided, the server selects the most recent matching events inside the filtered window and returns that slice ascending
+- each timeline item exposes `event_id`, `ts`, `agent_id`, `actor_id`, `event_type`, `severity`, `current_state`, `location`, `summary`, `correlation_id`, `counterparty_agent_ids`, `evidence_refs`, and `source_kind`
+- collector-derived activity and supervision events flow through `/timeline` without rewriting their evidence refs, counterparties, or source kind
+
+## Timeline response shape
+```json
+{
+  "items": [
+    {
+      "event_id": "evt_peer_watch_replay",
+      "ts": "2026-03-09T18:07:00.000Z",
+      "agent_id": "app-engineering",
+      "actor_id": "team-lead",
+      "event_type": "peer_watch_alert_raised",
+      "severity": "orange",
+      "current_state": "blocked",
+      "location": "review-zone",
+      "summary": "Lead escalated replay ordering issue",
+      "correlation_id": "corr-replay",
+      "counterparty_agent_ids": ["protocol-engineering"],
+      "evidence_refs": ["/tmp/replay-alert.md"],
+      "source_kind": "controller_event"
+    }
+  ]
 }
 ```
 

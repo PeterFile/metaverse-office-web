@@ -57,6 +57,7 @@ function createEvent({
   currentState,
   activeTask,
   summary,
+  location = 'meeting-zone',
   severity = 'normal',
   correlationId,
   counterpartyAgentIds = [],
@@ -73,7 +74,7 @@ function createEvent({
     event_type: eventType,
     current_state: currentState,
     active_task: activeTask,
-    location: 'meeting-zone',
+    location,
     summary,
     severity,
     correlation_id: correlationId,
@@ -323,6 +324,132 @@ test('POST writes append records and projection endpoints query them', async (t)
 
   const lines = (await readFile(storeFile, 'utf8')).trim().split('\n');
   assert.equal(lines.length, 5);
+});
+
+test('GET /timeline supports replay filters, evidence fields, and ascending limit slices', async (t) => {
+  const { baseUrl, store } = await createHarness(t, {
+    now: () => '2026-03-09T18:30:00.000Z'
+  });
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_timeline_old',
+      ts: '2026-03-09T17:40:00.000Z',
+      agentId: 'app-engineering',
+      eventType: 'agent_wrote_file',
+      currentState: 'coding',
+      activeTask: 'Old replay artifact',
+      location: 'desk-app-engineering',
+      summary: 'Outside replay window',
+      correlationId: 'corr-replay',
+      evidenceRefs: ['/tmp/old-replay.md']
+    })
+  );
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_timeline_1',
+      ts: '2026-03-09T18:03:00.000Z',
+      agentId: 'app-engineering',
+      eventType: 'agent_wrote_file',
+      currentState: 'coding',
+      activeTask: 'Implement replay query',
+      location: 'desk-app-engineering',
+      summary: 'Wrote timeline replay query notes',
+      correlationId: 'corr-replay',
+      evidenceRefs: ['/tmp/replay-query.md']
+    })
+  );
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_timeline_2',
+      ts: '2026-03-09T18:07:00.000Z',
+      agentId: 'app-engineering',
+      actorId: 'team-lead',
+      eventType: 'peer_watch_alert_raised',
+      currentState: 'blocked',
+      activeTask: 'Fix replay ordering',
+      location: 'review-zone',
+      summary: 'Lead escalated replay ordering issue',
+      severity: 'orange',
+      correlationId: 'corr-replay',
+      counterpartyAgentIds: ['protocol-engineering'],
+      evidenceRefs: ['/tmp/replay-alert.md'],
+      sourceKind: 'controller_event'
+    })
+  );
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_timeline_3',
+      ts: '2026-03-09T18:11:00.000Z',
+      agentId: 'growth-revenue',
+      actorId: 'team-lead',
+      eventType: 'review_started',
+      currentState: 'reviewing',
+      activeTask: 'Review replay slice',
+      location: 'review-zone',
+      summary: 'Lead started replay slice review',
+      severity: 'yellow',
+      correlationId: 'corr-replay',
+      counterpartyAgentIds: ['app-engineering'],
+      evidenceRefs: ['/tmp/replay-review.md'],
+      sourceKind: 'controller_event'
+    })
+  );
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_timeline_4',
+      ts: '2026-03-09T18:14:00.000Z',
+      agentId: 'app-engineering',
+      eventType: 'agent_wrote_file',
+      currentState: 'coding',
+      activeTask: 'Write unrelated artifact',
+      location: 'desk-app-engineering',
+      summary: 'Wrote unrelated artifact',
+      correlationId: 'corr-other',
+      evidenceRefs: ['/tmp/other-artifact.md']
+    })
+  );
+
+  const agentTimeline = await requestJson(`${baseUrl}/timeline?window=30m&agent_id=app-engineering`);
+  assert.equal(agentTimeline.response.status, 200);
+  assert.deepEqual(
+    agentTimeline.body.items.map((item) => item.event_id),
+    ['evt_timeline_1', 'evt_timeline_2', 'evt_timeline_4']
+  );
+
+  const filtered = await requestJson(
+    `${baseUrl}/timeline?window=30m&event_type=peer_watch_alert_raised&severity=orange&correlation_id=corr-replay`
+  );
+  assert.equal(filtered.response.status, 200);
+  assert.deepEqual(filtered.body.items, [
+    {
+      event_id: 'evt_timeline_2',
+      ts: '2026-03-09T18:07:00.000Z',
+      agent_id: 'app-engineering',
+      actor_id: 'team-lead',
+      event_type: 'peer_watch_alert_raised',
+      severity: 'orange',
+      current_state: 'blocked',
+      location: 'review-zone',
+      summary: 'Lead escalated replay ordering issue',
+      correlation_id: 'corr-replay',
+      counterparty_agent_ids: ['protocol-engineering'],
+      evidence_refs: ['/tmp/replay-alert.md'],
+      source_kind: 'controller_event'
+    }
+  ]);
+
+  const limited = await requestJson(`${baseUrl}/timeline?window=30m&correlation_id=corr-replay&limit=2`);
+  assert.equal(limited.response.status, 200);
+  assert.deepEqual(
+    limited.body.items.map((item) => item.event_id),
+    ['evt_timeline_2', 'evt_timeline_3']
+  );
+  assert.ok(Date.parse(limited.body.items[0].ts) < Date.parse(limited.body.items[1].ts));
 });
 
 test('GET interaction endpoints expose derived read models and filters', async (t) => {
@@ -1012,6 +1139,34 @@ test('collector snapshot POST emits supervision events onto existing query surfa
     timeline.body.items.filter((item) => item.event_type === 'peer_watch_alert_raised').length,
     2
   );
+  const growthRevenueAlert = timeline.body.items.find(
+    (item) =>
+      item.agent_id === 'growth-revenue' && item.event_type === 'peer_watch_alert_raised'
+  );
+  assert.ok(growthRevenueAlert);
+  assert.equal(growthRevenueAlert.source_kind, 'controller_event');
+  assert.deepEqual(growthRevenueAlert.counterparty_agent_ids, ['app-engineering']);
+  assert.deepEqual(growthRevenueAlert.evidence_refs, [
+    '/tmp/growth-revenue/inbox.md',
+    'tmux://6-web3-growth-revenue/0.0'
+  ]);
+
+  const growthRevenueStateChange = timeline.body.items.find(
+    (item) =>
+      item.agent_id === 'growth-revenue' && item.event_type === 'agent_state_changed'
+  );
+  assert.ok(growthRevenueStateChange);
+  assert.equal(growthRevenueStateChange.source_kind, 'tmux_observation');
+  assert.deepEqual(growthRevenueStateChange.evidence_refs, [
+    'tmux://6-web3-growth-revenue/0.0'
+  ]);
+
+  const growthRevenueFileWrite = timeline.body.items.find(
+    (item) => item.agent_id === 'growth-revenue' && item.event_type === 'agent_wrote_file'
+  );
+  assert.ok(growthRevenueFileWrite);
+  assert.equal(growthRevenueFileWrite.source_kind, 'workspace_file');
+  assert.deepEqual(growthRevenueFileWrite.evidence_refs, ['/tmp/growth-revenue/inbox.md']);
 
   const growthRevenue = await requestJson(`${baseUrl}/agents/growth-revenue`);
   assert.equal(growthRevenue.response.status, 200);

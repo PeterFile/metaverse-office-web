@@ -145,6 +145,11 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
     sendJson(res, 200, {
       items: store.listTimeline({
         window: url.searchParams.get('window') || '60m',
+        agent_id: url.searchParams.get('agent_id'),
+        event_type: url.searchParams.get('event_type'),
+        severity: url.searchParams.get('severity'),
+        correlation_id: url.searchParams.get('correlation_id'),
+        limit: url.searchParams.get('limit'),
         now: now()
       })
     });

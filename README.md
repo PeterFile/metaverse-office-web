@@ -1,6 +1,6 @@
 # Metaverse Office Web
 
-Updated: 2026-03-10T01:43:51+08:00
+Updated: 2026-03-10T04:22:21+08:00
 
 This repository is the implementation home for the Hermes-Agent metaverse-office project.
 
@@ -21,11 +21,13 @@ This repository is the implementation home for the Hermes-Agent metaverse-office
 - collector snapshots now also append deduped canonical `agent_state_changed` and `agent_wrote_file` events when observed state or file-write evidence advances
 - derived interaction read models now expose communication records without adding a new write path
 - enriched agent detail and peer-watch alert queries now expose current evidence surfaces without adding new writes
+- timeline replay slices now support evidence-first filtering by agent, event type, severity, correlation, and recent slice limit
 
 ## Key documents
 - `specs/phase1-spec.md`
 - `specs/api-contract.md`
 - `docs/plans/phase1-kickoff-plan.md`
+- `docs/plans/phase1-timeline-replay-plan.md`
 - `docs/plans/phase1-supervision-events-plan.md`
 - `docs/adr/0001-phase1-stack.md`
 - `notes/source-documents.md`
@@ -62,7 +64,7 @@ Optional env:
 - `GET /interactions`
 - `GET /collectors/controller-snapshot`
 - `GET /office/overview`
-- `GET /timeline`
+- `GET /timeline?window=&agent_id=&event_type=&severity=&correlation_id=&limit=`
 - `GET /peer-watch/alerts?status=&target_agent_id=&agent_id=&watcher_agent_id=&observer_agent_id=&correlation_id=&severity=&limit=`
 - `GET /handoffs`
 - `GET /reboots`
@@ -88,6 +90,13 @@ Optional env:
 - paired start/completed events collapse into one interaction only when interaction type, `correlation_id`, and participant lineage all match
 - when that lineage is ambiguous, the server returns single-event interaction records instead of guessing
 - global interaction filters: `interaction_type`, `counterparty_agent_id`, `severity`, `correlation_id`, `limit`, `window`
+
+### Timeline replay notes
+- `GET /timeline` is a read-only replay slice over canonical events
+- supported filters are `window`, `agent_id`, `event_type`, `severity`, `correlation_id`, and `limit`
+- replay output stays chronological ascending
+- when `limit` is present, the server chooses the newest matching events first and still returns them ascending
+- timeline items include evidence refs, counterparties, and `source_kind`, so collector-derived activity/supervision flows through unchanged
 
 ### Peer-watch alert query notes
 - `GET /peer-watch/alerts` stays read-only and derives its evidence view from canonical peer-watch events

@@ -1,7 +1,7 @@
 # Repo-local Phase 1 Spec Mirror
 
 Source of truth: `/Users/cwp/.hermes/teams/web3-company/controller/phase1-spec-package.md`
-Last mirrored: 2026-03-10T01:43:51+08:00
+Last mirrored: 2026-03-10T04:22:21+08:00
 
 This repository mirrors the controller-approved Phase 1 scope so implementation stays under `/Users/cwp/Projects/metaverse-office-web` instead of `~/.hermes/teams/...`.
 
@@ -70,6 +70,14 @@ This repository mirrors the controller-approved Phase 1 scope so implementation 
 - supported interaction types are `question_reply`, `review`, `handoff`, `peer_watch`, and `meeting`
 - paired interaction records only form when type, `correlation_id`, and participant lineage clearly match
 - unmatched events stay as single-event interaction records rather than inferred conversations
+
+## Timeline replay addendum
+- `GET /timeline` stays a read-only replay slice over append-only canonical events
+- supported filters are `window`, `agent_id`, `event_type`, `severity`, `correlation_id`, and `limit`
+- replay output stays chronological ascending for readability
+- when `limit` is provided, select the most recent matching events first and return that slice ascending
+- each timeline item exposes `event_id`, `ts`, `agent_id`, `actor_id`, `event_type`, `severity`, `current_state`, `location`, `summary`, `correlation_id`, `counterparty_agent_ids`, `evidence_refs`, and `source_kind`
+- collector-derived activity and supervision events flow through the same timeline item shape without rewriting their evidence or source fields
 
 ## Agent detail and alert read-model addendum
 - `GET /agents/:id` exposes the current projection plus `latest_heartbeat`, `open_peer_watch_alerts`, `recent_events`, `recent_interactions`, `recent_handoffs`, and `recent_reboots`

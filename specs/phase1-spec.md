@@ -1,7 +1,7 @@
 # Repo-local Phase 1 Spec Mirror
 
 Source of truth: `/Users/cwp/.hermes/teams/web3-company/controller/phase1-spec-package.md`
-Last mirrored: 2026-03-09T23:56:50+08:00
+Last mirrored: 2026-03-10T01:43:51+08:00
 
 This repository mirrors the controller-approved Phase 1 scope so implementation stays under `/Users/cwp/Projects/metaverse-office-web` instead of `~/.hermes/teams/...`.
 
@@ -19,6 +19,7 @@ This repository mirrors the controller-approved Phase 1 scope so implementation 
 - evidence binding to files and tmux observations
 - repo-local implementation plan and backend scaffold
 - controller snapshot collector that can emit evidence-backed peer-watch alerts from collected heartbeats without inventing new event types
+- enriched agent detail and peer-watch evidence queries over the existing append-only read models
 
 ## Canonical state enum
 - idle
@@ -65,3 +66,8 @@ This repository mirrors the controller-approved Phase 1 scope so implementation 
 - supported interaction types are `question_reply`, `review`, `handoff`, `peer_watch`, and `meeting`
 - paired interaction records only form when type, `correlation_id`, and participant lineage clearly match
 - unmatched events stay as single-event interaction records rather than inferred conversations
+
+## Agent detail and alert read-model addendum
+- `GET /agents/:id` exposes the current projection plus `latest_heartbeat`, `open_peer_watch_alerts`, `recent_events`, `recent_interactions`, `recent_handoffs`, and `recent_reboots`
+- the detail query stays evidence-first: it reuses append-only heartbeats/events instead of adding a write path
+- `GET /peer-watch/alerts?status=open` returns only currently unresolved alerts; omit `status` to inspect historical alert events

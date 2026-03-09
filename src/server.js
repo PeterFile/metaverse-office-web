@@ -96,7 +96,10 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
   const agentMatch = pathname.match(/^\/agents\/([^/]+)$/);
   if (method === 'GET' && agentMatch) {
     const agentId = decodeURIComponent(agentMatch[1]);
-    const agent = store.getAgent(agentId);
+    const agent = store.getAgentDetail(agentId, {
+      limit: url.searchParams.get('limit'),
+      now: now()
+    });
 
     if (!agent) {
       sendJson(res, 404, {
@@ -151,7 +154,14 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
   if (method === 'GET' && pathname === '/peer-watch/alerts') {
     sendJson(res, 200, {
       items: store.listPeerWatchAlerts({
-        severity: url.searchParams.get('severity')
+        severity: url.searchParams.get('severity'),
+        status: url.searchParams.get('status'),
+        target_agent_id: url.searchParams.get('target_agent_id'),
+        agent_id: url.searchParams.get('agent_id'),
+        watcher_agent_id: url.searchParams.get('watcher_agent_id'),
+        observer_agent_id: url.searchParams.get('observer_agent_id'),
+        correlation_id: url.searchParams.get('correlation_id'),
+        limit: url.searchParams.get('limit')
       })
     });
     return;

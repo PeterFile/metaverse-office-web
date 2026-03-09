@@ -1,6 +1,6 @@
 # Metaverse Office Web
 
-Updated: 2026-03-09T23:56:50+08:00
+Updated: 2026-03-10T01:43:51+08:00
 
 This repository is the implementation home for the Hermes-Agent metaverse-office project.
 
@@ -19,6 +19,7 @@ This repository is the implementation home for the Hermes-Agent metaverse-office
 - office overview query now exposes zone layout, occupants, watch edges, and derived staleness for future UI work
 - controller snapshot collector now derives evidence-backed heartbeats from workspace/tmux metadata and appends collector-backed peer-watch alerts into the existing event log
 - derived interaction read models now expose communication records without adding a new write path
+- enriched agent detail and peer-watch alert queries now expose current evidence surfaces without adding new writes
 
 ## Key documents
 - `specs/phase1-spec.md`
@@ -53,7 +54,7 @@ Optional env:
 ### API
 - `GET /health`
 - `GET /agents`
-- `GET /agents/:id`
+- `GET /agents/:id?limit=`
 - `GET /agents/:id/events`
 - `GET /agents/:id/interactions`
 - `GET /events`
@@ -61,7 +62,7 @@ Optional env:
 - `GET /collectors/controller-snapshot`
 - `GET /office/overview`
 - `GET /timeline`
-- `GET /peer-watch/alerts`
+- `GET /peer-watch/alerts?status=&target_agent_id=&agent_id=&watcher_agent_id=&observer_agent_id=&correlation_id=&severity=&limit=`
 - `GET /handoffs`
 - `GET /reboots`
 - `POST /events`
@@ -75,12 +76,22 @@ Optional env:
 - staleness thresholds are `<20m = normal`, `>=20m = yellow`, `>=30m = orange`
 - `red` remains event-driven only
 
+### Agent detail read-model notes
+- `GET /agents/:id` returns the current agent projection plus `latest_heartbeat`
+- optional `limit` caps `open_peer_watch_alerts`, `recent_events`, `recent_interactions`, `recent_handoffs`, and `recent_reboots`
+- `open_peer_watch_alerts` is derived from unresolved peer-watch evidence, not from raw historical `raised` events
+
 ### Interaction read-model notes
 - `GET /interactions` and `GET /agents/:id/interactions` are read-only query surfaces derived from the existing append-only event log
 - supported interaction types are `question_reply`, `review`, `handoff`, `peer_watch`, and `meeting`
 - paired start/completed events collapse into one interaction only when interaction type, `correlation_id`, and participant lineage all match
 - when that lineage is ambiguous, the server returns single-event interaction records instead of guessing
 - global interaction filters: `interaction_type`, `counterparty_agent_id`, `severity`, `correlation_id`, `limit`, `window`
+
+### Peer-watch alert query notes
+- `GET /peer-watch/alerts` stays read-only and derives its evidence view from canonical peer-watch events
+- supported filters are `status`, `target_agent_id`, backward-compatible `agent_id`, `watcher_agent_id`, `observer_agent_id`, `correlation_id`, `severity`, and `limit`
+- `status=open` returns only currently unresolved alerts; omit `status` to inspect the full alert event history
 
 ### Controlled write rule
 Prototype writes require `x-actor-id: <agent_id>`.

@@ -2,7 +2,7 @@
 
 > For Hermes: keep implementation minimal, schema-first, and reversible. UI must not outrun the event/state architecture.
 
-Updated: 2026-03-09T23:56:50+08:00
+Updated: 2026-03-10T01:43:51+08:00
 Goal: land the first meaningful implementation milestone in `/Users/cwp/Projects/metaverse-office-web`.
 
 ## Task 1 — Freeze repo-local spec docs
@@ -43,3 +43,5 @@ Goal: land the first meaningful implementation milestone in `/Users/cwp/Projects
 - latest collector report is exposed as a read model without changing append-only event/heartbeat storage
 - next step remains backend-first: richer supervision/event emission and evidence surfaces, not decorative UI
 - `GET /interactions` and `GET /agents/:id/interactions` now expose a communication read model derived from append-only events
+- `GET /agents/:id` now exposes latest heartbeat plus recent event/interaction/handoff/reboot evidence slices
+- `GET /peer-watch/alerts` now supports evidence filters, with `status=open` derived from currently unresolved alerts instead of raw historical raises

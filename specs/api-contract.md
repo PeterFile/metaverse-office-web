@@ -3,7 +3,7 @@
 ## Read APIs
 - `GET /health`
 - `GET /agents`
-- `GET /agents/:id`
+- `GET /agents/:id?limit=`
 - `GET /agents/:id/events?limit=&event_type=&severity=&correlation_id=`
 - `GET /agents/:id/interactions?interaction_type=&counterparty_agent_id=&severity=&correlation_id=&limit=&window=`
 - `GET /collectors/controller-snapshot`
@@ -11,7 +11,7 @@
 - `GET /interactions?interaction_type=&counterparty_agent_id=&severity=&correlation_id=&limit=&window=`
 - `GET /office/overview`
 - `GET /timeline?window=60m`
-- `GET /peer-watch/alerts?severity=`
+- `GET /peer-watch/alerts?status=&target_agent_id=&agent_id=&watcher_agent_id=&observer_agent_id=&correlation_id=&severity=&limit=`
 - `GET /handoffs`
 - `GET /reboots`
 
@@ -40,6 +40,41 @@
 - when a previously open collector-derived alert clears in a later snapshot, append `peer_watch_alert_resolved`
 - time alone must never fabricate `red`; `red` remains explicit event-driven supervision
 
+## Agent detail query semantics
+- `GET /agents/:id` returns the current agent projection plus evidence-first detail slices
+- optional `limit` applies to `open_peer_watch_alerts`, `recent_events`, `recent_interactions`, `recent_handoffs`, and `recent_reboots`; default is `5`
+- `latest_heartbeat` returns the most recent append-only heartbeat for the agent or `null`
+- `open_peer_watch_alerts` is derived from unresolved peer-watch alerts, not from raw historical `peer_watch_alert_raised` events
+
+## Agent detail response shape
+```json
+{
+  "item": {
+    "agent_id": "app-engineering",
+    "current_state": "rebooting",
+    "last_event_id": "evt_reboot_detail",
+    "latest_heartbeat": {
+      "agent_id": "app-engineering",
+      "received_at": "2026-03-09T18:19:00.000Z"
+    },
+    "open_peer_watch_alerts": [
+      {
+        "alert_id": "evt_alert_open",
+        "target_agent_id": "app-engineering",
+        "observer_agent_id": "team-lead",
+        "watcher_agent_ids": ["protocol-engineering"],
+        "status": "open",
+        "evidence_count": 1
+      }
+    ],
+    "recent_events": [],
+    "recent_interactions": [],
+    "recent_handoffs": [],
+    "recent_reboots": []
+  }
+}
+```
+
 ## Interaction query semantics
 - interaction read models are derived from the existing append-only event log; there is no `POST /interactions`
 - supported interaction types are `question_reply`, `review`, `handoff`, `peer_watch`, and `meeting`
@@ -48,6 +83,37 @@
 - `GET /interactions` supports `interaction_type`, `counterparty_agent_id`, `severity`, `correlation_id`, `limit`, and `window`
 - `GET /agents/:id/interactions` supports the same filters while treating `:id` as the implicit participant filter
 - each interaction item exposes `interaction_id`, `interaction_type`, `correlation_id`, `started_at`, `ended_at`, `participant_agent_ids`, `trigger_event_id`, `before_state`, `after_state`, `severity`, `evidence_refs`, `summary`, and `related_event_ids`
+
+## Peer-watch alert query semantics
+- peer-watch alert queries stay read-only and derive their evidence view from canonical peer-watch events
+- `GET /peer-watch/alerts` supports `status`, `target_agent_id`, backward-compatible `agent_id`, `watcher_agent_id`, `observer_agent_id`, `correlation_id`, `severity`, and `limit`
+- `status=open` returns only currently unresolved alerts from the derived open-alert projection
+- `status=resolved` returns historical resolution events; omitting `status` returns the full alert event history
+- each alert item exposes `alert_id`, `target_agent_id`, `observer_agent_id`, `watcher_agent_ids`, `status`, `current_state`, `active_task`, `severity`, `summary`, `evidence_refs`, `evidence_count`, `correlation_id`, `source_kind`, and `metadata`
+
+## Peer-watch alert response shape
+```json
+{
+  "items": [
+    {
+      "alert_id": "evt_peer_watch_other",
+      "target_agent_id": "market-intel",
+      "observer_agent_id": "team-lead",
+      "watcher_agent_ids": ["growth-revenue"],
+      "status": "open",
+      "current_state": "blocked",
+      "active_task": "Investigate stale market notes",
+      "severity": "yellow",
+      "summary": "Growth revenue escalated stale evidence",
+      "evidence_refs": ["/tmp/evidence-other.md"],
+      "evidence_count": 1,
+      "correlation_id": "corr-other",
+      "source_kind": "controller_event",
+      "metadata": {}
+    }
+  ]
+}
+```
 
 ## Interaction response shape
 ```json

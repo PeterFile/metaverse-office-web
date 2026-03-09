@@ -410,6 +410,210 @@ test('GET interaction endpoints expose derived read models and filters', async (
   assert.equal(missingAgent.response.status, 404);
 });
 
+test('GET /agents/:id includes recent evidence surfaces while preserving the current snapshot', async (t) => {
+  const { baseUrl, store } = await createHarness(t, {
+    now: () => '2026-03-09T18:20:00.000Z'
+  });
+
+  await store.appendHeartbeat({
+    agent_id: 'app-engineering',
+    actor_id: 'app-engineering',
+    received_at: '2026-03-09T18:19:00.000Z',
+    current_state: 'coding',
+    active_task: 'Harden agent detail query',
+    current_location: 'desk-app-engineering',
+    last_meaningful_output_at: '2026-03-09T18:18:00.000Z',
+    last_file_write_at: '2026-03-09T18:18:00.000Z',
+    current_blocker: '',
+    confidence_level: 'high',
+    reboot_recommended: false
+  });
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_alert_open',
+      ts: '2026-03-09T18:14:00.000Z',
+      agentId: 'app-engineering',
+      actorId: 'team-lead',
+      eventType: 'peer_watch_alert_raised',
+      currentState: 'blocked',
+      activeTask: 'Investigate failing query',
+      summary: 'Lead raised an open peer-watch alert',
+      severity: 'orange',
+      correlationId: 'corr-agent-detail',
+      counterpartyAgentIds: ['protocol-engineering'],
+      evidenceRefs: ['/tmp/agent-detail-alert.md']
+    })
+  );
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_review_started_detail',
+      ts: '2026-03-09T18:15:00.000Z',
+      agentId: 'app-engineering',
+      actorId: 'team-lead',
+      eventType: 'review_started',
+      currentState: 'reviewing',
+      activeTask: 'Review enriched agent detail',
+      summary: 'Lead started agent detail review',
+      severity: 'yellow',
+      correlationId: 'review-agent-detail',
+      counterpartyAgentIds: ['protocol-engineering'],
+      evidenceRefs: ['/tmp/review-start-detail.md']
+    })
+  );
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_review_completed_detail',
+      ts: '2026-03-09T18:16:00.000Z',
+      agentId: 'app-engineering',
+      actorId: 'team-lead',
+      eventType: 'review_completed',
+      currentState: 'reviewing',
+      activeTask: 'Review enriched agent detail',
+      summary: 'Lead completed agent detail review',
+      severity: 'normal',
+      correlationId: 'review-agent-detail',
+      counterpartyAgentIds: ['protocol-engineering'],
+      evidenceRefs: ['/tmp/review-end-detail.md']
+    })
+  );
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_handoff_detail',
+      ts: '2026-03-09T18:17:00.000Z',
+      agentId: 'app-engineering',
+      actorId: 'team-lead',
+      eventType: 'agent_handoff_started',
+      currentState: 'planning',
+      activeTask: 'Hand off alert follow-up',
+      summary: 'Lead started a handoff for agent detail work',
+      severity: 'normal',
+      correlationId: 'handoff-agent-detail',
+      counterpartyAgentIds: ['growth-revenue'],
+      evidenceRefs: ['/tmp/handoff-detail.md']
+    })
+  );
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_reboot_detail',
+      ts: '2026-03-09T18:18:30.000Z',
+      agentId: 'app-engineering',
+      actorId: 'team-lead',
+      eventType: 'agent_reboot_requested',
+      currentState: 'rebooting',
+      activeTask: 'Reset query context',
+      summary: 'Lead requested a reboot for agent detail work',
+      severity: 'orange',
+      correlationId: 'reboot-agent-detail',
+      evidenceRefs: ['/tmp/reboot-detail.md']
+    })
+  );
+
+  const response = await requestJson(`${baseUrl}/agents/app-engineering`);
+  assert.equal(response.response.status, 200);
+  assert.equal(response.body.item.agent_id, 'app-engineering');
+  assert.equal(response.body.item.last_event_id, 'evt_reboot_detail');
+  assert.equal(response.body.item.latest_heartbeat.received_at, '2026-03-09T18:19:00.000Z');
+  assert.equal(response.body.item.open_peer_watch_alerts.length, 1);
+  assert.equal(response.body.item.open_peer_watch_alerts[0].alert_id, 'evt_alert_open');
+  assert.equal(response.body.item.recent_events.length, 5);
+  assert.equal(response.body.item.recent_events[0].event_id, 'evt_reboot_detail');
+  assert.equal(response.body.item.recent_interactions.length, 3);
+  assert.equal(response.body.item.recent_interactions[0].interaction_type, 'handoff');
+  assert.equal(response.body.item.recent_handoffs.length, 1);
+  assert.equal(response.body.item.recent_handoffs[0].handoff_id, 'evt_handoff_detail');
+  assert.equal(response.body.item.recent_reboots.length, 1);
+  assert.equal(response.body.item.recent_reboots[0].reboot_id, 'evt_reboot_detail');
+});
+
+test('GET /peer-watch/alerts supports evidence-oriented filters and fields', async (t) => {
+  const { baseUrl, store } = await createHarness(t, {
+    now: () => '2026-03-09T18:20:00.000Z'
+  });
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_peer_watch_open_target',
+      ts: '2026-03-09T18:10:00.000Z',
+      agentId: 'app-engineering',
+      actorId: 'team-lead',
+      eventType: 'peer_watch_alert_raised',
+      currentState: 'blocked',
+      activeTask: 'Fix evidence query',
+      summary: 'Protocol engineering escalated missing evidence',
+      severity: 'orange',
+      correlationId: 'corr-open-target',
+      counterpartyAgentIds: ['protocol-engineering'],
+      evidenceRefs: ['/tmp/evidence-open.md']
+    })
+  );
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_peer_watch_resolved_target',
+      ts: '2026-03-09T18:12:00.000Z',
+      agentId: 'app-engineering',
+      actorId: 'team-lead',
+      eventType: 'peer_watch_alert_resolved',
+      currentState: 'coding',
+      activeTask: 'Fix evidence query',
+      summary: 'Protocol engineering confirmed the evidence fix',
+      severity: 'orange',
+      correlationId: 'corr-open-target',
+      counterpartyAgentIds: ['protocol-engineering'],
+      evidenceRefs: ['/tmp/evidence-resolved.md']
+    })
+  );
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_peer_watch_other',
+      ts: '2026-03-09T18:14:00.000Z',
+      agentId: 'market-intel',
+      actorId: 'team-lead',
+      eventType: 'peer_watch_alert_raised',
+      currentState: 'blocked',
+      activeTask: 'Investigate stale market notes',
+      summary: 'Growth revenue escalated stale evidence',
+      severity: 'yellow',
+      correlationId: 'corr-other',
+      counterpartyAgentIds: ['growth-revenue'],
+      evidenceRefs: ['/tmp/evidence-other.md']
+    })
+  );
+
+  const filtered = await requestJson(
+    `${baseUrl}/peer-watch/alerts?status=open&target_agent_id=market-intel&watcher_agent_id=growth-revenue&observer_agent_id=team-lead&correlation_id=corr-other&severity=yellow&limit=1`
+  );
+  assert.equal(filtered.response.status, 200);
+  assert.equal(filtered.body.items.length, 1);
+  assert.equal(filtered.body.items[0].alert_id, 'evt_peer_watch_other');
+  assert.equal(filtered.body.items[0].target_agent_id, 'market-intel');
+  assert.equal(filtered.body.items[0].observer_agent_id, 'team-lead');
+  assert.deepEqual(filtered.body.items[0].watcher_agent_ids, ['growth-revenue']);
+  assert.equal(filtered.body.items[0].evidence_count, 1);
+  assert.equal(filtered.body.items[0].status, 'open');
+  assert.equal(filtered.body.items[0].correlation_id, 'corr-other');
+
+  const backwardsCompatible = await requestJson(
+    `${baseUrl}/peer-watch/alerts?agent_id=app-engineering&status=resolved`
+  );
+  assert.equal(backwardsCompatible.response.status, 200);
+  assert.equal(backwardsCompatible.body.items.length, 1);
+  assert.equal(backwardsCompatible.body.items[0].alert_id, 'evt_peer_watch_resolved_target');
+  assert.equal(backwardsCompatible.body.items[0].agent_id, 'app-engineering');
+
+  const currentlyOpen = await requestJson(
+    `${baseUrl}/peer-watch/alerts?agent_id=app-engineering&status=open`
+  );
+  assert.equal(currentlyOpen.response.status, 200);
+  assert.deepEqual(currentlyOpen.body.items, []);
+});
+
 test('write endpoints reject missing headers, invalid payloads, and actor-boundary violations', async (t) => {
   const { baseUrl } = await createHarness(t);
 

@@ -200,6 +200,46 @@ class PrototypeStore {
     return this.listAgents().find((agent) => agent.agent_id === agentId) || null;
   }
 
+  getAgentDetail(agentId, filters = {}) {
+    const agent = this.getAgent(agentId);
+    if (!agent) {
+      return null;
+    }
+
+    const recentLimit = parseLimit(filters.limit || 5);
+
+    return {
+      ...agent,
+      latest_heartbeat: this.getLatestHeartbeat(agentId),
+      open_peer_watch_alerts: this.listOpenPeerWatchAlerts({
+        target_agent_id: agentId,
+        limit: recentLimit
+      }),
+      recent_events: this.listAgentEvents(agentId, {
+        limit: recentLimit
+      }),
+      recent_interactions: this.listAgentInteractions(agentId, {
+        limit: recentLimit,
+        now: filters.now
+      }),
+      recent_handoffs: this.listHandoffs({
+        agent_id: agentId,
+        limit: recentLimit
+      }),
+      recent_reboots: this.listReboots({
+        agent_id: agentId,
+        limit: recentLimit
+      })
+    };
+  }
+
+  getLatestHeartbeat(agentId) {
+    return this.heartbeats
+      .filter((heartbeat) => heartbeat.agent_id === agentId)
+      .slice()
+      .sort((left, right) => getHeartbeatSortMs(right) - getHeartbeatSortMs(left))[0] || null;
+  }
+
   listEvents(filters = {}) {
     const limit = parseLimit(filters.limit);
 
@@ -320,28 +360,54 @@ class PrototypeStore {
       }));
   }
 
-  listPeerWatchAlerts({ severity }) {
+  listPeerWatchAlerts(filters = {}) {
+    if (filters.status === 'open') {
+      return this.listOpenPeerWatchAlerts(filters);
+    }
+
+    const limit = parseLimit(filters.limit);
+
     return this.events
       .filter((event) => event.event_type.startsWith('peer_watch_alert_'))
-      .filter((event) => !severity || event.severity === severity)
+      .map((event) => createPeerWatchAlertRecord(event))
+      .filter((alert) => matchesPeerWatchAlertFilters(alert, filters))
       .slice()
       .sort((left, right) => Date.parse(right.ts) - Date.parse(left.ts))
-      .map((event) => ({
-        alert_id: event.event_id,
-        ts: event.ts,
-        agent_id: event.agent_id,
-        actor_id: event.actor_id,
-        severity: event.severity,
-        status: event.event_type.endsWith('_resolved') ? 'resolved' : 'open',
-        summary: event.summary,
-        evidence_refs: event.evidence_refs,
-        correlation_id: event.correlation_id
-      }));
+      .slice(0, limit);
   }
 
-  listHandoffs() {
+  listOpenPeerWatchAlerts(filters = {}) {
+    const limit = parseLimit(filters.limit);
+
+    return deriveOpenPeerWatchAlerts(this.events)
+      .filter((alert) => matchesPeerWatchAlertFilters(alert, {
+        ...filters,
+        status: 'open'
+      }))
+      .slice()
+      .sort((left, right) => Date.parse(right.ts) - Date.parse(left.ts))
+      .slice(0, limit);
+  }
+
+  listHandoffs(filters = {}) {
+    const limit = parseLimit(filters.limit);
+
     return this.events
       .filter((event) => event.event_type.startsWith('agent_handoff_'))
+      .filter((event) => {
+        if (filters.agent_id && event.agent_id !== filters.agent_id) {
+          return false;
+        }
+
+        if (
+          filters.correlation_id &&
+          event.correlation_id !== filters.correlation_id
+        ) {
+          return false;
+        }
+
+        return true;
+      })
       .slice()
       .sort((left, right) => Date.parse(right.ts) - Date.parse(left.ts))
       .map((event) => ({
@@ -354,12 +420,33 @@ class PrototypeStore {
         counterparty_agent_ids: event.counterparty_agent_ids,
         evidence_refs: event.evidence_refs,
         correlation_id: event.correlation_id
-      }));
+      }))
+      .slice(0, limit);
   }
 
-  listReboots() {
+  listReboots(filters = {}) {
+    const limit = parseLimit(filters.limit);
+
     return this.events
       .filter((event) => event.event_type.startsWith('agent_reboot_'))
+      .filter((event) => {
+        if (filters.agent_id && event.agent_id !== filters.agent_id) {
+          return false;
+        }
+
+        if (filters.severity && event.severity !== filters.severity) {
+          return false;
+        }
+
+        if (
+          filters.correlation_id &&
+          event.correlation_id !== filters.correlation_id
+        ) {
+          return false;
+        }
+
+        return true;
+      })
       .slice()
       .sort((left, right) => Date.parse(right.ts) - Date.parse(left.ts))
       .map((event) => ({
@@ -372,7 +459,8 @@ class PrototypeStore {
         summary: event.summary,
         evidence_refs: event.evidence_refs,
         correlation_id: event.correlation_id
-      }));
+      }))
+      .slice(0, limit);
   }
 
   getOfficeOverview({ now }) {
@@ -940,6 +1028,47 @@ function deriveInteractions(events) {
   return interactions;
 }
 
+function deriveOpenPeerWatchAlerts(events) {
+  const openAlertsByEventId = new Map();
+  const openKeysByEventId = new Map();
+
+  const orderedEvents = events
+    .filter((event) => event.event_type.startsWith('peer_watch_alert_'))
+    .slice()
+    .sort((left, right) => Date.parse(left.ts) - Date.parse(right.ts));
+
+  for (const event of orderedEvents) {
+    if (event.event_type === 'peer_watch_alert_raised') {
+      const alert = createPeerWatchAlertRecord(event);
+      const key = createPeerWatchAlertKey(event);
+      openAlertsByEventId.set(event.event_id, alert);
+      openKeysByEventId.set(event.event_id, key);
+      continue;
+    }
+
+    const resolvedAlertEventId =
+      event.metadata && typeof event.metadata.resolved_alert_event_id === 'string'
+        ? event.metadata.resolved_alert_event_id
+        : null;
+
+    if (resolvedAlertEventId && openAlertsByEventId.has(resolvedAlertEventId)) {
+      openAlertsByEventId.delete(resolvedAlertEventId);
+      openKeysByEventId.delete(resolvedAlertEventId);
+      continue;
+    }
+
+    const resolvedKey = createPeerWatchAlertKey(event);
+    for (const [eventId, key] of openKeysByEventId.entries()) {
+      if (key === resolvedKey) {
+        openKeysByEventId.delete(eventId);
+        openAlertsByEventId.delete(eventId);
+      }
+    }
+  }
+
+  return Array.from(openAlertsByEventId.values());
+}
+
 function getInteractionDescriptor(event) {
   return INTERACTION_EVENT_DESCRIPTORS[event.event_type] || null;
 }
@@ -1015,6 +1144,10 @@ function getInteractionSortMs(interaction) {
   return Date.parse(interaction.ended_at || interaction.started_at);
 }
 
+function getHeartbeatSortMs(heartbeat) {
+  return Date.parse(heartbeat.received_at || 0);
+}
+
 function mergeSeverity(currentSeverity, nextSeverity) {
   const currentRank = SEVERITY_RANK[currentSeverity] || 0;
   const nextRank = SEVERITY_RANK[nextSeverity] || 0;
@@ -1027,6 +1160,85 @@ function getEventCurrentBlocker(event) {
   }
 
   return event.metadata.current_blocker;
+}
+
+function createPeerWatchAlertRecord(event) {
+  const evidenceRefs = normalizeEvidenceRefs(event.evidence_refs);
+  const watcherAgentIds = Array.from(
+    new Set(
+      (event.counterparty_agent_ids || []).filter(
+        (agentId) => typeof agentId === 'string' && agentId.length > 0
+      )
+    )
+  );
+
+  return {
+    alert_id: event.event_id,
+    ts: event.ts,
+    agent_id: event.agent_id,
+    target_agent_id: event.agent_id,
+    actor_id: event.actor_id,
+    observer_agent_id: event.actor_id,
+    watcher_agent_ids: watcherAgentIds,
+    severity: event.severity,
+    status: event.event_type.endsWith('_resolved') ? 'resolved' : 'open',
+    current_state: event.current_state,
+    active_task: event.active_task,
+    summary: event.summary,
+    evidence_refs: evidenceRefs,
+    evidence_count: evidenceRefs.length,
+    correlation_id: event.correlation_id,
+    source_kind: event.source_kind,
+    metadata: event.metadata || {}
+  };
+}
+
+function matchesPeerWatchAlertFilters(alert, filters = {}) {
+  const targetAgentId = filters.target_agent_id || filters.agent_id;
+
+  if (filters.severity && alert.severity !== filters.severity) {
+    return false;
+  }
+
+  if (filters.status && alert.status !== filters.status) {
+    return false;
+  }
+
+  if (targetAgentId && alert.target_agent_id !== targetAgentId) {
+    return false;
+  }
+
+  if (
+    filters.watcher_agent_id &&
+    !alert.watcher_agent_ids.includes(filters.watcher_agent_id)
+  ) {
+    return false;
+  }
+
+  if (
+    filters.observer_agent_id &&
+    alert.observer_agent_id !== filters.observer_agent_id
+  ) {
+    return false;
+  }
+
+  if (
+    filters.correlation_id &&
+    alert.correlation_id !== filters.correlation_id
+  ) {
+    return false;
+  }
+
+  return true;
+}
+
+function createPeerWatchAlertKey(event) {
+  return [
+    event.agent_id,
+    event.actor_id,
+    event.correlation_id,
+    normalizeEvidenceRefs(event.counterparty_agent_ids).sort().join('|')
+  ].join('::');
 }
 
 function parseLimit(value) {

@@ -66,6 +66,33 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
     return;
   }
 
+  const agentInteractionsMatch = pathname.match(/^\/agents\/([^/]+)\/interactions$/);
+  if (method === 'GET' && agentInteractionsMatch) {
+    const agentId = decodeURIComponent(agentInteractionsMatch[1]);
+    const agent = getAgentById(agentId);
+    if (!agent) {
+      sendJson(res, 404, {
+        error: 'not_found',
+        details: `unknown agent ${agentId}`
+      });
+      return;
+    }
+
+    sendJson(res, 200, {
+      agent_id: agentId,
+      items: store.listAgentInteractions(agentId, {
+        interaction_type: url.searchParams.get('interaction_type'),
+        counterparty_agent_id: url.searchParams.get('counterparty_agent_id'),
+        severity: url.searchParams.get('severity'),
+        correlation_id: url.searchParams.get('correlation_id'),
+        limit: url.searchParams.get('limit'),
+        window: url.searchParams.get('window'),
+        now: now()
+      })
+    });
+    return;
+  }
+
   const agentMatch = pathname.match(/^\/agents\/([^/]+)$/);
   if (method === 'GET' && agentMatch) {
     const agentId = decodeURIComponent(agentMatch[1]);
@@ -91,6 +118,21 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
         severity: url.searchParams.get('severity'),
         correlation_id: url.searchParams.get('correlation_id'),
         limit: url.searchParams.get('limit')
+      })
+    });
+    return;
+  }
+
+  if (method === 'GET' && pathname === '/interactions') {
+    sendJson(res, 200, {
+      items: store.listInteractions({
+        interaction_type: url.searchParams.get('interaction_type'),
+        counterparty_agent_id: url.searchParams.get('counterparty_agent_id'),
+        severity: url.searchParams.get('severity'),
+        correlation_id: url.searchParams.get('correlation_id'),
+        limit: url.searchParams.get('limit'),
+        window: url.searchParams.get('window'),
+        now: now()
       })
     });
     return;

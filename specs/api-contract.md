@@ -5,8 +5,10 @@
 - `GET /agents`
 - `GET /agents/:id`
 - `GET /agents/:id/events?limit=&event_type=&severity=&correlation_id=`
+- `GET /agents/:id/interactions?interaction_type=&counterparty_agent_id=&severity=&correlation_id=&limit=&window=`
 - `GET /collectors/controller-snapshot`
 - `GET /events?agent_id=&event_type=&severity=&correlation_id=&limit=`
+- `GET /interactions?interaction_type=&counterparty_agent_id=&severity=&correlation_id=&limit=&window=`
 - `GET /office/overview`
 - `GET /timeline?window=60m`
 - `GET /peer-watch/alerts?severity=`
@@ -37,6 +39,38 @@
 - repeated unchanged collector conditions must not append duplicate `peer_watch_alert_raised` events
 - when a previously open collector-derived alert clears in a later snapshot, append `peer_watch_alert_resolved`
 - time alone must never fabricate `red`; `red` remains explicit event-driven supervision
+
+## Interaction query semantics
+- interaction read models are derived from the existing append-only event log; there is no `POST /interactions`
+- supported interaction types are `question_reply`, `review`, `handoff`, `peer_watch`, and `meeting`
+- paired start/completed events collapse into one interaction only when the derived interaction type, `correlation_id`, and participant lineage all match
+- ambiguous or unmatched events remain single-event interaction records instead of guessed pairs
+- `GET /interactions` supports `interaction_type`, `counterparty_agent_id`, `severity`, `correlation_id`, `limit`, and `window`
+- `GET /agents/:id/interactions` supports the same filters while treating `:id` as the implicit participant filter
+- each interaction item exposes `interaction_id`, `interaction_type`, `correlation_id`, `started_at`, `ended_at`, `participant_agent_ids`, `trigger_event_id`, `before_state`, `after_state`, `severity`, `evidence_refs`, `summary`, and `related_event_ids`
+
+## Interaction response shape
+```json
+{
+  "items": [
+    {
+      "interaction_id": "interaction:evt_review_started",
+      "interaction_type": "review",
+      "correlation_id": "review-123",
+      "started_at": "2026-03-09T18:00:00.000Z",
+      "ended_at": "2026-03-09T18:05:00.000Z",
+      "participant_agent_ids": ["app-engineering", "protocol-engineering", "team-lead"],
+      "trigger_event_id": "evt_review_started",
+      "before_state": "reviewing",
+      "after_state": "reviewing",
+      "severity": "yellow",
+      "evidence_refs": ["/tmp/review-start.md", "/tmp/review-complete.md"],
+      "summary": "Lead completed the backend review",
+      "related_event_ids": ["evt_review_started", "evt_review_completed"]
+    }
+  ]
+}
+```
 
 ## Collector snapshot response shape
 ```json

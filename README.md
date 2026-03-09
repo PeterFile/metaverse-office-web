@@ -1,6 +1,6 @@
 # Metaverse Office Web
 
-Updated: 2026-03-09T21:15:00+08:00
+Updated: 2026-03-09T23:56:50+08:00
 
 This repository is the implementation home for the Hermes-Agent metaverse-office project.
 
@@ -18,6 +18,7 @@ This repository is the implementation home for the Hermes-Agent metaverse-office
 - scaffold is aligned to the canonical seven-actor roster and controlled write boundaries
 - office overview query now exposes zone layout, occupants, watch edges, and derived staleness for future UI work
 - controller snapshot collector now derives evidence-backed heartbeats from workspace/tmux metadata and appends collector-backed peer-watch alerts into the existing event log
+- derived interaction read models now expose communication records without adding a new write path
 
 ## Key documents
 - `specs/phase1-spec.md`
@@ -54,7 +55,9 @@ Optional env:
 - `GET /agents`
 - `GET /agents/:id`
 - `GET /agents/:id/events`
+- `GET /agents/:id/interactions`
 - `GET /events`
+- `GET /interactions`
 - `GET /collectors/controller-snapshot`
 - `GET /office/overview`
 - `GET /timeline`
@@ -71,6 +74,13 @@ Optional env:
 - `effective_severity` can rise to `yellow` or `orange` from `last_meaningful_output_at`
 - staleness thresholds are `<20m = normal`, `>=20m = yellow`, `>=30m = orange`
 - `red` remains event-driven only
+
+### Interaction read-model notes
+- `GET /interactions` and `GET /agents/:id/interactions` are read-only query surfaces derived from the existing append-only event log
+- supported interaction types are `question_reply`, `review`, `handoff`, `peer_watch`, and `meeting`
+- paired start/completed events collapse into one interaction only when interaction type, `correlation_id`, and participant lineage all match
+- when that lineage is ambiguous, the server returns single-event interaction records instead of guessing
+- global interaction filters: `interaction_type`, `counterparty_agent_id`, `severity`, `correlation_id`, `limit`, `window`
 
 ### Controlled write rule
 Prototype writes require `x-actor-id: <agent_id>`.

@@ -21,6 +21,48 @@ const SEVERITY_RANK = Object.freeze({
   orange: 2,
   red: 3
 });
+const INTERACTION_EVENT_DESCRIPTORS = Object.freeze({
+  agent_asked_question: Object.freeze({
+    interaction_type: 'question_reply',
+    phase: 'start'
+  }),
+  agent_replied: Object.freeze({
+    interaction_type: 'question_reply',
+    phase: 'end'
+  }),
+  review_started: Object.freeze({
+    interaction_type: 'review',
+    phase: 'start'
+  }),
+  review_completed: Object.freeze({
+    interaction_type: 'review',
+    phase: 'end'
+  }),
+  agent_handoff_started: Object.freeze({
+    interaction_type: 'handoff',
+    phase: 'start'
+  }),
+  agent_handoff_completed: Object.freeze({
+    interaction_type: 'handoff',
+    phase: 'end'
+  }),
+  peer_watch_alert_raised: Object.freeze({
+    interaction_type: 'peer_watch',
+    phase: 'start'
+  }),
+  peer_watch_alert_resolved: Object.freeze({
+    interaction_type: 'peer_watch',
+    phase: 'end'
+  }),
+  meeting_started: Object.freeze({
+    interaction_type: 'meeting',
+    phase: 'start'
+  }),
+  meeting_ended: Object.freeze({
+    interaction_type: 'meeting',
+    phase: 'end'
+  })
+});
 
 class PrototypeStore {
   constructor({ filePath }) {
@@ -188,6 +230,72 @@ class PrototypeStore {
 
   listAgentEvents(agentId, filters = {}) {
     return this.listEvents({ ...filters, agent_id: agentId });
+  }
+
+  listInteractions(filters = {}) {
+    const limit = parseLimit(filters.limit);
+    const durationMs = filters.window ? parseWindow(filters.window) : null;
+    const nowMs = durationMs === null ? null : parseNowMs(filters.now);
+
+    return deriveInteractions(this.events)
+      .filter((interaction) => {
+        if (
+          filters.agent_id &&
+          !interaction.participant_agent_ids.includes(filters.agent_id)
+        ) {
+          return false;
+        }
+
+        if (
+          filters.counterparty_agent_id &&
+          !interaction.participant_agent_ids.includes(filters.counterparty_agent_id)
+        ) {
+          return false;
+        }
+
+        if (
+          filters.interaction_type &&
+          interaction.interaction_type !== filters.interaction_type
+        ) {
+          return false;
+        }
+
+        if (filters.severity && interaction.severity !== filters.severity) {
+          return false;
+        }
+
+        if (
+          filters.correlation_id &&
+          interaction.correlation_id !== filters.correlation_id
+        ) {
+          return false;
+        }
+
+        if (
+          durationMs !== null &&
+          nowMs !== null &&
+          getInteractionSortMs(interaction) < nowMs - durationMs
+        ) {
+          return false;
+        }
+
+        return true;
+      })
+      .sort((left, right) => {
+        const rightTs = getInteractionSortMs(right);
+        const leftTs = getInteractionSortMs(left);
+
+        if (rightTs !== leftTs) {
+          return rightTs - leftTs;
+        }
+
+        return right.interaction_id.localeCompare(left.interaction_id);
+      })
+      .slice(0, limit);
+  }
+
+  listAgentInteractions(agentId, filters = {}) {
+    return this.listInteractions({ ...filters, agent_id: agentId });
   }
 
   listTimeline({ window = '60m', now }) {
@@ -774,6 +882,139 @@ function shouldEventResetSeverity(event) {
   );
 }
 
+function deriveInteractions(events) {
+  const orderedEvents = events
+    .map((event, index) => ({ event, index }))
+    .filter(({ event }) => getInteractionDescriptor(event))
+    .sort((left, right) => {
+      const leftTs = Date.parse(left.event.ts);
+      const rightTs = Date.parse(right.event.ts);
+
+      if (leftTs !== rightTs) {
+        return leftTs - rightTs;
+      }
+
+      return left.index - right.index;
+    });
+  const interactions = [];
+  const openPairs = new Map();
+
+  for (const { event } of orderedEvents) {
+    const descriptor = getInteractionDescriptor(event);
+    const pairKey = createInteractionPairKey(event, descriptor);
+
+    if (descriptor.phase === 'start') {
+      if (!pairKey) {
+        interactions.push(createInteractionRecord({ startEvent: event, endEvent: null }));
+        continue;
+      }
+
+      if (!openPairs.has(pairKey)) {
+        openPairs.set(pairKey, []);
+      }
+
+      openPairs.get(pairKey).push(event);
+      continue;
+    }
+
+    const openStarts = pairKey ? openPairs.get(pairKey) : null;
+    if (openStarts && openStarts.length > 0) {
+      const startEvent = openStarts.shift();
+      if (openStarts.length === 0) {
+        openPairs.delete(pairKey);
+      }
+
+      interactions.push(createInteractionRecord({ startEvent, endEvent: event }));
+      continue;
+    }
+
+    interactions.push(createInteractionRecord({ startEvent: null, endEvent: event }));
+  }
+
+  for (const openStarts of openPairs.values()) {
+    for (const startEvent of openStarts) {
+      interactions.push(createInteractionRecord({ startEvent, endEvent: null }));
+    }
+  }
+
+  return interactions;
+}
+
+function getInteractionDescriptor(event) {
+  return INTERACTION_EVENT_DESCRIPTORS[event.event_type] || null;
+}
+
+function createInteractionPairKey(event, descriptor) {
+  if (
+    !descriptor ||
+    typeof event.correlation_id !== 'string' ||
+    event.correlation_id.trim().length === 0
+  ) {
+    return null;
+  }
+
+  const participants = getInteractionParticipantAgentIds(event);
+  if (participants.length === 0) {
+    return null;
+  }
+
+  return [
+    descriptor.interaction_type,
+    event.correlation_id,
+    participants.join('|')
+  ].join('::');
+}
+
+function getInteractionParticipantAgentIds(event) {
+  return Array.from(
+    new Set(
+      [event.agent_id, event.actor_id, ...(event.counterparty_agent_ids || [])]
+        .filter((agentId) => typeof agentId === 'string' && agentId.length > 0)
+        .sort()
+    )
+  );
+}
+
+function createInteractionRecord({ startEvent, endEvent }) {
+  const sourceEvent = startEvent || endEvent;
+  const sourceDescriptor = getInteractionDescriptor(sourceEvent);
+  const relatedEvents = [startEvent, endEvent].filter(Boolean);
+  const severity = relatedEvents.reduce(
+    (currentSeverity, event) => mergeSeverity(currentSeverity, event.severity),
+    'normal'
+  );
+  const participants = Array.from(
+    new Set(
+      relatedEvents
+        .flatMap((event) => getInteractionParticipantAgentIds(event))
+        .sort()
+    )
+  );
+
+  return {
+    interaction_id: `interaction:${sourceEvent.event_id}`,
+    interaction_type: sourceDescriptor.interaction_type,
+    correlation_id: sourceEvent.correlation_id,
+    started_at: startEvent ? startEvent.ts : endEvent.ts,
+    ended_at: endEvent ? endEvent.ts : null,
+    participant_agent_ids: participants,
+    trigger_event_id: sourceEvent.event_id,
+    before_state: startEvent ? startEvent.current_state : null,
+    after_state: endEvent ? endEvent.current_state : null,
+    severity,
+    evidence_refs: normalizeEvidenceRefs(relatedEvents.flatMap((event) => event.evidence_refs)),
+    summary:
+      (endEvent && endEvent.summary) ||
+      (startEvent && startEvent.summary) ||
+      sourceEvent.summary,
+    related_event_ids: relatedEvents.map((event) => event.event_id)
+  };
+}
+
+function getInteractionSortMs(interaction) {
+  return Date.parse(interaction.ended_at || interaction.started_at);
+}
+
 function mergeSeverity(currentSeverity, nextSeverity) {
   const currentRank = SEVERITY_RANK[currentSeverity] || 0;
   const nextRank = SEVERITY_RANK[nextSeverity] || 0;
@@ -810,6 +1051,11 @@ function parseWindow(value) {
   const amount = Number.parseInt(match[1], 10);
   const unit = match[2];
   return unit === 'h' ? amount * 60 * 60 * 1000 : amount * 60 * 1000;
+}
+
+function parseNowMs(value) {
+  const parsed = typeof value === 'string' ? Date.parse(value) : Date.now();
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 async function createPrototypeStore({ filePath }) {

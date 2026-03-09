@@ -1,7 +1,7 @@
 # Repo-local Phase 1 Spec Mirror
 
 Source of truth: `/Users/cwp/.hermes/teams/web3-company/controller/phase1-spec-package.md`
-Last mirrored: 2026-03-09T18:29:40+08:00
+Last mirrored: 2026-03-09T23:56:50+08:00
 
 This repository mirrors the controller-approved Phase 1 scope so implementation stays under `/Users/cwp/Projects/metaverse-office-web` instead of `~/.hermes/teams/...`.
 
@@ -15,6 +15,7 @@ This repository mirrors the controller-approved Phase 1 scope so implementation 
 ## Minimum deliverables
 - append-only event ingestion boundary
 - queryable agent/event/timeline/alert/handoff/reboot views
+- communication/interactions read models derived from canonical events
 - evidence binding to files and tmux observations
 - repo-local implementation plan and backend scaffold
 - controller snapshot collector that can emit evidence-backed peer-watch alerts from collected heartbeats without inventing new event types
@@ -58,3 +59,9 @@ This repository mirrors the controller-approved Phase 1 scope so implementation 
 - blocked or reboot-recommended collector items raise peer-watch alerts with evidence refs and metadata
 - repeated unchanged snapshots suppress duplicate raised alerts
 - time alone must never fabricate `red`
+
+## Interaction read-model addendum
+- communication records are exposed as read-only derived interactions over canonical events
+- supported interaction types are `question_reply`, `review`, `handoff`, `peer_watch`, and `meeting`
+- paired interaction records only form when type, `correlation_id`, and participant lineage clearly match
+- unmatched events stay as single-event interaction records rather than inferred conversations

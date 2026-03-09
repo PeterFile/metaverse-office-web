@@ -36,6 +36,7 @@ async function createHarness(t, options = {}) {
 
   const address = server.address();
   return {
+    store,
     storeFile,
     baseUrl: `http://127.0.0.1:${address.port}`
   };
@@ -45,6 +46,42 @@ async function requestJson(url, init) {
   const response = await fetch(url, init);
   const body = await response.json();
   return { response, body };
+}
+
+function createEvent({
+  eventId,
+  ts,
+  agentId,
+  actorId = agentId,
+  eventType,
+  currentState,
+  activeTask,
+  summary,
+  severity = 'normal',
+  correlationId,
+  counterpartyAgentIds = [],
+  evidenceRefs = [],
+  metadata = {},
+  sourceKind = actorId === agentId ? 'workspace_file' : 'controller_event'
+}) {
+  return {
+    event_id: eventId,
+    ts,
+    agent_id: agentId,
+    actor_id: actorId,
+    agent_role: agentId,
+    event_type: eventType,
+    current_state: currentState,
+    active_task: activeTask,
+    location: 'meeting-zone',
+    summary,
+    severity,
+    correlation_id: correlationId,
+    counterparty_agent_ids: counterpartyAgentIds,
+    evidence_refs: evidenceRefs,
+    source_kind: sourceKind,
+    metadata
+  };
 }
 
 test('GET endpoints expose the seeded canonical scaffold', async (t) => {
@@ -286,6 +323,91 @@ test('POST writes append records and projection endpoints query them', async (t)
 
   const lines = (await readFile(storeFile, 'utf8')).trim().split('\n');
   assert.equal(lines.length, 5);
+});
+
+test('GET interaction endpoints expose derived read models and filters', async (t) => {
+  const { baseUrl, store } = await createHarness(t, {
+    now: () => '2026-03-09T18:20:00.000Z'
+  });
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_review_started',
+      ts: '2026-03-09T18:10:00.000Z',
+      agentId: 'app-engineering',
+      actorId: 'team-lead',
+      eventType: 'review_started',
+      currentState: 'reviewing',
+      activeTask: 'Review interaction endpoint',
+      summary: 'Lead started interaction review',
+      severity: 'yellow',
+      correlationId: 'review-456',
+      counterpartyAgentIds: ['protocol-engineering'],
+      evidenceRefs: ['/tmp/review-start.md']
+    })
+  );
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_review_completed',
+      ts: '2026-03-09T18:12:00.000Z',
+      agentId: 'app-engineering',
+      actorId: 'team-lead',
+      eventType: 'review_completed',
+      currentState: 'reviewing',
+      activeTask: 'Review interaction endpoint',
+      summary: 'Lead completed interaction review',
+      severity: 'normal',
+      correlationId: 'review-456',
+      counterpartyAgentIds: ['protocol-engineering'],
+      evidenceRefs: ['/tmp/review-complete.md']
+    })
+  );
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_handoff_started',
+      ts: '2026-03-09T18:18:00.000Z',
+      agentId: 'app-engineering',
+      actorId: 'team-lead',
+      eventType: 'agent_handoff_started',
+      currentState: 'planning',
+      activeTask: 'Hand off endpoint cleanup',
+      summary: 'Lead started a handoff',
+      severity: 'orange',
+      correlationId: 'handoff-1',
+      counterpartyAgentIds: ['growth-revenue'],
+      evidenceRefs: ['/tmp/handoff.md']
+    })
+  );
+
+  const interactions = await requestJson(
+    `${baseUrl}/interactions?interaction_type=review&counterparty_agent_id=protocol-engineering&limit=1`
+  );
+  assert.equal(interactions.response.status, 200);
+  assert.equal(interactions.body.items.length, 1);
+  assert.equal(interactions.body.items[0].interaction_type, 'review');
+  assert.equal(interactions.body.items[0].ended_at, '2026-03-09T18:12:00.000Z');
+  assert.deepEqual(interactions.body.items[0].related_event_ids, [
+    'evt_review_started',
+    'evt_review_completed'
+  ]);
+
+  const windowed = await requestJson(`${baseUrl}/interactions?window=5m`);
+  assert.equal(windowed.response.status, 200);
+  assert.equal(windowed.body.items.length, 1);
+  assert.equal(windowed.body.items[0].interaction_type, 'handoff');
+
+  const agentInteractions = await requestJson(
+    `${baseUrl}/agents/app-engineering/interactions?counterparty_agent_id=protocol-engineering&severity=yellow`
+  );
+  assert.equal(agentInteractions.response.status, 200);
+  assert.equal(agentInteractions.body.agent_id, 'app-engineering');
+  assert.equal(agentInteractions.body.items.length, 1);
+  assert.equal(agentInteractions.body.items[0].correlation_id, 'review-456');
+
+  const missingAgent = await requestJson(`${baseUrl}/agents/missing-agent/interactions`);
+  assert.equal(missingAgent.response.status, 404);
 });
 
 test('write endpoints reject missing headers, invalid payloads, and actor-boundary violations', async (t) => {

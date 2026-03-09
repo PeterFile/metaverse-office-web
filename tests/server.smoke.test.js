@@ -554,3 +554,129 @@ test('collector snapshot endpoints stay read-only on GET and require team-lead o
   assert.equal(lines.length, 1);
   assert.equal(JSON.parse(lines[0]).kind, 'heartbeat');
 });
+
+test('collector snapshot POST emits supervision events onto existing query surfaces', async (t) => {
+  const controllerSnapshotCollector = {
+    async collectSnapshot({ actorId, collectedAt }) {
+      assert.equal(actorId, 'team-lead');
+      assert.equal(collectedAt, '2026-03-09T18:05:00.000Z');
+
+      return {
+        collected_at: collectedAt,
+        actor_id: actorId,
+        summary: {
+          agent_count: 2,
+          heartbeat_count: 2,
+          tmux_observed_count: 1,
+          workspace_observed_count: 2,
+          reboot_recommended_count: 1
+        },
+        items: [
+          {
+            agent_id: 'market-intel',
+            evidence_refs: ['/tmp/market-intel/outbox.md'],
+            workspace_observations: [],
+            tmux_observations: [],
+            supervision: {
+              watch_target: 'product-pmf',
+              watched_by: ['growth-revenue', 'team-lead'],
+              needs_attention: true
+            },
+            heartbeat: {
+              agent_id: 'market-intel',
+              actor_id: actorId,
+              received_at: collectedAt,
+              current_state: 'researching',
+              active_task: 'Review competitor notes',
+              last_meaningful_output_at: '2026-03-09T17:45:00.000Z',
+              last_file_write_at: '2026-03-09T17:45:00.000Z',
+              current_blocker: '',
+              confidence_level: 'high',
+              reboot_recommended: false
+            }
+          },
+          {
+            agent_id: 'growth-revenue',
+            evidence_refs: [
+              '/tmp/growth-revenue/inbox.md',
+              'tmux://6-web3-growth-revenue/0.0'
+            ],
+            workspace_observations: [],
+            tmux_observations: [],
+            supervision: {
+              watch_target: 'market-intel',
+              watched_by: ['app-engineering', 'team-lead'],
+              needs_attention: true
+            },
+            heartbeat: {
+              agent_id: 'growth-revenue',
+              actor_id: actorId,
+              received_at: collectedAt,
+              current_state: 'blocked',
+              active_task: 'Investigate stalled shell',
+              last_meaningful_output_at: '2026-03-09T18:00:00.000Z',
+              last_file_write_at: '2026-03-09T18:00:00.000Z',
+              current_blocker: 'tmux pane marked dead',
+              confidence_level: 'high',
+              reboot_recommended: true
+            }
+          }
+        ]
+      };
+    }
+  };
+
+  const { baseUrl } = await createHarness(t, { controllerSnapshotCollector });
+
+  const collected = await requestJson(`${baseUrl}/collectors/controller-snapshot`, {
+    method: 'POST',
+    headers: {
+      'x-actor-id': 'team-lead'
+    }
+  });
+  assert.equal(collected.response.status, 201);
+
+  const events = await requestJson(`${baseUrl}/events?event_type=peer_watch_alert_raised`);
+  assert.equal(events.response.status, 200);
+  assert.equal(events.body.items.length, 2);
+  assert.ok(
+    events.body.items.some(
+      (event) =>
+        event.agent_id === 'market-intel' &&
+        event.metadata.collector_alert_family === 'staleness' &&
+        event.severity === 'yellow'
+    )
+  );
+  assert.ok(
+    events.body.items.some(
+      (event) =>
+        event.agent_id === 'growth-revenue' &&
+        event.metadata.collector_alert_family === 'blocked' &&
+        event.severity === 'orange'
+    )
+  );
+
+  const alerts = await requestJson(`${baseUrl}/peer-watch/alerts`);
+  assert.equal(alerts.response.status, 200);
+  assert.equal(alerts.body.items.length, 2);
+  assert.ok(alerts.body.items.every((item) => item.status === 'open'));
+
+  const timeline = await requestJson(`${baseUrl}/timeline?window=30m`);
+  assert.equal(timeline.response.status, 200);
+  assert.equal(
+    timeline.body.items.filter((item) => item.event_type === 'peer_watch_alert_raised').length,
+    2
+  );
+
+  const growthRevenue = await requestJson(`${baseUrl}/agents/growth-revenue`);
+  assert.equal(growthRevenue.response.status, 200);
+  assert.equal(growthRevenue.body.item.current_state, 'blocked');
+  assert.equal(growthRevenue.body.item.current_blocker, 'tmux pane marked dead');
+  assert.equal(growthRevenue.body.item.severity, 'orange');
+
+  const overview = await requestJson(`${baseUrl}/office/overview`);
+  assert.equal(overview.response.status, 200);
+  const marketIntel = overview.body.agents.find((agent) => agent.agent_id === 'market-intel');
+  assert.equal(marketIntel.reported_severity, 'yellow');
+  assert.equal(marketIntel.effective_severity, 'yellow');
+});

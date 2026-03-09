@@ -17,12 +17,13 @@ This repository is the implementation home for the Hermes-Agent metaverse-office
 - minimal Phase 1 backend scaffold now exists for agent/event/timeline queries
 - scaffold is aligned to the canonical seven-actor roster and controlled write boundaries
 - office overview query now exposes zone layout, occupants, watch edges, and derived staleness for future UI work
-- controller snapshot collector now derives evidence-backed heartbeats from workspace/tmux metadata and exposes the latest report for inspection
+- controller snapshot collector now derives evidence-backed heartbeats from workspace/tmux metadata and appends collector-backed peer-watch alerts into the existing event log
 
 ## Key documents
 - `specs/phase1-spec.md`
 - `specs/api-contract.md`
 - `docs/plans/phase1-kickoff-plan.md`
+- `docs/plans/phase1-supervision-events-plan.md`
 - `docs/adr/0001-phase1-stack.md`
 - `notes/source-documents.md`
 
@@ -79,5 +80,10 @@ This keeps employee writes self-scoped and reserves cross-agent supervision/hand
 - `POST /collectors/controller-snapshot` is lead-only and requires `x-actor-id: team-lead`
 - `GET /collectors/controller-snapshot` is read-only and returns the latest in-memory collector report
 - collector heartbeats are derived from real `inbox.md`, `outbox.md`, `todo.md` mtimes plus tmux pane metadata
+- collector-derived supervision reuses canonical `peer_watch_alert_raised` / `peer_watch_alert_resolved`
+- yellow/orange staleness comes from `last_meaningful_output_at` only: `<20m = normal`, `>=20m = yellow`, `>=30m = orange`
+- blocked or reboot-recommended collector items append evidence-backed peer-watch alerts with collector metadata
+- repeated unchanged snapshots do not append duplicate raised alerts; cleared conditions append resolved alerts
+- collector-derived peer-watch events do not fabricate `red` from time alone
 - tests stay hermetic by injecting filesystem/tmux observations instead of touching the live Hermes workspace
-- next backend step is richer supervision/event emission, not UI decoration
+- existing `/events`, `/timeline`, `/peer-watch/alerts`, and agent projections now reflect collector-driven supervision events

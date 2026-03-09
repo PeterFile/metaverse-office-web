@@ -38,8 +38,6 @@ const EVENT_STATE_REQUIREMENTS = Object.freeze({
   meeting_ended: ['planning', 'reviewing'],
   review_started: ['reviewing'],
   review_completed: ['reviewing'],
-  peer_watch_alert_raised: ['blocked', 'reviewing'],
-  peer_watch_alert_resolved: ['blocked', 'reviewing'],
   agent_handoff_started: ['planning', 'reviewing', 'blocked'],
   agent_handoff_completed: ['planning', 'reviewing', 'blocked'],
   agent_reboot_requested: ['rebooting'],

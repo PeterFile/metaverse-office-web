@@ -8,6 +8,79 @@ const { SEED_AGENTS } = require('../src/domain');
 const { collectControllerSnapshot } = require('../src/collectors/controller-snapshot');
 const { createPrototypeStore } = require('../src/store/prototype-store');
 
+function createCollectorReport({ collectedAt, items }) {
+  return {
+    collected_at: collectedAt,
+    actor_id: 'team-lead',
+    summary: {
+      agent_count: items.length,
+      heartbeat_count: items.length,
+      tmux_observed_count: items.filter((item) => item.tmux_observations.length > 0).length,
+      workspace_observed_count: items.filter((item) => item.workspace_observations.length > 0).length,
+      reboot_recommended_count: items.filter((item) => item.heartbeat.reboot_recommended).length
+    },
+    items
+  };
+}
+
+function createReportItem({
+  collectedAt,
+  agentId,
+  evidenceRefs,
+  currentState,
+  activeTask,
+  lastMeaningfulOutputAt,
+  lastFileWriteAt,
+  currentBlocker = '',
+  rebootRecommended = false,
+  confidenceLevel = 'high'
+}) {
+  const agent = SEED_AGENTS.find((candidate) => candidate.agent_id === agentId);
+
+  return {
+    agent_id: agentId,
+    evidence_refs: evidenceRefs.slice(),
+    workspace_observations: evidenceRefs
+      .filter((ref) => !ref.startsWith('tmux://'))
+      .map((ref) => ({
+        path: ref,
+        file_name: path.basename(ref),
+        kind: 'workspace_file',
+        last_modified_at: lastFileWriteAt
+      })),
+    tmux_observations: evidenceRefs
+      .filter((ref) => ref.startsWith('tmux://'))
+      .map((ref) => ({
+        session_name: ref.replace(/^tmux:\/\/([^/]+)\/.*$/, '$1'),
+        window_index: '0',
+        pane_index: '0',
+        pane_id: '%1',
+        pane_title: activeTask,
+        pane_current_command: currentState === 'blocked' ? 'bash' : 'nvim',
+        pane_active: true,
+        pane_dead: currentState === 'blocked',
+        pane_activity_at: lastMeaningfulOutputAt
+      })),
+    supervision: {
+      watch_target: agent.watch_target,
+      watched_by: agent.watched_by.slice(),
+      needs_attention: currentState === 'blocked' || rebootRecommended
+    },
+    heartbeat: {
+      agent_id: agentId,
+      actor_id: 'team-lead',
+      received_at: collectedAt,
+      current_state: currentState,
+      active_task: activeTask,
+      last_meaningful_output_at: lastMeaningfulOutputAt,
+      last_file_write_at: lastFileWriteAt,
+      current_blocker: currentBlocker,
+      confidence_level: confidenceLevel,
+      reboot_recommended: rebootRecommended
+    }
+  };
+}
+
 test('collector derives evidence-backed heartbeats from workspace and tmux metadata', async () => {
   const appAgent = SEED_AGENTS.find((agent) => agent.agent_id === 'app-engineering');
   const growthAgent = SEED_AGENTS.find((agent) => agent.agent_id === 'growth-revenue');
@@ -123,4 +196,234 @@ test('store appends collector heartbeats and exposes the latest collector report
   const lines = (await readFile(storeFile, 'utf8')).trim().split('\n');
   assert.equal(lines.length, 1);
   assert.equal(JSON.parse(lines[0]).kind, 'heartbeat');
+});
+
+test('store appends collector-driven peer watch alerts for staleness and blocked snapshots', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'metaverse-office-store-'));
+  const storeFile = path.join(root, 'prototype-store.jsonl');
+  const store = await createPrototypeStore({ filePath: storeFile });
+
+  const report = createCollectorReport({
+    collectedAt: '2026-03-09T18:05:00.000Z',
+    items: [
+      createReportItem({
+        collectedAt: '2026-03-09T18:05:00.000Z',
+        agentId: 'market-intel',
+        evidenceRefs: ['/tmp/market-intel/outbox.md'],
+        currentState: 'researching',
+        activeTask: 'Review competitor notes',
+        lastMeaningfulOutputAt: '2026-03-09T17:45:00.000Z',
+        lastFileWriteAt: '2026-03-09T17:45:00.000Z'
+      }),
+      createReportItem({
+        collectedAt: '2026-03-09T18:05:00.000Z',
+        agentId: 'growth-revenue',
+        evidenceRefs: [
+          '/tmp/growth-revenue/inbox.md',
+          'tmux://6-web3-growth-revenue/0.0'
+        ],
+        currentState: 'blocked',
+        activeTask: 'Investigate stalled shell',
+        lastMeaningfulOutputAt: '2026-03-09T18:00:00.000Z',
+        lastFileWriteAt: '2026-03-09T18:00:00.000Z',
+        currentBlocker: 'tmux pane marked dead',
+        rebootRecommended: true
+      })
+    ]
+  });
+
+  await store.appendCollectorReport(report);
+
+  assert.deepEqual(store.getCounts(), {
+    agent_count: 7,
+    event_count: 2,
+    heartbeat_count: 2
+  });
+
+  const events = store.listEvents({ event_type: 'peer_watch_alert_raised' });
+  assert.equal(events.length, 2);
+
+  const stalenessAlert = events.find(
+    (event) =>
+      event.agent_id === 'market-intel' && event.metadata.collector_alert_family === 'staleness'
+  );
+  assert.equal(stalenessAlert.severity, 'yellow');
+  assert.equal(stalenessAlert.source_kind, 'controller_event');
+  assert.equal(stalenessAlert.current_state, 'researching');
+  assert.equal(stalenessAlert.metadata.collector_derived, true);
+  assert.equal(stalenessAlert.metadata.derived_staleness.severity, 'yellow');
+  assert.equal(
+    stalenessAlert.metadata.derived_staleness.last_meaningful_output_at,
+    '2026-03-09T17:45:00.000Z'
+  );
+  assert.ok(stalenessAlert.evidence_refs.includes('/tmp/market-intel/outbox.md'));
+
+  const blockedAlert = events.find(
+    (event) =>
+      event.agent_id === 'growth-revenue' && event.metadata.collector_alert_family === 'blocked'
+  );
+  assert.equal(blockedAlert.severity, 'orange');
+  assert.equal(blockedAlert.current_state, 'blocked');
+  assert.equal(blockedAlert.metadata.reboot_recommended, true);
+  assert.equal(blockedAlert.metadata.current_blocker, 'tmux pane marked dead');
+  assert.ok(blockedAlert.evidence_refs.includes('tmux://6-web3-growth-revenue/0.0'));
+});
+
+test('store resolves collector-driven peer watch alerts when snapshot conditions clear', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'metaverse-office-store-'));
+  const storeFile = path.join(root, 'prototype-store.jsonl');
+  const store = await createPrototypeStore({ filePath: storeFile });
+
+  await store.appendCollectorReport(
+    createCollectorReport({
+      collectedAt: '2026-03-09T18:05:00.000Z',
+      items: [
+        createReportItem({
+          collectedAt: '2026-03-09T18:05:00.000Z',
+          agentId: 'market-intel',
+          evidenceRefs: ['/tmp/market-intel/outbox.md'],
+          currentState: 'researching',
+          activeTask: 'Review competitor notes',
+          lastMeaningfulOutputAt: '2026-03-09T17:35:00.000Z',
+          lastFileWriteAt: '2026-03-09T17:35:00.000Z'
+        }),
+        createReportItem({
+          collectedAt: '2026-03-09T18:05:00.000Z',
+          agentId: 'growth-revenue',
+          evidenceRefs: [
+            '/tmp/growth-revenue/inbox.md',
+            'tmux://6-web3-growth-revenue/0.0'
+          ],
+          currentState: 'blocked',
+          activeTask: 'Investigate stalled shell',
+          lastMeaningfulOutputAt: '2026-03-09T18:00:00.000Z',
+          lastFileWriteAt: '2026-03-09T18:00:00.000Z',
+          currentBlocker: 'tmux pane marked dead',
+          rebootRecommended: true
+        })
+      ]
+    })
+  );
+
+  await store.appendCollectorReport(
+    createCollectorReport({
+      collectedAt: '2026-03-09T18:12:00.000Z',
+      items: [
+        createReportItem({
+          collectedAt: '2026-03-09T18:12:00.000Z',
+          agentId: 'market-intel',
+          evidenceRefs: ['/tmp/market-intel/outbox.md'],
+          currentState: 'researching',
+          activeTask: 'Published competitor summary',
+          lastMeaningfulOutputAt: '2026-03-09T18:11:00.000Z',
+          lastFileWriteAt: '2026-03-09T18:11:00.000Z'
+        }),
+        createReportItem({
+          collectedAt: '2026-03-09T18:12:00.000Z',
+          agentId: 'growth-revenue',
+          evidenceRefs: ['/tmp/growth-revenue/outbox.md'],
+          currentState: 'coding',
+          activeTask: 'Draft outbound fixes',
+          lastMeaningfulOutputAt: '2026-03-09T18:11:30.000Z',
+          lastFileWriteAt: '2026-03-09T18:11:30.000Z'
+        })
+      ]
+    })
+  );
+
+  const resolvedEvents = store.listEvents({ event_type: 'peer_watch_alert_resolved' });
+  assert.equal(resolvedEvents.length, 2);
+  assert.ok(
+    resolvedEvents.some(
+      (event) =>
+        event.agent_id === 'market-intel' && event.metadata.collector_alert_family === 'staleness'
+    )
+  );
+  assert.ok(
+    resolvedEvents.some(
+      (event) =>
+        event.agent_id === 'growth-revenue' && event.metadata.collector_alert_family === 'blocked'
+    )
+  );
+
+  const latestGrowthRevenue = store.getAgent('growth-revenue');
+  assert.equal(latestGrowthRevenue.current_state, 'coding');
+  assert.equal(latestGrowthRevenue.current_blocker, '');
+  assert.equal(latestGrowthRevenue.reboot_recommended, false);
+  assert.equal(latestGrowthRevenue.severity, 'normal');
+});
+
+test('store suppresses duplicate collector-driven peer watch alerts for unchanged snapshots', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'metaverse-office-store-'));
+  const storeFile = path.join(root, 'prototype-store.jsonl');
+  const store = await createPrototypeStore({ filePath: storeFile });
+
+  const firstReport = createCollectorReport({
+    collectedAt: '2026-03-09T18:05:00.000Z',
+    items: [
+      createReportItem({
+        collectedAt: '2026-03-09T18:05:00.000Z',
+        agentId: 'product-pmf',
+        evidenceRefs: ['/tmp/product-pmf/outbox.md'],
+        currentState: 'planning',
+        activeTask: 'Draft PMF memo',
+        lastMeaningfulOutputAt: '2026-03-09T17:34:00.000Z',
+        lastFileWriteAt: '2026-03-09T17:34:00.000Z'
+      }),
+      createReportItem({
+        collectedAt: '2026-03-09T18:05:00.000Z',
+        agentId: 'growth-revenue',
+        evidenceRefs: [
+          '/tmp/growth-revenue/inbox.md',
+          'tmux://6-web3-growth-revenue/0.0'
+        ],
+        currentState: 'blocked',
+        activeTask: 'Investigate stalled shell',
+        lastMeaningfulOutputAt: '2026-03-09T18:00:00.000Z',
+        lastFileWriteAt: '2026-03-09T18:00:00.000Z',
+        currentBlocker: 'tmux pane marked dead',
+        rebootRecommended: true
+      })
+    ]
+  });
+
+  const secondReport = createCollectorReport({
+    collectedAt: '2026-03-09T18:11:00.000Z',
+    items: [
+      createReportItem({
+        collectedAt: '2026-03-09T18:11:00.000Z',
+        agentId: 'product-pmf',
+        evidenceRefs: ['/tmp/product-pmf/outbox.md'],
+        currentState: 'planning',
+        activeTask: 'Draft PMF memo',
+        lastMeaningfulOutputAt: '2026-03-09T17:34:00.000Z',
+        lastFileWriteAt: '2026-03-09T17:34:00.000Z'
+      }),
+      createReportItem({
+        collectedAt: '2026-03-09T18:11:00.000Z',
+        agentId: 'growth-revenue',
+        evidenceRefs: [
+          '/tmp/growth-revenue/inbox.md',
+          'tmux://6-web3-growth-revenue/0.0'
+        ],
+        currentState: 'blocked',
+        activeTask: 'Investigate stalled shell',
+        lastMeaningfulOutputAt: '2026-03-09T18:00:00.000Z',
+        lastFileWriteAt: '2026-03-09T18:00:00.000Z',
+        currentBlocker: 'tmux pane marked dead',
+        rebootRecommended: true
+      })
+    ]
+  });
+
+  await store.appendCollectorReport(firstReport);
+  const firstCounts = store.getCounts();
+
+  await store.appendCollectorReport(secondReport);
+  const secondCounts = store.getCounts();
+
+  assert.equal(firstCounts.event_count, 2);
+  assert.equal(secondCounts.event_count, 2);
+  assert.equal(secondCounts.heartbeat_count, 4);
+  assert.equal(store.listEvents({ event_type: 'peer_watch_alert_raised' }).length, 2);
 });

@@ -17,6 +17,7 @@ This repository mirrors the controller-approved Phase 1 scope so implementation 
 - queryable agent/event/timeline/alert/handoff/reboot views
 - evidence binding to files and tmux observations
 - repo-local implementation plan and backend scaffold
+- controller snapshot collector that can emit evidence-backed peer-watch alerts from collected heartbeats without inventing new event types
 
 ## Canonical state enum
 - idle
@@ -50,3 +51,10 @@ This repository mirrors the controller-approved Phase 1 scope so implementation 
 - agent_context_degraded
 - agent_reboot_requested
 - agent_reboot_completed
+
+## Collector supervision addendum
+- snapshot-driven supervision reuses `peer_watch_alert_raised` and `peer_watch_alert_resolved`
+- yellow/orange staleness derives from `last_meaningful_output_at` only
+- blocked or reboot-recommended collector items raise peer-watch alerts with evidence refs and metadata
+- repeated unchanged snapshots suppress duplicate raised alerts
+- time alone must never fabricate `red`

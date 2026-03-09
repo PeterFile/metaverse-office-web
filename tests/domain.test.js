@@ -158,6 +158,33 @@ test('event validation rejects invalid state and actor combinations', () => {
   assert.match(invalidActor.errors.join(' '), /self-scoped/i);
 });
 
+test('event validation allows peer watch alerts from non-blocked work states', () => {
+  const result = validateEventPayload(
+    {
+      event_id: 'evt_stale_yellow',
+      ts: '2026-03-09T18:05:00.000Z',
+      agent_id: 'market-intel',
+      agent_role: 'market-intel',
+      event_type: 'peer_watch_alert_raised',
+      current_state: 'researching',
+      active_task: 'Review competitor notes',
+      summary: 'Collector observed yellow staleness since 2026-03-09T17:45:00.000Z',
+      severity: 'yellow',
+      correlation_id: 'collector-snapshot:2026-03-09T18:05:00.000Z',
+      counterparty_agent_ids: ['growth-revenue'],
+      evidence_refs: ['/tmp/market-intel/outbox.md'],
+      source_kind: 'controller_event',
+      metadata: {
+        collector_derived: true
+      }
+    },
+    { actorId: 'team-lead' }
+  );
+
+  assert.equal(result.ok, true);
+  assert.equal(result.value.location, 'review-zone');
+});
+
 test('heartbeat validation accepts canonical payloads', () => {
   const result = validateHeartbeatPayload(
     {

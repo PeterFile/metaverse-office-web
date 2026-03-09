@@ -32,6 +32,11 @@ async function handleRequest({ req, res, store, now }) {
     return;
   }
 
+  if (method === 'GET' && pathname === '/office/overview') {
+    sendJson(res, 200, store.getOfficeOverview({ now: now() }));
+    return;
+  }
+
   const agentEventsMatch = pathname.match(/^\/agents\/([^/]+)\/events$/);
   if (method === 'GET' && agentEventsMatch) {
     const agentId = decodeURIComponent(agentEventsMatch[1]);

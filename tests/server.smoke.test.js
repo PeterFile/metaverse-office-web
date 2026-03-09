@@ -68,6 +68,45 @@ test('GET endpoints expose the seeded canonical scaffold', async (t) => {
   assert.equal(missing.response.status, 404);
 });
 
+test('GET /office/overview exposes seeded layout, empty zones, and watch edges', async (t) => {
+  const { baseUrl } = await createHarness(t);
+
+  const overview = await requestJson(`${baseUrl}/office/overview`);
+  assert.equal(overview.response.status, 200);
+  assert.equal(overview.body.generated_at, '2026-03-09T18:05:00.000Z');
+  assert.equal(overview.body.summary.agent_count, 7);
+  assert.equal(overview.body.summary.blocked_count, 0);
+  assert.equal(overview.body.summary.reboot_recommended_count, 0);
+  assert.deepEqual(overview.body.summary.severity_buckets, {
+    normal: 7,
+    yellow: 0,
+    orange: 0,
+    red: 0
+  });
+  assert.equal(overview.body.zones.length, 11);
+  assert.equal(overview.body.watch_edges.length, 12);
+  assert.equal(overview.body.agents.length, 7);
+
+  const leadDesk = overview.body.zones.find((zone) => zone.zone_id === 'lead-desk');
+  assert.deepEqual(leadDesk.occupants, []);
+
+  const meetingZone = overview.body.zones.find((zone) => zone.zone_id === 'meeting-zone');
+  assert.deepEqual(meetingZone.occupants, []);
+
+  const reviewZone = overview.body.zones.find((zone) => zone.zone_id === 'review-zone');
+  assert.equal(reviewZone.occupants.length, 1);
+  assert.equal(reviewZone.occupants[0].agent_id, 'team-lead');
+
+  assert.ok(
+    overview.body.watch_edges.some(
+      (edge) =>
+        edge.from_agent_id === 'team-lead' &&
+        edge.to_agent_id === 'app-engineering' &&
+        edge.watch_mode === 'lead'
+    )
+  );
+});
+
 test('POST writes append records and projection endpoints query them', async (t) => {
   const { baseUrl, storeFile } = await createHarness(t);
 
@@ -304,4 +343,121 @@ test('write endpoints reject missing headers, invalid payloads, and actor-bounda
 
   assert.equal(invalidHeartbeat.response.status, 422);
   assert.match(invalidHeartbeat.body.error, /validation_failed/);
+});
+
+test('GET /office/overview derives yellow and orange staleness without fabricating red', async (t) => {
+  const { baseUrl } = await createHarness(t);
+
+  const marketIntelHeartbeat = await requestJson(`${baseUrl}/heartbeats`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-actor-id': 'market-intel'
+    },
+    body: JSON.stringify({
+      agent_id: 'market-intel',
+      current_state: 'researching',
+      active_task: 'Scan competitors',
+      last_meaningful_output_at: '2026-03-09T17:45:00.000Z',
+      last_file_write_at: '2026-03-09T17:45:00.000Z',
+      current_blocker: '',
+      confidence_level: 'medium',
+      reboot_recommended: false
+    })
+  });
+  assert.equal(marketIntelHeartbeat.response.status, 201);
+
+  const productHeartbeat = await requestJson(`${baseUrl}/heartbeats`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-actor-id': 'product-pmf'
+    },
+    body: JSON.stringify({
+      agent_id: 'product-pmf',
+      current_state: 'planning',
+      active_task: 'Draft PMF memo',
+      last_meaningful_output_at: '2026-03-09T17:35:00.000Z',
+      last_file_write_at: '2026-03-09T17:35:00.000Z',
+      current_blocker: '',
+      confidence_level: 'medium',
+      reboot_recommended: false
+    })
+  });
+  assert.equal(productHeartbeat.response.status, 201);
+
+  const rebootHeartbeat = await requestJson(`${baseUrl}/heartbeats`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-actor-id': 'growth-revenue'
+    },
+    body: JSON.stringify({
+      agent_id: 'growth-revenue',
+      current_state: 'coding',
+      active_task: 'Repair outbound funnel notes',
+      last_meaningful_output_at: '2026-03-09T18:04:00.000Z',
+      last_file_write_at: '2026-03-09T18:04:00.000Z',
+      current_blocker: '',
+      confidence_level: 'low',
+      reboot_recommended: true
+    })
+  });
+  assert.equal(rebootHeartbeat.response.status, 201);
+
+  const redAlert = await requestJson(`${baseUrl}/events`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-actor-id': 'team-lead'
+    },
+    body: JSON.stringify({
+      event_id: 'evt_alert_red',
+      ts: '2026-03-09T18:04:30.000Z',
+      agent_id: 'app-engineering',
+      agent_role: 'app-engineering',
+      event_type: 'peer_watch_alert_raised',
+      current_state: 'blocked',
+      active_task: 'Stop broken handler rollout',
+      summary: 'Peer watch found a severe regression',
+      severity: 'red',
+      correlation_id: 'phase1-overview',
+      counterparty_agent_ids: ['protocol-engineering'],
+      evidence_refs: ['/tmp/server.js'],
+      source_kind: 'controller_event',
+      metadata: {}
+    })
+  });
+  assert.equal(redAlert.response.status, 201);
+
+  const overview = await requestJson(`${baseUrl}/office/overview`);
+  assert.equal(overview.response.status, 200);
+  assert.equal(overview.body.summary.blocked_count, 1);
+  assert.equal(overview.body.summary.reboot_recommended_count, 1);
+  assert.deepEqual(overview.body.summary.severity_buckets, {
+    normal: 3,
+    yellow: 1,
+    orange: 2,
+    red: 1
+  });
+
+  const marketIntel = overview.body.agents.find((agent) => agent.agent_id === 'market-intel');
+  assert.equal(marketIntel.reported_severity, 'normal');
+  assert.equal(marketIntel.derived_staleness.severity, 'yellow');
+  assert.equal(marketIntel.effective_severity, 'yellow');
+
+  const productPmf = overview.body.agents.find((agent) => agent.agent_id === 'product-pmf');
+  assert.equal(productPmf.reported_severity, 'normal');
+  assert.equal(productPmf.derived_staleness.severity, 'orange');
+  assert.equal(productPmf.effective_severity, 'orange');
+
+  const growthRevenue = overview.body.agents.find((agent) => agent.agent_id === 'growth-revenue');
+  assert.equal(growthRevenue.reported_severity, 'orange');
+  assert.equal(growthRevenue.derived_staleness.severity, 'normal');
+  assert.equal(growthRevenue.effective_severity, 'orange');
+
+  const appEngineering = overview.body.agents.find((agent) => agent.agent_id === 'app-engineering');
+  assert.equal(appEngineering.reported_severity, 'red');
+  assert.equal(appEngineering.effective_severity, 'red');
+  assert.equal(appEngineering.derived_staleness.severity, 'normal');
 });

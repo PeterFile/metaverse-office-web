@@ -120,6 +120,133 @@ const WATCHED_BY = Object.freeze({
   'growth-revenue': ['app-engineering', 'team-lead']
 });
 
+const OFFICE_ZONES = Object.freeze(
+  [
+    {
+      zone_id: 'lead-desk',
+      label: 'Team Lead Desk',
+      kind: 'desk',
+      grid_x: 0,
+      grid_y: 0,
+      grid_w: 2,
+      grid_h: 1,
+      home_agent_id: 'team-lead'
+    },
+    {
+      zone_id: 'desk-market-intel',
+      label: 'Market Intel Desk',
+      kind: 'desk',
+      grid_x: 0,
+      grid_y: 1,
+      grid_w: 1,
+      grid_h: 1,
+      home_agent_id: 'market-intel'
+    },
+    {
+      zone_id: 'desk-product-pmf',
+      label: 'Product PMF Desk',
+      kind: 'desk',
+      grid_x: 1,
+      grid_y: 1,
+      grid_w: 1,
+      grid_h: 1,
+      home_agent_id: 'product-pmf'
+    },
+    {
+      zone_id: 'desk-tokenomics',
+      label: 'Tokenomics Desk',
+      kind: 'desk',
+      grid_x: 2,
+      grid_y: 1,
+      grid_w: 1,
+      grid_h: 1,
+      home_agent_id: 'tokenomics'
+    },
+    {
+      zone_id: 'desk-protocol-engineering',
+      label: 'Protocol Engineering Desk',
+      kind: 'desk',
+      grid_x: 3,
+      grid_y: 1,
+      grid_w: 1,
+      grid_h: 1,
+      home_agent_id: 'protocol-engineering'
+    },
+    {
+      zone_id: 'desk-app-engineering',
+      label: 'App Engineering Desk',
+      kind: 'desk',
+      grid_x: 4,
+      grid_y: 1,
+      grid_w: 1,
+      grid_h: 1,
+      home_agent_id: 'app-engineering'
+    },
+    {
+      zone_id: 'desk-growth-revenue',
+      label: 'Growth Revenue Desk',
+      kind: 'desk',
+      grid_x: 5,
+      grid_y: 1,
+      grid_w: 1,
+      grid_h: 1,
+      home_agent_id: 'growth-revenue'
+    },
+    {
+      zone_id: 'meeting-zone',
+      label: 'Meeting Zone',
+      kind: 'shared',
+      grid_x: 0,
+      grid_y: 2,
+      grid_w: 2,
+      grid_h: 1,
+      home_agent_id: null
+    },
+    {
+      zone_id: 'review-zone',
+      label: 'Review Zone',
+      kind: 'shared',
+      grid_x: 2,
+      grid_y: 2,
+      grid_w: 2,
+      grid_h: 1,
+      home_agent_id: null
+    },
+    {
+      zone_id: 'rest-zone',
+      label: 'Rest Zone',
+      kind: 'shared',
+      grid_x: 4,
+      grid_y: 2,
+      grid_w: 1,
+      grid_h: 1,
+      home_agent_id: null
+    },
+    {
+      zone_id: 'reboot-zone',
+      label: 'Reboot Zone',
+      kind: 'shared',
+      grid_x: 5,
+      grid_y: 2,
+      grid_w: 1,
+      grid_h: 1,
+      home_agent_id: null
+    }
+  ].map((zone) => Object.freeze(zone))
+);
+
+const STALENESS_THRESHOLDS_MS = Object.freeze({
+  yellow: 20 * 60 * 1000,
+  orange: 30 * 60 * 1000
+});
+
+const SEVERITY_RANK = Object.freeze({
+  normal: 0,
+  yellow: 1,
+  orange: 2,
+  red: 3
+});
+
 const SEED_AGENTS = Object.freeze([
   {
     agent_id: 'team-lead',
@@ -283,6 +410,83 @@ function deriveLocationForEvent(agent, eventType, currentState) {
   }
 
   return deriveLocationForState(agent, currentState);
+}
+
+function getWatchEdges() {
+  const edges = [];
+
+  for (const agent of SEED_AGENTS) {
+    if (agent.watch_target === 'all') {
+      for (const target of SEED_AGENTS) {
+        if (target.agent_id === agent.agent_id) {
+          continue;
+        }
+
+        edges.push({
+          from_agent_id: agent.agent_id,
+          to_agent_id: target.agent_id,
+          watch_mode: 'lead'
+        });
+      }
+      continue;
+    }
+
+    if (typeof agent.watch_target === 'string' && agent.watch_target.length > 0) {
+      edges.push({
+        from_agent_id: agent.agent_id,
+        to_agent_id: agent.watch_target,
+        watch_mode: 'peer'
+      });
+    }
+  }
+
+  return edges;
+}
+
+function deriveStalenessSeverity({ now, lastMeaningfulOutputAt }) {
+  const result = {
+    severity: 'normal',
+    stale_for_ms: null,
+    stale_for_minutes: null,
+    last_meaningful_output_at: lastMeaningfulOutputAt || null
+  };
+
+  if (!isIsoTimestamp(now) || !isIsoTimestamp(lastMeaningfulOutputAt)) {
+    return result;
+  }
+
+  const staleForMs = Math.max(0, Date.parse(now) - Date.parse(lastMeaningfulOutputAt));
+  result.stale_for_ms = staleForMs;
+  result.stale_for_minutes = Math.floor(staleForMs / (60 * 1000));
+
+  if (staleForMs >= STALENESS_THRESHOLDS_MS.orange) {
+    result.severity = 'orange';
+    return result;
+  }
+
+  if (staleForMs >= STALENESS_THRESHOLDS_MS.yellow) {
+    result.severity = 'yellow';
+  }
+
+  return result;
+}
+
+function deriveAgentOverviewSeverity({ now, reportedSeverity, lastMeaningfulOutputAt }) {
+  const derivedStaleness = deriveStalenessSeverity({
+    now,
+    lastMeaningfulOutputAt
+  });
+
+  const effectiveSeverity =
+    SEVERITY_RANK[reportedSeverity] >= SEVERITY_RANK[derivedStaleness.severity]
+      ? reportedSeverity
+      : derivedStaleness.severity;
+
+  return {
+    reported_severity: reportedSeverity,
+    derived_staleness: derivedStaleness,
+    effective_severity: effectiveSeverity
+  };
 }
 
 function validateEventPayload(payload, options = {}) {
@@ -477,15 +681,20 @@ module.exports = {
   CONTROLLER_EVENT_TYPES,
   EVENT_TYPES,
   MEANINGFUL_OUTPUT_EVENT_TYPES,
+  OFFICE_ZONES,
   SEED_AGENTS,
   SEVERITY_LEVELS,
+  STALENESS_THRESHOLDS_MS,
   WATCH_TARGETS,
   WATCHED_BY,
+  deriveAgentOverviewSeverity,
   validateEventPayload,
   validateHeartbeatPayload,
   isCanonicalState,
   isEventType,
   getAgentById,
+  getWatchEdges,
+  deriveStalenessSeverity,
   deriveLocationForState,
   deriveLocationForEvent
 };

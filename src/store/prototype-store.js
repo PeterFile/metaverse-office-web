@@ -2,9 +2,12 @@ const { appendFile, mkdir, readFile } = require('node:fs/promises');
 const path = require('node:path');
 
 const {
+  OFFICE_ZONES,
   SEED_AGENTS,
+  deriveAgentOverviewSeverity,
   deriveLocationForEvent,
   deriveLocationForState,
+  getWatchEdges,
   MEANINGFUL_OUTPUT_EVENT_TYPES
 } = require('../domain');
 
@@ -215,6 +218,78 @@ class PrototypeStore {
         correlation_id: event.correlation_id
       }));
   }
+
+  getOfficeOverview({ now }) {
+    const generatedAt = now;
+    const overviewAgents = this.listAgents().map((agent) => {
+      const severityView = deriveAgentOverviewSeverity({
+        now: generatedAt,
+        reportedSeverity: agent.severity,
+        lastMeaningfulOutputAt: agent.last_meaningful_output_at
+      });
+
+      return {
+        ...agent,
+        ...severityView
+      };
+    });
+
+    const occupantsByZone = new Map(OFFICE_ZONES.map((zone) => [zone.zone_id, []]));
+    const severityBuckets = {
+      normal: 0,
+      yellow: 0,
+      orange: 0,
+      red: 0
+    };
+
+    let blockedCount = 0;
+    let rebootRecommendedCount = 0;
+
+    for (const agent of overviewAgents) {
+      severityBuckets[agent.effective_severity] += 1;
+
+      if (agent.current_state === 'blocked') {
+        blockedCount += 1;
+      }
+
+      if (agent.reboot_recommended) {
+        rebootRecommendedCount += 1;
+      }
+
+      if (!occupantsByZone.has(agent.current_location)) {
+        occupantsByZone.set(agent.current_location, []);
+      }
+
+      occupantsByZone.get(agent.current_location).push(createZoneOccupant(agent));
+    }
+
+    return {
+      generated_at: generatedAt,
+      summary: {
+        agent_count: overviewAgents.length,
+        blocked_count: blockedCount,
+        reboot_recommended_count: rebootRecommendedCount,
+        severity_buckets: severityBuckets
+      },
+      zones: OFFICE_ZONES.map((zone) => ({
+        ...zone,
+        occupants: occupantsByZone.get(zone.zone_id) || []
+      })),
+      watch_edges: getWatchEdges(),
+      agents: overviewAgents
+    };
+  }
+}
+
+function createZoneOccupant(agent) {
+  return {
+    agent_id: agent.agent_id,
+    display_name: agent.display_name,
+    kind: agent.kind,
+    current_state: agent.current_state,
+    active_task: agent.active_task,
+    effective_severity: agent.effective_severity
+  };
 }
 
 function createBaseProjection(agent) {

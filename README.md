@@ -1,6 +1,6 @@
 # Metaverse Office Web
 
-Updated: 2026-03-09T19:12:21+08:00
+Updated: 2026-03-09T20:05:00+08:00
 
 This repository is the implementation home for the Hermes-Agent metaverse-office project.
 
@@ -16,6 +16,7 @@ This repository is the implementation home for the Hermes-Agent metaverse-office
 - repo-local spec mirror and implementation plan exist
 - minimal Phase 1 backend scaffold now exists for agent/event/timeline queries
 - scaffold is aligned to the canonical seven-actor roster and controlled write boundaries
+- office overview query now exposes zone layout, occupants, watch edges, and derived staleness for future UI work
 
 ## Key documents
 - `specs/phase1-spec.md`
@@ -52,12 +53,20 @@ Optional env:
 - `GET /agents/:id`
 - `GET /agents/:id/events`
 - `GET /events`
+- `GET /office/overview`
 - `GET /timeline`
 - `GET /peer-watch/alerts`
 - `GET /handoffs`
 - `GET /reboots`
 - `POST /events`
 - `POST /heartbeats`
+
+### Office overview notes
+- `GET /office/overview` returns `generated_at`, `summary`, `zones`, `watch_edges`, and `agents`
+- zone metadata is canonical and deterministic; the server does not invent layout data at request time
+- `effective_severity` can rise to `yellow` or `orange` from `last_meaningful_output_at`
+- staleness thresholds are `<20m = normal`, `>=20m = yellow`, `>=30m = orange`
+- `red` remains event-driven only
 
 ### Controlled write rule
 Prototype writes require `x-actor-id: <agent_id>`.

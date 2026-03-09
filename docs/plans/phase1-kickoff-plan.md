@@ -2,7 +2,7 @@
 
 > For Hermes: keep implementation minimal, schema-first, and reversible. UI must not outrun the event/state architecture.
 
-Updated: 2026-03-09T18:29:40+08:00
+Updated: 2026-03-09T20:05:00+08:00
 Goal: land the first meaningful implementation milestone in `/Users/cwp/Projects/metaverse-office-web`.
 
 ## Task 1 — Freeze repo-local spec docs
@@ -34,3 +34,5 @@ Goal: land the first meaningful implementation milestone in `/Users/cwp/Projects
 ## Task 6 — Prepare next UI-facing handoff
 - Document the API response shapes the future office UI should consume
 - Explicitly note that UI work starts only after API + schema milestone is green
+- `GET /office/overview` is now the stable query surface for layout, occupants, watch edges, and derived staleness
+- Next step stays backend-first: collectors / evidence adapters first, or a thin UI shell only against the frozen contract

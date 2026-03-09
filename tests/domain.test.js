@@ -4,8 +4,12 @@ const test = require('node:test');
 const {
   AGENT_STATES,
   EVENT_TYPES,
+  OFFICE_ZONES,
   SEED_AGENTS,
   SEVERITY_LEVELS,
+  deriveAgentOverviewSeverity,
+  deriveStalenessSeverity,
+  getWatchEdges,
   validateEventPayload,
   validateHeartbeatPayload
 } = require('../src/domain');
@@ -33,6 +37,77 @@ test('domain exports canonical states, event types, and severities from the Phas
   assert.ok(EVENT_TYPES.includes('peer_watch_alert_raised'));
   assert.ok(EVENT_TYPES.includes('agent_reboot_completed'));
   assert.deepEqual(SEVERITY_LEVELS, ['normal', 'yellow', 'orange', 'red']);
+});
+
+test('office overview exports zone metadata, watch edges, and staleness helpers', () => {
+  assert.equal(OFFICE_ZONES.length, 11);
+  assert.ok(
+    OFFICE_ZONES.some(
+      (zone) => zone.zone_id === 'desk-app-engineering' && zone.home_agent_id === 'app-engineering'
+    )
+  );
+  assert.ok(
+    OFFICE_ZONES.some((zone) => zone.zone_id === 'review-zone' && zone.kind === 'shared')
+  );
+
+  const watchEdges = getWatchEdges();
+  assert.equal(watchEdges.length, 12);
+  assert.ok(
+    watchEdges.some(
+      (edge) =>
+        edge.from_agent_id === 'team-lead' &&
+        edge.to_agent_id === 'market-intel' &&
+        edge.watch_mode === 'lead'
+    )
+  );
+  assert.ok(
+    watchEdges.some(
+      (edge) =>
+        edge.from_agent_id === 'market-intel' &&
+        edge.to_agent_id === 'product-pmf' &&
+        edge.watch_mode === 'peer'
+    )
+  );
+
+  assert.equal(
+    deriveStalenessSeverity({
+      now: '2026-03-09T18:05:00.000Z',
+      lastMeaningfulOutputAt: '2026-03-09T17:46:00.000Z'
+    }).severity,
+    'normal'
+  );
+  assert.equal(
+    deriveStalenessSeverity({
+      now: '2026-03-09T18:05:00.000Z',
+      lastMeaningfulOutputAt: '2026-03-09T17:45:00.000Z'
+    }).severity,
+    'yellow'
+  );
+  assert.equal(
+    deriveStalenessSeverity({
+      now: '2026-03-09T18:05:00.000Z',
+      lastMeaningfulOutputAt: '2026-03-09T17:35:00.000Z'
+    }).severity,
+    'orange'
+  );
+
+  const timeDerived = deriveAgentOverviewSeverity({
+    now: '2026-03-09T18:05:00.000Z',
+    reportedSeverity: 'normal',
+    lastMeaningfulOutputAt: '2026-03-09T17:35:00.000Z'
+  });
+  assert.equal(timeDerived.reported_severity, 'normal');
+  assert.equal(timeDerived.derived_staleness.severity, 'orange');
+  assert.equal(timeDerived.effective_severity, 'orange');
+
+  const explicitRed = deriveAgentOverviewSeverity({
+    now: '2026-03-09T18:05:00.000Z',
+    reportedSeverity: 'red',
+    lastMeaningfulOutputAt: '2026-03-09T17:35:00.000Z'
+  });
+  assert.equal(explicitRed.reported_severity, 'red');
+  assert.equal(explicitRed.derived_staleness.severity, 'orange');
+  assert.equal(explicitRed.effective_severity, 'red');
 });
 
 test('event validation rejects invalid state and actor combinations', () => {

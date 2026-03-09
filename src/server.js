@@ -1,10 +1,15 @@
 const http = require('node:http');
 
 const { getAgentById, validateEventPayload, validateHeartbeatPayload } = require('./domain');
+const { createControllerSnapshotCollector } = require('./collectors/controller-snapshot');
 
-function createAppServer({ store, now = () => new Date().toISOString() }) {
+function createAppServer({
+  store,
+  now = () => new Date().toISOString(),
+  controllerSnapshotCollector = createControllerSnapshotCollector()
+}) {
   return http.createServer((req, res) => {
-    handleRequest({ req, res, store, now }).catch((error) => {
+    handleRequest({ req, res, store, now, controllerSnapshotCollector }).catch((error) => {
       sendJson(res, error.statusCode || 500, {
         error: error.publicMessage || 'internal_error',
         details: error.details || error.message
@@ -13,7 +18,7 @@ function createAppServer({ store, now = () => new Date().toISOString() }) {
   });
 }
 
-async function handleRequest({ req, res, store, now }) {
+async function handleRequest({ req, res, store, now, controllerSnapshotCollector }) {
   const url = new URL(req.url, 'http://127.0.0.1');
   const pathname = url.pathname;
   const method = req.method || 'GET';
@@ -115,6 +120,13 @@ async function handleRequest({ req, res, store, now }) {
     return;
   }
 
+  if (method === 'GET' && pathname === '/collectors/controller-snapshot') {
+    sendJson(res, 200, {
+      item: store.getLatestCollectorReport()
+    });
+    return;
+  }
+
   if (method === 'GET' && pathname === '/reboots') {
     sendJson(res, 200, { items: store.listReboots() });
     return;
@@ -175,6 +187,34 @@ async function handleRequest({ req, res, store, now }) {
 
     const heartbeat = await store.appendHeartbeat(validation.value);
     sendJson(res, 201, { item: heartbeat });
+    return;
+  }
+
+  if (method === 'POST' && pathname === '/collectors/controller-snapshot') {
+    const actorId = getActorId(req);
+    if (!actorId) {
+      sendJson(res, 400, {
+        error: 'missing_actor_id',
+        details: 'x-actor-id header is required for controlled writes'
+      });
+      return;
+    }
+
+    if (actorId !== 'team-lead') {
+      sendJson(res, 403, {
+        error: 'forbidden_actor',
+        details: 'controller snapshot collection requires x-actor-id: team-lead'
+      });
+      return;
+    }
+
+    await readJsonBody(req);
+    const report = await controllerSnapshotCollector.collectSnapshot({
+      actorId,
+      collectedAt: now()
+    });
+    const storedReport = await store.appendCollectorReport(report);
+    sendJson(res, 201, { item: storedReport });
     return;
   }
 

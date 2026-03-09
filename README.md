@@ -1,6 +1,6 @@
 # Metaverse Office Web
 
-Updated: 2026-03-09T20:05:00+08:00
+Updated: 2026-03-09T21:15:00+08:00
 
 This repository is the implementation home for the Hermes-Agent metaverse-office project.
 
@@ -17,6 +17,7 @@ This repository is the implementation home for the Hermes-Agent metaverse-office
 - minimal Phase 1 backend scaffold now exists for agent/event/timeline queries
 - scaffold is aligned to the canonical seven-actor roster and controlled write boundaries
 - office overview query now exposes zone layout, occupants, watch edges, and derived staleness for future UI work
+- controller snapshot collector now derives evidence-backed heartbeats from workspace/tmux metadata and exposes the latest report for inspection
 
 ## Key documents
 - `specs/phase1-spec.md`
@@ -53,6 +54,7 @@ Optional env:
 - `GET /agents/:id`
 - `GET /agents/:id/events`
 - `GET /events`
+- `GET /collectors/controller-snapshot`
 - `GET /office/overview`
 - `GET /timeline`
 - `GET /peer-watch/alerts`
@@ -60,6 +62,7 @@ Optional env:
 - `GET /reboots`
 - `POST /events`
 - `POST /heartbeats`
+- `POST /collectors/controller-snapshot`
 
 ### Office overview notes
 - `GET /office/overview` returns `generated_at`, `summary`, `zones`, `watch_edges`, and `agents`
@@ -71,3 +74,10 @@ Optional env:
 ### Controlled write rule
 Prototype writes require `x-actor-id: <agent_id>`.
 This keeps employee writes self-scoped and reserves cross-agent supervision/handoff/reboot events for `team-lead`.
+
+### Collector snapshot notes
+- `POST /collectors/controller-snapshot` is lead-only and requires `x-actor-id: team-lead`
+- `GET /collectors/controller-snapshot` is read-only and returns the latest in-memory collector report
+- collector heartbeats are derived from real `inbox.md`, `outbox.md`, `todo.md` mtimes plus tmux pane metadata
+- tests stay hermetic by injecting filesystem/tmux observations instead of touching the live Hermes workspace
+- next backend step is richer supervision/event emission, not UI decoration

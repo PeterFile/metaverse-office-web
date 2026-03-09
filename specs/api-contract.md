@@ -5,6 +5,7 @@
 - `GET /agents`
 - `GET /agents/:id`
 - `GET /agents/:id/events?limit=&event_type=&severity=&correlation_id=`
+- `GET /collectors/controller-snapshot`
 - `GET /events?agent_id=&event_type=&severity=&correlation_id=&limit=`
 - `GET /office/overview`
 - `GET /timeline?window=60m`
@@ -15,12 +16,85 @@
 ## Write APIs
 - `POST /events`
 - `POST /heartbeats`
+- `POST /collectors/controller-snapshot`
 
 ## Prototype write control
 - all write requests must send `x-actor-id: <agent_id>`
 - employee agents may emit only self-scoped events and heartbeats for their own `agent_id`
 - the team lead/controller may emit cross-agent supervision, handoff, reboot, review, and meeting events
+- `POST /collectors/controller-snapshot` is controller-only and must send `x-actor-id: team-lead`
 - event location is system-derived from event/state mapping; callers must not control office placement
+
+## Collector snapshot semantics
+- `GET /collectors/controller-snapshot` is read-only and returns `{ "item": null }` until a snapshot has been collected
+- `POST /collectors/controller-snapshot` triggers one controller snapshot and persists collected heartbeats through the existing append-only heartbeat store
+- collected heartbeat fields are derived from real workspace file metadata (`inbox.md`, `outbox.md`, `todo.md`) and tmux pane metadata for the canonical seven-actor roster
+- the collector must not fabricate random activity, random severity, or random timestamps
+- the latest collector report is an in-memory read model; heartbeat storage stays backward compatible as append-only `heartbeat` records
+
+## Collector snapshot response shape
+```json
+{
+  "item": {
+    "collected_at": "2026-03-09T18:05:00.000Z",
+    "actor_id": "team-lead",
+    "summary": {
+      "agent_count": 7,
+      "heartbeat_count": 7,
+      "tmux_observed_count": 6,
+      "workspace_observed_count": 7,
+      "reboot_recommended_count": 1
+    },
+    "items": [
+      {
+        "agent_id": "app-engineering",
+        "evidence_refs": [
+          "/Users/cwp/.hermes/teams/web3-company/agents/app-engineering/workspace/todo.md",
+          "tmux://5-web3-app-engineering/0.1"
+        ],
+        "workspace_observations": [
+          {
+            "path": "/Users/cwp/.hermes/teams/web3-company/agents/app-engineering/workspace/todo.md",
+            "file_name": "todo.md",
+            "kind": "workspace_file",
+            "last_modified_at": "2026-03-09T18:04:00.000Z"
+          }
+        ],
+        "tmux_observations": [
+          {
+            "session_name": "5-web3-app-engineering",
+            "window_index": "0",
+            "pane_index": "1",
+            "pane_id": "%11",
+            "pane_title": "Implement HTTP handlers",
+            "pane_current_command": "nvim",
+            "pane_active": true,
+            "pane_dead": false,
+            "pane_activity_at": "2026-03-09T18:04:30.000Z"
+          }
+        ],
+        "supervision": {
+          "watch_target": "growth-revenue",
+          "watched_by": ["protocol-engineering", "team-lead"],
+          "needs_attention": false
+        },
+        "heartbeat": {
+          "agent_id": "app-engineering",
+          "actor_id": "team-lead",
+          "received_at": "2026-03-09T18:05:00.000Z",
+          "current_state": "coding",
+          "active_task": "Implement HTTP handlers",
+          "last_meaningful_output_at": "2026-03-09T18:04:30.000Z",
+          "last_file_write_at": "2026-03-09T18:04:00.000Z",
+          "current_blocker": "",
+          "confidence_level": "high",
+          "reboot_recommended": false
+        }
+      }
+    ]
+  }
+}
+```
 
 ## Canonical enums
 ### states

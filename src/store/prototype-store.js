@@ -17,6 +17,7 @@ class PrototypeStore {
     this.records = [];
     this.events = [];
     this.heartbeats = [];
+    this.latestCollectorReport = null;
   }
 
   async load() {
@@ -34,6 +35,7 @@ class PrototypeStore {
     this.records = [];
     this.events = [];
     this.heartbeats = [];
+    this.latestCollectorReport = null;
 
     if (!content.trim()) {
       return;
@@ -72,6 +74,33 @@ class PrototypeStore {
     this.records.push(record);
     this.heartbeats.push(heartbeat);
     return heartbeat;
+  }
+
+  async appendCollectorReport(report) {
+    const items = [];
+
+    for (const item of report.items || []) {
+      const heartbeat = await this.appendHeartbeat(item.heartbeat);
+      items.push({
+        ...item,
+        heartbeat
+      });
+    }
+
+    this.latestCollectorReport = {
+      ...report,
+      summary: {
+        ...(report.summary || {}),
+        heartbeat_count: items.length
+      },
+      items
+    };
+
+    return this.latestCollectorReport;
+  }
+
+  getLatestCollectorReport() {
+    return this.latestCollectorReport;
   }
 
   getCounts() {

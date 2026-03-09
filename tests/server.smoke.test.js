@@ -7,11 +7,15 @@ const test = require('node:test');
 const { createAppServer } = require('../src/server');
 const { createPrototypeStore } = require('../src/store/prototype-store');
 
-async function createHarness(t) {
+async function createHarness(t, options = {}) {
   const root = await mkdtemp(path.join(os.tmpdir(), 'metaverse-office-'));
   const storeFile = path.join(root, 'prototype-store.jsonl');
   const store = await createPrototypeStore({ filePath: storeFile });
-  const server = createAppServer({ store, now: () => '2026-03-09T18:05:00.000Z' });
+  const server = createAppServer({
+    store,
+    now: options.now || (() => '2026-03-09T18:05:00.000Z'),
+    controllerSnapshotCollector: options.controllerSnapshotCollector
+  });
 
   await new Promise((resolve) => {
     server.listen(0, '127.0.0.1', resolve);
@@ -460,4 +464,93 @@ test('GET /office/overview derives yellow and orange staleness without fabricati
   assert.equal(appEngineering.reported_severity, 'red');
   assert.equal(appEngineering.effective_severity, 'red');
   assert.equal(appEngineering.derived_staleness.severity, 'normal');
+});
+
+test('collector snapshot endpoints stay read-only on GET and require team-lead on POST', async (t) => {
+  const controllerSnapshotCollector = {
+    async collectSnapshot({ actorId, collectedAt }) {
+      assert.equal(actorId, 'team-lead');
+      assert.equal(collectedAt, '2026-03-09T18:05:00.000Z');
+
+      return {
+        collected_at: collectedAt,
+        actor_id: actorId,
+        summary: {
+          agent_count: 1,
+          heartbeat_count: 1,
+          tmux_observed_count: 1,
+          workspace_observed_count: 1,
+          reboot_recommended_count: 0
+        },
+        items: [
+          {
+            agent_id: 'app-engineering',
+            evidence_refs: ['/tmp/app-engineering/todo.md', 'tmux://5-web3-app-engineering/0.1'],
+            workspace_observations: [],
+            tmux_observations: [],
+            supervision: {
+              watch_target: 'growth-revenue',
+              watched_by: ['protocol-engineering', 'team-lead'],
+              needs_attention: false
+            },
+            heartbeat: {
+              agent_id: 'app-engineering',
+              actor_id: 'team-lead',
+              received_at: collectedAt,
+              current_state: 'coding',
+              active_task: 'Implement HTTP handlers',
+              last_meaningful_output_at: '2026-03-09T18:04:30.000Z',
+              last_file_write_at: '2026-03-09T18:04:00.000Z',
+              current_blocker: '',
+              confidence_level: 'high',
+              reboot_recommended: false
+            }
+          }
+        ]
+      };
+    }
+  };
+
+  const { baseUrl, storeFile } = await createHarness(t, { controllerSnapshotCollector });
+
+  const initial = await requestJson(`${baseUrl}/collectors/controller-snapshot`);
+  assert.equal(initial.response.status, 200);
+  assert.equal(initial.body.item, null);
+
+  const missingActor = await requestJson(`${baseUrl}/collectors/controller-snapshot`, {
+    method: 'POST'
+  });
+  assert.equal(missingActor.response.status, 400);
+  assert.equal(missingActor.body.error, 'missing_actor_id');
+
+  const forbidden = await requestJson(`${baseUrl}/collectors/controller-snapshot`, {
+    method: 'POST',
+    headers: {
+      'x-actor-id': 'app-engineering'
+    }
+  });
+  assert.equal(forbidden.response.status, 403);
+  assert.equal(forbidden.body.error, 'forbidden_actor');
+
+  const collected = await requestJson(`${baseUrl}/collectors/controller-snapshot`, {
+    method: 'POST',
+    headers: {
+      'x-actor-id': 'team-lead'
+    }
+  });
+  assert.equal(collected.response.status, 201);
+  assert.equal(collected.body.item.summary.heartbeat_count, 1);
+
+  const latest = await requestJson(`${baseUrl}/collectors/controller-snapshot`);
+  assert.equal(latest.response.status, 200);
+  assert.equal(latest.body.item.collected_at, '2026-03-09T18:05:00.000Z');
+
+  const appEngineering = await requestJson(`${baseUrl}/agents/app-engineering`);
+  assert.equal(appEngineering.response.status, 200);
+  assert.equal(appEngineering.body.item.current_state, 'coding');
+  assert.equal(appEngineering.body.item.last_heartbeat_at, '2026-03-09T18:05:00.000Z');
+
+  const lines = (await readFile(storeFile, 'utf8')).trim().split('\n');
+  assert.equal(lines.length, 1);
+  assert.equal(JSON.parse(lines[0]).kind, 'heartbeat');
 });

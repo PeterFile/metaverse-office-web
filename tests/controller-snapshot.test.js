@@ -190,12 +190,21 @@ test('store appends collector heartbeats and exposes the latest collector report
   const storedReport = await store.appendCollectorReport(report);
   assert.equal(storedReport.items.length, 1);
   assert.equal(store.getLatestCollectorReport().collected_at, '2026-03-09T18:05:00.000Z');
-  assert.equal(store.getCounts().heartbeat_count, 1);
+  assert.deepEqual(store.getCounts(), {
+    agent_count: 7,
+    event_count: 2,
+    heartbeat_count: 1
+  });
   assert.equal(store.getAgent('app-engineering').current_state, 'coding');
 
+  const activityEvents = store.listEvents({ agent_id: 'app-engineering' }).map((event) => event.event_type);
+  assert.deepEqual(activityEvents, ['agent_state_changed', 'agent_wrote_file']);
+
   const lines = (await readFile(storeFile, 'utf8')).trim().split('\n');
-  assert.equal(lines.length, 1);
-  assert.equal(JSON.parse(lines[0]).kind, 'heartbeat');
+  assert.equal(lines.length, 3);
+  assert.equal(JSON.parse(lines[0]).kind, 'event');
+  assert.equal(JSON.parse(lines[1]).kind, 'event');
+  assert.equal(JSON.parse(lines[2]).kind, 'heartbeat');
 });
 
 test('store appends collector-driven peer watch alerts for staleness and blocked snapshots', async () => {
@@ -236,7 +245,7 @@ test('store appends collector-driven peer watch alerts for staleness and blocked
 
   assert.deepEqual(store.getCounts(), {
     agent_count: 7,
-    event_count: 2,
+    event_count: 6,
     heartbeat_count: 2
   });
 
@@ -422,8 +431,72 @@ test('store suppresses duplicate collector-driven peer watch alerts for unchange
   await store.appendCollectorReport(secondReport);
   const secondCounts = store.getCounts();
 
-  assert.equal(firstCounts.event_count, 2);
-  assert.equal(secondCounts.event_count, 2);
+  assert.equal(firstCounts.event_count, 6);
+  assert.equal(secondCounts.event_count, 6);
   assert.equal(secondCounts.heartbeat_count, 4);
   assert.equal(store.listEvents({ event_type: 'peer_watch_alert_raised' }).length, 2);
+  assert.equal(store.listEvents({ event_type: 'agent_state_changed' }).length, 2);
+  assert.equal(store.listEvents({ event_type: 'agent_wrote_file' }).length, 2);
+});
+
+
+test('store suppresses duplicate collector-derived activity events for unchanged snapshots', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'metaverse-office-store-'));
+  const storeFile = path.join(root, 'prototype-store.jsonl');
+  const store = await createPrototypeStore({ filePath: storeFile });
+
+  const firstReport = createCollectorReport({
+    collectedAt: '2026-03-09T18:05:00.000Z',
+    items: [
+      createReportItem({
+        collectedAt: '2026-03-09T18:05:00.000Z',
+        agentId: 'app-engineering',
+        evidenceRefs: [
+          '/tmp/app-engineering/outbox.md',
+          'tmux://5-web3-app-engineering/0.1'
+        ],
+        currentState: 'coding',
+        activeTask: 'Implement HTTP handlers',
+        lastMeaningfulOutputAt: '2026-03-09T18:04:30.000Z',
+        lastFileWriteAt: '2026-03-09T18:04:00.000Z'
+      })
+    ]
+  });
+
+  const secondReport = createCollectorReport({
+    collectedAt: '2026-03-09T18:11:00.000Z',
+    items: [
+      createReportItem({
+        collectedAt: '2026-03-09T18:11:00.000Z',
+        agentId: 'app-engineering',
+        evidenceRefs: [
+          '/tmp/app-engineering/outbox.md',
+          'tmux://5-web3-app-engineering/0.1'
+        ],
+        currentState: 'coding',
+        activeTask: 'Implement HTTP handlers',
+        lastMeaningfulOutputAt: '2026-03-09T18:04:30.000Z',
+        lastFileWriteAt: '2026-03-09T18:04:00.000Z'
+      })
+    ]
+  });
+
+  await store.appendCollectorReport(firstReport);
+  const firstCounts = store.getCounts();
+
+  await store.appendCollectorReport(secondReport);
+  const secondCounts = store.getCounts();
+
+  assert.deepEqual(firstCounts, {
+    agent_count: 7,
+    event_count: 2,
+    heartbeat_count: 1
+  });
+  assert.deepEqual(secondCounts, {
+    agent_count: 7,
+    event_count: 2,
+    heartbeat_count: 2
+  });
+  assert.equal(store.listEvents({ event_type: 'agent_state_changed' }).length, 1);
+  assert.equal(store.listEvents({ event_type: 'agent_wrote_file' }).length, 1);
 });

@@ -19,6 +19,7 @@ This repository mirrors the controller-approved Phase 1 scope so implementation 
 - evidence binding to files and tmux observations
 - repo-local implementation plan and backend scaffold
 - controller snapshot collector that can emit evidence-backed peer-watch alerts from collected heartbeats without inventing new event types
+- collector-derived canonical activity events for observed state changes and newer workspace writes, with duplicate suppression across unchanged snapshots
 - enriched agent detail and peer-watch evidence queries over the existing append-only read models
 
 ## Canonical state enum
@@ -56,9 +57,12 @@ This repository mirrors the controller-approved Phase 1 scope so implementation 
 
 ## Collector supervision addendum
 - snapshot-driven supervision reuses `peer_watch_alert_raised` and `peer_watch_alert_resolved`
+- collector-derived activity reuses canonical `agent_state_changed` and `agent_wrote_file`
+- state-change activity is appended only when collector evidence shows a different current state than the previously known projection
+- file-write activity is appended only when collector evidence shows a newer `last_file_write_at` than the previously known projection
 - yellow/orange staleness derives from `last_meaningful_output_at` only
 - blocked or reboot-recommended collector items raise peer-watch alerts with evidence refs and metadata
-- repeated unchanged snapshots suppress duplicate raised alerts
+- repeated unchanged snapshots suppress duplicate activity and alert events
 - time alone must never fabricate `red`
 
 ## Interaction read-model addendum

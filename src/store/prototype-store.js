@@ -130,13 +130,20 @@ class PrototypeStore {
   }
 
   async appendCollectorReport(report) {
+    const previousAgentProjections = new Map(
+      this.listAgents().map((agent) => [agent.agent_id, agent])
+    );
+    const collectorActivityEvents = createCollectorActivityEvents({
+      report,
+      previousAgentProjections
+    });
     const collectorEvents = createCollectorSupervisionEvents({
       report,
       existingEvents: this.events
     });
     const items = [];
 
-    for (const event of collectorEvents) {
+    for (const event of [...collectorActivityEvents, ...collectorEvents]) {
       await this.appendEvent(event);
     }
 
@@ -643,6 +650,278 @@ function createCollectorSupervisionEvents({ report, existingEvents }) {
   }
 
   return events;
+}
+
+function createCollectorActivityEvents({ report, previousAgentProjections }) {
+  const events = [];
+
+  for (const item of report.items || []) {
+    const previousProjection = previousAgentProjections.get(item.agent_id) || null;
+    const fileWriteEvent = createCollectorFileWriteEvent({
+      report,
+      item,
+      previousProjection
+    });
+    if (fileWriteEvent) {
+      events.push(fileWriteEvent);
+    }
+
+    const stateChangedEvent = createCollectorStateChangedEvent({
+      report,
+      item,
+      previousProjection
+    });
+    if (stateChangedEvent) {
+      events.push(stateChangedEvent);
+    }
+  }
+
+  return events;
+}
+
+function createCollectorStateChangedEvent({ report, item, previousProjection }) {
+  const heartbeat = item.heartbeat || null;
+  const agent = getAgentById(item.agent_id);
+
+  if (!heartbeat || !agent || !heartbeat.current_state) {
+    return null;
+  }
+
+  const previousState = previousProjection ? previousProjection.current_state : null;
+  if (previousState === heartbeat.current_state) {
+    return null;
+  }
+
+  const evidence = deriveCollectorStateEvidence(item);
+  if (!evidence) {
+    return null;
+  }
+
+  const derivedStaleness = deriveStalenessSeverity({
+    now: report.collected_at,
+    lastMeaningfulOutputAt: heartbeat.last_meaningful_output_at
+  });
+
+  return validateCollectorEvent(
+    {
+      event_id: createCollectorEventId({
+        report,
+        agentId: item.agent_id,
+        family: 'state_change',
+        phase: 'observed',
+        severity: 'normal'
+      }),
+      ts: report.collected_at,
+      agent_id: item.agent_id,
+      agent_role: agent.role_slug,
+      event_type: 'agent_state_changed',
+      current_state: heartbeat.current_state,
+      active_task: heartbeat.active_task,
+      summary: previousState
+        ? `Collector observed state change ${previousState} -> ${heartbeat.current_state}`
+        : `Collector observed state ${heartbeat.current_state}`,
+      severity: 'normal',
+      correlation_id: createCollectorCorrelationId(report.collected_at),
+      counterparty_agent_ids: [],
+      evidence_refs: evidence.evidence_refs,
+      source_kind: evidence.source_kind,
+      metadata: {
+        ...createCollectorMetadataBase({
+          report,
+          item,
+          derivedStaleness
+        }),
+        collector_activity_family: 'state_change',
+        previous_state: previousState,
+        observed_state: heartbeat.current_state
+      }
+    },
+    report.actor_id
+  );
+}
+
+function createCollectorFileWriteEvent({ report, item, previousProjection }) {
+  const heartbeat = item.heartbeat || null;
+  const agent = getAgentById(item.agent_id);
+  const observedAt = normalizeCollectorTimestamp(heartbeat && heartbeat.last_file_write_at);
+
+  if (!heartbeat || !agent || !observedAt) {
+    return null;
+  }
+
+  const previousFileWriteAt = normalizeCollectorTimestamp(
+    previousProjection && previousProjection.last_file_write_at
+  );
+  if (
+    previousFileWriteAt &&
+    Date.parse(observedAt) <= Date.parse(previousFileWriteAt)
+  ) {
+    return null;
+  }
+
+  const evidence = deriveCollectorFileWriteEvidence(item, observedAt);
+  if (!evidence) {
+    return null;
+  }
+
+  const derivedStaleness = deriveStalenessSeverity({
+    now: report.collected_at,
+    lastMeaningfulOutputAt: heartbeat.last_meaningful_output_at
+  });
+
+  return validateCollectorEvent(
+    {
+      event_id: createCollectorEventId({
+        report,
+        agentId: item.agent_id,
+        family: 'file_write',
+        phase: 'observed',
+        severity: 'normal'
+      }),
+      ts: observedAt,
+      agent_id: item.agent_id,
+      agent_role: agent.role_slug,
+      event_type: 'agent_wrote_file',
+      current_state: heartbeat.current_state,
+      active_task: heartbeat.active_task,
+      summary: `Collector observed workspace write to ${evidence.file_name}`,
+      severity: 'normal',
+      correlation_id: createCollectorCorrelationId(report.collected_at),
+      counterparty_agent_ids: [],
+      evidence_refs: evidence.evidence_refs,
+      source_kind: 'workspace_file',
+      metadata: {
+        ...createCollectorMetadataBase({
+          report,
+          item,
+          derivedStaleness
+        }),
+        collector_activity_family: 'file_write',
+        previous_last_file_write_at: previousFileWriteAt,
+        observed_file_path: evidence.file_path,
+        observed_file_name: evidence.file_name,
+        observed_last_file_write_at: observedAt
+      }
+    },
+    report.actor_id
+  );
+}
+
+function deriveCollectorStateEvidence(item) {
+  const tmuxObservation = getLatestCollectorTmuxObservation(item);
+  if (tmuxObservation) {
+    return {
+      source_kind: 'tmux_observation',
+      evidence_refs: [
+        `tmux://${tmuxObservation.session_name}/${tmuxObservation.window_index}.${tmuxObservation.pane_index}`
+      ]
+    };
+  }
+
+  const tmuxRef = normalizeEvidenceRefs(item.evidence_refs).find(isTmuxRef);
+  if (tmuxRef) {
+    return {
+      source_kind: 'tmux_observation',
+      evidence_refs: [tmuxRef]
+    };
+  }
+
+  const workspaceObservation = getLatestCollectorWorkspaceFileObservation(item);
+  if (workspaceObservation) {
+    return {
+      source_kind: 'workspace_file',
+      evidence_refs: [workspaceObservation.path]
+    };
+  }
+
+  const workspaceFileRef = normalizeEvidenceRefs(item.evidence_refs).find(isWorkspaceFileRef);
+  if (workspaceFileRef) {
+    return {
+      source_kind: 'workspace_file',
+      evidence_refs: [workspaceFileRef]
+    };
+  }
+
+  return null;
+}
+
+function deriveCollectorFileWriteEvidence(item, observedAt) {
+  const workspaceObservation = getLatestCollectorWorkspaceFileObservation(item, observedAt);
+  if (workspaceObservation) {
+    return {
+      file_path: workspaceObservation.path,
+      file_name: workspaceObservation.file_name,
+      evidence_refs: [workspaceObservation.path]
+    };
+  }
+
+  const workspaceFileRef = normalizeEvidenceRefs(item.evidence_refs).find(isWorkspaceFileRef);
+  if (workspaceFileRef) {
+    return {
+      file_path: workspaceFileRef,
+      file_name: path.basename(workspaceFileRef),
+      evidence_refs: [workspaceFileRef]
+    };
+  }
+
+  return null;
+}
+
+function getLatestCollectorTmuxObservation(item) {
+  const observations = Array.isArray(item.tmux_observations) ? item.tmux_observations.slice() : [];
+  if (observations.length === 0) {
+    return null;
+  }
+
+  observations.sort(
+    (left, right) =>
+      Date.parse(right.pane_activity_at || 0) - Date.parse(left.pane_activity_at || 0)
+  );
+  return observations[0] || null;
+}
+
+function getLatestCollectorWorkspaceFileObservation(item, observedAt = null) {
+  const observations = (Array.isArray(item.workspace_observations) ? item.workspace_observations : [])
+    .filter((observation) => observation.kind === 'workspace_file')
+    .slice()
+    .sort(
+      (left, right) =>
+        Date.parse(right.last_modified_at || 0) - Date.parse(left.last_modified_at || 0)
+    );
+
+  if (observations.length === 0) {
+    return null;
+  }
+
+  if (observedAt) {
+    const exactMatch = observations.find((observation) => observation.last_modified_at === observedAt);
+    if (exactMatch) {
+      return exactMatch;
+    }
+  }
+
+  return observations[0] || null;
+}
+
+function isTmuxRef(ref) {
+  return typeof ref === 'string' && ref.startsWith('tmux://');
+}
+
+function isWorkspaceFileRef(ref) {
+  return typeof ref === 'string' && !isTmuxRef(ref) && path.extname(ref).length > 0;
+}
+
+function normalizeCollectorTimestamp(value) {
+  if (typeof value !== 'string' || value.length === 0) {
+    return null;
+  }
+
+  const parsed = Date.parse(value);
+  if (Number.isNaN(parsed)) {
+    return null;
+  }
+
+  return new Date(parsed).toISOString();
 }
 
 function buildOpenCollectorAlertIndex(events) {

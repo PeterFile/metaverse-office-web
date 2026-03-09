@@ -876,9 +876,18 @@ test('collector snapshot endpoints stay read-only on GET and require team-lead o
   assert.equal(appEngineering.body.item.current_state, 'coding');
   assert.equal(appEngineering.body.item.last_heartbeat_at, '2026-03-09T18:05:00.000Z');
 
+  const activityEvents = await requestJson(`${baseUrl}/events?agent_id=app-engineering&limit=5`);
+  assert.equal(activityEvents.response.status, 200);
+  assert.deepEqual(
+    activityEvents.body.items.map((event) => event.event_type),
+    ['agent_state_changed', 'agent_wrote_file']
+  );
+
   const lines = (await readFile(storeFile, 'utf8')).trim().split('\n');
-  assert.equal(lines.length, 1);
-  assert.equal(JSON.parse(lines[0]).kind, 'heartbeat');
+  assert.equal(lines.length, 3);
+  assert.equal(JSON.parse(lines[0]).kind, 'event');
+  assert.equal(JSON.parse(lines[1]).kind, 'event');
+  assert.equal(JSON.parse(lines[2]).kind, 'heartbeat');
 });
 
 test('collector snapshot POST emits supervision events onto existing query surfaces', async (t) => {
@@ -961,6 +970,16 @@ test('collector snapshot POST emits supervision events onto existing query surfa
     }
   });
   assert.equal(collected.response.status, 201);
+
+  const activityEvents = await requestJson(`${baseUrl}/events?event_type=agent_state_changed&limit=5`);
+  assert.equal(activityEvents.response.status, 200);
+  assert.equal(activityEvents.body.items.length, 2);
+  assert.ok(activityEvents.body.items.every((event) => event.metadata.collector_activity_family === 'state_change'));
+
+  const fileWriteEvents = await requestJson(`${baseUrl}/events?event_type=agent_wrote_file&limit=5`);
+  assert.equal(fileWriteEvents.response.status, 200);
+  assert.equal(fileWriteEvents.body.items.length, 2);
+  assert.ok(fileWriteEvents.body.items.every((event) => event.metadata.collector_activity_family === 'file_write'));
 
   const events = await requestJson(`${baseUrl}/events?event_type=peer_watch_alert_raised`);
   assert.equal(events.response.status, 200);

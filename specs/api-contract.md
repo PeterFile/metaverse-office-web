@@ -29,14 +29,17 @@
 
 ## Collector snapshot semantics
 - `GET /collectors/controller-snapshot` is read-only and returns `{ "item": null }` until a snapshot has been collected
-- `POST /collectors/controller-snapshot` triggers one controller snapshot, persists collected heartbeats, and may append collector-derived peer-watch events into the existing append-only event store
+- `POST /collectors/controller-snapshot` triggers one controller snapshot, persists collected heartbeats, and may append collector-derived canonical activity and peer-watch events into the existing append-only event store
 - collected heartbeat fields are derived from real workspace file metadata (`inbox.md`, `outbox.md`, `todo.md`) and tmux pane metadata for the canonical seven-actor roster
 - the collector must not fabricate random activity, random severity, or random timestamps
 - the latest collector report is an in-memory read model; heartbeat storage stays backward compatible as append-only `heartbeat` records
+- collector-derived activity uses canonical event types only: `agent_state_changed` and `agent_wrote_file`
 - collector-derived supervision uses existing canonical event types only: `peer_watch_alert_raised` and `peer_watch_alert_resolved`
+- collector-derived `agent_state_changed` requires evidence-backed state drift versus the previously known projection and uses `tmux_observation` or `workspace_file` as the source kind
+- collector-derived `agent_wrote_file` requires a newer `last_file_write_at` than the previously known projection and binds to the newest relevant workspace-file evidence
 - collector staleness alerts use `last_meaningful_output_at` only: `<20m = normal`, `>=20m = yellow`, `>=30m = orange`
 - blocked or reboot-recommended collector items raise `peer_watch_alert_raised` with evidence refs plus collector metadata; no reboot lifecycle records are fabricated yet
-- repeated unchanged collector conditions must not append duplicate `peer_watch_alert_raised` events
+- repeated unchanged collector conditions must not append duplicate activity or `peer_watch_alert_raised` events
 - when a previously open collector-derived alert clears in a later snapshot, append `peer_watch_alert_resolved`
 - time alone must never fabricate `red`; `red` remains explicit event-driven supervision
 

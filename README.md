@@ -18,6 +18,7 @@ This repository is the implementation home for the Hermes-Agent metaverse-office
 - scaffold is aligned to the canonical seven-actor roster and controlled write boundaries
 - office overview query now exposes zone layout, occupants, watch edges, and derived staleness for future UI work
 - controller snapshot collector now derives evidence-backed heartbeats from workspace/tmux metadata and appends collector-backed peer-watch alerts into the existing event log
+- collector snapshots now also append deduped canonical `agent_state_changed` and `agent_wrote_file` events when observed state or file-write evidence advances
 - derived interaction read models now expose communication records without adding a new write path
 - enriched agent detail and peer-watch alert queries now expose current evidence surfaces without adding new writes
 
@@ -102,9 +103,10 @@ This keeps employee writes self-scoped and reserves cross-agent supervision/hand
 - `GET /collectors/controller-snapshot` is read-only and returns the latest in-memory collector report
 - collector heartbeats are derived from real `inbox.md`, `outbox.md`, `todo.md` mtimes plus tmux pane metadata
 - collector-derived supervision reuses canonical `peer_watch_alert_raised` / `peer_watch_alert_resolved`
+- collector snapshots also append deduped canonical `agent_state_changed` and `agent_wrote_file` events when evidence shows a new state or a newer file write
 - yellow/orange staleness comes from `last_meaningful_output_at` only: `<20m = normal`, `>=20m = yellow`, `>=30m = orange`
 - blocked or reboot-recommended collector items append evidence-backed peer-watch alerts with collector metadata
-- repeated unchanged snapshots do not append duplicate raised alerts; cleared conditions append resolved alerts
+- repeated unchanged snapshots do not append duplicate activity or alert events; cleared conditions append resolved alerts
 - collector-derived peer-watch events do not fabricate `red` from time alone
 - tests stay hermetic by injecting filesystem/tmux observations instead of touching the live Hermes workspace
-- existing `/events`, `/timeline`, `/peer-watch/alerts`, and agent projections now reflect collector-driven supervision events
+- existing `/events`, `/timeline`, `/peer-watch/alerts`, and agent projections now reflect collector-driven supervision and activity events

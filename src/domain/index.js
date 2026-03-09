@@ -487,6 +487,16 @@ function deriveAgentOverviewSeverity({ now, reportedSeverity, lastMeaningfulOutp
   };
 }
 
+function isCollectorDerivedActivityPayload(payload) {
+  return (
+    isPlainObject(payload) &&
+    isPlainObject(payload.metadata) &&
+    payload.metadata.collector_derived === true &&
+    payload.metadata.collector_source === 'controller_snapshot' &&
+    (payload.event_type === 'agent_state_changed' || payload.event_type === 'agent_wrote_file')
+  );
+}
+
 function validateEventPayload(payload, options = {}) {
   const errors = [];
 
@@ -497,6 +507,7 @@ function validateEventPayload(payload, options = {}) {
   const actorId = options.actorId || payload.actor_id || payload.agent_id;
   const targetAgent = getAgentById(payload.agent_id);
   const actorAgent = getAgentById(actorId);
+  const isCollectorDerivedActivity = isCollectorDerivedActivityPayload(payload);
 
   if (options.actorId && payload.actor_id && payload.actor_id !== options.actorId) {
     errors.push('actor_id must match x-actor-id header');
@@ -532,6 +543,14 @@ function validateEventPayload(payload, options = {}) {
 
   if (!SOURCE_KIND_SET.has(payload.source_kind)) {
     errors.push('source_kind must be supported');
+  }
+
+  if (
+    isCollectorDerivedActivity &&
+    payload.source_kind !== 'workspace_file' &&
+    payload.source_kind !== 'tmux_observation'
+  ) {
+    errors.push('collector-derived activity events must use workspace_file or tmux_observation');
   }
 
   if (!Array.isArray(payload.counterparty_agent_ids)) {
@@ -576,13 +595,18 @@ function validateEventPayload(payload, options = {}) {
       errors.push('controller-only event_type requires the team lead');
     }
 
+    if (isCollectorDerivedActivity && actorAgent.kind !== 'lead') {
+      errors.push('collector-derived activity events require the team lead actor');
+    }
+
     if (
       actorAgent.kind === 'lead' &&
       actorAgent.agent_id !== targetAgent.agent_id &&
-      !CONTROLLER_EVENT_TYPES.has(payload.event_type)
+      !CONTROLLER_EVENT_TYPES.has(payload.event_type) &&
+      !isCollectorDerivedActivity
     ) {
       errors.push(
-        'lead cross-agent events must be supervision, handoff, reboot, review, or meeting events'
+        'lead cross-agent events must be supervision, handoff, reboot, review, meeting, or collector-derived observation events'
       );
     }
   }

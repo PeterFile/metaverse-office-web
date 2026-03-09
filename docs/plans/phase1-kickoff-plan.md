@@ -41,7 +41,8 @@ Goal: land the first meaningful implementation milestone in `/Users/cwp/Projects
 - `GET /collectors/controller-snapshot` and `POST /collectors/controller-snapshot` now exist
 - controller snapshots are lead-triggered only and append evidence-backed heartbeats through the existing store boundary
 - latest collector report is exposed as a read model without changing append-only event/heartbeat storage
-- next step remains backend-first: richer supervision/event emission and evidence surfaces, not decorative UI
+- collector snapshots now append deduped canonical `agent_state_changed` and `agent_wrote_file` events when evidence advances, so `/events` and `/timeline` stay aligned with projection updates
+- next step remains backend-first: richer operator queries over the append-only evidence trail, not decorative UI
 - `GET /interactions` and `GET /agents/:id/interactions` now expose a communication read model derived from append-only events
 - `GET /agents/:id` now exposes latest heartbeat plus recent event/interaction/handoff/reboot evidence slices
 - `GET /peer-watch/alerts` now supports evidence filters, with `status=open` derived from currently unresolved alerts instead of raw historical raises

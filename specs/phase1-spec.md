@@ -1,7 +1,7 @@
 # Repo-local Phase 1 Spec Mirror
 
 Source of truth: `/Users/cwp/.hermes/teams/web3-company/controller/phase1-spec-package.md`
-Last mirrored: 2026-03-10T06:05:34+08:00
+Last mirrored: 2026-03-10T07:50:50+08:00
 
 This repository mirrors the controller-approved Phase 1 scope so implementation stays under `/Users/cwp/Projects/metaverse-office-web` instead of `~/.hermes/teams/...`.
 
@@ -23,6 +23,7 @@ This repository mirrors the controller-approved Phase 1 scope so implementation 
 - enriched agent detail and peer-watch evidence queries over the existing append-only read models
 - operator incident feed query derived from existing alert/handoff/reboot read models
 - correlation drill-down query that aggregates incident, interaction, and replay evidence by `correlation_id`
+- agent-centric incident evidence surfaces derived from the same read-only incident feed semantics
 
 ## Canonical state enum
 - idle
@@ -82,8 +83,9 @@ This repository mirrors the controller-approved Phase 1 scope so implementation 
 - collector-derived activity and supervision events flow through the same timeline item shape without rewriting their evidence or source fields
 
 ## Agent detail and alert read-model addendum
-- `GET /agents/:id` exposes the current projection plus `latest_heartbeat`, `open_peer_watch_alerts`, `recent_events`, `recent_interactions`, `recent_handoffs`, and `recent_reboots`
+- `GET /agents/:id` exposes the current projection plus `latest_heartbeat`, `open_peer_watch_alerts`, `recent_events`, `recent_interactions`, `recent_incidents`, `recent_handoffs`, and `recent_reboots`
 - the detail query stays evidence-first: it reuses append-only heartbeats/events instead of adding a write path
+- `recent_incidents` is derived from the same normalized incident feed used elsewhere, scoped to the requested agent and bounded by the existing detail `limit` semantics
 - `GET /peer-watch/alerts?status=open` returns only currently unresolved alerts; omit `status` to inspect historical alert events
 
 ## Incident feed addendum
@@ -93,6 +95,7 @@ This repository mirrors the controller-approved Phase 1 scope so implementation 
 - normalized incident items expose `incident_id`, `kind`, `ts`, `agent_id`, `actor_id`, `status`, `severity`, `summary`, `correlation_id`, `evidence_refs`, `counterparty_agent_ids`, and `source_kind`
 - peer-watch `status=open` keeps the unresolved-alert semantics from the existing alert read model
 - handoff and reboot records extend their derived shapes minimally so incident normalization can reuse them instead of inventing a new storage layer
+- `GET /agents/:id/incidents` reuses the same read-only incident feed semantics with `:id` as the implicit agent filter and returns `404` for unknown agent ids
 
 ## Correlation drill-down addendum
 - `GET /correlations/:correlation_id` stays read-only and aggregates one evidence-first drill-down surface from existing incident, interaction, and timeline/event read models

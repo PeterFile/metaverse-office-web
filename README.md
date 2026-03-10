@@ -1,6 +1,6 @@
 # Metaverse Office Web
 
-Updated: 2026-03-10T06:05:34+08:00
+Updated: 2026-03-10T07:50:50+08:00
 
 This repository is the implementation home for the Hermes-Agent metaverse-office project.
 
@@ -24,12 +24,14 @@ This repository is the implementation home for the Hermes-Agent metaverse-office
 - timeline replay slices now support evidence-first filtering by agent, event type, severity, correlation, and recent slice limit
 - operator incident feed now exposes a descending read-only view over peer-watch alerts, handoffs, and reboots without adding new persistence
 - correlation drill-down now exposes one read-only evidence/replay surface per `correlation_id` by aggregating existing incident, interaction, and timeline read models
+- agent detail and agent-scoped incident queries now expose recent incident evidence by reusing the same read-only incident feed semantics
 
 ## Key documents
 - `specs/phase1-spec.md`
 - `specs/api-contract.md`
 - `docs/plans/phase1-kickoff-plan.md`
 - `docs/plans/phase1-incident-feed-plan.md`
+- `docs/plans/phase1-agent-incident-evidence-plan.md`
 - `docs/plans/phase1-correlation-drilldown-plan.md`
 - `docs/plans/phase1-timeline-replay-plan.md`
 - `docs/plans/phase1-supervision-events-plan.md`
@@ -63,6 +65,7 @@ Optional env:
 - `GET /agents`
 - `GET /agents/:id?limit=`
 - `GET /agents/:id/events`
+- `GET /agents/:id/incidents?kind=&severity=&status=&correlation_id=&limit=&window=`
 - `GET /agents/:id/interactions`
 - `GET /events`
 - `GET /interactions`
@@ -87,8 +90,14 @@ Optional env:
 
 ### Agent detail read-model notes
 - `GET /agents/:id` returns the current agent projection plus `latest_heartbeat`
-- optional `limit` caps `open_peer_watch_alerts`, `recent_events`, `recent_interactions`, `recent_handoffs`, and `recent_reboots`
+- optional `limit` caps `open_peer_watch_alerts`, `recent_events`, `recent_interactions`, `recent_incidents`, `recent_handoffs`, and `recent_reboots`
 - `open_peer_watch_alerts` is derived from unresolved peer-watch evidence, not from raw historical `raised` events
+- `recent_incidents` reuses the same normalized read-only incident feed semantics as `GET /incidents`, scoped to the requested agent
+
+### Agent incident query notes
+- `GET /agents/:id/incidents` stays read-only and applies the requested agent id as an implicit incident filter
+- supported filters are `kind`, `severity`, `status`, `correlation_id`, `limit`, and `window`
+- the route returns `404` for unknown agent ids instead of an empty feed
 
 ### Interaction read-model notes
 - `GET /interactions` and `GET /agents/:id/interactions` are read-only query surfaces derived from the existing append-only event log

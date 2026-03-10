@@ -93,6 +93,34 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
     return;
   }
 
+  const agentIncidentsMatch = pathname.match(/^\/agents\/([^/]+)\/incidents$/);
+  if (method === 'GET' && agentIncidentsMatch) {
+    const agentId = decodeURIComponent(agentIncidentsMatch[1]);
+    const agent = getAgentById(agentId);
+    if (!agent) {
+      sendJson(res, 404, {
+        error: 'not_found',
+        details: `unknown agent ${agentId}`
+      });
+      return;
+    }
+
+    sendJson(res, 200, {
+      agent_id: agentId,
+      items: store.listIncidents({
+        agent_id: agentId,
+        kind: url.searchParams.get('kind'),
+        severity: url.searchParams.get('severity'),
+        status: url.searchParams.get('status'),
+        correlation_id: url.searchParams.get('correlation_id'),
+        limit: url.searchParams.get('limit'),
+        window: url.searchParams.get('window'),
+        now: now()
+      })
+    });
+    return;
+  }
+
   const agentMatch = pathname.match(/^\/agents\/([^/]+)$/);
   if (method === 'GET' && agentMatch) {
     const agentId = decodeURIComponent(agentMatch[1]);

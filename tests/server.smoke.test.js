@@ -651,10 +651,19 @@ test('GET /agents/:id includes recent evidence surfaces while preserving the cur
   assert.equal(response.body.item.recent_events[0].event_id, 'evt_reboot_detail');
   assert.equal(response.body.item.recent_interactions.length, 3);
   assert.equal(response.body.item.recent_interactions[0].interaction_type, 'handoff');
+  assert.equal(response.body.item.recent_incidents.length, 3);
+  assert.equal(response.body.item.recent_incidents[0].incident_id, 'evt_reboot_detail');
   assert.equal(response.body.item.recent_handoffs.length, 1);
   assert.equal(response.body.item.recent_handoffs[0].handoff_id, 'evt_handoff_detail');
   assert.equal(response.body.item.recent_reboots.length, 1);
   assert.equal(response.body.item.recent_reboots[0].reboot_id, 'evt_reboot_detail');
+
+  const limited = await requestJson(`${baseUrl}/agents/app-engineering?limit=2`);
+  assert.equal(limited.response.status, 200);
+  assert.equal(limited.body.item.recent_events.length, 2);
+  assert.equal(limited.body.item.recent_interactions.length, 2);
+  assert.equal(limited.body.item.recent_incidents.length, 2);
+  assert.equal(limited.body.item.recent_incidents[0].incident_id, 'evt_reboot_detail');
 });
 
 test('GET /peer-watch/alerts supports evidence-oriented filters and fields', async (t) => {
@@ -942,6 +951,113 @@ test('GET /incidents exposes a descending normalized incident feed with read-onl
       source_kind: 'controller_event'
     }
   ]);
+});
+
+test('GET /agents/:id/incidents reuses incident feed semantics with an implicit agent filter', async (t) => {
+  const { baseUrl, store } = await createHarness(t, {
+    now: () => '2026-03-09T18:20:00.000Z'
+  });
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_agent_incident_old',
+      ts: '2026-03-09T17:40:00.000Z',
+      agentId: 'app-engineering',
+      actorId: 'team-lead',
+      eventType: 'peer_watch_alert_raised',
+      currentState: 'blocked',
+      activeTask: 'Investigate stale notes',
+      summary: 'Old agent incident outside the route window',
+      severity: 'yellow',
+      correlationId: 'corr-agent-incident-old',
+      counterpartyAgentIds: ['growth-revenue'],
+      evidenceRefs: ['/tmp/agent-incident-old.md']
+    })
+  );
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_agent_incident_alert',
+      ts: '2026-03-09T18:08:00.000Z',
+      agentId: 'app-engineering',
+      actorId: 'team-lead',
+      eventType: 'peer_watch_alert_raised',
+      currentState: 'blocked',
+      activeTask: 'Fix agent incident query',
+      summary: 'Lead raised an agent incident',
+      severity: 'orange',
+      correlationId: 'corr-agent-incident-feed',
+      counterpartyAgentIds: ['protocol-engineering'],
+      evidenceRefs: ['/tmp/agent-incident-alert.md']
+    })
+  );
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_agent_incident_handoff',
+      ts: '2026-03-09T18:12:00.000Z',
+      agentId: 'app-engineering',
+      actorId: 'team-lead',
+      eventType: 'agent_handoff_started',
+      currentState: 'planning',
+      activeTask: 'Hand off agent incident follow-up',
+      summary: 'Lead started an agent incident handoff',
+      severity: 'yellow',
+      correlationId: 'corr-agent-incident-feed',
+      counterpartyAgentIds: ['growth-revenue'],
+      evidenceRefs: ['/tmp/agent-incident-handoff.md']
+    })
+  );
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_other_agent_incident',
+      ts: '2026-03-09T18:18:00.000Z',
+      agentId: 'market-intel',
+      actorId: 'team-lead',
+      eventType: 'agent_reboot_requested',
+      currentState: 'rebooting',
+      activeTask: 'Reset stale incident context',
+      summary: 'Lead requested a reboot for another agent incident',
+      severity: 'red',
+      correlationId: 'corr-agent-incident-feed',
+      evidenceRefs: ['/tmp/other-agent-incident.md']
+    })
+  );
+
+  const response = await requestJson(
+    `${baseUrl}/agents/app-engineering/incidents?kind=handoff&severity=yellow&status=started&correlation_id=corr-agent-incident-feed&window=10m&limit=1`
+  );
+  assert.equal(response.response.status, 200);
+  assert.equal(response.body.agent_id, 'app-engineering');
+  assert.deepEqual(response.body.items, [
+    {
+      incident_id: 'evt_agent_incident_handoff',
+      kind: 'handoff',
+      ts: '2026-03-09T18:12:00.000Z',
+      agent_id: 'app-engineering',
+      actor_id: 'team-lead',
+      status: 'started',
+      severity: 'yellow',
+      summary: 'Lead started an agent incident handoff',
+      correlation_id: 'corr-agent-incident-feed',
+      evidence_refs: ['/tmp/agent-incident-handoff.md'],
+      counterparty_agent_ids: ['growth-revenue'],
+      source_kind: 'controller_event'
+    }
+  ]);
+
+  const implicitAgentFilter = await requestJson(
+    `${baseUrl}/agents/app-engineering/incidents?correlation_id=corr-agent-incident-feed&window=20m&limit=5`
+  );
+  assert.equal(implicitAgentFilter.response.status, 200);
+  assert.deepEqual(
+    implicitAgentFilter.body.items.map((item) => item.incident_id),
+    ['evt_agent_incident_handoff', 'evt_agent_incident_alert']
+  );
+
+  const missingAgent = await requestJson(`${baseUrl}/agents/missing-agent/incidents`);
+  assert.equal(missingAgent.response.status, 404);
 });
 
 test('GET /correlations/:correlation_id aggregates incident, interaction, and replay evidence', async (t) => {

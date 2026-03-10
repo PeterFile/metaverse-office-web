@@ -5,6 +5,7 @@
 - `GET /agents`
 - `GET /agents/:id?limit=`
 - `GET /agents/:id/events?limit=&event_type=&severity=&correlation_id=`
+- `GET /agents/:id/incidents?kind=&severity=&status=&correlation_id=&limit=&window=`
 - `GET /agents/:id/interactions?interaction_type=&counterparty_agent_id=&severity=&correlation_id=&limit=&window=`
 - `GET /collectors/controller-snapshot`
 - `GET /events?agent_id=&event_type=&severity=&correlation_id=&limit=`
@@ -48,9 +49,10 @@
 
 ## Agent detail query semantics
 - `GET /agents/:id` returns the current agent projection plus evidence-first detail slices
-- optional `limit` applies to `open_peer_watch_alerts`, `recent_events`, `recent_interactions`, `recent_handoffs`, and `recent_reboots`; default is `5`
+- optional `limit` applies to `open_peer_watch_alerts`, `recent_events`, `recent_interactions`, `recent_incidents`, `recent_handoffs`, and `recent_reboots`; default is `5`
 - `latest_heartbeat` returns the most recent append-only heartbeat for the agent or `null`
 - `open_peer_watch_alerts` is derived from unresolved peer-watch alerts, not from raw historical `peer_watch_alert_raised` events
+- `recent_incidents` is derived from the same normalized read-only incident feed used by `GET /incidents`, scoped to the requested agent
 
 ## Agent detail response shape
 ```json
@@ -75,9 +77,40 @@
     ],
     "recent_events": [],
     "recent_interactions": [],
+    "recent_incidents": [],
     "recent_handoffs": [],
     "recent_reboots": []
   }
+}
+```
+
+## Agent incident query semantics
+- `GET /agents/:id/incidents` is read-only and reuses the existing incident feed normalization with `:id` applied as the implicit `agent_id` filter
+- supported filters are `kind`, `severity`, `status`, `correlation_id`, `limit`, and `window`
+- supported `kind` values are `peer_watch_alert`, `handoff`, and `reboot`
+- `window` reuses the same normalized incident `ts` filtering semantics as `GET /incidents`
+- the route returns `404` when the agent id is unknown
+
+## Agent incident response shape
+```json
+{
+  "agent_id": "app-engineering",
+  "items": [
+    {
+      "incident_id": "evt_agent_incident_handoff",
+      "kind": "handoff",
+      "ts": "2026-03-09T18:12:00.000Z",
+      "agent_id": "app-engineering",
+      "actor_id": "team-lead",
+      "status": "started",
+      "severity": "yellow",
+      "summary": "Lead started an agent incident handoff",
+      "correlation_id": "corr-agent-incident-feed",
+      "evidence_refs": ["/tmp/agent-incident-handoff.md"],
+      "counterparty_agent_ids": ["growth-revenue"],
+      "source_kind": "controller_event"
+    }
+  ]
 }
 ```
 

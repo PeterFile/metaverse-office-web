@@ -2,7 +2,7 @@
 
 > For Hermes: keep implementation minimal, schema-first, and reversible. UI must not outrun the event/state architecture.
 
-Updated: 2026-03-10T06:05:34+08:00
+Updated: 2026-03-10T08:28:21+08:00
 Goal: land the first meaningful implementation milestone in `/Users/cwp/Projects/metaverse-office-web`.
 
 ## Task 1 — Freeze repo-local spec docs
@@ -49,4 +49,6 @@ Goal: land the first meaningful implementation milestone in `/Users/cwp/Projects
 - `GET /timeline` now supports replay filters and recent-slice semantics while keeping final output chronological ascending
 - `GET /incidents` now exposes a descending read-only operator feed over peer-watch alerts, handoffs, and reboots using the existing derived read models
 - `GET /correlations/:correlation_id` now exposes one aggregated evidence/replay surface for incident drill-down without adding new storage
+- `GET /agents/:id/incidents` now exposes agent-scoped incident evidence using the same normalized read-only incident feed semantics
+- `GET /agents/:id` now includes `recent_incidents` so the detail surface can show incident context without adding a write path
 - next step remains backend-first: keep deepening incident/evidence/replay queries before any UI work

@@ -229,6 +229,11 @@ class PrototypeStore {
         limit: recentLimit,
         now: filters.now
       }),
+      recent_incidents: this.listIncidents({
+        agent_id: agentId,
+        limit: recentLimit,
+        now: filters.now
+      }),
       recent_handoffs: this.listHandoffs({
         agent_id: agentId,
         limit: recentLimit

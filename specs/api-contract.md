@@ -7,6 +7,7 @@
 - `GET /agents/:id/events?limit=&event_type=&severity=&correlation_id=`
 - `GET /agents/:id/incidents?kind=&severity=&status=&correlation_id=&limit=&window=`
 - `GET /agents/:id/interactions?interaction_type=&counterparty_agent_id=&severity=&correlation_id=&limit=&window=`
+- `GET /agents/:id/workflow?limit=&window=`
 - `GET /collectors/controller-snapshot`
 - `GET /events?agent_id=&event_type=&severity=&correlation_id=&limit=`
 - `GET /interactions?interaction_type=&counterparty_agent_id=&severity=&correlation_id=&limit=&window=`
@@ -111,6 +112,45 @@
       "source_kind": "controller_event"
     }
   ]
+}
+```
+
+## Agent workflow query semantics
+- `GET /agents/:id/workflow` is read-only and aggregates the existing agent detail, incident, interaction, and timeline read models into one evidence-first response
+- the route path `:id` is required and returns `404` when the agent id is unknown
+- supported query params are `limit` and `window`
+- `detail` reuses the existing `GET /agents/:id` item semantics, including the current detail-slice default `limit=5`
+- `window` defaults to `60m` and filters only the top-level `incidents`, `interactions`, and `timeline` slices
+- `limit`, when provided, caps the top-level `incidents`, `interactions`, and `timeline` slices individually using their existing ordering semantics, and is also passed through to `detail` so its recent slices keep the existing detail limit behavior
+- `correlation_ids` are deduped from all returned top-level workflow slices
+- `counterparty_agent_ids` are deduped from all returned top-level workflow slices: `incidents` and `timeline` contribute their `counterparty_agent_ids`, `interactions` contribute via `participant_agent_ids`, and the final workflow list excludes the focal `:id` plus `team-lead`
+- no new write path, event type, or stored workflow projection is introduced
+
+## Agent workflow response shape
+```json
+{
+  "agent_id": "app-engineering",
+  "detail": {
+    "agent_id": "app-engineering",
+    "current_state": "coding",
+    "latest_heartbeat": null,
+    "recent_events": [],
+    "recent_interactions": [],
+    "recent_incidents": [],
+    "recent_handoffs": [],
+    "recent_reboots": []
+  },
+  "correlation_ids": [
+    "corr-workflow-handoff",
+    "corr-workflow-review"
+  ],
+  "counterparty_agent_ids": [
+    "growth-revenue",
+    "protocol-engineering"
+  ],
+  "incidents": [],
+  "interactions": [],
+  "timeline": []
 }
 ```
 

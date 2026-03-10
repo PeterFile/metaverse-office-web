@@ -666,6 +666,241 @@ test('GET /agents/:id includes recent evidence surfaces while preserving the cur
   assert.equal(limited.body.item.recent_incidents[0].incident_id, 'evt_reboot_detail');
 });
 
+test('GET /agents/:id/workflow aggregates detail with default 60m window and per-slice limits', async (t) => {
+  const { baseUrl, store } = await createHarness(t, {
+    now: () => '2026-03-09T19:00:00.000Z'
+  });
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_workflow_old_alert',
+      ts: '2026-03-09T17:50:00.000Z',
+      agentId: 'app-engineering',
+      actorId: 'team-lead',
+      eventType: 'peer_watch_alert_raised',
+      currentState: 'blocked',
+      activeTask: 'Investigate old workflow issue',
+      summary: 'Old workflow incident outside the default window',
+      severity: 'yellow',
+      correlationId: 'corr-workflow-old',
+      counterpartyAgentIds: ['market-intel'],
+      evidenceRefs: ['/tmp/workflow-old-alert.md']
+    })
+  );
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_workflow_review_started',
+      ts: '2026-03-09T18:05:00.000Z',
+      agentId: 'app-engineering',
+      actorId: 'team-lead',
+      eventType: 'review_started',
+      currentState: 'reviewing',
+      activeTask: 'Review workflow aggregation',
+      summary: 'Lead started workflow review',
+      severity: 'yellow',
+      correlationId: 'corr-workflow-review',
+      counterpartyAgentIds: ['protocol-engineering'],
+      evidenceRefs: ['/tmp/workflow-review-start.md']
+    })
+  );
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_workflow_review_completed',
+      ts: '2026-03-09T18:06:00.000Z',
+      agentId: 'app-engineering',
+      actorId: 'team-lead',
+      eventType: 'review_completed',
+      currentState: 'reviewing',
+      activeTask: 'Review workflow aggregation',
+      summary: 'Lead completed workflow review',
+      correlationId: 'corr-workflow-review',
+      counterpartyAgentIds: ['protocol-engineering'],
+      evidenceRefs: ['/tmp/workflow-review-complete.md']
+    })
+  );
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_workflow_peer_watch',
+      ts: '2026-03-09T18:40:00.000Z',
+      agentId: 'app-engineering',
+      actorId: 'team-lead',
+      eventType: 'peer_watch_alert_raised',
+      currentState: 'blocked',
+      activeTask: 'Fix workflow incident',
+      summary: 'Protocol engineering escalated workflow evidence',
+      severity: 'orange',
+      correlationId: 'corr-workflow-peer-watch',
+      counterpartyAgentIds: ['protocol-engineering'],
+      evidenceRefs: ['/tmp/workflow-peer-watch.md']
+    })
+  );
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_workflow_handoff_started',
+      ts: '2026-03-09T18:45:00.000Z',
+      agentId: 'app-engineering',
+      actorId: 'team-lead',
+      eventType: 'agent_handoff_started',
+      currentState: 'planning',
+      activeTask: 'Hand off workflow follow-up',
+      summary: 'Lead started workflow handoff',
+      severity: 'yellow',
+      correlationId: 'corr-workflow-handoff',
+      counterpartyAgentIds: ['growth-revenue'],
+      evidenceRefs: ['/tmp/workflow-handoff-start.md']
+    })
+  );
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_workflow_handoff_completed',
+      ts: '2026-03-09T18:46:00.000Z',
+      agentId: 'app-engineering',
+      actorId: 'team-lead',
+      eventType: 'agent_handoff_completed',
+      currentState: 'planning',
+      activeTask: 'Hand off workflow follow-up',
+      summary: 'Lead completed workflow handoff',
+      correlationId: 'corr-workflow-handoff',
+      counterpartyAgentIds: ['growth-revenue'],
+      evidenceRefs: ['/tmp/workflow-handoff-complete.md']
+    })
+  );
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_workflow_reboot',
+      ts: '2026-03-09T18:50:00.000Z',
+      agentId: 'app-engineering',
+      actorId: 'team-lead',
+      eventType: 'agent_reboot_requested',
+      currentState: 'rebooting',
+      activeTask: 'Reset workflow context',
+      summary: 'Lead requested a workflow reboot',
+      severity: 'red',
+      correlationId: 'corr-workflow-reboot',
+      evidenceRefs: ['/tmp/workflow-reboot.md']
+    })
+  );
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_workflow_write',
+      ts: '2026-03-09T18:55:00.000Z',
+      agentId: 'app-engineering',
+      eventType: 'agent_wrote_file',
+      currentState: 'coding',
+      activeTask: 'Write workflow notes',
+      summary: 'Agent wrote workflow notes',
+      correlationId: 'corr-workflow-write',
+      evidenceRefs: ['/tmp/workflow-write.md']
+    })
+  );
+
+  const defaultWindow = await requestJson(`${baseUrl}/agents/app-engineering/workflow?limit=10`);
+  assert.equal(defaultWindow.response.status, 200);
+  assert.equal(defaultWindow.body.agent_id, 'app-engineering');
+  assert.equal(defaultWindow.body.detail.agent_id, 'app-engineering');
+  assert.equal(defaultWindow.body.detail.recent_events.length, 8);
+  assert.equal(defaultWindow.body.detail.recent_incidents.length, 5);
+  assert.equal(defaultWindow.body.detail.recent_incidents.at(-1).incident_id, 'evt_workflow_old_alert');
+  assert.equal(defaultWindow.body.detail.recent_interactions.length, 4);
+  assert.equal(
+    defaultWindow.body.detail.recent_interactions.at(-1).interaction_id,
+    'interaction:evt_workflow_old_alert'
+  );
+  assert.deepEqual(
+    defaultWindow.body.incidents.map((item) => item.incident_id),
+    [
+      'evt_workflow_reboot',
+      'evt_workflow_handoff_completed',
+      'evt_workflow_handoff_started',
+      'evt_workflow_peer_watch'
+    ]
+  );
+  assert.deepEqual(
+    defaultWindow.body.interactions.map((item) => item.interaction_id),
+    [
+      'interaction:evt_workflow_handoff_started',
+      'interaction:evt_workflow_peer_watch',
+      'interaction:evt_workflow_review_started'
+    ]
+  );
+  assert.deepEqual(
+    defaultWindow.body.timeline.map((item) => item.event_id),
+    [
+      'evt_workflow_review_started',
+      'evt_workflow_review_completed',
+      'evt_workflow_peer_watch',
+      'evt_workflow_handoff_started',
+      'evt_workflow_handoff_completed',
+      'evt_workflow_reboot',
+      'evt_workflow_write'
+    ]
+  );
+  assert.deepEqual(defaultWindow.body.correlation_ids, [
+    'corr-workflow-handoff',
+    'corr-workflow-peer-watch',
+    'corr-workflow-reboot',
+    'corr-workflow-review',
+    'corr-workflow-write'
+  ]);
+  assert.deepEqual(defaultWindow.body.counterparty_agent_ids, [
+    'growth-revenue',
+    'protocol-engineering'
+  ]);
+  assert.equal(defaultWindow.body.counterparty_agent_ids.includes('app-engineering'), false);
+  assert.equal(defaultWindow.body.counterparty_agent_ids.includes('team-lead'), false);
+
+  const limited = await requestJson(
+    `${baseUrl}/agents/app-engineering/workflow?window=20m&limit=2`
+  );
+  assert.equal(limited.response.status, 200);
+  assert.equal(limited.body.detail.recent_events.length, 2);
+  assert.deepEqual(
+    limited.body.detail.recent_events.map((item) => item.event_id),
+    ['evt_workflow_write', 'evt_workflow_reboot']
+  );
+  assert.equal(limited.body.detail.recent_interactions.length, 2);
+  assert.equal(limited.body.detail.recent_incidents.length, 2);
+  assert.deepEqual(
+    limited.body.incidents.map((item) => item.incident_id),
+    ['evt_workflow_reboot', 'evt_workflow_handoff_completed']
+  );
+  assert.deepEqual(
+    limited.body.interactions.map((item) => item.interaction_id),
+    ['interaction:evt_workflow_handoff_started', 'interaction:evt_workflow_peer_watch']
+  );
+  assert.deepEqual(
+    limited.body.timeline.map((item) => item.event_id),
+    ['evt_workflow_reboot', 'evt_workflow_write']
+  );
+  assert.deepEqual(limited.body.correlation_ids, [
+    'corr-workflow-handoff',
+    'corr-workflow-peer-watch',
+    'corr-workflow-reboot',
+    'corr-workflow-write'
+  ]);
+  assert.deepEqual(limited.body.counterparty_agent_ids, [
+    'growth-revenue',
+    'protocol-engineering'
+  ]);
+  assert.equal(limited.body.counterparty_agent_ids.includes('app-engineering'), false);
+  assert.equal(limited.body.counterparty_agent_ids.includes('team-lead'), false);
+});
+
+test('GET /agents/:id/workflow returns 404 for unknown agents', async (t) => {
+  const { baseUrl } = await createHarness(t);
+
+  const response = await requestJson(`${baseUrl}/agents/missing-agent/workflow`);
+  assert.equal(response.response.status, 404);
+  assert.equal(response.body.error, 'not_found');
+});
+
 test('GET /peer-watch/alerts supports evidence-oriented filters and fields', async (t) => {
   const { baseUrl, store } = await createHarness(t, {
     now: () => '2026-03-09T18:20:00.000Z'

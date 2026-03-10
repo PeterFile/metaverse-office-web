@@ -51,4 +51,5 @@ Goal: land the first meaningful implementation milestone in `/Users/cwp/Projects
 - `GET /correlations/:correlation_id` now exposes one aggregated evidence/replay surface for incident drill-down without adding new storage
 - `GET /agents/:id/incidents` now exposes agent-scoped incident evidence using the same normalized read-only incident feed semantics
 - `GET /agents/:id` now includes `recent_incidents` so the detail surface can show incident context without adding a write path
+- `GET /agents/:id/workflow` is the next backend-only milestone: one read-only operator slice that reuses existing detail, incident, interaction, and timeline semantics with a default `60m` window
 - next step remains backend-first: keep deepening incident/evidence/replay queries before any UI work

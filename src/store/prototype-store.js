@@ -245,6 +245,56 @@ class PrototypeStore {
     };
   }
 
+  getAgentWorkflow(agentId, filters = {}) {
+    const limit = filters.limit === undefined ? null : filters.limit;
+    const window = filters.window || '60m';
+    const detail = this.getAgentDetail(agentId, {
+      limit,
+      now: filters.now
+    });
+
+    if (!detail) {
+      return null;
+    }
+
+    const incidents = this.listIncidents({
+      agent_id: agentId,
+      window,
+      limit,
+      now: filters.now
+    });
+    const interactions = this.listAgentInteractions(agentId, {
+      window,
+      limit,
+      now: filters.now
+    });
+    const timeline = this.listTimeline({
+      agent_id: agentId,
+      window,
+      limit,
+      now: filters.now
+    });
+
+    return {
+      agent_id: agentId,
+      detail,
+      correlation_ids: normalizeStringValues([
+        ...incidents.map((incident) => incident.correlation_id),
+        ...interactions.map((interaction) => interaction.correlation_id),
+        ...timeline.map((event) => event.correlation_id)
+      ]),
+      counterparty_agent_ids: getWorkflowCounterpartyAgentIds({
+        agentId,
+        incidents,
+        interactions,
+        timeline
+      }),
+      incidents,
+      interactions,
+      timeline
+    };
+  }
+
   getLatestHeartbeat(agentId) {
     return this.heartbeats
       .filter((heartbeat) => heartbeat.agent_id === agentId)
@@ -1179,6 +1229,15 @@ function normalizeEvidenceRefs(evidenceRefs) {
   return Array.from(new Set(evidenceRefs.filter((ref) => typeof ref === 'string' && ref.length > 0)));
 }
 
+function normalizeStringValues(values) {
+  if (!Array.isArray(values)) {
+    return [];
+  }
+
+  return Array.from(new Set(values.filter((value) => typeof value === 'string' && value.length > 0)))
+    .sort();
+}
+
 function normalizeAgentIds(agentIds) {
   if (!Array.isArray(agentIds)) {
     return [];
@@ -1798,6 +1857,22 @@ function getTimelineParticipantAgentIds(event) {
     event.actor_id,
     ...((event && event.counterparty_agent_ids) || [])
   ]);
+}
+
+function getWorkflowCounterpartyAgentIds({
+  agentId,
+  incidents = [],
+  interactions = [],
+  timeline = []
+}) {
+  return normalizeAgentIds([
+    ...incidents.flatMap((incident) => incident.counterparty_agent_ids || []),
+    ...interactions.flatMap((interaction) => interaction.participant_agent_ids || []),
+    ...timeline.flatMap((event) => event.counterparty_agent_ids || [])
+  ]).filter(
+    (counterpartyAgentId) =>
+      counterpartyAgentId !== agentId && counterpartyAgentId !== 'team-lead'
+  );
 }
 
 function collectCorrelationTimestamps({ incidents = [], interactions = [], timeline = [] }) {

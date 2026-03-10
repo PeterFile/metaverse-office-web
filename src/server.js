@@ -121,6 +121,27 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
     return;
   }
 
+  const agentWorkflowMatch = pathname.match(/^\/agents\/([^/]+)\/workflow$/);
+  if (method === 'GET' && agentWorkflowMatch) {
+    const agentId = decodeURIComponent(agentWorkflowMatch[1]);
+    const item = store.getAgentWorkflow(agentId, {
+      limit: url.searchParams.get('limit'),
+      window: url.searchParams.get('window') || '60m',
+      now: now()
+    });
+
+    if (!item) {
+      sendJson(res, 404, {
+        error: 'not_found',
+        details: `unknown agent ${agentId}`
+      });
+      return;
+    }
+
+    sendJson(res, 200, item);
+    return;
+  }
+
   const agentMatch = pathname.match(/^\/agents\/([^/]+)$/);
   if (method === 'GET' && agentMatch) {
     const agentId = decodeURIComponent(agentMatch[1]);

@@ -24,6 +24,7 @@ This repository mirrors the controller-approved Phase 1 scope so implementation 
 - operator incident feed query derived from existing alert/handoff/reboot read models
 - correlation drill-down query that aggregates incident, interaction, and replay evidence by `correlation_id`
 - agent-centric incident evidence surfaces derived from the same read-only incident feed semantics
+- agent-centric workflow query that aggregates detail, incidents, interactions, and replay evidence in one read-only response
 
 ## Canonical state enum
 - idle
@@ -104,3 +105,12 @@ This repository mirrors the controller-approved Phase 1 scope so implementation 
 - `window` reuses the existing `Nm|Nh` filter format; when omitted the drill-down keeps the full correlation history
 - `limit` caps each returned detail slice while leaving aggregate counts bound to the full filtered correlation match set
 - the route returns `404` when no incidents, interactions, or events match the requested `correlation_id`
+
+## Agent workflow addendum
+- `GET /agents/:id/workflow` stays backend-only, read-only, schema-first, and reversible
+- the route reuses `getAgentDetail`, agent-scoped incident reads, agent-scoped interaction reads, and agent-scoped timeline reads instead of adding a new stored projection
+- `detail` stays backward-compatible with `GET /agents/:id`
+- `window` defaults to `60m` and applies only to the top-level time-bounded slices: `incidents`, `interactions`, and `timeline`
+- `limit` caps each returned slice independently using the existing detail/query semantics
+- the response exposes deduped `correlation_ids` from all returned top-level slices
+- the response exposes deduped `counterparty_agent_ids` from all returned top-level slices; interaction-derived counterparties come from `participant_agent_ids`, and the final workflow list excludes the focal agent plus `team-lead`

@@ -25,6 +25,7 @@ This repository is the implementation home for the Hermes-Agent metaverse-office
 - operator incident feed now exposes a descending read-only view over peer-watch alerts, handoffs, and reboots without adding new persistence
 - correlation drill-down now exposes one read-only evidence/replay surface per `correlation_id` by aggregating existing incident, interaction, and timeline read models
 - agent detail and agent-scoped incident queries now expose recent incident evidence by reusing the same read-only incident feed semantics
+- agent workflow query now exposes one read-only operator slice per agent by aggregating existing detail, incident, interaction, and timeline read models
 
 ## Key documents
 - `specs/phase1-spec.md`
@@ -67,6 +68,7 @@ Optional env:
 - `GET /agents/:id/events`
 - `GET /agents/:id/incidents?kind=&severity=&status=&correlation_id=&limit=&window=`
 - `GET /agents/:id/interactions`
+- `GET /agents/:id/workflow?limit=&window=`
 - `GET /events`
 - `GET /interactions`
 - `GET /collectors/controller-snapshot`
@@ -98,6 +100,14 @@ Optional env:
 - `GET /agents/:id/incidents` stays read-only and applies the requested agent id as an implicit incident filter
 - supported filters are `kind`, `severity`, `status`, `correlation_id`, `limit`, and `window`
 - the route returns `404` for unknown agent ids instead of an empty feed
+
+### Agent workflow query notes
+- `GET /agents/:id/workflow` is a read-only aggregate over `getAgentDetail`, agent-scoped incidents, agent-scoped interactions, and agent-scoped timeline replay
+- `detail` stays backward-compatible with `GET /agents/:id`; the route does not add a stored workflow projection
+- `window` defaults to `60m` and filters only the top-level `incidents`, `interactions`, and `timeline` slices
+- when `limit` is present, it reuses existing per-slice semantics: `detail` applies the existing detail limit to its recent slices, and top-level `incidents`, `interactions`, and `timeline` each cap independently using their existing ordering
+- `correlation_ids` are deduped from all returned top-level workflow slices for quick operator pivots
+- `counterparty_agent_ids` are deduped from all returned top-level workflow slices: `incidents` and `timeline` contribute their `counterparty_agent_ids`, `interactions` contribute via `participant_agent_ids`, and the final workflow list excludes the focal agent id plus `team-lead`
 
 ### Interaction read-model notes
 - `GET /interactions` and `GET /agents/:id/interactions` are read-only query surfaces derived from the existing append-only event log

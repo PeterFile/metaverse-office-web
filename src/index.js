@@ -9,8 +9,12 @@ async function main() {
     process.env.METAVERSE_OFFICE_STORE_FILE ||
     path.join(process.cwd(), 'data', 'prototype-store.jsonl');
 
+  const allowedOrigins = process.env.CORS_ALLOWED_ORIGINS
+    ? process.env.CORS_ALLOWED_ORIGINS.split(',').map((value) => value.trim()).filter(Boolean)
+    : [];
+
   const store = await createPrototypeStore({ filePath });
-  const server = createAppServer({ store });
+  const server = createAppServer({ store, allowedOrigins });
 
   server.listen(port, () => {
     process.stdout.write(

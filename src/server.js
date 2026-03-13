@@ -6,10 +6,11 @@ const { createControllerSnapshotCollector } = require('./collectors/controller-s
 function createAppServer({
   store,
   now = () => new Date().toISOString(),
-  controllerSnapshotCollector = createControllerSnapshotCollector()
+  controllerSnapshotCollector = createControllerSnapshotCollector(),
+  allowedOrigins = []
 }) {
   return http.createServer((req, res) => {
-    handleRequest({ req, res, store, now, controllerSnapshotCollector }).catch((error) => {
+    handleRequest({ req, res, store, now, controllerSnapshotCollector, allowedOrigins }).catch((error) => {
       sendJson(res, error.statusCode || 500, {
         error: error.publicMessage || 'internal_error',
         details: error.details || error.message
@@ -18,10 +19,33 @@ function createAppServer({
   });
 }
 
-async function handleRequest({ req, res, store, now, controllerSnapshotCollector }) {
+async function handleRequest({ req, res, store, now, controllerSnapshotCollector, allowedOrigins }) {
   const url = new URL(req.url, 'http://127.0.0.1');
   const pathname = url.pathname;
   const method = req.method || 'GET';
+
+  const origin = req.headers['origin'];
+  if (origin) {
+    res.setHeader('Vary', 'Origin');
+  }
+  if (allowedOrigins.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type'); // Allow Content-Type header
+    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS'); // Read-only CORS surface
+
+    // Handle preflight OPTIONS requests for read-only access only
+    if (method === 'OPTIONS') {
+      const requestedMethod = req.headers['access-control-request-method'];
+      if (requestedMethod && requestedMethod !== 'GET') {
+        res.writeHead(405);
+        res.end();
+        return;
+      }
+      res.writeHead(204); // No Content
+      res.end();
+      return;
+    }
+  }
 
   if (method === 'GET' && pathname === '/health') {
     sendJson(res, 200, {

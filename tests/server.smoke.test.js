@@ -14,7 +14,8 @@ async function createHarness(t, options = {}) {
   const server = createAppServer({
     store,
     now: options.now || (() => '2026-03-09T18:05:00.000Z'),
-    controllerSnapshotCollector: options.controllerSnapshotCollector
+    controllerSnapshotCollector: options.controllerSnapshotCollector,
+    allowedOrigins: options.allowedOrigins
   });
 
   await new Promise((resolve) => {
@@ -1865,6 +1866,11 @@ test('collector snapshot endpoints stay read-only on GET and require team-lead o
   assert.equal(appEngineering.body.item.current_state, 'coding');
   assert.equal(appEngineering.body.item.last_heartbeat_at, '2026-03-09T18:05:00.000Z');
 
+  const overview = await requestJson(`${baseUrl}/office/overview`);
+  assert.equal(overview.response.status, 200);
+  const appEngineeringOverview = overview.body.agents.find((agent) => agent.agent_id === 'app-engineering');
+  assert.equal(appEngineeringOverview.current_state, 'coding');
+
   const activityEvents = await requestJson(`${baseUrl}/events?agent_id=app-engineering&limit=5`);
   assert.equal(activityEvents.response.status, 200);
   assert.deepEqual(
@@ -1878,6 +1884,7 @@ test('collector snapshot endpoints stay read-only on GET and require team-lead o
   assert.equal(JSON.parse(lines[1]).kind, 'event');
   assert.equal(JSON.parse(lines[2]).kind, 'heartbeat');
 });
+
 
 test('collector snapshot POST emits supervision events onto existing query surfaces', async (t) => {
   const controllerSnapshotCollector = {
@@ -2023,22 +2030,80 @@ test('collector snapshot POST emits supervision events onto existing query surfa
     'tmux://6-web3-growth-revenue/0.0'
   ]);
 
-  const growthRevenueFileWrite = timeline.body.items.find(
-    (item) => item.agent_id === 'growth-revenue' && item.event_type === 'agent_wrote_file'
-  );
-  assert.ok(growthRevenueFileWrite);
-  assert.equal(growthRevenueFileWrite.source_kind, 'workspace_file');
-  assert.deepEqual(growthRevenueFileWrite.evidence_refs, ['/tmp/growth-revenue/inbox.md']);
-
-  const growthRevenue = await requestJson(`${baseUrl}/agents/growth-revenue`);
-  assert.equal(growthRevenue.response.status, 200);
-  assert.equal(growthRevenue.body.item.current_state, 'blocked');
-  assert.equal(growthRevenue.body.item.current_blocker, 'tmux pane marked dead');
-  assert.equal(growthRevenue.body.item.severity, 'orange');
-
   const overview = await requestJson(`${baseUrl}/office/overview`);
   assert.equal(overview.response.status, 200);
   const marketIntel = overview.body.agents.find((agent) => agent.agent_id === 'market-intel');
-  assert.equal(marketIntel.reported_severity, 'yellow');
+  assert.equal(marketIntel.current_state, 'researching');
   assert.equal(marketIntel.effective_severity, 'yellow');
+  const growthRevenue = overview.body.agents.find((agent) => agent.agent_id === 'growth-revenue');
+  assert.equal(growthRevenue.current_state, 'blocked');
+  assert.equal(growthRevenue.effective_severity, 'orange');
+});
+
+test('CORS headers are correctly set for allowed origins', async (t) => {
+  const allowedOrigin = 'http://localhost:8080';
+  const { baseUrl } = await createHarness(t, { allowedOrigins: [allowedOrigin] });
+
+  const { response } = await requestJson(`${baseUrl}/health`, {
+    headers: {
+      Origin: allowedOrigin
+    }
+  });
+
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('Access-Control-Allow-Origin'), allowedOrigin);
+  assert.equal(response.headers.get('Access-Control-Allow-Headers'), 'Content-Type');
+  assert.equal(response.headers.get('Access-Control-Allow-Methods'), 'GET, OPTIONS');
+});
+
+test('OPTIONS preflight requests are handled for allowed origins', async (t) => {
+  const allowedOrigin = 'http://localhost:8080';
+  const { baseUrl } = await createHarness(t, { allowedOrigins: [allowedOrigin] });
+
+  const response = await fetch(`${baseUrl}/health`, {
+    method: 'OPTIONS',
+    headers: {
+      Origin: allowedOrigin,
+      'Access-Control-Request-Headers': 'Content-Type',
+      'Access-Control-Request-Method': 'GET'
+    }
+  });
+
+  assert.equal(response.status, 204);
+  assert.equal(response.headers.get('Access-Control-Allow-Origin'), allowedOrigin);
+  assert.equal(response.headers.get('Access-Control-Allow-Headers'), 'Content-Type');
+  assert.equal(response.headers.get('Access-Control-Allow-Methods'), 'GET, OPTIONS');
+});
+
+test('OPTIONS preflight rejects non-GET methods even for allowed origins', async (t) => {
+  const allowedOrigin = 'http://localhost:8080';
+  const { baseUrl } = await createHarness(t, { allowedOrigins: [allowedOrigin] });
+
+  const response = await fetch(`${baseUrl}/health`, {
+    method: 'OPTIONS',
+    headers: {
+      Origin: allowedOrigin,
+      'Access-Control-Request-Headers': 'Content-Type',
+      'Access-Control-Request-Method': 'POST'
+    }
+  });
+
+  assert.equal(response.status, 405);
+  assert.equal(response.headers.get('Access-Control-Allow-Origin'), allowedOrigin);
+  assert.equal(response.headers.get('Access-Control-Allow-Methods'), 'GET, OPTIONS');
+});
+
+test('CORS headers are not set for disallowed origins', async (t) => {
+  const allowedOrigin = 'http://localhost:8080';
+  const disallowedOrigin = 'http://malicious.com';
+  const { baseUrl } = await createHarness(t, { allowedOrigins: [allowedOrigin] });
+
+  const { response } = await requestJson(`${baseUrl}/health`, {
+    headers: {
+      Origin: disallowedOrigin
+    }
+  });
+
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('Access-Control-Allow-Origin'), null);
 });

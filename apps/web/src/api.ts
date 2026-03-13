@@ -1,0 +1,102 @@
+import type {
+  AgentWorkflow,
+  CorrelationDrilldown,
+  IncidentFeedResponse,
+  OfficeOverview,
+  ProblemResponse
+} from './types';
+
+const DEFAULT_WORKFLOW_LIMIT = 10;
+const DEFAULT_WORKFLOW_WINDOW = '60m';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL?.trim();
+
+async function parseJson<T>(response: Response): Promise<T> {
+  let body: T | ProblemResponse;
+  const contentType = response.headers.get('content-type');
+
+  if (contentType && contentType.includes('application/json')) {
+    try {
+      body = (await response.json()) as T | ProblemResponse;
+    } catch (error) {
+      // If response was supposed to be JSON but parsing failed
+      throw new Error('request_failed: invalid_json_response');
+    }
+  } else {
+    // If not JSON, or no content-type, treat as generic failure
+    throw new Error('request_failed: non_json_response');
+  }
+
+  if (!response.ok) {
+    const problem = body as ProblemResponse;
+    throw new Error(problem.details || problem.error || 'request_failed');
+  }
+
+  return body as T;
+}
+
+export function resolveApiUrl(path: string, apiBaseUrl = API_BASE_URL): string {
+  const trimmedBaseUrl = apiBaseUrl?.trim();
+
+  if (!trimmedBaseUrl) {
+    return path;
+  }
+
+  return `${trimmedBaseUrl.replace(/\/+$/, '')}/${path.replace(/^\/+/, '')}`;
+}
+
+export async function fetchOfficeOverview(signal?: AbortSignal): Promise<OfficeOverview> {
+  const response = await fetch(resolveApiUrl('/office/overview'), { signal });
+  return parseJson<OfficeOverview>(response);
+}
+
+export async function fetchAgentWorkflow(
+  agentId: string,
+  options: { limit?: number; window?: string; signal?: AbortSignal } = {}
+): Promise<AgentWorkflow> {
+  const params = new URLSearchParams({
+    limit: String(options.limit ?? DEFAULT_WORKFLOW_LIMIT),
+    window: options.window ?? DEFAULT_WORKFLOW_WINDOW
+  });
+  const response = await fetch(
+    resolveApiUrl(`/agents/${encodeURIComponent(agentId)}/workflow?${params.toString()}`),
+    {
+      signal: options.signal
+    }
+  );
+
+  return parseJson<AgentWorkflow>(response);
+}
+
+export async function fetchIncidents(
+  options: { limit?: number; window?: string; signal?: AbortSignal } = {}
+): Promise<IncidentFeedResponse> {
+  const params = new URLSearchParams({
+    limit: String(options.limit ?? DEFAULT_WORKFLOW_LIMIT),
+    window: options.window ?? DEFAULT_WORKFLOW_WINDOW
+  });
+  const response = await fetch(resolveApiUrl(`/incidents?${params.toString()}`), {
+    signal: options.signal
+  });
+
+  return parseJson<IncidentFeedResponse>(response);
+}
+
+export async function fetchCorrelationDrilldown(
+  correlationId: string,
+  options: { limit?: number; window?: string; signal?: AbortSignal } = {}
+): Promise<CorrelationDrilldown> {
+  const params = new URLSearchParams({
+    limit: String(options.limit ?? DEFAULT_WORKFLOW_LIMIT),
+    window: options.window ?? DEFAULT_WORKFLOW_WINDOW
+  });
+  const response = await fetch(
+    resolveApiUrl(`/correlations/${encodeURIComponent(correlationId)}?${params.toString()}`),
+    {
+      signal: options.signal
+    }
+  );
+
+  return parseJson<CorrelationDrilldown>(response);
+}
+
+export { DEFAULT_WORKFLOW_LIMIT, DEFAULT_WORKFLOW_WINDOW };

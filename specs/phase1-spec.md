@@ -1,7 +1,7 @@
 # Repo-local Phase 1 Spec Mirror
 
 Source of truth: `/Users/cwp/.hermes/teams/web3-company/controller/phase1-spec-package.md`
-Last mirrored: 2026-03-10T07:50:50+08:00
+Last mirrored: 2026-03-12T00:19:57+08:00
 
 This repository mirrors the controller-approved Phase 1 scope so implementation stays under `/Users/cwp/Projects/metaverse-office-web` instead of `~/.hermes/teams/...`.
 
@@ -11,6 +11,7 @@ This repository mirrors the controller-approved Phase 1 scope so implementation 
 - No 3D, no fake animation, no token layer, no onchain requirement
 - Event/state architecture comes before UI polish
 - Polling first, SSE second, WebSocket later only if justified
+- Phase 1 UI shell may use React + TypeScript, but only against the existing read-only operator contract
 
 ## Minimum deliverables
 - append-only event ingestion boundary
@@ -25,6 +26,7 @@ This repository mirrors the controller-approved Phase 1 scope so implementation 
 - correlation drill-down query that aggregates incident, interaction, and replay evidence by `correlation_id`
 - agent-centric incident evidence surfaces derived from the same read-only incident feed semantics
 - agent-centric workflow query that aggregates detail, incidents, interactions, and replay evidence in one read-only response
+- pnpm workspace + React operator shell that renders the canonical office overview and agent workflow drawer without adding a write path
 
 ## Canonical state enum
 - idle
@@ -114,3 +116,13 @@ This repository mirrors the controller-approved Phase 1 scope so implementation 
 - `limit` caps each returned slice independently using the existing detail/query semantics
 - the response exposes deduped `correlation_ids` from all returned top-level slices
 - the response exposes deduped `counterparty_agent_ids` from all returned top-level slices; interaction-derived counterparties come from `participant_agent_ids`, and the final workflow list excludes the focal agent plus `team-lead`
+
+
+## React operator shell addendum
+- the first operator shell lives under `apps/web` and uses React + TypeScript with pnpm workspace management
+- the shell consumes the existing `GET /office/overview`, `GET /agents/:id/workflow`, `GET /incidents`, and `GET /correlations/:correlation_id` read models only
+- same-origin reads are the default; the shell may optionally prefix them with `VITE_API_BASE_URL` when the backend explicitly allows that frontend origin via `CORS_ALLOWED_ORIGINS`, and local dev may still proxy `/office`, `/agents`, `/incidents`, and `/correlations` from Vite without changing backend semantics
+- workflow and incident surfaces may open correlation drill-down by reusing the existing read-only routes; no new write path or contract is introduced
+- shell refresh stays polling-based in Phase 1; no websocket or SSE requirement is introduced by this slice
+- UI must render explicit loading, empty, and error states instead of fabricating motion, severity, or productivity
+- once an overview, workflow, incident, or correlation slice has loaded successfully, later poll failures keep the last-good read surface visible; explicit fatal error states are reserved for initial loads that have no prior good data

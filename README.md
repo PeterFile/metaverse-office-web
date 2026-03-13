@@ -1,6 +1,6 @@
 # Metaverse Office Web
 
-Updated: 2026-03-10T07:50:50+08:00
+Updated: 2026-03-11T00:35:00+08:00
 
 This repository is the implementation home for the Hermes-Agent metaverse-office project.
 
@@ -26,11 +26,14 @@ This repository is the implementation home for the Hermes-Agent metaverse-office
 - correlation drill-down now exposes one read-only evidence/replay surface per `correlation_id` by aggregating existing incident, interaction, and timeline read models
 - agent detail and agent-scoped incident queries now expose recent incident evidence by reusing the same read-only incident feed semantics
 - agent workflow query now exposes one read-only operator slice per agent by aggregating existing detail, incident, interaction, and timeline read models
+- pnpm workspace bootstrap now exists with a React + TypeScript operator shell in `apps/web` that reuses the frozen read-only office/workflow/incident/correlation queries for triage
 
 ## Key documents
 - `specs/phase1-spec.md`
 - `specs/api-contract.md`
 - `docs/plans/phase1-kickoff-plan.md`
+- `docs/plans/phase1-react-operator-shell-plan.md`
+- `docs/adr/0002-react-operator-shell.md`
 - `docs/plans/phase1-incident-feed-plan.md`
 - `docs/plans/phase1-agent-incident-evidence-plan.md`
 - `docs/plans/phase1-correlation-drilldown-plan.md`
@@ -41,6 +44,8 @@ This repository is the implementation home for the Hermes-Agent metaverse-office
 
 ## Backend scaffold
 - runtime: plain Node.js built-ins only
+- frontend shell: React + TypeScript via Vite under `apps/web`
+- workspace manager: pnpm 10.28.2
 - storage: append-only local JSONL file at `data/prototype-store.jsonl`
 - seed domain: 6 employee agents plus `team-lead`
 - canonical employee ids:
@@ -51,15 +56,44 @@ This repository is the implementation home for the Hermes-Agent metaverse-office
   - `app-engineering`
   - `growth-revenue`
 
+## Setup and prerequisites
+- Node.js baseline: `>=20.19.0` or `>=22.12.0`
+- recommended Node.js baseline: `22.12+` LTS so Vite 7 / jsdom 28 stay inside one supported line
+- pnpm is pinned at `10.28.2` via the root `packageManager` field
+- Corepack ships with modern Node; if your Node install does not expose it, install/refresh it with `npm install --global corepack@latest`
+
+### Bootstrap
+From the repository root:
+
+```bash
+corepack enable pnpm
+corepack prepare pnpm@10.28.2 --activate
+pnpm --version
+pnpm install
+```
+
+Expected `pnpm --version`: `10.28.2`
+
 ### Run
 ```bash
-npm test
-npm start
+pnpm install
+pnpm test:all
+pnpm web:typecheck
+pnpm web:build
+pnpm backend:start
+```
+
+For local UI development, run the backend in one shell and the web shell in another:
+```bash
+pnpm backend:start
+VITE_DEV_PROXY_TARGET=http://127.0.0.1:3000 pnpm web:dev
 ```
 
 Optional env:
 - `PORT=3000`
 - `METAVERSE_OFFICE_STORE_FILE=/absolute/path/prototype-store.jsonl`
+- `VITE_API_BASE_URL=https://api.example.test` for the React shell when the backend also allows that origin via `CORS_ALLOWED_ORIGINS`; omit it to keep same-origin `/office`, `/agents`, `/incidents`, and `/correlations` requests, or keep using `VITE_DEV_PROXY_TARGET` for local Vite proxying
+- `CORS_ALLOWED_ORIGINS=https://frontend.example.test,http://localhost:5173` for the backend; a comma-separated list of origins allowed to make cross-origin GET requests.
 
 ### API
 - `GET /health`
@@ -163,3 +197,12 @@ This keeps employee writes self-scoped and reserves cross-agent supervision/hand
 - collector-derived peer-watch events do not fabricate `red` from time alone
 - tests stay hermetic by injecting filesystem/tmux observations instead of touching the live Hermes workspace
 - existing `/events`, `/timeline`, `/peer-watch/alerts`, and agent projections now reflect collector-driven supervision and activity events
+
+
+### React operator shell notes
+- `apps/web` is the first living office surface for Phase 1 and stays strictly evidence-first
+- the shell consumes `GET /office/overview`, `GET /agents/:id/workflow?limit=&window=`, `GET /incidents?limit=&window=`, and `GET /correlations/:correlation_id?limit=&window=` only
+- API calls are same-origin by default; cross-origin `VITE_API_BASE_URL` deployment requires the backend to allow that frontend origin via `CORS_ALLOWED_ORIGINS`, and local development may still proxy `/office`, `/agents`, `/incidents`, and `/correlations` through Vite via `VITE_DEV_PROXY_TARGET`
+- workflow and incident surfaces can open correlation drill-down without introducing a new backend contract or write path
+- the shell polls every 15 seconds and must surface explicit loading, empty, and error states instead of inventing motion or liveness
+- once overview, workflow, incident, or correlation data has loaded successfully, later refresh failures keep the last-good surface visible with an explicit degraded-refresh notice

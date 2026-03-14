@@ -10,6 +10,8 @@
     "dev": "vite",
     "build": "tsc -p tsconfig.json && vite build",
     "preview": "vite preview",
+    "install:browsers": "playwright install chromium",
+    "install:browsers:ci": "playwright install --with-deps chromium",
     "test": "vitest run",
     "test:browser-smoke": "playwright test e2e/operator-shell.keyboard.smoke.spec.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"

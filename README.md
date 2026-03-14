@@ -70,9 +70,16 @@ corepack enable pnpm
 corepack prepare pnpm@10.28.2 --activate
 pnpm --version
 pnpm install
+pnpm --filter @metaverse-office/web install:browsers
 ```
 
 Expected `pnpm --version`: `10.28.2`
+
+Fresh Linux CI runners should use:
+
+```bash
+pnpm --filter @metaverse-office/web install:browsers:ci
+```
 
 ### Run
 ```bash

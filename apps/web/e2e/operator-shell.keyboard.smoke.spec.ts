@@ -57,6 +57,63 @@ test.describe('operator shell keyboard smoke', () => {
     await expect(page.getByRole('heading', { name: 'Workflow: Growth Revenue Agent' })).toBeVisible();
   });
 
+  test('keeps the narrow responsive layout operable without horizontal overflow', async ({ page }) => {
+    await page.setViewportSize({ width: 760, height: 1200 });
+    await page.goto('/');
+
+    await expect(page.getByRole('heading', { name: 'Operator Shell' })).toBeVisible();
+
+    const contentShell = page.locator('.app-shell__content');
+    const operationsShell = page.locator('.app-shell__operations');
+    const officeGrid = page.getByRole('region', { name: 'Office grid' });
+
+    expect(countGridTracks(await contentShell.evaluate((element) => getComputedStyle(element).gridTemplateColumns))).toBe(1);
+    expect(
+      countGridTracks(await operationsShell.evaluate((element) => getComputedStyle(element).gridTemplateColumns))
+    ).toBe(1);
+
+    const officeGridBox = await boundingBoxOrThrow(officeGrid);
+    const leadDeskBox = await boundingBoxOrThrow(
+      page.locator('article').filter({ has: page.getByRole('heading', { name: 'Team Lead Desk' }) })
+    );
+    const appDeskBox = await boundingBoxOrThrow(
+      page.locator('article').filter({ has: page.getByRole('heading', { name: 'App Engineering Desk' }) })
+    );
+    const meetingZoneBox = await boundingBoxOrThrow(
+      page.locator('article').filter({ has: page.getByRole('heading', { name: 'Meeting Zone' }) })
+    );
+
+    expect(leadDeskBox.width).toBeGreaterThan(officeGridBox.width * 0.8);
+    expect(meetingZoneBox.width).toBeGreaterThan(officeGridBox.width * 0.8);
+    expect(appDeskBox.width).toBeLessThan(officeGridBox.width * 0.7);
+
+    const workflowPanel = await openGrowthWorkflowViaWatchTopology(page);
+    const workflowCorrelationButton = workflowPanel.getByRole('button', {
+      name: 'Open correlation corr-growth-lead-review'
+    });
+    await tabToElement(page, workflowCorrelationButton);
+    await page.keyboard.press('Enter');
+
+    await expect(
+      page.getByRole('heading', { name: 'Correlation: corr-growth-lead-review' })
+    ).toBeVisible();
+
+    const incidentFeedPanel = page.getByRole('region', { name: 'Global incident feed' });
+    const watchTopologyPanel = page.getByRole('region', { name: 'Watch topology' });
+    const correlationPanel = page.getByRole('region', { name: 'Correlation drilldown' });
+
+    const incidentFeedBox = await boundingBoxOrThrow(incidentFeedPanel);
+    const watchTopologyBox = await boundingBoxOrThrow(watchTopologyPanel);
+    const correlationBox = await boundingBoxOrThrow(correlationPanel);
+
+    expect(Math.abs(incidentFeedBox.x - watchTopologyBox.x)).toBeLessThanOrEqual(1);
+    expect(Math.abs(watchTopologyBox.x - correlationBox.x)).toBeLessThanOrEqual(1);
+    expect(watchTopologyBox.y).toBeGreaterThan(incidentFeedBox.y);
+    expect(correlationBox.y).toBeGreaterThan(watchTopologyBox.y);
+
+    await expectNoHorizontalOverflow(page);
+  });
+
   test(
     'keeps last-good overview/workflow/incident/correlation surfaces visible during degraded refresh polls',
     async ({ page }, testInfo) => {
@@ -214,6 +271,23 @@ async function configureSmokeScenario(
 
 function sanitizeCookieValue(value: string) {
   return value.replace(/[^a-zA-Z0-9_-]/g, '-');
+}
+
+function countGridTracks(gridTemplateColumns: string) {
+  return gridTemplateColumns.trim().split(/\s+/).filter(Boolean).length;
+}
+
+async function boundingBoxOrThrow(locator: Locator) {
+  const box = await locator.boundingBox();
+  expect(box).not.toBeNull();
+  return box!;
+}
+
+async function expectNoHorizontalOverflow(page: Page) {
+  const overflowPx = await page.evaluate(
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth
+  );
+  expect(overflowPx).toBeLessThanOrEqual(1);
 }
 
 async function tabToElement(page: Page, locator: Locator, maxTabs = 250): Promise<void> {

@@ -394,6 +394,10 @@ function buildZoneSnapshots(
     zone_id: z.zone_id,
     label: z.label,
     kind: z.kind,
+    grid_x: z.grid_x,
+    grid_y: z.grid_y,
+    grid_w: z.grid_w,
+    grid_h: z.grid_h,
     occupant_ids: occupancy.get(z.zone_id) ?? [],
   }));
 }

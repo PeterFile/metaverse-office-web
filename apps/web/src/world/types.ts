@@ -63,6 +63,10 @@ export interface ZoneSnapshot {
   zone_id: string;
   label: string;
   kind: 'desk' | 'shared';
+  grid_x: number;
+  grid_y: number;
+  grid_w: number;
+  grid_h: number;
   occupant_ids: string[];
 }
 

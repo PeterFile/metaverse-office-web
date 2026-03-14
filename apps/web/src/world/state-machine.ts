@@ -59,7 +59,12 @@ export function deriveAgentPhase(
   if (signals.has_open_handoff) {
     phase = 'handoff_active';
   }
-  if (signals.has_recent_handoff_done && phase !== 'handoff_active' && phase !== 'handoff_pending') {
+  if (
+    signals.has_recent_handoff_done &&
+    phase !== 'handoff_active' &&
+    phase !== 'handoff_pending' &&
+    phase !== 'rebooting'
+  ) {
     phase = 'handoff_done';
   }
 

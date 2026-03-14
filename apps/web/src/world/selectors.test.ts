@@ -32,9 +32,9 @@ function makeWorldAgent(overrides: Partial<WorldAgent> = {}): WorldAgent {
 }
 
 const ZONES: ZoneSnapshot[] = [
-  { zone_id: 'desk-app-engineering', label: 'App Engineering Desk', kind: 'desk', occupant_ids: [] },
-  { zone_id: 'meeting-zone', label: 'Meeting Zone', kind: 'shared', occupant_ids: [] },
-  { zone_id: 'review-zone', label: 'Review Zone', kind: 'shared', occupant_ids: [] },
+  { zone_id: 'desk-app-engineering', label: 'App Engineering Desk', kind: 'desk', occupant_ids: [], grid_x: 0, grid_y: 0, grid_w: 1, grid_h: 1 },
+  { zone_id: 'meeting-zone', label: 'Meeting Zone', kind: 'shared', occupant_ids: [], grid_x: 1, grid_y: 0, grid_w: 1, grid_h: 1 },
+  { zone_id: 'review-zone', label: 'Review Zone', kind: 'shared', occupant_ids: [], grid_x: 2, grid_y: 0, grid_w: 1, grid_h: 1 },
 ];
 
 describe('selectAgentLabel', () => {

@@ -74,6 +74,15 @@ describe('deriveAgentPhase', () => {
     ).toBe('handoff_active');
   });
 
+  it('handoff_done does not override rebooting', () => {
+    expect(
+      deriveAgentPhase('rebooting', {
+        ...NO_SIGNALS,
+        has_recent_handoff_done: true,
+      })
+    ).toBe('rebooting');
+  });
+
   it('recovered overrides reboot_recommended', () => {
     // recovered is applied after reboot_recommended in the chain
     expect(

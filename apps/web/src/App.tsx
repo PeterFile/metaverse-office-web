@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 
 import {
@@ -10,6 +10,8 @@ import {
   fetchIncidents,
   fetchOfficeOverview
 } from './api';
+import { usePolledResource, type LoadState, POLL_INTERVAL_MS } from './hooks/usePolledResource';
+import { ControlDeck } from './hud/ControlDeck';
 import { buildZoneLayoutModels } from './layout';
 import type {
   AgentWorkflow,
@@ -27,21 +29,11 @@ import type {
   WorkflowTimelineEvent
 } from './types';
 
-const POLL_INTERVAL_MS = 15_000;
-
-type LoadState = 'idle' | 'loading' | 'ready' | 'error';
-
 type ZoneStyle = CSSProperties & {
   '--zone-grid-column': string;
   '--zone-grid-row': string;
   '--zone-mobile-grid-column': string;
   '--zone-mobile-order': string;
-};
-
-type PolledResource<T> = {
-  data: T | null;
-  error: string | null;
-  state: LoadState;
 };
 
 type WatchTopologyRecord = {
@@ -167,109 +159,6 @@ function incidentFeedShowsCorrelation(incidentFeed: IncidentFeedResponse | null,
   }
 
   return recordsIncludeCorrelation(incidentFeed.items, correlationId);
-}
-
-function isAbortError(error: unknown) {
-  return error instanceof Error && error.name === 'AbortError';
-}
-
-function usePolledResource<T>({
-  enabled = true,
-  load,
-  onError,
-  resourceKey
-}: {
-  enabled?: boolean;
-  load: (signal: AbortSignal) => Promise<T>;
-  onError?: (error: unknown) => void;
-  resourceKey: string | null;
-}): PolledResource<T> {
-  const loadEvent = useEffectEvent(load);
-  const errorEvent = useEffectEvent(onError || (() => {}));
-  const [data, setData] = useState<T | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [state, setState] = useState<LoadState>(enabled ? 'loading' : 'idle');
-
-  useEffect(() => {
-    if (!enabled || !resourceKey) {
-      setData(null);
-      setError(null);
-      setState('idle');
-      return undefined;
-    }
-
-    let active = true;
-    let currentRequestId = 0;
-    let timeoutId: number | null = null;
-    let controller: AbortController | null = null;
-    let hasCommittedData = false;
-
-    setData(null);
-    setError(null);
-    setState('loading');
-
-    const scheduleNextPoll = () => {
-      if (!active) {
-        return;
-      }
-
-      timeoutId = window.setTimeout(() => {
-        void loadResource();
-      }, POLL_INTERVAL_MS);
-    };
-
-    const loadResource = async () => {
-      const requestId = ++currentRequestId;
-      const requestController = new AbortController();
-      controller = requestController;
-
-      if (!hasCommittedData) {
-        setState('loading');
-      }
-
-      try {
-        const nextData = await loadEvent(requestController.signal);
-        if (!active || requestController.signal.aborted || requestId !== currentRequestId) {
-          return;
-        }
-
-        hasCommittedData = true;
-        setData(nextData);
-        setError(null);
-        setState('ready');
-      } catch (nextError) {
-        if (
-          !active ||
-          requestController.signal.aborted ||
-          requestId !== currentRequestId ||
-          isAbortError(nextError)
-        ) {
-          return;
-        }
-
-        errorEvent(nextError);
-        setError(nextError instanceof Error ? nextError.message : 'unknown_error');
-        setState(hasCommittedData ? 'ready' : 'error');
-      } finally {
-        if (controller === requestController) {
-          controller = null;
-        }
-        scheduleNextPoll();
-      }
-    };
-
-    void loadResource();
-
-    return () => {
-      active = false;
-      if (timeoutId !== null) {
-        window.clearTimeout(timeoutId);
-      }
-      controller?.abort();
-    };
-  }, [enabled, resourceKey]);
-
-  return { data, error, state };
 }
 
 function RefreshStatusNotice({
@@ -1324,49 +1213,44 @@ export default function App() {
   }
 
   return (
-    <main className="app-shell">
-      <header className="app-shell__header">
-        <div>
-          <h1>Operator Shell</h1>
-          <p>Evidence-first office surface for the Phase 1 metaverse office.</p>
-          <RefreshStatusNotice
-            hasData={overviewResource.data !== null}
-            label="Overview"
-            error={overviewResource.error}
-          />
-        </div>
-        <p>Last refresh: {overviewResource.data.generated_at}</p>
-      </header>
-
-      <SummaryStrip overview={overviewResource.data} />
-
-      <section className="app-shell__content">
+    <ControlDeck
+      generatedAt={overviewResource.data.generated_at}
+      overviewRefreshNotice={
+        <RefreshStatusNotice
+          hasData={overviewResource.data !== null}
+          label="Overview"
+          error={overviewResource.error}
+        />
+      }
+      summaryStrip={<SummaryStrip overview={overviewResource.data} />}
+      officeGrid={
         <OfficeGrid
           overview={overviewResource.data}
           selectedAgentId={selectedAgentId}
           onSelectAgent={setSelectedAgentId}
         />
-        <div className="app-shell__sidebar">
-          <AttentionQueuePanel
-            agents={attentionQueue}
-            selectedAgentId={selectedAgentId}
-            onSelectAgent={setSelectedAgentId}
-          />
-          <WorkflowPanel
-            selectedAgentId={selectedAgentId}
-            selectedAgent={selectedAgent}
-            selectedAgentStillVisibleInOverview={selectedAgentStillVisibleInOverview}
-            selectedCorrelationId={selectedCorrelationId}
-            workflowState={workflowResource.state}
-            workflow={workflowResource.data}
-            workflowError={workflowResource.error}
-            onSelectAgent={setSelectedAgentId}
-            onSelectCorrelation={setSelectedCorrelationId}
-          />
-        </div>
-      </section>
-
-      <section className="app-shell__operations">
+      }
+      attentionQueuePanel={
+        <AttentionQueuePanel
+          agents={attentionQueue}
+          selectedAgentId={selectedAgentId}
+          onSelectAgent={setSelectedAgentId}
+        />
+      }
+      workflowPanel={
+        <WorkflowPanel
+          selectedAgentId={selectedAgentId}
+          selectedAgent={selectedAgent}
+          selectedAgentStillVisibleInOverview={selectedAgentStillVisibleInOverview}
+          selectedCorrelationId={selectedCorrelationId}
+          workflowState={workflowResource.state}
+          workflow={workflowResource.data}
+          workflowError={workflowResource.error}
+          onSelectAgent={setSelectedAgentId}
+          onSelectCorrelation={setSelectedCorrelationId}
+        />
+      }
+      incidentFeedPanel={
         <IncidentFeedPanel
           incidentFeed={incidentFeedResource.data}
           incidentFeedError={incidentFeedResource.error}
@@ -1376,11 +1260,15 @@ export default function App() {
           onSelectAgent={setSelectedAgentId}
           onSelectCorrelation={setSelectedCorrelationId}
         />
+      }
+      watchTopologyPanel={
         <WatchTopologyPanel
           topology={watchTopology}
           selectedAgentId={selectedAgentId}
           onSelectAgent={setSelectedAgentId}
         />
+      }
+      correlationPanel={
         <CorrelationPanel
           correlation={correlationResource.data}
           correlationError={correlationResource.error}
@@ -1389,12 +1277,10 @@ export default function App() {
           selectedCorrelationId={selectedCorrelationId}
           onSelectAgent={setSelectedAgentId}
         />
-      </section>
-
-      <footer className="app-shell__footer">
-        <p>Polling every {POLL_INTERVAL_MS / 1000}s. No fake motion. No synthetic activity.</p>
-        <p>{`Using ${DEFAULT_WORKFLOW_WINDOW} read-only slices with limit ${DEFAULT_WORKFLOW_LIMIT} for workflow, incidents, and correlation.`}</p>
-      </footer>
-    </main>
+      }
+      pollIntervalMs={POLL_INTERVAL_MS}
+      workflowWindow={DEFAULT_WORKFLOW_WINDOW}
+      workflowLimit={DEFAULT_WORKFLOW_LIMIT}
+    />
   );
 }

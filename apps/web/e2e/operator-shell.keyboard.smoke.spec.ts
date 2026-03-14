@@ -274,7 +274,101 @@ function sanitizeCookieValue(value: string) {
 }
 
 function countGridTracks(gridTemplateColumns: string) {
-  return gridTemplateColumns.trim().split(/\s+/).filter(Boolean).length;
+  const normalized = gridTemplateColumns.trim();
+  if (!normalized || normalized === 'none') {
+    return 0;
+  }
+
+  const splitTopLevelTokens = (value: string) => {
+    const tokens: string[] = [];
+    let tokenStart = -1;
+    let parenthesisDepth = 0;
+    let bracketDepth = 0;
+
+    for (let index = 0; index < value.length; index += 1) {
+      const char = value[index];
+
+      if (tokenStart === -1 && !/\s/.test(char)) {
+        tokenStart = index;
+      }
+
+      if (char === '(') {
+        parenthesisDepth += 1;
+      } else if (char === ')') {
+        parenthesisDepth = Math.max(0, parenthesisDepth - 1);
+      } else if (char === '[') {
+        bracketDepth += 1;
+      } else if (char === ']') {
+        bracketDepth = Math.max(0, bracketDepth - 1);
+      }
+
+      if (tokenStart !== -1 && parenthesisDepth === 0 && bracketDepth === 0 && /\s/.test(char)) {
+        tokens.push(value.slice(tokenStart, index));
+        tokenStart = -1;
+      }
+    }
+
+    if (tokenStart !== -1) {
+      tokens.push(value.slice(tokenStart));
+    }
+
+    return tokens.filter(Boolean);
+  };
+
+  const countTrackList = (value: string): number => {
+    const tokens = splitTopLevelTokens(value);
+    let trackCount = 0;
+
+    for (const token of tokens) {
+      if (token.startsWith('[') && token.endsWith(']')) {
+        continue;
+      }
+
+      if (token.startsWith('repeat(') && token.endsWith(')')) {
+        const inner = token.slice('repeat('.length, -1);
+        let parenthesisDepth = 0;
+        let bracketDepth = 0;
+        let separatorIndex = -1;
+
+        for (let index = 0; index < inner.length; index += 1) {
+          const char = inner[index];
+          if (char === '(') {
+            parenthesisDepth += 1;
+          } else if (char === ')') {
+            parenthesisDepth = Math.max(0, parenthesisDepth - 1);
+          } else if (char === '[') {
+            bracketDepth += 1;
+          } else if (char === ']') {
+            bracketDepth = Math.max(0, bracketDepth - 1);
+          } else if (char === ',' && parenthesisDepth === 0 && bracketDepth === 0) {
+            separatorIndex = index;
+            break;
+          }
+        }
+
+        if (separatorIndex === -1) {
+          trackCount += 1;
+          continue;
+        }
+
+        const repeatCountToken = inner.slice(0, separatorIndex).trim();
+        const repeatedTrackList = inner.slice(separatorIndex + 1).trim();
+        const repeatCount = Number.parseInt(repeatCountToken, 10);
+        const repeatedTrackCount = countTrackList(repeatedTrackList);
+
+        trackCount += Number.isFinite(repeatCount)
+          ? repeatCount * repeatedTrackCount
+          : repeatedTrackCount;
+        continue;
+      }
+
+      trackCount += 1;
+    }
+
+    return trackCount;
+  };
+
+  return countTrackList(normalized);
 }
 
 async function boundingBoxOrThrow(locator: Locator) {

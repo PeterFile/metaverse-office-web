@@ -78,6 +78,79 @@ export interface WorkflowDetail {
     agent_id: string;
     received_at?: string;
   } | null;
+  open_peer_watch_alerts: WorkflowPeerWatchAlert[];
+  recent_events: WorkflowDetailEvent[];
+  recent_interactions: WorkflowInteraction[];
+  recent_incidents: WorkflowIncident[];
+  recent_handoffs: WorkflowDetailHandoff[];
+  recent_reboots: WorkflowDetailReboot[];
+}
+
+export interface WorkflowPeerWatchAlert {
+  alert_id: string;
+  agent_id: string;
+  target_agent_id: string;
+  actor_id: string;
+  observer_agent_id: string;
+  watcher_agent_ids: string[];
+  severity: Severity;
+  status: string;
+  current_state: string;
+  active_task: string;
+  summary: string;
+  evidence_refs: string[];
+  evidence_count: number;
+  correlation_id: string | null;
+  source_kind: string;
+  metadata: Record<string, unknown>;
+}
+
+export interface WorkflowDetailEvent {
+  event_id: string;
+  ts: string;
+  agent_id: string;
+  actor_id: string;
+  event_type: string;
+  severity: Severity;
+  current_state: string;
+  active_task: string;
+  location: string;
+  summary: string;
+  correlation_id: string | null;
+  counterparty_agent_ids: string[];
+  evidence_refs: string[];
+  source_kind: string;
+  metadata: Record<string, unknown>;
+}
+
+export interface WorkflowDetailHandoff {
+  handoff_id: string;
+  ts: string;
+  agent_id: string;
+  actor_id: string;
+  phase: string;
+  status: string;
+  severity: Severity;
+  summary: string;
+  counterparty_agent_ids: string[];
+  evidence_refs: string[];
+  correlation_id: string | null;
+  source_kind: string;
+}
+
+export interface WorkflowDetailReboot {
+  reboot_id: string;
+  ts: string;
+  agent_id: string;
+  actor_id: string;
+  phase: string;
+  status: string;
+  severity: Severity;
+  summary: string;
+  counterparty_agent_ids: string[];
+  evidence_refs: string[];
+  correlation_id: string | null;
+  source_kind: string;
 }
 
 export interface WorkflowIncident {

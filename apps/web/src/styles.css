@@ -270,6 +270,11 @@ button {
   color: #fde68a;
 }
 
+.surface-status.surface-status--warning {
+  border-left-color: #7dd3fc;
+  color: #bae6fd;
+}
+
 .workflow-section {
   display: flex;
   flex-direction: column;
@@ -314,12 +319,14 @@ button {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 0.75rem;
 }
 
 .record-item__meta {
   color: #9fb0c3;
   font-size: 0.92rem;
+  overflow-wrap: anywhere;
 }
 
 .attention-item {
@@ -371,16 +378,33 @@ button {
 .correlation-chip,
 .correlation-chip--muted {
   display: inline-flex;
+  max-width: 100%;
   align-items: center;
   border-radius: 999px;
   padding: 0.24rem 0.65rem;
   font-size: 0.84rem;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .token-pill {
   border: 1px solid rgba(125, 211, 252, 0.18);
   background: rgba(14, 116, 144, 0.18);
   color: #bae6fd;
+}
+
+.button.token-pill,
+button.token-pill {
+  font: inherit;
+}
+
+.token-pill--action {
+  cursor: pointer;
+}
+
+.token-pill--selected {
+  border-color: rgba(250, 204, 21, 0.72);
+  color: #fef08a;
 }
 
 .correlation-chip,
@@ -397,6 +421,13 @@ button {
 .correlation-chip.selected {
   border-color: rgba(250, 204, 21, 0.72);
   color: #fef08a;
+}
+
+button.token-pill--action:focus-visible,
+button.correlation-chip:focus-visible {
+  box-shadow: 0 0 0 1px rgba(125, 211, 252, 0.35);
+  outline: 1px solid rgba(125, 211, 252, 0.55);
+  outline-offset: 1px;
 }
 
 .correlation-chip--muted {
@@ -426,6 +457,14 @@ button {
 
 .detail-card p {
   margin: 0;
+}
+
+.detail-card .record-list {
+  gap: 0.5rem;
+}
+
+.detail-card .record-item {
+  padding: 0.65rem 0.75rem;
 }
 
 @media (max-width: 1175px) {

@@ -6,3 +6,7 @@ apps/web/node_modules/
 apps/web/dist/
 .DS_Store
 **/.DS_Store
+/.autonomy/
+/.worktrees/
+/.tmp/
+/apps/web/test-results/

@@ -15,8 +15,9 @@
     "web:build": "pnpm --filter @metaverse-office/web build",
     "web:preview": "pnpm --filter @metaverse-office/web preview",
     "web:test": "pnpm --filter @metaverse-office/web test",
+    "web:test:browser-smoke": "pnpm --filter @metaverse-office/web test:browser-smoke",
     "test": "pnpm test:all",
-    "test:all": "pnpm backend:test && pnpm web:test && pnpm web:typecheck && pnpm web:build",
+    "test:all": "pnpm backend:test && pnpm web:test && pnpm web:typecheck && pnpm web:build && pnpm web:test:browser-smoke",
     "web:typecheck": "pnpm --filter @metaverse-office/web typecheck"
   }
 }

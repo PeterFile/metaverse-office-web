@@ -10,6 +10,27 @@ const DEFAULT_WORKFLOW_LIMIT = 10;
 const DEFAULT_WORKFLOW_WINDOW = '60m';
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL?.trim();
 
+export class RequestError extends Error {
+  status: number;
+  code: string | null;
+
+  constructor({
+    message,
+    status,
+    code
+  }: {
+    message: string;
+    status: number;
+    code: string | null;
+  }) {
+    super(message);
+    this.name = 'RequestError';
+    this.status = status;
+    this.code = code;
+    Object.setPrototypeOf(this, RequestError.prototype);
+  }
+}
+
 async function parseJson<T>(response: Response): Promise<T> {
   let body: T | ProblemResponse;
   const contentType = response.headers.get('content-type');
@@ -17,18 +38,28 @@ async function parseJson<T>(response: Response): Promise<T> {
   if (contentType && contentType.includes('application/json')) {
     try {
       body = (await response.json()) as T | ProblemResponse;
-    } catch (error) {
-      // If response was supposed to be JSON but parsing failed
-      throw new Error('request_failed: invalid_json_response');
+    } catch {
+      throw new RequestError({
+        message: 'request_failed: invalid_json_response',
+        status: response.status,
+        code: 'invalid_json_response'
+      });
     }
   } else {
-    // If not JSON, or no content-type, treat as generic failure
-    throw new Error('request_failed: non_json_response');
+    throw new RequestError({
+      message: 'request_failed: non_json_response',
+      status: response.status,
+      code: 'non_json_response'
+    });
   }
 
   if (!response.ok) {
     const problem = body as ProblemResponse;
-    throw new Error(problem.details || problem.error || 'request_failed');
+    throw new RequestError({
+      message: problem.details || problem.error || 'request_failed',
+      status: response.status,
+      code: problem.error || null
+    });
   }
 
   return body as T;

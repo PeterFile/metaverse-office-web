@@ -80,13 +80,22 @@ pnpm install
 pnpm test:all
 pnpm web:typecheck
 pnpm web:build
+pnpm web:test:browser-smoke
 pnpm backend:start
 ```
+
+`pnpm web:test:browser-smoke` runs the Playwright keyboard smoke from the repository root, starts a hermetic read-only backend seeded under `./.tmp/browser-smoke`, and launches the Vite shell on a strict local port for the check.
 
 For local UI development, run the backend in one shell and the web shell in another:
 ```bash
 pnpm backend:start
 VITE_DEV_PROXY_TARGET=http://127.0.0.1:3000 pnpm web:dev
+```
+
+For the browser smoke against your own local backend data instead of the hermetic seed, keep that backend running and execute the package-level command directly:
+```bash
+cd apps/web
+VITE_DEV_PROXY_TARGET=http://127.0.0.1:3000 pnpm exec playwright test e2e/operator-shell.keyboard.smoke.spec.ts --config playwright.config.ts
 ```
 
 Optional env:
@@ -204,5 +213,6 @@ This keeps employee writes self-scoped and reserves cross-agent supervision/hand
 - the shell consumes `GET /office/overview`, `GET /agents/:id/workflow?limit=&window=`, `GET /incidents?limit=&window=`, and `GET /correlations/:correlation_id?limit=&window=` only
 - API calls are same-origin by default; cross-origin `VITE_API_BASE_URL` deployment requires the backend to allow that frontend origin via `CORS_ALLOWED_ORIGINS`, and local development may still proxy `/office`, `/agents`, `/incidents`, and `/correlations` through Vite via `VITE_DEV_PROXY_TARGET`
 - workflow and incident surfaces can open correlation drill-down without introducing a new backend contract or write path
+- workflow counterparties, correlation participants, and incident agent ids remain read-only but are directly selectable so operators can pivot into another agent workflow from the current evidence surface
 - the shell polls every 15 seconds and must surface explicit loading, empty, and error states instead of inventing motion or liveness
 - once overview, workflow, incident, or correlation data has loaded successfully, later refresh failures keep the last-good surface visible with an explicit degraded-refresh notice

@@ -4,6 +4,7 @@ import type { CSSProperties, ReactNode } from 'react';
 import {
   DEFAULT_WORKFLOW_LIMIT,
   DEFAULT_WORKFLOW_WINDOW,
+  RequestError,
   fetchAgentWorkflow,
   fetchCorrelationDrilldown,
   fetchIncidents,
@@ -17,8 +18,12 @@ import type {
   OfficeAgent,
   OfficeOverview,
   Severity,
+  WorkflowDetailEvent,
+  WorkflowDetailHandoff,
+  WorkflowDetailReboot,
   WorkflowIncident,
   WorkflowInteraction,
+  WorkflowPeerWatchAlert,
   WorkflowTimelineEvent
 } from './types';
 
@@ -130,6 +135,40 @@ function buildWatchTopology(watchEdges: OfficeOverview['watch_edges'], agents: O
     );
 }
 
+function recordsIncludeCorrelation(
+  records: Array<{
+    correlation_id?: string | null;
+  }>,
+  correlationId: string
+) {
+  return records.some((record) => record.correlation_id === correlationId);
+}
+
+function workflowShowsCorrelation(workflow: AgentWorkflow | null, correlationId: string) {
+  if (!workflow) {
+    return false;
+  }
+
+  return (
+    workflow.correlation_ids.includes(correlationId) ||
+    recordsIncludeCorrelation(workflow.incidents, correlationId) ||
+    recordsIncludeCorrelation(workflow.interactions, correlationId) ||
+    recordsIncludeCorrelation(workflow.timeline, correlationId) ||
+    recordsIncludeCorrelation(workflow.detail.open_peer_watch_alerts, correlationId) ||
+    recordsIncludeCorrelation(workflow.detail.recent_events, correlationId) ||
+    recordsIncludeCorrelation(workflow.detail.recent_handoffs, correlationId) ||
+    recordsIncludeCorrelation(workflow.detail.recent_reboots, correlationId)
+  );
+}
+
+function incidentFeedShowsCorrelation(incidentFeed: IncidentFeedResponse | null, correlationId: string) {
+  if (!incidentFeed) {
+    return false;
+  }
+
+  return recordsIncludeCorrelation(incidentFeed.items, correlationId);
+}
+
 function isAbortError(error: unknown) {
   return error instanceof Error && error.name === 'AbortError';
 }
@@ -137,13 +176,16 @@ function isAbortError(error: unknown) {
 function usePolledResource<T>({
   enabled = true,
   load,
+  onError,
   resourceKey
 }: {
   enabled?: boolean;
   load: (signal: AbortSignal) => Promise<T>;
+  onError?: (error: unknown) => void;
   resourceKey: string | null;
 }): PolledResource<T> {
   const loadEvent = useEffectEvent(load);
+  const errorEvent = useEffectEvent(onError || (() => {}));
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [state, setState] = useState<LoadState>(enabled ? 'loading' : 'idle');
@@ -205,6 +247,7 @@ function usePolledResource<T>({
           return;
         }
 
+        errorEvent(nextError);
         setError(nextError instanceof Error ? nextError.message : 'unknown_error');
         setState(hasCommittedData ? 'ready' : 'error');
       } finally {
@@ -277,6 +320,30 @@ function CorrelationButton({
   );
 }
 
+function WorkflowAgentButton({
+  agentId,
+  isSelected,
+  onSelect
+}: {
+  agentId: string;
+  isSelected: boolean;
+  onSelect: (agentId: string) => void;
+}) {
+  const ariaLabel = isSelected ? `Select workflow for ${agentId} (selected)` : `Select workflow for ${agentId}`;
+
+  return (
+    <button
+      type="button"
+      className={`token-pill token-pill--action${isSelected ? ' token-pill--selected' : ''}`}
+      aria-label={ariaLabel}
+      aria-pressed={isSelected}
+      onClick={() => onSelect(agentId)}
+    >
+      {agentId}
+    </button>
+  );
+}
+
 function AgentCard({
   agent,
   isSelected,
@@ -331,7 +398,7 @@ function AttentionQueuePanel({
   onSelectAgent: (agentId: string) => void;
 }) {
   return (
-    <section className="operations-panel">
+    <section className="operations-panel" aria-label="Operator attention queue">
       <div className="panel-heading">
         <div>
           <h2>Operator attention queue</h2>
@@ -374,9 +441,17 @@ function AttentionQueuePanel({
   );
 }
 
-function WatchTopologyPanel({ topology }: { topology: WatchTopologyRecord[] }) {
+function WatchTopologyPanel({
+  topology,
+  selectedAgentId,
+  onSelectAgent
+}: {
+  topology: WatchTopologyRecord[];
+  selectedAgentId: string | null;
+  onSelectAgent: (agentId: string) => void;
+}) {
   return (
-    <section className="operations-panel">
+    <section className="operations-panel" aria-label="Watch topology">
       <div className="panel-heading">
         <div>
           <h2>Watch topology</h2>
@@ -387,9 +462,22 @@ function WatchTopologyPanel({ topology }: { topology: WatchTopologyRecord[] }) {
       {topology.length > 0 ? (
         <ul className="record-list">
           {topology.map((edge) => (
-            <li key={edge.id} className="record-item">
-              <strong>{`${edge.watcherLabel} -> ${edge.targetLabel}`}</strong>
-              <span className="record-item__meta">{`Mode: ${edge.watchMode}`}</span>
+            <li
+              key={edge.id}
+              className={`record-item attention-item${
+                selectedAgentId === edge.toAgentId ? ' attention-item--selected' : ''
+              }`}
+            >
+              <button
+                type="button"
+                className="attention-item__button"
+                aria-label={`Select target ${edge.targetLabel} from ${edge.watcherLabel} (${edge.watchMode} watch)${selectedAgentId === edge.toAgentId ? ' (selected)' : ''}`}
+                aria-pressed={selectedAgentId === edge.toAgentId}
+                onClick={() => onSelectAgent(edge.toAgentId)}
+              >
+                <strong>{`${edge.watcherLabel} -> ${edge.targetLabel}`}</strong>
+                <span className="record-item__meta">{`Mode: ${edge.watchMode}`}</span>
+              </button>
             </li>
           ))}
         </ul>
@@ -464,30 +552,69 @@ function WorkflowList<T>({
   title,
   empty,
   items,
+  listLabel,
   render
 }: {
   title: string;
   empty: string;
   items: T[];
+  listLabel?: string;
   render: (item: T) => ReactNode;
 }) {
   return (
     <section className="workflow-section">
       <h3>{title}</h3>
-      {items.length > 0 ? <ul className="record-list">{items.map(render)}</ul> : <p>{empty}</p>}
+      {items.length > 0 ? (
+        <ul className="record-list" aria-label={listLabel}>
+          {items.map(render)}
+        </ul>
+      ) : (
+        <p>{empty}</p>
+      )}
+    </section>
+  );
+}
+
+function WorkflowDetailSurface<T>({
+  title,
+  empty,
+  items,
+  listLabel,
+  render
+}: {
+  title: string;
+  empty: string;
+  items: T[];
+  listLabel: string;
+  render: (item: T) => ReactNode;
+}) {
+  return (
+    <section className="detail-card">
+      <strong>{title}</strong>
+      {items.length > 0 ? (
+        <ul className="record-list" aria-label={listLabel}>
+          {items.map(render)}
+        </ul>
+      ) : (
+        <p>{empty}</p>
+      )}
     </section>
   );
 }
 
 function IncidentRecord({
   incident,
+  selectedAgentId,
   selectedCorrelationId,
   correlationButtonLabelPrefix,
+  onSelectAgent,
   onSelectCorrelation
 }: {
   incident: WorkflowIncident;
+  selectedAgentId?: string | null;
   selectedCorrelationId: string | null;
   correlationButtonLabelPrefix?: string;
+  onSelectAgent?: (agentId: string) => void;
   onSelectCorrelation?: (correlationId: string) => void;
 }) {
   return (
@@ -504,7 +631,18 @@ function IncidentRecord({
         ) : null}
       </div>
       <span className="record-item__meta">{`${incident.severity} · ${incident.status}`}</span>
-      <span className="record-item__meta">{`${incident.agent_id} · ${incident.ts}`}</span>
+      {onSelectAgent ? (
+        <>
+          <WorkflowAgentButton
+            agentId={incident.agent_id}
+            isSelected={selectedAgentId === incident.agent_id}
+            onSelect={onSelectAgent}
+          />
+          <span className="record-item__meta">{`Timestamp: ${incident.ts}`}</span>
+        </>
+      ) : (
+        <span className="record-item__meta">{`${incident.agent_id} · ${incident.ts}`}</span>
+      )}
       <span className="record-item__meta">{`Source: ${incident.source_kind}`}</span>
       <span className="record-item__meta">{`Counterparties: ${formatInlineList(
         incident.counterparty_agent_ids
@@ -514,7 +652,15 @@ function IncidentRecord({
   );
 }
 
-function InteractionRecord({ interaction }: { interaction: WorkflowInteraction }) {
+function InteractionRecord({
+  interaction,
+  selectedAgentId,
+  onSelectAgent
+}: {
+  interaction: WorkflowInteraction;
+  selectedAgentId?: string | null;
+  onSelectAgent?: (agentId: string) => void;
+}) {
   return (
     <li className="record-item">
       <div className="record-item__header">
@@ -525,6 +671,19 @@ function InteractionRecord({ interaction }: { interaction: WorkflowInteraction }
       <span className="record-item__meta">{`Participants: ${formatInlineList(
         interaction.participant_agent_ids
       )}`}</span>
+      {onSelectAgent ? (
+        <ul className="token-list token-list--plain">
+          {interaction.participant_agent_ids.map((value) => (
+            <li key={`${interaction.interaction_id}:${value}`}>
+              <WorkflowAgentButton
+                agentId={value}
+                isSelected={selectedAgentId === value}
+                onSelect={onSelectAgent}
+              />
+            </li>
+          ))}
+        </ul>
+      ) : null}
       {interaction.correlation_id ? (
         <span className="record-item__meta">{`Correlation: ${interaction.correlation_id}`}</span>
       ) : null}
@@ -556,24 +715,116 @@ function TimelineRecord({ event }: { event: WorkflowTimelineEvent }) {
   );
 }
 
+function PeerWatchAlertRecord({ alert }: { alert: WorkflowPeerWatchAlert }) {
+  return (
+    <li className="record-item">
+      <div className="record-item__header">
+        <strong>{alert.summary}</strong>
+      </div>
+      <span className="record-item__meta">{`${alert.severity} · ${alert.status}`}</span>
+      <span className="record-item__meta">{`Current state: ${alert.current_state}`}</span>
+      <span className="record-item__meta">{`Task: ${alert.active_task || 'No active task recorded.'}`}</span>
+      <span className="record-item__meta">{`Observer: ${alert.observer_agent_id}`}</span>
+      <span className="record-item__meta">{`Watchers: ${formatInlineList(alert.watcher_agent_ids)}`}</span>
+      <span className="record-item__meta">{`Evidence refs: ${formatInlineList(alert.evidence_refs)}`}</span>
+      <span className="record-item__meta">{`Evidence count: ${alert.evidence_count}`}</span>
+      {alert.correlation_id ? (
+        <span className="record-item__meta">{`Correlation: ${alert.correlation_id}`}</span>
+      ) : null}
+      <span className="record-item__meta">{`Source: ${alert.source_kind}`}</span>
+    </li>
+  );
+}
+
+function DetailEventRecord({ event }: { event: WorkflowDetailEvent }) {
+  return (
+    <li className="record-item">
+      <div className="record-item__header">
+        <strong>{event.summary}</strong>
+      </div>
+      <span className="record-item__meta">{`${event.event_type} · ${event.severity}`}</span>
+      <span className="record-item__meta">{`Timestamp: ${event.ts}`}</span>
+      <span className="record-item__meta">{`State: ${event.current_state}`}</span>
+      <span className="record-item__meta">{`Task: ${event.active_task || 'No active task recorded.'}`}</span>
+      <span className="record-item__meta">{`Location: ${event.location}`}</span>
+      <span className="record-item__meta">{`Counterparties: ${formatInlineList(
+        event.counterparty_agent_ids
+      )}`}</span>
+      <span className="record-item__meta">{`Evidence refs: ${formatInlineList(event.evidence_refs)}`}</span>
+      {event.correlation_id ? (
+        <span className="record-item__meta">{`Correlation: ${event.correlation_id}`}</span>
+      ) : null}
+      <span className="record-item__meta">{`Source: ${event.source_kind}`}</span>
+    </li>
+  );
+}
+
+function HandoffRecord({ handoff }: { handoff: WorkflowDetailHandoff }) {
+  return (
+    <li className="record-item">
+      <div className="record-item__header">
+        <strong>{handoff.summary}</strong>
+      </div>
+      <span className="record-item__meta">{`${handoff.status} · ${handoff.severity}`}</span>
+      <span className="record-item__meta">{`Timestamp: ${handoff.ts}`}</span>
+      <span className="record-item__meta">{`Actor: ${handoff.actor_id}`}</span>
+      <span className="record-item__meta">{`Counterparties: ${formatInlineList(
+        handoff.counterparty_agent_ids
+      )}`}</span>
+      <span className="record-item__meta">{`Evidence refs: ${formatInlineList(handoff.evidence_refs)}`}</span>
+      {handoff.correlation_id ? (
+        <span className="record-item__meta">{`Correlation: ${handoff.correlation_id}`}</span>
+      ) : null}
+      <span className="record-item__meta">{`Source: ${handoff.source_kind}`}</span>
+    </li>
+  );
+}
+
+function RebootRecord({ reboot }: { reboot: WorkflowDetailReboot }) {
+  return (
+    <li className="record-item">
+      <div className="record-item__header">
+        <strong>{reboot.summary}</strong>
+      </div>
+      <span className="record-item__meta">{`${reboot.status} · ${reboot.severity}`}</span>
+      <span className="record-item__meta">{`Timestamp: ${reboot.ts}`}</span>
+      <span className="record-item__meta">{`Actor: ${reboot.actor_id}`}</span>
+      <span className="record-item__meta">{`Counterparties: ${formatInlineList(
+        reboot.counterparty_agent_ids
+      )}`}</span>
+      <span className="record-item__meta">{`Evidence refs: ${formatInlineList(reboot.evidence_refs)}`}</span>
+      {reboot.correlation_id ? (
+        <span className="record-item__meta">{`Correlation: ${reboot.correlation_id}`}</span>
+      ) : null}
+      <span className="record-item__meta">{`Source: ${reboot.source_kind}`}</span>
+    </li>
+  );
+}
+
 function WorkflowPanel({
+  selectedAgentId,
   selectedAgent,
+  selectedAgentStillVisibleInOverview,
   selectedCorrelationId,
   workflowState,
   workflow,
   workflowError,
+  onSelectAgent,
   onSelectCorrelation
 }: {
+  selectedAgentId: string | null;
   selectedAgent: OfficeAgent | null;
+  selectedAgentStillVisibleInOverview: boolean;
   selectedCorrelationId: string | null;
   workflowState: LoadState;
   workflow: AgentWorkflow | null;
   workflowError: string | null;
+  onSelectAgent: (agentId: string) => void;
   onSelectCorrelation: (correlationId: string) => void;
 }) {
-  if (!selectedAgent) {
+  if (!selectedAgentId) {
     return (
-      <aside className="workflow-panel">
+      <aside className="workflow-panel" aria-label="Workflow panel">
         <h2>Workflow panel</h2>
         <p>Select an agent to inspect incidents, interactions, and replay evidence.</p>
       </aside>
@@ -582,19 +833,23 @@ function WorkflowPanel({
 
   if (workflowState === 'loading' && !workflow) {
     return (
-      <aside className="workflow-panel">
+      <aside className="workflow-panel" aria-label="Workflow panel">
         <h2>Workflow panel</h2>
-        <p>Loading workflow.</p>
+        <p role="status" aria-live="polite">
+          Loading workflow.
+        </p>
       </aside>
     );
   }
 
   if (workflowState === 'error') {
     return (
-      <aside className="workflow-panel">
+      <aside className="workflow-panel" aria-label="Workflow panel">
         <h2>Workflow panel</h2>
-        <p>Unable to load workflow.</p>
-        {workflowError ? <p>{workflowError}</p> : null}
+        <div role="alert">
+          <p>Unable to load workflow.</p>
+          {workflowError ? <p>{workflowError}</p> : null}
+        </div>
       </aside>
     );
   }
@@ -603,10 +858,17 @@ function WorkflowPanel({
     return null;
   }
 
+  const workflowDisplayName = workflow.detail.display_name || selectedAgent?.display_name || selectedAgentId;
+
   return (
-    <aside className="workflow-panel">
-      <h2>{`Workflow: ${workflow.detail.display_name || selectedAgent.display_name}`}</h2>
+    <aside className="workflow-panel" aria-label="Workflow panel">
+      <h2>{`Workflow: ${workflowDisplayName}`}</h2>
       <RefreshStatusNotice hasData={workflow !== null} label="Workflow" error={workflowError} />
+      {!selectedAgentStillVisibleInOverview ? (
+        <p className="surface-status surface-status--warning" role="note">
+          {`${workflowDisplayName} is absent from the current office overview. Workflow evidence remains available, but the office grid and watch topology cannot highlight this agent.`}
+        </p>
+      ) : null}
       <p>{workflow.detail.active_task || 'No active task recorded.'}</p>
       <p>State: {workflow.detail.current_state}</p>
       <p>Location: {workflow.detail.current_location}</p>
@@ -615,10 +877,41 @@ function WorkflowPanel({
         {workflow.detail.latest_heartbeat?.received_at || 'No heartbeat recorded in this slice.'}
       </p>
 
+      <section className="detail-grid">
+        <WorkflowDetailSurface
+          title="Open peer-watch alerts"
+          empty="No open peer-watch alerts in this detail slice."
+          items={workflow.detail.open_peer_watch_alerts}
+          listLabel="Workflow detail peer-watch alerts"
+          render={(alert) => <PeerWatchAlertRecord key={alert.alert_id} alert={alert} />}
+        />
+        <WorkflowDetailSurface
+          title="Recent events"
+          empty="No recent events in this detail slice."
+          items={workflow.detail.recent_events}
+          listLabel="Workflow detail recent events"
+          render={(event) => <DetailEventRecord key={event.event_id} event={event} />}
+        />
+        <WorkflowDetailSurface
+          title="Recent handoffs"
+          empty="No recent handoffs in this detail slice."
+          items={workflow.detail.recent_handoffs}
+          listLabel="Workflow detail recent handoffs"
+          render={(handoff) => <HandoffRecord key={handoff.handoff_id} handoff={handoff} />}
+        />
+        <WorkflowDetailSurface
+          title="Recent reboots"
+          empty="No recent reboots in this detail slice."
+          items={workflow.detail.recent_reboots}
+          listLabel="Workflow detail recent reboots"
+          render={(reboot) => <RebootRecord key={reboot.reboot_id} reboot={reboot} />}
+        />
+      </section>
+
       <section className="workflow-section">
         <h3>Correlation ids</h3>
         {workflow.correlation_ids.length > 0 ? (
-          <ul className="token-list">
+          <ul className="token-list" aria-label="Workflow correlation ids">
             {workflow.correlation_ids.map((value) => (
               <li key={value}>
                 <CorrelationButton
@@ -637,10 +930,14 @@ function WorkflowPanel({
       <section className="workflow-section">
         <h3>Counterparties</h3>
         {workflow.counterparty_agent_ids.length > 0 ? (
-          <ul className="token-list token-list--plain">
+          <ul className="token-list token-list--plain" aria-label="Workflow counterparties">
             {workflow.counterparty_agent_ids.map((value) => (
-              <li key={value} className="token-pill">
-                {value}
+              <li key={value}>
+                <WorkflowAgentButton
+                  agentId={value}
+                  isSelected={selectedAgentId === value}
+                  onSelect={onSelectAgent}
+                />
               </li>
             ))}
           </ul>
@@ -653,12 +950,15 @@ function WorkflowPanel({
         title="Incidents"
         empty={`No incidents in ${DEFAULT_WORKFLOW_WINDOW}.`}
         items={workflow.incidents}
+        listLabel="Workflow incidents"
         render={(incident) => (
           <IncidentRecord
             key={incident.incident_id}
             incident={incident}
+            selectedAgentId={selectedAgentId}
             selectedCorrelationId={selectedCorrelationId}
             correlationButtonLabelPrefix="Inspect workflow incident correlation"
+            onSelectAgent={onSelectAgent}
             onSelectCorrelation={onSelectCorrelation}
           />
         )}
@@ -667,14 +967,21 @@ function WorkflowPanel({
         title="Interactions"
         empty={`No interactions in ${DEFAULT_WORKFLOW_WINDOW}.`}
         items={workflow.interactions}
+        listLabel="Workflow interactions"
         render={(interaction) => (
-          <InteractionRecord key={interaction.interaction_id} interaction={interaction} />
+          <InteractionRecord
+            key={interaction.interaction_id}
+            interaction={interaction}
+            selectedAgentId={selectedAgentId}
+            onSelectAgent={onSelectAgent}
+          />
         )}
       />
       <WorkflowList
         title="Timeline"
         empty={`No timeline events in ${DEFAULT_WORKFLOW_WINDOW}.`}
         items={workflow.timeline}
+        listLabel="Workflow timeline"
         render={(event) => <TimelineRecord key={event.event_id} event={event} />}
       />
     </aside>
@@ -685,17 +992,21 @@ function IncidentFeedPanel({
   incidentFeed,
   incidentFeedError,
   incidentFeedState,
+  selectedAgentId,
   selectedCorrelationId,
+  onSelectAgent,
   onSelectCorrelation
 }: {
   incidentFeed: IncidentFeedResponse | null;
   incidentFeedError: string | null;
   incidentFeedState: LoadState;
+  selectedAgentId: string | null;
   selectedCorrelationId: string | null;
+  onSelectAgent: (agentId: string) => void;
   onSelectCorrelation: (correlationId: string) => void;
 }) {
   return (
-    <section className="operations-panel">
+    <section className="operations-panel" aria-label="Global incident feed">
       <div className="panel-heading">
         <div>
           <h2>Global incident feed</h2>
@@ -708,24 +1019,30 @@ function IncidentFeedPanel({
         error={incidentFeedError}
       />
 
-      {incidentFeedState === 'loading' && !incidentFeed ? <p>Loading incident feed.</p> : null}
+      {incidentFeedState === 'loading' && !incidentFeed ? (
+        <p role="status" aria-live="polite">
+          Loading incident feed.
+        </p>
+      ) : null}
 
       {incidentFeedState === 'error' ? (
-        <>
+        <div role="alert">
           <p>Unable to load incident feed.</p>
           {incidentFeedError ? <p>{incidentFeedError}</p> : null}
-        </>
+        </div>
       ) : null}
 
       {incidentFeedState !== 'error' && incidentFeed ? (
         incidentFeed.items.length > 0 ? (
-          <ul className="record-list">
+          <ul className="record-list" aria-label="Global incidents">
             {incidentFeed.items.map((incident) => (
               <IncidentRecord
                 key={incident.incident_id}
                 incident={incident}
+                selectedAgentId={selectedAgentId}
                 selectedCorrelationId={selectedCorrelationId}
                 correlationButtonLabelPrefix="Inspect correlation"
+                onSelectAgent={onSelectAgent}
                 onSelectCorrelation={onSelectCorrelation}
               />
             ))}
@@ -742,16 +1059,20 @@ function CorrelationPanel({
   correlation,
   correlationError,
   correlationState,
-  selectedCorrelationId
+  selectedAgentId,
+  selectedCorrelationId,
+  onSelectAgent
 }: {
   correlation: CorrelationDrilldown | null;
   correlationError: string | null;
   correlationState: LoadState;
+  selectedAgentId: string | null;
   selectedCorrelationId: string | null;
+  onSelectAgent: (agentId: string) => void;
 }) {
   if (!selectedCorrelationId) {
     return (
-      <section className="operations-panel">
+      <section className="operations-panel" aria-label="Correlation drilldown">
         <h2>Correlation drilldown</h2>
         <p>Select a correlation id from workflow or incident feed.</p>
       </section>
@@ -760,19 +1081,23 @@ function CorrelationPanel({
 
   if (correlationState === 'loading' && !correlation) {
     return (
-      <section className="operations-panel">
+      <section className="operations-panel" aria-label="Correlation drilldown">
         <h2>Correlation drilldown</h2>
-        <p>Loading correlation drilldown.</p>
+        <p role="status" aria-live="polite">
+          Loading correlation drilldown.
+        </p>
       </section>
     );
   }
 
   if (correlationState === 'error') {
     return (
-      <section className="operations-panel">
+      <section className="operations-panel" aria-label="Correlation drilldown">
         <h2>Correlation drilldown</h2>
-        <p>Unable to load correlation.</p>
-        {correlationError ? <p>{correlationError}</p> : null}
+        <div role="alert">
+          <p>Unable to load correlation.</p>
+          {correlationError ? <p>{correlationError}</p> : null}
+        </div>
       </section>
     );
   }
@@ -782,7 +1107,7 @@ function CorrelationPanel({
   }
 
   return (
-    <section className="operations-panel">
+    <section className="operations-panel" aria-label="Correlation drilldown">
       <div className="panel-heading">
         <div>
           <h2>{`Correlation: ${correlation.correlation_id}`}</h2>
@@ -800,10 +1125,14 @@ function CorrelationPanel({
         <div className="detail-card">
           <strong>Participants</strong>
           {correlation.participant_agent_ids.length > 0 ? (
-            <ul className="token-list token-list--plain">
+            <ul className="token-list token-list--plain" aria-label="Correlation participants">
               {correlation.participant_agent_ids.map((value) => (
-                <li key={value} className="token-pill">
-                  {value}
+                <li key={value}>
+                  <WorkflowAgentButton
+                    agentId={value}
+                    isSelected={selectedAgentId === value}
+                    onSelect={onSelectAgent}
+                  />
                 </li>
               ))}
             </ul>
@@ -814,7 +1143,7 @@ function CorrelationPanel({
         <div className="detail-card">
           <strong>Evidence refs</strong>
           {correlation.evidence_refs.length > 0 ? (
-            <ul className="token-list token-list--plain">
+            <ul className="token-list token-list--plain" aria-label="Correlation evidence refs">
               {correlation.evidence_refs.map((value) => (
                 <li key={value} className="token-pill">
                   {value}
@@ -831,11 +1160,14 @@ function CorrelationPanel({
         title="Incidents"
         empty={`No incidents in ${DEFAULT_WORKFLOW_WINDOW}.`}
         items={correlation.incidents}
+        listLabel="Correlation incidents"
         render={(incident) => (
           <IncidentRecord
             key={incident.incident_id}
             incident={incident}
+            selectedAgentId={selectedAgentId}
             selectedCorrelationId={selectedCorrelationId}
+            onSelectAgent={onSelectAgent}
           />
         )}
       />
@@ -843,14 +1175,21 @@ function CorrelationPanel({
         title="Interactions"
         empty={`No interactions in ${DEFAULT_WORKFLOW_WINDOW}.`}
         items={correlation.interactions}
+        listLabel="Correlation interactions"
         render={(interaction) => (
-          <InteractionRecord key={interaction.interaction_id} interaction={interaction} />
+          <InteractionRecord
+            key={interaction.interaction_id}
+            interaction={interaction}
+            selectedAgentId={selectedAgentId}
+            onSelectAgent={onSelectAgent}
+          />
         )}
       />
       <WorkflowList
         title="Timeline"
         empty={`No timeline events in ${DEFAULT_WORKFLOW_WINDOW}.`}
         items={correlation.timeline}
+        listLabel="Correlation timeline"
         render={(event) => <TimelineRecord key={event.event_id} event={event} />}
       />
     </section>
@@ -874,21 +1213,47 @@ export default function App() {
       }),
     resourceKey: 'incident-feed'
   });
-  const selectedAgentAvailableId =
-    selectedAgentId && overviewResource.data?.agents.some((agent) => agent.agent_id === selectedAgentId)
-      ? selectedAgentId
-      : null;
+
+  const selectedAgentStillVisibleInOverview = useMemo(
+    () =>
+      selectedAgentId !== null &&
+      (overviewResource.data?.agents.some((agent) => agent.agent_id === selectedAgentId) || false),
+    [overviewResource.data, selectedAgentId]
+  );
+
+  const handleWorkflowError = (error: unknown) => {
+    if (
+      error instanceof RequestError &&
+      error.code === 'not_found' &&
+      !selectedAgentStillVisibleInOverview
+    ) {
+      setSelectedAgentId((currentAgentId) => (currentAgentId === null ? currentAgentId : null));
+    }
+  };
 
   const workflowResource = usePolledResource({
-    enabled: selectedAgentAvailableId !== null,
+    enabled: selectedAgentId !== null,
     load: (signal) =>
-      fetchAgentWorkflow(selectedAgentAvailableId!, {
+      fetchAgentWorkflow(selectedAgentId!, {
         limit: DEFAULT_WORKFLOW_LIMIT,
         window: DEFAULT_WORKFLOW_WINDOW,
         signal
       }),
-    resourceKey: selectedAgentAvailableId
+    onError: handleWorkflowError,
+    resourceKey: selectedAgentId
   });
+  const handleCorrelationError = (error: unknown) => {
+    if (
+      error instanceof RequestError &&
+      error.code === 'not_found' &&
+      !selectedCorrelationStillVisible
+    ) {
+      setSelectedCorrelationId((currentCorrelationId) =>
+        currentCorrelationId === null ? currentCorrelationId : null
+      );
+    }
+  };
+
   const correlationResource = usePolledResource({
     enabled: selectedCorrelationId !== null,
     load: (signal) =>
@@ -897,21 +1262,27 @@ export default function App() {
         window: DEFAULT_WORKFLOW_WINDOW,
         signal
       }),
+    onError: handleCorrelationError,
     resourceKey: selectedCorrelationId
   });
 
   const selectedAgent = useMemo(
-    () => overviewResource.data?.agents.find((agent) => agent.agent_id === selectedAgentAvailableId) || null,
-    [overviewResource.data, selectedAgentAvailableId]
+    () => overviewResource.data?.agents.find((agent) => agent.agent_id === selectedAgentId) || null,
+    [overviewResource.data, selectedAgentId]
   );
-
-  useEffect(() => {
-    if (!overviewResource.data || !selectedAgentId || selectedAgentAvailableId !== null) {
-      return;
-    }
-
-    setSelectedAgentId(null);
-  }, [overviewResource.data, selectedAgentAvailableId, selectedAgentId]);
+  const selectedCorrelationVisibleFromWorkflow = useMemo(
+    () =>
+      selectedCorrelationId !== null && workflowShowsCorrelation(workflowResource.data, selectedCorrelationId),
+    [selectedCorrelationId, workflowResource.data]
+  );
+  const selectedCorrelationVisibleFromIncidentFeed = useMemo(
+    () =>
+      selectedCorrelationId !== null &&
+      incidentFeedShowsCorrelation(incidentFeedResource.data, selectedCorrelationId),
+    [selectedCorrelationId, incidentFeedResource.data]
+  );
+  const selectedCorrelationStillVisible =
+    selectedCorrelationVisibleFromWorkflow || selectedCorrelationVisibleFromIncidentFeed;
 
   const attentionQueue = useMemo(
     () => buildAttentionQueue(overviewResource.data?.agents || []),
@@ -929,7 +1300,9 @@ export default function App() {
   if (overviewResource.state === 'loading' && !overviewResource.data) {
     return (
       <main className="app-shell">
-        <p>Loading office overview.</p>
+        <p role="status" aria-live="polite">
+          Loading office overview.
+        </p>
       </main>
     );
   }
@@ -938,8 +1311,10 @@ export default function App() {
     return (
       <main className="app-shell">
         <h1>Operator Shell</h1>
-        <p>Unable to load office overview.</p>
-        {overviewResource.error ? <p>{overviewResource.error}</p> : null}
+        <div role="alert">
+          <p>Unable to load office overview.</p>
+          {overviewResource.error ? <p>{overviewResource.error}</p> : null}
+        </div>
       </main>
     );
   }
@@ -978,11 +1353,14 @@ export default function App() {
             onSelectAgent={setSelectedAgentId}
           />
           <WorkflowPanel
+            selectedAgentId={selectedAgentId}
             selectedAgent={selectedAgent}
+            selectedAgentStillVisibleInOverview={selectedAgentStillVisibleInOverview}
             selectedCorrelationId={selectedCorrelationId}
             workflowState={workflowResource.state}
             workflow={workflowResource.data}
             workflowError={workflowResource.error}
+            onSelectAgent={setSelectedAgentId}
             onSelectCorrelation={setSelectedCorrelationId}
           />
         </div>
@@ -993,15 +1371,23 @@ export default function App() {
           incidentFeed={incidentFeedResource.data}
           incidentFeedError={incidentFeedResource.error}
           incidentFeedState={incidentFeedResource.state}
+          selectedAgentId={selectedAgentId}
           selectedCorrelationId={selectedCorrelationId}
+          onSelectAgent={setSelectedAgentId}
           onSelectCorrelation={setSelectedCorrelationId}
         />
-        <WatchTopologyPanel topology={watchTopology} />
+        <WatchTopologyPanel
+          topology={watchTopology}
+          selectedAgentId={selectedAgentId}
+          onSelectAgent={setSelectedAgentId}
+        />
         <CorrelationPanel
           correlation={correlationResource.data}
           correlationError={correlationResource.error}
           correlationState={correlationResource.state}
+          selectedAgentId={selectedAgentId}
           selectedCorrelationId={selectedCorrelationId}
+          onSelectAgent={setSelectedAgentId}
         />
       </section>
 

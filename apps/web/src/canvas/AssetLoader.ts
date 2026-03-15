@@ -36,7 +36,7 @@ export async function loadGameAssets(): Promise<LoadedAssets> {
     const [
       playerSheet, interiorSheet, tilesetSheet, uiSheet,
       pawnLead, pawnMarket, pawnPmf, pawnTokenomics, pawnProtocol, pawnApp, pawnGrowth,
-      rwDesk, rwBed, rwServer
+      rwDesk, rwBed, rwServer, rimworldPlant
     ] = await Promise.all([
       loadOrGet('/assets/player.json'),
       loadOrGet('/assets/pixel-cyberpunk-interior.json'),
@@ -51,7 +51,8 @@ export async function loadGameAssets(): Promise<LoadedAssets> {
       loadOrGetTexture('/assets/generated/pawn_growth.png'),
       loadOrGetTexture('/assets/generated/rw_desk.png'),
       loadOrGetTexture('/assets/generated/rw_bed.png'),
-      loadOrGetTexture('/assets/generated/rw_server.png')
+      loadOrGetTexture('/assets/generated/rw_server.png'),
+      loadOrGetTexture('/assets/generated/rimworld_plant.png')
     ]);
 
     const extractTextures = (sheet: Spritesheet | undefined): Record<string, Texture> => {
@@ -90,6 +91,7 @@ export async function loadGameAssets(): Promise<LoadedAssets> {
     interiorTextures['rw_desk.png'] = rwDesk;
     interiorTextures['rw_bed.png'] = rwBed;
     interiorTextures['rw_server.png'] = rwServer;
+    interiorTextures['rimworld_plant.png'] = rimworldPlant;
 
     // Enforce nearest-neighbor scaling for all textures
     const applyNearest = (dict: Record<string, Texture>) => {

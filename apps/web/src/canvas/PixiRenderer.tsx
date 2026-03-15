@@ -27,8 +27,8 @@ import type {
 import type { AgentSpriteMeta } from './sprites/AgentSprite';
 
 const SCENE_PADDING = 60;
-const MIN_CELL_SIZE = 90;
-const MAX_CELL_SIZE = 168;
+const MIN_CELL_SIZE = 40;
+const MAX_CELL_SIZE = 280;
 const DESK_PROP_SCALE = 1.0;
 
 type GridMetrics = {
@@ -91,17 +91,17 @@ const SEVERITY_COLORS: Record<Severity, number> = {
 };
 
 const BLUEPRINT_ZONE_CELLS: Record<string, LayoutCell> = {
-  'lead-desk': { x: 0, y: 0, w: 3, h: 2 },
-  'desk-market-intel': { x: 3, y: 0, w: 2, h: 2 },
-  'desk-product-pmf': { x: 5, y: 0, w: 2, h: 2 },
-  'desk-tokenomics': { x: 7, y: 0, w: 2, h: 2 },
-  'desk-protocol-engineering': { x: 3, y: 2, w: 2, h: 2 },
-  'desk-app-engineering': { x: 5, y: 2, w: 2, h: 2 },
-  'desk-growth-revenue': { x: 7, y: 2, w: 2, h: 2 },
-  'meeting-zone': { x: 0, y: 2, w: 3, h: 4 },
-  'review-zone': { x: 3, y: 4, w: 4, h: 2 },
-  'rest-zone': { x: 7, y: 4, w: 2, h: 2 },
-  'reboot-zone': { x: 9, y: 4, w: 2, h: 2 },
+  'lead-desk': { x: 0, y: 1, w: 4, h: 4 },
+  'desk-market-intel': { x: 5, y: 1, w: 3, h: 4 },
+  'desk-product-pmf': { x: 9, y: 1, w: 3, h: 4 },
+  'desk-tokenomics': { x: 13, y: 1, w: 3, h: 4 },
+  'desk-protocol-engineering': { x: 17, y: 1, w: 3, h: 4 },
+  'desk-app-engineering': { x: 21, y: 1, w: 3, h: 4 },
+  'desk-growth-revenue': { x: 25, y: 1, w: 3, h: 4 },
+  'meeting-zone': { x: 0, y: 7, w: 7, h: 6 },
+  'review-zone': { x: 8, y: 7, w: 7, h: 5 },
+  'rest-zone': { x: 16, y: 7, w: 6, h: 5 },
+  'reboot-zone': { x: 23, y: 7, w: 5, h: 5 },
 };
 
 const ZONE_SHORT_LABELS: Record<string, string> = {
@@ -281,31 +281,18 @@ function getRoomPalette(zone: ZoneSnapshot): RoomPalette {
 
 function resolveDoorway(zone: ZoneSnapshot, rect: ZoneRect): Doorway {
   const doorSpan = clamp(Math.round(Math.min(rect.w, rect.h) * 0.24), 28, 44);
-  const wallDepth = clamp(Math.round(Math.min(rect.w, rect.h) * 0.1), 10, 18);
+  const wallDepth = 8;
+  const cell = getZoneCell(zone);
 
-  if (isRestZone(zone) || isRebootZone(zone)) {
-    const top = rect.h * 0.56 - doorSpan * 0.5;
+  if (cell.y <= 2) {
     return {
-      side: 'left',
-      x: 0,
-      y: clamp(top, wallDepth + 8, rect.h - wallDepth - doorSpan - 8),
-      w: wallDepth,
-      h: doorSpan,
-    };
-  }
-
-  if (isMeetingZone(zone) && zone.zone_id === 'meeting-zone') {
-    const left = rect.w * 0.74 - doorSpan * 0.5;
-    return {
-      side: 'top',
-      x: clamp(left, wallDepth + 10, rect.w - wallDepth - doorSpan - 10),
-      y: 0,
+      side: 'bottom',
+      x: rect.w * 0.5 - doorSpan * 0.5,
+      y: rect.h - wallDepth,
       w: doorSpan,
       h: wallDepth,
     };
-  }
-
-  if (isReviewZone(zone)) {
+  } else if (cell.y === 6 && cell.x > 4) {
     return {
       side: 'top',
       x: rect.w * 0.5 - doorSpan * 0.5,
@@ -313,11 +300,27 @@ function resolveDoorway(zone: ZoneSnapshot, rect: ZoneRect): Doorway {
       w: doorSpan,
       h: wallDepth,
     };
+  } else if (cell.y >= 10) {
+    return {
+      side: 'top',
+      x: rect.w * 0.5 - doorSpan * 0.5,
+      y: 0,
+      w: doorSpan,
+      h: wallDepth,
+    };
+  } else if (cell.x <= 4 && cell.y >= 4) {
+    return {
+      side: 'right',
+      x: rect.w - wallDepth,
+      y: rect.h * 0.25 - doorSpan * 0.5,
+      w: wallDepth,
+      h: doorSpan,
+    };
   }
 
   return {
     side: 'bottom',
-    x: (zone.zone_id === 'lead-desk' ? rect.w * 0.68 : rect.w * 0.5) - doorSpan * 0.5,
+    x: rect.w * 0.5 - doorSpan * 0.5,
     y: rect.h - wallDepth,
     w: doorSpan,
     h: wallDepth,
@@ -331,97 +334,63 @@ function buildRoomShell(
   assets: LoadedAssets,
   palette: RoomPalette,
 ): Doorway {
-  const wallDepth = 16;
+  const wallDepth = 8;
   const doorway = resolveDoorway(zone, rect);
 
   const roomFill = new Graphics();
   roomFill.rect(wallDepth, wallDepth, rect.w - wallDepth * 2, rect.h - wallDepth * 2).fill({ color: palette.floor, alpha: 1 });
   background.addChild(roomFill);
 
-  const wall = new Graphics();
-  const addWall = (x: number, y: number, w: number, h: number) => {
-    if (w <= 0 || h <= 0) {
-      return;
-    }
-    wall.rect(Math.floor(x), Math.floor(y), Math.floor(w), Math.floor(h)).fill({ color: palette.wall, alpha: 1 });
-    wall.rect(Math.floor(x), Math.floor(y), Math.floor(w), Math.floor(h)).stroke({ color: palette.outline, width: 2, alignment: 0 });
-  };
+  if (zone.kind !== 'desk') {
+    const wall = new Graphics();
+    const addWall = (x: number, y: number, w: number, h: number) => {
+      if (w <= 0 || h <= 0) {
+        return;
+      }
+      wall.rect(Math.floor(x), Math.floor(y), Math.floor(w), Math.floor(h)).fill({ color: palette.wall, alpha: 1 });
+      wall.rect(Math.floor(x), Math.floor(y), Math.floor(w), Math.floor(h)).stroke({ color: palette.outline, width: 2, alignment: 0 });
+    };
 
-  // Top
-  if (doorway.side === 'top') {
-    addWall(0, 0, doorway.x, wallDepth);
-    addWall(doorway.x + doorway.w, 0, rect.w - doorway.x - doorway.w, wallDepth);
-  } else {
-    addWall(0, 0, rect.w, wallDepth);
-  }
-
-  // Bottom
-  if (doorway.side === 'bottom') {
-    addWall(0, rect.h - wallDepth, doorway.x, wallDepth);
-    addWall(doorway.x + doorway.w, rect.h - wallDepth, rect.w - doorway.x - doorway.w, wallDepth);
-  } else {
-    addWall(0, rect.h - wallDepth, rect.w, wallDepth);
-  }
-
-  // Left
-  if (doorway.side === 'left') {
-    addWall(0, wallDepth, wallDepth, doorway.y - wallDepth);
-    addWall(0, doorway.y + doorway.h, wallDepth, rect.h - wallDepth - doorway.y - doorway.h);
-  } else {
-    addWall(0, wallDepth, wallDepth, rect.h - wallDepth * 2);
-  }
-
-  // Right
-  if (doorway.side === 'right') {
-    addWall(rect.w - wallDepth, wallDepth, wallDepth, doorway.y - wallDepth);
-    addWall(rect.w - wallDepth, doorway.y + doorway.h, wallDepth, rect.h - wallDepth - doorway.y - doorway.h);
-  } else {
-    addWall(rect.w - wallDepth, wallDepth, wallDepth, rect.h - wallDepth * 2);
-  }
-
-  background.addChild(wall);
-
-  const threshold = new Graphics();
-  threshold.rect(doorway.x, doorway.y, doorway.w, doorway.h).fill({
-    color: palette.floor,
-    alpha: 1,
-  });
-  
-  const doorThickness = 8;
-  const isVert = doorway.side === 'left' || doorway.side === 'right';
-  threshold.rect(
-    doorway.x + (isVert ? doorway.w / 2 - doorThickness / 2 : 0),
-    doorway.y + (!isVert ? doorway.h / 2 - doorThickness / 2 : 0),
-    isVert ? doorThickness : doorway.w,
-    !isVert ? doorThickness : doorway.h
-  ).fill({ color: 0x6e4e2e, alpha: 1 });
-  threshold.rect(
-    doorway.x + (isVert ? doorway.w / 2 - doorThickness / 2 : 0),
-    doorway.y + (!isVert ? doorway.h / 2 - doorThickness / 2 : 0),
-    isVert ? doorThickness : doorway.w,
-    !isVert ? doorThickness : doorway.h
-  ).stroke({ color: 0x222222, width: 2, alignment: 0 });
-
-  background.addChild(threshold);
-
-  const doorPanel = assets.interiorTextures['prop_door_handle_panel.png'];
-  if (doorPanel) {
-    const panel = new Sprite(doorPanel);
-    panel.scale.set(1.7);
-    panel.alpha = 0.9;
-
-    if (doorway.side === 'left') {
-      panel.anchor.set(0, 0.5);
-      panel.position.set(6, doorway.y + doorway.h / 2 + 2);
-    } else if (doorway.side === 'top') {
-      panel.anchor.set(0.5, 0);
-      panel.position.set(doorway.x + doorway.w / 2, 2);
+    // Top
+    if (doorway.side === 'top') {
+      addWall(0, 0, doorway.x, wallDepth);
+      addWall(doorway.x + doorway.w, 0, rect.w - doorway.x - doorway.w, wallDepth);
     } else {
-      panel.anchor.set(0.5, 1);
-      panel.position.set(doorway.x + doorway.w / 2, rect.h - 2);
+      addWall(0, 0, rect.w, wallDepth);
     }
 
-    background.addChild(panel);
+    // Bottom
+    if (doorway.side === 'bottom') {
+      addWall(0, rect.h - wallDepth, doorway.x, wallDepth);
+      addWall(doorway.x + doorway.w, rect.h - wallDepth, rect.w - doorway.x - doorway.w, wallDepth);
+    } else {
+      addWall(0, rect.h - wallDepth, rect.w, wallDepth);
+    }
+
+    // Left
+    if (doorway.side === 'left') {
+      addWall(0, wallDepth, wallDepth, doorway.y - wallDepth);
+      addWall(0, doorway.y + doorway.h, wallDepth, rect.h - wallDepth - doorway.y - doorway.h);
+    } else {
+      addWall(0, wallDepth, wallDepth, rect.h - wallDepth * 2);
+    }
+
+    // Right
+    if (doorway.side === 'right') {
+      addWall(rect.w - wallDepth, wallDepth, wallDepth, doorway.y - wallDepth);
+      addWall(rect.w - wallDepth, doorway.y + doorway.h, wallDepth, rect.h - wallDepth - doorway.y - doorway.h);
+    } else {
+      addWall(rect.w - wallDepth, wallDepth, wallDepth, rect.h - wallDepth * 2);
+    }
+
+    background.addChild(wall);
+
+    const threshold = new Graphics();
+    threshold.rect(doorway.x, doorway.y, doorway.w, doorway.h).fill({
+      color: palette.floor,
+      alpha: 1,
+    });
+    background.addChild(threshold);
   }
 
   return doorway;
@@ -539,6 +508,8 @@ function buildDeskProps(
   const slots: Array<{ x: number; y: number }> = [];
   const deskTex = assets.interiorTextures['rw_desk.png'];
 
+  const plantTex = assets.interiorTextures['rimworld_plant.png'];
+
   const occupantCount = Math.max(1, zone.occupant_ids.length);
   const stationCount = Math.min(
     occupantCount,
@@ -556,6 +527,10 @@ function buildDeskProps(
       x,
       y: laneY + 42,
     });
+  }
+
+  if (plantTex) {
+    placeSprite(props, plantTex, rect.x + rect.w * 0.85, laneY - 10, 0.12);
   }
 
   return {
@@ -620,9 +595,9 @@ function buildReviewProps(
   const serverTex = assets.interiorTextures['rw_server.png'];
   const deskTex = assets.interiorTextures['rw_desk.png'];
 
-  placeSprite(props, serverTex, rect.x + 28, rect.y + rect.h * 0.44, DESK_PROP_SCALE * 0.7);
-  placeSprite(props, serverTex, rect.x + rect.w - 28, rect.y + rect.h * 0.44, DESK_PROP_SCALE * 0.7);
-  placeSprite(props, deskTex, rect.x + rect.w * 0.48, rect.y + rect.h * 0.6, DESK_PROP_SCALE * 0.7);
+  placeSprite(props, serverTex, rect.x + 36, rect.y + rect.h * 0.45, DESK_PROP_SCALE * 0.5);
+  placeSprite(props, serverTex, rect.x + rect.w - 36, rect.y + rect.h * 0.45, DESK_PROP_SCALE * 0.5);
+  placeSprite(props, deskTex, rect.x + rect.w * 0.48, rect.y + rect.h * 0.65, DESK_PROP_SCALE * 0.7);
 
   const occupantCount = Math.max(1, zone.occupant_ids.length);
   slots.push(
@@ -675,9 +650,9 @@ function buildRebootProps(
 
   const serverTex = assets.interiorTextures['rw_server.png'];
 
-  placeSprite(props, serverTex, rect.x + 28, rect.y + rect.h * 0.5, DESK_PROP_SCALE * 0.75);
-  placeSprite(props, serverTex, rect.x + rect.w - 28, rect.y + rect.h * 0.5, DESK_PROP_SCALE * 0.75);
-  placeSprite(props, serverTex, rect.x + rect.w / 2, rect.y + rect.h * 0.5, DESK_PROP_SCALE * 0.75);
+  placeSprite(props, serverTex, rect.x + 36, rect.y + rect.h * 0.45, DESK_PROP_SCALE * 0.55);
+  placeSprite(props, serverTex, rect.x + rect.w - 36, rect.y + rect.h * 0.45, DESK_PROP_SCALE * 0.55);
+  placeSprite(props, serverTex, rect.x + rect.w / 2, rect.y + rect.h * 0.45, DESK_PROP_SCALE * 0.55);
 
   const occupantCount = Math.max(1, zone.occupant_ids.length);
   slots.push(
@@ -732,17 +707,20 @@ function buildZoneVisual(
   const label = new Text({
     text: getZoneShortLabel(zone),
     style: new TextStyle({
-      fontSize: 16,
-      fill: palette.label,
+      fontSize: 22,
+      fill: 0xffffff,
       fontFamily: '"Segoe UI", Arial, sans-serif',
-      fontWeight: 'bold',
-      letterSpacing: 1,
-      stroke: { color: 0x000000, width: 3, join: 'round' },
+      fontWeight: '900',
+      letterSpacing: 2,
+      stroke: { color: 0x000000, width: 4, join: 'round' },
+      dropShadow: { color: 0x000000, alpha: 0.5, blur: 2, distance: 2 }
     }),
     resolution: 4,
   });
-  label.position.set(12, 8);
-  label.alpha = 0.85;
+
+  label.anchor.set(0.5, 0);
+  label.position.set(rect.w / 2, zone.kind === 'desk' ? -24 : 8);
+  label.alpha = 0.95;
   background.addChild(label);
 
   const props = zone.kind === 'desk' ? buildDeskProps(zone, rect, assets) : buildOpsSharedProps(zone, rect, assets);
@@ -763,24 +741,30 @@ function drawOfficeBackdrop(graphics: Graphics, zones: ZoneSnapshot[], grid: Gri
     return;
   }
 
-  const rects = zones.map((zone) => toSceneRect(zone, grid));
-  const rectMap = new Map(zones.map((zone) => [zone.zone_id, toSceneRect(zone, grid)]));
-  const minX = Math.min(...rects.map((rect) => rect.x)) - 64;
-  const minY = Math.min(...rects.map((rect) => rect.y)) - 64;
-  const maxX = Math.max(...rects.map((rect) => rect.x + rect.w)) + 64;
-  const maxY = Math.max(...rects.map((rect) => rect.y + rect.h)) + 64;
-  const width = maxX - minX;
-  const height = maxY - minY;
+  let maxX = 0;
+  let maxY = 0;
+  for (const zone of zones) {
+      const cell = getZoneCell(zone);
+      maxX = Math.max(maxX, cell.x + cell.w);
+      maxY = Math.max(maxY, cell.y + cell.h);
+  }
 
-  graphics.rect(minX, minY, width, height).fill({ color: 0x566d46, alpha: 1 });
-  graphics.rect(minX, minY, width, height).stroke({
-    color: 0x485c3b,
-    width: 4,
+  const facilityMargin = 2;
+  const facW = (maxX + facilityMargin * 2) * grid.cellW;
+  const facH = (maxY + facilityMargin * 2) * grid.cellH;
+  const facX = grid.offsetX - facilityMargin * grid.cellW;
+  const facY = grid.offsetY - facilityMargin * grid.cellH;
+
+  const facilityColor = 0x6e7889; // Deep concrete color
+  const facilityBorder = 0x5a6373;
+
+  graphics.rect(facX, facY, facW, facH).fill({ color: facilityColor, alpha: 1 });
+  graphics.rect(facX, facY, facW, facH).stroke({
+    color: facilityBorder,
+    width: 6,
     alpha: 1,
     alignment: 0,
   });
-
-  // (Removed hardcoded corridor logic)
 }
 
 function agentSlotPixel(zone: ZoneSnapshot, slotIdx: number, total: number, grid: GridMetrics): { x: number; y: number } {

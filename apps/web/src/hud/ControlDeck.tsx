@@ -1,4 +1,8 @@
+import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
+
+type BottomMenuTab = 'none' | 'queue' | 'watch' | 'layout' | 'feed';
+type InspectorTab = 'overview' | 'workflow' | 'correlation';
 
 type ControlDeckProps = {
   generatedAt: string;
@@ -13,6 +17,8 @@ type ControlDeckProps = {
   pollIntervalMs: number;
   workflowWindow: string;
   workflowLimit: number;
+  hasSelectedAgent: boolean;
+  hasSelectedCorrelation: boolean;
 };
 
 export function ControlDeck({
@@ -27,39 +33,130 @@ export function ControlDeck({
   correlationPanel,
   pollIntervalMs,
   workflowWindow,
-  workflowLimit
+  workflowLimit,
+  hasSelectedAgent,
+  hasSelectedCorrelation,
 }: ControlDeckProps) {
+  const [activeMenu, setActiveMenu] = useState<BottomMenuTab>('none');
+  const [inspectorTab, setInspectorTab] = useState<InspectorTab>('workflow');
+
+  useEffect(() => {
+    if (hasSelectedAgent) {
+      setInspectorTab('workflow');
+    }
+  }, [hasSelectedAgent]);
+
+  useEffect(() => {
+    if (hasSelectedCorrelation) {
+      setInspectorTab('correlation');
+    }
+  }, [hasSelectedCorrelation]);
+
+  const toggleMenu = (menu: BottomMenuTab) => {
+    setActiveMenu((prev) => (prev === menu ? 'none' : menu));
+  };
+
   return (
-    <main className="app-shell">
-      <header className="app-shell__header">
-        <div>
+    <div className="control-deck-hud">
+      {/* TOP LEFT: Time and basic resources */}
+      <header className="hud-panel--top-left" style={{ pointerEvents: 'auto' }}>
+        <div className="hud-shell__brand">
           <h1>Operator Shell</h1>
-          <p>Evidence-first office surface for the Phase 1 metaverse office.</p>
-          {overviewRefreshNotice}
+          <span className="hud-shell__timestamp">Last refresh: {generatedAt}</span>
         </div>
-        <p>Last refresh: {generatedAt}</p>
+        <div className="hud-shell__summary">{summaryStrip}</div>
+        <div className="hud-shell__legend" aria-label="Canvas legend">
+          <span className="hud-legend-chip hud-legend-chip--home">Home desk</span>
+          <span className="hud-legend-chip">Click agent</span>
+          <span className="hud-legend-chip">Focus shows trails</span>
+        </div>
+        <div className="hud-shell__notice">{overviewRefreshNotice}</div>
       </header>
 
-      {summaryStrip}
+      {/* BOTTOM LEFT: Selected Entity Inspector */}
+      {hasSelectedAgent && (
+        <aside className="hud-panel--inspector" style={{ pointerEvents: 'auto' }}>
+          <div className="hud-inspector__tabs">
+            <button
+              type="button"
+              className={`hud-tab-btn${inspectorTab === 'overview' ? ' is-active' : ''}`}
+              onClick={() => setInspectorTab('overview')}
+            >
+              Overview
+            </button>
+            <button
+              type="button"
+              className={`hud-tab-btn${inspectorTab === 'workflow' ? ' is-active' : ''}`}
+              onClick={() => setInspectorTab('workflow')}
+            >
+              Workflow
+            </button>
+            <button
+              type="button"
+              className={`hud-tab-btn${inspectorTab === 'correlation' ? ' is-active' : ''}`}
+              onClick={() => setInspectorTab('correlation')}
+            >
+              Correlation
+            </button>
+          </div>
+          <div className="hud-inspector__body">
+            {inspectorTab === 'overview' ? (
+               <div className="surface-card">
+                 <p className="surface-status surface-status--info">Agent is selected. View their workflow or active correlations to learn more.</p>
+               </div>
+            ) : null}
+            {inspectorTab === 'workflow' ? workflowPanel : null}
+            {inspectorTab === 'correlation' ? correlationPanel : null}
+          </div>
+        </aside>
+      )}
 
-      <section className="app-shell__content">
-        {officeGrid}
-        <div className="app-shell__sidebar">
-          {attentionQueuePanel}
-          {workflowPanel}
+      {/* BOTTOM CENTER/RIGHT: Main Menu & Panels */}
+      {activeMenu !== 'none' && (
+        <div className="hud-panel--menu-content" style={{ pointerEvents: 'auto' }}>
+          {activeMenu === 'queue' && attentionQueuePanel}
+          {activeMenu === 'watch' && watchTopologyPanel}
+          {activeMenu === 'layout' && officeGrid}
+          {activeMenu === 'feed' && incidentFeedPanel}
         </div>
-      </section>
+      )}
 
-      <section className="app-shell__operations">
-        {incidentFeedPanel}
-        {watchTopologyPanel}
-        {correlationPanel}
-      </section>
+      <nav className="hud-bottom-menu" style={{ pointerEvents: 'auto' }}>
+        <button
+          type="button"
+          className={`hud-menu-btn${activeMenu === 'queue' ? ' is-active' : ''}`}
+          onClick={() => toggleMenu('queue')}
+        >
+          Queue
+        </button>
+        <button
+          type="button"
+          className={`hud-menu-btn${activeMenu === 'watch' ? ' is-active' : ''}`}
+          onClick={() => toggleMenu('watch')}
+        >
+          Watch
+        </button>
+        <button
+          type="button"
+          className={`hud-menu-btn${activeMenu === 'layout' ? ' is-active' : ''}`}
+          onClick={() => toggleMenu('layout')}
+        >
+          Layout
+        </button>
+        <button
+          type="button"
+          className={`hud-menu-btn${activeMenu === 'feed' ? ' is-active' : ''}`}
+          onClick={() => toggleMenu('feed')}
+        >
+          Feed
+        </button>
 
-      <footer className="app-shell__footer">
-        <p>Polling every {pollIntervalMs / 1000}s. No fake motion. No synthetic activity.</p>
-        <p>{`Using ${workflowWindow} read-only slices with limit ${workflowLimit} for workflow, incidents, and correlation.`}</p>
-      </footer>
-    </main>
+        <div className="hud-menu__footer">
+          <span>Poll: {pollIntervalMs / 1000}s</span>
+          <span>Window: {workflowWindow}</span>
+          <span>Limit: {workflowLimit}</span>
+        </div>
+      </nav>
+    </div>
   );
 }

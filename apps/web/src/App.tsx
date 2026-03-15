@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 
 import {
@@ -28,6 +28,9 @@ import type {
   WorkflowPeerWatchAlert,
   WorkflowTimelineEvent
 } from './types';
+import { WorldProvider, useWorld } from './context/WorldContext';
+import { OfficeCanvasRenderer } from './canvas/PixiRenderer';
+import { projectWorldState } from './world/projector';
 
 type ZoneStyle = CSSProperties & {
   '--zone-grid-column': string;
@@ -1085,9 +1088,13 @@ function CorrelationPanel({
   );
 }
 
-export default function App() {
-  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
+function AppInner() {
+  const { setSelectedAgentId: ctxSetAgent, selectedAgentId: ctxAgentId, setWorld } = useWorld();
+  // local UI state that doesn't need context
   const [selectedCorrelationId, setSelectedCorrelationId] = useState<string | null>(null);
+  // selectedAgentId bridged from context
+  const selectedAgentId = ctxAgentId;
+  const setSelectedAgentId = ctxSetAgent;
 
   const overviewResource = usePolledResource({
     load: (signal) => fetchOfficeOverview(signal),
@@ -1116,7 +1123,8 @@ export default function App() {
       error.code === 'not_found' &&
       !selectedAgentStillVisibleInOverview
     ) {
-      setSelectedAgentId((currentAgentId) => (currentAgentId === null ? currentAgentId : null));
+      // context setSelectedAgentId accepts value, not updater function
+      setSelectedAgentId(null);
     }
   };
 
@@ -1186,25 +1194,49 @@ export default function App() {
     [overviewResource.data]
   );
 
+  // Sync projected world state into context so Canvas can read it
+  useEffect(() => {
+    if (!overviewResource.data) return;
+    const world = projectWorldState({
+      overview: overviewResource.data,
+      workflows: new Map(
+        workflowResource.data ? [[selectedAgentId ?? '', workflowResource.data]] : []
+      ),
+      incidentFeed: incidentFeedResource.data,
+      now: new Date().toISOString(),
+    });
+    setWorld(world);
+  }, [overviewResource.data, workflowResource.data, incidentFeedResource.data, selectedAgentId, setWorld]);
+
   if (overviewResource.state === 'loading' && !overviewResource.data) {
     return (
-      <main className="app-shell">
-        <p role="status" aria-live="polite">
-          Loading office overview.
-        </p>
-      </main>
+      <div
+        style={{
+          position: 'absolute', inset: 0, zIndex: 10,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          color: '#7dd3fc', fontFamily: 'monospace', fontSize: '0.9rem',
+          background: 'transparent', pointerEvents: 'none',
+        }}
+      >
+        <span role="status" aria-live="polite">Loading office overview…</span>
+      </div>
     );
   }
 
   if (overviewResource.state === 'error') {
     return (
-      <main className="app-shell">
-        <h1>Operator Shell</h1>
-        <div role="alert">
-          <p>Unable to load office overview.</p>
-          {overviewResource.error ? <p>{overviewResource.error}</p> : null}
-        </div>
-      </main>
+      <div
+        style={{
+          position: 'absolute', inset: 0, zIndex: 10,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          flexDirection: 'column', gap: '0.5rem',
+          color: '#f87171', fontFamily: 'monospace', fontSize: '0.9rem',
+          background: 'rgba(0,0,0,0.7)', pointerEvents: 'auto',
+        }}
+      >
+        <span role="alert">Unable to load office overview.</span>
+        {overviewResource.error ? <span>{overviewResource.error}</span> : null}
+      </div>
     );
   }
 
@@ -1281,6 +1313,21 @@ export default function App() {
       pollIntervalMs={POLL_INTERVAL_MS}
       workflowWindow={DEFAULT_WORKFLOW_WINDOW}
       workflowLimit={DEFAULT_WORKFLOW_LIMIT}
+      hasSelectedAgent={selectedAgentId !== null}
+      hasSelectedCorrelation={selectedCorrelationId !== null}
     />
+  );
+}
+
+export default function App() {
+  return (
+    <WorldProvider>
+      <div style={{ position: 'relative', width: '100vw', height: '100vh', overflow: 'hidden' }}>
+        {/* Layer 1: PixiJS Canvas (z-index: 1) */}
+        <OfficeCanvasRenderer />
+        {/* Layer 2: React HUD (z-index: 10) */}
+        <AppInner />
+      </div>
+    </WorldProvider>
   );
 }

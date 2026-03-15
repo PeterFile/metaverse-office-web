@@ -1,0 +1,133 @@
+{
+  "frames": [
+    {
+      "filename": "health_bar_combined_empty_full.png",
+      "frame": { "x": 1, "y": 1, "w": 80, "h": 47 },
+      "rotated": false,
+      "trimmed": true,
+      "spriteSourceSize": { "x": 8, "y": 23, "w": 80, "h": 47 },
+      "sourceSize": { "w": 96, "h": 88 }
+    },
+    {
+      "filename": "health_bar_empty.png",
+      "frame": { "x": 83, "y": 1, "w": 80, "h": 23 },
+      "rotated": false,
+      "trimmed": true,
+      "spriteSourceSize": { "x": 8, "y": 35, "w": 80, "h": 23 },
+      "sourceSize": { "w": 96, "h": 88 }
+    },
+    {
+      "filename": "health_bar_full.png",
+      "frame": { "x": 83, "y": 26, "w": 80, "h": 23 },
+      "rotated": false,
+      "trimmed": true,
+      "spriteSourceSize": { "x": 8, "y": 35, "w": 80, "h": 23 },
+      "sourceSize": { "w": 96, "h": 88 }
+    },
+    {
+      "filename": "blue_icons_group_empty.png",
+      "frame": { "x": 493, "y": 1, "w": 71, "h": 23 },
+      "rotated": false,
+      "trimmed": true,
+      "spriteSourceSize": { "x": 11, "y": 43, "w": 71, "h": 23 },
+      "sourceSize": { "w": 96, "h": 88 }
+    },
+    {
+      "filename": "blue_icons_group_mixed_1.png",
+      "frame": { "x": 493, "y": 26, "w": 71, "h": 23 },
+      "rotated": false,
+      "trimmed": true,
+      "spriteSourceSize": { "x": 11, "y": 43, "w": 71, "h": 23 },
+      "sourceSize": { "w": 96, "h": 88 }
+    },
+    {
+      "filename": "blue_icons_group_mixed_2.png",
+      "frame": { "x": 566, "y": 1, "w": 71, "h": 23 },
+      "rotated": false,
+      "trimmed": true,
+      "spriteSourceSize": { "x": 11, "y": 43, "w": 71, "h": 23 },
+      "sourceSize": { "w": 96, "h": 88 }
+    },
+    {
+      "filename": "blue_icons_group_full.png",
+      "frame": { "x": 566, "y": 26, "w": 71, "h": 23 },
+      "rotated": false,
+      "trimmed": true,
+      "spriteSourceSize": { "x": 11, "y": 43, "w": 71, "h": 23 },
+      "sourceSize": { "w": 96, "h": 88 }
+    },
+    {
+      "filename": "health_bar_20_percent_top.png",
+      "frame": { "x": 165, "y": 1, "w": 80, "h": 23 },
+      "rotated": false,
+      "trimmed": true,
+      "spriteSourceSize": { "x": 8, "y": 35, "w": 80, "h": 23 },
+      "sourceSize": { "w": 96, "h": 88 }
+    },
+    {
+      "filename": "health_bar_20_percent_bottom.png",
+      "frame": { "x": 165, "y": 26, "w": 80, "h": 23 },
+      "rotated": false,
+      "trimmed": true,
+      "spriteSourceSize": { "x": 8, "y": 35, "w": 80, "h": 23 },
+      "sourceSize": { "w": 96, "h": 88 }
+    },
+    {
+      "filename": "health_bar_40_percent_top.png",
+      "frame": { "x": 247, "y": 1, "w": 80, "h": 23 },
+      "rotated": false,
+      "trimmed": true,
+      "spriteSourceSize": { "x": 8, "y": 35, "w": 80, "h": 23 },
+      "sourceSize": { "w": 96, "h": 88 }
+    },
+    {
+      "filename": "health_bar_40_percent_bottom.png",
+      "frame": { "x": 247, "y": 26, "w": 80, "h": 23 },
+      "rotated": false,
+      "trimmed": true,
+      "spriteSourceSize": { "x": 8, "y": 35, "w": 80, "h": 23 },
+      "sourceSize": { "w": 96, "h": 88 }
+    },
+    {
+      "filename": "health_bar_60_percent_top.png",
+      "frame": { "x": 329, "y": 1, "w": 80, "h": 23 },
+      "rotated": false,
+      "trimmed": true,
+      "spriteSourceSize": { "x": 8, "y": 35, "w": 80, "h": 23 },
+      "sourceSize": { "w": 96, "h": 88 }
+    },
+    {
+      "filename": "health_bar_60_percent_bottom.png",
+      "frame": { "x": 329, "y": 26, "w": 80, "h": 23 },
+      "rotated": false,
+      "trimmed": true,
+      "spriteSourceSize": { "x": 8, "y": 35, "w": 80, "h": 23 },
+      "sourceSize": { "w": 96, "h": 88 }
+    },
+    {
+      "filename": "health_bar_80_percent_top.png",
+      "frame": { "x": 411, "y": 1, "w": 80, "h": 23 },
+      "rotated": false,
+      "trimmed": true,
+      "spriteSourceSize": { "x": 8, "y": 35, "w": 80, "h": 23 },
+      "sourceSize": { "w": 96, "h": 88 }
+    },
+    {
+      "filename": "health_bar_80_percent_bottom.png",
+      "frame": { "x": 411, "y": 26, "w": 80, "h": 23 },
+      "rotated": false,
+      "trimmed": true,
+      "spriteSourceSize": { "x": 8, "y": 35, "w": 80, "h": 23 },
+      "sourceSize": { "w": 96, "h": 88 }
+    }
+  ],
+  "meta": {
+    "app": "https://www.codeandweb.com/texturepacker",
+    "version": "1.0",
+    "image": "ui.png",
+    "format": "RGBA8888",
+    "size": { "w": 638, "h": 50 },
+    "scale": "1",
+    "smartupdate": "$TexturePacker:SmartUpdate:11fd9be6f0f0b6376ed8e6461daf20db:e1fad674aff43cbb144d0b998e841ae2:5b04aa198265472a3c5f56958d78e97b$"
+  }
+}

@@ -1,0 +1,437 @@
+{
+  "frames": [
+    {
+      "filename": "cabinet_server_dark.png",
+      "frame": { "x": 99, "y": 131, "w": 66, "h": 30 },
+      "rotated": true,
+      "trimmed": true,
+      "spriteSourceSize": { "x": 1, "y": 1, "w": 66, "h": 30 },
+      "sourceSize": { "w": 68, "h": 32 }
+    },
+    {
+      "filename": "wall_and_floor_base.png",
+      "frame": { "x": 1, "y": 1, "w": 160, "h": 128 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 160, "h": 128 },
+      "sourceSize": { "w": 160, "h": 128 }
+    },
+    {
+      "filename": "prop_small_button_1.png",
+      "frame": { "x": 303, "y": 45, "w": 7, "h": 8 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 7, "h": 8 },
+      "sourceSize": { "w": 7, "h": 8 }
+    },
+    {
+      "filename": "chair_pod_blue.png",
+      "frame": { "x": 255, "y": 119, "w": 20, "h": 26 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 20, "h": 26 },
+      "sourceSize": { "w": 20, "h": 26 }
+    },
+    {
+      "filename": "chair_pod_red.png",
+      "frame": { "x": 277, "y": 119, "w": 20, "h": 26 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 20, "h": 26 },
+      "sourceSize": { "w": 20, "h": 26 }
+    },
+    {
+      "filename": "cabinet_drawer_blue_screen.png",
+      "frame": { "x": 163, "y": 120, "w": 57, "h": 25 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 57, "h": 25 },
+      "sourceSize": { "w": 57, "h": 25 }
+    },
+    {
+      "filename": "prop_orange_cylinders.png",
+      "frame": { "x": 329, "y": 218, "w": 17, "h": 26 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 17, "h": 26 },
+      "sourceSize": { "w": 17, "h": 26 }
+    },
+    {
+      "filename": "console_control_grey.png",
+      "frame": { "x": 303, "y": 157, "w": 32, "h": 19 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 32, "h": 19 },
+      "sourceSize": { "w": 32, "h": 19 }
+    },
+    {
+      "filename": "cabinet_server_light.png",
+      "frame": { "x": 131, "y": 131, "w": 62, "h": 29 },
+      "rotated": true,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 62, "h": 29 },
+      "sourceSize": { "w": 62, "h": 29 }
+    },
+    {
+      "filename": "signboard_blank_orange.png",
+      "frame": { "x": 163, "y": 1, "w": 78, "h": 25 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 78, "h": 25 },
+      "sourceSize": { "w": 78, "h": 25 }
+    },
+    {
+      "filename": "monitor_cityscape_orange.png",
+      "frame": { "x": 1, "y": 200, "w": 78, "h": 25 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 78, "h": 25 },
+      "sourceSize": { "w": 78, "h": 25 }
+    },
+    {
+      "filename": "desk_surface_grey.png",
+      "frame": { "x": 163, "y": 55, "w": 66, "h": 30 },
+      "rotated": false,
+      "trimmed": true,
+      "spriteSourceSize": { "x": 1, "y": 1, "w": 66, "h": 30 },
+      "sourceSize": { "w": 68, "h": 32 }
+    },
+    {
+      "filename": "prop_small_button_2.png",
+      "frame": { "x": 312, "y": 45, "w": 7, "h": 8 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 7, "h": 8 },
+      "sourceSize": { "w": 7, "h": 8 }
+    },
+    {
+      "filename": "prop_socket_1.png",
+      "frame": { "x": 303, "y": 28, "w": 18, "h": 15 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 18, "h": 15 },
+      "sourceSize": { "w": 18, "h": 15 }
+    },
+    {
+      "filename": "prop_socket_2.png",
+      "frame": { "x": 327, "y": 201, "w": 18, "h": 15 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 18, "h": 15 },
+      "sourceSize": { "w": 18, "h": 15 }
+    },
+    {
+      "filename": "prop_tech_panel_1.png",
+      "frame": { "x": 145, "y": 195, "w": 29, "h": 15 },
+      "rotated": true,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 29, "h": 15 },
+      "sourceSize": { "w": 29, "h": 15 }
+    },
+    {
+      "filename": "prop_tech_panel_2.png",
+      "frame": { "x": 303, "y": 178, "w": 29, "h": 15 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 29, "h": 15 },
+      "sourceSize": { "w": 29, "h": 15 }
+    },
+    {
+      "filename": "prop_tech_device_box.png",
+      "frame": { "x": 291, "y": 85, "w": 30, "h": 22 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 30, "h": 22 },
+      "sourceSize": { "w": 30, "h": 22 }
+    },
+    {
+      "filename": "prop_small_screen_red.png",
+      "frame": { "x": 211, "y": 242, "w": 22, "h": 13 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 22, "h": 13 },
+      "sourceSize": { "w": 22, "h": 13 }
+    },
+    {
+      "filename": "prop_small_screen_blue.png",
+      "frame": { "x": 235, "y": 242, "w": 22, "h": 13 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 22, "h": 13 },
+      "sourceSize": { "w": 22, "h": 13 }
+    },
+    {
+      "filename": "signboard_blank_pink.png",
+      "frame": { "x": 163, "y": 28, "w": 78, "h": 25 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 78, "h": 25 },
+      "sourceSize": { "w": 78, "h": 25 }
+    },
+    {
+      "filename": "monitor_cityscape_purple.png",
+      "frame": { "x": 243, "y": 1, "w": 78, "h": 25 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 78, "h": 25 },
+      "sourceSize": { "w": 78, "h": 25 }
+    },
+    {
+      "filename": "machine_part_1.png",
+      "frame": { "x": 81, "y": 200, "w": 25, "h": 30 },
+      "rotated": true,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 25, "h": 30 },
+      "sourceSize": { "w": 25, "h": 30 }
+    },
+    {
+      "filename": "machine_part_2.png",
+      "frame": { "x": 113, "y": 199, "w": 26, "h": 30 },
+      "rotated": true,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 26, "h": 30 },
+      "sourceSize": { "w": 26, "h": 30 }
+    },
+    {
+      "filename": "computer_desk_neon_sign.png",
+      "frame": { "x": 1, "y": 131, "w": 96, "h": 67 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 96, "h": 67 },
+      "sourceSize": { "w": 96, "h": 67 }
+    },
+    {
+      "filename": "monitor_tall_vertical_purple.png",
+      "frame": { "x": 323, "y": 1, "w": 78, "h": 25 },
+      "rotated": true,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 78, "h": 25 },
+      "sourceSize": { "w": 78, "h": 25 }
+    },
+    {
+      "filename": "prop_server_drive_1.png",
+      "frame": { "x": 259, "y": 225, "w": 22, "h": 30 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 22, "h": 30 },
+      "sourceSize": { "w": 22, "h": 30 }
+    },
+    {
+      "filename": "prop_server_drive_2.png",
+      "frame": { "x": 147, "y": 232, "w": 23, "h": 30 },
+      "rotated": true,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 23, "h": 30 },
+      "sourceSize": { "w": 23, "h": 30 }
+    },
+    {
+      "filename": "prop_server_drive_3.png",
+      "frame": { "x": 283, "y": 225, "w": 22, "h": 30 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 22, "h": 30 },
+      "sourceSize": { "w": 22, "h": 30 }
+    },
+    {
+      "filename": "prop_server_drive_4.png",
+      "frame": { "x": 179, "y": 232, "w": 23, "h": 30 },
+      "rotated": true,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 23, "h": 30 },
+      "sourceSize": { "w": 23, "h": 30 }
+    },
+    {
+      "filename": "screen_square_game.png",
+      "frame": { "x": 300, "y": 195, "w": 25, "h": 25 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 25, "h": 25 },
+      "sourceSize": { "w": 25, "h": 25 }
+    },
+    {
+      "filename": "screen_square_orange_graph.png",
+      "frame": { "x": 323, "y": 81, "w": 26, "h": 25 },
+      "rotated": true,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 26, "h": 25 },
+      "sourceSize": { "w": 26, "h": 25 }
+    },
+    {
+      "filename": "screen_small_blue_stats.png",
+      "frame": { "x": 307, "y": 222, "w": 26, "h": 20 },
+      "rotated": true,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 26, "h": 20 },
+      "sourceSize": { "w": 26, "h": 20 }
+    },
+    {
+      "filename": "monitor_multi_setup_top.png",
+      "frame": { "x": 243, "y": 28, "w": 58, "h": 25 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 58, "h": 25 },
+      "sourceSize": { "w": 58, "h": 25 }
+    },
+    {
+      "filename": "machine_vent_unit.png",
+      "frame": { "x": 223, "y": 119, "w": 26, "h": 30 },
+      "rotated": true,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 26, "h": 30 },
+      "sourceSize": { "w": 26, "h": 30 }
+    },
+    {
+      "filename": "monitor_multi_setup_bottom.png",
+      "frame": { "x": 231, "y": 55, "w": 58, "h": 30 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 58, "h": 30 },
+      "sourceSize": { "w": 58, "h": 30 }
+    },
+    {
+      "filename": "server_tower_1.png",
+      "frame": { "x": 51, "y": 227, "w": 28, "h": 46 },
+      "rotated": true,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 28, "h": 46 },
+      "sourceSize": { "w": 28, "h": 46 }
+    },
+    {
+      "filename": "server_tower_2.png",
+      "frame": { "x": 99, "y": 227, "w": 28, "h": 46 },
+      "rotated": true,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 28, "h": 46 },
+      "sourceSize": { "w": 28, "h": 46 }
+    },
+    {
+      "filename": "server_tower_3.png",
+      "frame": { "x": 1, "y": 227, "w": 28, "h": 48 },
+      "rotated": true,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 28, "h": 48 },
+      "sourceSize": { "w": 28, "h": 48 }
+    },
+    {
+      "filename": "cabinet_storage_grey.png",
+      "frame": { "x": 163, "y": 87, "w": 58, "h": 31 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 58, "h": 31 },
+      "sourceSize": { "w": 58, "h": 31 }
+    },
+    {
+      "filename": "prop_door_handle_panel.png",
+      "frame": { "x": 288, "y": 195, "w": 10, "h": 28 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 10, "h": 28 },
+      "sourceSize": { "w": 10, "h": 28 }
+    },
+    {
+      "filename": "cabinet_storage_open.png",
+      "frame": { "x": 223, "y": 87, "w": 58, "h": 30 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 58, "h": 30 },
+      "sourceSize": { "w": 58, "h": 30 }
+    },
+    {
+      "filename": "prop_small_indicator.png",
+      "frame": { "x": 334, "y": 178, "w": 21, "h": 14 },
+      "rotated": true,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 21, "h": 14 },
+      "sourceSize": { "w": 21, "h": 14 }
+    },
+    {
+      "filename": "bed_cushion_blue.png",
+      "frame": { "x": 162, "y": 190, "w": 46, "h": 36 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 46, "h": 36 },
+      "sourceSize": { "w": 46, "h": 36 }
+    },
+    {
+      "filename": "bed_base_white.png",
+      "frame": { "x": 162, "y": 147, "w": 41, "h": 48 },
+      "rotated": true,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 41, "h": 48 },
+      "sourceSize": { "w": 41, "h": 48 }
+    },
+    {
+      "filename": "bed_base_frame.png",
+      "frame": { "x": 212, "y": 147, "w": 46, "h": 35 },
+      "rotated": true,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 46, "h": 35 },
+      "sourceSize": { "w": 46, "h": 35 }
+    },
+    {
+      "filename": "bed_base_frame_alt.png",
+      "frame": { "x": 210, "y": 195, "w": 46, "h": 35 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 46, "h": 35 },
+      "sourceSize": { "w": 46, "h": 35 }
+    },
+    {
+      "filename": "bed_frame_connector_1.png",
+      "frame": { "x": 249, "y": 147, "w": 46, "h": 8 },
+      "rotated": true,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 46, "h": 8 },
+      "sourceSize": { "w": 46, "h": 8 }
+    },
+    {
+      "filename": "bed_frame_connector_2.png",
+      "frame": { "x": 211, "y": 232, "w": 46, "h": 8 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 46, "h": 8 },
+      "sourceSize": { "w": 46, "h": 8 }
+    },
+    {
+      "filename": "bed_blanket_blue.png",
+      "frame": { "x": 259, "y": 147, "w": 42, "h": 46 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 42, "h": 46 },
+      "sourceSize": { "w": 42, "h": 46 }
+    },
+    {
+      "filename": "bed_blanket_orange.png",
+      "frame": { "x": 303, "y": 109, "w": 42, "h": 46 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 42, "h": 46 },
+      "sourceSize": { "w": 42, "h": 46 }
+    },
+    {
+      "filename": "screen_square_blank_cyan.png",
+      "frame": { "x": 258, "y": 195, "w": 28, "h": 28 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 28, "h": 28 },
+      "sourceSize": { "w": 28, "h": 28 }
+    },
+    {
+      "filename": "screen_square_cyan_graph.png",
+      "frame": { "x": 291, "y": 55, "w": 28, "h": 30 },
+      "rotated": true,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 28, "h": 30 },
+      "sourceSize": { "w": 28, "h": 30 }
+    }
+  ],
+  "meta": {
+    "app": "https://www.codeandweb.com/texturepacker",
+    "version": "1.0",
+    "image": "pixel-cyberpunk-interior.png",
+    "format": "RGBA8888",
+    "size": { "w": 349, "h": 256 },
+    "scale": "1",
+    "smartupdate": "$TexturePacker:SmartUpdate:39440427cc2e5600b98f2359a9b896b7:542cb7ad5c723001caabcba5007d8df5:fffdf3b0e3fd2f6caa80b2c25d882268$"
+  }
+}

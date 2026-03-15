@@ -1,0 +1,93 @@
+{
+  "frames": [
+    {
+      "filename": "main_wall_structure.png",
+      "frame": { "x": 1, "y": 1, "w": 1056, "h": 1056 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 1056, "h": 1056 },
+      "sourceSize": { "w": 1056, "h": 1056 }
+    },
+    {
+      "filename": "wall_block_small_left.png",
+      "frame": { "x": 874, "y": 1059, "w": 96, "h": 96 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 96, "h": 96 },
+      "sourceSize": { "w": 96, "h": 96 }
+    },
+    {
+      "filename": "bottom_corridor_left.png",
+      "frame": { "x": 294, "y": 1059, "w": 168, "h": 288 },
+      "rotated": true,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 168, "h": 288 },
+      "sourceSize": { "w": 168, "h": 288 }
+    },
+    {
+      "filename": "dark_vent_tiles.png",
+      "frame": { "x": 1, "y": 1059, "w": 291, "h": 192 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 291, "h": 192 },
+      "sourceSize": { "w": 291, "h": 192 }
+    },
+    {
+      "filename": "wall_block_small_left_dup.png",
+      "frame": { "x": 874, "y": 1059, "w": 96, "h": 96 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 96, "h": 96 },
+      "sourceSize": { "w": 96, "h": 96 }
+    },
+    {
+      "filename": "red_arrow_2.png",
+      "frame": { "x": 356, "y": 1229, "w": 21, "h": 60 },
+      "rotated": true,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 21, "h": 60 },
+      "sourceSize": { "w": 21, "h": 60 }
+    },
+    {
+      "filename": "bottom_corridor_right.png",
+      "frame": { "x": 584, "y": 1059, "w": 168, "h": 288 },
+      "rotated": true,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 168, "h": 288 },
+      "sourceSize": { "w": 168, "h": 288 }
+    },
+    {
+      "filename": "wall_block_small_right.png",
+      "frame": { "x": 972, "y": 1059, "w": 96, "h": 96 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 96, "h": 96 },
+      "sourceSize": { "w": 96, "h": 96 }
+    },
+    {
+      "filename": "red_arrow_1.png",
+      "frame": { "x": 294, "y": 1229, "w": 60, "h": 21 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 60, "h": 21 },
+      "sourceSize": { "w": 60, "h": 21 }
+    },
+    {
+      "filename": "wall_block_small_right_dup.png",
+      "frame": { "x": 972, "y": 1059, "w": 96, "h": 96 },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": { "x": 0, "y": 0, "w": 96, "h": 96 },
+      "sourceSize": { "w": 96, "h": 96 }
+    }
+  ],
+  "meta": {
+    "app": "https://www.codeandweb.com/texturepacker",
+    "version": "1.0",
+    "image": "tileset.png",
+    "format": "RGBA8888",
+    "size": { "w": 1069, "h": 1252 },
+    "scale": "1",
+    "smartupdate": "$TexturePacker:SmartUpdate:8ca2547faff58541dbc25d154ea8ba2e:86662e0be3534879c9b8c1efa5ddc65e:ace0e5e82375743ccde85e973fd84fb5$"
+  }
+}

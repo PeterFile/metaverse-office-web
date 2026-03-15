@@ -366,6 +366,7 @@ function extractTrail(workflow: AgentWorkflow | null): TrailEntry[] {
       ts: e.ts,
       event_type: e.event_type,
       severity: e.severity,
+      location: e.location ?? null,
       summary: e.summary,
     }));
 }
@@ -398,6 +399,7 @@ function buildZoneSnapshots(
     grid_y: z.grid_y,
     grid_w: z.grid_w,
     grid_h: z.grid_h,
+    home_agent_id: z.home_agent_id,
     occupant_ids: occupancy.get(z.zone_id) ?? [],
   }));
 }

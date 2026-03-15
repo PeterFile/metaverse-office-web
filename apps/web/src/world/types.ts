@@ -24,6 +24,7 @@ export interface TrailEntry {
   ts: string;
   event_type: string;
   severity: Severity;
+  location?: string | null;
   summary: string;
 }
 
@@ -67,6 +68,7 @@ export interface ZoneSnapshot {
   grid_y: number;
   grid_w: number;
   grid_h: number;
+  home_agent_id?: string | null;
   occupant_ids: string[];
 }
 

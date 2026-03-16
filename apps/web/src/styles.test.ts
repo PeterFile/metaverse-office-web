@@ -13,9 +13,9 @@ describe('AI Town shell styles', () => {
     expect(styles).toContain("url('/ai-town/assets/background.webp')");
   });
 
-  it('uses a framed two-column shell that collapses on smaller screens', () => {
+  it('uses a framed full-screen shell while preserving responsive collapse rules', () => {
     expect(styles).toMatch(
-      /\.aitown-shell__layout\s*\{[\s\S]*?grid-template-columns:\s*minmax\(0,\s*1fr\)\s+minmax\(320px,\s*380px\);/
+      /\.aitown-shell__layout--fullscreen\s*\{[\s\S]*?grid-template-columns:\s*1fr;/
     );
     expect(styles).toMatch(
       /@media \(max-width:\s*1080px\)\s*\{[\s\S]*?\.aitown-shell__layout\s*\{[\s\S]*?grid-template-columns:\s*1fr;/
@@ -32,5 +32,11 @@ describe('AI Town shell styles', () => {
     expect(styles).toMatch(
       /\.aitown-details__summary\s*\{[\s\S]*?border-image-source:\s*url\('\/ai-town\/assets\/ui\/desc\.svg'\);/
     );
+  });
+
+  it('renders Hub as a dismissible overlay instead of a permanent side rail', () => {
+    expect(styles).toMatch(/\.aitown-hub-overlay\s*\{[\s\S]*?position:\s*fixed;/);
+    expect(styles).toMatch(/\.aitown-hub-overlay\s*\{[\s\S]*?justify-content:\s*flex-end;/);
+    expect(styles).toMatch(/\.aitown-hub-sheet\s*\{[\s\S]*?width:\s*min\(430px, 100vw\);/);
   });
 });

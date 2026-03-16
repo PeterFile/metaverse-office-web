@@ -171,6 +171,11 @@ const workflowFixture = {
   timeline: []
 };
 
+async function openHub(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(await screen.findByRole('button', { name: 'Open Hub' }));
+  return screen.findByRole('complementary', { name: 'Agent details' });
+}
+
 describe('App', () => {
   beforeEach(() => {
     vi.stubGlobal(
@@ -215,17 +220,37 @@ describe('App', () => {
     expect(worldRegion).toBeVisible();
     expect(within(worldRegion).getByText('Loading world renderer...')).toBeVisible();
 
-    expect(screen.getByRole('complementary', { name: 'Agent details' })).toBeVisible();
-    expect(screen.getByRole('button', { name: 'Inspect App Engineering Agent' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Open Hub' })).toBeVisible();
+    expect(screen.queryByRole('complementary', { name: 'Agent details' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Inspect App Engineering Agent' })).not.toBeInTheDocument();
+  });
+
+  it('uses a full-screen scene with a dismissible hub overlay', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const hubTrigger = await screen.findByRole('button', { name: 'Open Hub' });
+    expect(hubTrigger).toBeVisible();
+    expect(screen.queryByRole('complementary', { name: 'Agent details' })).not.toBeInTheDocument();
+
+    await user.click(hubTrigger);
+    expect(await screen.findByRole('complementary', { name: 'Agent details' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Hide Hub' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Close Hub' })).toBeVisible();
+
+    await user.click(screen.getByRole('button', { name: 'Close Hub' }));
+    expect(screen.queryByRole('complementary', { name: 'Agent details' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Open Hub' })).toBeVisible();
   });
 
   it('keeps selected agent summary aligned with projected world state', async () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await user.click(await screen.findByRole('button', { name: 'Inspect Team Lead' }));
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect Team Lead' }));
 
-    const details = screen.getByRole('complementary', { name: 'Agent details' });
+    expect(screen.getByRole('button', { name: 'Hide Hub' })).toBeVisible();
 
     await waitFor(() => {
       expect(within(details).getByRole('heading', { name: 'Team Lead' })).toBeVisible();
@@ -263,9 +288,10 @@ describe('App', () => {
       })
     );
 
+    const user = userEvent.setup();
     render(<App />);
 
-    const details = screen.getByRole('complementary', { name: 'Agent details' });
+    const details = await openHub(user);
     expect(await within(details).findByText('incident refresh failed')).toBeVisible();
     expect(within(details).queryByText('No active incident feed.')).not.toBeInTheDocument();
   });
@@ -311,9 +337,9 @@ describe('App', () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await user.click(await screen.findByRole('button', { name: 'Inspect App Engineering Agent' }));
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
 
-    const details = screen.getByRole('complementary', { name: 'Agent details' });
     expect(await within(details).findByText('incident refresh failed')).toBeVisible();
     expect(within(details).queryByText('No incident feed entries.')).not.toBeInTheDocument();
   });
@@ -394,9 +420,9 @@ describe('App', () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await user.click(await screen.findByRole('button', { name: 'Inspect App Engineering Agent' }));
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
 
-    const details = screen.getByRole('complementary', { name: 'Agent details' });
     expect(await within(details).findByText('Workflow incident fallback entry')).toBeVisible();
     expect(within(details).queryByText('No incident feed entries.')).not.toBeInTheDocument();
   });
@@ -405,9 +431,8 @@ describe('App', () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await user.click(await screen.findByRole('button', { name: 'Inspect App Engineering Agent' }));
-
-    const details = screen.getByRole('complementary', { name: 'Agent details' });
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
 
     await waitFor(() => {
       expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();

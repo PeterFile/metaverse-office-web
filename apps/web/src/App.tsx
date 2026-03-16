@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useRef } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 
 import {
   DEFAULT_WORKFLOW_LIMIT,
@@ -46,6 +46,7 @@ export function resolveOverviewRefreshWarning(error: string | null, hasOverviewD
 
 function AppInner() {
   const { selectedAgentId, setSelectedAgentId, setWorld } = useWorld();
+  const [hubOpen, setHubOpen] = useState(false);
   const lastSelectedAgentRef = useRef<OfficeAgent | null>(null);
 
   const overviewResource = usePolledResource({
@@ -170,13 +171,30 @@ function AppInner() {
         </div>
       </header>
 
-      <section className="aitown-shell__layout">
-        <section className="aitown-panel aitown-panel--game" role="region" aria-label="Town world">
+      <section className="aitown-shell__layout aitown-shell__layout--fullscreen">
+        <section className="aitown-panel aitown-panel--game aitown-panel--game-fullscreen" role="region" aria-label="Town world">
           <div className="aitown-panel__topline">
             <span>Drag to pan. Wheel to zoom. Click an agent to inspect.</span>
             <span>
               {overviewResource.data?.generated_at ? `Snapshot ${overviewResource.data.generated_at}` : 'Synchronizing'}
             </span>
+          </div>
+
+          <div className="aitown-panel__toolbar">
+            <button
+              type="button"
+              className="aitown-button"
+              aria-expanded={hubOpen}
+              aria-controls="aitown-hub"
+              onClick={() => setHubOpen((open) => !open)}
+            >
+              {hubOpen ? 'Hide Hub' : 'Open Hub'}
+            </button>
+            {selectedAgent ? (
+              <button type="button" className="aitown-button" onClick={() => setSelectedAgentId(null)}>
+                Clear Selection
+              </button>
+            ) : null}
           </div>
 
           {overviewRefreshWarning ? (
@@ -195,23 +213,47 @@ function AppInner() {
             rendererFallback
           ) : (
             <Suspense fallback={rendererFallback}>
-              <LazyWorldScene scene={scene} onSelectAgent={setSelectedAgentId} />
+              <LazyWorldScene
+                scene={scene}
+                onSelectAgent={(agentId) => {
+                  setSelectedAgentId(agentId);
+                  if (agentId) {
+                    setHubOpen(true);
+                  }
+                }}
+              />
             </Suspense>
           )}
         </section>
-
-        <DetailsPanel
-          incidentFeed={incidentFeedResource.data}
-          incidentFeedError={incidentFeedResource.error}
-          incidentFeedState={incidentFeedResource.state}
-          selectedAgent={selectedAgent}
-          workflow={activeWorkflow}
-          workflowError={workflowResource.error}
-          workflowState={workflowResource.state}
-          world={projectedWorld}
-          onSelectAgent={setSelectedAgentId}
-        />
       </section>
+
+      {hubOpen ? (
+        <div className="aitown-hub-overlay" onClick={() => setHubOpen(false)}>
+          <div
+            id="aitown-hub"
+            className="aitown-hub-sheet"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="aitown-hub-sheet__header">
+              <span className="aitown-hub-sheet__title">Hub</span>
+              <button type="button" className="aitown-button" onClick={() => setHubOpen(false)}>
+                Close Hub
+              </button>
+            </div>
+            <DetailsPanel
+              incidentFeed={incidentFeedResource.data}
+              incidentFeedError={incidentFeedResource.error}
+              incidentFeedState={incidentFeedResource.state}
+              selectedAgent={selectedAgent}
+              workflow={activeWorkflow}
+              workflowError={workflowResource.error}
+              workflowState={workflowResource.state}
+              world={projectedWorld}
+              onSelectAgent={setSelectedAgentId}
+            />
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }

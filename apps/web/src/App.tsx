@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import {
   DEFAULT_WORKFLOW_LIMIT,
@@ -132,6 +132,16 @@ function AppInner() {
     }
   }, [overviewResource.data, selectedAgentId]);
 
+  const handleSceneSelectAgent = useCallback(
+    (agentId: string | null) => {
+      setSelectedAgentId(agentId);
+      if (agentId) {
+        setHubOpen(true);
+      }
+    },
+    [setSelectedAgentId]
+  );
+
   const rendererFallback = (
     <div className="aitown-world__placeholder aitown-world__placeholder--static">
       Loading world renderer...
@@ -144,35 +154,34 @@ function AppInner() {
 
   return (
     <main className="aitown-shell game-background">
-      <header className="aitown-shell__header">
-        <div className="aitown-shell__brand">
-          <span className="aitown-shell__eyebrow">Metaverse Office</span>
-          <h1 className="game-title">Metaverse Town</h1>
-          <p>AI Town-derived world shell for Metaverse Office.</p>
-        </div>
-
-        <div className="aitown-shell__stats" aria-label="Town summary">
-          <div className="aitown-shell__stat">
-            <span>Agents</span>
-            <strong>{overviewResource.data?.summary.agent_count ?? 0}</strong>
-          </div>
-          <div className="aitown-shell__stat">
-            <span>Blocked</span>
-            <strong>{overviewResource.data?.summary.blocked_count ?? 0}</strong>
-          </div>
-          <div className="aitown-shell__stat">
-            <span>Reboot</span>
-            <strong>{overviewResource.data?.summary.reboot_recommended_count ?? 0}</strong>
-          </div>
-          <div className="aitown-shell__stat">
-            <span>Feed</span>
-            <strong>{incidentFeedResource.data?.items.length ?? 0}</strong>
-          </div>
-        </div>
-      </header>
-
       <section className="aitown-shell__layout aitown-shell__layout--fullscreen">
         <section className="aitown-panel aitown-panel--game aitown-panel--game-fullscreen" role="region" aria-label="Town world">
+          <header className="aitown-shell__header">
+            <div className="aitown-shell__brand">
+              <span className="aitown-shell__eyebrow">Metaverse Office</span>
+              <h1 className="game-title">Metaverse Town</h1>
+              <p>AI Town-derived world shell for Metaverse Office.</p>
+            </div>
+
+            <div className="aitown-shell__stats" aria-label="Town summary">
+              <div className="aitown-shell__stat">
+                <span>Agents</span>
+                <strong>{overviewResource.data?.summary.agent_count ?? 0}</strong>
+              </div>
+              <div className="aitown-shell__stat">
+                <span>Blocked</span>
+                <strong>{overviewResource.data?.summary.blocked_count ?? 0}</strong>
+              </div>
+              <div className="aitown-shell__stat">
+                <span>Reboot</span>
+                <strong>{overviewResource.data?.summary.reboot_recommended_count ?? 0}</strong>
+              </div>
+              <div className="aitown-shell__stat">
+                <span>Feed</span>
+                <strong>{incidentFeedResource.data?.items.length ?? 0}</strong>
+              </div>
+            </div>
+          </header>
           <div className="aitown-panel__topline">
             <span>Drag to pan. Wheel to zoom. Click an agent to inspect.</span>
             <span>
@@ -213,15 +222,7 @@ function AppInner() {
             rendererFallback
           ) : (
             <Suspense fallback={rendererFallback}>
-              <LazyWorldScene
-                scene={scene}
-                onSelectAgent={(agentId) => {
-                  setSelectedAgentId(agentId);
-                  if (agentId) {
-                    setHubOpen(true);
-                  }
-                }}
-              />
+              <LazyWorldScene scene={scene} onSelectAgent={handleSceneSelectAgent} />
             </Suspense>
           )}
         </section>

@@ -15,10 +15,18 @@ describe('AI Town shell styles', () => {
 
   it('uses a framed full-screen shell while preserving responsive collapse rules', () => {
     expect(styles).toMatch(
-      /\.aitown-shell__layout--fullscreen\s*\{[\s\S]*?grid-template-columns:\s*1fr;/
+      /html,[\s\S]*?body,[\s\S]*?#root\s*\{[\s\S]*?height:\s*100%;[\s\S]*?min-height:\s*100%;/
+    );
+    expect(styles).toMatch(/body\s*\{[\s\S]*?overflow:\s*hidden;/);
+    expect(styles).toMatch(/\.aitown-shell\s*\{[\s\S]*?height:\s*100dvh;[\s\S]*?overflow:\s*hidden;/);
+    expect(styles).toMatch(
+      /\.aitown-shell__layout--fullscreen\s*\{[\s\S]*?display:\s*block;[\s\S]*?height:\s*100%;/
     );
     expect(styles).toMatch(
-      /@media \(max-width:\s*1080px\)\s*\{[\s\S]*?\.aitown-shell__layout\s*\{[\s\S]*?grid-template-columns:\s*1fr;/
+      /\.aitown-panel--game-fullscreen\s*\{[\s\S]*?width:\s*100%;[\s\S]*?height:\s*100%;[\s\S]*?min-height:\s*0;/
+    );
+    expect(styles).toMatch(
+      /@media \(max-width:\s*1080px\)\s*\{[\s\S]*?\.aitown-shell__layout\s*\{[\s\S]*?display:\s*block;[\s\S]*?width:\s*100%;/
     );
   });
 
@@ -37,6 +45,6 @@ describe('AI Town shell styles', () => {
   it('renders Hub as a dismissible overlay instead of a permanent side rail', () => {
     expect(styles).toMatch(/\.aitown-hub-overlay\s*\{[\s\S]*?position:\s*fixed;/);
     expect(styles).toMatch(/\.aitown-hub-overlay\s*\{[\s\S]*?justify-content:\s*flex-end;/);
-    expect(styles).toMatch(/\.aitown-hub-sheet\s*\{[\s\S]*?width:\s*min\(430px, 100vw\);/);
+    expect(styles).toMatch(/\.aitown-hub-sheet\s*\{[\s\S]*?width:\s*min\(430px, 100vw\);[\s\S]*?height:\s*100dvh;/);
   });
 });

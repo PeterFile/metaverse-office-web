@@ -233,6 +233,9 @@ describe('App', () => {
     expect(hubTrigger).toBeVisible();
     expect(screen.queryByRole('complementary', { name: 'Agent details' })).not.toBeInTheDocument();
 
+    const worldRegion = screen.getByRole('region', { name: 'Town world' });
+    expect(worldRegion.className).toContain('aitown-panel--game-fullscreen');
+
     await user.click(hubTrigger);
     expect(await screen.findByRole('complementary', { name: 'Agent details' })).toBeVisible();
     expect(screen.getByRole('button', { name: 'Hide Hub' })).toBeVisible();

@@ -25,11 +25,14 @@ html,
 body,
 #root {
   margin: 0;
+  width: 100%;
+  height: 100%;
   min-height: 100%;
 }
 
 body {
   min-width: 320px;
+  overflow: hidden;
 }
 
 button {
@@ -43,7 +46,7 @@ button {
 .game-title {
   margin: 0;
   font-family: 'Upheaval Pro', sans-serif;
-  font-size: clamp(3.4rem, 7vw, 6.4rem);
+  font-size: clamp(2.8rem, 5vw, 4.6rem);
   line-height: 0.92;
   letter-spacing: 0.04em;
   background: linear-gradient(to bottom, #fec742, #dd7c42);
@@ -64,25 +67,41 @@ button {
 }
 
 .aitown-shell {
-  min-height: 100vh;
-  padding: 28px;
+  position: relative;
+  width: 100%;
+  height: 100dvh;
+  min-height: 100dvh;
+  overflow: hidden;
   color: #f7f0d2;
 }
 
 .aitown-shell__header {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  right: 16px;
+  z-index: 6;
   display: flex;
-  align-items: flex-end;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 24px;
-  margin: 0 auto 20px;
-  max-width: 1500px;
+  margin: 0;
+  pointer-events: none;
 }
 
 .aitown-shell__brand {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  max-width: 720px;
+  max-width: min(620px, calc(100vw - 520px));
+  padding: 14px 18px;
+  border-style: solid;
+  border-width: 18px;
+  border-image-source: url('/ai-town/assets/ui/box.svg');
+  border-image-repeat: stretch;
+  border-image-slice: 12.5%;
+  background: rgba(46, 28, 37, 0.86);
+  backdrop-filter: blur(10px);
 }
 
 .aitown-shell__brand p {
@@ -103,6 +122,14 @@ button {
   grid-template-columns: repeat(4, minmax(92px, 1fr));
   gap: 12px;
   min-width: min(100%, 460px);
+  padding: 10px;
+  border-style: solid;
+  border-width: 18px;
+  border-image-source: url('/ai-town/assets/ui/box.svg');
+  border-image-repeat: stretch;
+  border-image-slice: 12.5%;
+  background: rgba(46, 28, 37, 0.82);
+  backdrop-filter: blur(10px);
 }
 
 .aitown-shell__stat {
@@ -139,8 +166,11 @@ button {
 }
 
 .aitown-shell__layout--fullscreen {
-  grid-template-columns: 1fr;
-  max-width: min(1800px, 100%);
+  display: block;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  max-width: none;
 }
 
 .aitown-panel {
@@ -149,37 +179,55 @@ button {
 
 .aitown-panel--game {
   position: relative;
-  min-height: 720px;
+  min-height: 0;
   border-style: solid;
   border-width: 36px;
   border-image-source: url('/ai-town/assets/ui/frame.svg');
   border-image-repeat: stretch;
   border-image-slice: 25%;
-  background: rgba(33, 24, 34, 0.88);
+  background: rgba(33, 24, 34, 0.92);
   box-shadow: 0 28px 60px rgba(12, 7, 13, 0.46);
   overflow: hidden;
 }
 
 .aitown-panel--game-fullscreen {
-  min-height: calc(100vh - 220px);
+  width: 100%;
+  height: 100%;
+  min-height: 0;
 }
 
 .aitown-panel__topline {
-  position: relative;
-  z-index: 3;
+  position: absolute;
+  top: 148px;
+  left: 18px;
+  right: 18px;
+  z-index: 5;
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  padding: 0 6px 12px;
-  color: #e4d3a0;
+  padding: 0;
+  color: #f1ddb0;
   font-size: 0.82rem;
+  pointer-events: none;
+}
+
+.aitown-panel__topline > span {
+  max-width: min(44ch, 45%);
+  padding: 8px 12px;
+  border-style: solid;
+  border-width: 14px;
+  border-image-source: url('/ai-town/assets/ui/box.svg');
+  border-image-repeat: stretch;
+  border-image-slice: 12.5%;
+  background: rgba(39, 24, 33, 0.82);
+  backdrop-filter: blur(8px);
 }
 
 .aitown-panel__toolbar {
   position: absolute;
-  top: 14px;
   right: 18px;
-  z-index: 4;
+  top: 156px;
+  z-index: 8;
   display: flex;
   gap: 10px;
 }
@@ -394,20 +442,22 @@ button {
 
 .aitown-world__canvas {
   position: relative;
-  min-height: 620px;
-  height: calc(100vh - 320px);
-  padding-top: 12px;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
 }
 
 .aitown-world__host {
   position: relative;
   width: 100%;
   height: 100%;
-  min-height: 620px;
+  min-height: 0;
+  touch-action: none;
 }
 
 .aitown-world__host canvas {
   display: block;
+  touch-action: none;
 }
 
 .aitown-world__placeholder {
@@ -455,7 +505,7 @@ button {
 
 .aitown-hub-sheet {
   width: min(430px, 100vw);
-  height: 100vh;
+  height: 100dvh;
   overflow-y: auto;
   padding: 20px 18px;
 }
@@ -476,17 +526,24 @@ button {
 }
 
 .aitown-hub-sheet .aitown-panel--details {
-  min-height: calc(100vh - 96px);
+  min-height: calc(100dvh - 96px);
 }
 
 @media (max-width: 1080px) {
   .aitown-shell {
-    padding: 18px;
+    height: 100dvh;
   }
 
   .aitown-shell__header {
+    top: 12px;
+    left: 12px;
+    right: 12px;
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .aitown-shell__brand {
+    max-width: none;
   }
 
   .aitown-shell__stats {
@@ -494,22 +551,36 @@ button {
   }
 
   .aitown-shell__layout {
-    grid-template-columns: 1fr;
+    display: block;
+    width: 100%;
+  }
+
+  .aitown-panel__topline {
+    top: 176px;
+    left: 14px;
+    right: 14px;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .aitown-panel__topline > span {
+    max-width: min(60ch, 100%);
   }
 
   .aitown-panel__toolbar {
-    position: static;
-    margin: 0 6px 12px;
+    right: 14px;
+    top: 232px;
     flex-wrap: wrap;
+    justify-content: flex-end;
   }
 
-  .aitown-panel--game,
   .aitown-panel--details {
     min-height: 620px;
   }
 
-  .aitown-world__canvas {
-    height: calc(100vh - 360px);
+  .aitown-panel--game-fullscreen {
+    height: 100%;
+    min-height: 0;
   }
 
   .aitown-hub-overlay {
@@ -522,7 +593,7 @@ button {
   }
 
   .aitown-hub-sheet .aitown-panel--details {
-    min-height: calc(100vh - 24px);
+    min-height: calc(100dvh - 24px);
   }
 
   .aitown-details__grid {
@@ -532,7 +603,14 @@ button {
 
 @media (max-width: 720px) {
   .aitown-shell {
-    padding: 12px;
+    height: 100dvh;
+  }
+
+  .aitown-shell__header {
+    top: 10px;
+    left: 10px;
+    right: 10px;
+    gap: 10px;
   }
 
   .aitown-shell__stats {
@@ -540,8 +618,26 @@ button {
   }
 
   .aitown-panel--game {
-    min-height: 480px;
+    min-height: 0;
     border-width: 24px;
+  }
+
+  .aitown-shell__header {
+    gap: 8px;
+  }
+
+  .aitown-shell__brand {
+    padding: 10px 12px;
+  }
+
+  .aitown-shell__stats {
+    gap: 8px;
+    padding: 8px;
+  }
+
+  .aitown-panel--game-fullscreen {
+    height: 100%;
+    min-height: 0;
   }
 
   .aitown-panel--details {
@@ -553,6 +649,25 @@ button {
   }
 
   .aitown-panel__topline {
-    flex-direction: column;
+    top: 204px;
+    left: 10px;
+    right: 10px;
+  }
+
+  .aitown-panel__topline > span {
+    max-width: 100%;
+    font-size: 0.76rem;
+  }
+
+  .aitown-panel__toolbar {
+    left: 10px;
+    right: 10px;
+    top: 256px;
+    bottom: auto;
+    justify-content: stretch;
+  }
+
+  .aitown-panel__toolbar > * {
+    flex: 1 1 0;
   }
 }

@@ -14,6 +14,12 @@ import { Viewport } from 'pixi-viewport';
 
 import { loadAiTownAssets } from './assetLoader';
 import type { AiTownSceneModel, SceneAgent, SceneZone } from './types';
+import {
+  DEFAULT_MAX_VIEWPORT_SCALE,
+  resolveViewportScaleBounds,
+  shouldBlockViewportPointerInput,
+  shouldBlockViewportWheelGesture
+} from './viewport';
 
 const SEVERITY_COLORS = {
   normal: 0x8ed16f,
@@ -229,10 +235,15 @@ export default function WorldScene({ scene, onSelectAgent }: WorldSceneProps) {
   const viewportRef = useRef<Viewport | null>(null);
   const zoneLayerRef = useRef<Container | null>(null);
   const agentLayerRef = useRef<Container | null>(null);
+  const onSelectAgentRef = useRef(onSelectAgent);
   const lastCenteredAgentRef = useRef<{ agentId: string; x: number; y: number } | null>(null);
   const [ready, setReady] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loadAttempt, setLoadAttempt] = useState(0);
+
+  useEffect(() => {
+    onSelectAgentRef.current = onSelectAgent;
+  }, [onSelectAgent]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -247,6 +258,43 @@ export default function WorldScene({ scene, onSelectAgent }: WorldSceneProps) {
     appRef.current = app;
     let disposed = false;
     let resizeObserver: ResizeObserver | null = null;
+    let viewportZoomHandler: (() => void) | null = null;
+    const blockGestureZoom = (event: Event) => {
+      event.preventDefault();
+    };
+    const blockNonMousePointer = (event: PointerEvent) => {
+      if (!shouldBlockViewportPointerInput(event.pointerType)) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    };
+    const blockTrackpadPinch = (event: WheelEvent) => {
+      if (
+        !shouldBlockViewportWheelGesture({
+          ctrlKey: event.ctrlKey,
+          deltaMode: event.deltaMode,
+          deltaX: event.deltaX,
+          deltaY: event.deltaY,
+          deltaZ: event.deltaZ
+        })
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    };
+
+    host.addEventListener('pointerdown', blockNonMousePointer, { passive: false, capture: true });
+    host.addEventListener('pointermove', blockNonMousePointer, { passive: false, capture: true });
+    host.addEventListener('pointerup', blockNonMousePointer, { passive: false, capture: true });
+    host.addEventListener('pointercancel', blockNonMousePointer, { passive: false, capture: true });
+    host.addEventListener('wheel', blockTrackpadPinch, { passive: false, capture: true });
+    host.addEventListener('gesturestart', blockGestureZoom as EventListener, { passive: false });
+    host.addEventListener('gesturechange', blockGestureZoom as EventListener, { passive: false });
+    host.addEventListener('gestureend', blockGestureZoom as EventListener, { passive: false });
 
     void (async () => {
       try {
@@ -307,19 +355,75 @@ export default function WorldScene({ scene, onSelectAgent }: WorldSceneProps) {
         events: app.renderer.events
       });
 
-      viewport
-        .drag()
-        .pinch()
-        .wheel()
-        .decelerate()
-        .clamp({ direction: 'all', underflow: 'center' })
-        .clampZoom({ minScale: 0.55, maxScale: 2.2 })
-        .fitWorld(true);
+      const initialCenter = { x: scene.pixelWidth / 2, y: scene.pixelHeight / 2 };
+      let currentBaseScale = 1;
+      let currentMaxScale = DEFAULT_MAX_VIEWPORT_SCALE;
 
-      viewport.moveCenter(scene.pixelWidth / 2, scene.pixelHeight / 2);
+      const syncViewportClampZoom = (hostWidth: number, hostHeight: number) => {
+        const { minScale, maxScale } = resolveViewportScaleBounds(
+          hostWidth,
+          hostHeight,
+          scene.pixelWidth,
+          scene.pixelHeight,
+          DEFAULT_MAX_VIEWPORT_SCALE
+        );
+
+        viewport.plugins.remove('clamp-zoom');
+        viewport.clampZoom({ minScale, maxScale });
+        viewport.plugins.remove('clamp');
+        viewport.clamp({ direction: 'all' });
+
+        currentMaxScale = maxScale;
+        return { minScale, maxScale };
+      };
+
+      const applyViewportLayout = (preserveView = false) => {
+        const hostWidth = Math.max(host.clientWidth, 1);
+        const hostHeight = Math.max(host.clientHeight, 1);
+        const { baseScale: nextBaseScale } = resolveViewportScaleBounds(
+          hostWidth,
+          hostHeight,
+          scene.pixelWidth,
+          scene.pixelHeight,
+          DEFAULT_MAX_VIEWPORT_SCALE
+        );
+        const previousCenter = preserveView ? viewport.center : initialCenter;
+        const previousScale = viewport.scale.x || nextBaseScale;
+        const scaleRatio = preserveView ? nextBaseScale / Math.max(currentBaseScale, 0.0001) : 1;
+
+        viewport.resize(hostWidth, hostHeight, scene.pixelWidth, scene.pixelHeight);
+        const { minScale, maxScale } = syncViewportClampZoom(hostWidth, hostHeight);
+        viewport.setZoom(preserveView ? previousScale * scaleRatio : nextBaseScale, true);
+        viewport.setZoom(Math.min(maxScale, Math.max(minScale, viewport.scale.x)), true);
+        viewport.moveCenter(previousCenter.x, previousCenter.y);
+        currentBaseScale = nextBaseScale;
+      };
+
+      viewportZoomHandler = () => {
+        const minScale = currentBaseScale;
+        const targetScale = Math.min(currentMaxScale, Math.max(minScale, viewport.scale.x));
+
+        if (Math.abs(targetScale - viewport.scale.x) > 0.0001) {
+          viewport.setZoom(targetScale, true);
+          return;
+        }
+
+        viewport.plugins.get('clamp')?.update?.();
+      };
+
+      viewport
+        .drag({ mouseButtons: 'left' })
+        .wheel({ trackpadPinch: false, wheelZoom: true })
+        .decelerate()
+        .clamp({ direction: 'all' });
+      if (viewportZoomHandler) {
+        viewport.on('zoomed', viewportZoomHandler);
+      }
+
+      applyViewportLayout();
 
       const mapContainer = buildStaticMap(scene, assets.tileSetTexture, assets.animationSheets);
-      mapContainer.on('pointertap', () => onSelectAgent(null));
+      mapContainer.on('pointertap', () => onSelectAgentRef.current(null));
 
       const zoneLayer = new Container();
       const agentLayer = new Container();
@@ -333,7 +437,7 @@ export default function WorldScene({ scene, onSelectAgent }: WorldSceneProps) {
       agentLayerRef.current = agentLayer;
 
       resizeObserver = new ResizeObserver(() => {
-        viewport.resize(host.clientWidth, host.clientHeight, scene.pixelWidth, scene.pixelHeight);
+        applyViewportLayout(true);
       });
       resizeObserver.observe(host);
 
@@ -343,6 +447,17 @@ export default function WorldScene({ scene, onSelectAgent }: WorldSceneProps) {
     return () => {
       disposed = true;
       resizeObserver?.disconnect();
+      if (viewportRef.current && viewportZoomHandler) {
+        viewportRef.current.off('zoomed', viewportZoomHandler);
+      }
+      host.removeEventListener('pointerdown', blockNonMousePointer, { capture: true });
+      host.removeEventListener('pointermove', blockNonMousePointer, { capture: true });
+      host.removeEventListener('pointerup', blockNonMousePointer, { capture: true });
+      host.removeEventListener('pointercancel', blockNonMousePointer, { capture: true });
+      host.removeEventListener('wheel', blockTrackpadPinch, { capture: true });
+      host.removeEventListener('gesturestart', blockGestureZoom as EventListener);
+      host.removeEventListener('gesturechange', blockGestureZoom as EventListener);
+      host.removeEventListener('gestureend', blockGestureZoom as EventListener);
       zoneLayerRef.current = null;
       agentLayerRef.current = null;
       viewportRef.current = null;
@@ -358,7 +473,7 @@ export default function WorldScene({ scene, onSelectAgent }: WorldSceneProps) {
         appRef.current = null;
       }
     };
-  }, [loadAttempt, onSelectAgent]);
+  }, [loadAttempt, scene.pixelHeight, scene.pixelWidth]);
 
   useEffect(() => {
     if (!ready) {
@@ -388,7 +503,7 @@ export default function WorldScene({ scene, onSelectAgent }: WorldSceneProps) {
 
       for (const agent of scene.agents) {
         agentLayer.addChild(
-          createAgentSprite(agent, onSelectAgent, assets.characterAnimations[agent.characterKey])
+          createAgentSprite(agent, (agentId) => onSelectAgentRef.current(agentId), assets.characterAnimations[agent.characterKey])
         );
       }
 
@@ -417,7 +532,7 @@ export default function WorldScene({ scene, onSelectAgent }: WorldSceneProps) {
         lastCenteredAgentRef.current = null;
       }
     })();
-  }, [onSelectAgent, ready, scene]);
+  }, [ready, scene]);
 
   return (
     <div className="aitown-world__canvas">

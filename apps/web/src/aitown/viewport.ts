@@ -21,6 +21,15 @@ export type ViewportScaleBounds = {
   maxScale: number;
 };
 
+export type ViewportPanBounds = {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+};
+
+export type ViewportClampOptions = ViewportPanBounds;
+
 export type ViewportWheelGestureSample = {
   ctrlKey: boolean;
   deltaMode: number;
@@ -34,6 +43,7 @@ const DOM_DELTA_LINE = 1;
 const DOM_DELTA_PAGE = 2;
 const MIN_PIXEL_MOUSE_WHEEL_STEP = 24;
 const PIXEL_MOUSE_WHEEL_GRANULARITY = 4;
+const FLOAT_EPSILON = 0.0001;
 
 export function shouldBlockViewportPointerInput(pointerType: string | null | undefined) {
   return pointerType !== 'mouse';
@@ -99,21 +109,35 @@ export function resolveViewportScaleBounds(
   const coverScale = Math.max(safeHostWidth / safeSceneWidth, safeHostHeight / safeSceneHeight);
   const widthScale = safeHostWidth / safeSceneWidth;
   const heightScale = safeHostHeight / safeSceneHeight;
-  const widthLimitedEntry = Math.abs(coverScale - widthScale) < 0.0001;
-  const sameAspectRatio = Math.abs(widthScale - heightScale) < 0.0001;
+  const widthLimitedEntry = Math.abs(coverScale - widthScale) < FLOAT_EPSILON;
+  const sameAspectRatio = Math.abs(widthScale - heightScale) < FLOAT_EPSILON;
   const needsEntryOverscan = widthLimitedEntry && !sameAspectRatio && supportsMousePan(capabilities);
   const baseScale = needsEntryOverscan
     ? coverScale * DEFAULT_ENTRY_VIEWPORT_OVERSCAN
     : coverScale;
-
-  // When fullscreen cover lands on a width-limited desktop fit, horizontal overflow becomes zero,
-  // so pixi-viewport clamps away left/right dragging until the user zooms in.
-  // Overscanning only those mouse-draggable width-limited entries preserves immediate horizontal panning
-  // without changing equal-aspect or touch-only layouts that cannot recover the hidden area.
 
   return {
     baseScale,
     minScale: baseScale,
     maxScale: Math.max(maxScale, baseScale)
   };
+}
+
+export function resolveViewportPanBounds(
+  sceneWidth: number,
+  sceneHeight: number
+): ViewportPanBounds {
+  return {
+    left: 0,
+    right: sanitizeDimension(sceneWidth),
+    top: 0,
+    bottom: sanitizeDimension(sceneHeight)
+  };
+}
+
+export function resolveViewportClampOptions(
+  sceneWidth: number,
+  sceneHeight: number
+): ViewportClampOptions {
+  return resolveViewportPanBounds(sceneWidth, sceneHeight);
 }

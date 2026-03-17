@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_MAX_VIEWPORT_SCALE,
   isViewportMouseWheelGesture,
+  resolveViewportClampOptions,
+  resolveViewportPanBounds,
   resolveViewportScaleBounds,
   shouldBlockViewportPointerInput,
   shouldBlockViewportWheelGesture,
@@ -96,11 +98,22 @@ describe('viewport coverage and panning bounds', () => {
     expect(coveredWidth).toBeGreaterThan(1600);
   });
 
-  it('adds entry-time horizontal overflow for width-constrained desktop viewports', () => {
-    const bounds = resolveViewportScaleBounds(1600, 900, 2048, 1536, DEFAULT_MAX_VIEWPORT_SCALE, mouseCapabilities);
-    const coveredWidth = 2048 * bounds.baseScale;
+  it('keeps pan bounds locked to the true world edges so dragging never exposes black gutters', () => {
+    const panBounds = resolveViewportPanBounds(2048, 1536);
 
-    expect(coveredWidth).toBeGreaterThan(1600);
+    expect(panBounds.left).toBe(0);
+    expect(panBounds.right).toBe(2048);
+    expect(panBounds.top).toBe(0);
+    expect(panBounds.bottom).toBe(1536);
+  });
+
+  it('emits explicit clamp edges instead of boolean auto-clamp flags', () => {
+    const clampOptions = resolveViewportClampOptions(2048, 1536);
+
+    expect(clampOptions.left).toBe(0);
+    expect(clampOptions.right).toBe(2048);
+    expect(clampOptions.top).toBe(0);
+    expect(clampOptions.bottom).toBe(1536);
   });
 });
 

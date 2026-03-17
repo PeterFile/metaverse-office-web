@@ -16,6 +16,7 @@ import { loadAiTownAssets } from './assetLoader';
 import type { AiTownSceneModel, SceneAgent, SceneZone } from './types';
 import {
   DEFAULT_MAX_VIEWPORT_SCALE,
+  resolveViewportClampOptions,
   resolveViewportScaleBounds,
   shouldBlockViewportPointerInput,
   shouldBlockViewportWheelGesture,
@@ -372,21 +373,24 @@ export default function WorldScene({ scene, onSelectAgent }: WorldSceneProps) {
         };
       };
 
-      const syncViewportClampZoom = (hostWidth: number, hostHeight: number) => {
+      const syncViewportConstraints = (hostWidth: number, hostHeight: number, capabilities?: ViewportInputCapabilities) => {
         const { minScale, maxScale } = resolveViewportScaleBounds(
           hostWidth,
           hostHeight,
           scene.pixelWidth,
           scene.pixelHeight,
           DEFAULT_MAX_VIEWPORT_SCALE,
-          resolveViewportInputCapabilities()
+          capabilities
         );
-
         viewport.plugins.remove('clamp-zoom');
         viewport.clampZoom({ minScale, maxScale });
         viewport.plugins.remove('clamp');
-        viewport.clamp({ direction: 'all' });
+        viewport.clamp({
+          ...resolveViewportClampOptions(scene.pixelWidth, scene.pixelHeight),
+          underflow: 'none'
+        });
 
+        currentBaseScale = minScale;
         currentMaxScale = maxScale;
         return { minScale, maxScale };
       };
@@ -394,42 +398,45 @@ export default function WorldScene({ scene, onSelectAgent }: WorldSceneProps) {
       const applyViewportLayout = (preserveView = false) => {
         const hostWidth = Math.max(host.clientWidth, 1);
         const hostHeight = Math.max(host.clientHeight, 1);
+        const capabilities = resolveViewportInputCapabilities();
         const { baseScale: nextBaseScale } = resolveViewportScaleBounds(
           hostWidth,
           hostHeight,
           scene.pixelWidth,
           scene.pixelHeight,
-          DEFAULT_MAX_VIEWPORT_SCALE
+          DEFAULT_MAX_VIEWPORT_SCALE,
+          capabilities
         );
         const previousCenter = preserveView ? viewport.center : initialCenter;
         const previousScale = viewport.scale.x || nextBaseScale;
-        const scaleRatio = preserveView ? nextBaseScale / Math.max(currentBaseScale, 0.0001) : 1;
 
         viewport.resize(hostWidth, hostHeight, scene.pixelWidth, scene.pixelHeight);
-        const { minScale, maxScale } = syncViewportClampZoom(hostWidth, hostHeight);
-        viewport.setZoom(preserveView ? previousScale * scaleRatio : nextBaseScale, true);
-        viewport.setZoom(Math.min(maxScale, Math.max(minScale, viewport.scale.x)), true);
+        const { minScale, maxScale } = syncViewportConstraints(hostWidth, hostHeight, capabilities);
+        const targetScale = preserveView ? Math.min(maxScale, Math.max(minScale, previousScale)) : nextBaseScale;
+        viewport.setZoom(Math.min(maxScale, Math.max(minScale, targetScale)), true);
         viewport.moveCenter(previousCenter.x, previousCenter.y);
-        currentBaseScale = nextBaseScale;
+        viewport.plugins.get('clamp')?.update?.();
       };
 
       viewportZoomHandler = () => {
+        const capabilities = resolveViewportInputCapabilities();
         const minScale = currentBaseScale;
         const targetScale = Math.min(currentMaxScale, Math.max(minScale, viewport.scale.x));
 
         if (Math.abs(targetScale - viewport.scale.x) > 0.0001) {
           viewport.setZoom(targetScale, true);
+          syncViewportConstraints(viewport.screenWidth, viewport.screenHeight, capabilities);
           return;
         }
 
+        syncViewportConstraints(viewport.screenWidth, viewport.screenHeight, capabilities);
         viewport.plugins.get('clamp')?.update?.();
       };
 
       viewport
         .drag({ mouseButtons: 'left' })
         .wheel({ trackpadPinch: false, wheelZoom: true })
-        .decelerate()
-        .clamp({ direction: 'all' });
+        .decelerate();
       if (viewportZoomHandler) {
         viewport.on('zoomed', viewportZoomHandler);
       }
@@ -449,6 +456,7 @@ export default function WorldScene({ scene, onSelectAgent }: WorldSceneProps) {
       viewportRef.current = viewport;
       zoneLayerRef.current = zoneLayer;
       agentLayerRef.current = agentLayer;
+      (window as typeof window & { __AITOWN_VIEWPORT__?: Viewport }).__AITOWN_VIEWPORT__ = viewport;
 
       resizeObserver = new ResizeObserver(() => {
         applyViewportLayout(true);
@@ -475,6 +483,7 @@ export default function WorldScene({ scene, onSelectAgent }: WorldSceneProps) {
       zoneLayerRef.current = null;
       agentLayerRef.current = null;
       viewportRef.current = null;
+      (window as typeof window & { __AITOWN_VIEWPORT__?: Viewport }).__AITOWN_VIEWPORT__ = undefined;
       lastCenteredAgentRef.current = null;
       setReady(false);
 

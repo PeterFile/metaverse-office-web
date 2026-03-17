@@ -1,4 +1,11 @@
 export const DEFAULT_MAX_VIEWPORT_SCALE = 2.2;
+export const DEFAULT_ENTRY_VIEWPORT_OVERSCAN = 1.15;
+
+export type ViewportInputCapabilities = {
+  primaryPointerFine?: boolean;
+  anyPointerFine?: boolean;
+  maxTouchPoints?: number;
+};
 
 function sanitizeDimension(value: number) {
   if (!Number.isFinite(value) || value <= 0) {
@@ -60,12 +67,29 @@ export function shouldBlockViewportWheelGesture(sample: ViewportWheelGestureSamp
   return !isViewportMouseWheelGesture(sample);
 }
 
+function supportsMousePan(capabilities?: ViewportInputCapabilities) {
+  if (!capabilities) {
+    return true;
+  }
+
+  if (capabilities.primaryPointerFine === false || capabilities.anyPointerFine === false) {
+    return false;
+  }
+
+  if ((capabilities.maxTouchPoints ?? 0) > 0 && !capabilities.primaryPointerFine && !capabilities.anyPointerFine) {
+    return false;
+  }
+
+  return true;
+}
+
 export function resolveViewportScaleBounds(
   hostWidth: number,
   hostHeight: number,
   sceneWidth: number,
   sceneHeight: number,
-  maxScale = DEFAULT_MAX_VIEWPORT_SCALE
+  maxScale = DEFAULT_MAX_VIEWPORT_SCALE,
+  capabilities?: ViewportInputCapabilities
 ): ViewportScaleBounds {
   const safeHostWidth = sanitizeDimension(hostWidth);
   const safeHostHeight = sanitizeDimension(hostHeight);
@@ -73,7 +97,19 @@ export function resolveViewportScaleBounds(
   const safeSceneHeight = sanitizeDimension(sceneHeight);
 
   const coverScale = Math.max(safeHostWidth / safeSceneWidth, safeHostHeight / safeSceneHeight);
-  const baseScale = coverScale;
+  const widthScale = safeHostWidth / safeSceneWidth;
+  const heightScale = safeHostHeight / safeSceneHeight;
+  const widthLimitedEntry = Math.abs(coverScale - widthScale) < 0.0001;
+  const sameAspectRatio = Math.abs(widthScale - heightScale) < 0.0001;
+  const needsEntryOverscan = widthLimitedEntry && !sameAspectRatio && supportsMousePan(capabilities);
+  const baseScale = needsEntryOverscan
+    ? coverScale * DEFAULT_ENTRY_VIEWPORT_OVERSCAN
+    : coverScale;
+
+  // When fullscreen cover lands on a width-limited desktop fit, horizontal overflow becomes zero,
+  // so pixi-viewport clamps away left/right dragging until the user zooms in.
+  // Overscanning only those mouse-draggable width-limited entries preserves immediate horizontal panning
+  // without changing equal-aspect or touch-only layouts that cannot recover the hidden area.
 
   return {
     baseScale,

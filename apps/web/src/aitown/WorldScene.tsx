@@ -18,7 +18,8 @@ import {
   DEFAULT_MAX_VIEWPORT_SCALE,
   resolveViewportScaleBounds,
   shouldBlockViewportPointerInput,
-  shouldBlockViewportWheelGesture
+  shouldBlockViewportWheelGesture,
+  type ViewportInputCapabilities
 } from './viewport';
 
 const SEVERITY_COLORS = {
@@ -359,13 +360,26 @@ export default function WorldScene({ scene, onSelectAgent }: WorldSceneProps) {
       let currentBaseScale = 1;
       let currentMaxScale = DEFAULT_MAX_VIEWPORT_SCALE;
 
+      const resolveViewportInputCapabilities = (): ViewportInputCapabilities => {
+        if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+          return {};
+        }
+
+        return {
+          primaryPointerFine: window.matchMedia('(pointer: fine)').matches,
+          anyPointerFine: window.matchMedia('(any-pointer: fine)').matches,
+          maxTouchPoints: navigator.maxTouchPoints
+        };
+      };
+
       const syncViewportClampZoom = (hostWidth: number, hostHeight: number) => {
         const { minScale, maxScale } = resolveViewportScaleBounds(
           hostWidth,
           hostHeight,
           scene.pixelWidth,
           scene.pixelHeight,
-          DEFAULT_MAX_VIEWPORT_SCALE
+          DEFAULT_MAX_VIEWPORT_SCALE,
+          resolveViewportInputCapabilities()
         );
 
         viewport.plugins.remove('clamp-zoom');

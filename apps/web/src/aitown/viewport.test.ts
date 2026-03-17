@@ -5,7 +5,8 @@ import {
   isViewportMouseWheelGesture,
   resolveViewportScaleBounds,
   shouldBlockViewportPointerInput,
-  shouldBlockViewportWheelGesture
+  shouldBlockViewportWheelGesture,
+  type ViewportInputCapabilities
 } from './viewport';
 
 describe('viewport interaction policy', () => {
@@ -74,6 +75,12 @@ describe('viewport interaction policy', () => {
   });
 });
 
+const mouseCapabilities: ViewportInputCapabilities = {
+  primaryPointerFine: true,
+  anyPointerFine: true,
+  maxTouchPoints: 0
+};
+
 describe('viewport coverage and panning bounds', () => {
   it('uses cover scale to avoid black gutters on initial fullscreen render', () => {
     const bounds = resolveViewportScaleBounds(1600, 900, 2048, 1536);
@@ -88,28 +95,53 @@ describe('viewport coverage and panning bounds', () => {
 
     expect(coveredWidth).toBeGreaterThan(1600);
   });
+
+  it('adds entry-time horizontal overflow for width-constrained desktop viewports', () => {
+    const bounds = resolveViewportScaleBounds(1600, 900, 2048, 1536, DEFAULT_MAX_VIEWPORT_SCALE, mouseCapabilities);
+    const coveredWidth = 2048 * bounds.baseScale;
+
+    expect(coveredWidth).toBeGreaterThan(1600);
+  });
 });
 
 describe('resolveViewportScaleBounds', () => {
-  it('keeps the minimum zoom locked to cover scale so the viewport never exposes black gutters', () => {
-    const bounds = resolveViewportScaleBounds(1600, 900, 2048, 1536);
+  it('locks minimum zoom to an overscanned entry scale so horizontal pan exists before any zoom on desktop', () => {
+    const bounds = resolveViewportScaleBounds(1600, 900, 2048, 1536, DEFAULT_MAX_VIEWPORT_SCALE, mouseCapabilities);
 
-    expect(bounds.baseScale).toBeCloseTo(1600 / 2048, 4);
+    expect(bounds.baseScale).toBeCloseTo((1600 / 2048) * 1.15, 4);
     expect(bounds.minScale).toBeCloseTo(bounds.baseScale, 4);
     expect(bounds.maxScale).toBe(DEFAULT_MAX_VIEWPORT_SCALE);
   });
 
   it('keeps portrait layouts in cover mode instead of zooming out to full-map fit', () => {
-    const bounds = resolveViewportScaleBounds(390, 844, 2048, 1536);
+    const bounds = resolveViewportScaleBounds(390, 844, 2048, 1536, DEFAULT_MAX_VIEWPORT_SCALE, mouseCapabilities);
 
     expect(bounds.baseScale).toBeCloseTo(844 / 1536, 4);
     expect(bounds.minScale).toBeCloseTo(bounds.baseScale, 4);
   });
 
-  it('raises the max zoom cap when giant displays need a larger cover scale', () => {
-    const bounds = resolveViewportScaleBounds(6000, 3000, 2048, 1536);
+  it('does not overscan equal-aspect layouts that already show the full map', () => {
+    const bounds = resolveViewportScaleBounds(1024, 768, 2048, 1536, DEFAULT_MAX_VIEWPORT_SCALE, mouseCapabilities);
 
-    expect(bounds.baseScale).toBeCloseTo(6000 / 2048, 4);
+    expect(bounds.baseScale).toBeCloseTo(0.5, 4);
+    expect(bounds.minScale).toBeCloseTo(0.5, 4);
+  });
+
+  it('does not overscan touch-only layouts that cannot recover hidden edges by dragging', () => {
+    const bounds = resolveViewportScaleBounds(1600, 900, 2048, 1536, DEFAULT_MAX_VIEWPORT_SCALE, {
+      primaryPointerFine: false,
+      anyPointerFine: false,
+      maxTouchPoints: 5
+    });
+
+    expect(bounds.baseScale).toBeCloseTo(1600 / 2048, 4);
+    expect(bounds.minScale).toBeCloseTo(bounds.baseScale, 4);
+  });
+
+  it('raises the max zoom cap when giant displays need a larger overscanned entry scale', () => {
+    const bounds = resolveViewportScaleBounds(6000, 3000, 2048, 1536, DEFAULT_MAX_VIEWPORT_SCALE, mouseCapabilities);
+
+    expect(bounds.baseScale).toBeCloseTo((6000 / 2048) * 1.15, 4);
     expect(bounds.maxScale).toBe(bounds.baseScale);
     expect(bounds.minScale).toBe(bounds.baseScale);
   });

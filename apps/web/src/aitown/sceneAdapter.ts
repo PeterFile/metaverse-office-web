@@ -1,0 +1,171 @@
+import type { WorldAgent, WorldState } from '../world/types';
+
+import { CHARACTER_KEYS } from './characters';
+import { GENTLE_MAP } from './mapData';
+import type { AiTownSceneModel, CharacterKey, Facing, ScenePoint, SceneZone } from './types';
+
+const DESK_ANCHORS: ScenePoint[] = [
+  { x: 9.5, y: 11.5 },
+  { x: 15.5, y: 7.5 },
+  { x: 13.5, y: 24.5 },
+  { x: 20.5, y: 25.5 },
+  { x: 28.5, y: 24.5 },
+  { x: 34.5, y: 13.5 },
+  { x: 37.5, y: 24.5 },
+  { x: 30.5, y: 8.5 }
+];
+
+const SHARED_ANCHORS: ScenePoint[] = [
+  { x: 20.5, y: 14.5 },
+  { x: 17.5, y: 18.5 },
+  { x: 24.5, y: 18.5 },
+  { x: 11.5, y: 15.5 },
+  { x: 29.5, y: 14.5 },
+  { x: 21.5, y: 9.5 }
+];
+
+function stableHash(value: string) {
+  let hash = 2166136261;
+
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
+  }
+
+  return hash >>> 0;
+}
+
+function compareZoneAssignment(left: SceneZone, right: SceneZone) {
+  return (
+    left.label.localeCompare(right.label) ||
+    left.zoneId.localeCompare(right.zoneId)
+  );
+}
+
+function assignAnchors(zones: SceneZone[], anchors: ScenePoint[]) {
+  return new Map(
+    [...zones]
+      .sort(compareZoneAssignment)
+      .map((zone, index) => [zone.zoneId, anchors[index % anchors.length]])
+  );
+}
+
+function toPixel(point: ScenePoint) {
+  return {
+    x: point.x * GENTLE_MAP.tileDim,
+    y: point.y * GENTLE_MAP.tileDim
+  };
+}
+
+function layoutZoneOccupant(anchor: ScenePoint, index: number, total: number): ScenePoint {
+  const columns = Math.min(3, Math.max(1, total));
+  const column = index % columns;
+  const row = Math.floor(index / columns);
+  const xOffset = (column - (columns - 1) / 2) * 0.9;
+  const yOffset = row * 0.8;
+
+  return {
+    x: anchor.x + xOffset,
+    y: anchor.y + yOffset
+  };
+}
+
+function agentFacing(agentId: string): Facing {
+  const directions: Facing[] = ['down', 'left', 'right', 'up'];
+  return directions[stableHash(agentId) % directions.length];
+}
+
+function agentCharacter(agentId: string): CharacterKey {
+  return CHARACTER_KEYS[stableHash(agentId) % CHARACTER_KEYS.length];
+}
+
+function findFallbackZone(agent: WorldAgent, zones: SceneZone[]) {
+  const directMatch = zones.find((zone) => zone.zoneId === agent.zone);
+  if (directMatch) {
+    return directMatch;
+  }
+
+  if (agent.raw_location) {
+    const rawMatch = zones.find((zone) => zone.zoneId === agent.raw_location);
+    if (rawMatch) {
+      return rawMatch;
+    }
+  }
+
+  const homeDeskId = agent.kind === 'lead' ? 'lead-desk' : `desk-${agent.agent_id}`;
+  const homeDesk = zones.find((zone) => zone.zoneId === homeDeskId);
+  if (homeDesk) {
+    return homeDesk;
+  }
+
+  return zones.find((zone) => zone.kind === 'shared') ?? zones[0] ?? null;
+}
+
+export function adaptWorldToScene(
+  world: WorldState,
+  selectedAgentId: string | null
+): AiTownSceneModel {
+  const sceneZones: SceneZone[] = world.zones.map((zone) => ({
+    zoneId: zone.zone_id,
+    label: zone.label,
+    kind: zone.kind,
+    anchor: { x: 0, y: 0 },
+    occupantIds: zone.occupant_ids
+  }));
+
+  const deskAssignments = assignAnchors(
+    sceneZones.filter((zone) => zone.kind === 'desk'),
+    DESK_ANCHORS
+  );
+  const sharedAssignments = assignAnchors(
+    sceneZones.filter((zone) => zone.kind === 'shared'),
+    SHARED_ANCHORS
+  );
+
+  const zones = sceneZones.map((zone) => ({
+    ...zone,
+    anchor:
+      zone.kind === 'desk'
+        ? deskAssignments.get(zone.zoneId) ?? DESK_ANCHORS[0]
+        : sharedAssignments.get(zone.zoneId) ?? SHARED_ANCHORS[0]
+  }));
+
+  const agents = [...world.agents.values()].map((agent) => {
+    const zone = findFallbackZone(agent, zones);
+    const occupantIds = zone?.occupantIds.includes(agent.agent_id)
+      ? zone.occupantIds
+      : [...(zone?.occupantIds ?? []), agent.agent_id];
+    const occupantIndex = occupantIds.indexOf(agent.agent_id);
+    const laidOut =
+      zone && occupantIndex >= 0
+        ? layoutZoneOccupant(zone.anchor, occupantIndex, occupantIds.length)
+        : { x: 20.5, y: 15.5 };
+
+    return {
+      agentId: agent.agent_id,
+      displayName: agent.display_name,
+      kind: agent.kind,
+      zoneId: agent.zone,
+      position: toPixel(laidOut),
+      characterKey: agentCharacter(agent.agent_id),
+      facing: agentFacing(agent.agent_id),
+      phase: agent.phase,
+      severity: agent.severity,
+      selected: agent.agent_id === selectedAgentId,
+      activeTask: agent.active_task,
+      rawLocation: agent.raw_location,
+      rebootRecommended: agent.reboot_recommended,
+      openAlertCount: agent.open_alert_count,
+      hasOpenIncidents: agent.has_open_incidents
+    };
+  });
+
+  return {
+    map: GENTLE_MAP,
+    zones,
+    agents,
+    selectedAgentId,
+    pixelWidth: GENTLE_MAP.width * GENTLE_MAP.tileDim,
+    pixelHeight: GENTLE_MAP.height * GENTLE_MAP.tileDim
+  };
+}

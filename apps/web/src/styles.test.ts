@@ -5,34 +5,46 @@ import { describe, expect, it } from 'vitest';
 
 const styles = readFileSync(resolve(process.cwd(), 'src/styles.css'), 'utf8');
 
-describe('operator shell responsive styles', () => {
-  it('stacks the workflow shell before the desktop map would overflow while keeping the existing mobile collapse', () => {
-    expect(styles).toContain('grid-template-columns: repeat(6, minmax(120px, 1fr));');
+describe('AI Town shell styles', () => {
+  it('loads the AI Town fonts and frame assets', () => {
+    expect(styles).toContain("@font-face {\n  font-family: 'Upheaval Pro';");
+    expect(styles).toContain("@font-face {\n  font-family: 'VCR OSD Mono';");
+    expect(styles).toContain("url('/ai-town/assets/ui/frame.svg')");
+    expect(styles).toContain("url('/ai-town/assets/background.webp')");
+  });
+
+  it('uses a framed full-screen shell while preserving responsive collapse rules', () => {
     expect(styles).toMatch(
-      /@media \(max-width: 1175px\)\s*\{[\s\S]*?\.app-shell__content\s*\{\s*grid-template-columns:\s*1fr;\s*\}[\s\S]*?\.workflow-panel\s*\{\s*position:\s*static;\s*\}/
+      /html,[\s\S]*?body,[\s\S]*?#root\s*\{[\s\S]*?height:\s*100%;[\s\S]*?min-height:\s*100%;/
+    );
+    expect(styles).toMatch(/body\s*\{[\s\S]*?overflow:\s*hidden;/);
+    expect(styles).toMatch(/\.aitown-shell\s*\{[\s\S]*?height:\s*100dvh;[\s\S]*?overflow:\s*hidden;/);
+    expect(styles).toMatch(
+      /\.aitown-shell__layout--fullscreen\s*\{[\s\S]*?display:\s*block;[\s\S]*?height:\s*100%;/
     );
     expect(styles).toMatch(
-      /@media \(max-width: 840px\)\s*\{[\s\S]*?\.office-grid\s*\{\s*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\);\s*\}/
+      /\.aitown-panel--game-fullscreen\s*\{[\s\S]*?width:\s*100%;[\s\S]*?height:\s*100%;[\s\S]*?min-height:\s*0;/
+    );
+    expect(styles).toMatch(
+      /@media \(max-width:\s*1080px\)\s*\{[\s\S]*?\.aitown-shell__layout\s*\{[\s\S]*?display:\s*block;[\s\S]*?width:\s*100%;/
     );
   });
 
-  it('wraps evidence metadata and action pills so long refs do not force horizontal overflow', () => {
-    expect(styles).toMatch(/\.record-item__header\s*\{[\s\S]*?flex-wrap:\s*wrap;/);
-    expect(styles).toMatch(/\.record-item__meta\s*\{[\s\S]*?overflow-wrap:\s*anywhere;/);
+  it('keeps the game panel and details panel on the AI Town visual language', () => {
     expect(styles).toMatch(
-      /\.token-pill,\s*\.correlation-chip,\s*\.correlation-chip--muted\s*\{[\s\S]*?max-width:\s*100%;[\s\S]*?white-space:\s*normal;[\s\S]*?overflow-wrap:\s*anywhere;/
+      /\.aitown-panel--game\s*\{[\s\S]*?border-image-source:\s*url\('\/ai-town\/assets\/ui\/frame\.svg'\);/
     );
-    expect(styles).toMatch(/\.detail-card \.record-list\s*\{[\s\S]*?gap:\s*0\.5rem;/);
-    expect(styles).toMatch(/\.detail-card \.record-item\s*\{[\s\S]*?padding:\s*0\.65rem 0\.75rem;/);
-  });
-
-  it('defines explicit focus-visible rings for selectable workflow and correlation pills', () => {
     expect(styles).toMatch(
-      /button\.token-pill--action:focus-visible,\s*button\.correlation-chip:focus-visible\s*\{[\s\S]*?box-shadow:\s*0 0 0 1px rgba\(125,\s*211,\s*252,\s*0\.35\);[\s\S]*?outline:\s*1px solid rgba\(125,\s*211,\s*252,\s*0\.55\);[\s\S]*?outline-offset:\s*1px;/
+      /\.aitown-button\s*\{[\s\S]*?border-image-source:\s*url\('\/ai-town\/assets\/ui\/button\.svg'\);/
+    );
+    expect(styles).toMatch(
+      /\.aitown-details__summary\s*\{[\s\S]*?border-image-source:\s*url\('\/ai-town\/assets\/ui\/desc\.svg'\);/
     );
   });
 
-  it('styles the absent-from-overview workflow note as a visible warning surface', () => {
-    expect(styles).toMatch(/\.surface-status\.surface-status--warning\s*\{[\s\S]*?border-left-color:\s*#7dd3fc;[\s\S]*?color:\s*#bae6fd;/);
+  it('renders Hub as a dismissible overlay instead of a permanent side rail', () => {
+    expect(styles).toMatch(/\.aitown-hub-overlay\s*\{[\s\S]*?position:\s*fixed;/);
+    expect(styles).toMatch(/\.aitown-hub-overlay\s*\{[\s\S]*?justify-content:\s*flex-end;/);
+    expect(styles).toMatch(/\.aitown-hub-sheet\s*\{[\s\S]*?width:\s*min\(430px, 100vw\);[\s\S]*?height:\s*100dvh;/);
   });
 });

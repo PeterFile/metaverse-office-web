@@ -10,6 +10,7 @@ import {
   resolveViewportClampOptions,
   resolveViewportPanBounds,
   resolveViewportScaleBounds,
+  resolveViewportWheelGestureDisposition,
   shouldBlockViewportPointerInput,
   shouldBlockViewportWheelGesture,
   type ViewportInputCapabilities
@@ -82,6 +83,35 @@ describe('viewport interaction policy', () => {
         deltaY: 42
       })
     ).toBe(false);
+  });
+
+  it('routes non-mouse wheel gestures back to the browser instead of preventing defaults', () => {
+    expect(
+      resolveViewportWheelGestureDisposition({
+        ctrlKey: false,
+        deltaMode: 1,
+        deltaX: 0,
+        deltaY: 3
+      })
+    ).toBe('canvas-zoom');
+
+    expect(
+      resolveViewportWheelGestureDisposition({
+        ctrlKey: true,
+        deltaMode: 0,
+        deltaX: 0,
+        deltaY: 120
+      })
+    ).toBe('browser-default');
+
+    expect(
+      resolveViewportWheelGestureDisposition({
+        ctrlKey: false,
+        deltaMode: 0,
+        deltaX: 18,
+        deltaY: 42
+      })
+    ).toBe('browser-default');
   });
 });
 

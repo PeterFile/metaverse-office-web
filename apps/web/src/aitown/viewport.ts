@@ -45,6 +45,8 @@ export type ViewportWheelGestureSample = {
   deltaZ?: number;
 };
 
+export type ViewportWheelGestureDisposition = 'canvas-zoom' | 'browser-default';
+
 const DOM_DELTA_PIXEL = 0;
 const DOM_DELTA_LINE = 1;
 const DOM_DELTA_PAGE = 2;
@@ -80,8 +82,14 @@ export function isViewportMouseWheelGesture(sample: ViewportWheelGestureSample) 
   );
 }
 
+export function resolveViewportWheelGestureDisposition(
+  sample: ViewportWheelGestureSample
+): ViewportWheelGestureDisposition {
+  return isViewportMouseWheelGesture(sample) ? 'canvas-zoom' : 'browser-default';
+}
+
 export function shouldBlockViewportWheelGesture(sample: ViewportWheelGestureSample) {
-  return !isViewportMouseWheelGesture(sample);
+  return resolveViewportWheelGestureDisposition(sample) === 'browser-default';
 }
 
 export function resolveViewportScaleBounds(

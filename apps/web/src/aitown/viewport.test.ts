@@ -117,22 +117,22 @@ describe('viewport coverage and panning bounds', () => {
     expect(visibleHeight).toBeGreaterThan(900);
   });
 
-  it('clamps pan bounds to exact scene dimensions', () => {
+  it('extends pan bounds for the hub and chrome overlay margins', () => {
     const panBounds = resolveViewportPanBounds(2048, 1536, 1000, 800, 1.0);
 
     expect(panBounds.left).toBe(0);
-    expect(panBounds.right).toBe(2048);
+    expect(panBounds.right).toBeCloseTo(2048 + 480, 4);
     expect(panBounds.top).toBe(0);
-    expect(panBounds.bottom).toBe(1536);
+    expect(panBounds.bottom).toBeCloseTo(1536 + 280, 4);
   });
 
-  it('emits explicit clamp edges matching scene dimensions', () => {
+  it('scales clamp margins with the current zoom level', () => {
     const clampOptions = resolveViewportClampOptions(2048, 1536, 1000, 800, 2.0);
 
     expect(clampOptions.left).toBe(0);
-    expect(clampOptions.right).toBe(2048);
+    expect(clampOptions.right).toBeCloseTo(2048 + 480 / 2, 4);
     expect(clampOptions.top).toBe(0);
-    expect(clampOptions.bottom).toBe(1536);
+    expect(clampOptions.bottom).toBeCloseTo(1536 + 280 / 2, 4);
   });
 });
 

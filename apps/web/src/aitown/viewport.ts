@@ -1,5 +1,7 @@
 export const DEFAULT_MAX_VIEWPORT_SCALE = 2.2;
-export const DEFAULT_ENTRY_VIEWPORT_OVERSCAN = 1.15;
+export const DEFAULT_ENTRY_VIEWPORT_OVERSCAN = 1.08;
+export const DEFAULT_ALLOW_VIEWPORT_DRAG_OUTSIDE = true;
+export const DEFAULT_MIN_VIEWPORT_PAN_MARGIN = 96;
 
 export type ViewportInputCapabilities = {
   primaryPointerFine?: boolean;
@@ -28,6 +30,11 @@ export type ViewportPanBounds = {
   bottom: number;
 };
 
+export type ViewportCenter = {
+  x: number;
+  y: number;
+};
+
 export type ViewportClampOptions = ViewportPanBounds;
 
 export type ViewportWheelGestureSample = {
@@ -45,8 +52,8 @@ const MIN_PIXEL_MOUSE_WHEEL_STEP = 24;
 const PIXEL_MOUSE_WHEEL_GRANULARITY = 4;
 const FLOAT_EPSILON = 0.0001;
 
-export function shouldBlockViewportPointerInput(pointerType: string | null | undefined) {
-  return pointerType !== 'mouse';
+export function shouldBlockViewportPointerInput(_pointerType: string | null | undefined) {
+  return false;
 }
 
 export function isViewportMouseWheelGesture(sample: ViewportWheelGestureSample) {
@@ -77,22 +84,6 @@ export function shouldBlockViewportWheelGesture(sample: ViewportWheelGestureSamp
   return !isViewportMouseWheelGesture(sample);
 }
 
-function supportsMousePan(capabilities?: ViewportInputCapabilities) {
-  if (!capabilities) {
-    return true;
-  }
-
-  if (capabilities.primaryPointerFine === false || capabilities.anyPointerFine === false) {
-    return false;
-  }
-
-  if ((capabilities.maxTouchPoints ?? 0) > 0 && !capabilities.primaryPointerFine && !capabilities.anyPointerFine) {
-    return false;
-  }
-
-  return true;
-}
-
 export function resolveViewportScaleBounds(
   hostWidth: number,
   hostHeight: number,
@@ -107,37 +98,61 @@ export function resolveViewportScaleBounds(
   const safeSceneHeight = sanitizeDimension(sceneHeight);
 
   const coverScale = Math.max(safeHostWidth / safeSceneWidth, safeHostHeight / safeSceneHeight);
-  const widthScale = safeHostWidth / safeSceneWidth;
-  const heightScale = safeHostHeight / safeSceneHeight;
-  const widthLimitedEntry = Math.abs(coverScale - widthScale) < FLOAT_EPSILON;
-  const sameAspectRatio = Math.abs(widthScale - heightScale) < FLOAT_EPSILON;
-  const needsEntryOverscan = widthLimitedEntry && !sameAspectRatio && supportsMousePan(capabilities);
-  const baseScale = needsEntryOverscan
-    ? coverScale * DEFAULT_ENTRY_VIEWPORT_OVERSCAN
-    : coverScale;
+  const minPannableScale = Math.max(
+    coverScale,
+    (safeHostWidth + DEFAULT_MIN_VIEWPORT_PAN_MARGIN * 2) / safeSceneWidth,
+    (safeHostHeight + DEFAULT_MIN_VIEWPORT_PAN_MARGIN * 2) / safeSceneHeight
+  );
+  const baseScale = Math.max(coverScale * DEFAULT_ENTRY_VIEWPORT_OVERSCAN, minPannableScale);
+  const minScale = minPannableScale;
 
   return {
     baseScale,
-    minScale: baseScale,
+    minScale,
     maxScale: Math.max(maxScale, baseScale)
+  };
+}
+
+export function resolveViewportEntryCenter(
+  hostWidth: number,
+  hostHeight: number,
+  sceneWidth: number,
+  sceneHeight: number,
+  capabilities?: ViewportInputCapabilities
+): ViewportCenter {
+  return {
+    x: sanitizeDimension(sceneWidth) / 2,
+    y: sanitizeDimension(sceneHeight) / 2
   };
 }
 
 export function resolveViewportPanBounds(
   sceneWidth: number,
-  sceneHeight: number
+  sceneHeight: number,
+  hostWidth: number,
+  hostHeight: number,
+  scale: number
 ): ViewportPanBounds {
+  const currentScale = Math.max(scale, 0.0001);
+  // Screen-equivalent margins so scene edges can be dragged past UI overlays.
+  const rightMarginScreen = 480;   // Hub panel
+  const bottomMarginScreen = 280;  // header + toolbar + frame
+  const rightMarginWorld = rightMarginScreen / currentScale;
+  const bottomMarginWorld = bottomMarginScreen / currentScale;
   return {
     left: 0,
-    right: sanitizeDimension(sceneWidth),
+    right: sanitizeDimension(sceneWidth) + rightMarginWorld,
     top: 0,
-    bottom: sanitizeDimension(sceneHeight)
+    bottom: sanitizeDimension(sceneHeight) + bottomMarginWorld
   };
 }
 
 export function resolveViewportClampOptions(
   sceneWidth: number,
-  sceneHeight: number
+  sceneHeight: number,
+  hostWidth: number,
+  hostHeight: number,
+  scale: number
 ): ViewportClampOptions {
-  return resolveViewportPanBounds(sceneWidth, sceneHeight);
+  return resolveViewportPanBounds(sceneWidth, sceneHeight, hostWidth, hostHeight, scale);
 }

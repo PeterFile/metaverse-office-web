@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  DEFAULT_ALLOW_VIEWPORT_DRAG_OUTSIDE,
+  DEFAULT_ENTRY_VIEWPORT_OVERSCAN,
   DEFAULT_MAX_VIEWPORT_SCALE,
+  DEFAULT_MIN_VIEWPORT_PAN_MARGIN,
   isViewportMouseWheelGesture,
+  resolveViewportEntryCenter,
   resolveViewportClampOptions,
   resolveViewportPanBounds,
   resolveViewportScaleBounds,
@@ -12,11 +16,15 @@ import {
 } from './viewport';
 
 describe('viewport interaction policy', () => {
-  it('blocks non-mouse pointer gestures so panning stays mouse-only', () => {
+  it('keeps mouse drag alive after the pointer leaves the host so edge panning can finish', () => {
+    expect(DEFAULT_ALLOW_VIEWPORT_DRAG_OUTSIDE).toBe(true);
+  });
+
+  it('allows mouse, touch, and pen pointer drags so every device can pan the world', () => {
     expect(shouldBlockViewportPointerInput('mouse')).toBe(false);
-    expect(shouldBlockViewportPointerInput('touch')).toBe(true);
-    expect(shouldBlockViewportPointerInput('pen')).toBe(true);
-    expect(shouldBlockViewportPointerInput(undefined)).toBe(true);
+    expect(shouldBlockViewportPointerInput('touch')).toBe(false);
+    expect(shouldBlockViewportPointerInput('pen')).toBe(false);
+    expect(shouldBlockViewportPointerInput(undefined)).toBe(false);
   });
 
   it('blocks ctrl-wheel gestures so zoom stays wheel-only instead of trackpad pinch', () => {
@@ -84,22 +92,33 @@ const mouseCapabilities: ViewportInputCapabilities = {
 };
 
 describe('viewport coverage and panning bounds', () => {
-  it('uses cover scale to avoid black gutters on initial fullscreen render', () => {
+  it('overscans the initial fullscreen render so both axes stay pannable', () => {
     const bounds = resolveViewportScaleBounds(1600, 900, 2048, 1536);
+    const expectedBaseScale = Math.max(
+      (1600 / 2048) * DEFAULT_ENTRY_VIEWPORT_OVERSCAN,
+      Math.max(
+        1600 / 2048,
+        (1600 + DEFAULT_MIN_VIEWPORT_PAN_MARGIN * 2) / 2048,
+        (900 + DEFAULT_MIN_VIEWPORT_PAN_MARGIN * 2) / 1536
+      )
+    );
 
-    expect(bounds.baseScale * 2048).toBeGreaterThanOrEqual(1600);
-    expect(bounds.baseScale * 1536).toBeGreaterThanOrEqual(900);
+    expect(bounds.baseScale).toBeCloseTo(expectedBaseScale, 4);
+    expect(bounds.baseScale * 2048).toBeGreaterThan(1600);
+    expect(bounds.baseScale * 1536).toBeGreaterThan(900);
   });
 
-  it('keeps horizontal overflow available when cover mode is height-constrained', () => {
+  it('overscans widescreen layouts so horizontal and vertical panning both remain available', () => {
     const bounds = resolveViewportScaleBounds(1600, 900, 2048, 1000);
-    const coveredWidth = 2048 * bounds.baseScale;
+    const visibleWidth = 2048 * bounds.baseScale;
+    const visibleHeight = 1000 * bounds.baseScale;
 
-    expect(coveredWidth).toBeGreaterThan(1600);
+    expect(visibleWidth).toBeGreaterThan(1600);
+    expect(visibleHeight).toBeGreaterThan(900);
   });
 
-  it('keeps pan bounds locked to the true world edges so dragging never exposes black gutters', () => {
-    const panBounds = resolveViewportPanBounds(2048, 1536);
+  it('clamps pan bounds to exact scene dimensions', () => {
+    const panBounds = resolveViewportPanBounds(2048, 1536, 1000, 800, 1.0);
 
     expect(panBounds.left).toBe(0);
     expect(panBounds.right).toBe(2048);
@@ -107,8 +126,8 @@ describe('viewport coverage and panning bounds', () => {
     expect(panBounds.bottom).toBe(1536);
   });
 
-  it('emits explicit clamp edges instead of boolean auto-clamp flags', () => {
-    const clampOptions = resolveViewportClampOptions(2048, 1536);
+  it('emits explicit clamp edges matching scene dimensions', () => {
+    const clampOptions = resolveViewportClampOptions(2048, 1536, 1000, 800, 2.0);
 
     expect(clampOptions.left).toBe(0);
     expect(clampOptions.right).toBe(2048);
@@ -118,44 +137,137 @@ describe('viewport coverage and panning bounds', () => {
 });
 
 describe('resolveViewportScaleBounds', () => {
-  it('locks minimum zoom to an overscanned entry scale so horizontal pan exists before any zoom on desktop', () => {
+  it('keeps desktop minimum zoom with real two-axis pan room and no gutters', () => {
     const bounds = resolveViewportScaleBounds(1600, 900, 2048, 1536, DEFAULT_MAX_VIEWPORT_SCALE, mouseCapabilities);
+    const expectedMinScale = Math.max(
+      1600 / 2048,
+      (1600 + DEFAULT_MIN_VIEWPORT_PAN_MARGIN * 2) / 2048,
+      (900 + DEFAULT_MIN_VIEWPORT_PAN_MARGIN * 2) / 1536
+    );
 
-    expect(bounds.baseScale).toBeCloseTo((1600 / 2048) * 1.15, 4);
-    expect(bounds.minScale).toBeCloseTo(bounds.baseScale, 4);
+    expect(bounds.baseScale).toBeCloseTo(expectedMinScale, 4);
+    expect(bounds.minScale).toBeCloseTo(expectedMinScale, 4);
+    expect(bounds.minScale * 2048 - 1600).toBeGreaterThanOrEqual(DEFAULT_MIN_VIEWPORT_PAN_MARGIN * 2);
+    expect(bounds.minScale * 1536 - 900).toBeGreaterThanOrEqual(DEFAULT_MIN_VIEWPORT_PAN_MARGIN * 2);
     expect(bounds.maxScale).toBe(DEFAULT_MAX_VIEWPORT_SCALE);
   });
 
-  it('keeps portrait layouts in cover mode instead of zooming out to full-map fit', () => {
+  it('keeps portrait minimum zoom with real two-axis pan room and no gutters', () => {
     const bounds = resolveViewportScaleBounds(390, 844, 2048, 1536, DEFAULT_MAX_VIEWPORT_SCALE, mouseCapabilities);
+    const expectedMinScale = Math.max(
+      844 / 1536,
+      (390 + DEFAULT_MIN_VIEWPORT_PAN_MARGIN * 2) / 2048,
+      (844 + DEFAULT_MIN_VIEWPORT_PAN_MARGIN * 2) / 1536
+    );
 
-    expect(bounds.baseScale).toBeCloseTo(844 / 1536, 4);
-    expect(bounds.minScale).toBeCloseTo(bounds.baseScale, 4);
+    expect(bounds.baseScale).toBeCloseTo(expectedMinScale, 4);
+    expect(bounds.minScale).toBeCloseTo(expectedMinScale, 4);
+    expect(bounds.minScale * 2048 - 390).toBeGreaterThanOrEqual(DEFAULT_MIN_VIEWPORT_PAN_MARGIN * 2);
+    expect(bounds.minScale * 1536 - 844).toBeGreaterThanOrEqual(DEFAULT_MIN_VIEWPORT_PAN_MARGIN * 2);
   });
 
-  it('does not overscan equal-aspect layouts that already show the full map', () => {
+  it('keeps equal-aspect layouts draggable on both axes too', () => {
     const bounds = resolveViewportScaleBounds(1024, 768, 2048, 1536, DEFAULT_MAX_VIEWPORT_SCALE, mouseCapabilities);
+    const expectedMinScale = Math.max(
+      0.5,
+      (1024 + DEFAULT_MIN_VIEWPORT_PAN_MARGIN * 2) / 2048,
+      (768 + DEFAULT_MIN_VIEWPORT_PAN_MARGIN * 2) / 1536
+    );
 
-    expect(bounds.baseScale).toBeCloseTo(0.5, 4);
-    expect(bounds.minScale).toBeCloseTo(0.5, 4);
+    expect(bounds.baseScale).toBeCloseTo(expectedMinScale, 4);
+    expect(bounds.minScale).toBeCloseTo(expectedMinScale, 4);
   });
 
-  it('does not overscan touch-only layouts that cannot recover hidden edges by dragging', () => {
+  it('keeps touch-only layouts overscanned too because mobile also needs free drag room', () => {
     const bounds = resolveViewportScaleBounds(1600, 900, 2048, 1536, DEFAULT_MAX_VIEWPORT_SCALE, {
       primaryPointerFine: false,
       anyPointerFine: false,
       maxTouchPoints: 5
     });
+    const expectedMinScale = Math.max(
+      1600 / 2048,
+      (1600 + DEFAULT_MIN_VIEWPORT_PAN_MARGIN * 2) / 2048,
+      (900 + DEFAULT_MIN_VIEWPORT_PAN_MARGIN * 2) / 1536
+    );
 
-    expect(bounds.baseScale).toBeCloseTo(1600 / 2048, 4);
-    expect(bounds.minScale).toBeCloseTo(bounds.baseScale, 4);
+    expect(bounds.baseScale).toBeCloseTo(expectedMinScale, 4);
+    expect(bounds.minScale).toBeCloseTo(expectedMinScale, 4);
+  });
+
+  it('still overscans hybrid desktop environments where any pointer can drag', () => {
+    const bounds = resolveViewportScaleBounds(1600, 900, 2048, 1536, DEFAULT_MAX_VIEWPORT_SCALE, {
+      primaryPointerFine: false,
+      anyPointerFine: true,
+      maxTouchPoints: 5
+    });
+    const expectedMinScale = Math.max(
+      1600 / 2048,
+      (1600 + DEFAULT_MIN_VIEWPORT_PAN_MARGIN * 2) / 2048,
+      (900 + DEFAULT_MIN_VIEWPORT_PAN_MARGIN * 2) / 1536
+    );
+
+    expect(bounds.baseScale).toBeCloseTo(expectedMinScale, 4);
+    expect(bounds.minScale).toBeCloseTo(expectedMinScale, 4);
+  });
+
+  it('still overscans unknown pointer environments instead of collapsing drag room by mistake', () => {
+    const bounds = resolveViewportScaleBounds(1600, 900, 2048, 1536, DEFAULT_MAX_VIEWPORT_SCALE, {
+      maxTouchPoints: 0
+    });
+    const expectedMinScale = Math.max(
+      1600 / 2048,
+      (1600 + DEFAULT_MIN_VIEWPORT_PAN_MARGIN * 2) / 2048,
+      (900 + DEFAULT_MIN_VIEWPORT_PAN_MARGIN * 2) / 1536
+    );
+
+    expect(bounds.baseScale).toBeCloseTo(expectedMinScale, 4);
+    expect(bounds.minScale).toBeCloseTo(expectedMinScale, 4);
+  });
+
+  it('still overscans unknown environments that only advertise touch points and no fine pointer', () => {
+    const bounds = resolveViewportScaleBounds(1600, 900, 2048, 1536, DEFAULT_MAX_VIEWPORT_SCALE, {
+      maxTouchPoints: 5
+    });
+    const expectedMinScale = Math.max(
+      1600 / 2048,
+      (1600 + DEFAULT_MIN_VIEWPORT_PAN_MARGIN * 2) / 2048,
+      (900 + DEFAULT_MIN_VIEWPORT_PAN_MARGIN * 2) / 1536
+    );
+
+    expect(bounds.baseScale).toBeCloseTo(expectedMinScale, 4);
+    expect(bounds.minScale).toBeCloseTo(expectedMinScale, 4);
   });
 
   it('raises the max zoom cap when giant displays need a larger overscanned entry scale', () => {
     const bounds = resolveViewportScaleBounds(6000, 3000, 2048, 1536, DEFAULT_MAX_VIEWPORT_SCALE, mouseCapabilities);
+    const expectedMinScale = Math.max(
+      6000 / 2048,
+      (6000 + DEFAULT_MIN_VIEWPORT_PAN_MARGIN * 2) / 2048,
+      (3000 + DEFAULT_MIN_VIEWPORT_PAN_MARGIN * 2) / 1536
+    );
 
-    expect(bounds.baseScale).toBeCloseTo((6000 / 2048) * 1.15, 4);
+    expect(bounds.baseScale).toBeCloseTo((6000 / 2048) * DEFAULT_ENTRY_VIEWPORT_OVERSCAN, 4);
     expect(bounds.maxScale).toBe(bounds.baseScale);
-    expect(bounds.minScale).toBe(bounds.baseScale);
+    expect(bounds.minScale).toBeCloseTo(expectedMinScale, 4);
+  });
+});
+
+describe('resolveViewportEntryCenter', () => {
+  it('keeps wide desktop entry centered in cover mode', () => {
+    const center = resolveViewportEntryCenter(1600, 900, 2048, 1536, mouseCapabilities);
+
+    expect(center.x).toBeCloseTo(2048 / 2, 4);
+    expect(center.y).toBeCloseTo(1536 / 2, 4);
+  });
+
+  it('keeps touch-only entry centered so mobile starts with the same framing', () => {
+    const center = resolveViewportEntryCenter(1600, 900, 2048, 1536, {
+      primaryPointerFine: false,
+      anyPointerFine: false,
+      maxTouchPoints: 5
+    });
+
+    expect(center.x).toBeCloseTo(2048 / 2, 4);
+    expect(center.y).toBeCloseTo(1536 / 2, 4);
   });
 });

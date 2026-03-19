@@ -183,7 +183,7 @@ function AppInner() {
             </div>
           </header>
           <div className="aitown-panel__topline">
-            <span>Drag to pan. Wheel to zoom. Click an agent to inspect.</span>
+            <span>Drag to pan. Wheel to zoom. Tap or click an agent to inspect.</span>
             <span>
               {overviewResource.data?.generated_at ? `Snapshot ${overviewResource.data.generated_at}` : 'Synchronizing'}
             </span>

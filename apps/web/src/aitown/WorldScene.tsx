@@ -20,8 +20,8 @@ import {
   resolveViewportClampOptions,
   resolveViewportEntryCenter,
   resolveViewportScaleBounds,
+  resolveViewportWheelGestureDisposition,
   shouldBlockViewportPointerInput,
-  shouldBlockViewportWheelGesture,
   type ViewportInputCapabilities
 } from './viewport';
 
@@ -286,30 +286,23 @@ export default function WorldScene({ scene, onSelectAgent }: WorldSceneProps) {
     let handleHostPointerDown = (_event: PointerEvent) => {};
     let handleHostPointerMove = (_event: PointerEvent) => {};
     let handleHostPointerUp = (_event: PointerEvent) => {};
-    const blockGestureZoom = (event: Event) => {
-      event.preventDefault();
-    };
-    const blockTrackpadPinch = (event: WheelEvent) => {
+    const passthroughBrowserZoomShortcut = (event: WheelEvent) => {
       if (
-        !shouldBlockViewportWheelGesture({
+        resolveViewportWheelGestureDisposition({
           ctrlKey: event.ctrlKey,
           deltaMode: event.deltaMode,
           deltaX: event.deltaX,
           deltaY: event.deltaY,
           deltaZ: event.deltaZ
-        })
+        }) !== 'browser-default'
       ) {
         return;
       }
 
-      event.preventDefault();
       event.stopImmediatePropagation();
     };
 
-    host.addEventListener('wheel', blockTrackpadPinch, { passive: false, capture: true });
-    host.addEventListener('gesturestart', blockGestureZoom as EventListener, { passive: false });
-    host.addEventListener('gesturechange', blockGestureZoom as EventListener, { passive: false });
-    host.addEventListener('gestureend', blockGestureZoom as EventListener, { passive: false });
+    host.addEventListener('wheel', passthroughBrowserZoomShortcut, { passive: false, capture: true });
 
     void (async () => {
       try {
@@ -546,10 +539,7 @@ export default function WorldScene({ scene, onSelectAgent }: WorldSceneProps) {
       if (viewportRef.current && viewportZoomHandler) {
         viewportRef.current.off('zoomed', viewportZoomHandler);
       }
-      host.removeEventListener('wheel', blockTrackpadPinch, { capture: true });
-      host.removeEventListener('gesturestart', blockGestureZoom as EventListener);
-      host.removeEventListener('gesturechange', blockGestureZoom as EventListener);
-      host.removeEventListener('gestureend', blockGestureZoom as EventListener);
+      host.removeEventListener('wheel', passthroughBrowserZoomShortcut, { capture: true });
       host.removeEventListener('pointerdown', handleHostPointerDown);
       host.removeEventListener('pointermove', handleHostPointerMove);
       host.removeEventListener('pointerup', handleHostPointerUp);

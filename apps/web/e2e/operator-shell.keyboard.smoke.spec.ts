@@ -38,6 +38,13 @@ async function readViewportState(page: Page) {
   });
 }
 
+async function readViewportScale(page: Page) {
+  return page.evaluate(() => {
+    const viewport = (window as typeof window & { __AITOWN_VIEWPORT__?: { scale?: { x?: number } } }).__AITOWN_VIEWPORT__;
+    return viewport?.scale?.x ?? null;
+  });
+}
+
 async function zoomViewportOutToMinimum(page: Page) {
   await page.evaluate(() => {
     const viewport = (window as typeof window & { __AITOWN_VIEWPORT__?: any }).__AITOWN_VIEWPORT__;
@@ -203,5 +210,78 @@ test.describe('AI Town shell smoke', () => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.reload();
     await expectMinimumZoomKeepsTwoAxisPanRoom(page);
+  });
+
+  test('routes ctrl-wheel to the browser without zooming the canvas viewport', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.locator('.aitown-world__host canvas')).toBeVisible();
+    await page.waitForFunction(() => Boolean((window as typeof window & { __AITOWN_VIEWPORT__?: { scale: { x: number; y: number } } }).__AITOWN_VIEWPORT__));
+
+    const beforeScale = await readViewportScale(page);
+    expect(beforeScale).not.toBeNull();
+
+    const result = await page.locator('.aitown-world__host canvas').evaluate((canvas) => {
+      const event = new WheelEvent('wheel', {
+        bubbles: true,
+        cancelable: true,
+        ctrlKey: true,
+        deltaY: 120
+      });
+      const dispatchReturned = canvas.dispatchEvent(event);
+
+      return {
+        dispatchReturned,
+        defaultPrevented: event.defaultPrevented
+      };
+    });
+
+    const afterScale = await readViewportScale(page);
+    expect(afterScale).not.toBeNull();
+    expect(result).toEqual({
+      dispatchReturned: true,
+      defaultPrevented: false
+    });
+    expect(afterScale).toBe(beforeScale);
+  });
+
+  test('does not register Safari gesture listeners on the canvas host path', async ({ page }) => {
+    await page.addInitScript(() => {
+      const originalAddEventListener = EventTarget.prototype.addEventListener;
+      const gestureRegistrations: Array<{ type: string; target: string }> = [];
+
+      const describeTarget = (target: EventTarget) => {
+        if (target === window) return 'window';
+        if (target === document) return 'document';
+        if (target instanceof HTMLCanvasElement) return 'canvas';
+        if (target instanceof HTMLElement) {
+          return target.classList.contains('aitown-world__host')
+            ? 'aitown-world__host'
+            : `${target.tagName.toLowerCase()}.${target.className}`;
+        }
+        return Object.prototype.toString.call(target);
+      };
+
+      EventTarget.prototype.addEventListener = function patchedAddEventListener(
+        type: string,
+        listener: EventListenerOrEventListenerObject | null,
+        options?: boolean | AddEventListenerOptions
+      ) {
+        if (type === 'gesturestart' || type === 'gesturechange' || type === 'gestureend') {
+          gestureRegistrations.push({ type, target: describeTarget(this) });
+        }
+        return originalAddEventListener.call(this, type, listener, options);
+      };
+
+      (window as typeof window & { __AITOWN_GESTURE_LISTENERS__?: Array<{ type: string; target: string }> }).__AITOWN_GESTURE_LISTENERS__ = gestureRegistrations;
+    });
+
+    await page.goto('/');
+    await expect(page.locator('.aitown-world__host canvas')).toBeVisible();
+
+    const listeners = await page.evaluate(() => {
+      return (window as typeof window & { __AITOWN_GESTURE_LISTENERS__?: Array<{ type: string; target: string }> }).__AITOWN_GESTURE_LISTENERS__ ?? [];
+    });
+
+    expect(listeners.filter((entry) => entry.target === 'aitown-world__host' || entry.target === 'canvas')).toEqual([]);
   });
 });

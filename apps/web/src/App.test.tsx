@@ -206,9 +206,11 @@ describe('App', () => {
     );
   });
 
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
+afterEach(() => {
+  vi.useRealTimers();
+  delete (window as typeof window & { __AITOWN_POLL_INTERVAL_MS__?: number }).__AITOWN_POLL_INTERVAL_MS__;
+  vi.unstubAllGlobals();
+});
 
   it('renders the AI Town shell as the default frontend', async () => {
     render(<App />);
@@ -237,13 +239,62 @@ describe('App', () => {
     expect(worldRegion.className).toContain('aitown-panel--game-fullscreen');
 
     await user.click(hubTrigger);
+    expect(await screen.findByRole('dialog', { name: 'Hub' })).toBeVisible();
     expect(await screen.findByRole('complementary', { name: 'Agent details' })).toBeVisible();
     expect(screen.getByRole('button', { name: 'Hide Hub' })).toBeVisible();
     expect(screen.getByRole('button', { name: 'Close Hub' })).toBeVisible();
 
     await user.click(screen.getByRole('button', { name: 'Close Hub' }));
+    expect(screen.queryByRole('dialog', { name: 'Hub' })).not.toBeInTheDocument();
     expect(screen.queryByRole('complementary', { name: 'Agent details' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Open Hub' })).toBeVisible();
+  });
+
+  it('treats Hub as a dialog, closes on Escape, and restores focus to the trigger', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const hubTrigger = await screen.findByRole('button', { name: 'Open Hub' });
+    hubTrigger.focus();
+    expect(hubTrigger).toHaveFocus();
+
+    await user.click(hubTrigger);
+
+    const dialog = await screen.findByRole('dialog', { name: 'Hub' });
+    const closeButton = within(dialog).getByRole('button', { name: 'Close Hub' });
+    await waitFor(() => {
+      expect(closeButton).toHaveFocus();
+    });
+
+    await user.keyboard('{Escape}');
+
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog', { name: 'Hub' })).not.toBeInTheDocument();
+    });
+    expect(screen.getByRole('button', { name: 'Open Hub' })).toHaveFocus();
+  });
+
+  it('traps Tab navigation inside Hub while it is open', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole('button', { name: 'Open Hub' }));
+
+    const dialog = await screen.findByRole('dialog', { name: 'Hub' });
+    const closeButton = within(dialog).getByRole('button', { name: 'Close Hub' });
+    const rosterButtons = within(dialog).getAllByRole('button', { name: /Inspect /i });
+    const lastRosterButton = rosterButtons.at(-1);
+
+    expect(lastRosterButton).toBeDefined();
+    await waitFor(() => {
+      expect(closeButton).toHaveFocus();
+    });
+
+    await user.tab({ shift: true });
+    expect(lastRosterButton).toHaveFocus();
+
+    await user.tab();
+    expect(closeButton).toHaveFocus();
   });
 
   it('keeps selected agent summary aligned with projected world state', async () => {
@@ -351,6 +402,193 @@ describe('App', () => {
     expect(resolveOverviewRefreshWarning('overview refresh failed', true)).toBe('overview refresh failed');
     expect(resolveOverviewRefreshWarning('overview refresh failed', false)).toBeNull();
     expect(resolveOverviewRefreshWarning(null, true)).toBeNull();
+  });
+
+  it('keeps the last overview snapshot visible when a later overview poll fails', async () => {
+    (window as typeof window & { __AITOWN_POLL_INTERVAL_MS__?: number }).__AITOWN_POLL_INTERVAL_MS__ = 10;
+
+    let overviewRequests = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === '/office/overview') {
+          overviewRequests += 1;
+          if (overviewRequests === 1) {
+            return new Response(JSON.stringify(overviewFixture), {
+              headers: { 'content-type': 'application/json' }
+            });
+          }
+
+          return new Response(JSON.stringify({ error: 'internal_error', details: 'overview refresh failed' }), {
+            status: 500,
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === incidentsUrl) {
+          return new Response(JSON.stringify(incidentFeedFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        throw new Error(`Unexpected request: ${url}`);
+      })
+    );
+
+    render(<App />);
+
+    expect(await screen.findByRole('heading', { name: 'Metaverse Town' })).toBeVisible();
+    expect(screen.getByText(/Snapshot 2026-03-16T09:00:00.000Z/)).toBeVisible();
+
+    expect(await screen.findByText('Showing last office snapshot.')).toBeVisible();
+    expect(screen.getByText('overview refresh failed')).toBeVisible();
+    expect(screen.getByText(/Snapshot 2026-03-16T09:00:00.000Z/)).toBeVisible();
+    expect(screen.queryByText('Unable to load office overview.')).not.toBeInTheDocument();
+  });
+
+  it('clears stale selected-agent workflow details only after overview confirms the agent is absent', async () => {
+    (window as typeof window & { __AITOWN_POLL_INTERVAL_MS__?: number }).__AITOWN_POLL_INTERVAL_MS__ = 10;
+
+    let overviewRequests = 0;
+    let workflowRequests = 0;
+    let allowOverviewDrop = false;
+    let overviewDroppedAgent = false;
+    const overviewWithoutSelectedAgent = {
+      ...overviewFixture,
+      summary: {
+        ...overviewFixture.summary,
+        agent_count: 2,
+        blocked_count: 0,
+        reboot_recommended_count: 0,
+        severity_buckets: {
+          normal: 1,
+          yellow: 1,
+          orange: 0,
+          red: 0
+        }
+      },
+      watch_edges: [],
+      agents: overviewFixture.agents.filter((agent) => agent.agent_id !== 'app-engineering'),
+      zones: overviewFixture.zones.map((zone) => ({
+        ...zone,
+        occupants: zone.occupants
+      }))
+    };
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === '/office/overview') {
+          overviewRequests += 1;
+          const body = allowOverviewDrop ? overviewWithoutSelectedAgent : overviewFixture;
+          if (allowOverviewDrop) {
+            overviewDroppedAgent = true;
+          }
+          return new Response(JSON.stringify(body), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === incidentsUrl) {
+          return new Response(JSON.stringify(incidentFeedFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === workflowUrl) {
+          workflowRequests += 1;
+          if (workflowRequests === 1) {
+            allowOverviewDrop = true;
+            return new Response(JSON.stringify(workflowFixture), {
+              headers: { 'content-type': 'application/json' }
+            });
+          }
+
+          if (!overviewDroppedAgent) {
+            return new Response(JSON.stringify(workflowFixture), {
+              headers: { 'content-type': 'application/json' }
+            });
+          }
+
+          return new Response(JSON.stringify({ error: 'not_found', details: 'unknown agent app-engineering' }), {
+            status: 404,
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        throw new Error(`Unexpected request: ${url}`);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(await within(details).findByRole('button', { name: 'Inspect App Engineering Agent' }));
+    expect(await within(details).findByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
+    });
+    expect(overviewRequests).toBeGreaterThan(1);
+    expect(workflowRequests).toBeGreaterThan(1);
+    expect(within(details).queryByRole('heading', { name: 'App Engineering Agent' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Clear Selection' })).not.toBeInTheDocument();
+  });
+
+  it('keeps selected-agent workflow details pinned when a workflow 404 arrives before overview drops the agent', async () => {
+    (window as typeof window & { __AITOWN_POLL_INTERVAL_MS__?: number }).__AITOWN_POLL_INTERVAL_MS__ = 10;
+
+    let workflowRequests = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === '/office/overview') {
+          return new Response(JSON.stringify(overviewFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === incidentsUrl) {
+          return new Response(JSON.stringify(incidentFeedFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === workflowUrl) {
+          workflowRequests += 1;
+          if (workflowRequests === 1) {
+            return new Response(JSON.stringify(workflowFixture), {
+              headers: { 'content-type': 'application/json' }
+            });
+          }
+
+          return new Response(JSON.stringify({ error: 'not_found', details: 'unknown agent app-engineering' }), {
+            status: 404,
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        throw new Error(`Unexpected request: ${url}`);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
+    expect(await within(details).findByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+
+    expect(await within(details).findByText('unknown agent app-engineering')).toBeVisible();
+    expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Clear Selection' })).toBeVisible();
   });
 
   it('prefers workflow incidents when the selected agent is missing from the global incident feed', async () => {

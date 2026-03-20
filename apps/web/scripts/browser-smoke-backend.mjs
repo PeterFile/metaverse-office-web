@@ -31,8 +31,13 @@ async function main() {
   const baseServer = createAppServer({ store, now });
   const server = createScenarioServer({ baseServer, store, now });
   server.listen(port, '127.0.0.1', () => {
+    const address = server.address();
+    if (!address || typeof address === 'string') {
+      throw new Error('browser smoke backend failed to resolve its listen address');
+    }
+
     process.stdout.write(
-      `browser smoke backend listening on http://127.0.0.1:${port}\nstore: ${storeFile}\n`
+      `browser smoke backend listening on http://127.0.0.1:${address.port}\nstore: ${storeFile}\n`
     );
   });
 

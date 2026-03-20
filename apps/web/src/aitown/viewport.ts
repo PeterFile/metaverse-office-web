@@ -17,6 +17,13 @@ function sanitizeDimension(value: number) {
   return value;
 }
 
+function resolveViewportMinPanMargin(hostWidth: number, hostHeight: number) {
+  return Math.max(
+    DEFAULT_MIN_VIEWPORT_PAN_MARGIN,
+    Math.min(sanitizeDimension(hostWidth), sanitizeDimension(hostHeight)) * 0.18
+  );
+}
+
 export type ViewportScaleBounds = {
   baseScale: number;
   minScale: number;
@@ -33,6 +40,13 @@ export type ViewportPanBounds = {
 export type ViewportCenter = {
   x: number;
   y: number;
+};
+
+export type ViewportClampPadding = {
+  left?: number;
+  right?: number;
+  top?: number;
+  bottom?: number;
 };
 
 export type ViewportClampOptions = ViewportPanBounds;
@@ -56,6 +70,13 @@ const FLOAT_EPSILON = 0.0001;
 
 export function shouldBlockViewportPointerInput(_pointerType: string | null | undefined) {
   return false;
+}
+
+export function shouldDeferViewportPointerGestureToBrowser(
+  pointerType: string | null | undefined,
+  activeTouchPointers = 0
+) {
+  return pointerType === 'touch' && activeTouchPointers > 1;
 }
 
 export function isViewportMouseWheelGesture(sample: ViewportWheelGestureSample) {
@@ -104,12 +125,13 @@ export function resolveViewportScaleBounds(
   const safeHostHeight = sanitizeDimension(hostHeight);
   const safeSceneWidth = sanitizeDimension(sceneWidth);
   const safeSceneHeight = sanitizeDimension(sceneHeight);
+  const minPanMargin = resolveViewportMinPanMargin(safeHostWidth, safeHostHeight);
 
   const coverScale = Math.max(safeHostWidth / safeSceneWidth, safeHostHeight / safeSceneHeight);
   const minPannableScale = Math.max(
     coverScale,
-    (safeHostWidth + DEFAULT_MIN_VIEWPORT_PAN_MARGIN * 2) / safeSceneWidth,
-    (safeHostHeight + DEFAULT_MIN_VIEWPORT_PAN_MARGIN * 2) / safeSceneHeight
+    (safeHostWidth + minPanMargin * 2) / safeSceneWidth,
+    (safeHostHeight + minPanMargin * 2) / safeSceneHeight
   );
   const baseScale = Math.max(coverScale * DEFAULT_ENTRY_VIEWPORT_OVERSCAN, minPannableScale);
   const minScale = minPannableScale;
@@ -139,19 +161,20 @@ export function resolveViewportPanBounds(
   sceneHeight: number,
   hostWidth: number,
   hostHeight: number,
-  scale: number
+  scale: number,
+  clampPadding: ViewportClampPadding = {}
 ): ViewportPanBounds {
-  const currentScale = Math.max(scale, 0.0001);
-  // Screen-equivalent margins so scene edges can be dragged past UI overlays.
-  const rightMarginScreen = 480;   // Hub panel
-  const bottomMarginScreen = 280;  // header + toolbar + frame
-  const rightMarginWorld = rightMarginScreen / currentScale;
-  const bottomMarginWorld = bottomMarginScreen / currentScale;
+  const currentScale = Math.max(scale, FLOAT_EPSILON);
+  const leftPadding = Math.max(0, clampPadding.left ?? 0) / currentScale;
+  const rightPadding = Math.max(0, clampPadding.right ?? 0) / currentScale;
+  const topPadding = Math.max(0, clampPadding.top ?? 0) / currentScale;
+  const bottomPadding = Math.max(0, clampPadding.bottom ?? 0) / currentScale;
+
   return {
-    left: 0,
-    right: sanitizeDimension(sceneWidth) + rightMarginWorld,
-    top: 0,
-    bottom: sanitizeDimension(sceneHeight) + bottomMarginWorld
+    left: leftPadding === 0 ? 0 : -leftPadding,
+    right: sanitizeDimension(sceneWidth) + rightPadding,
+    top: topPadding === 0 ? 0 : -topPadding,
+    bottom: sanitizeDimension(sceneHeight) + bottomPadding
   };
 }
 
@@ -160,7 +183,8 @@ export function resolveViewportClampOptions(
   sceneHeight: number,
   hostWidth: number,
   hostHeight: number,
-  scale: number
+  scale: number,
+  clampPadding: ViewportClampPadding = {}
 ): ViewportClampOptions {
-  return resolveViewportPanBounds(sceneWidth, sceneHeight, hostWidth, hostHeight, scale);
+  return resolveViewportPanBounds(sceneWidth, sceneHeight, hostWidth, hostHeight, scale, clampPadding);
 }

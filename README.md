@@ -81,6 +81,8 @@ Fresh Linux CI runners should use:
 pnpm --filter @metaverse-office/web install:browsers:ci
 ```
 
+That installs the Chromium browser used by the smoke suite. The Playwright checks here only prove the Chromium path.
+
 ### Run
 ```bash
 pnpm install
@@ -91,7 +93,7 @@ pnpm web:test:browser-smoke
 pnpm backend:start
 ```
 
-`pnpm web:test:browser-smoke` runs the Playwright keyboard smoke from the repository root, starts a hermetic read-only backend seeded under `./.tmp/browser-smoke`, and launches the Vite shell on a strict local port for the check.
+`pnpm web:test:browser-smoke` runs the Playwright keyboard smoke from the repository root, starts its own hermetic read-only backend seeded under `./.tmp/browser-smoke`, starts its own Vite shell on ephemeral localhost ports, and passes the resolved base URL into Playwright so stale orphaned processes do not block startup.
 
 For local UI development, run the backend in one shell and the web shell in another:
 ```bash
@@ -102,12 +104,14 @@ VITE_DEV_PROXY_TARGET=http://127.0.0.1:3000 pnpm web:dev
 For the browser smoke against your own local backend data instead of the hermetic seed, keep that backend running and execute the package-level command directly:
 ```bash
 cd apps/web
-VITE_DEV_PROXY_TARGET=http://127.0.0.1:3000 pnpm exec playwright test e2e/operator-shell.keyboard.smoke.spec.ts --config playwright.config.ts
+VITE_DEV_PROXY_TARGET=http://127.0.0.1:3000 pnpm test:browser-smoke
 ```
 
 Optional env:
 - `PORT=3000`
 - `METAVERSE_OFFICE_STORE_FILE=/absolute/path/prototype-store.jsonl`
+- `BROWSER_SMOKE_BACKEND_PORT=3210` to pin the hermetic backend port for browser smoke while still letting the wrapper auto-select a free Vite port unless you also pin `BROWSER_SMOKE_DEV_SERVER_PORT`
+- `BROWSER_SMOKE_DEV_SERVER_PORT=4173` to pin the Vite dev-server port for browser smoke while still letting the wrapper auto-select a free hermetic backend port unless you also pin `BROWSER_SMOKE_BACKEND_PORT`
 - `VITE_API_BASE_URL=https://api.example.test` for the React shell when the backend also allows that origin via `CORS_ALLOWED_ORIGINS`; omit it to keep same-origin `/office`, `/agents`, `/incidents`, and `/correlations` requests, or keep using `VITE_DEV_PROXY_TARGET` for local Vite proxying
 - `CORS_ALLOWED_ORIGINS=https://frontend.example.test,http://localhost:5173` for the backend; a comma-separated list of origins allowed to make cross-origin GET requests.
 

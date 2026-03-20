@@ -13,7 +13,7 @@
     "install:browsers": "playwright install chromium",
     "install:browsers:ci": "playwright install --with-deps chromium",
     "test": "vitest run",
-    "test:browser-smoke": "playwright test e2e/operator-shell.keyboard.smoke.spec.ts",
+    "test:browser-smoke": "node ./scripts/run-browser-smoke.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {

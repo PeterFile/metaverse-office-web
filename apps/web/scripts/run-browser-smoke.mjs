@@ -1,0 +1,353 @@
+import { spawn } from 'node:child_process';
+import http from 'node:http';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+import {
+  BROWSER_SMOKE_BACKEND_PORT_ENV,
+  BROWSER_SMOKE_BASE_URL_ENV,
+  BROWSER_SMOKE_DEV_SERVER_PORT_ENV,
+  readBrowserSmokePortOverride,
+  resolveBrowserSmokePorts
+} from './browser-smoke-ports.mjs';
+
+const scriptDir = path.dirname(fileURLToPath(import.meta.url));
+const appRoot = path.resolve(scriptDir, '..');
+const defaultPlaywrightArgs = [
+  'exec',
+  'playwright',
+  'test',
+  'e2e/operator-shell.keyboard.smoke.spec.ts',
+  '--config',
+  'playwright.config.ts'
+];
+
+export function resolvePlaywrightArgs(extraArgs = process.argv.slice(2)) {
+  const forwardedArgs = extraArgs[0] === '--' ? extraArgs.slice(1) : extraArgs;
+  return [...defaultPlaywrightArgs, ...forwardedArgs];
+}
+
+export async function main() {
+  const mode = resolveBrowserSmokeRunMode(process.env);
+
+  if (mode.type === 'fixed-ports') {
+    await runPlaywright({
+      env: {
+        [BROWSER_SMOKE_BACKEND_PORT_ENV]: String(mode.backendPort),
+        [BROWSER_SMOKE_DEV_SERVER_PORT_ENV]: String(mode.devServerPort)
+      },
+      summary: `browser smoke ports backend=${mode.backendPort} web=${mode.devServerPort}`
+    });
+    return;
+  }
+
+  if (mode.type === 'managed-frontend') {
+    await runManagedFrontendSmoke(mode.proxyTarget, {
+      devServerPort: mode.devServerPort
+    });
+    return;
+  }
+
+  const backend = await launchManagedServer({
+    command: 'node',
+    args: ['./scripts/browser-smoke-backend.mjs'],
+    env: {
+      ...process.env,
+      PORT: String(mode.backendPort ?? 0)
+    },
+    waitForUrlPath: '/health',
+    readyPrefix: 'browser smoke backend listening on '
+  });
+
+  try {
+    await runManagedFrontendSmoke(backend.origin, {
+      devServerPort: mode.devServerPort
+    });
+  } finally {
+    await stopManagedServer(backend.child);
+  }
+}
+
+export function resolveBrowserSmokeRunMode(env = process.env) {
+  const explicitBackendPort = readBrowserSmokePortOverride(BROWSER_SMOKE_BACKEND_PORT_ENV, env);
+  const explicitDevServerPort = readBrowserSmokePortOverride(BROWSER_SMOKE_DEV_SERVER_PORT_ENV, env);
+  const proxyTarget = env.VITE_DEV_PROXY_TARGET?.trim();
+
+  if (explicitBackendPort !== null && explicitDevServerPort !== null) {
+    const { backendPort, devServerPort } = resolveBrowserSmokePorts(env);
+    return {
+      type: 'fixed-ports',
+      backendPort,
+      devServerPort
+    };
+  }
+
+  if (proxyTarget) {
+    return {
+      type: 'managed-frontend',
+      proxyTarget,
+      ...(explicitDevServerPort !== null ? { devServerPort: explicitDevServerPort } : {})
+    };
+  }
+
+  return {
+    type: 'managed-hermetic',
+    ...(explicitBackendPort !== null ? { backendPort: explicitBackendPort } : {}),
+    ...(explicitDevServerPort !== null ? { devServerPort: explicitDevServerPort } : {})
+  };
+}
+
+async function runManagedFrontendSmoke(
+  proxyTarget,
+  options = {}
+) {
+  const frontend = await launchManagedServer({
+    command: resolvePnpmCommand(),
+    args: ['exec', 'vite', '--host', '127.0.0.1', '--port', String(options.devServerPort ?? 0)],
+    env: {
+      ...process.env,
+      VITE_DEV_PROXY_TARGET: proxyTarget
+    },
+    waitForUrlPath: '/',
+    readyPrefix: 'Local:'
+  });
+
+  try {
+    await runPlaywright({
+      env: {
+        [BROWSER_SMOKE_BASE_URL_ENV]: frontend.origin
+      },
+      summary: `browser smoke origins backend=${proxyTarget} web=${frontend.origin}`
+    });
+  } finally {
+    await stopManagedServer(frontend.child);
+  }
+}
+
+async function runPlaywright({ env, summary, args = resolvePlaywrightArgs() }) {
+  process.stdout.write(`${summary}\n`);
+
+  const child = spawn(resolvePnpmCommand(), args, {
+    cwd: appRoot,
+    stdio: 'inherit',
+    env: {
+      ...process.env,
+      ...env
+    }
+  });
+
+  await waitForChildExit(child);
+}
+
+export function waitForChildExit(child) {
+  return new Promise((resolve, reject) => {
+    const forwardSignal = (signal) => {
+      if (!child.killed) {
+        child.kill(signal);
+      }
+    };
+
+    process.on('SIGINT', forwardSignal);
+    process.on('SIGTERM', forwardSignal);
+
+    const cleanup = () => {
+      process.off('SIGINT', forwardSignal);
+      process.off('SIGTERM', forwardSignal);
+    };
+
+    child.on('error', (error) => {
+      cleanup();
+      reject(error);
+    });
+
+    child.on('exit', (code, signal) => {
+      cleanup();
+      if (signal) {
+        reject(new Error(`Process exited from signal ${signal}`));
+        return;
+      }
+      if (code !== 0) {
+        reject(new Error(`Process exited with code ${code ?? 1}`));
+        return;
+      }
+      resolve();
+    });
+  });
+}
+
+export async function launchManagedServer({
+  command,
+  args,
+  env,
+  waitForUrlPath,
+  readyPrefix,
+  spawnProcess = spawn,
+  waitForReady
+}) {
+  const child = spawnProcess(command, args, {
+    cwd: appRoot,
+    env,
+    stdio: ['ignore', 'pipe', 'pipe']
+  });
+
+  try {
+    const origin = await waitForServerOrigin({
+      child,
+      readyPrefix,
+      waitForUrlPath,
+      ...(waitForReady ? { waitForReady } : {})
+    });
+
+    child.stdout.pipe(process.stdout);
+    child.stderr.pipe(process.stderr);
+
+    return { child, origin };
+  } catch (error) {
+    await stopManagedServer(child);
+    throw error;
+  }
+}
+
+export function waitForServerOrigin({
+  child,
+  readyPrefix,
+  waitForUrlPath,
+  timeoutMs = 120_000,
+  waitForReady = waitForHttpReady
+}) {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    let stdoutBuffer = '';
+    let stderrBuffer = '';
+
+    const finish = (callback) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timeoutId);
+      child.stdout.off('data', onStdout);
+      child.stderr.off('data', onStderr);
+      child.off('exit', onExit);
+      child.off('error', onError);
+      callback();
+    };
+
+    const onStdout = (chunk) => {
+      const text = chunk.toString();
+      stdoutBuffer += text;
+      const origin = extractOrigin(stdoutBuffer, readyPrefix);
+      if (!origin) {
+        return;
+      }
+
+      waitForReady(`${origin}${waitForUrlPath}`)
+        .then(() => finish(() => resolve(origin)))
+        .catch((error) => finish(() => reject(error)));
+    };
+
+    const onStderr = (chunk) => {
+      stderrBuffer += chunk.toString();
+    };
+
+    const onExit = (code, signal) => {
+      finish(() => {
+        reject(
+          new Error(
+            `Managed server exited before becoming ready (code=${code ?? 'null'}, signal=${signal ?? 'null'})\n${stderrBuffer || stdoutBuffer}`
+          )
+        );
+      });
+    };
+
+    const onError = (error) => {
+      finish(() => reject(error));
+    };
+
+    const timeoutId = setTimeout(() => {
+      finish(() => {
+        reject(new Error(`Timed out waiting for managed server readiness\n${stderrBuffer || stdoutBuffer}`));
+      });
+    }, timeoutMs);
+
+    child.stdout.on('data', onStdout);
+    child.stderr.on('data', onStderr);
+    child.once('exit', onExit);
+    child.once('error', onError);
+  });
+}
+
+export function extractOrigin(output, readyPrefix) {
+  const lines = output.split(/\r?\n/).reverse();
+  for (const line of lines) {
+    const prefixIndex = line.indexOf(readyPrefix);
+    if (prefixIndex === -1) {
+      continue;
+    }
+
+    const match = line.slice(prefixIndex + readyPrefix.length).match(/https?:\/\/127\.0\.0\.1:\d+/);
+    if (match) {
+      return match[0];
+    }
+  }
+
+  return null;
+}
+
+export async function waitForHttpReady(url, timeoutMs = 120_000) {
+  const deadline = Date.now() + timeoutMs;
+  let lastError;
+
+  while (Date.now() < deadline) {
+    try {
+      const status = await requestStatus(url);
+      if (status >= 200 && status < 400) {
+        return;
+      }
+      lastError = new Error(`Unexpected status ${status} from ${url}`);
+    } catch (error) {
+      lastError = error;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+
+  throw lastError ?? new Error(`Timed out waiting for ${url}`);
+}
+
+function requestStatus(url) {
+  return new Promise((resolve, reject) => {
+    const req = http.get(url, (res) => {
+      res.resume();
+      resolve(res.statusCode ?? 0);
+    });
+    req.on('error', reject);
+  });
+}
+
+export function stopManagedServer(child, signal = 'SIGTERM') {
+  return new Promise((resolve) => {
+    if (child.exitCode !== null || child.signalCode !== null) {
+      resolve();
+      return;
+    }
+
+    child.once('exit', () => resolve());
+    child.kill(signal);
+  });
+}
+
+function resolvePnpmCommand() {
+  return process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
+}
+
+const isDirectExecution = process.argv[1]
+  ? path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+  : false;
+
+if (isDirectExecution) {
+  main().catch((error) => {
+    process.stderr.write(`${error.stack || error}\n`);
+    process.exit(1);
+  });
+}

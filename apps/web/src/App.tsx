@@ -17,8 +17,24 @@ import { projectWorldState } from './world/projector';
 
 const LazyWorldScene = lazy(() => import('./aitown/WorldScene'));
 
+const HUB_FOCUSABLE_SELECTOR = [
+  'button:not([disabled])',
+  '[href]',
+  'input:not([disabled]):not([type="hidden"])',
+  'select:not([disabled])',
+  'textarea:not([disabled])',
+  '[tabindex]:not([tabindex="-1"])',
+  '[contenteditable="true"]'
+].join(', ');
+
 function isJsdomEnvironment() {
   return typeof navigator !== 'undefined' && /jsdom/i.test(navigator.userAgent);
+}
+
+function getHubFocusableElements(container: HTMLElement) {
+  return Array.from(container.querySelectorAll<HTMLElement>(HUB_FOCUSABLE_SELECTOR)).filter(
+    (element) => element.getAttribute('aria-hidden') !== 'true'
+  );
 }
 
 export function resolveSelectedAgent(
@@ -48,6 +64,11 @@ function AppInner() {
   const { selectedAgentId, setSelectedAgentId, setWorld } = useWorld();
   const [hubOpen, setHubOpen] = useState(false);
   const lastSelectedAgentRef = useRef<OfficeAgent | null>(null);
+  const hubTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const hubCloseButtonRef = useRef<HTMLButtonElement | null>(null);
+  const hubDialogRef = useRef<HTMLDivElement | null>(null);
+  const hubFocusReturnRef = useRef<HTMLElement | null>(null);
+  const wasHubOpenRef = useRef(false);
 
   const overviewResource = usePolledResource({
     load: (signal) => fetchOfficeOverview(signal),
@@ -132,6 +153,91 @@ function AppInner() {
     }
   }, [overviewResource.data, selectedAgentId]);
 
+  const closeHub = useCallback(() => {
+    setHubOpen(false);
+  }, []);
+
+  const toggleHub = useCallback(() => {
+    setHubOpen((open) => !open);
+  }, []);
+
+  useEffect(() => {
+    if (typeof document === 'undefined') {
+      return;
+    }
+
+    if (hubOpen && !wasHubOpenRef.current) {
+      const activeElement = document.activeElement;
+      hubFocusReturnRef.current = activeElement instanceof HTMLElement ? activeElement : null;
+      hubCloseButtonRef.current?.focus();
+    }
+
+    if (!hubOpen && wasHubOpenRef.current) {
+      const focusTarget = hubFocusReturnRef.current;
+      if (focusTarget && focusTarget.isConnected && focusTarget !== document.body) {
+        focusTarget.focus();
+      } else {
+        hubTriggerRef.current?.focus();
+      }
+      hubFocusReturnRef.current = null;
+    }
+
+    wasHubOpenRef.current = hubOpen;
+  }, [hubOpen]);
+
+  useEffect(() => {
+    if (!hubOpen || typeof document === 'undefined') {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
+        closeHub();
+        return;
+      }
+
+      if (event.key !== 'Tab') {
+        return;
+      }
+
+      const dialog = hubDialogRef.current;
+      if (!dialog) {
+        return;
+      }
+
+      const focusableElements = getHubFocusableElements(dialog);
+      if (focusableElements.length === 0) {
+        event.preventDefault();
+        dialog.focus();
+        return;
+      }
+
+      const firstFocusable = focusableElements[0];
+      const lastFocusable = focusableElements[focusableElements.length - 1];
+      const activeElement = document.activeElement;
+
+      if (event.shiftKey) {
+        if (activeElement === firstFocusable || !dialog.contains(activeElement)) {
+          event.preventDefault();
+          lastFocusable.focus();
+        }
+        return;
+      }
+
+      if (activeElement === lastFocusable || !dialog.contains(activeElement)) {
+        event.preventDefault();
+        firstFocusable.focus();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [closeHub, hubOpen]);
+
   const handleSceneSelectAgent = useCallback(
     (agentId: string | null) => {
       setSelectedAgentId(agentId);
@@ -191,11 +297,13 @@ function AppInner() {
 
           <div className="aitown-panel__toolbar">
             <button
+              ref={hubTriggerRef}
               type="button"
               className="aitown-button"
               aria-expanded={hubOpen}
               aria-controls="aitown-hub"
-              onClick={() => setHubOpen((open) => !open)}
+              aria-haspopup="dialog"
+              onClick={toggleHub}
             >
               {hubOpen ? 'Hide Hub' : 'Open Hub'}
             </button>
@@ -229,15 +337,20 @@ function AppInner() {
       </section>
 
       {hubOpen ? (
-        <div className="aitown-hub-overlay" onClick={() => setHubOpen(false)}>
+        <div className="aitown-hub-overlay" onClick={closeHub}>
           <div
+            ref={hubDialogRef}
             id="aitown-hub"
             className="aitown-hub-sheet"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="aitown-hub-title"
+            tabIndex={-1}
             onClick={(event) => event.stopPropagation()}
           >
             <div className="aitown-hub-sheet__header">
-              <span className="aitown-hub-sheet__title">Hub</span>
-              <button type="button" className="aitown-button" onClick={() => setHubOpen(false)}>
+              <span id="aitown-hub-title" className="aitown-hub-sheet__title">Hub</span>
+              <button ref={hubCloseButtonRef} type="button" className="aitown-button" onClick={closeHub}>
                 Close Hub
               </button>
             </div>

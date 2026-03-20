@@ -14,6 +14,15 @@ function isAbortError(error: unknown) {
   return error instanceof Error && error.name === 'AbortError';
 }
 
+function resolvePollIntervalMs() {
+  if (typeof window === 'undefined') {
+    return POLL_INTERVAL_MS;
+  }
+
+  const override = (window as typeof window & { __AITOWN_POLL_INTERVAL_MS__?: number }).__AITOWN_POLL_INTERVAL_MS__;
+  return typeof override === 'number' && Number.isFinite(override) && override > 0 ? override : POLL_INTERVAL_MS;
+}
+
 export function usePolledResource<T>({
   enabled = true,
   load,
@@ -56,7 +65,7 @@ export function usePolledResource<T>({
 
       timeoutId = window.setTimeout(() => {
         void loadResource();
-      }, POLL_INTERVAL_MS);
+      }, resolvePollIntervalMs());
     };
 
     const loadResource = async () => {

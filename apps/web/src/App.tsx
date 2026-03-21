@@ -62,11 +62,49 @@ export function resolveOverviewRefreshWarning(error: string | null, hasOverviewD
   return error;
 }
 
+function resolveCorrelationPollKey(selectedCorrelationId: string | null) {
+  return selectedCorrelationId;
+}
+
+function resolveCorrelationSelectionContext(selectedAgentId: string | null) {
+  return selectedAgentId ?? '__crew-overview__';
+}
+
+function selectDefaultCorrelationId({
+  incidentFeed,
+  workflow,
+  selectedAgentId
+}: {
+  incidentFeed: { items: Array<{ correlation_id: string | null }> } | null;
+  workflow: {
+    detail: { open_peer_watch_alerts: Array<{ correlation_id: string | null }> };
+    correlation_ids: string[];
+  } | null;
+  selectedAgentId: string | null;
+}) {
+  if (selectedAgentId) {
+    if (!workflow) {
+      return null;
+    }
+
+    const workflowCorrelation = workflow.detail.open_peer_watch_alerts.find((alert) => alert.correlation_id)?.correlation_id;
+    if (workflowCorrelation) {
+      return workflowCorrelation;
+    }
+
+    return workflow.correlation_ids.find(Boolean) ?? null;
+  }
+
+  return incidentFeed?.items.find((incident) => incident.correlation_id)?.correlation_id ?? null;
+}
+
 function AppInner() {
   const { selectedAgentId, setSelectedAgentId, setWorld } = useWorld();
   const [hubOpen, setHubOpen] = useState(false);
   const [selectedCorrelationId, setSelectedCorrelationId] = useState<string | null>(null);
   const lastSelectedAgentRef = useRef<OfficeAgent | null>(null);
+  const correlationSelectionModeRef = useRef<'auto' | 'manual'>('auto');
+  const lastCorrelationContextRef = useRef<string | null>(null);
   const hubTriggerRef = useRef<HTMLButtonElement | null>(null);
   const hubCloseButtonRef = useRef<HTMLButtonElement | null>(null);
   const hubDialogRef = useRef<HTMLDivElement | null>(null);
@@ -122,25 +160,28 @@ function AppInner() {
         !selectedAgentStillVisibleInOverview
       ) {
         setSelectedAgentId(null);
-        setSelectedCorrelationId(null);
       }
     },
     resourceKey: selectedAgentId
   });
 
+  const activeWorkflow =
+    workflowResource.data?.agent_id === selectedAgentId ? workflowResource.data : null;
+
   const correlationResource = usePolledResource({
-    enabled: selectedCorrelationId !== null,
+    enabled: hubOpen && selectedCorrelationId !== null,
     load: (signal) =>
       fetchCorrelationDrilldown(selectedCorrelationId!, {
         limit: DEFAULT_WORKFLOW_LIMIT,
         window: DEFAULT_WORKFLOW_WINDOW,
         signal
       }),
-    resourceKey: selectedCorrelationId
+    resourceKey: resolveCorrelationPollKey(selectedCorrelationId)
   });
 
-  const activeWorkflow =
-    workflowResource.data?.agent_id === selectedAgentId ? workflowResource.data : null;
+  const activeCorrelation =
+    correlationResource.data?.correlation_id === selectedCorrelationId ? correlationResource.data : null;
+  const correlationSelectionContext = resolveCorrelationSelectionContext(selectedAgentId);
 
   const projectedWorld = useMemo(
     () =>
@@ -180,17 +221,51 @@ function AppInner() {
     }
   }, [overviewResource.data, selectedAgentId]);
 
+  useEffect(() => {
+    if (!hubOpen) {
+      lastCorrelationContextRef.current = null;
+      correlationSelectionModeRef.current = 'auto';
+      return;
+    }
+
+    if (lastCorrelationContextRef.current !== correlationSelectionContext) {
+      lastCorrelationContextRef.current = correlationSelectionContext;
+      correlationSelectionModeRef.current = 'auto';
+      setSelectedCorrelationId(null);
+    }
+  }, [correlationSelectionContext, hubOpen]);
+
+  useEffect(() => {
+    if (!hubOpen) {
+      return;
+    }
+
+    if (correlationSelectionModeRef.current === 'manual' && selectedCorrelationId !== null) {
+      return;
+    }
+
+    const nextCorrelationId = selectDefaultCorrelationId({
+      incidentFeed: incidentFeedResource.data,
+      workflow: activeWorkflow,
+      selectedAgentId
+    });
+
+    if (nextCorrelationId !== selectedCorrelationId) {
+      setSelectedCorrelationId(nextCorrelationId);
+    }
+  }, [activeWorkflow, hubOpen, incidentFeedResource.data, selectedAgentId, selectedCorrelationId]);
+
   const closeHub = useCallback(() => {
     setHubOpen(false);
   }, []);
 
-  const selectAgent = useCallback(
-    (agentId: string | null, correlationId: string | null = null) => {
-      setSelectedAgentId(agentId);
-      setSelectedCorrelationId(agentId ? correlationId : null);
-    },
-    [setSelectedAgentId]
-  );
+  const handleSelectCorrelation = useCallback((correlationId: string | null) => {
+    correlationSelectionModeRef.current = correlationId === null ? 'auto' : 'manual';
+    setSelectedCorrelationId(correlationId);
+    if (correlationId) {
+      setHubOpen(true);
+    }
+  }, []);
 
   const toggleHub = useCallback(() => {
     setHubOpen((open) => !open);
@@ -273,6 +348,16 @@ function AppInner() {
     };
   }, [closeHub, hubOpen]);
 
+  const selectAgent = useCallback(
+    (agentId: string | null, correlationId: string | null) => {
+      lastCorrelationContextRef.current = resolveCorrelationSelectionContext(agentId);
+      correlationSelectionModeRef.current = correlationId === null ? 'auto' : 'manual';
+      setSelectedCorrelationId(correlationId);
+      setSelectedAgentId(agentId);
+    },
+    [setSelectedAgentId]
+  );
+
   const handleSceneSelectAgent = useCallback(
     (agentId: string | null) => {
       selectAgent(agentId, null);
@@ -351,7 +436,7 @@ function AppInner() {
               {hubOpen ? 'Hide Hub' : 'Open Hub'}
             </button>
             {selectedAgent ? (
-              <button type="button" className="aitown-button" onClick={() => selectAgent(null)}>
+              <button type="button" className="aitown-button" onClick={() => selectAgent(null, null)}>
                 Clear Selection
               </button>
             ) : null}
@@ -398,21 +483,23 @@ function AppInner() {
               </button>
             </div>
             <DetailsPanel
+              correlation={activeCorrelation}
+              correlationError={correlationResource.error}
+              correlationState={correlationResource.state}
               incidentFeed={incidentFeedResource.data}
               incidentFeedError={incidentFeedResource.error}
               incidentFeedState={incidentFeedResource.state}
               operations={operationsResource.data}
               operationsError={operationsResource.error}
               operationsState={operationsResource.state}
-              correlation={correlationResource.data}
-              correlationError={correlationResource.error}
-              correlationState={correlationResource.state}
               selectedAgent={selectedAgent}
+              selectedCorrelationId={selectedCorrelationId}
               workflow={activeWorkflow}
               workflowError={workflowResource.error}
               workflowState={workflowResource.state}
               world={projectedWorld}
-              onSelectAgent={selectAgent}
+              onSelectAgent={(agentId) => selectAgent(agentId, null)}
+              onSelectCorrelation={handleSelectCorrelation}
               onSelectOperation={handleSelectOperation}
             />
           </div>

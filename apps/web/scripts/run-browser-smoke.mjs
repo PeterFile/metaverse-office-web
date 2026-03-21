@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 import {
   assertDistinctBrowserSmokePorts,
+  BROWSER_SMOKE_BACKEND_ORIGIN_ENV,
   BROWSER_SMOKE_BACKEND_PORT_ENV,
   BROWSER_SMOKE_BASE_URL_ENV,
   BROWSER_SMOKE_DEV_SERVER_PORT_ENV,
@@ -59,6 +60,7 @@ export async function main(cliArgs = process.argv.slice(2)) {
     await runManagedFrontendSmoke(backend.origin, {
       devServerPort: mode.devServerPort,
       frontendMode: mode.frontendMode,
+      inspectableBackendOrigin: backend.origin,
       playwrightArgs
     });
   } finally {
@@ -179,15 +181,20 @@ async function runManagedFrontendSmoke(
 
   try {
     await runPlaywright({
-      env: {
-        [BROWSER_SMOKE_BASE_URL_ENV]: frontend.origin
-      },
+      env: resolveBrowserSmokePlaywrightEnv(frontend.origin, options.inspectableBackendOrigin ?? null),
       summary: `browser smoke origins backend=${proxyTarget} web=${frontend.origin}`,
       args: resolvePlaywrightArgs(options.playwrightArgs)
     });
   } finally {
     await stopManagedServer(frontend.child);
   }
+}
+
+export function resolveBrowserSmokePlaywrightEnv(frontendOrigin, inspectableBackendOrigin = null) {
+  return {
+    [BROWSER_SMOKE_BASE_URL_ENV]: frontendOrigin,
+    [BROWSER_SMOKE_BACKEND_ORIGIN_ENV]: inspectableBackendOrigin ?? ''
+  };
 }
 
 async function runPlaywright({ env, summary, args = resolvePlaywrightArgs() }) {

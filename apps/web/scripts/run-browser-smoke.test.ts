@@ -8,6 +8,7 @@ import {
   extractOrigin,
   launchManagedServer,
   parseBrowserSmokeArgs,
+  resolveBrowserSmokePlaywrightEnv,
   resolveBrowserSmokeRunMode,
   resolveFrontendServerArgs,
   resolvePlaywrightArgs,
@@ -189,6 +190,20 @@ describe('run-browser-smoke helpers', () => {
       '--grep',
       'pinch handoff'
     ]);
+  });
+
+  it('threads the inspectable backend origin into Playwright only when the smoke target exposes request logs', () => {
+    expect(
+      resolveBrowserSmokePlaywrightEnv('http://127.0.0.1:4173', 'http://127.0.0.1:3210')
+    ).toEqual({
+      BROWSER_SMOKE_BASE_URL: 'http://127.0.0.1:4173',
+      BROWSER_SMOKE_BACKEND_ORIGIN: 'http://127.0.0.1:3210'
+    });
+
+    expect(resolveBrowserSmokePlaywrightEnv('http://127.0.0.1:4173')).toEqual({
+      BROWSER_SMOKE_BASE_URL: 'http://127.0.0.1:4173',
+      BROWSER_SMOKE_BACKEND_ORIGIN: ''
+    });
   });
 
   it('extracts localhost origins from backend and Vite readiness output', () => {

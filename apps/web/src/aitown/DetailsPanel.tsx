@@ -4,27 +4,31 @@ import type {
   IncidentFeedResponse,
   OfficeAgent,
   OfficeOperations,
-  WorkflowIncident
+  WorkflowIncident,
+  WorkflowInteraction,
+  WorkflowTimelineEvent
 } from '../types';
 import type { LoadState } from '../hooks/usePolledResource';
 import type { WorldState } from '../world/types';
 
 type DetailsPanelProps = {
+  correlation: CorrelationDrilldown | null;
+  correlationError: string | null;
+  correlationState: LoadState;
   incidentFeed: IncidentFeedResponse | null;
   incidentFeedError: string | null;
   incidentFeedState: LoadState;
   operations: OfficeOperations | null;
   operationsError: string | null;
   operationsState: LoadState;
-  correlation: CorrelationDrilldown | null;
-  correlationError: string | null;
-  correlationState: LoadState;
   selectedAgent: OfficeAgent | null;
+  selectedCorrelationId: string | null;
   workflow: AgentWorkflow | null;
   workflowError: string | null;
   workflowState: LoadState;
   world: WorldState;
   onSelectAgent: (agentId: string | null) => void;
+  onSelectCorrelation: (correlationId: string | null) => void;
   onSelectOperation: (agentId: string, correlationId: string | null) => void;
 };
 
@@ -38,6 +42,72 @@ const SEVERITY_LABELS = {
 function dedupeIncidents(incidents: WorkflowIncident[]) {
   return incidents.filter(
     (incident, index, list) => list.findIndex((item) => item.incident_id === incident.incident_id) === index
+  );
+}
+
+function renderCorrelationButton({
+  correlationId,
+  label,
+  buttonLabel,
+  activeCorrelationId,
+  onSelectCorrelation
+}: {
+  correlationId: string | null;
+  label: string;
+  buttonLabel: string;
+  activeCorrelationId: string | null;
+  onSelectCorrelation: (correlationId: string | null) => void;
+}) {
+  if (!correlationId) {
+    return <span>{label}</span>;
+  }
+
+  const isActive = activeCorrelationId === correlationId;
+
+  return (
+    <button
+      type="button"
+      className={`aitown-link-button${isActive ? ' is-active' : ''}`}
+      aria-label={`${buttonLabel} ${correlationId}${isActive ? ', currently selected' : ''}`}
+      onClick={() => onSelectCorrelation(correlationId)}
+    >
+      {label}
+    </button>
+  );
+}
+
+function renderEvidenceRefs(evidenceRefs: string[]) {
+  return evidenceRefs.length > 0 ? evidenceRefs.join(', ') : 'No evidence refs';
+}
+
+function renderCounterparties(counterpartyAgentIds: string[]) {
+  return counterpartyAgentIds.length > 0 ? counterpartyAgentIds.join(', ') : 'No counterparties';
+}
+
+function renderParticipants(participantAgentIds: string[]) {
+  return participantAgentIds.length > 0 ? participantAgentIds.join(', ') : 'No participants';
+}
+
+function renderCorrelationInteraction(interaction: WorkflowInteraction) {
+  return (
+    <li key={interaction.interaction_id} className={`aitown-record severity-${interaction.severity ?? 'normal'}`}>
+      <strong>{interaction.summary}</strong>
+      <span>{`Interaction · ${interaction.interaction_type}`}</span>
+      <span>{`Participants · ${renderParticipants(interaction.participant_agent_ids)}`}</span>
+      <span>{`Evidence · ${renderEvidenceRefs(interaction.evidence_refs)}`}</span>
+    </li>
+  );
+}
+
+function renderCorrelationTimelineEvent(event: WorkflowTimelineEvent) {
+  return (
+    <li key={event.event_id} className={`aitown-record severity-${event.severity}`}>
+      <strong>{event.summary}</strong>
+      <span>{`Timeline · ${event.event_type} · ${event.location}`}</span>
+      <span>{`Counterparties · ${renderCounterparties(event.counterparty_agent_ids)}`}</span>
+      <span>{`Evidence · ${renderEvidenceRefs(event.evidence_refs)}`}</span>
+      <span>{`Source · ${event.source_kind}`}</span>
+    </li>
   );
 }
 
@@ -60,21 +130,23 @@ function compareAgents(
 }
 
 export function DetailsPanel({
+  correlation,
+  correlationError,
+  correlationState,
   incidentFeed,
   incidentFeedError,
   incidentFeedState,
   operations,
   operationsError,
   operationsState,
-  correlation,
-  correlationError,
-  correlationState,
   selectedAgent,
+  selectedCorrelationId,
   workflow,
   workflowError,
   workflowState,
   world,
   onSelectAgent,
+  onSelectCorrelation,
   onSelectOperation
 }: DetailsPanelProps) {
   const agents = [...world.agents.values()]
@@ -103,36 +175,6 @@ export function DetailsPanel({
         </div>
 
         <section className="aitown-details__section">
-          <h3>Active Queue</h3>
-          <ul className="aitown-records">
-            {operationsState === 'loading' && !operations ? (
-              <li className="aitown-record">Loading operations queue...</li>
-            ) : null}
-            {operationsError ? <li className="aitown-record">{operationsError}</li> : null}
-            {(operations?.items ?? []).slice(0, 4).map((operation) => (
-              <li key={operation.agent_id} className={`aitown-record severity-${operation.effective_severity}`}>
-                <button
-                  type="button"
-                  className="aitown-roster__button"
-                  aria-label={
-                    operation.correlation_id
-                      ? `Open coordination for ${operation.display_name}`
-                      : `Inspect ${operation.display_name} from active queue`
-                  }
-                  onClick={() => onSelectOperation(operation.agent_id, operation.correlation_id)}
-                >
-                  <strong>{operation.display_name}</strong>
-                  <span>{`${operation.current_state} · ${operation.current_blocker || operation.active_task}`}</span>
-                </button>
-              </li>
-            ))}
-            {operationsState === 'ready' && !operationsError && !operations?.items.length ? (
-              <li className="aitown-record">No active operations queue.</li>
-            ) : null}
-          </ul>
-        </section>
-
-        <section className="aitown-details__section">
           <h3>Roster</h3>
           <div className="aitown-roster">
             {agents.map((agent) => (
@@ -151,6 +193,32 @@ export function DetailsPanel({
         </section>
 
         <section className="aitown-details__section">
+          <h3>Active Queue</h3>
+          <ul className="aitown-records">
+            {operationsState === 'loading' && !operations ? (
+              <li className="aitown-record">Loading operations queue...</li>
+            ) : null}
+            {operationsError ? <li className="aitown-record">{operationsError}</li> : null}
+            {(operations?.items ?? []).slice(0, 4).map((operation) => (
+              <li key={operation.agent_id} className={`aitown-record severity-${operation.effective_severity}`}>
+                <button
+                  type="button"
+                  className={`aitown-roster__button severity-${operation.effective_severity}`}
+                  aria-label={`Inspect ${operation.display_name} from active queue`}
+                  onClick={() => onSelectOperation(operation.agent_id, operation.correlation_id)}
+                >
+                  <strong>{operation.display_name}</strong>
+                  <span>{`${operation.current_state} · ${operation.current_blocker || operation.active_task}`}</span>
+                </button>
+              </li>
+            ))}
+            {operationsState === 'ready' && !operationsError && !operations?.items.length ? (
+              <li className="aitown-record">No active operations queue.</li>
+            ) : null}
+          </ul>
+        </section>
+
+        <section className="aitown-details__section">
           <h3>Incident Feed</h3>
           <ul className="aitown-records">
             {incidentFeedState === 'loading' && !incidentFeed ? (
@@ -161,10 +229,51 @@ export function DetailsPanel({
               <li key={incident.incident_id} className={`aitown-record severity-${incident.severity}`}>
                 <strong>{incident.summary}</strong>
                 <span>{incident.agent_id}</span>
+                {renderCorrelationButton({
+                  correlationId: incident.correlation_id,
+                  label: incident.correlation_id ?? 'No correlation id',
+                  buttonLabel: 'Open incident correlation',
+                  activeCorrelationId: selectedCorrelationId,
+                  onSelectCorrelation
+                })}
               </li>
             ))}
             {incidentFeedState === 'ready' && !incidentFeedError && !incidentFeed?.items.length ? (
               <li className="aitown-record">No active incident feed.</li>
+            ) : null}
+          </ul>
+        </section>
+
+        <section className="aitown-details__section">
+          <h3>Correlation Drilldown</h3>
+          <ul className="aitown-records">
+            {correlationState === 'loading' && !correlation ? (
+              <li className="aitown-record">Loading correlation drilldown...</li>
+            ) : null}
+            {correlationError ? <li className="aitown-record">{correlationError}</li> : null}
+            {correlation ? (
+              <>
+                <li className="aitown-record">
+                  <strong>{correlation.correlation_id}</strong>
+                  <span>{`Participants · ${renderParticipants(correlation.participant_agent_ids)}`}</span>
+                  <span>{`Evidence · ${renderEvidenceRefs(correlation.evidence_refs)}`}</span>
+                  <span>{`Counts · ${correlation.incident_count} incidents · ${correlation.interaction_count} interactions · ${correlation.event_count} events`}</span>
+                </li>
+                {correlation.incidents.map((incident) => (
+                  <li key={incident.incident_id} className={`aitown-record severity-${incident.severity}`}>
+                    <strong>{incident.summary}</strong>
+                    <span>{`Incident · ${incident.kind} · ${incident.status}`}</span>
+                    <span>{`Counterparties · ${renderCounterparties(incident.counterparty_agent_ids)}`}</span>
+                    <span>{`Evidence · ${renderEvidenceRefs(incident.evidence_refs)}`}</span>
+                    <span>{`Source · ${incident.source_kind}`}</span>
+                  </li>
+                ))}
+                {correlation.interactions.map(renderCorrelationInteraction)}
+                {correlation.timeline.map(renderCorrelationTimelineEvent)}
+              </>
+            ) : null}
+            {correlationState !== 'loading' && !correlationError && !correlation ? (
+              <li className="aitown-record">No correlation selected.</li>
             ) : null}
           </ul>
         </section>
@@ -227,31 +336,6 @@ export function DetailsPanel({
       </div>
 
       <section className="aitown-details__section">
-        <h3>Coordination</h3>
-        <ul className="aitown-records">
-          {correlationState === 'loading' && !correlation ? <li className="aitown-record">Loading coordination drilldown...</li> : null}
-          {correlationError ? <li className="aitown-record">{correlationError}</li> : null}
-          {correlation ? (
-            <>
-              <li className="aitown-record">
-                <strong>{correlation.correlation_id}</strong>
-                <span>{`${correlation.participant_agent_ids.length} participants · ${correlation.interaction_count} interactions`}</span>
-              </li>
-              <li className="aitown-record">
-                <strong>Event flow</strong>
-                <span>{`${correlation.incident_count} incidents · ${correlation.event_count} events`}</span>
-              </li>
-              <li className="aitown-record">
-                <strong>Evidence refs</strong>
-                <span>{correlation.evidence_refs.slice(0, 2).join(', ') || 'No evidence refs'}</span>
-              </li>
-            </>
-          ) : null}
-          {correlationState === 'idle' ? <li className="aitown-record">No coordination drilldown selected.</li> : null}
-        </ul>
-      </section>
-
-      <section className="aitown-details__section">
         <h3>Workflow</h3>
         {workflowState === 'loading' && !workflow ? <p>Loading workflow...</p> : null}
         {workflowError ? <p>{workflowError}</p> : null}
@@ -259,7 +343,14 @@ export function DetailsPanel({
           {(workflow?.detail.open_peer_watch_alerts ?? []).map((alert) => (
             <li key={alert.alert_id} className={`aitown-record severity-${alert.severity}`}>
               <strong>{alert.summary}</strong>
-              <span>{alert.correlation_id ?? 'No correlation id'}</span>
+              {renderCorrelationButton({
+                correlationId: alert.correlation_id,
+                label: alert.correlation_id ?? 'No correlation id',
+                buttonLabel: 'Open workflow correlation',
+                activeCorrelationId: selectedCorrelationId,
+                onSelectCorrelation
+              })}
+              <span>{`Workflow status · ${alert.current_state}`}</span>
             </li>
           ))}
           {workflow && workflow.detail.open_peer_watch_alerts.length === 0 ? (
@@ -278,11 +369,52 @@ export function DetailsPanel({
           {relatedIncidents.map((incident) => (
             <li key={incident.incident_id} className={`aitown-record severity-${incident.severity}`}>
               <strong>{incident.summary}</strong>
+              {renderCorrelationButton({
+                correlationId: incident.correlation_id,
+                label: incident.correlation_id ?? 'No correlation id',
+                buttonLabel: 'Open incident correlation',
+                activeCorrelationId: selectedCorrelationId,
+                onSelectCorrelation
+              })}
               <span>{incident.status}</span>
             </li>
           ))}
           {incidentFeedState === 'ready' && !incidentFeedError && relatedIncidents.length === 0 ? (
             <li className="aitown-record">No incident feed entries.</li>
+          ) : null}
+        </ul>
+      </section>
+
+      <section className="aitown-details__section">
+        <h3>Correlation Drilldown</h3>
+        <ul className="aitown-records">
+          {correlationState === 'loading' && !correlation ? (
+            <li className="aitown-record">Loading correlation drilldown...</li>
+          ) : null}
+          {correlationError ? <li className="aitown-record">{correlationError}</li> : null}
+          {correlation ? (
+            <>
+              <li className="aitown-record">
+                <strong>{correlation.correlation_id}</strong>
+                <span>{`Participants · ${renderParticipants(correlation.participant_agent_ids)}`}</span>
+                <span>{`Evidence · ${renderEvidenceRefs(correlation.evidence_refs)}`}</span>
+                <span>{`Counts · ${correlation.incident_count} incidents · ${correlation.interaction_count} interactions · ${correlation.event_count} events`}</span>
+              </li>
+              {correlation.incidents.map((incident) => (
+                <li key={incident.incident_id} className={`aitown-record severity-${incident.severity}`}>
+                  <strong>{incident.summary}</strong>
+                  <span>{`Incident · ${incident.kind} · ${incident.status}`}</span>
+                  <span>{`Counterparties · ${renderCounterparties(incident.counterparty_agent_ids)}`}</span>
+                  <span>{`Evidence · ${renderEvidenceRefs(incident.evidence_refs)}`}</span>
+                  <span>{`Source · ${incident.source_kind}`}</span>
+                </li>
+              ))}
+              {correlation.interactions.map(renderCorrelationInteraction)}
+              {correlation.timeline.map(renderCorrelationTimelineEvent)}
+            </>
+          ) : null}
+          {correlationState !== 'loading' && !correlationError && !correlation ? (
+            <li className="aitown-record">No correlation selected.</li>
           ) : null}
         </ul>
       </section>

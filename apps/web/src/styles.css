@@ -375,7 +375,8 @@ button {
 }
 
 .aitown-roster__button:focus-visible,
-.aitown-button:focus-visible {
+.aitown-button:focus-visible,
+.aitown-link-button:focus-visible {
   outline: 2px solid #f7d57b;
   outline-offset: 2px;
 }
@@ -389,6 +390,24 @@ button {
   padding: 0;
   color: #fff7df;
   cursor: pointer;
+}
+
+.aitown-link-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  width: fit-content;
+  border: 0;
+  background: none;
+  padding: 0;
+  color: #f7d57b;
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.aitown-link-button.is-active {
+  color: #fff3d0;
 }
 
 .aitown-button:active {

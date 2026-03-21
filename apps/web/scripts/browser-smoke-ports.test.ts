@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   assertDistinctBrowserSmokePorts,
+  BROWSER_SMOKE_BACKEND_ORIGIN_ENV,
   BROWSER_SMOKE_BACKEND_PORT_ENV,
   BROWSER_SMOKE_BASE_URL_ENV,
   BROWSER_SMOKE_DEV_SERVER_PORT_ENV,
@@ -47,6 +48,10 @@ describe('browser smoke port helpers', () => {
 
   it('exposes the wrapper-managed explicit base URL env', () => {
     expect(BROWSER_SMOKE_BASE_URL_ENV).toBe('BROWSER_SMOKE_BASE_URL');
+  });
+
+  it('exposes the wrapper-managed backend origin env', () => {
+    expect(BROWSER_SMOKE_BACKEND_ORIGIN_ENV).toBe('BROWSER_SMOKE_BACKEND_ORIGIN');
   });
 
   it('defaults browser smoke frontend mode to preview', () => {

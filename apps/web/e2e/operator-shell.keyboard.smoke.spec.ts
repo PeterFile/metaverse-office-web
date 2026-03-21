@@ -6,50 +6,7 @@ import { findStableSample, requireStableSample } from '../scripts/stability';
 const POLL_DRIVEN_ASSERTION_TIMEOUT_MS = 12_000;
 
 async function readViewportState(page: Page) {
-  return page.evaluate(() => {
-    const viewport = (window as typeof window & { __AITOWN_VIEWPORT__?: {
-      x: number;
-      y: number;
-      scale?: {
-        x?: number;
-      };
-      left: number;
-      top: number;
-      right: number;
-      bottom: number;
-      screenWidth: number;
-      screenHeight: number;
-      worldWidth: number;
-      worldHeight: number;
-      screenWorldWidth: number;
-      screenWorldHeight: number;
-      clampPadding?: {
-        top?: number;
-        right?: number;
-      };
-    } }).__AITOWN_VIEWPORT__;
-
-    if (!viewport) {
-      return null;
-    }
-
-    return {
-      x: viewport.x,
-      y: viewport.y,
-      scale: viewport.scale?.x ?? null,
-      left: viewport.left,
-      top: viewport.top,
-      right: viewport.right,
-      bottom: viewport.bottom,
-      screenWidth: viewport.screenWidth,
-      screenHeight: viewport.screenHeight,
-      worldWidth: viewport.worldWidth,
-      worldHeight: viewport.worldHeight,
-      screenWorldWidth: viewport.screenWorldWidth,
-      screenWorldHeight: viewport.screenWorldHeight,
-      clampPadding: viewport.clampPadding
-    };
-  });
+  return page.evaluate(() => window.__AITOWN_VIEWPORT__?.read() ?? null);
 }
 
 function expectViewportBoundsWithinClampBudget(
@@ -67,10 +24,7 @@ function expectViewportBoundsWithinClampBudget(
 }
 
 async function readViewportScale(page: Page) {
-  return page.evaluate(() => {
-    const viewport = (window as typeof window & { __AITOWN_VIEWPORT__?: { scale?: { x?: number } } }).__AITOWN_VIEWPORT__;
-    return viewport?.scale?.x ?? null;
-  });
+  return page.evaluate(() => window.__AITOWN_VIEWPORT__?.read().scale ?? null);
 }
 
 type BrowserZoomState = {
@@ -272,18 +226,16 @@ async function expectViewportScaleRemainsUnchanged(
 
 async function readViewportPose(page: Page) {
   return page.evaluate(() => {
-    const viewport = (window as typeof window & {
-      __AITOWN_VIEWPORT__?: { x: number; y: number; scale?: { x?: number } };
-    }).__AITOWN_VIEWPORT__;
+    const state = window.__AITOWN_VIEWPORT__?.read();
 
-    if (!viewport) {
+    if (!state) {
       return null;
     }
 
     return {
-      x: viewport.x,
-      y: viewport.y,
-      scale: viewport.scale?.x ?? null
+      x: state.x,
+      y: state.y,
+      scale: state.scale
     };
   });
 }
@@ -370,33 +322,44 @@ async function synthesizePinchGesture(
 
 async function zoomViewportOutToMinimum(page: Page) {
   await page.evaluate(() => {
-    const viewport = (window as typeof window & { __AITOWN_VIEWPORT__?: any }).__AITOWN_VIEWPORT__;
-
-    const minScale = viewport?.plugins.get('clamp-zoom')?.options?.minScale;
-    if (viewport && typeof minScale === 'number') {
-      viewport.setZoom(minScale, true);
-      viewport.plugins.get('clamp')?.update?.();
-    }
+    window.__AITOWN_VIEWPORT__?.zoomToMinimum();
   });
 }
 
-async function forceViewportAgainstTopRightClamp(page: Page) {
-  await page.waitForFunction(() => Boolean((window as typeof window & { __AITOWN_VIEWPORT__?: object }).__AITOWN_VIEWPORT__));
-  await page.evaluate(() => {
-    const viewport = (window as typeof window & { __AITOWN_VIEWPORT__?: any }).__AITOWN_VIEWPORT__;
+async function zoomViewportInWithMouseWheel(page: Page, deltaY = -160) {
+  await expect(page.locator('.aitown-world__host canvas')).toBeVisible();
+  await page.waitForFunction(() => Boolean(window.__AITOWN_VIEWPORT__));
 
-    if (!viewport) {
+  const beforeScale = await readViewportScale(page);
+  expect(beforeScale).not.toBeNull();
+
+  await page.locator('.aitown-world__host canvas').hover();
+  await page.mouse.wheel(0, deltaY);
+
+  await expect
+    .poll(async () => await readViewportScale(page), {
+      timeout: POLL_DRIVEN_ASSERTION_TIMEOUT_MS
+    })
+    .toBeGreaterThan(beforeScale! + 0.01);
+}
+
+async function forceViewportAgainstTopRightClamp(page: Page) {
+  await page.waitForFunction(() => Boolean(window.__AITOWN_VIEWPORT__));
+  await page.evaluate(() => {
+    const viewport = window.__AITOWN_VIEWPORT__;
+    const state = viewport?.read();
+
+    if (!viewport || !state) {
       throw new Error('missing viewport');
     }
 
-    viewport.moveCenter(viewport.worldWidth * 4, -viewport.worldHeight * 4);
-    viewport.plugins.get('clamp')?.update?.();
+    viewport.moveCenter(state.worldWidth * 4, -state.worldHeight * 4);
   });
 }
 
 async function expectCanvasDragMovesViewport(page: Page) {
   await expect(page.locator('.aitown-world__host canvas')).toBeVisible();
-  await page.waitForFunction(() => Boolean((window as typeof window & { __AITOWN_VIEWPORT__?: object }).__AITOWN_VIEWPORT__));
+  await page.waitForFunction(() => Boolean(window.__AITOWN_VIEWPORT__));
 
   const before = await readViewportState(page);
   expect(before).not.toBeNull();
@@ -427,7 +390,7 @@ async function expectCanvasDragMovesViewport(page: Page) {
 
 async function expectMinimumZoomKeepsTwoAxisPanRoom(page: Page) {
   await expect(page.locator('.aitown-world__host canvas')).toBeVisible();
-  await page.waitForFunction(() => Boolean((window as typeof window & { __AITOWN_VIEWPORT__?: object }).__AITOWN_VIEWPORT__));
+  await page.waitForFunction(() => Boolean(window.__AITOWN_VIEWPORT__));
   await zoomViewportOutToMinimum(page);
 
   const before = await readViewportState(page);
@@ -588,7 +551,7 @@ async function expectDefaultViewportKeepsDirectEdgeReachability(
   const verifyReturnToTopLeft = options.verifyReturnToTopLeft ?? true;
 
   await expect(page.locator('.aitown-world__host canvas')).toBeVisible();
-  await page.waitForFunction(() => Boolean((window as typeof window & { __AITOWN_VIEWPORT__?: object }).__AITOWN_VIEWPORT__));
+  await page.waitForFunction(() => Boolean(window.__AITOWN_VIEWPORT__));
 
   const initial = await readViewportState(page);
   expect(initial).not.toBeNull();
@@ -782,7 +745,7 @@ test.describe('AI Town shell smoke', () => {
       await page.setViewportSize(shell.viewport);
       await page.goto('/');
       await expect(page.locator('.aitown-world__host canvas')).toBeVisible();
-      await page.waitForFunction(() => Boolean((window as typeof window & { __AITOWN_VIEWPORT__?: object }).__AITOWN_VIEWPORT__));
+      await page.waitForFunction(() => Boolean(window.__AITOWN_VIEWPORT__));
       await zoomViewportOutToMinimum(page);
 
       const state = await readViewportState(page);
@@ -813,11 +776,22 @@ test.describe('AI Town shell smoke', () => {
     });
   }
 
-  test('keeps selected-agent hub overlay clamp padding active at the top-right viewport boundary', async ({ page }) => {
+  test('keeps selected-agent hub overlay clamp padding active at the top-right viewport boundary after resetting from a zoomed-in view', async ({ page }) => {
     await page.goto('/');
+    await zoomViewportInWithMouseWheel(page);
     await page.getByRole('button', { name: 'Open Hub' }).click();
     await page.getByRole('button', { name: 'Inspect Growth Revenue Agent' }).click();
     await expect(page.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+
+    await zoomViewportOutToMinimum(page);
+
+    await expect
+      .poll(async () => {
+        const state = await readViewportState(page);
+
+        return state ? Math.abs(state.scale - state.minScale) <= 0.0001 : false;
+      })
+      .toBe(true);
 
     await forceViewportAgainstTopRightClamp(page);
 
@@ -848,7 +822,7 @@ test.describe('AI Town shell smoke', () => {
     await installObservedWheelGestureCapture(page);
     await page.goto('/');
     await expect(page.locator('.aitown-world__host canvas')).toBeVisible();
-    await page.waitForFunction(() => Boolean((window as typeof window & { __AITOWN_VIEWPORT__?: { scale: { x: number; y: number } } }).__AITOWN_VIEWPORT__));
+    await page.waitForFunction(() => Boolean(window.__AITOWN_VIEWPORT__));
 
     const beforeScale = await readViewportScale(page);
     const beforeBrowserZoom = await readBrowserZoomState(page);
@@ -898,7 +872,7 @@ test.describe('AI Town shell smoke', () => {
 
     await page.goto('/');
     await expect(page.locator('.aitown-world__host canvas')).toBeVisible();
-    await page.waitForFunction(() => Boolean((window as typeof window & { __AITOWN_VIEWPORT__?: object }).__AITOWN_VIEWPORT__));
+    await page.waitForFunction(() => Boolean(window.__AITOWN_VIEWPORT__));
     await installPinchTelemetry(page);
 
     const beforePose = await readViewportPose(page);

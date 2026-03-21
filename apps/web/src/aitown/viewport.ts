@@ -69,6 +69,61 @@ export type ViewportCornerAfterScreenDragInput = {
   deltaY: number;
 };
 
+export type ViewportCornerDragTarget = {
+  left: number;
+  top: number;
+  scale: { x: number };
+  moveCorner: (x: number, y: number) => unknown;
+};
+
+export type ViewportInspectionScaleBounds = {
+  minScale: number;
+  maxScale: number;
+};
+
+export type ViewportInspectable = {
+  x: number;
+  y: number;
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+  screenWidth: number;
+  screenHeight: number;
+  worldWidth: number;
+  worldHeight: number;
+  screenWorldWidth: number;
+  screenWorldHeight: number;
+  scale: { x: number };
+  setZoom: (scale: number, center?: boolean) => unknown;
+  moveCenter: (x: number, y: number) => unknown;
+};
+
+export type ViewportInspectionState = {
+  x: number;
+  y: number;
+  scale: number;
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+  screenWidth: number;
+  screenHeight: number;
+  worldWidth: number;
+  worldHeight: number;
+  screenWorldWidth: number;
+  screenWorldHeight: number;
+  clampPadding: { top: number; right: number };
+  minScale: number;
+  maxScale: number;
+};
+
+export type ViewportInspector = {
+  read: () => ViewportInspectionState;
+  zoomToMinimum: () => number;
+  moveCenter: (x: number, y: number) => void;
+};
+
 const DOM_DELTA_PIXEL = 0;
 const DOM_DELTA_LINE = 1;
 const DOM_DELTA_PAGE = 2;
@@ -133,6 +188,86 @@ export function resolveViewportCornerAfterScreenDrag({
   return {
     x: cornerX - deltaX / nextScale,
     y: cornerY - deltaY / nextScale
+  };
+}
+
+export function moveViewportCornerAfterScreenDrag(
+  viewport: ViewportCornerDragTarget,
+  deltaX: number,
+  deltaY: number
+) {
+  if (deltaX === 0 && deltaY === 0) {
+    return false;
+  }
+
+  const nextCorner = resolveViewportCornerAfterScreenDrag({
+    cornerX: viewport.left,
+    cornerY: viewport.top,
+    scale: viewport.scale.x,
+    deltaX,
+    deltaY
+  });
+
+  viewport.moveCorner(nextCorner.x, nextCorner.y);
+
+  return true;
+}
+
+export function resolveViewportInspectionState(
+  viewport: ViewportInspectable,
+  clampPadding: ViewportClampPadding = {},
+  scaleBounds?: Partial<ViewportInspectionScaleBounds>
+): ViewportInspectionState {
+  return {
+    x: viewport.x,
+    y: viewport.y,
+    scale: viewport.scale.x,
+    left: viewport.left,
+    top: viewport.top,
+    right: viewport.right,
+    bottom: viewport.bottom,
+    screenWidth: viewport.screenWidth,
+    screenHeight: viewport.screenHeight,
+    worldWidth: viewport.worldWidth,
+    worldHeight: viewport.worldHeight,
+    screenWorldWidth: viewport.screenWorldWidth,
+    screenWorldHeight: viewport.screenWorldHeight,
+    clampPadding: {
+      top: clampPadding.top ?? 0,
+      right: clampPadding.right ?? 0
+    },
+    minScale: scaleBounds?.minScale ?? viewport.scale.x,
+    maxScale: scaleBounds?.maxScale ?? viewport.scale.x
+  };
+}
+
+export function createViewportInspector({
+  viewport,
+  getClampPadding,
+  getScaleBounds,
+  afterZoom
+}: {
+  viewport: ViewportInspectable;
+  getClampPadding?: () => ViewportClampPadding;
+  getScaleBounds?: () => ViewportInspectionScaleBounds;
+  afterZoom?: () => void;
+}): ViewportInspector {
+  const read = () =>
+    resolveViewportInspectionState(viewport, getClampPadding?.(), getScaleBounds?.());
+
+  return {
+    read,
+    zoomToMinimum() {
+      const minScale = getScaleBounds?.().minScale ?? viewport.scale.x;
+
+      viewport.setZoom(minScale, true);
+      afterZoom?.();
+
+      return minScale;
+    },
+    moveCenter(x: number, y: number) {
+      viewport.moveCenter(x, y);
+    }
   };
 }
 

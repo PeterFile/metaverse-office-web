@@ -1,14 +1,17 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   DEFAULT_ALLOW_VIEWPORT_DRAG_OUTSIDE,
   DEFAULT_ENTRY_VIEWPORT_OVERSCAN,
   DEFAULT_MAX_VIEWPORT_SCALE,
   DEFAULT_MIN_VIEWPORT_PAN_MARGIN,
+  createViewportInspector,
   isViewportMouseWheelGesture,
+  moveViewportCornerAfterScreenDrag,
   resolveViewportCornerAfterScreenDrag,
   resolveViewportEntryCenter,
   resolveViewportClampOptions,
+  resolveViewportInspectionState,
   resolveViewportPanBounds,
   resolveViewportScaleBounds,
   resolveViewportWheelGestureDisposition,
@@ -413,6 +416,144 @@ describe('resolveViewportCornerAfterScreenDrag', () => {
         deltaY: 0
       })
     ).toEqual({ x: 512, y: 384 });
+  });
+
+  it('applies screen drags through the public moveCorner path without synthetic viewport events', () => {
+    const moveCorner = vi.fn();
+    const viewport = {
+      left: 512,
+      top: 384,
+      scale: { x: 2 },
+      moveCorner
+    };
+
+    expect(moveViewportCornerAfterScreenDrag(viewport, 120, -80)).toBe(true);
+    expect(moveCorner).toHaveBeenCalledWith(452, 424);
+  });
+
+  it('skips moveCorner when the drag delta is zero', () => {
+    const moveCorner = vi.fn();
+    const viewport = {
+      left: 512,
+      top: 384,
+      scale: { x: 1.5 },
+      moveCorner
+    };
+
+    expect(moveViewportCornerAfterScreenDrag(viewport, 0, 0)).toBe(false);
+    expect(moveCorner).not.toHaveBeenCalled();
+  });
+});
+
+describe('viewport inspection surface', () => {
+  it('resolves a stable inspection snapshot without exposing raw plugin state', () => {
+    expect(
+      resolveViewportInspectionState(
+        {
+          x: 128,
+          y: 256,
+          left: 12,
+          top: 24,
+          right: 1036,
+          bottom: 792,
+          screenWidth: 1024,
+          screenHeight: 768,
+          worldWidth: 2048,
+          worldHeight: 1536,
+          screenWorldWidth: 1024,
+          screenWorldHeight: 768,
+          scale: { x: 1.25 },
+          setZoom: vi.fn(),
+          moveCenter: vi.fn()
+        },
+        { top: 80, right: 120 },
+        { minScale: 0.9, maxScale: 2.2 }
+      )
+    ).toEqual({
+      x: 128,
+      y: 256,
+      scale: 1.25,
+      left: 12,
+      top: 24,
+      right: 1036,
+      bottom: 792,
+      screenWidth: 1024,
+      screenHeight: 768,
+      worldWidth: 2048,
+      worldHeight: 1536,
+      screenWorldWidth: 1024,
+      screenWorldHeight: 768,
+      clampPadding: { top: 80, right: 120 },
+      minScale: 0.9,
+      maxScale: 2.2
+    });
+  });
+
+  it('creates an inspector that zooms to the tracked minimum through the public setZoom path', () => {
+    const setZoom = vi.fn();
+    const moveCenter = vi.fn();
+    const afterZoom = vi.fn();
+    const viewport = {
+      x: 128,
+      y: 256,
+      left: 12,
+      top: 24,
+      right: 1036,
+      bottom: 792,
+      screenWidth: 1024,
+      screenHeight: 768,
+      worldWidth: 2048,
+      worldHeight: 1536,
+      screenWorldWidth: 1024,
+      screenWorldHeight: 768,
+      scale: { x: 1.25 },
+      setZoom,
+      moveCenter
+    };
+    const inspector = createViewportInspector({
+      viewport,
+      getClampPadding: () => ({ top: 80, right: 120 }),
+      getScaleBounds: () => ({ minScale: 0.9, maxScale: 2.2 }),
+      afterZoom
+    });
+
+    expect(inspector.zoomToMinimum()).toBe(0.9);
+    expect(setZoom).toHaveBeenCalledWith(0.9, true);
+    expect(afterZoom).toHaveBeenCalledTimes(1);
+    expect(afterZoom.mock.invocationCallOrder[0]).toBeGreaterThan(setZoom.mock.invocationCallOrder[0]);
+    expect(inspector.read()).toMatchObject({
+      scale: 1.25,
+      clampPadding: { top: 80, right: 120 },
+      minScale: 0.9,
+      maxScale: 2.2
+    });
+  });
+
+  it('delegates forced center moves through the public moveCenter path', () => {
+    const moveCenter = vi.fn();
+    const inspector = createViewportInspector({
+      viewport: {
+        x: 128,
+        y: 256,
+        left: 12,
+        top: 24,
+        right: 1036,
+        bottom: 792,
+        screenWidth: 1024,
+        screenHeight: 768,
+        worldWidth: 2048,
+        worldHeight: 1536,
+        screenWorldWidth: 1024,
+        screenWorldHeight: 768,
+        scale: { x: 1.25 },
+        setZoom: vi.fn(),
+        moveCenter
+      },
+      getScaleBounds: () => ({ minScale: 0.9, maxScale: 2.2 })
+    });
+
+    inspector.moveCenter(4096, -2048);
+    expect(moveCenter).toHaveBeenCalledWith(4096, -2048);
   });
 });
 

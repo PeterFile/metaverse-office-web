@@ -17,14 +17,16 @@ import type { AiTownSceneModel, SceneAgent, SceneZone } from './types';
 import {
   DEFAULT_ALLOW_VIEWPORT_DRAG_OUTSIDE,
   DEFAULT_MAX_VIEWPORT_SCALE,
+  createViewportInspector,
+  moveViewportCornerAfterScreenDrag,
   resolveViewportClampOptions,
-  resolveViewportCornerAfterScreenDrag,
   resolveViewportEntryCenter,
   resolveViewportScaleBounds,
   resolveViewportWheelGestureDisposition,
   shouldBlockViewportPointerInput,
   shouldDeferViewportPointerGestureToBrowser,
-  type ViewportInputCapabilities
+  type ViewportInputCapabilities,
+  type ViewportInspector
 } from './viewport';
 import { resolveViewportClampPadding } from './viewportClampPadding';
 
@@ -246,6 +248,7 @@ export default function WorldScene({ scene, onSelectAgent }: WorldSceneProps) {
   const lastCenteredAgentRef = useRef<{ agentId: string; x: number; y: number } | null>(null);
   const suppressSceneTapRef = useRef(false);
   const clampPaddingRef = useRef<{ top: number; right: number }>({ top: 0, right: 0 });
+  const viewportInspectorRef = useRef<ViewportInspector | null>(null);
   const [ready, setReady] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loadAttempt, setLoadAttempt] = useState(0);
@@ -461,20 +464,11 @@ export default function WorldScene({ scene, onSelectAgent }: WorldSceneProps) {
 
         lastPointerPosition = nextPosition;
 
-        if (deltaX === 0 && deltaY === 0) {
+        if (!moveViewportCornerAfterScreenDrag(viewport, deltaX, deltaY)) {
           return;
         }
 
         pointerDragged = true;
-        const nextCorner = resolveViewportCornerAfterScreenDrag({
-          cornerX: viewport.left,
-          cornerY: viewport.top,
-          scale: viewport.scale.x,
-          deltaX,
-          deltaY
-        });
-        viewport.moveCorner(nextCorner.x, nextCorner.y);
-        viewport.emit('moved', { viewport, type: 'drag' });
         event.preventDefault();
       };
 
@@ -517,7 +511,6 @@ export default function WorldScene({ scene, onSelectAgent }: WorldSceneProps) {
         const targetScale = preserveView ? Math.min(maxScale, Math.max(minScale, previousScale)) : nextBaseScale;
         viewport.setZoom(Math.min(maxScale, Math.max(minScale, targetScale)), true);
         viewport.moveCenter(previousCenter.x, previousCenter.y);
-        viewport.plugins.get('clamp')?.update?.();
       };
 
       viewportZoomHandler = () => {
@@ -532,7 +525,6 @@ export default function WorldScene({ scene, onSelectAgent }: WorldSceneProps) {
         }
 
         syncViewportConstraints(viewport.screenWidth, viewport.screenHeight, capabilities);
-        viewport.plugins.get('clamp')?.update?.();
       };
 
       viewport.wheel({ trackpadPinch: false, wheelZoom: true });
@@ -559,13 +551,20 @@ export default function WorldScene({ scene, onSelectAgent }: WorldSceneProps) {
       viewport.addChild(mapContainer, zoneLayer, agentLayer);
       app.stage.addChild(viewport);
 
+      const viewportInspector = createViewportInspector({
+        viewport,
+        getClampPadding: () => clampPaddingRef.current,
+        getScaleBounds: () => ({ minScale: currentBaseScale, maxScale: currentMaxScale }),
+        afterZoom: () => {
+          viewportZoomHandler?.();
+        }
+      });
+
       viewportRef.current = viewport;
       zoneLayerRef.current = zoneLayer;
       agentLayerRef.current = agentLayer;
-      (window as typeof window & { __AITOWN_VIEWPORT__?: Viewport & { clampPadding?: { top: number; right: number } } }).__AITOWN_VIEWPORT__ = Object.assign(
-        viewport,
-        { clampPadding: clampPaddingRef.current }
-      );
+      viewportInspectorRef.current = viewportInspector;
+      (window as typeof window & { __AITOWN_VIEWPORT__?: ViewportInspector }).__AITOWN_VIEWPORT__ = viewportInspector;
       host.addEventListener('pointerdown', handleHostPointerDown);
       host.addEventListener('pointermove', handleHostPointerMove);
       host.addEventListener('pointerup', handleHostPointerUp);
@@ -612,7 +611,8 @@ export default function WorldScene({ scene, onSelectAgent }: WorldSceneProps) {
       zoneLayerRef.current = null;
       agentLayerRef.current = null;
       viewportRef.current = null;
-      (window as typeof window & { __AITOWN_VIEWPORT__?: Viewport }).__AITOWN_VIEWPORT__ = undefined;
+      viewportInspectorRef.current = null;
+      (window as typeof window & { __AITOWN_VIEWPORT__?: ViewportInspector }).__AITOWN_VIEWPORT__ = undefined;
       lastCenteredAgentRef.current = null;
       setReady(false);
 

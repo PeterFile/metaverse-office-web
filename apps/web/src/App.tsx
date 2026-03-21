@@ -14,29 +14,14 @@ import { DetailsPanel } from './aitown/DetailsPanel';
 import { adaptWorldToScene } from './aitown/sceneAdapter';
 import { WorldProvider, useWorld } from './context/WorldContext';
 import { usePolledResource } from './hooks/usePolledResource';
+import { getHubFocusableElements } from './hubFocus';
 import type { OfficeAgent } from './types';
 import { projectWorldState } from './world/projector';
 
 const LazyWorldScene = lazy(() => import('./aitown/WorldScene'));
 
-const HUB_FOCUSABLE_SELECTOR = [
-  'button:not([disabled])',
-  '[href]',
-  'input:not([disabled]):not([type="hidden"])',
-  'select:not([disabled])',
-  'textarea:not([disabled])',
-  '[tabindex]:not([tabindex="-1"])',
-  '[contenteditable="true"]'
-].join(', ');
-
 function isJsdomEnvironment() {
   return typeof navigator !== 'undefined' && /jsdom/i.test(navigator.userAgent);
-}
-
-function getHubFocusableElements(container: HTMLElement) {
-  return Array.from(container.querySelectorAll<HTMLElement>(HUB_FOCUSABLE_SELECTOR)).filter(
-    (element) => element.getAttribute('aria-hidden') !== 'true'
-  );
 }
 
 export function resolveSelectedAgent(

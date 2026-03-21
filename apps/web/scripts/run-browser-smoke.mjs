@@ -24,6 +24,7 @@ const defaultPlaywrightArgs = [
   '--config',
   'playwright.config.ts'
 ];
+export const BROWSER_SMOKE_FRONTEND_READY_PATH = '/office/overview';
 
 export function resolvePlaywrightArgs(extraArgs = process.argv.slice(2)) {
   const forwardedArgs = extraArgs[0] === '--' ? extraArgs.slice(1) : extraArgs;
@@ -175,7 +176,7 @@ async function runManagedFrontendSmoke(
     command: resolvePnpmCommand(),
     args: resolveFrontendServerArgs({ frontendMode, devServerPort: options.devServerPort }),
     env: frontendEnv,
-    waitForUrlPath: '/',
+    waitForUrlPath: BROWSER_SMOKE_FRONTEND_READY_PATH,
     readyPrefix: 'Local:'
   });
 

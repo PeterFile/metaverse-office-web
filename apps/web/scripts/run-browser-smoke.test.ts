@@ -5,6 +5,7 @@ import { PassThrough } from 'node:stream';
 import { describe, expect, it } from 'vitest';
 
 import {
+  BROWSER_SMOKE_FRONTEND_READY_PATH,
   extractOrigin,
   launchManagedServer,
   parseBrowserSmokeArgs,
@@ -206,6 +207,10 @@ describe('run-browser-smoke helpers', () => {
     });
   });
 
+  it('waits for preview-mode readiness on the first proxied office endpoint instead of raw index html', () => {
+    expect(BROWSER_SMOKE_FRONTEND_READY_PATH).toBe('/office/overview');
+  });
+
   it('extracts localhost origins from backend and Vite readiness output', () => {
     expect(
       extractOrigin(
@@ -252,7 +257,7 @@ describe('run-browser-smoke helpers', () => {
     const ready = waitForServerOrigin({
       child: child as any,
       readyPrefix: 'Local:',
-      waitForUrlPath: '/',
+      waitForUrlPath: BROWSER_SMOKE_FRONTEND_READY_PATH,
       waitForReady: async (url) => {
         seenUrls.push(url);
       }
@@ -261,7 +266,7 @@ describe('run-browser-smoke helpers', () => {
     stdout.write('  ➜  Local:   http://127.0.0.1:45681/\n');
 
     await expect(ready).resolves.toBe('http://127.0.0.1:45681');
-    expect(seenUrls).toEqual(['http://127.0.0.1:45681/']);
+    expect(seenUrls).toEqual([`http://127.0.0.1:45681${BROWSER_SMOKE_FRONTEND_READY_PATH}`]);
   });
 
   it('requires a successful readiness probe instead of accepting 4xx responses', async () => {
@@ -319,7 +324,7 @@ describe('run-browser-smoke helpers', () => {
         command: process.execPath,
         args: ['-e', 'setTimeout(() => {}, 10_000)'],
         env: process.env,
-        waitForUrlPath: '/',
+        waitForUrlPath: BROWSER_SMOKE_FRONTEND_READY_PATH,
         readyPrefix: 'Local:',
         spawnProcess: () => {
           queueMicrotask(() => {

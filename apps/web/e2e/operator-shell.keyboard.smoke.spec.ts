@@ -144,8 +144,10 @@ function expectBrowserZoomStateMatchesBaseline(
 
 type ObservedWheelGesture = {
   ctrlKey: boolean;
+  defaultPrevented: boolean;
   deltaMode: number;
   deltaY: number;
+  phase: 'capture' | 'after-dispatch';
   target: 'world-host' | 'other';
 };
 
@@ -153,8 +155,10 @@ async function installObservedWheelGestureCapture(page: Page) {
   await page.addInitScript(() => {
     const records: Array<{
       ctrlKey: boolean;
+      defaultPrevented: boolean;
       deltaMode: number;
       deltaY: number;
+      phase: 'capture' | 'after-dispatch';
       target: 'world-host' | 'other';
     }> = [];
 
@@ -165,11 +169,25 @@ async function installObservedWheelGestureCapture(page: Page) {
     window.addEventListener(
       'wheel',
       (event) => {
-        records.push({
+        const snapshot = {
           ctrlKey: event.ctrlKey,
           deltaMode: event.deltaMode,
           deltaY: event.deltaY,
           target: classifyTarget(event.target)
+        };
+
+        records.push({
+          ...snapshot,
+          defaultPrevented: event.defaultPrevented,
+          phase: 'capture'
+        });
+
+        queueMicrotask(() => {
+          records.push({
+            ...snapshot,
+            defaultPrevented: event.defaultPrevented,
+            phase: 'after-dispatch'
+          });
         });
       },
       { capture: true, passive: true }
@@ -186,8 +204,10 @@ async function readObservedWheelGestures(page: Page): Promise<ObservedWheelGestu
     return (window as typeof window & {
       __AITOWN_OBSERVED_WHEEL_GESTURES__?: Array<{
         ctrlKey: boolean;
+        defaultPrevented: boolean;
         deltaMode: number;
         deltaY: number;
+        phase: 'capture' | 'after-dispatch';
         target: 'world-host' | 'other';
       }>;
     }).__AITOWN_OBSERVED_WHEEL_GESTURES__ ?? [];
@@ -318,6 +338,15 @@ async function synthesizePinchGesture(
     relativeSpeed: 800,
     gestureSourceType
   });
+}
+
+async function dispatchChromiumCtrlMouseWheel(page: Page, deltaY: number) {
+  const host = page.locator('.aitown-world__host');
+  await expect(host).toBeVisible();
+  await host.hover();
+  await page.keyboard.down('Control');
+  await page.mouse.wheel(0, deltaY);
+  await page.keyboard.up('Control');
 }
 
 async function zoomViewportOutToMinimum(page: Page) {
@@ -835,8 +864,10 @@ test.describe('AI Town shell smoke', () => {
     const zoomedViewportScale = await expectViewportScaleRemainsUnchanged(page, beforeScale!);
     const zoomInWheelGestureCount = (await readObservedWheelGestures(page)).filter(
       (gesture) =>
+        gesture.phase === 'after-dispatch' &&
         gesture.target === 'world-host' &&
         gesture.ctrlKey &&
+        !gesture.defaultPrevented &&
         gesture.deltaMode === 0 &&
         Math.abs(gesture.deltaY) < 24
     ).length;
@@ -851,8 +882,10 @@ test.describe('AI Town shell smoke', () => {
     const restoredViewportScale = await expectViewportScaleRemainsUnchanged(page, beforeScale!);
     const worldHostWheelGestures = (await readObservedWheelGestures(page)).filter(
       (gesture) =>
+        gesture.phase === 'after-dispatch' &&
         gesture.target === 'world-host' &&
         gesture.ctrlKey &&
+        !gesture.defaultPrevented &&
         gesture.deltaMode === 0 &&
         Math.abs(gesture.deltaY) < 24
     );
@@ -865,6 +898,51 @@ test.describe('AI Town shell smoke', () => {
       'browser zoom did not settle back to its baseline after the reverse pinch'
     );
     expect(worldHostWheelGestures.length).toBeGreaterThan(zoomInWheelGestureCount);
+  });
+
+  test('does not intercept ctrl-wheel over the canvas host and leaves the canvas viewport unchanged', async ({
+    page,
+    browserName
+  }) => {
+    test.skip(browserName !== 'chromium', 'ctrl-wheel host non-interception proof is currently pinned to Chromium smoke coverage');
+
+    await installObservedWheelGestureCapture(page);
+    await page.goto('/');
+    await expect(page.locator('.aitown-world__host canvas')).toBeVisible();
+    await page.waitForFunction(() => Boolean(window.__AITOWN_VIEWPORT__));
+
+    const beforeScale = await readViewportScale(page);
+    expect(beforeScale).not.toBeNull();
+
+    await dispatchChromiumCtrlMouseWheel(page, -120);
+    const zoomInViewportScale = await expectViewportScaleRemainsUnchanged(page, beforeScale!);
+    const zoomInWorldHostCtrlWheelGestures = (await readObservedWheelGestures(page)).filter(
+      (gesture) =>
+        gesture.phase === 'after-dispatch' &&
+        gesture.target === 'world-host' &&
+        gesture.ctrlKey &&
+        !gesture.defaultPrevented &&
+        gesture.deltaMode === 0 &&
+        gesture.deltaY < 0
+    );
+
+    expect(zoomInViewportScale).toBe(beforeScale);
+    expect(zoomInWorldHostCtrlWheelGestures.length).toBeGreaterThan(0);
+
+    await dispatchChromiumCtrlMouseWheel(page, 120);
+    const restoredViewportScale = await expectViewportScaleRemainsUnchanged(page, beforeScale!);
+    const worldHostCtrlWheelGestures = (await readObservedWheelGestures(page)).filter(
+      (gesture) =>
+        gesture.phase === 'after-dispatch' &&
+        gesture.target === 'world-host' &&
+        gesture.ctrlKey &&
+        !gesture.defaultPrevented &&
+        gesture.deltaMode === 0
+    );
+
+    expect(restoredViewportScale).toBe(beforeScale);
+    expect(worldHostCtrlWheelGestures.some((gesture) => gesture.deltaY < 0)).toBe(true);
+    expect(worldHostCtrlWheelGestures.some((gesture) => gesture.deltaY > 0)).toBe(true);
   });
 
   test('does not intercept touch pinch gestures or move the canvas viewport', async ({ page, browserName }) => {

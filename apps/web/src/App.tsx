@@ -6,6 +6,7 @@ import {
   RequestError,
   fetchAgentWorkflow,
   fetchIncidents,
+  fetchOfficeOperations,
   fetchOfficeOverview
 } from './api';
 import { DetailsPanel } from './aitown/DetailsPanel';
@@ -83,6 +84,18 @@ function AppInner() {
         signal
       }),
     resourceKey: 'incident-feed'
+  });
+
+  const operationsQueueEnabled = hubOpen && selectedAgentId === null;
+
+  const operationsResource = usePolledResource({
+    enabled: operationsQueueEnabled,
+    load: (signal) =>
+      fetchOfficeOperations({
+        limit: 4,
+        signal
+      }),
+    resourceKey: 'office-operations'
   });
 
   const selectedAgentStillVisibleInOverview = useMemo(
@@ -358,6 +371,9 @@ function AppInner() {
               incidentFeed={incidentFeedResource.data}
               incidentFeedError={incidentFeedResource.error}
               incidentFeedState={incidentFeedResource.state}
+              operations={operationsResource.data}
+              operationsError={operationsResource.error}
+              operationsState={operationsResource.state}
               selectedAgent={selectedAgent}
               workflow={activeWorkflow}
               workflowError={workflowResource.error}

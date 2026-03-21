@@ -2,6 +2,7 @@ import type {
   AgentWorkflow,
   IncidentFeedResponse,
   OfficeAgent,
+  OfficeOperations,
   WorkflowIncident
 } from '../types';
 import type { LoadState } from '../hooks/usePolledResource';
@@ -11,6 +12,9 @@ type DetailsPanelProps = {
   incidentFeed: IncidentFeedResponse | null;
   incidentFeedError: string | null;
   incidentFeedState: LoadState;
+  operations: OfficeOperations | null;
+  operationsError: string | null;
+  operationsState: LoadState;
   selectedAgent: OfficeAgent | null;
   workflow: AgentWorkflow | null;
   workflowError: string | null;
@@ -54,6 +58,9 @@ export function DetailsPanel({
   incidentFeed,
   incidentFeedError,
   incidentFeedState,
+  operations,
+  operationsError,
+  operationsState,
   selectedAgent,
   workflow,
   workflowError,
@@ -102,6 +109,25 @@ export function DetailsPanel({
               </button>
             ))}
           </div>
+        </section>
+
+        <section className="aitown-details__section">
+          <h3>Active Queue</h3>
+          <ul className="aitown-records">
+            {operationsState === 'loading' && !operations ? (
+              <li className="aitown-record">Loading operations queue...</li>
+            ) : null}
+            {operationsError ? <li className="aitown-record">{operationsError}</li> : null}
+            {(operations?.items ?? []).slice(0, 4).map((operation) => (
+              <li key={operation.agent_id} className={`aitown-record severity-${operation.effective_severity}`}>
+                <strong>{operation.display_name}</strong>
+                <span>{`${operation.current_state} · ${operation.current_blocker || operation.active_task}`}</span>
+              </li>
+            ))}
+            {operationsState === 'ready' && !operationsError && !operations?.items.length ? (
+              <li className="aitown-record">No active operations queue.</li>
+            ) : null}
+          </ul>
         </section>
 
         <section className="aitown-details__section">

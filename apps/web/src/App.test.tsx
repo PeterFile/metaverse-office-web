@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App, { resolveOverviewRefreshWarning, resolveSelectedAgent } from './App';
 import type { OfficeAgent } from './types';
 
+const operationsUrl = '/office/operations?limit=4';
 const incidentsUrl = '/incidents?limit=10&window=60m';
 const workflowUrl = '/agents/app-engineering/workflow?limit=10&window=60m';
 
@@ -107,6 +108,96 @@ const overviewFixture = {
   ]
 };
 
+const operationsFixture = {
+  generated_at: '2026-03-16T09:00:00.000Z',
+  summary: {
+    item_count: 2,
+    blocked_count: 1,
+    reboot_recommended_count: 1,
+    state_buckets: {
+      blocked: 1,
+      reviewing: 1
+    },
+    severity_buckets: {
+      normal: 1,
+      yellow: 0,
+      orange: 1,
+      red: 0
+    }
+  },
+  items: [
+    {
+      agent_id: 'app-engineering',
+      display_name: 'App Engineering Agent',
+      kind: 'employee',
+      current_state: 'blocked',
+      active_task: 'Fix workflow issue',
+      current_blocker: 'Workflow evidence is still incomplete',
+      current_location: 'meeting-zone',
+      effective_severity: 'orange',
+      reported_severity: 'yellow',
+      derived_staleness: {
+        severity: 'orange',
+        stale_for_minutes: 22,
+        last_meaningful_output_at: '2026-03-16T08:38:00.000Z'
+      },
+      reboot_recommended: true,
+      last_event_at: '2026-03-16T08:50:00.000Z',
+      last_heartbeat_at: '2026-03-16T08:59:30.000Z',
+      last_meaningful_output_at: '2026-03-16T08:38:00.000Z',
+      correlation_id: 'corr-app-review',
+      latest_event: {
+        event_id: 'evt-1',
+        event_type: 'peer_watch_alert_raised',
+        ts: '2026-03-16T08:50:00.000Z',
+        summary: 'Workflow evidence is still incomplete',
+        source_kind: 'controller_event',
+        evidence_refs: ['/tmp/evidence.md'],
+        counterparty_agent_ids: ['team-lead']
+      }
+    },
+    {
+      agent_id: 'team-lead',
+      display_name: 'Team Lead',
+      kind: 'lead',
+      current_state: 'reviewing',
+      active_task: 'Coordinate rollout',
+      current_blocker: '',
+      current_location: 'lead-desk',
+      effective_severity: 'normal',
+      reported_severity: 'normal',
+      derived_staleness: {
+        severity: 'normal',
+        stale_for_minutes: 1,
+        last_meaningful_output_at: '2026-03-16T08:59:00.000Z'
+      },
+      reboot_recommended: false,
+      last_event_at: null,
+      last_heartbeat_at: null,
+      last_meaningful_output_at: null,
+      correlation_id: null,
+      latest_event: null
+    }
+  ]
+};
+
+const emptyOperationsFixture = {
+  generated_at: '2026-03-16T09:00:00.000Z',
+  summary: {
+    item_count: 0,
+    blocked_count: 0,
+    reboot_recommended_count: 0,
+    state_buckets: {},
+    severity_buckets: {
+      normal: 0,
+      yellow: 0,
+      orange: 0,
+      red: 0
+    }
+  },
+  items: []
+};
+
 const incidentFeedFixture = {
   items: [
     {
@@ -185,6 +276,12 @@ describe('App', () => {
 
         if (url === '/office/overview') {
           return new Response(JSON.stringify(overviewFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === operationsUrl) {
+          return new Response(JSON.stringify(operationsFixture), {
             headers: { 'content-type': 'application/json' }
           });
         }
@@ -297,6 +394,168 @@ afterEach(() => {
     expect(closeButton).toHaveFocus();
   });
 
+  it('loads the active operations queue only when Hub opens in Crew Overview and requests the limited slice', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await screen.findByRole('button', { name: 'Open Hub' });
+    expect(globalThis.fetch).not.toHaveBeenCalledWith(operationsUrl, expect.anything());
+
+    const details = await openHub(user);
+
+    expect(await within(details).findByRole('heading', { name: 'Active Queue' })).toBeVisible();
+    expect(within(details).getByText('blocked · Workflow evidence is still incomplete')).toBeVisible();
+    expect(within(details).getByText('reviewing · Coordinate rollout')).toBeVisible();
+
+    await act(async () => {
+      expect(globalThis.fetch).toHaveBeenCalledWith(operationsUrl, expect.anything());
+    });
+
+    await user.click(within(details).getByRole('button', { name: 'Inspect Team Lead' }));
+    expect(within(details).queryByRole('heading', { name: 'Active Queue' })).not.toBeInTheDocument();
+  });
+
+  it('shows operations queue loading state explicitly while the overview queue is still pending', async () => {
+    let resolveOperations: ((response: Response) => void) | null = null;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === '/office/overview') {
+          return Promise.resolve(
+            new Response(JSON.stringify(overviewFixture), {
+              headers: { 'content-type': 'application/json' }
+            })
+          );
+        }
+
+        if (url === operationsUrl) {
+          return new Promise<Response>((resolve) => {
+            resolveOperations = resolve;
+          });
+        }
+
+        if (url === incidentsUrl) {
+          return Promise.resolve(
+            new Response(JSON.stringify(incidentFeedFixture), {
+              headers: { 'content-type': 'application/json' }
+            })
+          );
+        }
+
+        if (url === workflowUrl) {
+          return Promise.resolve(
+            new Response(JSON.stringify(workflowFixture), {
+              headers: { 'content-type': 'application/json' }
+            })
+          );
+        }
+
+        return Promise.reject(new Error(`Unexpected request: ${url}`));
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    expect(await within(details).findByText('Loading operations queue...')).toBeVisible();
+
+    expect(resolveOperations).not.toBeNull();
+    resolveOperations!(
+      new Response(JSON.stringify(operationsFixture), {
+        headers: { 'content-type': 'application/json' }
+      })
+    );
+
+    expect(await within(details).findByText('blocked · Workflow evidence is still incomplete')).toBeVisible();
+  });
+
+  it('shows operations queue failures explicitly instead of pretending empty', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === '/office/overview') {
+          return new Response(JSON.stringify(overviewFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === operationsUrl) {
+          return new Response(JSON.stringify({ error: 'internal_error', details: 'operations refresh failed' }), {
+            status: 500,
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === incidentsUrl) {
+          return new Response(JSON.stringify(incidentFeedFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === workflowUrl) {
+          return new Response(JSON.stringify(workflowFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        throw new Error(`Unexpected request: ${url}`);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    expect(await within(details).findByText('operations refresh failed')).toBeVisible();
+    expect(within(details).queryByText('No active operations queue.')).not.toBeInTheDocument();
+  });
+
+  it('shows an empty operations queue explicitly when no active overview items exist', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === '/office/overview') {
+          return new Response(JSON.stringify(overviewFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === operationsUrl) {
+          return new Response(JSON.stringify(emptyOperationsFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === incidentsUrl) {
+          return new Response(JSON.stringify(incidentFeedFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === workflowUrl) {
+          return new Response(JSON.stringify(workflowFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        throw new Error(`Unexpected request: ${url}`);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    expect(await within(details).findByText('No active operations queue.')).toBeVisible();
+  });
+
   it('keeps selected agent summary aligned with projected world state', async () => {
     const user = userEvent.setup();
     render(<App />);
@@ -321,6 +580,12 @@ afterEach(() => {
 
         if (url === '/office/overview') {
           return new Response(JSON.stringify(overviewFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === operationsUrl) {
+          return new Response(JSON.stringify(operationsFixture), {
             headers: { 'content-type': 'application/json' }
           });
         }
@@ -367,6 +632,12 @@ afterEach(() => {
 
         if (url === '/office/overview') {
           return new Response(JSON.stringify(overviewFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === operationsUrl) {
+          return new Response(JSON.stringify(operationsFixture), {
             headers: { 'content-type': 'application/json' }
           });
         }
@@ -555,6 +826,12 @@ afterEach(() => {
           });
         }
 
+        if (url === operationsUrl) {
+          return new Response(JSON.stringify(operationsFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
         if (url === incidentsUrl) {
           return new Response(JSON.stringify(incidentFeedFixture), {
             headers: { 'content-type': 'application/json' }
@@ -638,6 +915,12 @@ afterEach(() => {
 
         if (url === '/office/overview') {
           return new Response(JSON.stringify(overviewFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === operationsUrl) {
+          return new Response(JSON.stringify(operationsFixture), {
             headers: { 'content-type': 'application/json' }
           });
         }

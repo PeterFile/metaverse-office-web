@@ -12,6 +12,7 @@
 - `GET /events?agent_id=&event_type=&severity=&correlation_id=&limit=`
 - `GET /interactions?interaction_type=&counterparty_agent_id=&severity=&correlation_id=&limit=&window=`
 - `GET /office/overview`
+- `GET /office/operations?limit=&state=`
 - `GET /timeline?window=&agent_id=&event_type=&severity=&correlation_id=&limit=`
 - `GET /peer-watch/alerts?status=&target_agent_id=&agent_id=&watcher_agent_id=&observer_agent_id=&correlation_id=&severity=&limit=`
 - `GET /incidents?kind=&agent_id=&severity=&status=&correlation_id=&limit=&window=`
@@ -544,6 +545,71 @@
         "last_meaningful_output_at": "2026-03-09T18:04:00.000Z"
       },
       "effective_severity": "normal"
+    }
+  ]
+}
+```
+
+## Office operations semantics
+- `GET /office/operations` is a read-only live-operations queue derived from the existing append-only events, heartbeats, and current agent projections
+- by default, the queue includes only currently active agents where `current_state` is neither `idle` nor `sleeping`
+- supported query params are `limit` and `state`
+- `state`, when present, filters by one canonical state value and replaces the default active-only filter instead of layering on top of it
+- `limit`, when present, caps the returned queue after sorting; summary counts describe the returned slice, not the pre-limit match set
+- queue items reuse the same `reported_severity`, `derived_staleness`, and `effective_severity` logic as `GET /office/overview`
+- `correlation_id` and `latest_event` come from the latest event for the agent when one exists; heartbeat-only agents return `null` for both fields
+- queue ordering is highest effective severity first, then reboot recommended agents, then blocked agents, then newest activity, then canonical display-name tie-breaks
+
+## Office operations response shape
+```json
+{
+  "generated_at": "2026-03-09T18:05:00.000Z",
+  "summary": {
+    "item_count": 2,
+    "blocked_count": 1,
+    "reboot_recommended_count": 0,
+    "state_buckets": {
+      "blocked": 1,
+      "reviewing": 1
+    },
+    "severity_buckets": {
+      "normal": 1,
+      "yellow": 0,
+      "orange": 1,
+      "red": 0
+    }
+  },
+  "items": [
+    {
+      "agent_id": "app-engineering",
+      "display_name": "App Engineering Agent",
+      "kind": "employee",
+      "current_state": "blocked",
+      "active_task": "Hand off the contract fix",
+      "current_blocker": "Need review evidence",
+      "current_location": "desk-app-engineering",
+      "reported_severity": "orange",
+      "effective_severity": "orange",
+      "derived_staleness": {
+        "severity": "normal",
+        "stale_for_ms": 120000,
+        "stale_for_minutes": 2,
+        "last_meaningful_output_at": "2026-03-09T18:58:00.000Z"
+      },
+      "reboot_recommended": false,
+      "last_event_at": "2026-03-09T18:48:00.000Z",
+      "last_heartbeat_at": "2026-03-09T18:58:30.000Z",
+      "last_meaningful_output_at": "2026-03-09T18:58:00.000Z",
+      "correlation_id": "corr-contract",
+      "latest_event": {
+        "event_id": "evt_contract_handoff_completed",
+        "event_type": "agent_handoff_completed",
+        "ts": "2026-03-09T18:48:00.000Z",
+        "summary": "Lead completed the contract handoff",
+        "source_kind": "controller_event",
+        "evidence_refs": ["/tmp/contract-handoff.md"],
+        "counterparty_agent_ids": ["growth-revenue"]
+      }
     }
   ]
 }

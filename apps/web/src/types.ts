@@ -68,6 +68,49 @@ export interface OfficeOverview {
   agents: OfficeAgent[];
 }
 
+export interface OperationsSummary {
+  item_count: number;
+  blocked_count: number;
+  reboot_recommended_count: number;
+  state_buckets: Record<string, number>;
+  severity_buckets: Record<Severity, number>;
+}
+
+export interface OfficeOperationLatestEvent {
+  event_id: string;
+  event_type: string;
+  ts: string;
+  summary: string;
+  source_kind: string;
+  evidence_refs: string[];
+  counterparty_agent_ids: string[];
+}
+
+export interface OfficeOperation {
+  agent_id: string;
+  display_name: string;
+  kind: 'lead' | 'employee';
+  current_state: string;
+  active_task: string;
+  current_blocker: string;
+  current_location: string;
+  reported_severity: Severity;
+  effective_severity: Severity;
+  derived_staleness: DerivedStaleness;
+  reboot_recommended: boolean;
+  last_event_at: string | null;
+  last_heartbeat_at: string | null;
+  last_meaningful_output_at: string | null;
+  correlation_id: string | null;
+  latest_event: OfficeOperationLatestEvent | null;
+}
+
+export interface OfficeOperations {
+  generated_at: string;
+  summary: OperationsSummary;
+  items: OfficeOperation[];
+}
+
 export interface WorkflowDetail {
   agent_id: string;
   display_name?: string;

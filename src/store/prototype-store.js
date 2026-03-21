@@ -615,6 +615,33 @@ class PrototypeStore {
       agents: overviewAgents
     };
   }
+
+  getOfficeOperations(filters = {}) {
+    const generatedAt = filters.now;
+    const latestEventsByAgentId = buildLatestEventsByAgentId(this.events);
+    const limit =
+      filters.limit === null || filters.limit === undefined || filters.limit === ''
+        ? null
+        : parseLimit(filters.limit);
+
+    const items = applyOptionalLimit(
+      this.listAgents()
+        .filter((agent) => matchesOfficeOperationState(agent, filters.state))
+        .map((agent) => createOfficeOperationItem({
+          agent,
+          latestEvent: latestEventsByAgentId.get(agent.agent_id) || null,
+          now: generatedAt
+        }))
+        .sort(compareOfficeOperations),
+      limit
+    );
+
+    return {
+      generated_at: generatedAt,
+      summary: createOfficeOperationsSummary(items),
+      items
+    };
+  }
 }
 
 function createZoneOccupant(agent) {
@@ -626,6 +653,143 @@ function createZoneOccupant(agent) {
     active_task: agent.active_task,
     effective_severity: agent.effective_severity
   };
+}
+
+function createOfficeOperationItem({ agent, latestEvent, now }) {
+  const severityView = deriveAgentOverviewSeverity({
+    now,
+    reportedSeverity: agent.severity,
+    lastMeaningfulOutputAt: agent.last_meaningful_output_at
+  });
+
+  return {
+    agent_id: agent.agent_id,
+    display_name: agent.display_name,
+    kind: agent.kind,
+    current_state: agent.current_state,
+    active_task: agent.active_task,
+    current_blocker: agent.current_blocker,
+    current_location: agent.current_location,
+    reported_severity: severityView.reported_severity,
+    effective_severity: severityView.effective_severity,
+    derived_staleness: severityView.derived_staleness,
+    reboot_recommended: agent.reboot_recommended,
+    last_event_at: agent.last_event_at,
+    last_heartbeat_at: agent.last_heartbeat_at,
+    last_meaningful_output_at: agent.last_meaningful_output_at,
+    correlation_id: latestEvent ? latestEvent.correlation_id : null,
+    latest_event: latestEvent
+      ? {
+          event_id: latestEvent.event_id,
+          event_type: latestEvent.event_type,
+          ts: latestEvent.ts,
+          summary: latestEvent.summary,
+          source_kind: latestEvent.source_kind,
+          evidence_refs: latestEvent.evidence_refs,
+          counterparty_agent_ids: latestEvent.counterparty_agent_ids
+        }
+      : null
+  };
+}
+
+function matchesOfficeOperationState(agent, state) {
+  if (typeof state === 'string' && state.length > 0) {
+    return agent.current_state === state;
+  }
+
+  return agent.current_state !== 'idle' && agent.current_state !== 'sleeping';
+}
+
+function buildLatestEventsByAgentId(events) {
+  const latestEventsByAgentId = new Map();
+
+  for (const event of events) {
+    const previous = latestEventsByAgentId.get(event.agent_id) || null;
+    if (!previous || compareEventsByTsDesc(event, previous) < 0) {
+      latestEventsByAgentId.set(event.agent_id, event);
+    }
+  }
+
+  return latestEventsByAgentId;
+}
+
+function createOfficeOperationsSummary(items) {
+  const severityBuckets = {
+    normal: 0,
+    yellow: 0,
+    orange: 0,
+    red: 0
+  };
+  const stateBuckets = {};
+
+  let blockedCount = 0;
+  let rebootRecommendedCount = 0;
+
+  for (const item of items) {
+    severityBuckets[item.effective_severity] += 1;
+    stateBuckets[item.current_state] = (stateBuckets[item.current_state] || 0) + 1;
+
+    if (item.current_state === 'blocked') {
+      blockedCount += 1;
+    }
+
+    if (item.reboot_recommended) {
+      rebootRecommendedCount += 1;
+    }
+  }
+
+  return {
+    item_count: items.length,
+    blocked_count: blockedCount,
+    reboot_recommended_count: rebootRecommendedCount,
+    state_buckets: stateBuckets,
+    severity_buckets: severityBuckets
+  };
+}
+
+function compareOfficeOperations(left, right) {
+  const severityDelta =
+    SEVERITY_RANK[right.effective_severity] - SEVERITY_RANK[left.effective_severity];
+  if (severityDelta !== 0) {
+    return severityDelta;
+  }
+
+  const rebootDelta = Number(right.reboot_recommended) - Number(left.reboot_recommended);
+  if (rebootDelta !== 0) {
+    return rebootDelta;
+  }
+
+  const blockedDelta = Number(right.current_state === 'blocked') - Number(left.current_state === 'blocked');
+  if (blockedDelta !== 0) {
+    return blockedDelta;
+  }
+
+  const activityDelta = getOfficeOperationActivitySortMs(right) - getOfficeOperationActivitySortMs(left);
+  if (activityDelta !== 0) {
+    return activityDelta;
+  }
+
+  return (
+    left.display_name.localeCompare(right.display_name) ||
+    left.agent_id.localeCompare(right.agent_id)
+  );
+}
+
+function getOfficeOperationActivitySortMs(item) {
+  return Math.max(
+    Date.parse(item.last_event_at || 0) || 0,
+    Date.parse(item.last_heartbeat_at || 0) || 0,
+    Date.parse(item.last_meaningful_output_at || 0) || 0
+  );
+}
+
+function compareEventsByTsDesc(left, right) {
+  const tsDelta = Date.parse(right.ts || 0) - Date.parse(left.ts || 0);
+  if (tsDelta !== 0) {
+    return tsDelta;
+  }
+
+  return String(right.event_id || '').localeCompare(String(left.event_id || ''));
 }
 
 function createBaseProjection(agent) {

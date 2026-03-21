@@ -2,6 +2,7 @@ import type {
   AgentWorkflow,
   CorrelationDrilldown,
   IncidentFeedResponse,
+  OfficeOperations,
   OfficeOverview,
   ProblemResponse
 } from './types';
@@ -78,6 +79,24 @@ export function resolveApiUrl(path: string, apiBaseUrl = API_BASE_URL): string {
 export async function fetchOfficeOverview(signal?: AbortSignal): Promise<OfficeOverview> {
   const response = await fetch(resolveApiUrl('/office/overview'), { signal });
   return parseJson<OfficeOverview>(response);
+}
+
+export async function fetchOfficeOperations(
+  options: { limit?: number; state?: string; signal?: AbortSignal } = {}
+): Promise<OfficeOperations> {
+  const params = new URLSearchParams();
+  if (options.limit !== undefined) {
+    params.set('limit', String(options.limit));
+  }
+  if (options.state) {
+    params.set('state', options.state);
+  }
+
+  const suffix = params.size > 0 ? `?${params.toString()}` : '';
+  const response = await fetch(resolveApiUrl(`/office/operations${suffix}`), {
+    signal: options.signal
+  });
+  return parseJson<OfficeOperations>(response);
 }
 
 export async function fetchAgentWorkflow(

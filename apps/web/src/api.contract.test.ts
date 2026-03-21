@@ -10,6 +10,7 @@ import type {
   AgentWorkflow,
   CorrelationDrilldown,
   IncidentFeedResponse,
+  OfficeOperations,
   OfficeOverview
 } from './types';
 
@@ -101,7 +102,7 @@ describe('read-only frontend/backend contract smoke', () => {
     expect(path.basename(harness.root)).toMatch(/^web-contract-/);
   });
 
-  it('loads /office/overview, /agents/:id/workflow, /incidents, and /correlations/:id from the real backend', async () => {
+  it('loads /office/overview, /office/operations, /agents/:id/workflow, /incidents, and /correlations/:id from the real backend', async () => {
     harness = await createHarness(() => '2026-03-09T19:00:00.000Z');
     await seedContractSlice(harness.store);
 
@@ -116,8 +117,9 @@ describe('read-only frontend/backend contract smoke', () => {
     );
 
     const api = await loadApi(harness.baseUrl);
-    const [overview, workflow, incidents, correlation] = await Promise.all([
+    const [overview, operations, workflow, incidents, correlation] = await Promise.all([
       api.fetchOfficeOverview(),
+      api.fetchOfficeOperations(),
       api.fetchAgentWorkflow('app-engineering'),
       api.fetchIncidents(),
       api.fetchCorrelationDrilldown('corr-contract')
@@ -128,6 +130,12 @@ describe('read-only frontend/backend contract smoke', () => {
         method: 'GET',
         origin: harness.baseUrl,
         pathname: '/office/overview',
+        query: []
+      },
+      {
+        method: 'GET',
+        origin: harness.baseUrl,
+        pathname: '/office/operations',
         query: []
       },
       {
@@ -159,6 +167,7 @@ describe('read-only frontend/backend contract smoke', () => {
       }
     ]);
     expectOverviewContract(overview);
+    expectOperationsContract(operations);
     expectWorkflowContract(workflow);
     expectIncidentFeedContract(incidents);
     expectCorrelationContract(correlation);
@@ -462,6 +471,48 @@ function expectOverviewContract(overview: OfficeOverview) {
       })
     ])
   );
+}
+
+function expectOperationsContract(operations: OfficeOperations) {
+  expect(operations.generated_at).toBe('2026-03-09T19:00:00.000Z');
+  expect(operations.summary).toEqual({
+    item_count: 2,
+    blocked_count: 1,
+    reboot_recommended_count: 0,
+    state_buckets: {
+      blocked: 1,
+      reviewing: 1
+    },
+    severity_buckets: {
+      normal: 1,
+      yellow: 0,
+      orange: 1,
+      red: 0
+    }
+  });
+  expect(operations.items.map((item) => item.agent_id)).toEqual([
+    'app-engineering',
+    'team-lead'
+  ]);
+  expect(operations.items[0]).toMatchObject({
+    agent_id: 'app-engineering',
+    display_name: 'App Engineering Agent',
+    current_state: 'blocked',
+    correlation_id: 'corr-contract',
+    current_blocker: 'Need review evidence',
+    reported_severity: 'orange',
+    effective_severity: 'orange',
+    latest_event: {
+      event_id: 'evt_contract_handoff_completed',
+      event_type: 'agent_handoff_completed',
+      summary: 'Lead completed the contract handoff'
+    }
+  });
+  expect(operations.items[1]).toMatchObject({
+    agent_id: 'team-lead',
+    latest_event: null,
+    correlation_id: null
+  });
 }
 
 function expectWorkflowContract(workflow: AgentWorkflow) {

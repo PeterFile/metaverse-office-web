@@ -150,6 +150,173 @@ test('GET /office/overview exposes seeded layout, empty zones, and watch edges',
   );
 });
 
+test('GET /office/operations exposes the active queue with state and limit filters', async (t) => {
+  const { baseUrl, store } = await createHarness(t);
+
+  await store.appendHeartbeat({
+    agent_id: 'market-intel',
+    received_at: '2026-03-09T18:04:00.000Z',
+    current_state: 'researching',
+    active_task: 'Scan competitor notes',
+    current_location: 'desk-market-intel',
+    last_meaningful_output_at: '2026-03-09T17:45:00.000Z',
+    last_file_write_at: '2026-03-09T17:45:00.000Z',
+    current_blocker: '',
+    confidence_level: 'medium',
+    reboot_recommended: false
+  });
+
+  await store.appendHeartbeat({
+    agent_id: 'growth-revenue',
+    received_at: '2026-03-09T18:04:10.000Z',
+    current_state: 'coding',
+    active_task: 'Repair outbound funnel notes',
+    current_location: 'desk-growth-revenue',
+    last_meaningful_output_at: '2026-03-09T17:35:00.000Z',
+    last_file_write_at: '2026-03-09T17:35:00.000Z',
+    current_blocker: '',
+    confidence_level: 'low',
+    reboot_recommended: true
+  });
+
+  await store.appendHeartbeat({
+    agent_id: 'product-pmf',
+    received_at: '2026-03-09T18:04:20.000Z',
+    current_state: 'sleeping',
+    active_task: 'Sleep until next lead task',
+    current_location: 'rest-zone',
+    last_meaningful_output_at: '2026-03-09T18:00:00.000Z',
+    last_file_write_at: '2026-03-09T18:00:00.000Z',
+    current_blocker: '',
+    confidence_level: 'high',
+    reboot_recommended: false
+  });
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_ops_blocked',
+      ts: '2026-03-09T18:04:30.000Z',
+      agentId: 'app-engineering',
+      actorId: 'team-lead',
+      eventType: 'peer_watch_alert_raised',
+      currentState: 'blocked',
+      activeTask: 'Stop broken handler rollout',
+      location: 'review-zone',
+      summary: 'Peer watch found a severe regression',
+      severity: 'red',
+      correlationId: 'corr-ops-alert',
+      counterpartyAgentIds: ['protocol-engineering'],
+      evidenceRefs: ['/tmp/ops-alert.md'],
+      sourceKind: 'controller_event'
+    })
+  );
+
+  const operations = await requestJson(`${baseUrl}/office/operations`);
+  assert.equal(operations.response.status, 200);
+  assert.equal(operations.body.generated_at, '2026-03-09T18:05:00.000Z');
+  assert.deepEqual(operations.body.summary, {
+    item_count: 4,
+    blocked_count: 1,
+    reboot_recommended_count: 1,
+    state_buckets: {
+      blocked: 1,
+      coding: 1,
+      researching: 1,
+      reviewing: 1
+    },
+    severity_buckets: {
+      normal: 1,
+      yellow: 1,
+      orange: 1,
+      red: 1
+    }
+  });
+  assert.deepEqual(
+    operations.body.items.map((item) => item.agent_id),
+    ['app-engineering', 'growth-revenue', 'market-intel', 'team-lead']
+  );
+
+  const blocked = operations.body.items[0];
+  assert.deepEqual(blocked, {
+    agent_id: 'app-engineering',
+    display_name: 'App Engineering Agent',
+    kind: 'employee',
+    current_state: 'blocked',
+    active_task: 'Stop broken handler rollout',
+    current_blocker: 'Peer watch found a severe regression',
+    current_location: 'review-zone',
+    reported_severity: 'red',
+    effective_severity: 'red',
+    derived_staleness: {
+      severity: 'normal',
+      stale_for_ms: 30000,
+      stale_for_minutes: 0,
+      last_meaningful_output_at: '2026-03-09T18:04:30.000Z'
+    },
+    reboot_recommended: false,
+    last_event_at: '2026-03-09T18:04:30.000Z',
+    last_heartbeat_at: null,
+    last_meaningful_output_at: '2026-03-09T18:04:30.000Z',
+    correlation_id: 'corr-ops-alert',
+    latest_event: {
+      event_id: 'evt_ops_blocked',
+      event_type: 'peer_watch_alert_raised',
+      ts: '2026-03-09T18:04:30.000Z',
+      summary: 'Peer watch found a severe regression',
+      source_kind: 'controller_event',
+      evidence_refs: ['/tmp/ops-alert.md'],
+      counterparty_agent_ids: ['protocol-engineering']
+    }
+  });
+
+  const rebooting = operations.body.items[1];
+  assert.equal(rebooting.agent_id, 'growth-revenue');
+  assert.equal(rebooting.reported_severity, 'orange');
+  assert.equal(rebooting.effective_severity, 'orange');
+  assert.equal(rebooting.correlation_id, null);
+  assert.equal(rebooting.latest_event, null);
+
+  const filtered = await requestJson(`${baseUrl}/office/operations?state=blocked`);
+  assert.equal(filtered.response.status, 200);
+  assert.deepEqual(filtered.body.summary, {
+    item_count: 1,
+    blocked_count: 1,
+    reboot_recommended_count: 0,
+    state_buckets: {
+      blocked: 1
+    },
+    severity_buckets: {
+      normal: 0,
+      yellow: 0,
+      orange: 0,
+      red: 1
+    }
+  });
+  assert.deepEqual(filtered.body.items.map((item) => item.agent_id), ['app-engineering']);
+
+  const limited = await requestJson(`${baseUrl}/office/operations?limit=2`);
+  assert.equal(limited.response.status, 200);
+  assert.deepEqual(limited.body.items.map((item) => item.agent_id), [
+    'app-engineering',
+    'growth-revenue'
+  ]);
+  assert.deepEqual(limited.body.summary, {
+    item_count: 2,
+    blocked_count: 1,
+    reboot_recommended_count: 1,
+    state_buckets: {
+      blocked: 1,
+      coding: 1
+    },
+    severity_buckets: {
+      normal: 0,
+      yellow: 0,
+      orange: 1,
+      red: 1
+    }
+  });
+});
+
 test('POST writes append records and projection endpoints query them', async (t) => {
   const { baseUrl, storeFile } = await createHarness(t);
 

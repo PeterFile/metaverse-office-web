@@ -556,6 +556,62 @@ afterEach(() => {
     expect(await within(details).findByText('No active operations queue.')).toBeVisible();
   });
 
+  it('keeps the last operations queue visible when a later queue poll fails', async () => {
+    (window as typeof window & { __AITOWN_POLL_INTERVAL_MS__?: number }).__AITOWN_POLL_INTERVAL_MS__ = 10;
+
+    let operationsRequests = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === '/office/overview') {
+          return new Response(JSON.stringify(overviewFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === operationsUrl) {
+          operationsRequests += 1;
+          if (operationsRequests === 1) {
+            return new Response(JSON.stringify(operationsFixture), {
+              headers: { 'content-type': 'application/json' }
+            });
+          }
+
+          return new Response(JSON.stringify({ error: 'internal_error', details: 'operations refresh failed' }), {
+            status: 500,
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === incidentsUrl) {
+          return new Response(JSON.stringify(incidentFeedFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === workflowUrl) {
+          return new Response(JSON.stringify(workflowFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        throw new Error(`Unexpected request: ${url}`);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    expect(await within(details).findByText('blocked · Workflow evidence is still incomplete')).toBeVisible();
+
+    expect(await within(details).findByText('operations refresh failed')).toBeVisible();
+    expect(within(details).getByText('blocked · Workflow evidence is still incomplete')).toBeVisible();
+    expect(operationsRequests).toBeGreaterThan(1);
+  });
+
   it('keeps selected agent summary aligned with projected world state', async () => {
     const user = userEvent.setup();
     render(<App />);

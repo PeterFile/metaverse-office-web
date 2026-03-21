@@ -53,12 +53,64 @@ async function main() {
 
 function createScenarioServer({ baseServer, store, now }) {
   return http.createServer((req, res) => {
+    if (applyBrowserSmokeCors(req, res)) {
+      return;
+    }
+
     if (handleScenarioOverride({ req, res, store, now })) {
       return;
     }
 
     baseServer.emit('request', req, res);
   });
+}
+
+export function applyBrowserSmokeCors(req, res) {
+  const origin = normalizeOriginHeader(req.headers.origin);
+  if (!isLoopbackOrigin(origin)) {
+    return false;
+  }
+
+  res.setHeader('Vary', 'Origin');
+  res.setHeader('Access-Control-Allow-Origin', origin);
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+
+  if ((req.method || 'GET') !== 'OPTIONS') {
+    return false;
+  }
+
+  const requestedMethod = normalizeOriginHeader(req.headers['access-control-request-method']);
+  if (requestedMethod && requestedMethod !== 'GET') {
+    res.writeHead(405);
+    res.end();
+    return true;
+  }
+
+  res.writeHead(204);
+  res.end();
+  return true;
+}
+
+export function isLoopbackOrigin(origin) {
+  if (!origin) {
+    return false;
+  }
+
+  try {
+    const parsedOrigin = new URL(origin);
+    return parsedOrigin.hostname === '127.0.0.1' || parsedOrigin.hostname === 'localhost';
+  } catch {
+    return false;
+  }
+}
+
+function normalizeOriginHeader(value) {
+  if (typeof value === 'string') {
+    return value;
+  }
+
+  return Array.isArray(value) ? value[0] : null;
 }
 
 function handleScenarioOverride({ req, res, store, now }) {
@@ -68,13 +120,11 @@ function handleScenarioOverride({ req, res, store, now }) {
   }
 
   const url = new URL(req.url || '/', 'http://127.0.0.1');
-  const cookies = parseCookies(req.headers.cookie);
-  const scenario = cookies[scenarioCookieName];
+  const { scenario, runId } = readScenarioRequestContext(url, req.headers.cookie);
   if (!scenario) {
     return false;
   }
 
-  const runId = cookies[scenarioRunCookieName] || 'default';
   const state = getScenarioState({ scenario, runId });
   if (scenario === 'degraded-refresh') {
     return handleDegradedRefreshScenario({ res, url, state });
@@ -85,6 +135,14 @@ function handleScenarioOverride({ req, res, store, now }) {
   }
 
   return false;
+}
+
+export function readScenarioRequestContext(url, rawCookieHeader) {
+  const cookies = parseCookies(rawCookieHeader);
+  const scenario = cookies[scenarioCookieName];
+  const runId = cookies[scenarioRunCookieName] || 'default';
+
+  return { scenario, runId };
 }
 
 function handleDegradedRefreshScenario({ res, url, state }) {
@@ -437,7 +495,13 @@ function createEvent({
   };
 }
 
-main().catch((error) => {
-  process.stderr.write(`${error.stack || error}\n`);
-  process.exitCode = 1;
-});
+const isDirectExecution = process.argv[1]
+  ? path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+  : false;
+
+if (isDirectExecution) {
+  main().catch((error) => {
+    process.stderr.write(`${error.stack || error}\n`);
+    process.exitCode = 1;
+  });
+}

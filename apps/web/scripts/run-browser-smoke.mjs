@@ -4,11 +4,13 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
+  assertDistinctBrowserSmokePorts,
   BROWSER_SMOKE_BACKEND_PORT_ENV,
   BROWSER_SMOKE_BASE_URL_ENV,
   BROWSER_SMOKE_DEV_SERVER_PORT_ENV,
+  BROWSER_SMOKE_FRONTEND_MODE_ENV,
   readBrowserSmokePortOverride,
-  resolveBrowserSmokePorts
+  resolveBrowserSmokeFrontendMode
 } from './browser-smoke-ports.mjs';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
@@ -27,23 +29,17 @@ export function resolvePlaywrightArgs(extraArgs = process.argv.slice(2)) {
   return [...defaultPlaywrightArgs, ...forwardedArgs];
 }
 
-export async function main() {
-  const mode = resolveBrowserSmokeRunMode(process.env);
-
-  if (mode.type === 'fixed-ports') {
-    await runPlaywright({
-      env: {
-        [BROWSER_SMOKE_BACKEND_PORT_ENV]: String(mode.backendPort),
-        [BROWSER_SMOKE_DEV_SERVER_PORT_ENV]: String(mode.devServerPort)
-      },
-      summary: `browser smoke ports backend=${mode.backendPort} web=${mode.devServerPort}`
-    });
-    return;
-  }
+export async function main(cliArgs = process.argv.slice(2)) {
+  const { frontendMode, playwrightArgs } = parseBrowserSmokeArgs(cliArgs);
+  const mode = resolveBrowserSmokeRunMode(
+    frontendMode ? { ...process.env, BROWSER_SMOKE_FRONTEND_MODE: frontendMode } : process.env
+  );
 
   if (mode.type === 'managed-frontend') {
     await runManagedFrontendSmoke(mode.proxyTarget, {
-      devServerPort: mode.devServerPort
+      devServerPort: mode.devServerPort,
+      frontendMode: mode.frontendMode,
+      playwrightArgs
     });
     return;
   }
@@ -61,7 +57,9 @@ export async function main() {
 
   try {
     await runManagedFrontendSmoke(backend.origin, {
-      devServerPort: mode.devServerPort
+      devServerPort: mode.devServerPort,
+      frontendMode: mode.frontendMode,
+      playwrightArgs
     });
   } finally {
     await stopManagedServer(backend.child);
@@ -72,42 +70,109 @@ export function resolveBrowserSmokeRunMode(env = process.env) {
   const explicitBackendPort = readBrowserSmokePortOverride(BROWSER_SMOKE_BACKEND_PORT_ENV, env);
   const explicitDevServerPort = readBrowserSmokePortOverride(BROWSER_SMOKE_DEV_SERVER_PORT_ENV, env);
   const proxyTarget = env.VITE_DEV_PROXY_TARGET?.trim();
-
-  if (explicitBackendPort !== null && explicitDevServerPort !== null) {
-    const { backendPort, devServerPort } = resolveBrowserSmokePorts(env);
-    return {
-      type: 'fixed-ports',
-      backendPort,
-      devServerPort
-    };
-  }
+  const frontendMode = resolveBrowserSmokeFrontendMode(env);
 
   if (proxyTarget) {
     return {
       type: 'managed-frontend',
+      frontendMode,
       proxyTarget,
       ...(explicitDevServerPort !== null ? { devServerPort: explicitDevServerPort } : {})
     };
   }
 
+  if (explicitBackendPort !== null && explicitDevServerPort !== null) {
+    assertDistinctBrowserSmokePorts(explicitBackendPort, explicitDevServerPort);
+  }
+
   return {
     type: 'managed-hermetic',
+    frontendMode,
     ...(explicitBackendPort !== null ? { backendPort: explicitBackendPort } : {}),
     ...(explicitDevServerPort !== null ? { devServerPort: explicitDevServerPort } : {})
   };
+}
+
+export function parseBrowserSmokeArgs(args = []) {
+  const forwardedArgs = [...args];
+  let frontendMode = null;
+
+  for (let index = 0; index < forwardedArgs.length; index += 1) {
+    const arg = forwardedArgs[index];
+    if (arg === '--') {
+      break;
+    }
+
+    if (arg.startsWith('--frontend-mode=')) {
+      frontendMode = arg.slice('--frontend-mode='.length);
+      forwardedArgs.splice(index, 1);
+      index -= 1;
+      continue;
+    }
+
+    if (arg === '--frontend-mode') {
+      const nextValue = forwardedArgs[index + 1];
+      if (!nextValue || nextValue === '--') {
+        throw new Error('--frontend-mode requires a value of "preview" or "dev"');
+      }
+      frontendMode = nextValue;
+      forwardedArgs.splice(index, 2);
+      index -= 1;
+    }
+  }
+
+  if (frontendMode) {
+    resolveBrowserSmokeFrontendMode({ [BROWSER_SMOKE_FRONTEND_MODE_ENV]: frontendMode });
+  }
+
+  const playwrightArgs = forwardedArgs[0] === '--' ? forwardedArgs.slice(1) : forwardedArgs;
+
+  return {
+    frontendMode,
+    playwrightArgs
+  };
+}
+
+export function resolveFrontendServerArgs({ frontendMode = 'preview', devServerPort } = {}) {
+  if (frontendMode === 'dev') {
+    const args = ['exec', 'vite', '--host', '127.0.0.1'];
+    if (typeof devServerPort === 'number') {
+      args.push('--port', String(devServerPort), '--strictPort');
+    }
+    return args;
+  }
+
+  return [
+    'exec',
+    'vite',
+    'preview',
+    '--host',
+    '127.0.0.1',
+    '--port',
+    String(devServerPort ?? 0),
+    '--strictPort'
+  ];
 }
 
 async function runManagedFrontendSmoke(
   proxyTarget,
   options = {}
 ) {
+  const frontendMode = options.frontendMode ?? 'preview';
+  const usePreview = frontendMode !== 'dev';
+  const frontendEnv = {
+    ...process.env,
+    VITE_DEV_PROXY_TARGET: proxyTarget
+  };
+
+  if (usePreview) {
+    await runForegroundCommand(['exec', 'vite', 'build'], frontendEnv);
+  }
+
   const frontend = await launchManagedServer({
     command: resolvePnpmCommand(),
-    args: ['exec', 'vite', '--host', '127.0.0.1', '--port', String(options.devServerPort ?? 0)],
-    env: {
-      ...process.env,
-      VITE_DEV_PROXY_TARGET: proxyTarget
-    },
+    args: resolveFrontendServerArgs({ frontendMode, devServerPort: options.devServerPort }),
+    env: frontendEnv,
     waitForUrlPath: '/',
     readyPrefix: 'Local:'
   });
@@ -117,7 +182,8 @@ async function runManagedFrontendSmoke(
       env: {
         [BROWSER_SMOKE_BASE_URL_ENV]: frontend.origin
       },
-      summary: `browser smoke origins backend=${proxyTarget} web=${frontend.origin}`
+      summary: `browser smoke origins backend=${proxyTarget} web=${frontend.origin}`,
+      args: resolvePlaywrightArgs(options.playwrightArgs)
     });
   } finally {
     await stopManagedServer(frontend.child);
@@ -162,6 +228,29 @@ export function waitForChildExit(child) {
 
     child.on('exit', (code, signal) => {
       cleanup();
+      if (signal) {
+        reject(new Error(`Process exited from signal ${signal}`));
+        return;
+      }
+      if (code !== 0) {
+        reject(new Error(`Process exited with code ${code ?? 1}`));
+        return;
+      }
+      resolve();
+    });
+  });
+}
+
+export function runForegroundCommand(args, env) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(resolvePnpmCommand(), args, {
+      cwd: appRoot,
+      stdio: 'inherit',
+      env
+    });
+
+    child.on('error', reject);
+    child.on('exit', (code, signal) => {
       if (signal) {
         reject(new Error(`Process exited from signal ${signal}`));
         return;

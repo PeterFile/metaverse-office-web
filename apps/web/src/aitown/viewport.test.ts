@@ -6,6 +6,7 @@ import {
   DEFAULT_MAX_VIEWPORT_SCALE,
   DEFAULT_MIN_VIEWPORT_PAN_MARGIN,
   isViewportMouseWheelGesture,
+  resolveViewportCornerAfterScreenDrag,
   resolveViewportEntryCenter,
   resolveViewportClampOptions,
   resolveViewportPanBounds,
@@ -135,6 +136,38 @@ function expectedViewportPanMargin(hostWidth: number, hostHeight: number) {
     DEFAULT_MIN_VIEWPORT_PAN_MARGIN,
     Math.min(hostWidth, hostHeight) * 0.18
   );
+}
+
+function resolveEntryViewportTravelBudget(hostWidth: number, hostHeight: number, sceneWidth: number, sceneHeight: number) {
+  const { baseScale } = resolveViewportScaleBounds(
+    hostWidth,
+    hostHeight,
+    sceneWidth,
+    sceneHeight,
+    DEFAULT_MAX_VIEWPORT_SCALE,
+    mouseCapabilities
+  );
+  const center = resolveViewportEntryCenter(
+    hostWidth,
+    hostHeight,
+    sceneWidth,
+    sceneHeight,
+    mouseCapabilities
+  );
+  const panBounds = resolveViewportPanBounds(sceneWidth, sceneHeight, hostWidth, hostHeight, baseScale);
+  const visibleWorldWidth = hostWidth / baseScale;
+  const visibleWorldHeight = hostHeight / baseScale;
+  const left = center.x - visibleWorldWidth / 2;
+  const right = center.x + visibleWorldWidth / 2;
+  const top = center.y - visibleWorldHeight / 2;
+  const bottom = center.y + visibleWorldHeight / 2;
+
+  return {
+    left: left - panBounds.left,
+    right: panBounds.right - right,
+    top: top - panBounds.top,
+    bottom: panBounds.bottom - bottom
+  };
 }
 
 describe('viewport coverage and panning bounds', () => {
@@ -335,6 +368,51 @@ describe('resolveViewportScaleBounds', () => {
 
     expect(bounds.minScale * 2048 - 6000).toBeGreaterThanOrEqual(expectedPanMargin * 2);
     expect(bounds.minScale * 1536 - 3000).toBeGreaterThanOrEqual(expectedPanMargin * 2);
+  });
+});
+
+describe('default entry viewport travel budget', () => {
+  const shells = [
+    { name: 'landscape', width: 1280, height: 720 },
+    { name: 'portrait', width: 390, height: 844 }
+  ] as const;
+
+  for (const shell of shells) {
+    it(`keeps the centered ${shell.name} entry viewport one drag away from every scene edge`, () => {
+      const expectedPanMargin = expectedViewportPanMargin(shell.width, shell.height);
+      const travelBudget = resolveEntryViewportTravelBudget(shell.width, shell.height, 2048, 1536);
+
+      expect(travelBudget.left).toBeGreaterThanOrEqual(expectedPanMargin - 0.0001);
+      expect(travelBudget.right).toBeGreaterThanOrEqual(expectedPanMargin - 0.0001);
+      expect(travelBudget.top).toBeGreaterThanOrEqual(expectedPanMargin - 0.0001);
+      expect(travelBudget.bottom).toBeGreaterThanOrEqual(expectedPanMargin - 0.0001);
+    });
+  }
+});
+
+describe('resolveViewportCornerAfterScreenDrag', () => {
+  it('converts screen drag deltas into world-corner movement at the current scale', () => {
+    expect(
+      resolveViewportCornerAfterScreenDrag({
+        cornerX: 512,
+        cornerY: 384,
+        scale: 2,
+        deltaX: 120,
+        deltaY: -80
+      })
+    ).toEqual({ x: 452, y: 424 });
+  });
+
+  it('leaves the world corner unchanged when there is no drag delta', () => {
+    expect(
+      resolveViewportCornerAfterScreenDrag({
+        cornerX: 512,
+        cornerY: 384,
+        scale: 1.5,
+        deltaX: 0,
+        deltaY: 0
+      })
+    ).toEqual({ x: 512, y: 384 });
   });
 });
 

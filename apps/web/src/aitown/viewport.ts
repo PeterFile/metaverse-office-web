@@ -61,6 +61,14 @@ export type ViewportWheelGestureSample = {
 
 export type ViewportWheelGestureDisposition = 'canvas-zoom' | 'browser-default';
 
+export type ViewportCornerAfterScreenDragInput = {
+  cornerX: number;
+  cornerY: number;
+  scale: number;
+  deltaX: number;
+  deltaY: number;
+};
+
 const DOM_DELTA_PIXEL = 0;
 const DOM_DELTA_LINE = 1;
 const DOM_DELTA_PAGE = 2;
@@ -111,6 +119,21 @@ export function resolveViewportWheelGestureDisposition(
 
 export function shouldBlockViewportWheelGesture(sample: ViewportWheelGestureSample) {
   return resolveViewportWheelGestureDisposition(sample) === 'browser-default';
+}
+
+export function resolveViewportCornerAfterScreenDrag({
+  cornerX,
+  cornerY,
+  scale,
+  deltaX,
+  deltaY
+}: ViewportCornerAfterScreenDragInput): ViewportCenter {
+  const nextScale = Math.max(scale, FLOAT_EPSILON);
+
+  return {
+    x: cornerX - deltaX / nextScale,
+    y: cornerY - deltaY / nextScale
+  };
 }
 
 export function resolveViewportScaleBounds(

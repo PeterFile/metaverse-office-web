@@ -7,7 +7,9 @@ import { describe, expect, it } from 'vitest';
 import {
   extractOrigin,
   launchManagedServer,
+  parseBrowserSmokeArgs,
   resolveBrowserSmokeRunMode,
+  resolveFrontendServerArgs,
   resolvePlaywrightArgs,
   stopManagedServer,
   waitForChildExit,
@@ -16,38 +18,77 @@ import {
 } from './run-browser-smoke.mjs';
 
 describe('run-browser-smoke helpers', () => {
-  it('keeps explicit fixed-port runs on the direct Playwright path when both overrides are set', () => {
+  it('keeps explicit fixed-port runs on the managed hermetic path so preview-mode smoke semantics stay consistent', () => {
     expect(
       resolveBrowserSmokeRunMode({
         BROWSER_SMOKE_BACKEND_PORT: '4321',
         BROWSER_SMOKE_DEV_SERVER_PORT: '5432'
       })
     ).toEqual({
-      type: 'fixed-ports',
+      type: 'managed-hermetic',
+      frontendMode: 'preview',
       backendPort: 4321,
       devServerPort: 5432
     });
   });
 
-  it('keeps a backend-only port pin on the managed hermetic path so the frontend can still auto-select a free port', () => {
+  it('still honors an explicit dev frontend mode when both backend and frontend ports are pinned', () => {
+    expect(
+      resolveBrowserSmokeRunMode({
+        BROWSER_SMOKE_BACKEND_PORT: '4321',
+        BROWSER_SMOKE_DEV_SERVER_PORT: '5432',
+        BROWSER_SMOKE_FRONTEND_MODE: 'dev'
+      })
+    ).toEqual({
+      type: 'managed-hermetic',
+      frontendMode: 'dev',
+      backendPort: 4321,
+      devServerPort: 5432
+    });
+  });
+
+  it('rejects duplicate backend and frontend ports on the managed hermetic path before spawning either server', () => {
+    expect(() =>
+      resolveBrowserSmokeRunMode({
+        BROWSER_SMOKE_BACKEND_PORT: '4173',
+        BROWSER_SMOKE_DEV_SERVER_PORT: '4173'
+      })
+    ).toThrow(/must differ/);
+  });
+
+  it('keeps a backend-only port pin on the managed hermetic path while leaving frontend port selection unpinned', () => {
     expect(
       resolveBrowserSmokeRunMode({
         BROWSER_SMOKE_BACKEND_PORT: '4321'
       })
     ).toEqual({
       type: 'managed-hermetic',
+      frontendMode: 'preview',
       backendPort: 4321
     });
   });
 
-  it('keeps a dev-server-only port pin on the managed hermetic path so the backend can still auto-select a free port', () => {
+  it('keeps a dev-server-only port pin on the managed hermetic path while leaving backend port selection unpinned', () => {
     expect(
       resolveBrowserSmokeRunMode({
         BROWSER_SMOKE_DEV_SERVER_PORT: '5432'
       })
     ).toEqual({
       type: 'managed-hermetic',
+      frontendMode: 'preview',
       devServerPort: 5432
+    });
+  });
+
+  it('allows a single pinned port to reuse the other side\'s historical default because the unpinned side still auto-selects at launch', () => {
+    expect(
+      resolveBrowserSmokeRunMode({
+        BROWSER_SMOKE_DEV_SERVER_PORT: '3210'
+      })
+    ).toEqual({
+      type: 'managed-hermetic',
+      frontendMode: 'preview',
+      devServerPort: 3210
     });
   });
 
@@ -58,6 +99,7 @@ describe('run-browser-smoke helpers', () => {
       })
     ).toEqual({
       type: 'managed-frontend',
+      frontendMode: 'preview',
       proxyTarget: 'http://127.0.0.1:3000'
     });
   });
@@ -70,6 +112,7 @@ describe('run-browser-smoke helpers', () => {
       })
     ).toEqual({
       type: 'managed-frontend',
+      frontendMode: 'preview',
       proxyTarget: 'http://127.0.0.1:3000',
       devServerPort: 5432
     });
@@ -83,14 +126,55 @@ describe('run-browser-smoke helpers', () => {
       })
     ).toEqual({
       type: 'managed-frontend',
+      frontendMode: 'preview',
       proxyTarget: 'http://127.0.0.1:3000'
     });
   });
 
-  it('falls back to the hermetic backend only when no explicit target is provided', () => {
+  it('falls back to the hermetic backend with a preview frontend when no explicit target is provided', () => {
     expect(resolveBrowserSmokeRunMode({})).toEqual({
-      type: 'managed-hermetic'
+      type: 'managed-hermetic',
+      frontendMode: 'preview'
     });
+  });
+
+  it('lets callers force the faster Vite dev frontend when preview realism is unnecessary', () => {
+    expect(
+      resolveBrowserSmokeRunMode({
+        BROWSER_SMOKE_FRONTEND_MODE: 'dev'
+      })
+    ).toEqual({
+      type: 'managed-hermetic',
+      frontendMode: 'dev'
+    });
+  });
+
+  it('parses a frontend-mode CLI override without swallowing forwarded Playwright args', () => {
+    expect(parseBrowserSmokeArgs(['--frontend-mode=dev', '--', '--headed', '--grep', 'pinch handoff'])).toEqual({
+      frontendMode: 'dev',
+      playwrightArgs: ['--headed', '--grep', 'pinch handoff']
+    });
+  });
+
+  it('strictly pins explicit dev frontend ports instead of allowing Vite to silently increment them', () => {
+    expect(resolveFrontendServerArgs({ frontendMode: 'dev', devServerPort: 5432 })).toEqual([
+      'exec',
+      'vite',
+      '--host',
+      '127.0.0.1',
+      '--port',
+      '5432',
+      '--strictPort'
+    ]);
+  });
+
+  it('keeps unpinned dev frontend runs flexible so Vite can auto-select a free port', () => {
+    expect(resolveFrontendServerArgs({ frontendMode: 'dev' })).toEqual([
+      'exec',
+      'vite',
+      '--host',
+      '127.0.0.1'
+    ]);
   });
 
   it('forwards extra Playwright CLI args through the wrapper after pnpm\'s separator', () => {

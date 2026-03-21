@@ -1,5 +1,10 @@
 import { expect, test, type Page } from '@playwright/test';
 
+import { resolveViewportEdgeDragDelta } from '../scripts/viewport-reachability';
+import { findStableSample, requireStableSample } from '../scripts/stability';
+
+const POLL_DRIVEN_ASSERTION_TIMEOUT_MS = 12_000;
+
 async function readViewportState(page: Page) {
   return page.evaluate(() => {
     const viewport = (window as typeof window & { __AITOWN_VIEWPORT__?: {
@@ -66,6 +71,203 @@ async function readViewportScale(page: Page) {
     const viewport = (window as typeof window & { __AITOWN_VIEWPORT__?: { scale?: { x?: number } } }).__AITOWN_VIEWPORT__;
     return viewport?.scale?.x ?? null;
   });
+}
+
+type BrowserZoomState = {
+  devicePixelRatio: number;
+  innerWidth: number;
+  innerHeight: number;
+  clientWidth: number;
+  clientHeight: number;
+  visualViewportWidth: number | null;
+  visualViewportHeight: number | null;
+  visualViewportScale: number | null;
+};
+
+function describeBrowserZoomState(state: BrowserZoomState) {
+  return {
+    devicePixelRatio: state.devicePixelRatio,
+    innerWidth: state.innerWidth,
+    innerHeight: state.innerHeight,
+    clientWidth: state.clientWidth,
+    clientHeight: state.clientHeight,
+    visualViewportWidth: state.visualViewportWidth,
+    visualViewportHeight: state.visualViewportHeight,
+    visualViewportScale: state.visualViewportScale
+  };
+}
+
+async function readBrowserZoomState(page: Page): Promise<BrowserZoomState> {
+  return page.evaluate(() => ({
+    devicePixelRatio: window.devicePixelRatio,
+    innerWidth: window.innerWidth,
+    innerHeight: window.innerHeight,
+    clientWidth: document.documentElement.clientWidth,
+    clientHeight: document.documentElement.clientHeight,
+    visualViewportWidth: window.visualViewport?.width ?? null,
+    visualViewportHeight: window.visualViewport?.height ?? null,
+    visualViewportScale: window.visualViewport?.scale ?? null
+  }));
+}
+
+function isBrowserZoomStateStable(previousState: BrowserZoomState, nextState: BrowserZoomState) {
+  return (
+    Math.abs(nextState.devicePixelRatio - previousState.devicePixelRatio) <= 0.01 &&
+    Math.abs(nextState.innerWidth - previousState.innerWidth) <= 1 &&
+    Math.abs(nextState.innerHeight - previousState.innerHeight) <= 1 &&
+    Math.abs(nextState.clientWidth - previousState.clientWidth) <= 1 &&
+    Math.abs(nextState.clientHeight - previousState.clientHeight) <= 1 &&
+    Math.abs((nextState.visualViewportWidth ?? 0) - (previousState.visualViewportWidth ?? 0)) <= 1 &&
+    Math.abs((nextState.visualViewportHeight ?? 0) - (previousState.visualViewportHeight ?? 0)) <= 1 &&
+    Math.abs((nextState.visualViewportScale ?? 0) - (previousState.visualViewportScale ?? 0)) <= 0.01
+  );
+}
+
+function didBrowserZoomChange(previousState: BrowserZoomState, nextState: BrowserZoomState) {
+  return (
+    Math.abs(nextState.devicePixelRatio - previousState.devicePixelRatio) > 0.01 ||
+    Math.abs(nextState.innerWidth - previousState.innerWidth) > 1 ||
+    Math.abs(nextState.innerHeight - previousState.innerHeight) > 1 ||
+    Math.abs(nextState.clientWidth - previousState.clientWidth) > 1 ||
+    Math.abs(nextState.clientHeight - previousState.clientHeight) > 1 ||
+    Math.abs((nextState.visualViewportWidth ?? 0) - (previousState.visualViewportWidth ?? 0)) > 1 ||
+    Math.abs((nextState.visualViewportHeight ?? 0) - (previousState.visualViewportHeight ?? 0)) > 1 ||
+    Math.abs((nextState.visualViewportScale ?? 0) - (previousState.visualViewportScale ?? 0)) > 0.01
+  );
+}
+
+async function waitForBrowserZoomChange(
+  page: Page,
+  previousState: BrowserZoomState,
+  samples = 10,
+  sampleDelayMs = 100
+) {
+  const states: BrowserZoomState[] = [];
+  const isStableZoomChange = (currentPreviousState: BrowserZoomState, currentNextState: BrowserZoomState) =>
+    didBrowserZoomChange(previousState, currentPreviousState) &&
+    didBrowserZoomChange(previousState, currentNextState) &&
+    isBrowserZoomStateStable(currentPreviousState, currentNextState);
+
+  for (let sample = 0; sample < samples; sample += 1) {
+    const currentState = await readBrowserZoomState(page);
+    states.push(currentState);
+
+    const stableState = findStableSample(states, isStableZoomChange);
+
+    if (stableState) {
+      return stableState;
+    }
+
+    if (sample < samples - 1) {
+      await page.waitForTimeout(sampleDelayMs);
+    }
+  }
+
+  return requireStableSample(
+    states,
+    isStableZoomChange,
+    `browser zoom did not change after ${samples} samples`,
+    describeBrowserZoomState
+  );
+}
+
+function expectBrowserZoomStateMatchesBaseline(
+  actualState: BrowserZoomState,
+  expectedState: BrowserZoomState,
+  errorMessage: string
+) {
+  if (isBrowserZoomStateStable(expectedState, actualState)) {
+    return;
+  }
+
+  throw new Error(
+    `${errorMessage}: ${JSON.stringify({
+      expected: describeBrowserZoomState(expectedState),
+      actual: describeBrowserZoomState(actualState)
+    })}`
+  );
+}
+
+type ObservedWheelGesture = {
+  ctrlKey: boolean;
+  deltaMode: number;
+  deltaY: number;
+  target: 'world-host' | 'other';
+};
+
+async function installObservedWheelGestureCapture(page: Page) {
+  await page.addInitScript(() => {
+    const records: Array<{
+      ctrlKey: boolean;
+      deltaMode: number;
+      deltaY: number;
+      target: 'world-host' | 'other';
+    }> = [];
+
+    const classifyTarget = (target: EventTarget | null) => {
+      return target instanceof Element && target.closest('.aitown-world__host') ? 'world-host' : 'other';
+    };
+
+    window.addEventListener(
+      'wheel',
+      (event) => {
+        records.push({
+          ctrlKey: event.ctrlKey,
+          deltaMode: event.deltaMode,
+          deltaY: event.deltaY,
+          target: classifyTarget(event.target)
+        });
+      },
+      { capture: true, passive: true }
+    );
+
+    (window as typeof window & {
+      __AITOWN_OBSERVED_WHEEL_GESTURES__?: typeof records;
+    }).__AITOWN_OBSERVED_WHEEL_GESTURES__ = records;
+  });
+}
+
+async function readObservedWheelGestures(page: Page): Promise<ObservedWheelGesture[]> {
+  return page.evaluate(() => {
+    return (window as typeof window & {
+      __AITOWN_OBSERVED_WHEEL_GESTURES__?: Array<{
+        ctrlKey: boolean;
+        deltaMode: number;
+        deltaY: number;
+        target: 'world-host' | 'other';
+      }>;
+    }).__AITOWN_OBSERVED_WHEEL_GESTURES__ ?? [];
+  });
+}
+
+async function expectViewportScaleRemainsUnchanged(
+  page: Page,
+  expectedScale: number,
+  samples = 8,
+  sampleDelayMs = 100,
+  epsilon = 0.0001
+) {
+  const observedScales: Array<number | null> = [];
+
+  for (let sample = 0; sample < samples; sample += 1) {
+    observedScales.push(await readViewportScale(page));
+
+    if (sample < samples - 1) {
+      await page.waitForTimeout(sampleDelayMs);
+    }
+  }
+
+  const changedScale = observedScales.find(
+    (scale) => typeof scale !== 'number' || Math.abs(scale - expectedScale) > epsilon
+  );
+
+  if (changedScale !== undefined) {
+    throw new Error(
+      `viewport scale changed after browser zoom settled: ${JSON.stringify({ expectedScale, observedScales })}`
+    );
+  }
+
+  return observedScales[observedScales.length - 1] as number;
 }
 
 async function readViewportPose(page: Page) {
@@ -148,82 +350,11 @@ async function readPinchTelemetry(page: Page) {
   });
 }
 
-async function installCtrlWheelTelemetry(page: Page) {
-  await page.addInitScript(() => {
-    const records: Array<{
-      action: 'observed' | 'preventDefault' | 'stopImmediatePropagation';
-      ctrlKey: boolean;
-      target: 'world-host' | 'other';
-      defaultPrevented: boolean;
-    }> = [];
-
-    const classifyTarget = (target: EventTarget | null) => {
-      return target instanceof Element && target.closest('.aitown-world__host') ? 'world-host' : 'other';
-    };
-
-    const originalPreventDefault = Event.prototype.preventDefault;
-    Event.prototype.preventDefault = function patchedPreventDefault(this: Event) {
-      if (this.type === 'wheel' && this instanceof WheelEvent && this.ctrlKey) {
-        records.push({
-          action: 'preventDefault',
-          ctrlKey: this.ctrlKey,
-          target: classifyTarget(this.target),
-          defaultPrevented: this.defaultPrevented
-        });
-      }
-
-      return originalPreventDefault.call(this);
-    };
-
-    const originalStopImmediatePropagation = Event.prototype.stopImmediatePropagation;
-    Event.prototype.stopImmediatePropagation = function patchedStopImmediatePropagation(this: Event) {
-      if (this.type === 'wheel' && this instanceof WheelEvent && this.ctrlKey) {
-        records.push({
-          action: 'stopImmediatePropagation',
-          ctrlKey: this.ctrlKey,
-          target: classifyTarget(this.target),
-          defaultPrevented: this.defaultPrevented
-        });
-      }
-
-      return originalStopImmediatePropagation.call(this);
-    };
-
-    window.addEventListener(
-      'wheel',
-      (event) => {
-        if (event.ctrlKey) {
-          records.push({
-            action: 'observed',
-            ctrlKey: event.ctrlKey,
-            target: classifyTarget(event.target),
-            defaultPrevented: event.defaultPrevented
-          });
-        }
-      },
-      { capture: true, passive: true }
-    );
-
-    (window as typeof window & {
-      __AITOWN_CTRL_WHEEL_TELEMETRY__?: typeof records;
-    }).__AITOWN_CTRL_WHEEL_TELEMETRY__ = records;
-  });
-}
-
-async function readCtrlWheelTelemetry(page: Page) {
-  return page.evaluate(() => {
-    return (window as typeof window & {
-      __AITOWN_CTRL_WHEEL_TELEMETRY__?: Array<{
-        action: 'observed' | 'preventDefault' | 'stopImmediatePropagation';
-        ctrlKey: boolean;
-        target: 'world-host' | 'other';
-        defaultPrevented: boolean;
-      }>;
-    }).__AITOWN_CTRL_WHEEL_TELEMETRY__ ?? [];
-  });
-}
-
-async function synthesizePinchGesture(page: Page, scaleFactor = 1.25) {
+async function synthesizePinchGesture(
+  page: Page,
+  scaleFactor = 1.25,
+  gestureSourceType: 'touch' | 'mouse' = 'touch'
+) {
   const session = await page.context().newCDPSession(page);
   const canvasBox = await page.locator('.aitown-world__host canvas').boundingBox();
   expect(canvasBox).not.toBeNull();
@@ -233,7 +364,7 @@ async function synthesizePinchGesture(page: Page, scaleFactor = 1.25) {
     y: Math.round(canvasBox!.y + canvasBox!.height / 2),
     scaleFactor,
     relativeSpeed: 800,
-    gestureSourceType: 'touch'
+    gestureSourceType
   });
 }
 
@@ -335,6 +466,169 @@ async function expectMinimumZoomKeepsTwoAxisPanRoom(page: Page) {
   expect(Math.abs(after!.y - before!.y)).toBeGreaterThanOrEqual(90);
 }
 
+async function dragViewportFromCenter(page: Page, deltaX: number, deltaY: number) {
+  const canvasBox = await page.locator('.aitown-world__host canvas').boundingBox();
+  expect(canvasBox).not.toBeNull();
+
+  const startX = canvasBox!.x + canvasBox!.width * 0.5;
+  const startY = canvasBox!.y + canvasBox!.height * 0.5;
+  const endX = startX + deltaX;
+  const endY = startY + deltaY;
+
+  await page.mouse.move(startX, startY);
+  await page.mouse.down();
+  await page.mouse.move(endX, endY, { steps: 16 });
+  await page.mouse.up();
+}
+
+async function waitForViewportSettle(page: Page, samples = 8, sampleDelayMs = 50) {
+  const states: Array<NonNullable<Awaited<ReturnType<typeof readViewportState>>>> = [];
+  const isViewportStable = (
+    previousState: NonNullable<Awaited<ReturnType<typeof readViewportState>>>,
+    nextState: NonNullable<Awaited<ReturnType<typeof readViewportState>>>
+  ) => Math.abs(nextState.x - previousState.x) <= 0.5 && Math.abs(nextState.y - previousState.y) <= 0.5;
+
+  for (let sample = 0; sample < samples; sample += 1) {
+    const currentState = await readViewportState(page);
+    expect(currentState).not.toBeNull();
+    states.push(currentState!);
+
+    const stableState = findStableSample(states, isViewportStable);
+
+    if (stableState) {
+      return stableState;
+    }
+
+    if (sample < samples - 1) {
+      await page.waitForTimeout(sampleDelayMs);
+    }
+  }
+
+  return requireStableSample(
+    states,
+    isViewportStable,
+    `viewport did not settle after ${samples} samples`,
+    (state) => ({
+      x: state.x,
+      y: state.y,
+      left: state.left,
+      right: state.right,
+      top: state.top,
+      bottom: state.bottom,
+      scale: state.scale
+    })
+  );
+}
+
+function isViewportAtBottomRightEdge(
+  state: NonNullable<Awaited<ReturnType<typeof waitForViewportSettle>>>
+) {
+  const scale = state.scale ?? 1;
+  const rightAllowance = (state.clampPadding?.right ?? 0) / scale;
+
+  return state.right >= state.worldWidth + rightAllowance - 0.5 && state.bottom >= state.worldHeight - 0.5;
+}
+
+function isViewportAtTopLeftEdge(
+  state: NonNullable<Awaited<ReturnType<typeof waitForViewportSettle>>>
+) {
+  const scale = state.scale ?? 1;
+  const topAllowance = (state.clampPadding?.top ?? 0) / scale;
+
+  return state.left >= -0.5 && state.left <= 0.5 && state.top <= -(topAllowance - 0.5);
+}
+
+async function dragViewportToEdge(
+  page: Page,
+  edge: 'bottom-right' | 'top-left',
+  attempts = 2
+) {
+  const states: Array<NonNullable<Awaited<ReturnType<typeof waitForViewportSettle>>>> = [];
+  const isSatisfied = edge === 'bottom-right' ? isViewportAtBottomRightEdge : isViewportAtTopLeftEdge;
+
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const before = await readViewportState(page);
+    expect(before).not.toBeNull();
+
+    const { deltaX, deltaY } = resolveViewportEdgeDragDelta(before!, edge);
+    if (deltaX === 0 && deltaY === 0) {
+      return before!;
+    }
+
+    await dragViewportFromCenter(page, deltaX, deltaY);
+    const currentState = await waitForViewportSettle(page);
+    states.push(currentState);
+
+    if (isSatisfied(currentState)) {
+      return currentState;
+    }
+  }
+
+  throw new Error(
+    `viewport did not reach the ${edge} edge after ${attempts} resolved drags: ${JSON.stringify(
+      states.map((state) => ({
+        x: state.x,
+        y: state.y,
+        left: state.left,
+        right: state.right,
+        top: state.top,
+        bottom: state.bottom,
+        scale: state.scale
+      }))
+    )}`
+  );
+}
+
+async function expectDefaultViewportKeepsDirectEdgeReachability(
+  page: Page,
+  options: {
+    verifyReturnToTopLeft?: boolean;
+  } = {}
+) {
+  const verifyReturnToTopLeft = options.verifyReturnToTopLeft ?? true;
+
+  await expect(page.locator('.aitown-world__host canvas')).toBeVisible();
+  await page.waitForFunction(() => Boolean((window as typeof window & { __AITOWN_VIEWPORT__?: object }).__AITOWN_VIEWPORT__));
+
+  const initial = await readViewportState(page);
+  expect(initial).not.toBeNull();
+  expect(initial!.scale).not.toBeNull();
+  expectViewportBoundsWithinClampBudget(initial!);
+  const initialScale = initial!.scale!;
+
+  const bottomRight = await dragViewportToEdge(page, 'bottom-right');
+  expectViewportBoundsWithinClampBudget(bottomRight);
+  expect(bottomRight.scale).not.toBeNull();
+  expect(bottomRight.scale).toBeCloseTo(initialScale, 4);
+
+  const bottomRightScale = bottomRight.scale ?? 1;
+  const bottomRightAllowance = (bottomRight.clampPadding?.right ?? 0) / bottomRightScale;
+
+  expect(bottomRight.right).toBeGreaterThanOrEqual(bottomRight.worldWidth + bottomRightAllowance - 0.5);
+  expect(bottomRight.bottom).toBeGreaterThanOrEqual(bottomRight.worldHeight - 0.5);
+
+  if (!verifyReturnToTopLeft) {
+    return;
+  }
+
+  const topLeft = await dragViewportToEdge(page, 'top-left');
+  expectViewportBoundsWithinClampBudget(topLeft);
+  expect(topLeft.scale).not.toBeNull();
+  expect(topLeft.scale).toBeCloseTo(initialScale, 4);
+
+  expect(topLeft.left).toBeGreaterThanOrEqual(-0.5);
+  expect(topLeft.left).toBeLessThanOrEqual(0.5);
+
+  const topLeftScale = topLeft.scale ?? 1;
+  const topLeftTopAllowance = (topLeft.clampPadding?.top ?? 0) / topLeftScale;
+  expect(topLeft.top).toBeLessThanOrEqual(-(topLeftTopAllowance - 0.5));
+}
+
+const SHELLS = [
+  { name: 'landscape', viewport: { width: 1280, height: 720 } },
+  { name: 'portrait', viewport: { width: 390, height: 844 } }
+] as const;
+
 test.describe('AI Town shell smoke', () => {
   test('renders the new default shell and allows roster-driven selection through the Hub overlay', async ({ page }) => {
     await page.goto('/');
@@ -435,6 +729,7 @@ test.describe('AI Town shell smoke', () => {
   });
 
   test('clears stale selected-agent workflow details after overview refresh confirms the agent is gone', async ({ page }) => {
+    test.setTimeout(45_000);
     await installFastPollInterval(page);
     await page.goto('/');
     await page.getByRole('button', { name: 'Open Hub' }).click();
@@ -445,13 +740,16 @@ test.describe('AI Town shell smoke', () => {
 
     await enableScenario(page, 'stale-selection-404');
 
-    await expect(detailsPanel.getByRole('heading', { name: 'Crew Overview' })).toBeVisible({ timeout: 7_000 });
+    await expect(detailsPanel.getByRole('heading', { name: 'Crew Overview' })).toBeVisible({
+      timeout: POLL_DRIVEN_ASSERTION_TIMEOUT_MS
+    });
     await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toHaveCount(0);
     await expect(detailsPanel.getByRole('button', { name: 'Inspect Growth Revenue Agent' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Clear Selection' })).toHaveCount(0);
   });
 
   test('keeps the last overview surface visible while degraded refresh warnings are active', async ({ page }) => {
+    test.setTimeout(45_000);
     await installFastPollInterval(page);
     await page.goto('/');
 
@@ -461,7 +759,9 @@ test.describe('AI Town shell smoke', () => {
 
     await enableScenario(page, 'degraded-refresh');
 
-    await expect(page.getByText('Showing last office snapshot.')).toBeVisible({ timeout: 7_000 });
+    await expect(page.getByText('Showing last office snapshot.')).toBeVisible({
+      timeout: POLL_DRIVEN_ASSERTION_TIMEOUT_MS
+    });
     await expect(page.getByText('overview refresh failed')).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Metaverse Town' })).toBeVisible();
     await expect(page.getByRole('region', { name: 'Town world' })).toBeVisible();
@@ -469,51 +769,49 @@ test.describe('AI Town shell smoke', () => {
     await expect(page.getByText('Unable to load office overview.')).toHaveCount(0);
   });
 
-  test('keeps the world diagonally draggable on landscape and portrait shells', async ({ page }) => {
-    await page.setViewportSize({ width: 1280, height: 720 });
-    await page.goto('/');
-    await expectCanvasDragMovesViewport(page);
+  for (const shell of SHELLS) {
+    test(`keeps the world diagonally draggable on the ${shell.name} shell`, async ({ page }) => {
+      await page.setViewportSize(shell.viewport);
+      await page.goto('/');
+      await expectCanvasDragMovesViewport(page);
+    });
+  }
 
-    await page.setViewportSize({ width: 390, height: 844 });
-    await page.reload();
-    await expectCanvasDragMovesViewport(page);
-  });
+  for (const shell of SHELLS) {
+    test(`keeps minimum-zoom viewport bounds inside the clamp padding budget on the ${shell.name} shell`, async ({ page }) => {
+      await page.setViewportSize(shell.viewport);
+      await page.goto('/');
+      await expect(page.locator('.aitown-world__host canvas')).toBeVisible();
+      await page.waitForFunction(() => Boolean((window as typeof window & { __AITOWN_VIEWPORT__?: object }).__AITOWN_VIEWPORT__));
+      await zoomViewportOutToMinimum(page);
 
-  test('keeps minimum-zoom viewport bounds inside the clamp padding budget on landscape and portrait shells', async ({ page }) => {
-    await page.setViewportSize({ width: 1280, height: 720 });
-    await page.goto('/');
-    await expect(page.locator('.aitown-world__host canvas')).toBeVisible();
-    await page.waitForFunction(() => Boolean((window as typeof window & { __AITOWN_VIEWPORT__?: object }).__AITOWN_VIEWPORT__));
-    await zoomViewportOutToMinimum(page);
+      const state = await readViewportState(page);
+      expect(state).not.toBeNull();
+      expect(state!.screenWorldWidth).toBeGreaterThanOrEqual(state!.screenWidth);
+      expect(state!.screenWorldHeight).toBeGreaterThanOrEqual(state!.screenHeight);
+      expectViewportBoundsWithinClampBudget(state!);
+    });
+  }
 
-    const landscape = await readViewportState(page);
-    expect(landscape).not.toBeNull();
-    expect(landscape!.screenWorldWidth).toBeGreaterThanOrEqual(landscape!.screenWidth);
-    expect(landscape!.screenWorldHeight).toBeGreaterThanOrEqual(landscape!.screenHeight);
-    expectViewportBoundsWithinClampBudget(landscape!);
+  for (const shell of SHELLS) {
+    test(`still keeps meaningful two-axis drag room at minimum zoom on the ${shell.name} shell`, async ({ page }) => {
+      await page.setViewportSize(shell.viewport);
+      await page.goto('/');
+      await expectMinimumZoomKeepsTwoAxisPanRoom(page);
+    });
+  }
 
-    await page.setViewportSize({ width: 390, height: 844 });
-    await page.reload();
-    await expect(page.locator('.aitown-world__host canvas')).toBeVisible();
-    await page.waitForFunction(() => Boolean((window as typeof window & { __AITOWN_VIEWPORT__?: object }).__AITOWN_VIEWPORT__));
-    await zoomViewportOutToMinimum(page);
+  for (const shell of SHELLS) {
+    test(`keeps the default initial viewport directly reachable to the right and bottom edges without zooming first on the ${shell.name} shell`, async ({ page }) => {
+      if (shell.name === 'landscape') {
+        test.slow();
+      }
 
-    const portrait = await readViewportState(page);
-    expect(portrait).not.toBeNull();
-    expect(portrait!.screenWorldWidth).toBeGreaterThanOrEqual(portrait!.screenWidth);
-    expect(portrait!.screenWorldHeight).toBeGreaterThanOrEqual(portrait!.screenHeight);
-    expectViewportBoundsWithinClampBudget(portrait!);
-  });
-
-  test('still keeps meaningful two-axis drag room at minimum zoom on landscape and portrait shells', async ({ page }) => {
-    await page.setViewportSize({ width: 1280, height: 720 });
-    await page.goto('/');
-    await expectMinimumZoomKeepsTwoAxisPanRoom(page);
-
-    await page.setViewportSize({ width: 390, height: 844 });
-    await page.reload();
-    await expectMinimumZoomKeepsTwoAxisPanRoom(page);
-  });
+      await page.setViewportSize(shell.viewport);
+      await page.goto('/');
+      await expectDefaultViewportKeepsDirectEdgeReachability(page);
+    });
+  }
 
   test('keeps selected-agent hub overlay clamp padding active at the top-right viewport boundary', async ({ page }) => {
     await page.goto('/');
@@ -544,34 +842,55 @@ test.describe('AI Town shell smoke', () => {
       .toBe(true);
   });
 
-  test('short-circuits ctrl-wheel canvas handling without preventDefaulting or zooming the viewport', async ({ page }) => {
-    await installCtrlWheelTelemetry(page);
+  test('leaves browser-native pinch zoom available without zooming the canvas viewport', async ({ page, browserName }) => {
+    test.skip(browserName !== 'chromium', 'CDP pinch synthesis is Chromium-only');
+
+    await installObservedWheelGestureCapture(page);
     await page.goto('/');
     await expect(page.locator('.aitown-world__host canvas')).toBeVisible();
     await page.waitForFunction(() => Boolean((window as typeof window & { __AITOWN_VIEWPORT__?: { scale: { x: number; y: number } } }).__AITOWN_VIEWPORT__));
 
     const beforeScale = await readViewportScale(page);
+    const beforeBrowserZoom = await readBrowserZoomState(page);
     expect(beforeScale).not.toBeNull();
+    const pinchScaleFactor = 1.25;
 
-    await page.locator('.aitown-world__host canvas').hover();
-    await page.keyboard.down('Control');
-    await page.mouse.wheel(0, 120);
-    await page.keyboard.up('Control');
+    await synthesizePinchGesture(page, pinchScaleFactor, 'mouse');
 
-    const afterScale = await readViewportScale(page);
-    const telemetry = await readCtrlWheelTelemetry(page);
+    const zoomedBrowserZoom = await waitForBrowserZoomChange(page, beforeBrowserZoom);
+    const zoomedViewportScale = await expectViewportScaleRemainsUnchanged(page, beforeScale!);
+    const zoomInWheelGestureCount = (await readObservedWheelGestures(page)).filter(
+      (gesture) =>
+        gesture.target === 'world-host' &&
+        gesture.ctrlKey &&
+        gesture.deltaMode === 0 &&
+        Math.abs(gesture.deltaY) < 24
+    ).length;
 
-    expect(afterScale).not.toBeNull();
-    expect(afterScale).toBe(beforeScale);
-    expect(
-      telemetry.filter((entry) => entry.action === 'observed' && entry.target === 'world-host' && entry.ctrlKey)
-    ).not.toHaveLength(0);
-    expect(
-      telemetry.filter((entry) => entry.action === 'stopImmediatePropagation' && entry.target === 'world-host' && entry.ctrlKey)
-    ).not.toHaveLength(0);
-    expect(
-      telemetry.filter((entry) => entry.action === 'preventDefault' && entry.target === 'world-host' && entry.ctrlKey)
-    ).toHaveLength(0);
+    expect(zoomedViewportScale).toBe(beforeScale);
+    expect(didBrowserZoomChange(beforeBrowserZoom, zoomedBrowserZoom)).toBe(true);
+    expect(zoomInWheelGestureCount).toBeGreaterThan(0);
+
+    await synthesizePinchGesture(page, 1 / pinchScaleFactor, 'mouse');
+
+    const restoredBrowserZoom = await waitForBrowserZoomChange(page, zoomedBrowserZoom);
+    const restoredViewportScale = await expectViewportScaleRemainsUnchanged(page, beforeScale!);
+    const worldHostWheelGestures = (await readObservedWheelGestures(page)).filter(
+      (gesture) =>
+        gesture.target === 'world-host' &&
+        gesture.ctrlKey &&
+        gesture.deltaMode === 0 &&
+        Math.abs(gesture.deltaY) < 24
+    );
+
+    expect(restoredViewportScale).toBe(beforeScale);
+    expect(didBrowserZoomChange(zoomedBrowserZoom, restoredBrowserZoom)).toBe(true);
+    expectBrowserZoomStateMatchesBaseline(
+      restoredBrowserZoom,
+      beforeBrowserZoom,
+      'browser zoom did not settle back to its baseline after the reverse pinch'
+    );
+    expect(worldHostWheelGestures.length).toBeGreaterThan(zoomInWheelGestureCount);
   });
 
   test('does not intercept touch pinch gestures or move the canvas viewport', async ({ page, browserName }) => {

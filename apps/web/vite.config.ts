@@ -5,31 +5,31 @@ import { configDefaults, defineConfig } from 'vitest/config';
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   const proxyTarget = env.VITE_DEV_PROXY_TARGET?.trim() || process.env.VITE_DEV_PROXY_TARGET?.trim() || 'http://127.0.0.1:3000';
+  const proxy = proxyTarget
+    ? {
+        '/office': {
+          target: proxyTarget,
+          changeOrigin: true
+        },
+        '/agents': {
+          target: proxyTarget,
+          changeOrigin: true
+        },
+        '/incidents': {
+          target: proxyTarget,
+          changeOrigin: true
+        },
+        '/correlations': {
+          target: proxyTarget,
+          changeOrigin: true
+        }
+      }
+    : undefined;
 
   return {
     plugins: [react()],
-    server: proxyTarget
-      ? {
-          proxy: {
-            '/office': {
-              target: proxyTarget,
-              changeOrigin: true
-            },
-            '/agents': {
-              target: proxyTarget,
-              changeOrigin: true
-            },
-            '/incidents': {
-              target: proxyTarget,
-              changeOrigin: true
-            },
-            '/correlations': {
-              target: proxyTarget,
-              changeOrigin: true
-            }
-          }
-        }
-      : undefined,
+    server: proxy ? { proxy } : undefined,
+    preview: proxy ? { proxy } : undefined,
     test: {
       environment: 'jsdom',
       globals: true,

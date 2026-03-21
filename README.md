@@ -90,10 +90,13 @@ pnpm test:all
 pnpm web:typecheck
 pnpm web:build
 pnpm web:test:browser-smoke
+pnpm web:test:browser-smoke:dev
 pnpm backend:start
 ```
 
 `pnpm web:test:browser-smoke` runs the Playwright keyboard smoke from the repository root, starts its own hermetic read-only backend seeded under `./.tmp/browser-smoke`, starts its own Vite shell on ephemeral localhost ports, and passes the resolved base URL into Playwright so stale orphaned processes do not block startup.
+
+`pnpm web:test:browser-smoke:dev` runs the same Playwright smoke through the wrapper with `BROWSER_SMOKE_FRONTEND_MODE=dev`, so CI also proves the non-preview Vite path end-to-end instead of only covering that branch in helper tests.
 
 For local UI development, run the backend in one shell and the web shell in another:
 ```bash
@@ -105,11 +108,13 @@ For the browser smoke against your own local backend data instead of the hermeti
 ```bash
 cd apps/web
 VITE_DEV_PROXY_TARGET=http://127.0.0.1:3000 pnpm test:browser-smoke
+VITE_DEV_PROXY_TARGET=http://127.0.0.1:3000 pnpm test:browser-smoke:dev
 ```
 
 Optional env:
 - `PORT=3000`
 - `METAVERSE_OFFICE_STORE_FILE=/absolute/path/prototype-store.jsonl`
+- `BROWSER_SMOKE_FRONTEND_MODE=dev` to run the smoke wrapper against a managed Vite dev server instead of the preview build; omit it to keep the preview-mode smoke path
 - `BROWSER_SMOKE_BACKEND_PORT=3210` to pin the hermetic backend port for browser smoke while still letting the wrapper auto-select a free Vite port unless you also pin `BROWSER_SMOKE_DEV_SERVER_PORT`
 - `BROWSER_SMOKE_DEV_SERVER_PORT=4173` to pin the Vite dev-server port for browser smoke while still letting the wrapper auto-select a free hermetic backend port unless you also pin `BROWSER_SMOKE_BACKEND_PORT`
 - `VITE_API_BASE_URL=https://api.example.test` for the React shell when the backend also allows that origin via `CORS_ALLOWED_ORIGINS`; omit it to keep same-origin `/office`, `/agents`, `/incidents`, and `/correlations` requests, or keep using `VITE_DEV_PROXY_TARGET` for local Vite proxying

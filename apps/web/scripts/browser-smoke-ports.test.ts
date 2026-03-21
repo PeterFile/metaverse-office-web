@@ -5,9 +5,11 @@ import {
   BROWSER_SMOKE_BACKEND_PORT_ENV,
   BROWSER_SMOKE_BASE_URL_ENV,
   BROWSER_SMOKE_DEV_SERVER_PORT_ENV,
+  BROWSER_SMOKE_FRONTEND_MODE_ENV,
   DEFAULT_BROWSER_SMOKE_BACKEND_PORT,
   DEFAULT_BROWSER_SMOKE_DEV_SERVER_PORT,
   readBrowserSmokePortOverride,
+  resolveBrowserSmokeFrontendMode,
   resolveBrowserSmokePorts
 } from './browser-smoke-ports.mjs';
 
@@ -45,5 +47,22 @@ describe('browser smoke port helpers', () => {
 
   it('exposes the wrapper-managed explicit base URL env', () => {
     expect(BROWSER_SMOKE_BASE_URL_ENV).toBe('BROWSER_SMOKE_BASE_URL');
+  });
+
+  it('defaults browser smoke frontend mode to preview', () => {
+    expect(resolveBrowserSmokeFrontendMode({})).toBe('preview');
+  });
+
+  it('accepts explicit preview and dev frontend modes', () => {
+    expect(resolveBrowserSmokeFrontendMode({ [BROWSER_SMOKE_FRONTEND_MODE_ENV]: 'preview' })).toBe('preview');
+    expect(resolveBrowserSmokeFrontendMode({ [BROWSER_SMOKE_FRONTEND_MODE_ENV]: 'dev' })).toBe('dev');
+  });
+
+  it('rejects unsupported browser smoke frontend modes', () => {
+    expect(() =>
+      resolveBrowserSmokeFrontendMode({
+        [BROWSER_SMOKE_FRONTEND_MODE_ENV]: 'staging'
+      })
+    ).toThrow(/must be either "preview" or "dev"/);
   });
 });

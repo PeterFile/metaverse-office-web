@@ -18,6 +18,7 @@ import {
   DEFAULT_ALLOW_VIEWPORT_DRAG_OUTSIDE,
   DEFAULT_MAX_VIEWPORT_SCALE,
   resolveViewportClampOptions,
+  resolveViewportCornerAfterScreenDrag,
   resolveViewportEntryCenter,
   resolveViewportScaleBounds,
   resolveViewportWheelGestureDisposition,
@@ -465,9 +466,14 @@ export default function WorldScene({ scene, onSelectAgent }: WorldSceneProps) {
         }
 
         pointerDragged = true;
-        viewport.position.set(viewport.x + deltaX, viewport.y + deltaY);
-        viewport.dirty = true;
-        viewport.plugins.get('clamp')?.update?.();
+        const nextCorner = resolveViewportCornerAfterScreenDrag({
+          cornerX: viewport.left,
+          cornerY: viewport.top,
+          scale: viewport.scale.x,
+          deltaX,
+          deltaY
+        });
+        viewport.moveCorner(nextCorner.x, nextCorner.y);
         viewport.emit('moved', { viewport, type: 'drag' });
         event.preventDefault();
       };

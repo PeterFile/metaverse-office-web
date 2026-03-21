@@ -26,6 +26,7 @@ This repository mirrors the controller-approved Phase 1 scope so implementation 
 - correlation drill-down query that aggregates incident, interaction, and replay evidence by `correlation_id`
 - agent-centric incident evidence surfaces derived from the same read-only incident feed semantics
 - agent-centric workflow query that aggregates detail, incidents, interactions, and replay evidence in one read-only response
+- office operations query that derives the first live-operations queue from the existing append-only events, heartbeats, and current agent projections
 - pnpm workspace + React operator shell that renders the canonical office overview and agent workflow drawer without adding a write path
 
 ## Canonical state enum
@@ -116,6 +117,15 @@ This repository mirrors the controller-approved Phase 1 scope so implementation 
 - `limit` caps each returned slice independently using the existing detail/query semantics
 - the response exposes deduped `correlation_ids` from all returned top-level slices
 - the response exposes deduped `counterparty_agent_ids` from all returned top-level slices; interaction-derived counterparties come from `participant_agent_ids`, and the final workflow list excludes the focal agent plus `team-lead`
+
+## Office operations addendum
+- `GET /office/operations` stays backend-only, read-only, schema-first, and reversible
+- the route reuses the current agent projection plus the existing overview severity/staleness derivation; no new persistence, projection table, or event type is introduced
+- default output is the active queue only: agents whose `current_state` is neither `idle` nor `sleeping`
+- optional `state` filters by one canonical `current_state`; optional `limit` caps the returned queue slice
+- queue items expose the current projection, the latest-event correlation surface, and the latest event summary/evidence when present
+- queue summary exposes `item_count`, `blocked_count`, `reboot_recommended_count`, `state_buckets`, and `severity_buckets` for the returned slice
+- queue ordering is operational, not decorative: higher effective severity first, then reboot recommendations, then blocked state, then newer activity
 
 
 ## React operator shell addendum

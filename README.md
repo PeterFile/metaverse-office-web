@@ -26,6 +26,7 @@ This repository is the implementation home for the Hermes-Agent metaverse-office
 - correlation drill-down now exposes one read-only evidence/replay surface per `correlation_id` by aggregating existing incident, interaction, and timeline read models
 - agent detail and agent-scoped incident queries now expose recent incident evidence by reusing the same read-only incident feed semantics
 - agent workflow query now exposes one read-only operator slice per agent by aggregating existing detail, incident, interaction, and timeline read models
+- office operations query now exposes the first live-operations queue by deriving active work from the existing append-only events, heartbeats, and agent projections
 - pnpm workspace bootstrap now exists with a React + TypeScript operator shell in `apps/web` that reuses the frozen read-only office/workflow/incident/correlation queries for triage
 
 ## Key documents
@@ -132,6 +133,7 @@ Optional env:
 - `GET /interactions`
 - `GET /collectors/controller-snapshot`
 - `GET /office/overview`
+- `GET /office/operations?limit=&state=`
 - `GET /timeline?window=&agent_id=&event_type=&severity=&correlation_id=&limit=`
 - `GET /peer-watch/alerts?status=&target_agent_id=&agent_id=&watcher_agent_id=&observer_agent_id=&correlation_id=&severity=&limit=`
 - `GET /incidents?kind=&agent_id=&severity=&status=&correlation_id=&limit=&window=`
@@ -148,6 +150,14 @@ Optional env:
 - `effective_severity` can rise to `yellow` or `orange` from `last_meaningful_output_at`
 - staleness thresholds are `<20m = normal`, `>=20m = yellow`, `>=30m = orange`
 - `red` remains event-driven only
+
+### Office operations notes
+- `GET /office/operations` is a read-only live-operations queue derived from the existing append-only events, heartbeats, and current agent projections
+- default output includes only currently active agents: `current_state` is neither `idle` nor `sleeping`
+- optional `state` filters the queue by one canonical `current_state`; optional `limit` caps the returned queue after sorting
+- queue items reuse the existing projection plus `reported_severity`, `derived_staleness`, and `effective_severity` from the overview logic
+- `correlation_id` and `latest_event` come from the latest event for that agent when one exists; heartbeats do not fabricate them
+- summary fields describe the returned queue slice: `item_count`, `blocked_count`, `reboot_recommended_count`, `state_buckets`, and `severity_buckets`
 
 ### Agent detail read-model notes
 - `GET /agents/:id` returns the current agent projection plus `latest_heartbeat`

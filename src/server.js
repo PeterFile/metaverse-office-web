@@ -66,6 +66,15 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
     return;
   }
 
+  if (method === 'GET' && pathname === '/office/operations') {
+    sendJson(res, 200, store.getOfficeOperations({
+      now: now(),
+      state: url.searchParams.get('state'),
+      limit: url.searchParams.get('limit')
+    }));
+    return;
+  }
+
   const agentEventsMatch = pathname.match(/^\/agents\/([^/]+)\/events$/);
   if (method === 'GET' && agentEventsMatch) {
     const agentId = decodeURIComponent(agentEventsMatch[1]);

@@ -1,5 +1,6 @@
 import type {
   AgentWorkflow,
+  CorrelationDrilldown,
   IncidentFeedResponse,
   OfficeAgent,
   OfficeOperations,
@@ -15,12 +16,16 @@ type DetailsPanelProps = {
   operations: OfficeOperations | null;
   operationsError: string | null;
   operationsState: LoadState;
+  correlation: CorrelationDrilldown | null;
+  correlationError: string | null;
+  correlationState: LoadState;
   selectedAgent: OfficeAgent | null;
   workflow: AgentWorkflow | null;
   workflowError: string | null;
   workflowState: LoadState;
   world: WorldState;
   onSelectAgent: (agentId: string | null) => void;
+  onSelectOperation: (agentId: string, correlationId: string | null) => void;
 };
 
 const SEVERITY_LABELS = {
@@ -61,12 +66,16 @@ export function DetailsPanel({
   operations,
   operationsError,
   operationsState,
+  correlation,
+  correlationError,
+  correlationState,
   selectedAgent,
   workflow,
   workflowError,
   workflowState,
   world,
-  onSelectAgent
+  onSelectAgent,
+  onSelectOperation
 }: DetailsPanelProps) {
   const agents = [...world.agents.values()]
     .map((agent) => ({
@@ -94,6 +103,36 @@ export function DetailsPanel({
         </div>
 
         <section className="aitown-details__section">
+          <h3>Active Queue</h3>
+          <ul className="aitown-records">
+            {operationsState === 'loading' && !operations ? (
+              <li className="aitown-record">Loading operations queue...</li>
+            ) : null}
+            {operationsError ? <li className="aitown-record">{operationsError}</li> : null}
+            {(operations?.items ?? []).slice(0, 4).map((operation) => (
+              <li key={operation.agent_id} className={`aitown-record severity-${operation.effective_severity}`}>
+                <button
+                  type="button"
+                  className="aitown-roster__button"
+                  aria-label={
+                    operation.correlation_id
+                      ? `Open coordination for ${operation.display_name}`
+                      : `Inspect ${operation.display_name} from active queue`
+                  }
+                  onClick={() => onSelectOperation(operation.agent_id, operation.correlation_id)}
+                >
+                  <strong>{operation.display_name}</strong>
+                  <span>{`${operation.current_state} · ${operation.current_blocker || operation.active_task}`}</span>
+                </button>
+              </li>
+            ))}
+            {operationsState === 'ready' && !operationsError && !operations?.items.length ? (
+              <li className="aitown-record">No active operations queue.</li>
+            ) : null}
+          </ul>
+        </section>
+
+        <section className="aitown-details__section">
           <h3>Roster</h3>
           <div className="aitown-roster">
             {agents.map((agent) => (
@@ -109,25 +148,6 @@ export function DetailsPanel({
               </button>
             ))}
           </div>
-        </section>
-
-        <section className="aitown-details__section">
-          <h3>Active Queue</h3>
-          <ul className="aitown-records">
-            {operationsState === 'loading' && !operations ? (
-              <li className="aitown-record">Loading operations queue...</li>
-            ) : null}
-            {operationsError ? <li className="aitown-record">{operationsError}</li> : null}
-            {(operations?.items ?? []).slice(0, 4).map((operation) => (
-              <li key={operation.agent_id} className={`aitown-record severity-${operation.effective_severity}`}>
-                <strong>{operation.display_name}</strong>
-                <span>{`${operation.current_state} · ${operation.current_blocker || operation.active_task}`}</span>
-              </li>
-            ))}
-            {operationsState === 'ready' && !operationsError && !operations?.items.length ? (
-              <li className="aitown-record">No active operations queue.</li>
-            ) : null}
-          </ul>
         </section>
 
         <section className="aitown-details__section">
@@ -205,6 +225,31 @@ export function DetailsPanel({
           <strong>{selectedAgent.reboot_recommended ? 'Recommended' : 'No'}</strong>
         </div>
       </div>
+
+      <section className="aitown-details__section">
+        <h3>Coordination</h3>
+        <ul className="aitown-records">
+          {correlationState === 'loading' && !correlation ? <li className="aitown-record">Loading coordination drilldown...</li> : null}
+          {correlationError ? <li className="aitown-record">{correlationError}</li> : null}
+          {correlation ? (
+            <>
+              <li className="aitown-record">
+                <strong>{correlation.correlation_id}</strong>
+                <span>{`${correlation.participant_agent_ids.length} participants · ${correlation.interaction_count} interactions`}</span>
+              </li>
+              <li className="aitown-record">
+                <strong>Event flow</strong>
+                <span>{`${correlation.incident_count} incidents · ${correlation.event_count} events`}</span>
+              </li>
+              <li className="aitown-record">
+                <strong>Evidence refs</strong>
+                <span>{correlation.evidence_refs.slice(0, 2).join(', ') || 'No evidence refs'}</span>
+              </li>
+            </>
+          ) : null}
+          {correlationState === 'idle' ? <li className="aitown-record">No coordination drilldown selected.</li> : null}
+        </ul>
+      </section>
 
       <section className="aitown-details__section">
         <h3>Workflow</h3>

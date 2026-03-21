@@ -8,6 +8,7 @@ import type { OfficeAgent } from './types';
 const operationsUrl = '/office/operations?limit=4';
 const incidentsUrl = '/incidents?limit=10&window=60m';
 const workflowUrl = '/agents/app-engineering/workflow?limit=10&window=60m';
+const correlationUrl = '/correlations/corr-app-review?limit=10&window=60m';
 
 const overviewFixture = {
   generated_at: '2026-03-16T09:00:00.000Z',
@@ -262,6 +263,83 @@ const workflowFixture = {
   timeline: []
 };
 
+const correlationFixture = {
+  correlation_id: 'corr-app-review',
+  participant_agent_ids: ['app-engineering', 'team-lead'],
+  evidence_refs: ['/tmp/evidence.md', '/tmp/review.md'],
+  first_ts: '2026-03-16T08:45:00.000Z',
+  last_ts: '2026-03-16T08:50:00.000Z',
+  incident_count: 2,
+  interaction_count: 1,
+  event_count: 2,
+  incidents: [
+    incidentFeedFixture.items[0],
+    {
+      incident_id: 'inc-2',
+      kind: 'handoff',
+      ts: '2026-03-16T08:47:00.000Z',
+      agent_id: 'app-engineering',
+      actor_id: 'team-lead',
+      status: 'completed',
+      severity: 'yellow',
+      summary: 'Lead completed a workflow handoff',
+      correlation_id: 'corr-app-review',
+      evidence_refs: ['/tmp/review.md'],
+      counterparty_agent_ids: ['team-lead'],
+      source_kind: 'controller_event'
+    }
+  ],
+  interactions: [
+    {
+      interaction_id: 'interaction-1',
+      interaction_type: 'review',
+      correlation_id: 'corr-app-review',
+      started_at: '2026-03-16T08:45:00.000Z',
+      ended_at: '2026-03-16T08:48:00.000Z',
+      participant_agent_ids: ['app-engineering', 'team-lead'],
+      trigger_event_id: 'evt-0',
+      before_state: 'reviewing',
+      after_state: 'blocked',
+      severity: 'orange',
+      evidence_refs: ['/tmp/review.md'],
+      summary: 'Lead reviewed the blocked workflow',
+      related_event_ids: ['evt-0', 'evt-1']
+    }
+  ],
+  timeline: [
+    {
+      event_id: 'evt-0',
+      ts: '2026-03-16T08:45:00.000Z',
+      agent_id: 'app-engineering',
+      actor_id: 'team-lead',
+      event_type: 'review_started',
+      severity: 'yellow',
+      current_state: 'reviewing',
+      location: 'meeting-zone',
+      summary: 'Lead started reviewing the workflow evidence',
+      correlation_id: 'corr-app-review',
+      counterparty_agent_ids: ['team-lead'],
+      evidence_refs: ['/tmp/review.md'],
+      source_kind: 'controller_event'
+    },
+    {
+      event_id: 'evt-1',
+      ts: '2026-03-16T08:50:00.000Z',
+      agent_id: 'app-engineering',
+      actor_id: 'team-lead',
+      event_type: 'peer_watch_alert_raised',
+      severity: 'orange',
+      current_state: 'blocked',
+      location: 'meeting-zone',
+      summary: 'Workflow evidence is still incomplete',
+      correlation_id: 'corr-app-review',
+      counterparty_agent_ids: ['team-lead'],
+      evidence_refs: ['/tmp/evidence.md'],
+      source_kind: 'controller_event'
+    }
+  ]
+};
+
 async function openHub(user: ReturnType<typeof userEvent.setup>) {
   await user.click(await screen.findByRole('button', { name: 'Open Hub' }));
   return screen.findByRole('complementary', { name: 'Agent details' });
@@ -282,6 +360,12 @@ describe('App', () => {
 
         if (url === operationsUrl) {
           return new Response(JSON.stringify(operationsFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === correlationUrl) {
+          return new Response(JSON.stringify(correlationFixture), {
             headers: { 'content-type': 'application/json' }
           });
         }
@@ -413,6 +497,178 @@ afterEach(() => {
 
     await user.click(within(details).getByRole('button', { name: 'Inspect Team Lead' }));
     expect(within(details).queryByRole('heading', { name: 'Active Queue' })).not.toBeInTheDocument();
+  });
+
+  it('opens a coordination drilldown from the active queue and loads correlation evidence for the selected agent', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Open coordination for App Engineering Agent' }));
+
+    expect(await within(details).findByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+    expect(await within(details).findByRole('heading', { name: 'Coordination' })).toBeVisible();
+    expect(within(details).getAllByText('corr-app-review').length).toBeGreaterThan(0);
+    expect(within(details).getByText('2 participants · 1 interactions')).toBeVisible();
+    expect(within(details).getByText('2 incidents · 2 events')).toBeVisible();
+    expect(within(details).getByText('/tmp/evidence.md, /tmp/review.md')).toBeVisible();
+
+    await act(async () => {
+      expect(globalThis.fetch).toHaveBeenCalledWith(correlationUrl, expect.anything());
+    });
+  });
+
+  it('does not request a coordination drilldown when selecting an agent outside the active queue', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect Team Lead' }));
+
+    expect(await within(details).findByRole('heading', { name: 'Team Lead' })).toBeVisible();
+    expect(within(details).getByText('No coordination drilldown selected.')).toBeVisible();
+    expect(globalThis.fetch).not.toHaveBeenCalledWith(correlationUrl, expect.anything());
+  });
+
+  it('does not claim to open coordination when an active queue item has no correlation id', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect Team Lead from active queue' }));
+
+    expect(await within(details).findByRole('heading', { name: 'Team Lead' })).toBeVisible();
+    expect(within(details).getByText('No coordination drilldown selected.')).toBeVisible();
+    expect(globalThis.fetch).not.toHaveBeenCalledWith(correlationUrl, expect.anything());
+  });
+
+  it('shows coordination drilldown failures explicitly instead of pretending empty', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === '/office/overview') {
+          return new Response(JSON.stringify(overviewFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === operationsUrl) {
+          return new Response(JSON.stringify(operationsFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === correlationUrl) {
+          return new Response(JSON.stringify({ error: 'internal_error', details: 'correlation refresh failed' }), {
+            status: 500,
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === incidentsUrl) {
+          return new Response(JSON.stringify(incidentFeedFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === workflowUrl) {
+          return new Response(JSON.stringify(workflowFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        throw new Error(`Unexpected request: ${url}`);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Open coordination for App Engineering Agent' }));
+
+    expect(await within(details).findByText('correlation refresh failed')).toBeVisible();
+    expect(within(details).queryByText('No coordination drilldown selected.')).not.toBeInTheDocument();
+  });
+
+  it('keeps the last coordination drilldown visible when a later correlation poll fails', async () => {
+    (window as typeof window & { __AITOWN_POLL_INTERVAL_MS__?: number }).__AITOWN_POLL_INTERVAL_MS__ = 10;
+
+    let correlationRequests = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === '/office/overview') {
+          return new Response(JSON.stringify(overviewFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === operationsUrl) {
+          return new Response(JSON.stringify(operationsFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === correlationUrl) {
+          correlationRequests += 1;
+          if (correlationRequests === 1) {
+            return new Response(JSON.stringify(correlationFixture), {
+              headers: { 'content-type': 'application/json' }
+            });
+          }
+
+          return new Response(JSON.stringify({ error: 'internal_error', details: 'correlation refresh failed' }), {
+            status: 500,
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === incidentsUrl) {
+          return new Response(JSON.stringify(incidentFeedFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === workflowUrl) {
+          return new Response(JSON.stringify(workflowFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        throw new Error(`Unexpected request: ${url}`);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Open coordination for App Engineering Agent' }));
+
+    expect(await within(details).findByText('2 participants · 1 interactions')).toBeVisible();
+    expect(await within(details).findByText('correlation refresh failed')).toBeVisible();
+    expect(within(details).getByText('2 incidents · 2 events')).toBeVisible();
+    expect(correlationRequests).toBeGreaterThan(1);
+  });
+
+  it('clears stale coordination drilldown content when switching to an agent without a selected correlation', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Open coordination for App Engineering Agent' }));
+    expect(await within(details).findByText('2 participants · 1 interactions')).toBeVisible();
+
+    await user.click(within(details).getByRole('button', { name: 'Clear' }));
+    await user.click(within(details).getByRole('button', { name: 'Inspect Team Lead' }));
+    expect(await within(details).findByRole('heading', { name: 'Team Lead' })).toBeVisible();
+    expect(within(details).getByText('No coordination drilldown selected.')).toBeVisible();
+    expect(within(details).queryByText('2 participants · 1 interactions')).not.toBeInTheDocument();
   });
 
   it('shows operations queue loading state explicitly while the overview queue is still pending', async () => {

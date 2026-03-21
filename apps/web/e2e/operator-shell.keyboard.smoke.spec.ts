@@ -841,6 +841,75 @@ test.describe('AI Town shell smoke', () => {
     await expect(page.getByRole('button', { name: 'Open Hub' })).toBeVisible();
   });
 
+  test('opens coordination drilldown from the active queue and requests the correlation read model', async ({ page }) => {
+    const inspectableBackendOrigin = resolveInspectableBrowserSmokeBackendOrigin();
+    const coordinationPath = '/correlations/corr-revenue-handoff';
+    const initialCorrelationRequests = inspectableBackendOrigin
+      ? (await readBrowserSmokeRequestLog(inspectableBackendOrigin)).filter((entry) => entry.pathname === coordinationPath).length
+      : null;
+
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Hub' }).click();
+
+    const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
+    await expect(detailsPanel.getByRole('heading', { name: 'Active Queue' })).toBeVisible();
+
+    const coordinationButton = detailsPanel.getByRole('button', { name: 'Open coordination for Growth Revenue Agent' });
+    await expect(coordinationButton).toBeVisible();
+    await coordinationButton.click();
+
+    await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+    await expect(detailsPanel.getByRole('heading', { name: 'Coordination' })).toBeVisible();
+
+    if (inspectableBackendOrigin && initialCorrelationRequests !== null) {
+      await expect
+        .poll(async () => {
+          const requests = await readBrowserSmokeRequestLog(inspectableBackendOrigin);
+          return requests.filter((entry) => entry.pathname === coordinationPath).length;
+        }, {
+          timeout: POLL_DRIVEN_ASSERTION_TIMEOUT_MS
+        })
+        .toBeGreaterThan(initialCorrelationRequests);
+    }
+
+    await expect(detailsPanel.getByText(/corr-revenue-handoff/)).toBeVisible();
+    await expect(detailsPanel.getByText('3 participants · 1 interactions')).toBeVisible();
+    await expect(detailsPanel.getByText(/revenue-handoff\.md/)).toBeVisible();
+    await expect(detailsPanel.getByText('1 incidents · 1 events')).toBeVisible();
+    await expect(detailsPanel.getByText('No coordination drilldown selected.')).toHaveCount(0);
+    await expect(detailsPanel.getByText('correlation refresh failed')).toHaveCount(0);
+  });
+
+  test('inspects active queue items without a correlation id without requesting coordination drilldown', async ({ page }) => {
+    const inspectableBackendOrigin = resolveInspectableBrowserSmokeBackendOrigin();
+    const initialCorrelationRequests = inspectableBackendOrigin
+      ? (await readBrowserSmokeRequestLog(inspectableBackendOrigin)).filter((entry) => entry.pathname.startsWith('/correlations/')).length
+      : null;
+
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Hub' }).click();
+
+    const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
+    const inspectQueueButton = detailsPanel.getByRole('button', { name: 'Inspect Team Lead from active queue' });
+    await expect(inspectQueueButton).toBeVisible();
+    await inspectQueueButton.click();
+
+    await expect(detailsPanel.getByRole('heading', { name: 'Team Lead' })).toBeVisible();
+    await expect(detailsPanel.getByRole('heading', { name: 'Coordination' })).toBeVisible();
+    await expect(detailsPanel.getByText('No coordination drilldown selected.')).toBeVisible();
+
+    if (inspectableBackendOrigin && initialCorrelationRequests !== null) {
+      await expect
+        .poll(async () => {
+          const requests = await readBrowserSmokeRequestLog(inspectableBackendOrigin);
+          return requests.filter((entry) => entry.pathname.startsWith('/correlations/')).length;
+        }, {
+          timeout: POLL_DRIVEN_ASSERTION_TIMEOUT_MS
+        })
+        .toBe(initialCorrelationRequests);
+    }
+  });
+
   test('treats Hub as a dismissible dialog and restores trigger focus on Escape', async ({ page }) => {
     await page.goto('/');
 

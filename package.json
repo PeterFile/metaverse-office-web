@@ -10,7 +10,7 @@
   "scripts": {
     "start": "node src/index.js",
     "backend:start": "node src/index.js",
-    "backend:test": "node --test './tests/**/*.test.js'",
+    "backend:test": "node --test tests/*.test.js",
     "web:dev": "pnpm --filter @metaverse-office/web dev",
     "web:build": "pnpm --filter @metaverse-office/web build",
     "web:preview": "pnpm --filter @metaverse-office/web preview",

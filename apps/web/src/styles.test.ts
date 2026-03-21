@@ -47,4 +47,9 @@ describe('AI Town shell styles', () => {
     expect(styles).toMatch(/\.aitown-hub-overlay\s*\{[\s\S]*?justify-content:\s*flex-end;/);
     expect(styles).toMatch(/\.aitown-hub-sheet\s*\{[\s\S]*?width:\s*min\(430px, 100vw\);[\s\S]*?height:\s*100dvh;/);
   });
+
+  it('keeps browser pinch zoom available on the fullscreen world host and canvas', () => {
+    expect(styles).toMatch(/\.aitown-world__host\s*\{[\s\S]*?touch-action:\s*pinch-zoom;/);
+    expect(styles).toMatch(/\.aitown-world__host canvas\s*\{[\s\S]*?touch-action:\s*pinch-zoom;/);
+  });
 });

@@ -1,24 +1,30 @@
 import { defineConfig } from '@playwright/test';
+import {
+  BROWSER_SMOKE_BASE_URL_ENV,
+  resolveBrowserSmokePorts
+} from './scripts/browser-smoke-ports.mjs';
 
-const backendPort = 3210;
+const explicitBaseURL = process.env[BROWSER_SMOKE_BASE_URL_ENV]?.trim();
+const { backendPort, devServerPort } = resolveBrowserSmokePorts(process.env);
 const defaultBackendUrl = `http://127.0.0.1:${backendPort}`;
 const proxyTarget = process.env.VITE_DEV_PROXY_TARGET?.trim() || defaultBackendUrl;
-const devServerPort = 4173;
-const baseURL = `http://127.0.0.1:${devServerPort}`;
+const baseURL = explicitBaseURL || `http://127.0.0.1:${devServerPort}`;
 
-const webServers = [
-  {
-    command: `pnpm dev --host 127.0.0.1 --port ${devServerPort} --strictPort`,
-    url: baseURL,
-    reuseExistingServer: false,
-    timeout: 120_000,
-    env: {
-      VITE_DEV_PROXY_TARGET: proxyTarget
-    }
-  }
-];
+const webServers = explicitBaseURL
+  ? undefined
+  : [
+      {
+        command: `pnpm dev --host 127.0.0.1 --port ${devServerPort} --strictPort`,
+        url: `http://127.0.0.1:${devServerPort}`,
+        reuseExistingServer: false,
+        timeout: 120_000,
+        env: {
+          VITE_DEV_PROXY_TARGET: proxyTarget
+        }
+      }
+    ];
 
-if (!process.env.VITE_DEV_PROXY_TARGET?.trim()) {
+if (webServers && !process.env.VITE_DEV_PROXY_TARGET?.trim()) {
   webServers.unshift({
     command: 'node ./scripts/browser-smoke-backend.mjs',
     url: `${defaultBackendUrl}/health`,
@@ -37,8 +43,15 @@ export default defineConfig({
   use: {
     baseURL,
     headless: true,
-    browserName: 'chromium',
     viewport: { width: 1280, height: 720 }
   },
-  webServer: webServers
+  projects: [
+    {
+      name: 'chromium',
+      use: {
+        browserName: 'chromium'
+      }
+    }
+  ],
+  ...(webServers ? { webServer: webServers } : {})
 });

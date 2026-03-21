@@ -17,13 +17,18 @@ import type { AiTownSceneModel, SceneAgent, SceneZone } from './types';
 import {
   DEFAULT_ALLOW_VIEWPORT_DRAG_OUTSIDE,
   DEFAULT_MAX_VIEWPORT_SCALE,
+  createViewportInspector,
+  moveViewportCornerAfterScreenDrag,
   resolveViewportClampOptions,
   resolveViewportEntryCenter,
   resolveViewportScaleBounds,
   resolveViewportWheelGestureDisposition,
   shouldBlockViewportPointerInput,
-  type ViewportInputCapabilities
+  shouldDeferViewportPointerGestureToBrowser,
+  type ViewportInputCapabilities,
+  type ViewportInspector
 } from './viewport';
+import { resolveViewportClampPadding } from './viewportClampPadding';
 
 const SEVERITY_COLORS = {
   normal: 0x8ed16f,
@@ -242,6 +247,8 @@ export default function WorldScene({ scene, onSelectAgent }: WorldSceneProps) {
   const onSelectAgentRef = useRef(onSelectAgent);
   const lastCenteredAgentRef = useRef<{ agentId: string; x: number; y: number } | null>(null);
   const suppressSceneTapRef = useRef(false);
+  const clampPaddingRef = useRef<{ top: number; right: number }>({ top: 0, right: 0 });
+  const viewportInspectorRef = useRef<ViewportInspector | null>(null);
   const [ready, setReady] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loadAttempt, setLoadAttempt] = useState(0);
@@ -263,12 +270,14 @@ export default function WorldScene({ scene, onSelectAgent }: WorldSceneProps) {
     appRef.current = app;
     let disposed = false;
     let resizeObserver: ResizeObserver | null = null;
+    let overlayObserver: MutationObserver | null = null;
     let viewportZoomHandler: (() => void) | null = null;
     let activePointerId: number | null = null;
+    let activeTouchPointerIds = new Set<number>();
     let lastPointerPosition: { x: number; y: number } | null = null;
     let pointerDragged = false;
-    let resetPointerDragState = (pointerId?: number) => {
-      if (pointerId !== undefined && host.hasPointerCapture(pointerId)) {
+    let clearActivePointerDrag = (pointerId: number | null | undefined = activePointerId) => {
+      if (pointerId !== null && pointerId !== undefined && host.hasPointerCapture(pointerId)) {
         host.releasePointerCapture(pointerId);
       }
 
@@ -307,7 +316,8 @@ export default function WorldScene({ scene, onSelectAgent }: WorldSceneProps) {
     void (async () => {
       try {
         await app.init({
-          backgroundAlpha: 0,
+          backgroundAlpha: 1,
+          backgroundColor: 0x211822,
           antialias: false,
           autoDensity: true,
           resolution: window.devicePixelRatio || 1
@@ -380,6 +390,13 @@ export default function WorldScene({ scene, onSelectAgent }: WorldSceneProps) {
       };
 
       const syncViewportConstraints = (hostWidth: number, hostHeight: number, capabilities?: ViewportInputCapabilities) => {
+        const clampPadding = resolveViewportClampPadding(host);
+        const nextClampPadding = {
+          top: clampPadding.top ?? 0,
+          right: clampPadding.right ?? 0
+        };
+        clampPaddingRef.current = nextClampPadding;
+        (viewport as Viewport & { clampPadding?: { top: number; right: number } }).clampPadding = nextClampPadding;
         const { minScale, maxScale } = resolveViewportScaleBounds(
           hostWidth,
           hostHeight,
@@ -392,7 +409,14 @@ export default function WorldScene({ scene, onSelectAgent }: WorldSceneProps) {
         viewport.clampZoom({ minScale, maxScale });
         viewport.plugins.remove('clamp');
         viewport.clamp({
-          ...resolveViewportClampOptions(scene.pixelWidth, scene.pixelHeight, hostWidth, hostHeight, viewport.scale.x),
+          ...resolveViewportClampOptions(
+            scene.pixelWidth,
+            scene.pixelHeight,
+            hostWidth,
+            hostHeight,
+            viewport.scale.x,
+            clampPadding
+          ),
           underflow: 'center'
         });
 
@@ -402,11 +426,20 @@ export default function WorldScene({ scene, onSelectAgent }: WorldSceneProps) {
       };
 
       handleHostPointerDown = (event: PointerEvent) => {
+        if (event.pointerType === 'touch') {
+          activeTouchPointerIds.add(event.pointerId);
+        }
+
         if (shouldBlockViewportPointerInput(event.pointerType)) {
           return;
         }
 
         if (event.pointerType === 'mouse' && event.button !== 0) {
+          return;
+        }
+
+        if (shouldDeferViewportPointerGestureToBrowser(event.pointerType, activeTouchPointerIds.size)) {
+          clearActivePointerDrag();
           return;
         }
 
@@ -417,6 +450,10 @@ export default function WorldScene({ scene, onSelectAgent }: WorldSceneProps) {
       };
 
       handleHostPointerMove = (event: PointerEvent) => {
+        if (shouldDeferViewportPointerGestureToBrowser(event.pointerType, activeTouchPointerIds.size)) {
+          return;
+        }
+
         if (activePointerId !== event.pointerId || !lastPointerPosition) {
           return;
         }
@@ -427,24 +464,24 @@ export default function WorldScene({ scene, onSelectAgent }: WorldSceneProps) {
 
         lastPointerPosition = nextPosition;
 
-        if (deltaX === 0 && deltaY === 0) {
+        if (!moveViewportCornerAfterScreenDrag(viewport, deltaX, deltaY)) {
           return;
         }
 
         pointerDragged = true;
-        viewport.position.set(viewport.x + deltaX, viewport.y + deltaY);
-        viewport.dirty = true;
-        viewport.plugins.get('clamp')?.update?.();
-        viewport.emit('moved', { viewport, type: 'drag' });
         event.preventDefault();
       };
 
       handleHostPointerUp = (event: PointerEvent) => {
+        if (event.pointerType === 'touch') {
+          activeTouchPointerIds.delete(event.pointerId);
+        }
+
         if (activePointerId !== event.pointerId) {
           return;
         }
 
-        resetPointerDragState(event.pointerId);
+        clearActivePointerDrag(event.pointerId);
       };
 
       const applyViewportLayout = (preserveView = false) => {
@@ -474,7 +511,6 @@ export default function WorldScene({ scene, onSelectAgent }: WorldSceneProps) {
         const targetScale = preserveView ? Math.min(maxScale, Math.max(minScale, previousScale)) : nextBaseScale;
         viewport.setZoom(Math.min(maxScale, Math.max(minScale, targetScale)), true);
         viewport.moveCenter(previousCenter.x, previousCenter.y);
-        viewport.plugins.get('clamp')?.update?.();
       };
 
       viewportZoomHandler = () => {
@@ -489,7 +525,6 @@ export default function WorldScene({ scene, onSelectAgent }: WorldSceneProps) {
         }
 
         syncViewportConstraints(viewport.screenWidth, viewport.screenHeight, capabilities);
-        viewport.plugins.get('clamp')?.update?.();
       };
 
       viewport.wheel({ trackpadPinch: false, wheelZoom: true });
@@ -516,10 +551,20 @@ export default function WorldScene({ scene, onSelectAgent }: WorldSceneProps) {
       viewport.addChild(mapContainer, zoneLayer, agentLayer);
       app.stage.addChild(viewport);
 
+      const viewportInspector = createViewportInspector({
+        viewport,
+        getClampPadding: () => clampPaddingRef.current,
+        getScaleBounds: () => ({ minScale: currentBaseScale, maxScale: currentMaxScale }),
+        afterZoom: () => {
+          viewportZoomHandler?.();
+        }
+      });
+
       viewportRef.current = viewport;
       zoneLayerRef.current = zoneLayer;
       agentLayerRef.current = agentLayer;
-      (window as typeof window & { __AITOWN_VIEWPORT__?: Viewport }).__AITOWN_VIEWPORT__ = viewport;
+      viewportInspectorRef.current = viewportInspector;
+      (window as typeof window & { __AITOWN_VIEWPORT__?: ViewportInspector }).__AITOWN_VIEWPORT__ = viewportInspector;
       host.addEventListener('pointerdown', handleHostPointerDown);
       host.addEventListener('pointermove', handleHostPointerMove);
       host.addEventListener('pointerup', handleHostPointerUp);
@@ -530,12 +575,29 @@ export default function WorldScene({ scene, onSelectAgent }: WorldSceneProps) {
       });
       resizeObserver.observe(host);
 
+      if (typeof MutationObserver !== 'undefined') {
+        overlayObserver = new MutationObserver(() => {
+          if (!viewportRef.current) {
+            return;
+          }
+
+          applyViewportLayout(true);
+        });
+        overlayObserver.observe(document.body, {
+          childList: true,
+          subtree: true,
+          attributes: true,
+          attributeFilter: ['class', 'style']
+        });
+      }
+
       setReady(true);
     })();
 
     return () => {
       disposed = true;
       resizeObserver?.disconnect();
+      overlayObserver?.disconnect();
       if (viewportRef.current && viewportZoomHandler) {
         viewportRef.current.off('zoomed', viewportZoomHandler);
       }
@@ -544,11 +606,13 @@ export default function WorldScene({ scene, onSelectAgent }: WorldSceneProps) {
       host.removeEventListener('pointermove', handleHostPointerMove);
       host.removeEventListener('pointerup', handleHostPointerUp);
       host.removeEventListener('pointercancel', handleHostPointerUp);
-      resetPointerDragState();
+      clearActivePointerDrag();
+      activeTouchPointerIds.clear();
       zoneLayerRef.current = null;
       agentLayerRef.current = null;
       viewportRef.current = null;
-      (window as typeof window & { __AITOWN_VIEWPORT__?: Viewport }).__AITOWN_VIEWPORT__ = undefined;
+      viewportInspectorRef.current = null;
+      (window as typeof window & { __AITOWN_VIEWPORT__?: ViewportInspector }).__AITOWN_VIEWPORT__ = undefined;
       lastCenteredAgentRef.current = null;
       setReady(false);
 

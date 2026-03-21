@@ -5,6 +5,7 @@ import {
   DEFAULT_WORKFLOW_WINDOW,
   RequestError,
   fetchAgentWorkflow,
+  fetchCorrelationDrilldown,
   fetchIncidents,
   fetchOfficeOperations,
   fetchOfficeOverview
@@ -64,6 +65,7 @@ export function resolveOverviewRefreshWarning(error: string | null, hasOverviewD
 function AppInner() {
   const { selectedAgentId, setSelectedAgentId, setWorld } = useWorld();
   const [hubOpen, setHubOpen] = useState(false);
+  const [selectedCorrelationId, setSelectedCorrelationId] = useState<string | null>(null);
   const lastSelectedAgentRef = useRef<OfficeAgent | null>(null);
   const hubTriggerRef = useRef<HTMLButtonElement | null>(null);
   const hubCloseButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -120,9 +122,21 @@ function AppInner() {
         !selectedAgentStillVisibleInOverview
       ) {
         setSelectedAgentId(null);
+        setSelectedCorrelationId(null);
       }
     },
     resourceKey: selectedAgentId
+  });
+
+  const correlationResource = usePolledResource({
+    enabled: selectedCorrelationId !== null,
+    load: (signal) =>
+      fetchCorrelationDrilldown(selectedCorrelationId!, {
+        limit: DEFAULT_WORKFLOW_LIMIT,
+        window: DEFAULT_WORKFLOW_WINDOW,
+        signal
+      }),
+    resourceKey: selectedCorrelationId
   });
 
   const activeWorkflow =
@@ -169,6 +183,14 @@ function AppInner() {
   const closeHub = useCallback(() => {
     setHubOpen(false);
   }, []);
+
+  const selectAgent = useCallback(
+    (agentId: string | null, correlationId: string | null = null) => {
+      setSelectedAgentId(agentId);
+      setSelectedCorrelationId(agentId ? correlationId : null);
+    },
+    [setSelectedAgentId]
+  );
 
   const toggleHub = useCallback(() => {
     setHubOpen((open) => !open);
@@ -253,12 +275,20 @@ function AppInner() {
 
   const handleSceneSelectAgent = useCallback(
     (agentId: string | null) => {
-      setSelectedAgentId(agentId);
+      selectAgent(agentId, null);
       if (agentId) {
         setHubOpen(true);
       }
     },
-    [setSelectedAgentId]
+    [selectAgent]
+  );
+
+  const handleSelectOperation = useCallback(
+    (agentId: string, correlationId: string | null) => {
+      selectAgent(agentId, correlationId);
+      setHubOpen(true);
+    },
+    [selectAgent]
   );
 
   const rendererFallback = (
@@ -321,7 +351,7 @@ function AppInner() {
               {hubOpen ? 'Hide Hub' : 'Open Hub'}
             </button>
             {selectedAgent ? (
-              <button type="button" className="aitown-button" onClick={() => setSelectedAgentId(null)}>
+              <button type="button" className="aitown-button" onClick={() => selectAgent(null)}>
                 Clear Selection
               </button>
             ) : null}
@@ -374,12 +404,16 @@ function AppInner() {
               operations={operationsResource.data}
               operationsError={operationsResource.error}
               operationsState={operationsResource.state}
+              correlation={correlationResource.data}
+              correlationError={correlationResource.error}
+              correlationState={correlationResource.state}
               selectedAgent={selectedAgent}
               workflow={activeWorkflow}
               workflowError={workflowResource.error}
               workflowState={workflowResource.state}
               world={projectedWorld}
-              onSelectAgent={setSelectedAgentId}
+              onSelectAgent={selectAgent}
+              onSelectOperation={handleSelectOperation}
             />
           </div>
         </div>

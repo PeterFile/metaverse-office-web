@@ -53,6 +53,10 @@ describe('browser smoke backend preview-mode CORS', () => {
     );
 
     expect(handled).toBe(true);
+    expect(res.headers.get('vary')).toBe('Origin');
+    expect(res.headers.get('access-control-allow-origin')).toBe('http://localhost:4173');
+    expect(res.headers.get('access-control-allow-headers')).toBe('Content-Type');
+    expect(res.headers.get('access-control-allow-methods')).toBe('GET, OPTIONS');
     expect(res.writeHead).toHaveBeenCalledWith(204);
     expect(res.end).toHaveBeenCalledTimes(1);
   });
@@ -72,6 +76,28 @@ describe('browser smoke backend preview-mode CORS', () => {
     );
 
     expect(handled).toBe(true);
+    expect(res.headers.get('allow')).toBe('GET, OPTIONS');
+    expect(res.writeHead).toHaveBeenCalledWith(405);
+    expect(res.end).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects loopback non-preflight writes without exposing read-only CORS headers', () => {
+    const res = createResponseRecorder();
+
+    const handled = applyBrowserSmokeCors(
+      {
+        method: 'POST',
+        headers: {
+          origin: 'http://127.0.0.1:4173'
+        }
+      } as any,
+      res as any
+    );
+
+    expect(handled).toBe(true);
+    expect(res.headers.get('allow')).toBe('GET, OPTIONS');
+    expect(res.headers.get('access-control-allow-origin')).toBeUndefined();
+    expect(res.headers.get('access-control-allow-methods')).toBeUndefined();
     expect(res.writeHead).toHaveBeenCalledWith(405);
     expect(res.end).toHaveBeenCalledTimes(1);
   });

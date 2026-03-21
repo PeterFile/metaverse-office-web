@@ -1,5 +1,9 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type ConsoleMessage, type Page, type Request } from '@playwright/test';
 
+import {
+  BROWSER_SMOKE_BACKEND_ORIGIN_ENV,
+  resolveBrowserSmokePorts
+} from '../scripts/browser-smoke-ports.mjs';
 import { resolveViewportEdgeDragDelta } from '../scripts/viewport-reachability';
 import { findStableSample, requireStableSample } from '../scripts/stability';
 
@@ -151,6 +155,53 @@ type ObservedWheelGesture = {
   target: 'world-host' | 'other';
 };
 
+type BrowserWriteAttemptResult =
+  | {
+      kind: 'response';
+      status: number;
+      bodyText: string;
+    }
+  | {
+      kind: 'error';
+      name: string | null;
+      message: string;
+    };
+
+type BrowserSmokeRequestLogEntry = {
+  method: string;
+  pathname: string;
+  origin: string | null;
+  accessControlRequestMethod: string | null;
+};
+
+type BrowserConsoleObservation = {
+  type: string;
+  text: string;
+};
+
+type BrowserRequestFailureObservation = {
+  method: string;
+  url: string;
+  errorText: string | null;
+};
+
+type BrowserWriteNetworkEvent = {
+  name: string;
+  method: string | null;
+  status: number | null;
+  url: string;
+  type: string | null;
+  errorText: string | null;
+  initiator: string | null;
+};
+
+type ObservedLoopbackWriteAttempt = {
+  consoleMessages: BrowserConsoleObservation[];
+  requestFailures: BrowserRequestFailureObservation[];
+  networkEvents: BrowserWriteNetworkEvent[];
+  dispose: () => Promise<void>;
+};
+
 async function installObservedWheelGestureCapture(page: Page) {
   await page.addInitScript(() => {
     const records: Array<{
@@ -275,6 +326,146 @@ async function enableScenario(page: Page, scenario: 'degraded-refresh' | 'stale-
     },
     { nextScenario: scenario, nextRunId: runId }
   );
+}
+
+function resolveBrowserSmokeWriteTargetOrigin() {
+  const explicitOrigin = process.env[BROWSER_SMOKE_BACKEND_ORIGIN_ENV]?.trim();
+  if (explicitOrigin) {
+    return explicitOrigin.replace(/\/+$/, '');
+  }
+
+  const proxyTarget = process.env.VITE_DEV_PROXY_TARGET?.trim();
+  if (proxyTarget) {
+    return proxyTarget.replace(/\/+$/, '');
+  }
+
+  if (process.env.BROWSER_SMOKE_BASE_URL?.trim()) {
+    return null;
+  }
+
+  const { backendPort } = resolveBrowserSmokePorts(process.env);
+  return `http://127.0.0.1:${backendPort}`;
+}
+
+function resolveInspectableBrowserSmokeBackendOrigin() {
+  const explicitOrigin = process.env[BROWSER_SMOKE_BACKEND_ORIGIN_ENV]?.trim();
+  if (explicitOrigin) {
+    return explicitOrigin.replace(/\/+$/, '');
+  }
+
+  if (process.env.VITE_DEV_PROXY_TARGET?.trim()) {
+    return null;
+  }
+
+  const { backendPort } = resolveBrowserSmokePorts(process.env);
+  return `http://127.0.0.1:${backendPort}`;
+}
+
+async function attemptLoopbackWrite(page: Page, pathname: string): Promise<BrowserWriteAttemptResult> {
+  const backendOrigin = resolveBrowserSmokeWriteTargetOrigin();
+
+  return page.evaluate(
+    async ({ nextBackendOrigin, nextPathname }) => {
+      try {
+        const response = await fetch(`${nextBackendOrigin}${nextPathname}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ smoke: true, pathname: nextPathname })
+        });
+
+        return {
+          kind: 'response' as const,
+          status: response.status,
+          bodyText: await response.text()
+        };
+      } catch (error) {
+        return {
+          kind: 'error' as const,
+          name: error instanceof Error ? error.name : null,
+          message: error instanceof Error ? error.message : String(error)
+        };
+      }
+    },
+    { nextBackendOrigin: backendOrigin, nextPathname: pathname }
+  );
+}
+
+async function observeLoopbackWriteAttempt(page: Page, pathname: string): Promise<ObservedLoopbackWriteAttempt> {
+  const backendOrigin = resolveBrowserSmokeWriteTargetOrigin();
+  const expectedUrl = `${backendOrigin}${pathname}`;
+  const consoleMessages: BrowserConsoleObservation[] = [];
+  const requestFailures: BrowserRequestFailureObservation[] = [];
+  const networkEvents: BrowserWriteNetworkEvent[] = [];
+  const cdpSession = await page.context().newCDPSession(page);
+
+  await cdpSession.send('Network.enable');
+
+  const handleConsole = (message: ConsoleMessage) => {
+    consoleMessages.push({
+      type: message.type(),
+      text: message.text()
+    });
+  };
+
+  const handleRequestFailed = (request: Request) => {
+    if (request.url() !== expectedUrl) {
+      return;
+    }
+
+    requestFailures.push({
+      method: request.method(),
+      url: request.url(),
+      errorText: request.failure()?.errorText ?? null
+    });
+  };
+
+  const appendNetworkEvent = (name: string, payload: Record<string, unknown>) => {
+    const url =
+      (payload.request as { url?: string } | undefined)?.url ??
+      (payload.response as { url?: string } | undefined)?.url ??
+      null;
+    if (url !== expectedUrl) {
+      return;
+    }
+
+    networkEvents.push({
+      name,
+      method: (payload.request as { method?: string } | undefined)?.method ?? null,
+      status: (payload.response as { status?: number } | undefined)?.status ?? null,
+      url,
+      type: typeof payload.type === 'string' ? payload.type : null,
+      errorText: typeof payload.errorText === 'string' ? payload.errorText : null,
+      initiator:
+        typeof (payload.initiator as { type?: string } | undefined)?.type === 'string'
+          ? (payload.initiator as { type?: string }).type ?? null
+          : null
+    });
+  };
+
+  page.on('console', handleConsole);
+  page.on('requestfailed', handleRequestFailed);
+  cdpSession.on('Network.requestWillBeSent', (payload) => appendNetworkEvent('Network.requestWillBeSent', payload));
+  cdpSession.on('Network.responseReceived', (payload) => appendNetworkEvent('Network.responseReceived', payload));
+  cdpSession.on('Network.loadingFailed', (payload) => appendNetworkEvent('Network.loadingFailed', payload));
+
+  return {
+    consoleMessages,
+    requestFailures,
+    networkEvents,
+    dispose: async () => {
+      page.off('console', handleConsole);
+      page.off('requestfailed', handleRequestFailed);
+      await cdpSession.detach();
+    }
+  };
+}
+
+async function readBrowserSmokeRequestLog(backendOrigin: string): Promise<BrowserSmokeRequestLogEntry[]> {
+  const response = await fetch(`${backendOrigin}/__browser-smoke__/requests`);
+  expect(response.ok).toBe(true);
+  return (await response.json()) as BrowserSmokeRequestLogEntry[];
 }
 
 async function installPinchTelemetry(page: Page) {
@@ -759,6 +950,106 @@ test.describe('AI Town shell smoke', () => {
     await expect(page.getByRole('region', { name: 'Town world' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Open Hub' })).toBeVisible();
     await expect(page.getByText('Unable to load office overview.')).toHaveCount(0);
+  });
+
+  test('blocks loopback browser writes against the read-only smoke backend above the helper layer', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.getByRole('heading', { name: 'Metaverse Town' })).toBeVisible();
+
+    const frontendOrigin = new URL(page.url()).origin;
+    const inspectableBackendOrigin = resolveInspectableBrowserSmokeBackendOrigin();
+    const backendOrigin = resolveBrowserSmokeWriteTargetOrigin();
+    if (!backendOrigin) {
+      return;
+    }
+
+    const expectedUrl = `${backendOrigin}/events`;
+    const observedAttempt = await observeLoopbackWriteAttempt(page, '/events');
+
+    try {
+      const writeAttempt = await attemptLoopbackWrite(page, '/events');
+      expect(writeAttempt.kind).toBe('error');
+
+      await expect
+        .poll(() => {
+          const corsConsoleMessage = observedAttempt.consoleMessages.find(
+            (message) =>
+              /blocked by CORS policy/i.test(message.text) &&
+              /preflight request/i.test(message.text) &&
+              message.text.includes(expectedUrl) &&
+              message.text.includes(frontendOrigin)
+          );
+          const postRequestFailure = observedAttempt.requestFailures.find(
+            (failure) => failure.method === 'POST' && failure.url === expectedUrl
+          );
+          const preflightRequest = observedAttempt.networkEvents.find(
+            (event) =>
+              event.name === 'Network.requestWillBeSent' &&
+              event.method === 'OPTIONS' &&
+              event.url === expectedUrl &&
+              event.initiator === 'preflight'
+          );
+          const preflightResponse = observedAttempt.networkEvents.find(
+            (event) =>
+              event.name === 'Network.responseReceived' &&
+              event.type === 'Preflight' &&
+              event.url === expectedUrl
+          );
+          const postIntent = observedAttempt.networkEvents.find(
+            (event) =>
+              event.name === 'Network.requestWillBeSent' &&
+              event.method === 'POST' &&
+              event.url === expectedUrl &&
+              event.initiator === 'script'
+          );
+
+          return {
+            sawCorsConsoleMessage: Boolean(corsConsoleMessage),
+            postRequestFailure: postRequestFailure?.errorText ?? null,
+            sawPreflightRequest: Boolean(preflightRequest),
+            sawBlockedPreflight:
+              typeof preflightResponse?.status === 'number' && preflightResponse.status >= 400,
+            sawScriptPostIntent: Boolean(postIntent)
+          };
+        })
+        .toEqual({
+          sawCorsConsoleMessage: true,
+          postRequestFailure: 'net::ERR_FAILED',
+          sawPreflightRequest: true,
+          sawBlockedPreflight: true,
+          sawScriptPostIntent: true
+        });
+
+      if (!inspectableBackendOrigin) {
+        return;
+      }
+
+      await expect
+        .poll(async () => {
+          const requests = await readBrowserSmokeRequestLog(inspectableBackendOrigin);
+          const matchingRequests = requests.filter(
+            (entry) => entry.pathname === '/events' && entry.origin === frontendOrigin
+          );
+
+          return {
+            preflight: matchingRequests.find(
+              (entry) => entry.method === 'OPTIONS' && entry.accessControlRequestMethod === 'POST'
+            ) ?? null,
+            sawPost: matchingRequests.some((entry) => entry.method === 'POST')
+          };
+        })
+        .toEqual({
+          preflight: {
+            method: 'OPTIONS',
+            pathname: '/events',
+            origin: frontendOrigin,
+            accessControlRequestMethod: 'POST'
+          },
+          sawPost: false
+        });
+    } finally {
+      await observedAttempt.dispose();
+    }
   });
 
   for (const shell of SHELLS) {

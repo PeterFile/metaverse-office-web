@@ -20,6 +20,8 @@ const scenarioRunCookieName = 'browser_smoke_run';
 const staleSelectionAgentId = 'growth-revenue';
 const staleSelectionCorrelationId = 'corr-growth-lead-review';
 const initialScenarioGraceMs = 5_000;
+const requestLog = [];
+const maxRequestLogEntries = 200;
 
 async function main() {
   await rm(scratchRoot, { recursive: true, force: true });
@@ -53,7 +55,15 @@ async function main() {
 
 function createScenarioServer({ baseServer, store, now }) {
   return http.createServer((req, res) => {
+    const url = new URL(req.url || '/', 'http://127.0.0.1');
+    recordBrowserSmokeRequest(req, url);
+
     if (applyBrowserSmokeCors(req, res)) {
+      return;
+    }
+
+    if ((req.method || 'GET') === 'GET' && url.pathname === '/__browser-smoke__/requests') {
+      sendJson(res, 200, requestLog);
       return;
     }
 
@@ -71,25 +81,38 @@ export function applyBrowserSmokeCors(req, res) {
     return false;
   }
 
-  res.setHeader('Vary', 'Origin');
-  res.setHeader('Access-Control-Allow-Origin', origin);
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  const method = req.method || 'GET';
+  if (method === 'OPTIONS') {
+    const requestedMethod = normalizeOriginHeader(req.headers['access-control-request-method']);
 
-  if ((req.method || 'GET') !== 'OPTIONS') {
-    return false;
+    if (requestedMethod && requestedMethod !== 'GET') {
+      res.setHeader('Allow', 'GET, OPTIONS');
+      res.writeHead(405);
+      res.end();
+      return true;
+    }
+
+    res.setHeader('Vary', 'Origin');
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.writeHead(204);
+    res.end();
+    return true;
   }
 
-  const requestedMethod = normalizeOriginHeader(req.headers['access-control-request-method']);
-  if (requestedMethod && requestedMethod !== 'GET') {
+  if (method !== 'GET') {
+    res.setHeader('Allow', 'GET, OPTIONS');
     res.writeHead(405);
     res.end();
     return true;
   }
 
-  res.writeHead(204);
-  res.end();
-  return true;
+  res.setHeader('Vary', 'Origin');
+  res.setHeader('Access-Control-Allow-Origin', origin);
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  return false;
 }
 
 export function isLoopbackOrigin(origin) {
@@ -373,6 +396,19 @@ function incrementScenarioCount(state, key) {
   const nextCount = (state.requestCounts.get(key) || 0) + 1;
   state.requestCounts.set(key, nextCount);
   return nextCount;
+}
+
+function recordBrowserSmokeRequest(req, url) {
+  requestLog.push({
+    method: req.method || 'GET',
+    pathname: url.pathname,
+    origin: normalizeOriginHeader(req.headers.origin),
+    accessControlRequestMethod: normalizeOriginHeader(req.headers['access-control-request-method'])
+  });
+
+  if (requestLog.length > maxRequestLogEntries) {
+    requestLog.splice(0, requestLog.length - maxRequestLogEntries);
+  }
 }
 
 function sendJson(res, statusCode, payload) {

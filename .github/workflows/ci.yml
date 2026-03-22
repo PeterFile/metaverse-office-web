@@ -25,5 +25,30 @@ jobs:
       - name: Install Playwright Chromium
         run: pnpm --filter @metaverse-office/web install:browsers:ci
 
-      - name: Run full test suite
-        run: pnpm test:all
+      - name: Run backend tests
+        run: pnpm backend:test
+
+      - name: Run web unit/integration tests
+        run: pnpm web:test
+
+      - name: Run web typecheck
+        run: pnpm web:typecheck
+
+      - name: Run web production build
+        run: pnpm web:build
+
+      - name: Run browser smoke (preview)
+        run: pnpm web:test:browser-smoke
+
+      - name: Run browser smoke (dev)
+        run: pnpm web:test:browser-smoke:dev
+
+      - name: Upload Playwright artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-artifacts-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: ignore
+          path: |
+            apps/web/playwright-report
+            apps/web/test-results

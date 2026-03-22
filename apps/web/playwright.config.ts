@@ -40,10 +40,19 @@ export default defineConfig({
   testDir: './e2e',
   fullyParallel: false,
   workers: 1,
+  reporter: process.env.CI
+    ? [
+        ['line'],
+        ['html', { open: 'never', outputFolder: 'playwright-report' }]
+      ]
+    : 'list',
+  outputDir: 'test-results',
   use: {
     baseURL,
     headless: true,
-    viewport: { width: 1280, height: 720 }
+    viewport: { width: 1280, height: 720 },
+    trace: 'retain-on-failure',
+    screenshot: 'only-on-failure'
   },
   projects: [
     {

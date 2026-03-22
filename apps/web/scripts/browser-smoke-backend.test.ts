@@ -1,6 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { applyBrowserSmokeCors, isLoopbackOrigin, readScenarioRequestContext } from './browser-smoke-backend.mjs';
+import {
+  applyBrowserSmokeCors,
+  handleSelectedOperationQueueDropScenario,
+  handleSelectedOperationRefreshScenario,
+  isLoopbackOrigin,
+  readScenarioRequestContext
+} from './browser-smoke-backend.mjs';
 
 function createResponseRecorder() {
   const headers = new Map<string, string>();
@@ -153,5 +159,105 @@ describe('readScenarioRequestContext', () => {
       scenario: undefined,
       runId: 'default'
     });
+  });
+});
+
+describe('selected-operation refresh failure scenario', () => {
+  it('fails selected-operation refresh polls after the grace window', () => {
+    const res = createResponseRecorder();
+
+    expect(
+      handleSelectedOperationRefreshScenario({
+        res,
+        state: {
+          startedAt: Date.now() - 6_000,
+          requestCounts: new Map()
+        },
+        url: new URL('http://127.0.0.1:3210/office/operations?agent_id=app-engineering')
+      })
+    ).toBe(true);
+    expect(res.writeHead).toHaveBeenCalledWith(500, {
+      'content-type': 'application/json; charset=utf-8'
+    });
+    expect(res.end).toHaveBeenCalledWith(
+      JSON.stringify({
+        error: 'internal_error',
+        details: 'operations refresh failed'
+      })
+    );
+  });
+
+  it('ignores crew-overview queue refreshes without a selected agent filter', () => {
+    const res = createResponseRecorder();
+
+    expect(
+      handleSelectedOperationRefreshScenario({
+        res,
+        state: {
+          startedAt: Date.now() - 6_000,
+          requestCounts: new Map()
+        },
+        url: new URL('http://127.0.0.1:3210/office/operations?limit=4&state=active')
+      })
+    ).toBe(false);
+    expect(res.writeHead).not.toHaveBeenCalled();
+    expect(res.end).not.toHaveBeenCalled();
+  });
+});
+
+describe('selected-operation queue-drop scenario', () => {
+  it('returns an empty selected-operation queue after the grace window', () => {
+    const res = createResponseRecorder();
+
+    expect(
+      handleSelectedOperationQueueDropScenario({
+        now: () => '2026-03-11T00:00:00.000Z',
+        res,
+        state: {
+          startedAt: Date.now() - 6_000,
+          requestCounts: new Map()
+        },
+        url: new URL('http://127.0.0.1:3210/office/operations?agent_id=app-engineering')
+      })
+    ).toBe(true);
+    expect(res.writeHead).toHaveBeenCalledWith(200, {
+      'content-type': 'application/json; charset=utf-8'
+    });
+    expect(res.end).toHaveBeenCalledWith(
+      JSON.stringify({
+        generated_at: '2026-03-11T00:00:00.000Z',
+        summary: {
+          item_count: 0,
+          blocked_count: 0,
+          reboot_recommended_count: 0,
+          state_buckets: {},
+          severity_buckets: {
+            normal: 0,
+            yellow: 0,
+            orange: 0,
+            red: 0
+          }
+        },
+        items: []
+      })
+    );
+  });
+
+  it('ignores crew-overview queue refreshes without a selected agent filter', () => {
+    const res = createResponseRecorder();
+
+    expect(
+      handleSelectedOperationQueueDropScenario({
+        now: () => '2026-03-11T00:00:00.000Z',
+        res,
+        state: {
+          startedAt: Date.now() - 6_000,
+          requestCounts: new Map()
+        },
+        url: new URL('http://127.0.0.1:3210/office/operations?limit=4&state=active')
+      })
+    ).toBe(false);
+    expect(res.writeHead).not.toHaveBeenCalled();
+    expect(res.end).not.toHaveBeenCalled();
   });
 });

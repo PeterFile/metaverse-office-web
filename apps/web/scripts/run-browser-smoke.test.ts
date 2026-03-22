@@ -237,7 +237,7 @@ describe('run-browser-smoke helpers', () => {
 
     expect(
       extractOrigin(
-        '  \u001b[32m➜\u001b[39m  \u001b[1mLocal\u001b[22m:   \u001b[36mhttp://127.0.0.1:\u001b[1m45680\u001b[22m/\u001b[39m',
+        '  \u001B[32m➜\u001B[39m  \u001B[1mLocal\u001B[22m:   \u001B[36mhttp://127.0.0.1:\u001B[1m45680\u001B[22m/\u001B[39m',
         'Local:'
       )
     ).toBe('http://127.0.0.1:45680');

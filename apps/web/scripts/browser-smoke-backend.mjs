@@ -153,6 +153,14 @@ function handleScenarioOverride({ req, res, store, now }) {
     return handleDegradedRefreshScenario({ res, url, state });
   }
 
+  if (scenario === 'selected-operation-refresh-failure') {
+    return handleSelectedOperationRefreshScenario({ res, url, state });
+  }
+
+  if (scenario === 'selected-operation-queue-drop') {
+    return handleSelectedOperationQueueDropScenario({ res, url, state, now });
+  }
+
   if (scenario === 'stale-selection-404') {
     return handleStaleSelectionScenario({ res, url, state, store, now });
   }
@@ -216,6 +224,62 @@ function handleDegradedRefreshScenario({ res, url, state }) {
   }
 
   return false;
+}
+
+export function handleSelectedOperationRefreshScenario({ res, url, state }) {
+  if (Date.now() - state.startedAt < initialScenarioGraceMs) {
+    return false;
+  }
+
+  if (url.pathname !== '/office/operations') {
+    return false;
+  }
+
+  const agentId = url.searchParams.get('agent_id');
+  if (!agentId) {
+    return false;
+  }
+
+  incrementScenarioCount(state, `operations:${agentId}`);
+  sendJson(res, 500, {
+    error: 'internal_error',
+    details: 'operations refresh failed'
+  });
+  return true;
+}
+
+export function handleSelectedOperationQueueDropScenario({ res, url, state, now }) {
+  if (Date.now() - state.startedAt < initialScenarioGraceMs) {
+    return false;
+  }
+
+  if (url.pathname !== '/office/operations') {
+    return false;
+  }
+
+  const agentId = url.searchParams.get('agent_id');
+  if (!agentId) {
+    return false;
+  }
+
+  incrementScenarioCount(state, `operations:${agentId}`);
+  sendJson(res, 200, {
+    generated_at: now(),
+    summary: {
+      item_count: 0,
+      blocked_count: 0,
+      reboot_recommended_count: 0,
+      state_buckets: {},
+      severity_buckets: {
+        normal: 0,
+        yellow: 0,
+        orange: 0,
+        red: 0
+      }
+    },
+    items: []
+  });
+  return true;
 }
 
 function handleStaleSelectionScenario({ res, url, state, store, now }) {

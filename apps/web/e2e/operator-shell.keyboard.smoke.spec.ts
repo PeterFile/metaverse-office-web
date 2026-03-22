@@ -331,7 +331,14 @@ async function installFastPollInterval(page: Page, intervalMs = 100) {
   }, intervalMs);
 }
 
-async function enableScenario(page: Page, scenario: 'degraded-refresh' | 'stale-selection-404') {
+async function enableScenario(
+  page: Page,
+  scenario:
+    | 'degraded-refresh'
+    | 'selected-operation-refresh-failure'
+    | 'selected-operation-queue-drop'
+    | 'stale-selection-404'
+) {
   const runId = `${scenario}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   await page.evaluate(
     ({ nextScenario, nextRunId }) => {
@@ -1034,6 +1041,95 @@ test.describe('AI Town shell smoke', () => {
       detailsPanel.getByRole('button', { name: 'Inspect Growth Revenue Agent', exact: true })
     ).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Clear Selection' })).toHaveCount(0);
+  });
+
+  test('keeps selected-operation details and correlation drilldown visible when only the selected-operation refresh degrades', async ({ page }) => {
+    test.setTimeout(45_000);
+    await installFastPollInterval(page);
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Hub' }).click();
+
+    const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
+    const operationSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Current Operation' })
+    });
+    const runContextSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Run Context' })
+    });
+    const correlationSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Correlation Drilldown' })
+    });
+
+    await detailsPanel.getByRole('button', { name: 'Inspect Growth Revenue Agent from active queue' }).click();
+
+    await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+    await expect(operationSection.getByText('planning · Prepare handoff notes')).toBeVisible();
+    await expect(runContextSection.getByText(/Run blocker ·/)).toBeVisible();
+    await expect(correlationSection.getByText('corr-revenue-handoff')).toBeVisible();
+    await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
+
+    await enableScenario(page, 'selected-operation-refresh-failure');
+
+    await expect(detailsPanel.getByText('Showing last operation snapshot. operations refresh failed')).toBeVisible({
+      timeout: POLL_DRIVEN_ASSERTION_TIMEOUT_MS
+    });
+    await expect(operationSection.getByText('planning · Prepare handoff notes')).toBeVisible();
+    await expect(runContextSection.getByText(/Run blocker ·/)).toBeVisible();
+    await expect(runContextSection.getByText(/Last heartbeat ·/)).toBeVisible();
+    await expect(correlationSection.getByText('corr-growth-lead-review')).toBeVisible();
+    await expect(correlationSection.getByText('Counts · 0 incidents · 1 interactions · 2 events')).toBeVisible();
+    await expect(correlationSection.getByText('Participants · growth-revenue, team-lead')).toHaveCount(2);
+    await expect(correlationSection.getByText('corr-revenue-handoff')).toHaveCount(0);
+    await expect(correlationSection.getByText('operations refresh failed')).toHaveCount(0);
+    await expect(correlationSection.getByText('correlation refresh failed')).toHaveCount(0);
+  });
+
+  test('keeps the last Current Operation visible when the selected operation drops out of the active queue', async ({ page }) => {
+    test.setTimeout(45_000);
+    await installFastPollInterval(page);
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Hub' }).click();
+
+    const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
+    const operationSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Current Operation' })
+    });
+    const runContextSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Run Context' })
+    });
+    const correlationSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Correlation Drilldown' })
+    });
+
+    await detailsPanel.getByRole('button', { name: 'Inspect Growth Revenue Agent from active queue' }).click();
+
+    await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+    await expect(operationSection.getByText('planning · Prepare handoff notes')).toBeVisible();
+    await expect(
+      operationSection.getByRole('button', { name: 'Open operation correlation corr-revenue-handoff' })
+    ).toBeVisible();
+    await expect(runContextSection.getByText(/Run blocker ·/)).toBeVisible();
+    await expect(correlationSection.getByText('corr-revenue-handoff')).toBeVisible();
+
+    await enableScenario(page, 'selected-operation-queue-drop');
+
+    await expect(
+      detailsPanel.getByText('Showing last operation snapshot. Operation is no longer in the active queue.')
+    ).toBeVisible({
+      timeout: POLL_DRIVEN_ASSERTION_TIMEOUT_MS
+    });
+    await expect(operationSection.getByText('planning · Prepare handoff notes')).toBeVisible();
+    await expect(
+      operationSection.getByRole('button', { name: 'Open operation correlation corr-revenue-handoff' })
+    ).toHaveCount(0);
+    await expect(runContextSection.getByText(/Run blocker ·/)).toBeVisible();
+    await expect(runContextSection.getByText(/Last heartbeat ·/)).toBeVisible();
+    await expect(correlationSection.getByText('corr-growth-lead-review')).toBeVisible();
+    await expect(correlationSection.getByText('Counts · 0 incidents · 1 interactions · 2 events')).toBeVisible();
+    await expect(correlationSection.getByText('Participants · growth-revenue, team-lead')).toHaveCount(2);
+    await expect(correlationSection.getByText('corr-revenue-handoff')).toHaveCount(0);
+    await expect(correlationSection.getByText('operations refresh failed')).toHaveCount(0);
+    await expect(correlationSection.getByText('correlation refresh failed')).toHaveCount(0);
   });
 
   test('keeps the last overview surface visible while degraded refresh warnings are active', async ({ page }) => {

@@ -3,6 +3,7 @@ import type {
   CorrelationDrilldown,
   IncidentFeedResponse,
   OfficeAgent,
+  OfficeOperation,
   OfficeOperations,
   WorkflowIncident,
   WorkflowInteraction,
@@ -23,13 +24,14 @@ type DetailsPanelProps = {
   operationsState: LoadState;
   selectedAgent: OfficeAgent | null;
   selectedCorrelationId: string | null;
+  selectedOperation: OfficeOperation | null;
   workflow: AgentWorkflow | null;
   workflowError: string | null;
   workflowState: LoadState;
   world: WorldState;
   onSelectAgent: (agentId: string | null) => void;
   onSelectCorrelation: (correlationId: string | null) => void;
-  onSelectOperation: (agentId: string, correlationId: string | null) => void;
+  onSelectOperation: (operation: OfficeOperation) => void;
 };
 
 const SEVERITY_LABELS = {
@@ -141,6 +143,7 @@ export function DetailsPanel({
   operationsState,
   selectedAgent,
   selectedCorrelationId,
+  selectedOperation,
   workflow,
   workflowError,
   workflowState,
@@ -205,7 +208,7 @@ export function DetailsPanel({
                   type="button"
                   className={`aitown-roster__button severity-${operation.effective_severity}`}
                   aria-label={`Inspect ${operation.display_name} from active queue`}
-                  onClick={() => onSelectOperation(operation.agent_id, operation.correlation_id)}
+                  onClick={() => onSelectOperation(operation)}
                 >
                   <strong>{operation.display_name}</strong>
                   <span>{`${operation.current_state} · ${operation.current_blocker || operation.active_task}`}</span>
@@ -334,6 +337,33 @@ export function DetailsPanel({
           <strong>{selectedAgent.reboot_recommended ? 'Recommended' : 'No'}</strong>
         </div>
       </div>
+
+      {selectedOperation ? (
+        <section className="aitown-details__section">
+          <h3>Current Operation</h3>
+          {operationsError ? <p role="status">{`Showing last operation snapshot. ${operationsError}`}</p> : null}
+          <ul className="aitown-records">
+            <li className={`aitown-record severity-${selectedOperation.effective_severity}`}>
+              <strong>{selectedOperation.display_name}</strong>
+              <span>{`${selectedOperation.current_state} · ${selectedOperation.current_blocker || selectedOperation.active_task}`}</span>
+              <span>{`Location · ${selectedOperation.current_location}`}</span>
+              <span>{`Latest event · ${selectedOperation.latest_event?.summary ?? 'No latest event yet'}`}</span>
+              {selectedOperation.correlation_id
+                ? renderCorrelationButton({
+                    correlationId: selectedOperation.correlation_id,
+                    label: selectedOperation.correlation_id,
+                    buttonLabel: 'Open operation correlation',
+                    activeCorrelationId: selectedCorrelationId,
+                    onSelectCorrelation
+                  })
+                : null}
+              <span>{`Counterparties · ${renderCounterparties(selectedOperation.latest_event?.counterparty_agent_ids ?? [])}`}</span>
+              <span>{`Evidence · ${renderEvidenceRefs(selectedOperation.latest_event?.evidence_refs ?? [])}`}</span>
+              <span>{`Source · ${selectedOperation.latest_event?.source_kind ?? 'No latest event source'}`}</span>
+            </li>
+          </ul>
+        </section>
+      ) : null}
 
       <section className="aitown-details__section">
         <h3>Workflow</h3>

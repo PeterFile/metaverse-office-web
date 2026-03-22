@@ -1,4 +1,4 @@
-import { expect, test, type ConsoleMessage, type Page, type Request } from '@playwright/test';
+import { expect, test, type ConsoleMessage, type Locator, type Page, type Request } from '@playwright/test';
 
 import {
   BROWSER_SMOKE_BACKEND_ORIGIN_ENV,
@@ -11,6 +11,20 @@ const POLL_DRIVEN_ASSERTION_TIMEOUT_MS = 12_000;
 
 async function readViewportState(page: Page) {
   return page.evaluate(() => window.__AITOWN_VIEWPORT__?.read() ?? null);
+}
+
+async function focusHubControlWithTab(page: Page, locator: Locator, accessibleName: string, maxTabs = 32) {
+  await expect(locator).toBeVisible();
+
+  for (let step = 0; step < maxTabs; step += 1) {
+    if (await locator.evaluate((element) => element === document.activeElement)) {
+      return;
+    }
+
+    await page.keyboard.press('Tab');
+  }
+
+  throw new Error(`could not focus ${accessibleName} with Tab within ${maxTabs} steps`);
 }
 
 function expectViewportBoundsWithinClampBudget(
@@ -850,8 +864,7 @@ test.describe('AI Town shell smoke', () => {
     await expect(workflowSection.getByText('No open watch alerts.')).toBeVisible();
     await expect(incidentSection.getByText('Lead completed the revenue handoff')).toBeVisible();
     await expect(incidentSection.getByText('completed', { exact: true })).toBeVisible();
-    await incidentSection.getByRole('button', { name: 'Open incident correlation corr-revenue-handoff' }).click();
-    await expect(correlationSection.getByText('corr-revenue-handoff')).toBeVisible();
+    await expect(correlationSection.getByText('corr-growth-lead-review')).toBeVisible();
 
     await page.getByRole('button', { name: 'Close Hub' }).click();
     await expect(page.getByRole('complementary', { name: 'Agent details' })).toHaveCount(0);
@@ -893,6 +906,70 @@ test.describe('AI Town shell smoke', () => {
 
     await page.keyboard.press('Tab');
     await expect(closeButton).toBeFocused();
+  });
+
+  test('opens agent detail and correlation drilldown from the crew-overview active queue via keyboard traversal', async ({ page }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Hub' }).click();
+
+    const dialog = page.getByRole('dialog', { name: 'Hub' });
+    const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
+    const queueButton = detailsPanel.getByRole('button', {
+      name: 'Inspect Growth Revenue Agent from active queue'
+    });
+    const correlationSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Correlation Drilldown' })
+    });
+
+    await expect(dialog).toBeVisible();
+    await expect(detailsPanel.getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
+    await expect(detailsPanel.getByRole('heading', { name: 'Active Queue' })).toBeVisible();
+    await focusHubControlWithTab(page, queueButton, 'Inspect Growth Revenue Agent from active queue');
+    await expect(queueButton).toBeFocused();
+    await page.keyboard.press('Enter');
+
+    await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+    await expect(detailsPanel.getByRole('button', { name: 'Clear' })).toBeFocused();
+    await expect(correlationSection.getByText('corr-revenue-handoff')).toBeVisible();
+    await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
+  });
+
+  test('opens an incident correlation drilldown from the selected-agent Hub via keyboard traversal', async ({ page }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Hub' }).click();
+
+    const dialog = page.getByRole('dialog', { name: 'Hub' });
+    const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
+    const inspectButton = detailsPanel.getByRole('button', {
+      name: 'Inspect Growth Revenue Agent',
+      exact: true
+    });
+
+    await expect(dialog).toBeVisible();
+    await focusHubControlWithTab(page, inspectButton, 'Inspect Growth Revenue Agent');
+    await expect(inspectButton).toBeFocused();
+    await page.keyboard.press('Enter');
+
+    const incidentSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Incident Feed' })
+    });
+    const correlationSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Correlation Drilldown' })
+    });
+    const incidentCorrelationButton = incidentSection.getByRole('button', {
+      name: 'Open incident correlation corr-revenue-handoff'
+    });
+
+    await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+    await expect(correlationSection.getByText('corr-growth-lead-review')).toBeVisible();
+    await expect(correlationSection.getByText('Counts · 0 incidents · 1 interactions · 2 events')).toBeVisible();
+
+    await focusHubControlWithTab(page, incidentCorrelationButton, 'Open incident correlation corr-revenue-handoff');
+    await expect(incidentCorrelationButton).toBeFocused();
+    await page.keyboard.press('Enter');
+
+    await expect(correlationSection.getByText('corr-revenue-handoff')).toBeVisible();
+    await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
   });
 
   test('keeps selected-agent workflow details pinned when a refresh-only workflow 404 arrives before overview drops the agent', async ({ page }) => {

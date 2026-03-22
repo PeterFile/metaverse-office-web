@@ -6,6 +6,7 @@ import App, { resolveOverviewRefreshWarning, resolveSelectedAgent } from './App'
 import type { OfficeAgent } from './types';
 
 const operationsUrl = '/office/operations?limit=4';
+const fullOperationsUrl = '/office/operations';
 const incidentsUrl = '/incidents?limit=10&window=60m';
 const workflowUrl = '/agents/app-engineering/workflow?limit=10&window=60m';
 const teamLeadWorkflowUrl = '/agents/team-lead/workflow?limit=10&window=60m';
@@ -429,7 +430,7 @@ describe('App', () => {
           });
         }
 
-        if (url === operationsUrl) {
+        if (url === operationsUrl || url === fullOperationsUrl) {
           return new Response(JSON.stringify(operationsFixture), {
             headers: { 'content-type': 'application/json' }
           });
@@ -587,7 +588,8 @@ afterEach(() => {
     render(<App />);
 
     const details = await openHub(user);
-    await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent from active queue' }));
+    const queueButton = within(details).getByRole('button', { name: 'Inspect App Engineering Agent from active queue' });
+    await user.click(queueButton);
 
     const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
     expect(correlationSection).not.toBeNull();
@@ -595,11 +597,286 @@ afterEach(() => {
     await waitFor(() => {
       expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
       expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+      expect(within(details).getByRole('button', { name: 'Clear' })).toHaveFocus();
     });
 
     await act(async () => {
       expect(globalThis.fetch).toHaveBeenCalledWith(workflowUrl, expect.anything());
       expect(globalThis.fetch).toHaveBeenCalledWith(correlationUrl, expect.anything());
+    });
+  });
+
+  it('keeps queue-derived operation context visible after drilling into a selected agent', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent from active queue' }));
+
+    const operationSection = within(details).getByRole('heading', { name: 'Current Operation' }).closest('section');
+    expect(operationSection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(operationSection!).getByText('blocked · Workflow evidence is still incomplete')).toBeVisible();
+      expect(within(operationSection!).getByRole('button', { name: /Open operation correlation corr-app-review/ })).toBeVisible();
+      expect(within(operationSection!).getByText('Location · meeting-zone')).toBeVisible();
+      expect(within(operationSection!).getByText('Latest event · Workflow evidence is still incomplete')).toBeVisible();
+      expect(within(operationSection!).getByText('Counterparties · team-lead')).toBeVisible();
+      expect(within(operationSection!).getByText('Evidence · /tmp/evidence.md')).toBeVisible();
+      expect(within(operationSection!).getByText('Source · controller_event')).toBeVisible();
+    });
+  });
+
+  it('shows when a queue-derived operation does not have a latest event yet', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect Team Lead from active queue' }));
+
+    const operationSection = within(details).getByRole('heading', { name: 'Current Operation' }).closest('section');
+    expect(operationSection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(operationSection!).getByText('reviewing · Coordinate rollout')).toBeVisible();
+      expect(within(operationSection!).getByText('Latest event · No latest event yet')).toBeVisible();
+      expect(within(operationSection!).queryByText('Latest event · Coordinate rollout')).not.toBeInTheDocument();
+      expect(within(operationSection!).getByText('Source · No latest event source')).toBeVisible();
+    });
+  });
+
+  it('refreshes queue-derived operation context while selected agent details remain open', async () => {
+    (window as typeof window & { __AITOWN_POLL_INTERVAL_MS__?: number }).__AITOWN_POLL_INTERVAL_MS__ = 10;
+
+    let operationsRequests = 0;
+    const refreshedOperationsFixture = {
+      ...operationsFixture,
+      generated_at: '2026-03-16T09:00:20.000Z',
+      summary: {
+        ...operationsFixture.summary,
+        item_count: 6,
+        blocked_count: 4,
+        reboot_recommended_count: 4,
+        state_buckets: {
+          blocked: 4,
+          reviewing: 2
+        },
+        severity_buckets: {
+          normal: 1,
+          yellow: 2,
+          orange: 3,
+          red: 0
+        }
+      },
+      items: [
+        {
+          ...operationsFixture.items[0],
+          agent_id: 'market-intel',
+          display_name: 'Market Intel Agent',
+          active_task: 'Escalate policy spike',
+          current_blocker: 'Awaiting policy note',
+          current_location: 'policy-room'
+        },
+        {
+          ...operationsFixture.items[0],
+          agent_id: 'product-pmf',
+          display_name: 'Product PMF Agent',
+          active_task: 'Resolve churn alert',
+          current_blocker: 'Need retention evidence',
+          current_location: 'pmf-room'
+        },
+        {
+          ...operationsFixture.items[0],
+          agent_id: 'tokenomics',
+          display_name: 'Tokenomics Agent',
+          active_task: 'Audit unlock schedule',
+          current_blocker: 'Waiting on vesting sheet',
+          current_location: 'treasury-desk'
+        },
+        {
+          ...operationsFixture.items[0],
+          agent_id: 'growth-revenue',
+          display_name: 'Growth Revenue Agent',
+          active_task: 'Stabilize launch handoff',
+          current_blocker: 'Need live launch metrics',
+          current_location: 'launch-bridge'
+        },
+        {
+          ...operationsFixture.items[0],
+          current_state: 'reviewing',
+          active_task: 'Verify merged rollout',
+          current_blocker: '',
+          current_location: 'review-zone',
+          correlation_id: 'corr-app-followup',
+          latest_event: operationsFixture.items[0].latest_event
+            ? {
+                ...operationsFixture.items[0].latest_event,
+                summary: 'Merged rollout verified',
+                source_kind: 'workspace_snapshot',
+                evidence_refs: ['/tmp/review.log'],
+                counterparty_agent_ids: ['growth-revenue']
+              }
+            : null
+        },
+        operationsFixture.items[1]
+      ]
+    };
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === '/office/overview') {
+          return new Response(JSON.stringify(overviewFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === operationsUrl) {
+          operationsRequests += 1;
+          return new Response(JSON.stringify(operationsFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === fullOperationsUrl) {
+          operationsRequests += 1;
+          return new Response(JSON.stringify(refreshedOperationsFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === incidentsUrl) {
+          return new Response(JSON.stringify(incidentFeedFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === workflowUrl) {
+          return new Response(JSON.stringify(workflowFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === correlationUrl) {
+          return new Response(JSON.stringify(correlationFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        throw new Error(`Unexpected request: ${url}`);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent from active queue' }));
+
+    const operationSection = within(details).getByRole('heading', { name: 'Current Operation' }).closest('section');
+    expect(operationSection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(operationsRequests).toBeGreaterThan(1);
+      expect(globalThis.fetch).toHaveBeenCalledWith(fullOperationsUrl, expect.anything());
+    });
+
+    await waitFor(() => {
+      expect(within(operationSection!).getByText('reviewing · Verify merged rollout')).toBeVisible();
+      expect(within(operationSection!).getByText('Location · review-zone')).toBeVisible();
+      expect(within(operationSection!).getByText('Latest event · Merged rollout verified')).toBeVisible();
+      expect(within(operationSection!).getByRole('button', { name: /Open operation correlation corr-app-followup/ })).toBeVisible();
+      expect(within(operationSection!).getByText('Counterparties · growth-revenue')).toBeVisible();
+      expect(within(operationSection!).getByText('Evidence · /tmp/review.log')).toBeVisible();
+      expect(within(operationSection!).getByText('Source · workspace_snapshot')).toBeVisible();
+    });
+  });
+
+  it('shows a stale-operation warning when queue-derived refresh fails after selection', async () => {
+    (window as typeof window & { __AITOWN_POLL_INTERVAL_MS__?: number }).__AITOWN_POLL_INTERVAL_MS__ = 10;
+
+    let operationsRequests = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === '/office/overview') {
+          return new Response(JSON.stringify(overviewFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === operationsUrl) {
+          operationsRequests += 1;
+          return new Response(JSON.stringify(operationsFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === fullOperationsUrl) {
+          operationsRequests += 1;
+          return new Response(JSON.stringify({ error: 'internal_error', details: 'operations refresh failed' }), {
+            status: 500,
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === incidentsUrl) {
+          return new Response(JSON.stringify(incidentFeedFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === workflowUrl) {
+          return new Response(JSON.stringify(workflowFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === correlationUrl) {
+          return new Response(JSON.stringify(correlationFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        throw new Error(`Unexpected request: ${url}`);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent from active queue' }));
+
+    const operationSection = await within(details).findByRole('heading', { name: 'Current Operation' });
+    expect(operationSection).toBeVisible();
+
+    await waitFor(() => {
+      expect(operationsRequests).toBeGreaterThan(1);
+      expect(globalThis.fetch).toHaveBeenCalledWith(fullOperationsUrl, expect.anything());
+      expect(within(details).getByText('Showing last operation snapshot. operations refresh failed')).toBeVisible();
+      expect(within(details).getByText('blocked · Workflow evidence is still incomplete')).toBeVisible();
+    });
+  });
+
+  it('clears queue-derived operation context before a fresh roster selection', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent from active queue' }));
+    expect(await within(details).findByRole('heading', { name: 'Current Operation' })).toBeVisible();
+
+    await user.click(within(details).getByRole('button', { name: 'Clear' }));
+    await user.click(within(details).getByRole('button', { name: 'Inspect Team Lead' }));
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'Team Lead' })).toBeVisible();
+      expect(within(details).queryByRole('heading', { name: 'Current Operation' })).not.toBeInTheDocument();
     });
   });
 
@@ -652,7 +929,7 @@ afterEach(() => {
           );
         }
 
-        if (url === operationsUrl) {
+        if (url === operationsUrl || url === fullOperationsUrl) {
           return new Promise<Response>((resolve) => {
             resolveOperations = resolve;
           });
@@ -706,7 +983,7 @@ afterEach(() => {
           });
         }
 
-        if (url === operationsUrl) {
+        if (url === operationsUrl || url === fullOperationsUrl) {
           return new Response(JSON.stringify({ error: 'internal_error', details: 'operations refresh failed' }), {
             status: 500,
             headers: { 'content-type': 'application/json' }
@@ -799,7 +1076,7 @@ afterEach(() => {
           );
         }
 
-        if (url === operationsUrl) {
+        if (url === operationsUrl || url === fullOperationsUrl) {
           return Promise.resolve(
             new Response(JSON.stringify(operationsFixture), {
               headers: { 'content-type': 'application/json' }
@@ -899,7 +1176,7 @@ afterEach(() => {
           );
         }
 
-        if (url === operationsUrl) {
+        if (url === operationsUrl || url === fullOperationsUrl) {
           return Promise.resolve(
             new Response(JSON.stringify(operationsFixture), {
               headers: { 'content-type': 'application/json' }
@@ -969,7 +1246,7 @@ afterEach(() => {
           });
         }
 
-        if (url === operationsUrl) {
+        if (url === operationsUrl || url === fullOperationsUrl) {
           return new Response(JSON.stringify(operationsFixture), {
             headers: { 'content-type': 'application/json' }
           });
@@ -1036,7 +1313,7 @@ afterEach(() => {
           });
         }
 
-        if (url === operationsUrl) {
+        if (url === operationsUrl || url === fullOperationsUrl) {
           return new Response(JSON.stringify(emptyOperationsFixture), {
             headers: { 'content-type': 'application/json' }
           });
@@ -1080,7 +1357,7 @@ afterEach(() => {
           });
         }
 
-        if (url === operationsUrl) {
+        if (url === operationsUrl || url === fullOperationsUrl) {
           operationsRequests += 1;
           if (operationsRequests === 1) {
             return new Response(JSON.stringify(operationsFixture), {
@@ -1149,7 +1426,7 @@ afterEach(() => {
           });
         }
 
-        if (url === operationsUrl) {
+        if (url === operationsUrl || url === fullOperationsUrl) {
           return new Response(JSON.stringify(operationsFixture), {
             headers: { 'content-type': 'application/json' }
           });
@@ -1201,7 +1478,7 @@ afterEach(() => {
           });
         }
 
-        if (url === operationsUrl) {
+        if (url === operationsUrl || url === fullOperationsUrl) {
           return new Response(JSON.stringify(operationsFixture), {
             headers: { 'content-type': 'application/json' }
           });
@@ -1391,7 +1668,7 @@ afterEach(() => {
           });
         }
 
-        if (url === operationsUrl) {
+        if (url === operationsUrl || url === fullOperationsUrl) {
           return new Response(JSON.stringify(operationsFixture), {
             headers: { 'content-type': 'application/json' }
           });
@@ -1484,7 +1761,7 @@ afterEach(() => {
           });
         }
 
-        if (url === operationsUrl) {
+        if (url === operationsUrl || url === fullOperationsUrl) {
           return new Response(JSON.stringify(operationsFixture), {
             headers: { 'content-type': 'application/json' }
           });

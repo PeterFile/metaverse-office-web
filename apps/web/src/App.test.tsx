@@ -614,7 +614,9 @@ afterEach(() => {
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent from active queue' }));
 
     const operationSection = within(details).getByRole('heading', { name: 'Current Operation' }).closest('section');
+    const runContextSection = within(details).getByRole('heading', { name: 'Run Context' }).closest('section');
     expect(operationSection).not.toBeNull();
+    expect(runContextSection).not.toBeNull();
 
     await waitFor(() => {
       expect(within(operationSection!).getByText('blocked · Workflow evidence is still incomplete')).toBeVisible();
@@ -624,6 +626,14 @@ afterEach(() => {
       expect(within(operationSection!).getByText('Counterparties · team-lead')).toBeVisible();
       expect(within(operationSection!).getByText('Evidence · /tmp/evidence.md')).toBeVisible();
       expect(within(operationSection!).getByText('Source · controller_event')).toBeVisible();
+      expect(within(runContextSection!).getByText('Run blocker · Workflow evidence is still incomplete')).toBeVisible();
+      expect(within(runContextSection!).getByText('Latest event type · peer_watch_alert_raised')).toBeVisible();
+      expect(within(runContextSection!).getByText('Latest event at · 2026-03-16T08:50:00.000Z')).toBeVisible();
+      expect(within(runContextSection!).getByText('Last event at · 2026-03-16T08:50:00.000Z')).toBeVisible();
+      expect(within(runContextSection!).getByText('Last heartbeat · 2026-03-16T08:59:30.000Z')).toBeVisible();
+      expect(within(runContextSection!).getByText('Last output · 2026-03-16T08:38:00.000Z')).toBeVisible();
+      expect(within(runContextSection!).getByText('Staleness · Orange · 22m')).toBeVisible();
+      expect(within(runContextSection!).getByText('Reboot recommendation · Recommended')).toBeVisible();
     });
   });
 
@@ -635,13 +645,23 @@ afterEach(() => {
     await user.click(within(details).getByRole('button', { name: 'Inspect Team Lead from active queue' }));
 
     const operationSection = within(details).getByRole('heading', { name: 'Current Operation' }).closest('section');
+    const runContextSection = within(details).getByRole('heading', { name: 'Run Context' }).closest('section');
     expect(operationSection).not.toBeNull();
+    expect(runContextSection).not.toBeNull();
 
     await waitFor(() => {
       expect(within(operationSection!).getByText('reviewing · Coordinate rollout')).toBeVisible();
       expect(within(operationSection!).getByText('Latest event · No latest event yet')).toBeVisible();
       expect(within(operationSection!).queryByText('Latest event · Coordinate rollout')).not.toBeInTheDocument();
       expect(within(operationSection!).getByText('Source · No latest event source')).toBeVisible();
+      expect(within(runContextSection!).getByText('Run blocker · No current blocker')).toBeVisible();
+      expect(within(runContextSection!).getByText('Latest event type · No latest event type')).toBeVisible();
+      expect(within(runContextSection!).getByText('Latest event at · No latest event timestamp')).toBeVisible();
+      expect(within(runContextSection!).getByText('Last event at · No last event timestamp')).toBeVisible();
+      expect(within(runContextSection!).getByText('Last heartbeat · No heartbeat yet')).toBeVisible();
+      expect(within(runContextSection!).getByText('Last output · No last output timestamp')).toBeVisible();
+      expect(within(runContextSection!).getByText('Staleness · Normal · 1m')).toBeVisible();
+      expect(within(runContextSection!).getByText('Reboot recommendation · No')).toBeVisible();
     });
   });
 
@@ -766,7 +786,9 @@ afterEach(() => {
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent from active queue' }));
 
     const operationSection = within(details).getByRole('heading', { name: 'Current Operation' }).closest('section');
+    const runContextSection = within(details).getByRole('heading', { name: 'Run Context' }).closest('section');
     expect(operationSection).not.toBeNull();
+    expect(runContextSection).not.toBeNull();
 
     await waitFor(() => {
       expect(operationsRequests).toBeGreaterThan(1);
@@ -781,6 +803,14 @@ afterEach(() => {
       expect(within(operationSection!).getByText('Counterparties · growth-revenue')).toBeVisible();
       expect(within(operationSection!).getByText('Evidence · /tmp/review.log')).toBeVisible();
       expect(within(operationSection!).getByText('Source · workspace_snapshot')).toBeVisible();
+      expect(within(runContextSection!).getByText('Run blocker · No current blocker')).toBeVisible();
+      expect(within(runContextSection!).getByText('Latest event type · peer_watch_alert_raised')).toBeVisible();
+      expect(within(runContextSection!).getByText('Latest event at · 2026-03-16T08:50:00.000Z')).toBeVisible();
+      expect(within(runContextSection!).getByText('Last event at · 2026-03-16T08:50:00.000Z')).toBeVisible();
+      expect(within(runContextSection!).getByText('Last heartbeat · 2026-03-16T08:59:30.000Z')).toBeVisible();
+      expect(within(runContextSection!).getByText('Last output · 2026-03-16T08:38:00.000Z')).toBeVisible();
+      expect(within(runContextSection!).getByText('Staleness · Orange · 22m')).toBeVisible();
+      expect(within(runContextSection!).getByText('Reboot recommendation · Recommended')).toBeVisible();
     });
   });
 

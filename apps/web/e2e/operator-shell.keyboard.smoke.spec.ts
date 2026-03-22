@@ -920,6 +920,9 @@ test.describe('AI Town shell smoke', () => {
     const correlationSection = detailsPanel.locator('section').filter({
       has: page.getByRole('heading', { name: 'Correlation Drilldown' })
     });
+    const runContextSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Run Context' })
+    });
 
     await expect(dialog).toBeVisible();
     await expect(detailsPanel.getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
@@ -930,6 +933,12 @@ test.describe('AI Town shell smoke', () => {
 
     await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
     await expect(detailsPanel.getByRole('button', { name: 'Clear' })).toBeFocused();
+    await expect(detailsPanel.getByRole('heading', { name: 'Run Context' })).toBeVisible();
+    await expect(runContextSection.getByText(/Run blocker ·/)).toBeVisible();
+    await expect(runContextSection.getByText(/Latest event type ·/)).toBeVisible();
+    await expect(runContextSection.getByText(/Last heartbeat ·/)).toBeVisible();
+    await expect(runContextSection.getByText(/Staleness ·/)).toBeVisible();
+    await expect(runContextSection.getByText(/Reboot recommendation ·/)).toBeVisible();
     await expect(correlationSection.getByText('corr-revenue-handoff')).toBeVisible();
     await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
   });

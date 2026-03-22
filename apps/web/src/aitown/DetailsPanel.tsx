@@ -90,6 +90,18 @@ function renderParticipants(participantAgentIds: string[]) {
   return participantAgentIds.length > 0 ? participantAgentIds.join(', ') : 'No participants';
 }
 
+function renderTimestamp(value: string | null, fallback: string) {
+  return value ?? fallback;
+}
+
+function renderOperationBlocker(blocker: string) {
+  return blocker || 'No current blocker';
+}
+
+function renderOperationStaleness(operation: OfficeOperation) {
+  return `${SEVERITY_LABELS[operation.derived_staleness.severity]} · ${operation.derived_staleness.stale_for_minutes ?? 0}m`;
+}
+
 function renderCorrelationInteraction(interaction: WorkflowInteraction) {
   return (
     <li key={interaction.interaction_id} className={`aitown-record severity-${interaction.severity ?? 'normal'}`}>
@@ -347,6 +359,7 @@ export function DetailsPanel({
       </div>
 
       {selectedOperation ? (
+        <>
         <section className="aitown-details__section">
           <h3>Current Operation</h3>
           {currentOperationWarning ? <p role="status">{currentOperationWarning}</p> : null}
@@ -371,6 +384,23 @@ export function DetailsPanel({
             </li>
           </ul>
         </section>
+        <section className="aitown-details__section">
+          <h3>Run Context</h3>
+          <ul className="aitown-records">
+            <li className={`aitown-record severity-${selectedOperation.effective_severity}`}>
+              <strong>{selectedOperation.display_name}</strong>
+              <span>{`Run blocker · ${renderOperationBlocker(selectedOperation.current_blocker)}`}</span>
+              <span>{`Latest event type · ${selectedOperation.latest_event?.event_type ?? 'No latest event type'}`}</span>
+              <span>{`Latest event at · ${renderTimestamp(selectedOperation.latest_event?.ts ?? null, 'No latest event timestamp')}`}</span>
+              <span>{`Last event at · ${renderTimestamp(selectedOperation.last_event_at, 'No last event timestamp')}`}</span>
+              <span>{`Last heartbeat · ${renderTimestamp(selectedOperation.last_heartbeat_at, 'No heartbeat yet')}`}</span>
+              <span>{`Last output · ${renderTimestamp(selectedOperation.last_meaningful_output_at, 'No last output timestamp')}`}</span>
+              <span>{`Staleness · ${renderOperationStaleness(selectedOperation)}`}</span>
+              <span>{`Reboot recommendation · ${selectedOperation.reboot_recommended ? 'Recommended' : 'No'}`}</span>
+            </li>
+          </ul>
+        </section>
+        </>
       ) : null}
 
       <section className="aitown-details__section">

@@ -15,10 +15,14 @@ import { adaptWorldToScene } from './aitown/sceneAdapter';
 import { WorldProvider, useWorld } from './context/WorldContext';
 import { usePolledResource } from './hooks/usePolledResource';
 import { getHubFocusableElements } from './hubFocus';
-import type { OfficeAgent } from './types';
+import type { OfficeAgent, OfficeOperation } from './types';
 import { projectWorldState } from './world/projector';
 
 const LazyWorldScene = lazy(() => import('./aitown/WorldScene'));
+
+type OperationSelection = {
+  agentId: string;
+};
 
 function isJsdomEnvironment() {
   return typeof navigator !== 'undefined' && /jsdom/i.test(navigator.userAgent);
@@ -57,10 +61,12 @@ function resolveCorrelationSelectionContext(selectedAgentId: string | null) {
 
 function selectDefaultCorrelationId({
   incidentFeed,
+  selectedOperation,
   workflow,
   selectedAgentId
 }: {
   incidentFeed: { items: Array<{ correlation_id: string | null }> } | null;
+  selectedOperation: OfficeOperation | null;
   workflow: {
     detail: { open_peer_watch_alerts: Array<{ correlation_id: string | null }> };
     correlation_ids: string[];
@@ -68,16 +74,21 @@ function selectDefaultCorrelationId({
   selectedAgentId: string | null;
 }) {
   if (selectedAgentId) {
-    if (!workflow) {
-      return null;
+    if (selectedOperation?.correlation_id) {
+      return selectedOperation.correlation_id;
     }
 
-    const workflowCorrelation = workflow.detail.open_peer_watch_alerts.find((alert) => alert.correlation_id)?.correlation_id;
+    const workflowCorrelation = workflow?.detail.open_peer_watch_alerts.find((alert) => alert.correlation_id)?.correlation_id;
     if (workflowCorrelation) {
       return workflowCorrelation;
     }
 
-    return workflow.correlation_ids.find(Boolean) ?? null;
+    const workflowFallbackCorrelation = workflow?.correlation_ids.find(Boolean) ?? null;
+    if (workflowFallbackCorrelation) {
+      return workflowFallbackCorrelation;
+    }
+
+    return null;
   }
 
   return incidentFeed?.items.find((incident) => incident.correlation_id)?.correlation_id ?? null;
@@ -87,6 +98,9 @@ function AppInner() {
   const { selectedAgentId, setSelectedAgentId, setWorld } = useWorld();
   const [hubOpen, setHubOpen] = useState(false);
   const [selectedCorrelationId, setSelectedCorrelationId] = useState<string | null>(null);
+  const [selectedOperationSelection, setSelectedOperationSelection] = useState<OperationSelection | null>(null);
+  const [selectedOperationSnapshot, setSelectedOperationSnapshot] = useState<OfficeOperation | null>(null);
+  const [invalidSelectedOperationCorrelationId, setInvalidSelectedOperationCorrelationId] = useState<string | null>(null);
   const lastSelectedAgentRef = useRef<OfficeAgent | null>(null);
   const correlationSelectionModeRef = useRef<'auto' | 'manual'>('auto');
   const lastCorrelationContextRef = useRef<string | null>(null);
@@ -111,16 +125,19 @@ function AppInner() {
     resourceKey: 'incident-feed'
   });
 
-  const operationsQueueEnabled = hubOpen && selectedAgentId === null;
+  const operationsQueueEnabled = hubOpen && (selectedAgentId === null || selectedOperationSelection !== null);
 
   const operationsResource = usePolledResource({
     enabled: operationsQueueEnabled,
     load: (signal) =>
       fetchOfficeOperations({
-        limit: 4,
+        limit: selectedOperationSelection ? undefined : 4,
+        agentId: selectedOperationSelection?.agentId,
         signal
       }),
-    resourceKey: 'office-operations'
+    resourceKey: selectedOperationSelection
+      ? `office-operations:${selectedOperationSelection.agentId}`
+      : 'office-operations'
   });
 
   const selectedAgentStillVisibleInOverview = useMemo(
@@ -194,9 +211,104 @@ function AppInner() {
     lastSelectedAgentRef.current
   );
 
+  const liveSelectedOperation = useMemo(() => {
+    if (!selectedOperationSelection) {
+      return null;
+    }
+
+    return operationsResource.data?.items.find((operation) => operation.agent_id === selectedOperationSelection.agentId) ?? null;
+  }, [operationsResource.data, selectedOperationSelection]);
+
+  const selectedOperation = useMemo(() => {
+    if (!selectedOperationSelection) {
+      return null;
+    }
+
+    return liveSelectedOperation ?? selectedOperationSnapshot;
+  }, [liveSelectedOperation, selectedOperationSelection, selectedOperationSnapshot]);
+
+  const selectedOperationForCorrelationSelection = useMemo(() => {
+    if (operationsResource.error) {
+      return null;
+    }
+
+    if (liveSelectedOperation) {
+      return liveSelectedOperation;
+    }
+
+    return operationsResource.state === 'loading' ? selectedOperationSnapshot : null;
+  }, [liveSelectedOperation, operationsResource.error, operationsResource.state, selectedOperationSnapshot]);
+
+  useEffect(() => {
+    const currentOperationCorrelationId = selectedOperationForCorrelationSelection?.correlation_id ?? null;
+
+    if (!currentOperationCorrelationId) {
+      if (invalidSelectedOperationCorrelationId !== null) {
+        setInvalidSelectedOperationCorrelationId(null);
+      }
+      return;
+    }
+
+    if (
+      invalidSelectedOperationCorrelationId !== null &&
+      invalidSelectedOperationCorrelationId !== currentOperationCorrelationId
+    ) {
+      setInvalidSelectedOperationCorrelationId(null);
+    }
+  }, [invalidSelectedOperationCorrelationId, selectedOperationForCorrelationSelection]);
+
+  useEffect(() => {
+    const currentOperationCorrelationId = selectedOperationForCorrelationSelection?.correlation_id ?? null;
+    if (!currentOperationCorrelationId) {
+      return;
+    }
+
+    const selectedOperationCorrelationFailed =
+      Boolean(correlationResource.error) &&
+      !activeCorrelation &&
+      selectedCorrelationId === currentOperationCorrelationId;
+
+    if (
+      selectedOperationCorrelationFailed &&
+      invalidSelectedOperationCorrelationId !== currentOperationCorrelationId
+    ) {
+      setInvalidSelectedOperationCorrelationId(currentOperationCorrelationId);
+    }
+  }, [
+    activeCorrelation,
+    correlationResource.error,
+    invalidSelectedOperationCorrelationId,
+    selectedCorrelationId,
+    selectedOperationForCorrelationSelection
+  ]);
+
+  const selectedOperationForAutoCorrelation = useMemo(() => {
+    if (!selectedOperationForCorrelationSelection?.correlation_id) {
+      return selectedOperationForCorrelationSelection;
+    }
+
+    return invalidSelectedOperationCorrelationId === selectedOperationForCorrelationSelection.correlation_id
+      ? null
+      : selectedOperationForCorrelationSelection;
+  }, [invalidSelectedOperationCorrelationId, selectedOperationForCorrelationSelection]);
+
+  useEffect(() => {
+    if (liveSelectedOperation) {
+      setSelectedOperationSnapshot(liveSelectedOperation);
+      return;
+    }
+
+    if (!selectedOperationSelection) {
+      setSelectedOperationSnapshot(null);
+    }
+  }, [liveSelectedOperation, selectedOperationSelection]);
+
   useEffect(() => {
     if (!selectedAgentId) {
       lastSelectedAgentRef.current = null;
+      if (selectedOperationSelection) {
+        setSelectedOperationSelection(null);
+      }
       return;
     }
 
@@ -231,6 +343,7 @@ function AppInner() {
 
     const nextCorrelationId = selectDefaultCorrelationId({
       incidentFeed: incidentFeedResource.data,
+      selectedOperation: selectedOperationForAutoCorrelation,
       workflow: activeWorkflow,
       selectedAgentId
     });
@@ -238,7 +351,15 @@ function AppInner() {
     if (nextCorrelationId !== selectedCorrelationId) {
       setSelectedCorrelationId(nextCorrelationId);
     }
-  }, [activeWorkflow, hubOpen, incidentFeedResource.data, selectedAgentId, selectedCorrelationId]);
+  }, [
+    activeWorkflow,
+    hubOpen,
+    incidentFeedResource.data,
+    selectedAgentId,
+    selectedCorrelationId,
+    selectedOperation,
+    selectedOperationForAutoCorrelation
+  ]);
 
   const closeHub = useCallback(() => {
     setHubOpen(false);
@@ -279,6 +400,30 @@ function AppInner() {
 
     wasHubOpenRef.current = hubOpen;
   }, [hubOpen]);
+
+  useEffect(() => {
+    if (!hubOpen || typeof document === 'undefined') {
+      return;
+    }
+
+    const dialog = hubDialogRef.current;
+    if (!dialog) {
+      return;
+    }
+
+    const activeElement = document.activeElement;
+    if (activeElement instanceof HTMLElement && activeElement.isConnected && dialog.contains(activeElement)) {
+      return;
+    }
+
+    const detailsPanel = dialog.querySelector<HTMLElement>('[role="complementary"][aria-label="Agent details"]');
+    if (!detailsPanel) {
+      return;
+    }
+
+    const [firstDetailsFocusable] = getHubFocusableElements(detailsPanel);
+    (firstDetailsFocusable ?? dialog).focus();
+  }, [hubOpen, selectedAgentId]);
 
   useEffect(() => {
     if (!hubOpen || typeof document === 'undefined') {
@@ -334,10 +479,16 @@ function AppInner() {
   }, [closeHub, hubOpen]);
 
   const selectAgent = useCallback(
-    (agentId: string | null, correlationId: string | null) => {
+    (
+      agentId: string | null,
+      correlationId: string | null,
+      operationSelection: OperationSelection | null = null,
+      correlationMode: 'auto' | 'manual' = correlationId === null ? 'auto' : 'manual'
+    ) => {
       lastCorrelationContextRef.current = resolveCorrelationSelectionContext(agentId);
-      correlationSelectionModeRef.current = correlationId === null ? 'auto' : 'manual';
+      correlationSelectionModeRef.current = correlationMode;
       setSelectedCorrelationId(correlationId);
+      setSelectedOperationSelection(operationSelection);
       setSelectedAgentId(agentId);
     },
     [setSelectedAgentId]
@@ -354,8 +505,11 @@ function AppInner() {
   );
 
   const handleSelectOperation = useCallback(
-    (agentId: string, correlationId: string | null) => {
-      selectAgent(agentId, correlationId);
+    (operation: OfficeOperation) => {
+      setSelectedOperationSnapshot(operation);
+      selectAgent(operation.agent_id, operation.correlation_id, {
+        agentId: operation.agent_id
+      }, 'auto');
       setHubOpen(true);
     },
     [selectAgent]
@@ -479,11 +633,12 @@ function AppInner() {
               operationsState={operationsResource.state}
               selectedAgent={selectedAgent}
               selectedCorrelationId={selectedCorrelationId}
+              selectedOperation={selectedOperation}
               workflow={activeWorkflow}
               workflowError={workflowResource.error}
               workflowState={workflowResource.state}
               world={projectedWorld}
-              onSelectAgent={(agentId) => selectAgent(agentId, null)}
+              onSelectAgent={(agentId) => selectAgent(agentId, null, null)}
               onSelectCorrelation={handleSelectCorrelation}
               onSelectOperation={handleSelectOperation}
             />

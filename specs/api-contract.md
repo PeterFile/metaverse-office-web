@@ -12,7 +12,7 @@
 - `GET /events?agent_id=&event_type=&severity=&correlation_id=&limit=`
 - `GET /interactions?interaction_type=&counterparty_agent_id=&severity=&correlation_id=&limit=&window=`
 - `GET /office/overview`
-- `GET /office/operations?limit=&state=`
+- `GET /office/operations?limit=&state=&agent_id=`
 - `GET /timeline?window=&agent_id=&event_type=&severity=&correlation_id=&limit=`
 - `GET /peer-watch/alerts?status=&target_agent_id=&agent_id=&watcher_agent_id=&observer_agent_id=&correlation_id=&severity=&limit=`
 - `GET /incidents?kind=&agent_id=&severity=&status=&correlation_id=&limit=&window=`
@@ -553,7 +553,8 @@
 ## Office operations semantics
 - `GET /office/operations` is a read-only live-operations queue derived from the existing append-only events, heartbeats, and current agent projections
 - by default, the queue includes only currently active agents where `current_state` is neither `idle` nor `sleeping`
-- supported query params are `limit` and `state`
+- supported query params are `limit`, `state`, and `agent_id`
+- `agent_id`, when present, narrows the queue to one agent before the existing state/limit handling; omitting `state` still preserves the default active-only filter
 - `state`, when present, filters by one canonical state value and replaces the default active-only filter instead of layering on top of it
 - `limit`, when present, caps the returned queue after sorting; summary counts describe the returned slice, not the pre-limit match set
 - queue items reuse the same `reported_severity`, `derived_staleness`, and `effective_severity` logic as `GET /office/overview`

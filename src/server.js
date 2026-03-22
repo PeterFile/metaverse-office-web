@@ -69,6 +69,7 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
   if (method === 'GET' && pathname === '/office/operations') {
     sendJson(res, 200, store.getOfficeOperations({
       now: now(),
+      agent_id: url.searchParams.get('agent_id'),
       state: url.searchParams.get('state'),
       limit: url.searchParams.get('limit')
     }));

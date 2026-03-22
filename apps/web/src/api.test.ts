@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { RequestError, fetchOfficeOverview, resolveApiUrl } from './api';
+import { RequestError, fetchOfficeOperations, fetchOfficeOverview, resolveApiUrl } from './api';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -63,6 +63,45 @@ describe('fetchOfficeOverview', () => {
       code: 'non_json_response',
       message: 'request_failed: non_json_response'
     });
+  });
+});
+
+describe('fetchOfficeOperations', () => {
+  it('passes limit, state, and agent_id filters through to the backend query string', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            generated_at: '2026-03-09T19:00:00.000Z',
+            summary: {
+              item_count: 1,
+              blocked_count: 1,
+              reboot_recommended_count: 0,
+              state_buckets: { blocked: 1 },
+              severity_buckets: { normal: 0, yellow: 0, orange: 0, red: 1 }
+            },
+            items: []
+          }),
+          {
+            headers: {
+              'content-type': 'application/json'
+            }
+          }
+        )
+      )
+    );
+
+    await fetchOfficeOperations({
+      limit: 1,
+      state: 'blocked',
+      agentId: 'app-engineering'
+    });
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/office/operations?limit=1&state=blocked&agent_id=app-engineering',
+      expect.objectContaining({ signal: undefined })
+    );
   });
 });
 

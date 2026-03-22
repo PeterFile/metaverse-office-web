@@ -82,7 +82,7 @@ export async function fetchOfficeOverview(signal?: AbortSignal): Promise<OfficeO
 }
 
 export async function fetchOfficeOperations(
-  options: { limit?: number; state?: string; signal?: AbortSignal } = {}
+  options: { limit?: number; state?: string; agentId?: string; signal?: AbortSignal } = {}
 ): Promise<OfficeOperations> {
   const params = new URLSearchParams();
   if (options.limit !== undefined) {
@@ -90,6 +90,9 @@ export async function fetchOfficeOperations(
   }
   if (options.state) {
     params.set('state', options.state);
+  }
+  if (options.agentId) {
+    params.set('agent_id', options.agentId);
   }
 
   const suffix = params.size > 0 ? `?${params.toString()}` : '';

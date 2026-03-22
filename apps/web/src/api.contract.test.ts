@@ -173,6 +173,57 @@ describe('read-only frontend/backend contract smoke', () => {
     expectCorrelationContract(correlation);
   });
 
+  it('passes office-operations agent_id filters through to the real backend without widening the request surface', async () => {
+    harness = await createHarness(() => '2026-03-09T19:00:00.000Z');
+    await seedContractSlice(harness.store);
+
+    const nativeFetch = globalThis.fetch.bind(globalThis);
+    const requests: RequestContract[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+        requests.push(getRequestContract(input, harness!.baseUrl, init));
+        return nativeFetch(input, init);
+      })
+    );
+
+    const api = await loadApi(harness.baseUrl);
+    const operations = await api.fetchOfficeOperations({ agentId: 'app-engineering' });
+
+    expect(requests).toEqual([
+      {
+        method: 'GET',
+        origin: harness.baseUrl,
+        pathname: '/office/operations',
+        query: [['agent_id', 'app-engineering']]
+      }
+    ]);
+    expect(operations.generated_at).toBe('2026-03-09T19:00:00.000Z');
+    expect(operations.summary).toEqual({
+      item_count: 1,
+      blocked_count: 1,
+      reboot_recommended_count: 0,
+      state_buckets: {
+        blocked: 1
+      },
+      severity_buckets: {
+        normal: 0,
+        yellow: 0,
+        orange: 1,
+        red: 0
+      }
+    });
+    expect(operations.items.map((item) => item.agent_id)).toEqual(['app-engineering']);
+    expect(operations.items[0]).toMatchObject({
+      agent_id: 'app-engineering',
+      current_state: 'blocked',
+      correlation_id: 'corr-contract',
+      latest_event: {
+        source_kind: 'controller_event'
+      }
+    });
+  });
+
   it('surfaces unknown-agent workflow 404s through the frontend request parser against the real backend', async () => {
     harness = await createHarness(() => '2026-03-09T19:00:00.000Z');
 

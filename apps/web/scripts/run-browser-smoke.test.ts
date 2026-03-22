@@ -6,9 +6,11 @@ import { describe, expect, it } from 'vitest';
 
 import {
   BROWSER_SMOKE_FRONTEND_READY_PATH,
+  BROWSER_SMOKE_PROXY_READY_PATH,
   extractOrigin,
   launchManagedServer,
   parseBrowserSmokeArgs,
+  resolveBrowserSmokeFrontendReadyPath,
   resolveBrowserSmokePlaywrightEnv,
   resolveBrowserSmokeRunMode,
   resolveFrontendServerArgs,
@@ -207,8 +209,11 @@ describe('run-browser-smoke helpers', () => {
     });
   });
 
-  it('waits for preview-mode readiness on the first proxied office endpoint instead of raw index html', () => {
-    expect(BROWSER_SMOKE_FRONTEND_READY_PATH).toBe('/office/overview');
+  it('uses different frontend readiness paths for hermetic versus external-backend smoke runs', () => {
+    expect(BROWSER_SMOKE_FRONTEND_READY_PATH).toBe('/');
+    expect(BROWSER_SMOKE_PROXY_READY_PATH).toBe('/office/overview');
+    expect(resolveBrowserSmokeFrontendReadyPath('http://127.0.0.1:3210')).toBe('/');
+    expect(resolveBrowserSmokeFrontendReadyPath()).toBe('/office/overview');
   });
 
   it('extracts localhost origins from backend and Vite readiness output', () => {
@@ -229,6 +234,13 @@ describe('run-browser-smoke helpers', () => {
         'Local:'
       )
     ).toBe('http://127.0.0.1:45679');
+
+    expect(
+      extractOrigin(
+        '  \u001b[32m➜\u001b[39m  \u001b[1mLocal\u001b[22m:   \u001b[36mhttp://127.0.0.1:\u001b[1m45680\u001b[22m/\u001b[39m',
+        'Local:'
+      )
+    ).toBe('http://127.0.0.1:45680');
   });
 
   it('waits for child exit success and rejects non-zero exits', async () => {
@@ -287,6 +299,50 @@ describe('run-browser-smoke helpers', () => {
     try {
       await expect(waitForHttpReady(`http://127.0.0.1:${address.port}/`, 300)).rejects.toThrow(/Unexpected status 404/);
     } finally {
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => {
+          if (error) {
+            reject(error);
+            return;
+          }
+          resolve();
+        });
+      });
+    }
+  });
+
+  it('retries readiness probes when the first HTTP request connects but never returns a response', async () => {
+    let requestCount = 0;
+    const sockets = new Set();
+    const server = http.createServer((req, res) => {
+      requestCount += 1;
+      sockets.add(req.socket);
+      req.socket.on('close', () => sockets.delete(req.socket));
+
+      if (requestCount === 1) {
+        return;
+      }
+
+      res.statusCode = 200;
+      res.end('ready');
+    });
+
+    await new Promise<void>((resolve) => {
+      server.listen(0, '127.0.0.1', () => resolve());
+    });
+
+    const address = server.address();
+    if (!address || typeof address === 'string') {
+      throw new Error('failed to bind test server');
+    }
+
+    try {
+      await expect(waitForHttpReady(`http://127.0.0.1:${address.port}/`, 1_000, 100)).resolves.toBeUndefined();
+      expect(requestCount).toBeGreaterThanOrEqual(2);
+    } finally {
+      for (const socket of sockets) {
+        socket.destroy();
+      }
       await new Promise<void>((resolve, reject) => {
         server.close((error) => {
           if (error) {

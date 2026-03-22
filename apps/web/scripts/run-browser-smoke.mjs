@@ -24,7 +24,8 @@ const defaultPlaywrightArgs = [
   '--config',
   'playwright.config.ts'
 ];
-export const BROWSER_SMOKE_FRONTEND_READY_PATH = '/office/overview';
+export const BROWSER_SMOKE_FRONTEND_READY_PATH = '/';
+export const BROWSER_SMOKE_PROXY_READY_PATH = '/office/overview';
 
 export function resolvePlaywrightArgs(extraArgs = process.argv.slice(2)) {
   const forwardedArgs = extraArgs[0] === '--' ? extraArgs.slice(1) : extraArgs;
@@ -176,7 +177,7 @@ async function runManagedFrontendSmoke(
     command: resolvePnpmCommand(),
     args: resolveFrontendServerArgs({ frontendMode, devServerPort: options.devServerPort }),
     env: frontendEnv,
-    waitForUrlPath: BROWSER_SMOKE_FRONTEND_READY_PATH,
+    waitForUrlPath: resolveBrowserSmokeFrontendReadyPath(options.inspectableBackendOrigin ?? null),
     readyPrefix: 'Local:'
   });
 
@@ -196,6 +197,10 @@ export function resolveBrowserSmokePlaywrightEnv(frontendOrigin, inspectableBack
     [BROWSER_SMOKE_BASE_URL_ENV]: frontendOrigin,
     [BROWSER_SMOKE_BACKEND_ORIGIN_ENV]: inspectableBackendOrigin ?? ''
   };
+}
+
+export function resolveBrowserSmokeFrontendReadyPath(inspectableBackendOrigin = null) {
+  return inspectableBackendOrigin ? BROWSER_SMOKE_FRONTEND_READY_PATH : BROWSER_SMOKE_PROXY_READY_PATH;
 }
 
 async function runPlaywright({ env, summary, args = resolvePlaywrightArgs() }) {
@@ -376,7 +381,8 @@ export function waitForServerOrigin({
 
 export function extractOrigin(output, readyPrefix) {
   const lines = output.split(/\r?\n/).reverse();
-  for (const line of lines) {
+  for (const rawLine of lines) {
+    const line = stripAnsi(rawLine);
     const prefixIndex = line.indexOf(readyPrefix);
     if (prefixIndex === -1) {
       continue;
@@ -391,13 +397,17 @@ export function extractOrigin(output, readyPrefix) {
   return null;
 }
 
-export async function waitForHttpReady(url, timeoutMs = 120_000) {
+function stripAnsi(value) {
+  return value.replace(/\u001B\[[0-9;]*m/g, '');
+}
+
+export async function waitForHttpReady(url, timeoutMs = 120_000, requestTimeoutMs = 2_000) {
   const deadline = Date.now() + timeoutMs;
   let lastError;
 
   while (Date.now() < deadline) {
     try {
-      const status = await requestStatus(url);
+      const status = await requestStatus(url, requestTimeoutMs);
       if (status >= 200 && status < 400) {
         return;
       }
@@ -412,11 +422,15 @@ export async function waitForHttpReady(url, timeoutMs = 120_000) {
   throw lastError ?? new Error(`Timed out waiting for ${url}`);
 }
 
-function requestStatus(url) {
+function requestStatus(url, timeoutMs = 2_000) {
   return new Promise((resolve, reject) => {
     const req = http.get(url, (res) => {
       res.resume();
       resolve(res.statusCode ?? 0);
+    });
+
+    req.setTimeout(timeoutMs, () => {
+      req.destroy(new Error(`Timed out waiting for ${url}`));
     });
     req.on('error', reject);
   });

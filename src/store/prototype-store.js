@@ -626,6 +626,7 @@ class PrototypeStore {
 
     const items = applyOptionalLimit(
       this.listAgents()
+        .filter((agent) => matchesOfficeOperationAgentId(agent, filters.agent_id))
         .filter((agent) => matchesOfficeOperationState(agent, filters.state))
         .map((agent) => createOfficeOperationItem({
           agent,
@@ -698,6 +699,14 @@ function matchesOfficeOperationState(agent, state) {
   }
 
   return agent.current_state !== 'idle' && agent.current_state !== 'sleeping';
+}
+
+function matchesOfficeOperationAgentId(agent, agentId) {
+  if (typeof agentId === 'string' && agentId.length > 0) {
+    return agent.agent_id === agentId;
+  }
+
+  return true;
 }
 
 function buildLatestEventsByAgentId(events) {

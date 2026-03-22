@@ -150,7 +150,7 @@ test('GET /office/overview exposes seeded layout, empty zones, and watch edges',
   );
 });
 
-test('GET /office/operations exposes the active queue with state and limit filters', async (t) => {
+test('GET /office/operations exposes the active queue with agent_id, state, and limit filters', async (t) => {
   const { baseUrl, store } = await createHarness(t);
 
   await store.appendHeartbeat({
@@ -313,6 +313,42 @@ test('GET /office/operations exposes the active queue with state and limit filte
       yellow: 0,
       orange: 1,
       red: 1
+    }
+  });
+
+  const selectedAgent = await requestJson(`${baseUrl}/office/operations?agent_id=growth-revenue`);
+  assert.equal(selectedAgent.response.status, 200);
+  assert.deepEqual(selectedAgent.body.items.map((item) => item.agent_id), ['growth-revenue']);
+  assert.deepEqual(selectedAgent.body.summary, {
+    item_count: 1,
+    blocked_count: 0,
+    reboot_recommended_count: 1,
+    state_buckets: {
+      coding: 1
+    },
+    severity_buckets: {
+      normal: 0,
+      yellow: 0,
+      orange: 1,
+      red: 0
+    }
+  });
+
+  const sleepingWithExplicitState = await requestJson(`${baseUrl}/office/operations?agent_id=product-pmf&state=sleeping`);
+  assert.equal(sleepingWithExplicitState.response.status, 200);
+  assert.deepEqual(sleepingWithExplicitState.body.items.map((item) => item.agent_id), ['product-pmf']);
+  assert.deepEqual(sleepingWithExplicitState.body.summary, {
+    item_count: 1,
+    blocked_count: 0,
+    reboot_recommended_count: 0,
+    state_buckets: {
+      sleeping: 1
+    },
+    severity_buckets: {
+      normal: 1,
+      yellow: 0,
+      orange: 0,
+      red: 0
     }
   });
 });

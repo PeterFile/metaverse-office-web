@@ -78,16 +78,17 @@ function selectDefaultCorrelationId({
       return selectedOperation.correlation_id;
     }
 
-    if (!workflow) {
-      return null;
-    }
-
-    const workflowCorrelation = workflow.detail.open_peer_watch_alerts.find((alert) => alert.correlation_id)?.correlation_id;
+    const workflowCorrelation = workflow?.detail.open_peer_watch_alerts.find((alert) => alert.correlation_id)?.correlation_id;
     if (workflowCorrelation) {
       return workflowCorrelation;
     }
 
-    return workflow.correlation_ids.find(Boolean) ?? null;
+    const workflowFallbackCorrelation = workflow?.correlation_ids.find(Boolean) ?? null;
+    if (workflowFallbackCorrelation) {
+      return workflowFallbackCorrelation;
+    }
+
+    return null;
   }
 
   return incidentFeed?.items.find((incident) => incident.correlation_id)?.correlation_id ?? null;
@@ -99,6 +100,7 @@ function AppInner() {
   const [selectedCorrelationId, setSelectedCorrelationId] = useState<string | null>(null);
   const [selectedOperationSelection, setSelectedOperationSelection] = useState<OperationSelection | null>(null);
   const [selectedOperationSnapshot, setSelectedOperationSnapshot] = useState<OfficeOperation | null>(null);
+  const [invalidSelectedOperationCorrelationId, setInvalidSelectedOperationCorrelationId] = useState<string | null>(null);
   const lastSelectedAgentRef = useRef<OfficeAgent | null>(null);
   const correlationSelectionModeRef = useRef<'auto' | 'manual'>('auto');
   const lastCorrelationContextRef = useRef<string | null>(null);
@@ -130,10 +132,11 @@ function AppInner() {
     load: (signal) =>
       fetchOfficeOperations({
         limit: selectedOperationSelection ? undefined : 4,
+        agentId: selectedOperationSelection?.agentId,
         signal
       }),
     resourceKey: selectedOperationSelection
-      ? `office-operations:selected:${selectedOperationSelection.agentId}`
+      ? `office-operations:${selectedOperationSelection.agentId}`
       : 'office-operations'
   });
 
@@ -221,16 +224,73 @@ function AppInner() {
       return null;
     }
 
+    return liveSelectedOperation ?? selectedOperationSnapshot;
+  }, [liveSelectedOperation, selectedOperationSelection, selectedOperationSnapshot]);
+
+  const selectedOperationForCorrelationSelection = useMemo(() => {
+    if (operationsResource.error) {
+      return null;
+    }
+
     if (liveSelectedOperation) {
       return liveSelectedOperation;
     }
 
-    if (operationsResource.state === 'ready' && operationsResource.data) {
-      return null;
+    return operationsResource.state === 'loading' ? selectedOperationSnapshot : null;
+  }, [liveSelectedOperation, operationsResource.error, operationsResource.state, selectedOperationSnapshot]);
+
+  useEffect(() => {
+    const currentOperationCorrelationId = selectedOperationForCorrelationSelection?.correlation_id ?? null;
+
+    if (!currentOperationCorrelationId) {
+      if (invalidSelectedOperationCorrelationId !== null) {
+        setInvalidSelectedOperationCorrelationId(null);
+      }
+      return;
     }
 
-    return selectedOperationSnapshot;
-  }, [liveSelectedOperation, operationsResource.data, operationsResource.state, selectedOperationSelection, selectedOperationSnapshot]);
+    if (
+      invalidSelectedOperationCorrelationId !== null &&
+      invalidSelectedOperationCorrelationId !== currentOperationCorrelationId
+    ) {
+      setInvalidSelectedOperationCorrelationId(null);
+    }
+  }, [invalidSelectedOperationCorrelationId, selectedOperationForCorrelationSelection]);
+
+  useEffect(() => {
+    const currentOperationCorrelationId = selectedOperationForCorrelationSelection?.correlation_id ?? null;
+    if (!currentOperationCorrelationId) {
+      return;
+    }
+
+    const selectedOperationCorrelationFailed =
+      Boolean(correlationResource.error) &&
+      !activeCorrelation &&
+      selectedCorrelationId === currentOperationCorrelationId;
+
+    if (
+      selectedOperationCorrelationFailed &&
+      invalidSelectedOperationCorrelationId !== currentOperationCorrelationId
+    ) {
+      setInvalidSelectedOperationCorrelationId(currentOperationCorrelationId);
+    }
+  }, [
+    activeCorrelation,
+    correlationResource.error,
+    invalidSelectedOperationCorrelationId,
+    selectedCorrelationId,
+    selectedOperationForCorrelationSelection
+  ]);
+
+  const selectedOperationForAutoCorrelation = useMemo(() => {
+    if (!selectedOperationForCorrelationSelection?.correlation_id) {
+      return selectedOperationForCorrelationSelection;
+    }
+
+    return invalidSelectedOperationCorrelationId === selectedOperationForCorrelationSelection.correlation_id
+      ? null
+      : selectedOperationForCorrelationSelection;
+  }, [invalidSelectedOperationCorrelationId, selectedOperationForCorrelationSelection]);
 
   useEffect(() => {
     if (liveSelectedOperation) {
@@ -283,7 +343,7 @@ function AppInner() {
 
     const nextCorrelationId = selectDefaultCorrelationId({
       incidentFeed: incidentFeedResource.data,
-      selectedOperation,
+      selectedOperation: selectedOperationForAutoCorrelation,
       workflow: activeWorkflow,
       selectedAgentId
     });
@@ -291,7 +351,15 @@ function AppInner() {
     if (nextCorrelationId !== selectedCorrelationId) {
       setSelectedCorrelationId(nextCorrelationId);
     }
-  }, [activeWorkflow, hubOpen, incidentFeedResource.data, selectedAgentId, selectedCorrelationId, selectedOperation]);
+  }, [
+    activeWorkflow,
+    hubOpen,
+    incidentFeedResource.data,
+    selectedAgentId,
+    selectedCorrelationId,
+    selectedOperation,
+    selectedOperationForAutoCorrelation
+  ]);
 
   const closeHub = useCallback(() => {
     setHubOpen(false);

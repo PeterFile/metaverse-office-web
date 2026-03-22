@@ -6,7 +6,7 @@ import App, { resolveOverviewRefreshWarning, resolveSelectedAgent } from './App'
 import type { OfficeAgent } from './types';
 
 const operationsUrl = '/office/operations?limit=4';
-const fullOperationsUrl = '/office/operations';
+const selectedOperationUrl = '/office/operations?agent_id=app-engineering';
 const incidentsUrl = '/incidents?limit=10&window=60m';
 const workflowUrl = '/agents/app-engineering/workflow?limit=10&window=60m';
 const teamLeadWorkflowUrl = '/agents/team-lead/workflow?limit=10&window=60m';
@@ -430,7 +430,7 @@ describe('App', () => {
           });
         }
 
-        if (url === operationsUrl || url === fullOperationsUrl) {
+        if (url === operationsUrl || url === selectedOperationUrl) {
           return new Response(JSON.stringify(operationsFixture), {
             headers: { 'content-type': 'application/json' }
           });
@@ -654,53 +654,22 @@ afterEach(() => {
       generated_at: '2026-03-16T09:00:20.000Z',
       summary: {
         ...operationsFixture.summary,
-        item_count: 6,
-        blocked_count: 4,
-        reboot_recommended_count: 4,
+        item_count: 4,
+        blocked_count: 2,
+        reboot_recommended_count: 1,
         state_buckets: {
-          blocked: 4,
-          reviewing: 2
+          reviewing: 2,
+          blocked: 1,
+          coordinating: 1
         },
         severity_buckets: {
           normal: 1,
-          yellow: 2,
-          orange: 3,
+          yellow: 1,
+          orange: 2,
           red: 0
         }
       },
       items: [
-        {
-          ...operationsFixture.items[0],
-          agent_id: 'market-intel',
-          display_name: 'Market Intel Agent',
-          active_task: 'Escalate policy spike',
-          current_blocker: 'Awaiting policy note',
-          current_location: 'policy-room'
-        },
-        {
-          ...operationsFixture.items[0],
-          agent_id: 'product-pmf',
-          display_name: 'Product PMF Agent',
-          active_task: 'Resolve churn alert',
-          current_blocker: 'Need retention evidence',
-          current_location: 'pmf-room'
-        },
-        {
-          ...operationsFixture.items[0],
-          agent_id: 'tokenomics',
-          display_name: 'Tokenomics Agent',
-          active_task: 'Audit unlock schedule',
-          current_blocker: 'Waiting on vesting sheet',
-          current_location: 'treasury-desk'
-        },
-        {
-          ...operationsFixture.items[0],
-          agent_id: 'growth-revenue',
-          display_name: 'Growth Revenue Agent',
-          active_task: 'Stabilize launch handoff',
-          current_blocker: 'Need live launch metrics',
-          current_location: 'launch-bridge'
-        },
         {
           ...operationsFixture.items[0],
           current_state: 'reviewing',
@@ -718,7 +687,28 @@ afterEach(() => {
               }
             : null
         },
-        operationsFixture.items[1]
+        {
+          ...operationsFixture.items[0],
+          agent_id: 'growth-revenue',
+          display_name: 'Growth Revenue Agent',
+          active_task: 'Stabilize launch handoff',
+          current_blocker: 'Need live launch metrics',
+          current_location: 'launch-bridge',
+          correlation_id: 'corr-growth-launch'
+        },
+        operationsFixture.items[1],
+        {
+          ...operationsFixture.items[1],
+          agent_id: 'market-intel',
+          display_name: 'Market Intel Agent',
+          current_state: 'blocked',
+          active_task: 'Escalate policy spike',
+          current_blocker: 'Awaiting policy note',
+          current_location: 'policy-room',
+          effective_severity: 'yellow',
+          reported_severity: 'yellow',
+          correlation_id: 'corr-policy-spike'
+        }
       ]
     };
 
@@ -740,7 +730,7 @@ afterEach(() => {
           });
         }
 
-        if (url === fullOperationsUrl) {
+        if (url === selectedOperationUrl) {
           operationsRequests += 1;
           return new Response(JSON.stringify(refreshedOperationsFixture), {
             headers: { 'content-type': 'application/json' }
@@ -780,7 +770,7 @@ afterEach(() => {
 
     await waitFor(() => {
       expect(operationsRequests).toBeGreaterThan(1);
-      expect(globalThis.fetch).toHaveBeenCalledWith(fullOperationsUrl, expect.anything());
+      expect(globalThis.fetch).toHaveBeenCalledWith(selectedOperationUrl, expect.anything());
     });
 
     await waitFor(() => {
@@ -816,7 +806,7 @@ afterEach(() => {
           });
         }
 
-        if (url === fullOperationsUrl) {
+        if (url === selectedOperationUrl) {
           operationsRequests += 1;
           return new Response(JSON.stringify({ error: 'internal_error', details: 'operations refresh failed' }), {
             status: 500,
@@ -855,11 +845,316 @@ afterEach(() => {
     const operationSection = await within(details).findByRole('heading', { name: 'Current Operation' });
     expect(operationSection).toBeVisible();
 
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    expect(correlationSection).not.toBeNull();
+
     await waitFor(() => {
       expect(operationsRequests).toBeGreaterThan(1);
-      expect(globalThis.fetch).toHaveBeenCalledWith(fullOperationsUrl, expect.anything());
+      expect(globalThis.fetch).toHaveBeenCalledWith(selectedOperationUrl, expect.anything());
       expect(within(details).getByText('Showing last operation snapshot. operations refresh failed')).toBeVisible();
       expect(within(details).getByText('blocked · Workflow evidence is still incomplete')).toBeVisible();
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+      expect(within(correlationSection!).queryByText('operations refresh failed')).not.toBeInTheDocument();
+    });
+  });
+
+  it('falls back to no correlation when stale operation refresh fails and workflow has none', async () => {
+    (window as typeof window & { __AITOWN_POLL_INTERVAL_MS__?: number }).__AITOWN_POLL_INTERVAL_MS__ = 10;
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === '/office/overview') {
+          return new Response(JSON.stringify(overviewFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === operationsUrl) {
+          return new Response(JSON.stringify(operationsFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === selectedOperationUrl) {
+          return new Response(JSON.stringify({ error: 'internal_error', details: 'operations refresh failed' }), {
+            status: 500,
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === incidentsUrl) {
+          return new Response(JSON.stringify(incidentFeedFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === workflowUrl) {
+          return new Response(JSON.stringify(teamLeadWorkflowFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === correlationUrl) {
+          return new Response(JSON.stringify(correlationFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        throw new Error(`Unexpected request: ${url}`);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent from active queue' }));
+
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    expect(correlationSection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(details).getByText('Showing last operation snapshot. operations refresh failed')).toBeVisible();
+      expect(within(correlationSection!).getByText('No correlation selected.')).toBeVisible();
+      expect(within(correlationSection!).queryByText('corr-app-review')).not.toBeInTheDocument();
+    });
+  });
+
+  it('keeps the last operation snapshot visible when the agent leaves the active queue', async () => {
+    (window as typeof window & { __AITOWN_POLL_INTERVAL_MS__?: number }).__AITOWN_POLL_INTERVAL_MS__ = 10;
+
+    let operationsRequests = 0;
+    let dropSelectedOperation = false;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === '/office/overview') {
+          return new Response(JSON.stringify(overviewFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === operationsUrl) {
+          operationsRequests += 1;
+          return new Response(JSON.stringify(operationsFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === selectedOperationUrl) {
+          operationsRequests += 1;
+          return new Response(JSON.stringify(dropSelectedOperation ? emptyOperationsFixture : operationsFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === incidentsUrl) {
+          return new Response(JSON.stringify(incidentFeedFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === workflowUrl) {
+          return new Response(JSON.stringify(workflowFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === correlationUrl) {
+          return new Response(JSON.stringify(correlationFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        throw new Error(`Unexpected request: ${url}`);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent from active queue' }));
+
+    expect(await within(details).findByRole('heading', { name: 'Current Operation' })).toBeVisible();
+    dropSelectedOperation = true;
+
+    await waitFor(() => {
+      expect(operationsRequests).toBeGreaterThan(1);
+      expect(within(details).getByText('Showing last operation snapshot. Operation is no longer in the active queue.')).toBeVisible();
+      expect(within(details).getByText('blocked · Workflow evidence is still incomplete')).toBeVisible();
+    });
+  });
+
+  it('falls back to the live workflow correlation when the queue snapshot becomes stale', async () => {
+    (window as typeof window & { __AITOWN_POLL_INTERVAL_MS__?: number }).__AITOWN_POLL_INTERVAL_MS__ = 10;
+
+    let dropSelectedOperation = false;
+    const refreshedWorkflowFixture = {
+      ...workflowFixture,
+      correlation_ids: ['corr-app-secondary'],
+      detail: {
+        ...workflowFixture.detail,
+        open_peer_watch_alerts: [
+          {
+            ...workflowFixture.detail.open_peer_watch_alerts[0],
+            correlation_id: 'corr-app-secondary',
+            summary: 'Secondary workflow correlation is now active'
+          }
+        ]
+      }
+    };
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === '/office/overview') {
+          return new Response(JSON.stringify(overviewFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === operationsUrl || url === selectedOperationUrl) {
+          return new Response(JSON.stringify(dropSelectedOperation ? emptyOperationsFixture : operationsFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === incidentsUrl) {
+          return new Response(JSON.stringify(incidentFeedFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === workflowUrl) {
+          return new Response(JSON.stringify(refreshedWorkflowFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === correlationUrl) {
+          return new Response(JSON.stringify({ error: 'not_found', details: 'old correlation removed' }), {
+            status: 404,
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === secondaryCorrelationUrl) {
+          return new Response(JSON.stringify(secondaryCorrelationFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        throw new Error(`Unexpected request: ${url}`);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent from active queue' }));
+    expect(await within(details).findByRole('heading', { name: 'Current Operation' })).toBeVisible();
+
+    dropSelectedOperation = true;
+
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    expect(correlationSection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(details).getByText('Showing last operation snapshot. Operation is no longer in the active queue.')).toBeVisible();
+      expect(within(details).queryByRole('button', { name: /Open operation correlation corr-app-review/ })).not.toBeInTheDocument();
+      expect(within(correlationSection!).getByText('corr-app-secondary')).toBeVisible();
+      expect(within(correlationSection!).queryByText('old correlation removed')).not.toBeInTheDocument();
+      expect(within(correlationSection!).queryByText('corr-app-review')).not.toBeInTheDocument();
+    });
+  });
+
+  it('falls back to the live workflow correlation when the selected operation keeps a stale correlation id', async () => {
+    (window as typeof window & { __AITOWN_POLL_INTERVAL_MS__?: number }).__AITOWN_POLL_INTERVAL_MS__ = 10;
+
+    const refreshedWorkflowFixture = {
+      ...workflowFixture,
+      correlation_ids: ['corr-app-secondary'],
+      detail: {
+        ...workflowFixture.detail,
+        open_peer_watch_alerts: [
+          {
+            ...workflowFixture.detail.open_peer_watch_alerts[0],
+            correlation_id: 'corr-app-secondary',
+            summary: 'Secondary workflow correlation is now active'
+          }
+        ]
+      }
+    };
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === '/office/overview') {
+          return new Response(JSON.stringify(overviewFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === operationsUrl || url === selectedOperationUrl) {
+          return new Response(JSON.stringify(operationsFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === incidentsUrl) {
+          return new Response(JSON.stringify(incidentFeedFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === workflowUrl) {
+          return new Response(JSON.stringify(refreshedWorkflowFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === correlationUrl) {
+          return new Response(JSON.stringify({ error: 'not_found', details: 'old correlation removed' }), {
+            status: 404,
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === secondaryCorrelationUrl) {
+          return new Response(JSON.stringify(secondaryCorrelationFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        throw new Error(`Unexpected request: ${url}`);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent from active queue' }));
+    expect(await within(details).findByRole('heading', { name: 'Current Operation' })).toBeVisible();
+
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    expect(correlationSection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(correlationSection!).getByText('corr-app-secondary')).toBeVisible();
+      expect(within(correlationSection!).queryByText('old correlation removed')).not.toBeInTheDocument();
+      expect(within(correlationSection!).queryByText('corr-app-review')).not.toBeInTheDocument();
     });
   });
 
@@ -929,7 +1224,7 @@ afterEach(() => {
           );
         }
 
-        if (url === operationsUrl || url === fullOperationsUrl) {
+        if (url === operationsUrl || url === selectedOperationUrl) {
           return new Promise<Response>((resolve) => {
             resolveOperations = resolve;
           });
@@ -983,7 +1278,7 @@ afterEach(() => {
           });
         }
 
-        if (url === operationsUrl || url === fullOperationsUrl) {
+        if (url === operationsUrl || url === selectedOperationUrl) {
           return new Response(JSON.stringify({ error: 'internal_error', details: 'operations refresh failed' }), {
             status: 500,
             headers: { 'content-type': 'application/json' }
@@ -1076,7 +1371,7 @@ afterEach(() => {
           );
         }
 
-        if (url === operationsUrl || url === fullOperationsUrl) {
+        if (url === operationsUrl || url === selectedOperationUrl) {
           return Promise.resolve(
             new Response(JSON.stringify(operationsFixture), {
               headers: { 'content-type': 'application/json' }
@@ -1176,7 +1471,7 @@ afterEach(() => {
           );
         }
 
-        if (url === operationsUrl || url === fullOperationsUrl) {
+        if (url === operationsUrl || url === selectedOperationUrl) {
           return Promise.resolve(
             new Response(JSON.stringify(operationsFixture), {
               headers: { 'content-type': 'application/json' }
@@ -1246,7 +1541,7 @@ afterEach(() => {
           });
         }
 
-        if (url === operationsUrl || url === fullOperationsUrl) {
+        if (url === operationsUrl || url === selectedOperationUrl) {
           return new Response(JSON.stringify(operationsFixture), {
             headers: { 'content-type': 'application/json' }
           });
@@ -1313,7 +1608,7 @@ afterEach(() => {
           });
         }
 
-        if (url === operationsUrl || url === fullOperationsUrl) {
+        if (url === operationsUrl || url === selectedOperationUrl) {
           return new Response(JSON.stringify(emptyOperationsFixture), {
             headers: { 'content-type': 'application/json' }
           });
@@ -1357,7 +1652,7 @@ afterEach(() => {
           });
         }
 
-        if (url === operationsUrl || url === fullOperationsUrl) {
+        if (url === operationsUrl || url === selectedOperationUrl) {
           operationsRequests += 1;
           if (operationsRequests === 1) {
             return new Response(JSON.stringify(operationsFixture), {
@@ -1426,7 +1721,7 @@ afterEach(() => {
           });
         }
 
-        if (url === operationsUrl || url === fullOperationsUrl) {
+        if (url === operationsUrl || url === selectedOperationUrl) {
           return new Response(JSON.stringify(operationsFixture), {
             headers: { 'content-type': 'application/json' }
           });
@@ -1478,7 +1773,7 @@ afterEach(() => {
           });
         }
 
-        if (url === operationsUrl || url === fullOperationsUrl) {
+        if (url === operationsUrl || url === selectedOperationUrl) {
           return new Response(JSON.stringify(operationsFixture), {
             headers: { 'content-type': 'application/json' }
           });
@@ -1668,7 +1963,7 @@ afterEach(() => {
           });
         }
 
-        if (url === operationsUrl || url === fullOperationsUrl) {
+        if (url === operationsUrl || url === selectedOperationUrl) {
           return new Response(JSON.stringify(operationsFixture), {
             headers: { 'content-type': 'application/json' }
           });
@@ -1761,7 +2056,7 @@ afterEach(() => {
           });
         }
 
-        if (url === operationsUrl || url === fullOperationsUrl) {
+        if (url === operationsUrl || url === selectedOperationUrl) {
           return new Response(JSON.stringify(operationsFixture), {
             headers: { 'content-type': 'application/json' }
           });

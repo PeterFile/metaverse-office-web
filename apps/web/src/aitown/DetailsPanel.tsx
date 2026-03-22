@@ -286,6 +286,14 @@ export function DetailsPanel({
 
   const selectedWorldAgent = world.agents.get(selectedAgent.agent_id) ?? null;
   const inboundWatchers = world.watch_edges.filter((edge) => edge.to_agent_id === selectedAgent.agent_id);
+  const currentOperationMissingFromQueue =
+    selectedOperation !== null && operationsState === 'ready' && (operations?.items ?? []).length === 0;
+  const currentOperationWarning = operationsError
+    ? `Showing last operation snapshot. ${operationsError}`
+    : currentOperationMissingFromQueue
+      ? 'Showing last operation snapshot. Operation is no longer in the active queue.'
+      : null;
+  const currentOperationIsStale = currentOperationWarning !== null;
   const workflowIncidents = dedupeIncidents([
     ...(workflow?.incidents ?? []),
     ...(workflow?.detail.recent_incidents ?? [])
@@ -341,14 +349,14 @@ export function DetailsPanel({
       {selectedOperation ? (
         <section className="aitown-details__section">
           <h3>Current Operation</h3>
-          {operationsError ? <p role="status">{`Showing last operation snapshot. ${operationsError}`}</p> : null}
+          {currentOperationWarning ? <p role="status">{currentOperationWarning}</p> : null}
           <ul className="aitown-records">
             <li className={`aitown-record severity-${selectedOperation.effective_severity}`}>
               <strong>{selectedOperation.display_name}</strong>
               <span>{`${selectedOperation.current_state} · ${selectedOperation.current_blocker || selectedOperation.active_task}`}</span>
               <span>{`Location · ${selectedOperation.current_location}`}</span>
               <span>{`Latest event · ${selectedOperation.latest_event?.summary ?? 'No latest event yet'}`}</span>
-              {selectedOperation.correlation_id
+              {selectedOperation.correlation_id && !currentOperationIsStale
                 ? renderCorrelationButton({
                     correlationId: selectedOperation.correlation_id,
                     label: selectedOperation.correlation_id,

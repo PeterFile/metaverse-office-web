@@ -122,6 +122,7 @@ This repository mirrors the controller-approved Phase 1 scope so implementation 
 - `GET /office/operations` stays backend-only, read-only, schema-first, and reversible
 - the route reuses the current agent projection plus the existing overview severity/staleness derivation; no new persistence, projection table, or event type is introduced
 - default output is the active queue only: agents whose `current_state` is neither `idle` nor `sleeping`
+- optional `agent_id` narrows the queue to one agent before the existing `state` and `limit` filters, which keeps selected-agent refreshes read-only and bounded
 - optional `state` filters by one canonical `current_state`; optional `limit` caps the returned queue slice
 - queue items expose the current projection, the latest-event correlation surface, and the latest event summary/evidence when present
 - queue summary exposes `item_count`, `blocked_count`, `reboot_recommended_count`, `state_buckets`, and `severity_buckets` for the returned slice

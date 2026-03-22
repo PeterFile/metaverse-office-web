@@ -320,6 +320,14 @@ export function DetailsPanel({
     ? SEVERITY_LABELS[selectedWorldAgent.severity]
     : SEVERITY_LABELS[selectedAgent.effective_severity];
   const phaseLabel = selectedWorldAgent?.phase ?? selectedAgent.current_state;
+  const workflowAlertCorrelationIds = new Set(
+    (workflow?.detail.open_peer_watch_alerts ?? []).flatMap((alert) => (alert.correlation_id ? [alert.correlation_id] : []))
+  );
+  const workflowPivotCorrelationIds = (workflow?.correlation_ids ?? []).filter(
+    (correlationId) => Boolean(correlationId) && !workflowAlertCorrelationIds.has(correlationId)
+  );
+  const workflowHasAdditionalPivots =
+    workflowPivotCorrelationIds.length > 0 || (workflow?.counterparty_agent_ids.length ?? 0) > 0;
 
   return (
     <aside className="aitown-panel aitown-panel--details" role="complementary" aria-label="Agent details">
@@ -423,6 +431,25 @@ export function DetailsPanel({
           ))}
           {workflow && workflow.detail.open_peer_watch_alerts.length === 0 ? (
             <li className="aitown-record">No open watch alerts.</li>
+          ) : null}
+          {workflowHasAdditionalPivots ? (
+            <li className="aitown-record">
+              <strong>Workflow pivots</strong>
+              {workflow?.counterparty_agent_ids.length ? (
+                <span>{`Counterparties · ${renderCounterparties(workflow.counterparty_agent_ids)}`}</span>
+              ) : null}
+              {workflowPivotCorrelationIds.map((correlationId) => (
+                <div key={correlationId}>
+                  {renderCorrelationButton({
+                    correlationId,
+                    label: correlationId,
+                    buttonLabel: 'Open workflow correlation',
+                    activeCorrelationId: selectedCorrelationId,
+                    onSelectCorrelation
+                  })}
+                </div>
+              ))}
+            </li>
           ) : null}
         </ul>
       </section>

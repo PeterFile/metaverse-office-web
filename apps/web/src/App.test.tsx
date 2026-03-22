@@ -1358,6 +1358,112 @@ afterEach(() => {
     });
   });
 
+  it('surfaces workflow counterparties and additional correlation pivots from the selected-agent workflow slice', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
+
+    const workflowSection = within(details).getByRole('heading', { name: 'Workflow' }).closest('section');
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    expect(workflowSection).not.toBeNull();
+    expect(correlationSection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(workflowSection!).getByText('Counterparties · team-lead')).toBeVisible();
+      expect(
+        within(workflowSection!).getByRole('button', { name: 'Open workflow correlation corr-app-secondary' })
+      ).toBeVisible();
+    });
+
+    await user.click(within(workflowSection!).getByRole('button', { name: 'Open workflow correlation corr-app-secondary' }));
+
+    await waitFor(() => {
+      expect(within(correlationSection!).getByText('corr-app-secondary')).toBeVisible();
+      expect(
+        within(correlationSection!).getByText('Counts · 1 incidents · 0 interactions · 1 events')
+      ).toBeVisible();
+    });
+  });
+
+  it('filters falsy workflow correlation pivots from the selected-agent workflow slice', async () => {
+    const workflowWithEmptyPivotFixture = {
+      ...workflowFixture,
+      correlation_ids: ['corr-app-review', '', 'corr-app-secondary']
+    };
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === '/office/overview') {
+          return new Response(JSON.stringify(overviewFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === operationsUrl || url === selectedOperationUrl) {
+          return new Response(JSON.stringify(operationsFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === incidentsUrl) {
+          return new Response(JSON.stringify(incidentFeedFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === workflowUrl) {
+          return new Response(JSON.stringify(workflowWithEmptyPivotFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === teamLeadWorkflowUrl) {
+          return new Response(JSON.stringify(teamLeadWorkflowFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === correlationUrl) {
+          return new Response(JSON.stringify(correlationFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === secondaryCorrelationUrl) {
+          return new Response(JSON.stringify(secondaryCorrelationFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        throw new Error(`Unexpected request: ${url}`);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
+
+    const workflowSection = within(details).getByRole('heading', { name: 'Workflow' }).closest('section');
+    expect(workflowSection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(workflowSection!).getByText('Counterparties · team-lead')).toBeVisible();
+      expect(within(workflowSection!).getByRole('button', { name: /Open workflow correlation corr-app-review/ })).toBeVisible();
+      expect(
+        within(workflowSection!).getByRole('button', { name: 'Open workflow correlation corr-app-secondary' })
+      ).toBeVisible();
+      expect(within(workflowSection!).getAllByRole('button', { name: /Open workflow correlation/ })).toHaveLength(2);
+      expect(within(workflowSection!).queryByRole('button', { name: /^Open workflow correlation$/ })).not.toBeInTheDocument();
+    });
+  });
+
   it('keeps an explicitly selected incident correlation instead of snapping back to the workflow default', async () => {
     const user = userEvent.setup();
     render(<App />);

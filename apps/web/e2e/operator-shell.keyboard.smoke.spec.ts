@@ -950,6 +950,38 @@ test.describe('AI Town shell smoke', () => {
     await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
   });
 
+  test('carries the crew-overview incident correlation into a selected-agent pivot via keyboard traversal', async ({ page }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Hub' }).click();
+
+    const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
+    const incidentSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Incident Feed' })
+    });
+    const correlationSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Correlation Drilldown' })
+    });
+    const incidentAgentButton = incidentSection.getByRole('button', {
+      name: 'Select incident agent growth-revenue from incident evt_revenue_handoff_completed'
+    });
+
+    await expect(detailsPanel.getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
+    await focusHubControlWithTab(
+      page,
+      incidentAgentButton,
+      'Select incident agent growth-revenue from incident evt_revenue_handoff_completed'
+    );
+    await expect(incidentAgentButton).toBeFocused();
+    await page.keyboard.press('Enter');
+
+    await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+    await expect(detailsPanel.getByRole('heading', { name: 'Workflow' })).toBeVisible();
+    await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
+    await expect(correlationSection.getByText('corr-revenue-handoff')).toBeVisible();
+    await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
+    await expect(correlationSection.getByText('corr-growth-lead-review')).toHaveCount(0);
+  });
+
   test('opens an incident correlation drilldown from the selected-agent Hub via keyboard traversal', async ({ page }) => {
     await page.goto('/');
     await page.getByRole('button', { name: 'Open Hub' }).click();

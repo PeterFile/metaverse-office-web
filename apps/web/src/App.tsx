@@ -102,7 +102,7 @@ function AppInner() {
   const [selectedOperationSnapshot, setSelectedOperationSnapshot] = useState<OfficeOperation | null>(null);
   const [invalidSelectedOperationCorrelationId, setInvalidSelectedOperationCorrelationId] = useState<string | null>(null);
   const lastSelectedAgentRef = useRef<OfficeAgent | null>(null);
-  const correlationSelectionModeRef = useRef<'auto' | 'manual'>('auto');
+  const correlationSelectionModeRef = useRef<'auto' | 'manual' | 'preserved'>('auto');
   const lastCorrelationContextRef = useRef<string | null>(null);
   const hubTriggerRef = useRef<HTMLButtonElement | null>(null);
   const hubCloseButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -178,6 +178,16 @@ function AppInner() {
         window: DEFAULT_WORKFLOW_WINDOW,
         signal
       }),
+    onError: (error) => {
+      if (
+        correlationSelectionModeRef.current === 'preserved' &&
+        error instanceof RequestError &&
+        error.code === 'not_found'
+      ) {
+        correlationSelectionModeRef.current = 'auto';
+        setSelectedCorrelationId(null);
+      }
+    },
     resourceKey: resolveCorrelationPollKey(selectedCorrelationId)
   });
 
@@ -337,7 +347,10 @@ function AppInner() {
       return;
     }
 
-    if (correlationSelectionModeRef.current === 'manual' && selectedCorrelationId !== null) {
+    if (
+      (correlationSelectionModeRef.current === 'manual' || correlationSelectionModeRef.current === 'preserved') &&
+      selectedCorrelationId !== null
+    ) {
       return;
     }
 
@@ -483,7 +496,7 @@ function AppInner() {
       agentId: string | null,
       correlationId: string | null,
       operationSelection: OperationSelection | null = null,
-      correlationMode: 'auto' | 'manual' = correlationId === null ? 'auto' : 'manual'
+      correlationMode: 'auto' | 'manual' | 'preserved' = correlationId === null ? 'auto' : 'manual'
     ) => {
       lastCorrelationContextRef.current = resolveCorrelationSelectionContext(agentId);
       correlationSelectionModeRef.current = correlationMode;
@@ -638,7 +651,9 @@ function AppInner() {
               workflowError={workflowResource.error}
               workflowState={workflowResource.state}
               world={projectedWorld}
-              onSelectAgent={(agentId) => selectAgent(agentId, null, null)}
+              onSelectAgent={(agentId, correlationId = null) =>
+                selectAgent(agentId, correlationId, null, correlationId === null ? 'auto' : 'preserved')
+              }
               onSelectCorrelation={handleSelectCorrelation}
               onSelectOperation={handleSelectOperation}
             />

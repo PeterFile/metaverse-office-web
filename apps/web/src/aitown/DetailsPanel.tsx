@@ -29,7 +29,7 @@ type DetailsPanelProps = {
   workflowError: string | null;
   workflowState: LoadState;
   world: WorldState;
-  onSelectAgent: (agentId: string | null) => void;
+  onSelectAgent: (agentId: string | null, correlationId?: string | null) => void;
   onSelectCorrelation: (correlationId: string | null) => void;
   onSelectOperation: (operation: OfficeOperation) => void;
 };
@@ -76,6 +76,71 @@ function renderCorrelationButton({
       {label}
     </button>
   );
+}
+
+function renderAgentPivotButton({
+  agentId,
+  ariaLabel,
+  correlationId = null,
+  onSelectAgent
+}: {
+  agentId: string;
+  ariaLabel: string;
+  correlationId?: string | null;
+  onSelectAgent: (agentId: string | null, correlationId?: string | null) => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="aitown-link-button"
+      aria-label={ariaLabel}
+      onClick={() => onSelectAgent(agentId, correlationId)}
+    >
+      {agentId}
+    </button>
+  );
+}
+
+function renderAgentPivotList({
+  agentIds,
+  currentAgentId,
+  navigableAgentIds,
+  emptyLabel,
+  ariaLabelPrefix,
+  correlationId,
+  onSelectAgent
+}: {
+  agentIds: string[];
+  currentAgentId: string | null;
+  navigableAgentIds: Set<string>;
+  emptyLabel: string;
+  ariaLabelPrefix: string;
+  correlationId?: string | null;
+  onSelectAgent: (agentId: string | null, correlationId?: string | null) => void;
+}) {
+  if (agentIds.length === 0) {
+    return emptyLabel;
+  }
+
+  return agentIds.map((agentId, index) => {
+    const canNavigate = agentId !== currentAgentId && navigableAgentIds.has(agentId);
+
+    return (
+      <span key={`${ariaLabelPrefix}-${agentId}`}>
+        {index > 0 ? ', ' : null}
+        {canNavigate ? (
+          renderAgentPivotButton({
+            agentId,
+            ariaLabel: `${ariaLabelPrefix} ${agentId}`,
+            correlationId,
+            onSelectAgent
+          })
+        ) : (
+          <span>{agentId}</span>
+        )}
+      </span>
+    );
+  });
 }
 
 function renderEvidenceRefs(evidenceRefs: string[]) {
@@ -171,6 +236,7 @@ export function DetailsPanel({
       severity: agent.severity
     }))
     .sort(compareAgents);
+  const navigableAgentIds = new Set(agents.map((agent) => agent.agentId));
 
   if (!selectedAgent) {
     return (
@@ -243,7 +309,16 @@ export function DetailsPanel({
             {(incidentFeed?.items ?? []).slice(0, 4).map((incident) => (
               <li key={incident.incident_id} className={`aitown-record severity-${incident.severity}`}>
                 <strong>{incident.summary}</strong>
-                <span>{incident.agent_id}</span>
+                <span>
+                  {navigableAgentIds.has(incident.agent_id)
+                    ? renderAgentPivotButton({
+                        agentId: incident.agent_id,
+                        ariaLabel: `Select incident agent ${incident.agent_id} from incident ${incident.incident_id}`,
+                        correlationId: incident.correlation_id,
+                        onSelectAgent
+                      })
+                    : incident.agent_id}
+                </span>
                 {renderCorrelationButton({
                   correlationId: incident.correlation_id,
                   label: incident.correlation_id ?? 'No correlation id',
@@ -270,7 +345,18 @@ export function DetailsPanel({
               <>
                 <li className="aitown-record">
                   <strong>{correlation.correlation_id}</strong>
-                  <span>{`Participants · ${renderParticipants(correlation.participant_agent_ids)}`}</span>
+                  <span>
+                    Participants ·{' '}
+                    {renderAgentPivotList({
+                      agentIds: correlation.participant_agent_ids,
+                      currentAgentId: null,
+                      navigableAgentIds,
+                      emptyLabel: 'No participants',
+                      ariaLabelPrefix: 'Select correlation participant agent',
+                      correlationId: correlation.correlation_id,
+                      onSelectAgent
+                    })}
+                  </span>
                   <span>{`Evidence · ${renderEvidenceRefs(correlation.evidence_refs)}`}</span>
                   <span>{`Counts · ${correlation.incident_count} incidents · ${correlation.interaction_count} interactions · ${correlation.event_count} events`}</span>
                 </li>
@@ -436,7 +522,17 @@ export function DetailsPanel({
             <li className="aitown-record">
               <strong>Workflow pivots</strong>
               {workflow?.counterparty_agent_ids.length ? (
-                <span>{`Counterparties · ${renderCounterparties(workflow.counterparty_agent_ids)}`}</span>
+                <span>
+                  Counterparties ·{' '}
+                  {renderAgentPivotList({
+                    agentIds: workflow.counterparty_agent_ids,
+                    currentAgentId: selectedAgent.agent_id,
+                    navigableAgentIds,
+                    emptyLabel: 'No counterparties',
+                    ariaLabelPrefix: 'Select workflow counterparty agent',
+                    onSelectAgent
+                  })}
+                </span>
               ) : null}
               {workflowPivotCorrelationIds.map((correlationId) => (
                 <div key={correlationId}>
@@ -491,7 +587,17 @@ export function DetailsPanel({
             <>
               <li className="aitown-record">
                 <strong>{correlation.correlation_id}</strong>
-                <span>{`Participants · ${renderParticipants(correlation.participant_agent_ids)}`}</span>
+                <span>
+                  Participants ·{' '}
+                  {renderAgentPivotList({
+                    agentIds: correlation.participant_agent_ids,
+                    currentAgentId: selectedAgent.agent_id,
+                    navigableAgentIds,
+                    emptyLabel: 'No participants',
+                    ariaLabelPrefix: 'Select correlation participant agent',
+                    onSelectAgent
+                  })}
+                </span>
                 <span>{`Evidence · ${renderEvidenceRefs(correlation.evidence_refs)}`}</span>
                 <span>{`Counts · ${correlation.incident_count} incidents · ${correlation.interaction_count} interactions · ${correlation.event_count} events`}</span>
               </li>

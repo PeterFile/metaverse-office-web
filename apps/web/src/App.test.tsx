@@ -671,7 +671,7 @@ afterEach(() => {
     });
   });
 
-  it('pivots from current-operation counterparties through the selected-agent flow', async () => {
+  it('preserves the current-operation correlation when pivoting through current-operation counterparties', async () => {
     const user = userEvent.setup();
     render(<App />);
 
@@ -1573,7 +1573,39 @@ afterEach(() => {
     });
   });
 
-  it('pivots from workflow counterparties through the selected-agent flow', async () => {
+  it('does not preserve auto-selected workflow correlation when pivoting through workflow counterparties', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent from active queue' }));
+
+    const workflowSection = within(details).getByRole('heading', { name: 'Workflow' }).closest('section');
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    expect(workflowSection).not.toBeNull();
+    expect(correlationSection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+    });
+
+    await user.click(within(workflowSection!).getByRole('button', { name: 'Select workflow counterparty agent team-lead' }));
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'Team Lead' })).toBeVisible();
+      expect(within(details).queryByRole('heading', { name: 'Current Operation' })).not.toBeInTheDocument();
+      expect(within(correlationSection!).getByText('No correlation selected.')).toBeVisible();
+    });
+
+    expect(screen.getByRole('button', { name: 'Hide Hub' })).toBeVisible();
+    expect(within(correlationSection!).queryByText('corr-app-review')).not.toBeInTheDocument();
+
+    await act(async () => {
+      expect(globalThis.fetch).toHaveBeenCalledWith(teamLeadWorkflowUrl, expect.anything());
+    });
+  });
+
+  it('preserves an explicitly selected workflow correlation when pivoting through workflow counterparties', async () => {
     const user = userEvent.setup();
     render(<App />);
 
@@ -1597,18 +1629,15 @@ afterEach(() => {
     await waitFor(() => {
       expect(within(details).getByRole('heading', { name: 'Team Lead' })).toBeVisible();
       expect(within(details).queryByRole('heading', { name: 'Current Operation' })).not.toBeInTheDocument();
-      expect(
-        within(within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section')!).getByText(
-          'No correlation selected.'
-        )
-      ).toBeVisible();
+      expect(within(correlationSection!).getByText('corr-app-secondary')).toBeVisible();
     });
 
     expect(screen.getByRole('button', { name: 'Hide Hub' })).toBeVisible();
-    expect(within(details).queryByText('corr-app-secondary')).not.toBeInTheDocument();
+    expect(within(correlationSection!).getByText('Counts · 1 incidents · 0 interactions · 1 events')).toBeVisible();
 
     await act(async () => {
       expect(globalThis.fetch).toHaveBeenCalledWith(teamLeadWorkflowUrl, expect.anything());
+      expect(globalThis.fetch).toHaveBeenCalledWith(secondaryCorrelationUrl, expect.anything());
     });
   });
 
@@ -1646,7 +1675,7 @@ afterEach(() => {
     });
   });
 
-  it('keeps the active crew-overview correlation when pivoting through its participant agents', async () => {
+  it('preserves the active crew-overview correlation when pivoting through its participant agents', async () => {
     const user = userEvent.setup();
     render(<App />);
 
@@ -1819,7 +1848,7 @@ afterEach(() => {
     });
   });
 
-  it('carries the clicked crew-overview incident correlation into the selected-agent flow', async () => {
+  it('preserves the clicked crew-overview incident correlation into the selected-agent flow', async () => {
     const user = userEvent.setup();
     render(<App />);
 
@@ -1847,6 +1876,94 @@ afterEach(() => {
     await act(async () => {
       expect(globalThis.fetch).toHaveBeenCalledWith(workflowUrl, expect.anything());
       expect(globalThis.fetch).toHaveBeenCalledWith(secondaryCorrelationUrl, expect.anything());
+    });
+  });
+
+  it('does not preserve a carried crew-overview incident correlation when later pivoting through workflow counterparties', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    const incidentSection = within(details).getByRole('heading', { name: 'Incident Feed' }).closest('section');
+    expect(incidentSection).not.toBeNull();
+
+    await user.click(
+      within(incidentSection!).getByRole('button', {
+        name: 'Select incident agent app-engineering from incident inc-2'
+      })
+    );
+
+    const workflowSection = within(details).getByRole('heading', { name: 'Workflow' }).closest('section');
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    expect(workflowSection).not.toBeNull();
+    expect(correlationSection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+      expect(within(correlationSection!).getByText('corr-app-secondary')).toBeVisible();
+    });
+
+    await user.click(within(workflowSection!).getByRole('button', { name: 'Select workflow counterparty agent team-lead' }));
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'Team Lead' })).toBeVisible();
+      expect(within(details).queryByRole('heading', { name: 'Current Operation' })).not.toBeInTheDocument();
+      expect(within(correlationSection!).getByText('No correlation selected.')).toBeVisible();
+    });
+
+    expect(within(correlationSection!).queryByText('corr-app-secondary')).not.toBeInTheDocument();
+
+    await act(async () => {
+      expect(globalThis.fetch).toHaveBeenCalledWith(teamLeadWorkflowUrl, expect.anything());
+    });
+  });
+
+  it('does not treat a different carried correlation as explicit after an earlier manual selection', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    const getIncidentSection = () => within(details).getByRole('heading', { name: 'Incident Feed' }).closest('section');
+    const getCorrelationSection = () => within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    expect(getIncidentSection()).not.toBeNull();
+    expect(getCorrelationSection()).not.toBeNull();
+
+    await user.click(
+      within(getIncidentSection()!).getByRole('button', { name: 'Open incident correlation corr-app-review, currently selected' })
+    );
+    await waitFor(() => {
+      expect(within(getCorrelationSection()!).getByText('corr-app-review')).toBeVisible();
+    });
+
+    await user.click(
+      within(getIncidentSection()!).getByRole('button', {
+        name: 'Select incident agent app-engineering from incident inc-2'
+      })
+    );
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+      expect(within(getCorrelationSection()!).getByText('corr-app-secondary')).toBeVisible();
+      expect(within(getCorrelationSection()!).getByText('Counts · 1 incidents · 0 interactions · 1 events')).toBeVisible();
+    });
+
+    const workflowSection = within(details).getByRole('heading', { name: 'Workflow' }).closest('section');
+    expect(workflowSection).not.toBeNull();
+
+    await user.click(within(workflowSection!).getByRole('button', { name: 'Select workflow counterparty agent team-lead' }));
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'Team Lead' })).toBeVisible();
+      expect(within(getCorrelationSection()!).getByText('No correlation selected.')).toBeVisible();
+    });
+
+    expect(within(getCorrelationSection()!).queryByText('corr-app-secondary')).not.toBeInTheDocument();
+
+    await act(async () => {
+      expect(globalThis.fetch).toHaveBeenCalledWith(correlationUrl, expect.anything());
+      expect(globalThis.fetch).toHaveBeenCalledWith(secondaryCorrelationUrl, expect.anything());
+      expect(globalThis.fetch).toHaveBeenCalledWith(workflowUrl, expect.anything());
+      expect(globalThis.fetch).toHaveBeenCalledWith(teamLeadWorkflowUrl, expect.anything());
     });
   });
 

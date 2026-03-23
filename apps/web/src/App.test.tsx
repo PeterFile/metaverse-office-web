@@ -8,6 +8,7 @@ import type { OfficeAgent } from './types';
 const operationsUrl = '/office/operations?limit=4';
 const selectedOperationUrl = '/office/operations?agent_id=app-engineering';
 const incidentsUrl = '/incidents?limit=10&window=60m';
+const timelineUrl = '/timeline?limit=4&window=60m';
 const workflowUrl = '/agents/app-engineering/workflow?limit=10&window=60m';
 const teamLeadWorkflowUrl = '/agents/team-lead/workflow?limit=10&window=60m';
 const growthRevenueWorkflowUrl = '/agents/growth-revenue/workflow?limit=10&window=60m';
@@ -232,6 +233,41 @@ const incidentFeedFixture = {
       evidence_refs: ['/tmp/secondary-evidence.md'],
       counterparty_agent_ids: ['growth-revenue'],
       source_kind: 'controller_event'
+    }
+  ]
+};
+
+const timelineFixture = {
+  items: [
+    {
+      event_id: 'evt-timeline-1',
+      ts: '2026-03-16T08:50:00.000Z',
+      agent_id: 'app-engineering',
+      actor_id: 'team-lead',
+      event_type: 'peer_watch_alert_raised',
+      severity: 'orange',
+      current_state: 'blocked',
+      location: 'meeting-zone',
+      summary: 'Replay captured missing workflow evidence',
+      correlation_id: 'corr-app-review',
+      counterparty_agent_ids: ['team-lead'],
+      evidence_refs: ['/tmp/evidence.md'],
+      source_kind: 'controller_event'
+    },
+    {
+      event_id: 'evt-timeline-2',
+      ts: '2026-03-16T08:52:00.000Z',
+      agent_id: 'growth-revenue',
+      actor_id: 'growth-revenue',
+      event_type: 'agent_noted',
+      severity: 'yellow',
+      current_state: 'planning',
+      location: 'meeting-zone',
+      summary: 'Replay captured launch copy review note',
+      correlation_id: null,
+      counterparty_agent_ids: [],
+      evidence_refs: ['/tmp/launch-note.md'],
+      source_kind: 'workspace_snapshot'
     }
   ]
 };
@@ -533,6 +569,12 @@ describe('App', () => {
           });
         }
 
+        if (url === timelineUrl) {
+          return new Response(JSON.stringify(timelineFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
         if (url === workflowUrl) {
           return new Response(JSON.stringify(workflowFixture), {
             headers: { 'content-type': 'application/json' }
@@ -708,6 +750,121 @@ afterEach(() => {
     expect(
       within(incidentSection!).getByRole('button', { name: /Open incident correlation corr-app-review/ })
     ).toBeVisible();
+  });
+
+  it('loads the timeline replay slice only when Hub opens in Crew Overview and hides it after selecting an agent', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await screen.findByRole('button', { name: 'Open Hub' });
+    expect(globalThis.fetch).not.toHaveBeenCalledWith(timelineUrl, expect.anything());
+
+    const details = await openHub(user);
+    const replaySection = (await within(details).findByRole('heading', { name: 'Timeline Replay' })).closest('section');
+
+    expect(replaySection).not.toBeNull();
+    expect(within(replaySection!).getByText('Replay captured missing workflow evidence')).toBeVisible();
+
+    await act(async () => {
+      expect(globalThis.fetch).toHaveBeenCalledWith(timelineUrl, expect.anything());
+    });
+
+    await user.click(within(details).getByRole('button', { name: 'Inspect Team Lead' }));
+    expect(within(details).queryByRole('heading', { name: 'Timeline Replay' })).not.toBeInTheDocument();
+  });
+
+  it('renders timeline replay evidence-first labels and supports a correlation pivot from crew overview', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    const replaySection = (await within(details).findByRole('heading', { name: 'Timeline Replay' })).closest('section');
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    const replayEvent = within(replaySection!)
+      .getByText('Replay captured missing workflow evidence')
+      .closest('li');
+
+    expect(replaySection).not.toBeNull();
+    expect(correlationSection).not.toBeNull();
+    expect(replayEvent).not.toBeNull();
+    expect(within(replayEvent!).getByText('Replay captured missing workflow evidence')).toBeVisible();
+    expect(within(replayEvent!).getByText('Event type · peer_watch_alert_raised')).toBeVisible();
+    expect(within(replayEvent!).getByText('Location · meeting-zone')).toBeVisible();
+    expect(within(replayEvent!).getByText('Counterparties · team-lead')).toBeVisible();
+    expect(within(replayEvent!).getByText('Evidence · /tmp/evidence.md')).toBeVisible();
+    expect(within(replayEvent!).getByText('Source · controller_event')).toBeVisible();
+    expect(
+      within(replayEvent!).getByRole('button', { name: 'Select replay agent app-engineering from event evt-timeline-1' })
+    ).toBeVisible();
+
+    await user.click(
+      within(replayEvent!).getByRole('button', { name: /Open replay correlation corr-app-review/ })
+    );
+
+    expect(await within(correlationSection!).findByText('corr-app-review')).toBeVisible();
+    expect(within(correlationSection!).getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
+  });
+
+  it('keeps the last timeline replay visible when a later replay poll fails', async () => {
+    (window as typeof window & { __AITOWN_POLL_INTERVAL_MS__?: number }).__AITOWN_POLL_INTERVAL_MS__ = 10;
+
+    let timelineRequests = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === '/office/overview') {
+          return new Response(JSON.stringify(overviewFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === operationsUrl || url === selectedOperationUrl) {
+          return new Response(JSON.stringify(operationsFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === incidentsUrl) {
+          return new Response(JSON.stringify(incidentFeedFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === timelineUrl) {
+          timelineRequests += 1;
+          if (timelineRequests === 1) {
+            return new Response(JSON.stringify(timelineFixture), {
+              headers: { 'content-type': 'application/json' }
+            });
+          }
+
+          return new Response(JSON.stringify({ error: 'internal_error', details: 'timeline refresh failed' }), {
+            status: 500,
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === correlationUrl) {
+          return new Response(JSON.stringify(correlationFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        throw new Error(`Unexpected request: ${url}`);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    expect(await within(details).findByText('Replay captured missing workflow evidence')).toBeVisible();
+
+    expect(await within(details).findByText('timeline refresh failed')).toBeVisible();
+    expect(within(details).getByText('Replay captured missing workflow evidence')).toBeVisible();
+    expect(timelineRequests).toBeGreaterThan(1);
   });
 
   it('shows a canonical office grid in crew overview and pivots from a zone occupant', async () => {

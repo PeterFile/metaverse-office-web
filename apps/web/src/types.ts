@@ -243,6 +243,10 @@ export interface WorkflowTimelineEvent {
   source_kind: string;
 }
 
+export interface TimelineReplayResponse {
+  items: WorkflowTimelineEvent[];
+}
+
 export interface AgentWorkflow {
   agent_id: string;
   detail: WorkflowDetail;

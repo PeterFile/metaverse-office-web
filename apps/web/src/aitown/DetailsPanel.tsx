@@ -6,6 +6,7 @@ import type {
   OfficeOperation,
   OfficeOperations,
   OfficeZone,
+  TimelineReplayResponse,
   WorkflowIncident,
   WorkflowInteraction,
   WorkflowTimelineEvent
@@ -30,6 +31,9 @@ type DetailsPanelProps = {
   selectedAgent: OfficeAgent | null;
   selectedCorrelationId: string | null;
   selectedOperation: OfficeOperation | null;
+  timelineReplay: TimelineReplayResponse | null;
+  timelineReplayError: string | null;
+  timelineReplayState: LoadState;
   workflow: AgentWorkflow | null;
   workflowError: string | null;
   workflowState: LoadState;
@@ -211,6 +215,61 @@ function renderCorrelationTimelineEvent(event: WorkflowTimelineEvent) {
   );
 }
 
+function renderReplayTimelineEvent({
+  event,
+  activeCorrelationId,
+  agentLabel,
+  currentAgentId,
+  navigableAgentIds,
+  onSelectAgent,
+  onSelectCorrelation
+}: {
+  event: WorkflowTimelineEvent;
+  activeCorrelationId: string | null;
+  agentLabel: string;
+  currentAgentId: string | null;
+  navigableAgentIds: Set<string>;
+  onSelectAgent: (agentId: string | null, correlationId?: string | null) => void;
+  onSelectCorrelation: (correlationId: string | null) => void;
+}) {
+  const canNavigateToAgent = event.agent_id !== currentAgentId && navigableAgentIds.has(event.agent_id);
+
+  return (
+    <li key={event.event_id} className={`aitown-record severity-${event.severity}`}>
+      <strong>{event.summary}</strong>
+      <span>{`Event type · ${event.event_type}`}</span>
+      <span>{`Location · ${event.location}`}</span>
+      <span>{`Counterparties · ${renderCounterparties(event.counterparty_agent_ids)}`}</span>
+      <span>{`Evidence · ${renderEvidenceRefs(event.evidence_refs)}`}</span>
+      <span>{`Source · ${event.source_kind}`}</span>
+      {event.correlation_id ? (
+        <span>
+          Correlation pivot ·{' '}
+          {renderCorrelationButton({
+            correlationId: event.correlation_id,
+            label: event.correlation_id,
+            buttonLabel: 'Open replay correlation',
+            activeCorrelationId,
+            onSelectCorrelation
+          })}
+        </span>
+      ) : null}
+      <span>
+        Agent pivot ·{' '}
+        {canNavigateToAgent
+          ? renderAgentPivotButton({
+              agentId: event.agent_id,
+              label: agentLabel,
+              ariaLabel: `Select replay agent ${event.agent_id} from event ${event.event_id}`,
+              correlationId: event.correlation_id,
+              onSelectAgent
+            })
+          : agentLabel}
+      </span>
+    </li>
+  );
+}
+
 function renderWorkflowStatusRecord({
   key,
   kind,
@@ -367,6 +426,9 @@ export function DetailsPanel({
   selectedAgent,
   selectedCorrelationId,
   selectedOperation,
+  timelineReplay,
+  timelineReplayError,
+  timelineReplayState,
   workflow,
   workflowError,
   workflowState,
@@ -573,6 +635,30 @@ export function DetailsPanel({
             )}
             {incidentFeedState === 'ready' && !incidentFeedError && !incidentFeed?.items.length ? (
               <li className="aitown-record">No active incident feed.</li>
+            ) : null}
+          </ul>
+        </section>
+
+        <section className="aitown-details__section">
+          <h3>Timeline Replay</h3>
+          <ul className="aitown-records">
+            {timelineReplayState === 'loading' && !timelineReplay ? (
+              <li className="aitown-record">Loading timeline replay...</li>
+            ) : null}
+            {timelineReplayError ? <li className="aitown-record">{timelineReplayError}</li> : null}
+            {(timelineReplay?.items ?? []).map((event) =>
+              renderReplayTimelineEvent({
+                event,
+                activeCorrelationId: selectedCorrelationId,
+                agentLabel: agentNameById.get(event.agent_id) ?? event.agent_id,
+                currentAgentId: null,
+                navigableAgentIds,
+                onSelectAgent,
+                onSelectCorrelation
+              })
+            )}
+            {timelineReplayState === 'ready' && !timelineReplayError && !timelineReplay?.items.length ? (
+              <li className="aitown-record">No recent replay events.</li>
             ) : null}
           </ul>
         </section>

@@ -710,6 +710,159 @@ afterEach(() => {
     ).toBeVisible();
   });
 
+  it('shows a canonical office grid in crew overview and pivots from a zone occupant', async () => {
+    const user = userEvent.setup();
+    const canonicalZoneOverviewFixture = {
+      ...overviewFixture,
+      zones: [
+        {
+          zone_id: 'meeting-zone',
+          label: 'Meeting Zone',
+          kind: 'shared' as const,
+          grid_x: 1,
+          grid_y: 1,
+          grid_w: 2,
+          grid_h: 1,
+          home_agent_id: null,
+          occupants: [
+            {
+              agent_id: 'app-engineering',
+              display_name: 'App Engineering Agent',
+              kind: 'employee' as const,
+              current_state: 'blocked',
+              active_task: 'Fix workflow issue',
+              effective_severity: 'orange' as const
+            },
+            {
+              agent_id: 'growth-revenue',
+              display_name: 'Growth Revenue Agent',
+              kind: 'employee' as const,
+              current_state: 'planning',
+              active_task: 'Review launch copy',
+              effective_severity: 'yellow' as const
+            }
+          ]
+        },
+        {
+          zone_id: 'qa-desk',
+          label: 'QA Desk',
+          kind: 'desk' as const,
+          grid_x: 1,
+          grid_y: 0,
+          grid_w: 1,
+          grid_h: 1,
+          home_agent_id: 'growth-revenue',
+          occupants: []
+        },
+        {
+          zone_id: 'lead-desk',
+          label: 'Team Lead Desk',
+          kind: 'desk' as const,
+          grid_x: 0,
+          grid_y: 0,
+          grid_w: 1,
+          grid_h: 1,
+          home_agent_id: 'team-lead',
+          occupants: [
+            {
+              agent_id: 'team-lead',
+              display_name: 'Team Lead',
+              kind: 'lead' as const,
+              current_state: 'reviewing',
+              active_task: 'Coordinate rollout',
+              effective_severity: 'normal' as const
+            }
+          ]
+        }
+      ]
+    };
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === '/office/overview') {
+          return new Response(JSON.stringify(canonicalZoneOverviewFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === operationsUrl || url === selectedOperationUrl) {
+          return new Response(JSON.stringify(operationsFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === incidentsUrl) {
+          return new Response(JSON.stringify(incidentFeedFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === workflowUrl) {
+          return new Response(JSON.stringify(workflowFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === teamLeadWorkflowUrl) {
+          return new Response(JSON.stringify(teamLeadWorkflowFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === growthRevenueWorkflowUrl) {
+          return new Response(JSON.stringify(growthRevenueWorkflowFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === correlationUrl) {
+          return new Response(JSON.stringify(correlationFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === secondaryCorrelationUrl) {
+          return new Response(JSON.stringify(secondaryCorrelationFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        throw new Error(`Unexpected request: ${url}`);
+      })
+    );
+
+    render(<App />);
+
+    const details = await openHub(user);
+    const officeGridSection = within(details).getByRole('heading', { name: 'Office Grid' }).closest('section');
+    expect(officeGridSection).not.toBeNull();
+
+    const officeGridLabels = Array.from(officeGridSection!.querySelectorAll('li strong')).map((node) => node.textContent);
+    expect(officeGridLabels).toEqual(['Team Lead Desk', 'QA Desk', 'Meeting Zone']);
+
+    expect(within(officeGridSection!).getAllByText('Kind · desk')).toHaveLength(2);
+    expect(within(officeGridSection!).getByText('Kind · shared')).toBeVisible();
+    expect(within(officeGridSection!).getByText('Home · Team Lead')).toBeVisible();
+    expect(within(officeGridSection!).getByText('Home · Growth Revenue Agent')).toBeVisible();
+    expect(
+      within(officeGridSection!).getByRole('button', { name: 'Select zone occupant Team Lead in Team Lead Desk' })
+    ).toBeVisible();
+    expect(within(officeGridSection!).getAllByText('Occupants · Empty')).toHaveLength(1);
+    expect(within(officeGridSection!).getByText('Severity · Normal · 1 occupant(s)')).toBeVisible();
+    expect(within(officeGridSection!).getByText('Severity · Orange · 2 occupant(s)')).toBeVisible();
+
+    const occupantButton = within(officeGridSection!).getByRole('button', {
+      name: 'Select zone occupant App Engineering Agent in Meeting Zone'
+    });
+    expect(occupantButton).toBeVisible();
+
+    await user.click(occupantButton);
+    expect(await within(details).findByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+  });
+
   it('opens agent detail and correlation drilldown directly from the active queue', async () => {
     const user = userEvent.setup();
     render(<App />);

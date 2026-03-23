@@ -654,6 +654,7 @@ function AppInner() {
               operations={operationsResource.data}
               operationsError={operationsResource.error}
               operationsState={operationsResource.state}
+              overviewZones={overviewResource.data?.zones ?? null}
               preserveWorkflowCounterpartyCorrelation={preserveWorkflowCounterpartyCorrelation}
               selectedAgent={selectedAgent}
               selectedCorrelationId={selectedCorrelationId}

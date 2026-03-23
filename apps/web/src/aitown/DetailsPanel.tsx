@@ -5,11 +5,13 @@ import type {
   OfficeAgent,
   OfficeOperation,
   OfficeOperations,
+  OfficeZone,
   WorkflowIncident,
   WorkflowInteraction,
   WorkflowTimelineEvent
 } from '../types';
 import type { LoadState } from '../hooks/usePolledResource';
+import { buildZoneLayoutModels } from '../layout';
 import type { WorldState } from '../world/types';
 import { selectAgentBadge, selectAgentZoneLabel, selectAttentionQueue, selectWatchEdgeRisk } from '../world/selectors';
 
@@ -23,6 +25,7 @@ type DetailsPanelProps = {
   operations: OfficeOperations | null;
   operationsError: string | null;
   operationsState: LoadState;
+  overviewZones: OfficeZone[] | null;
   preserveWorkflowCounterpartyCorrelation: boolean;
   selectedAgent: OfficeAgent | null;
   selectedCorrelationId: string | null;
@@ -41,6 +44,13 @@ const SEVERITY_LABELS = {
   yellow: 'Yellow',
   orange: 'Orange',
   red: 'Red'
+} as const;
+
+const SEVERITY_RANK = {
+  normal: 0,
+  yellow: 1,
+  orange: 2,
+  red: 3
 } as const;
 
 function dedupeIncidents(incidents: WorkflowIncident[]) {
@@ -82,11 +92,13 @@ function renderCorrelationButton({
 
 function renderAgentPivotButton({
   agentId,
+  label = agentId,
   ariaLabel,
   correlationId = null,
   onSelectAgent
 }: {
   agentId: string;
+  label?: string;
   ariaLabel: string;
   correlationId?: string | null;
   onSelectAgent: (agentId: string | null, correlationId?: string | null) => void;
@@ -98,7 +110,7 @@ function renderAgentPivotButton({
       aria-label={ariaLabel}
       onClick={() => onSelectAgent(agentId, correlationId)}
     >
-      {agentId}
+      {label}
     </button>
   );
 }
@@ -283,18 +295,61 @@ function compareAgents(
   left: { severity: keyof typeof SEVERITY_LABELS; displayName: string; agentId: string },
   right: { severity: keyof typeof SEVERITY_LABELS; displayName: string; agentId: string }
 ) {
-  const severityRank = {
-    normal: 0,
-    yellow: 1,
-    orange: 2,
-    red: 3
-  } as const;
-
   return (
-    severityRank[right.severity] - severityRank[left.severity] ||
+    SEVERITY_RANK[right.severity] - SEVERITY_RANK[left.severity] ||
     left.displayName.localeCompare(right.displayName) ||
     left.agentId.localeCompare(right.agentId)
   );
+}
+
+function renderZoneOccupants({
+  zoneLabel,
+  occupants,
+  currentAgentId,
+  navigableAgentIds,
+  onSelectAgent
+}: {
+  zoneLabel: string;
+  occupants: Array<{ agentId: string; displayName: string }>;
+  currentAgentId: string | null;
+  navigableAgentIds: Set<string>;
+  onSelectAgent: (agentId: string | null, correlationId?: string | null) => void;
+}) {
+  if (occupants.length === 0) {
+    return 'Empty';
+  }
+
+  return occupants.map((occupant, index) => {
+    const canNavigate = occupant.agentId !== currentAgentId && navigableAgentIds.has(occupant.agentId);
+
+    return (
+      <span key={`zone-occupant-${zoneLabel}-${occupant.agentId}`}>
+        {index > 0 ? ', ' : null}
+        {canNavigate ? (
+          renderAgentPivotButton({
+            agentId: occupant.agentId,
+            label: occupant.displayName,
+            ariaLabel: `Select zone occupant ${occupant.displayName} in ${zoneLabel}`,
+            onSelectAgent
+          })
+        ) : (
+          <span>{occupant.displayName}</span>
+        )}
+      </span>
+    );
+  });
+}
+
+function summarizeZoneSeverity(severities: Array<keyof typeof SEVERITY_LABELS>) {
+  if (severities.length === 0) {
+    return 'Normal · Empty';
+  }
+
+  const highestSeverity = severities.reduce<keyof typeof SEVERITY_LABELS>((highest, severity) =>
+    SEVERITY_RANK[severity] > SEVERITY_RANK[highest] ? severity : highest
+  , 'normal');
+
+  return `${SEVERITY_LABELS[highestSeverity]} · ${severities.length} occupant(s)`;
 }
 
 export function DetailsPanel({
@@ -307,6 +362,7 @@ export function DetailsPanel({
   operations,
   operationsError,
   operationsState,
+  overviewZones,
   preserveWorkflowCounterpartyCorrelation,
   selectedAgent,
   selectedCorrelationId,
@@ -329,6 +385,41 @@ export function DetailsPanel({
   const navigableAgentIds = new Set(agents.map((agent) => agent.agentId));
   const attentionQueue = selectAttentionQueue(world);
   const agentNameById = new Map([...world.agents.values()].map((agent) => [agent.agent_id, agent.display_name]));
+  const zoneSource = overviewZones ?? world.zones.map((zone) => ({
+    zone_id: zone.zone_id,
+    label: zone.label,
+    kind: zone.kind,
+    grid_x: zone.grid_x,
+    grid_y: zone.grid_y,
+    grid_w: zone.grid_w,
+    grid_h: zone.grid_h,
+    home_agent_id: zone.home_agent_id ?? null,
+    occupants: []
+  }));
+  const officeGrid = buildZoneLayoutModels(zoneSource).map((layoutModel) => {
+    const zone = layoutModel.zone;
+    const overviewZone = overviewZones?.find((candidate) => candidate.zone_id === zone.zone_id) ?? null;
+    const occupants = overviewZone && overviewZone.occupants.length > 0
+      ? overviewZone.occupants.map((occupant) => ({
+          agentId: occupant.agent_id,
+          displayName: occupant.display_name,
+          severity: occupant.effective_severity
+        }))
+      : [...world.agents.values()]
+          .filter((agent) => agent.raw_location === zone.zone_id)
+          .map((agent) => ({
+            agentId: agent.agent_id,
+            displayName: agent.display_name,
+            severity: agent.severity
+          }));
+
+    return {
+      zone,
+      occupants,
+      homeAgentLabel: zone.home_agent_id ? (agentNameById.get(zone.home_agent_id) ?? zone.home_agent_id) : null,
+      severitySummary: summarizeZoneSeverity(occupants.map((occupant) => occupant.severity))
+    };
+  });
 
   if (!selectedAgent) {
     return (
@@ -388,6 +479,31 @@ export function DetailsPanel({
               );
             })}
             {attentionQueue.length === 0 ? <li className="aitown-record">No agents need attention.</li> : null}
+          </ul>
+        </section>
+
+        <section className="aitown-details__section">
+          <h3>Office Grid</h3>
+          <ul className="aitown-records">
+            {officeGrid.map(({ zone, occupants, homeAgentLabel, severitySummary }) => (
+              <li key={zone.zone_id} className="aitown-record">
+                <strong>{zone.label}</strong>
+                <span>{`Kind · ${zone.kind}`}</span>
+                <span>{`Home · ${homeAgentLabel ?? 'Unassigned'}`}</span>
+                <span>
+                  Occupants ·{' '}
+                  {renderZoneOccupants({
+                    zoneLabel: zone.label,
+                    occupants,
+                    currentAgentId: null,
+                    navigableAgentIds,
+                    onSelectAgent
+                  })}
+                </span>
+                <span>{`Severity · ${severitySummary}`}</span>
+              </li>
+            ))}
+            {officeGrid.length === 0 ? <li className="aitown-record">No office zones available.</li> : null}
           </ul>
         </section>
 

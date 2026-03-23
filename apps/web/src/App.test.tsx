@@ -8,6 +8,7 @@ import type { OfficeAgent } from './types';
 const operationsUrl = '/office/operations?limit=4';
 const selectedOperationUrl = '/office/operations?agent_id=app-engineering';
 const incidentsUrl = '/incidents?limit=10&window=60m';
+const timelineUrl = '/timeline?limit=4&window=60m';
 const workflowUrl = '/agents/app-engineering/workflow?limit=10&window=60m';
 const teamLeadWorkflowUrl = '/agents/team-lead/workflow?limit=10&window=60m';
 const growthRevenueWorkflowUrl = '/agents/growth-revenue/workflow?limit=10&window=60m';
@@ -236,6 +237,41 @@ const incidentFeedFixture = {
   ]
 };
 
+const timelineFixture = {
+  items: [
+    {
+      event_id: 'evt-timeline-1',
+      ts: '2026-03-16T08:50:00.000Z',
+      agent_id: 'app-engineering',
+      actor_id: 'team-lead',
+      event_type: 'peer_watch_alert_raised',
+      severity: 'orange',
+      current_state: 'blocked',
+      location: 'meeting-zone',
+      summary: 'Replay captured missing workflow evidence',
+      correlation_id: 'corr-app-review',
+      counterparty_agent_ids: ['team-lead'],
+      evidence_refs: ['/tmp/evidence.md'],
+      source_kind: 'controller_event'
+    },
+    {
+      event_id: 'evt-timeline-2',
+      ts: '2026-03-16T08:52:00.000Z',
+      agent_id: 'growth-revenue',
+      actor_id: 'growth-revenue',
+      event_type: 'agent_noted',
+      severity: 'yellow',
+      current_state: 'planning',
+      location: 'meeting-zone',
+      summary: 'Replay captured launch copy review note',
+      correlation_id: null,
+      counterparty_agent_ids: [],
+      evidence_refs: ['/tmp/launch-note.md'],
+      source_kind: 'workspace_snapshot'
+    }
+  ]
+};
+
 const workflowFixture = {
   agent_id: 'app-engineering',
   detail: {
@@ -268,11 +304,75 @@ const workflowFixture = {
         metadata: {}
       }
     ],
-    recent_events: [],
-    recent_interactions: [],
+    recent_events: [
+      {
+        event_id: 'evt-workflow-1',
+        ts: '2026-03-16T08:58:00.000Z',
+        agent_id: 'app-engineering',
+        actor_id: 'app-engineering',
+        event_type: 'agent_noted',
+        severity: 'yellow',
+        current_state: 'blocked',
+        active_task: 'Fix workflow issue',
+        location: 'meeting-zone',
+        summary: 'Agent attached workflow evidence for lead review',
+        correlation_id: 'corr-app-review',
+        counterparty_agent_ids: ['team-lead'],
+        evidence_refs: ['/tmp/evidence.md'],
+        source_kind: 'workspace_snapshot',
+        metadata: {}
+      }
+    ],
+    recent_interactions: [
+      {
+        interaction_id: 'interaction-workflow-1',
+        interaction_type: 'peer_watch',
+        correlation_id: 'corr-app-review',
+        started_at: '2026-03-16T08:49:00.000Z',
+        ended_at: '2026-03-16T08:58:00.000Z',
+        participant_agent_ids: ['app-engineering', 'team-lead'],
+        trigger_event_id: 'evt-workflow-1',
+        before_state: 'coding',
+        after_state: 'blocked',
+        severity: 'orange',
+        evidence_refs: ['/tmp/evidence.md'],
+        summary: 'Lead reviewed the missing workflow evidence thread',
+        related_event_ids: ['evt-workflow-1']
+      }
+    ],
     recent_incidents: [],
-    recent_handoffs: [],
-    recent_reboots: []
+    recent_handoffs: [
+      {
+        handoff_id: 'handoff-1',
+        ts: '2026-03-16T08:57:00.000Z',
+        agent_id: 'app-engineering',
+        actor_id: 'growth-revenue',
+        phase: 'handoff_done',
+        status: 'completed',
+        severity: 'yellow',
+        summary: 'Secondary review handoff completed',
+        counterparty_agent_ids: ['growth-revenue'],
+        evidence_refs: ['/tmp/secondary-evidence.md'],
+        correlation_id: 'corr-app-secondary',
+        source_kind: 'controller_event'
+      }
+    ],
+    recent_reboots: [
+      {
+        reboot_id: 'reboot-1',
+        ts: '2026-03-16T08:40:00.000Z',
+        agent_id: 'app-engineering',
+        actor_id: 'team-lead',
+        phase: 'reboot_recommended',
+        status: 'requested',
+        severity: 'yellow',
+        summary: 'Reboot recommended after the workflow stalled',
+        counterparty_agent_ids: ['team-lead'],
+        evidence_refs: ['/tmp/reboot-note.md'],
+        correlation_id: 'corr-app-review',
+        source_kind: 'controller_event'
+      }
+    ]
   },
   correlation_ids: ['corr-app-review', 'corr-app-secondary'],
   counterparty_agent_ids: ['team-lead'],
@@ -469,6 +569,12 @@ describe('App', () => {
           });
         }
 
+        if (url === timelineUrl) {
+          return new Response(JSON.stringify(timelineFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
         if (url === workflowUrl) {
           return new Response(JSON.stringify(workflowFixture), {
             headers: { 'content-type': 'application/json' }
@@ -614,6 +720,304 @@ afterEach(() => {
 
     await user.click(within(details).getByRole('button', { name: 'Inspect Team Lead' }));
     expect(within(details).queryByRole('heading', { name: 'Active Queue' })).not.toBeInTheDocument();
+  });
+
+  it('shows attention queue, watch topology, and enriched incident cards in crew overview', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    const attentionSection = within(details).getByRole('heading', { name: 'Attention Queue' }).closest('section');
+    const topologySection = within(details).getByRole('heading', { name: 'Watch Topology' }).closest('section');
+    const incidentSection = within(details).getByRole('heading', { name: 'Incident Feed' }).closest('section');
+
+    expect(attentionSection).not.toBeNull();
+    expect(topologySection).not.toBeNull();
+    expect(incidentSection).not.toBeNull();
+
+    expect(within(attentionSection!).getByRole('button', { name: 'Inspect App Engineering Agent from attention queue' })).toBeVisible();
+    expect(within(attentionSection!).getByRole('button', { name: 'Inspect Growth Revenue Agent from attention queue' })).toBeVisible();
+    expect(within(attentionSection!).getByText('Orange · Blocked')).toBeVisible();
+    expect(within(attentionSection!).getByText('Yellow · Planning')).toBeVisible();
+    expect(within(topologySection!).getByText('Team Lead -> App Engineering Agent')).toBeVisible();
+    expect(within(topologySection!).getByText('Mode · lead')).toBeVisible();
+    expect(within(topologySection!).getByText('Risk · High risk · Orange')).toBeVisible();
+    expect(within(incidentSection!).getByText('Incident · peer_watch · open')).toBeVisible();
+    expect(within(incidentSection!).getByText('Counterparties · team-lead')).toBeVisible();
+    expect(within(incidentSection!).getByText('Evidence · /tmp/evidence.md')).toBeVisible();
+    expect(within(incidentSection!).getAllByText('Source · controller_event').length).toBeGreaterThan(0);
+    expect(within(incidentSection!).getByRole('button', { name: 'Select incident agent app-engineering from incident inc-1' })).toBeVisible();
+    expect(
+      within(incidentSection!).getByRole('button', { name: /Open incident correlation corr-app-review/ })
+    ).toBeVisible();
+  });
+
+  it('loads the timeline replay slice only when Hub opens in Crew Overview and hides it after selecting an agent', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await screen.findByRole('button', { name: 'Open Hub' });
+    expect(globalThis.fetch).not.toHaveBeenCalledWith(timelineUrl, expect.anything());
+
+    const details = await openHub(user);
+    const replaySection = (await within(details).findByRole('heading', { name: 'Timeline Replay' })).closest('section');
+
+    expect(replaySection).not.toBeNull();
+    expect(within(replaySection!).getByText('Replay captured missing workflow evidence')).toBeVisible();
+
+    await act(async () => {
+      expect(globalThis.fetch).toHaveBeenCalledWith(timelineUrl, expect.anything());
+    });
+
+    await user.click(within(details).getByRole('button', { name: 'Inspect Team Lead' }));
+    expect(within(details).queryByRole('heading', { name: 'Timeline Replay' })).not.toBeInTheDocument();
+  });
+
+  it('renders timeline replay evidence-first labels and supports a correlation pivot from crew overview', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    const replaySection = (await within(details).findByRole('heading', { name: 'Timeline Replay' })).closest('section');
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    const replayEvent = within(replaySection!)
+      .getByText('Replay captured missing workflow evidence')
+      .closest('li');
+
+    expect(replaySection).not.toBeNull();
+    expect(correlationSection).not.toBeNull();
+    expect(replayEvent).not.toBeNull();
+    expect(within(replayEvent!).getByText('Replay captured missing workflow evidence')).toBeVisible();
+    expect(within(replayEvent!).getByText('Event type · peer_watch_alert_raised')).toBeVisible();
+    expect(within(replayEvent!).getByText('Location · meeting-zone')).toBeVisible();
+    expect(within(replayEvent!).getByText('Counterparties · team-lead')).toBeVisible();
+    expect(within(replayEvent!).getByText('Evidence · /tmp/evidence.md')).toBeVisible();
+    expect(within(replayEvent!).getByText('Source · controller_event')).toBeVisible();
+    expect(
+      within(replayEvent!).getByRole('button', { name: 'Select replay agent app-engineering from event evt-timeline-1' })
+    ).toBeVisible();
+
+    await user.click(
+      within(replayEvent!).getByRole('button', { name: /Open replay correlation corr-app-review/ })
+    );
+
+    expect(await within(correlationSection!).findByText('corr-app-review')).toBeVisible();
+    expect(within(correlationSection!).getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
+  });
+
+  it('keeps the last timeline replay visible when a later replay poll fails', async () => {
+    (window as typeof window & { __AITOWN_POLL_INTERVAL_MS__?: number }).__AITOWN_POLL_INTERVAL_MS__ = 10;
+
+    let timelineRequests = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === '/office/overview') {
+          return new Response(JSON.stringify(overviewFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === operationsUrl || url === selectedOperationUrl) {
+          return new Response(JSON.stringify(operationsFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === incidentsUrl) {
+          return new Response(JSON.stringify(incidentFeedFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === timelineUrl) {
+          timelineRequests += 1;
+          if (timelineRequests === 1) {
+            return new Response(JSON.stringify(timelineFixture), {
+              headers: { 'content-type': 'application/json' }
+            });
+          }
+
+          return new Response(JSON.stringify({ error: 'internal_error', details: 'timeline refresh failed' }), {
+            status: 500,
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === correlationUrl) {
+          return new Response(JSON.stringify(correlationFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        throw new Error(`Unexpected request: ${url}`);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    expect(await within(details).findByText('Replay captured missing workflow evidence')).toBeVisible();
+
+    expect(await within(details).findByText('timeline refresh failed')).toBeVisible();
+    expect(within(details).getByText('Replay captured missing workflow evidence')).toBeVisible();
+    expect(timelineRequests).toBeGreaterThan(1);
+  });
+
+  it('shows a canonical office grid in crew overview and pivots from a zone occupant', async () => {
+    const user = userEvent.setup();
+    const canonicalZoneOverviewFixture = {
+      ...overviewFixture,
+      zones: [
+        {
+          zone_id: 'meeting-zone',
+          label: 'Meeting Zone',
+          kind: 'shared' as const,
+          grid_x: 1,
+          grid_y: 1,
+          grid_w: 2,
+          grid_h: 1,
+          home_agent_id: null,
+          occupants: [
+            {
+              agent_id: 'app-engineering',
+              display_name: 'App Engineering Agent',
+              kind: 'employee' as const,
+              current_state: 'blocked',
+              active_task: 'Fix workflow issue',
+              effective_severity: 'orange' as const
+            },
+            {
+              agent_id: 'growth-revenue',
+              display_name: 'Growth Revenue Agent',
+              kind: 'employee' as const,
+              current_state: 'planning',
+              active_task: 'Review launch copy',
+              effective_severity: 'yellow' as const
+            }
+          ]
+        },
+        {
+          zone_id: 'qa-desk',
+          label: 'QA Desk',
+          kind: 'desk' as const,
+          grid_x: 1,
+          grid_y: 0,
+          grid_w: 1,
+          grid_h: 1,
+          home_agent_id: 'growth-revenue',
+          occupants: []
+        },
+        {
+          zone_id: 'lead-desk',
+          label: 'Team Lead Desk',
+          kind: 'desk' as const,
+          grid_x: 0,
+          grid_y: 0,
+          grid_w: 1,
+          grid_h: 1,
+          home_agent_id: 'team-lead',
+          occupants: [
+            {
+              agent_id: 'team-lead',
+              display_name: 'Team Lead',
+              kind: 'lead' as const,
+              current_state: 'reviewing',
+              active_task: 'Coordinate rollout',
+              effective_severity: 'normal' as const
+            }
+          ]
+        }
+      ]
+    };
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === '/office/overview') {
+          return new Response(JSON.stringify(canonicalZoneOverviewFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === operationsUrl || url === selectedOperationUrl) {
+          return new Response(JSON.stringify(operationsFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === incidentsUrl) {
+          return new Response(JSON.stringify(incidentFeedFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === workflowUrl) {
+          return new Response(JSON.stringify(workflowFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === teamLeadWorkflowUrl) {
+          return new Response(JSON.stringify(teamLeadWorkflowFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === growthRevenueWorkflowUrl) {
+          return new Response(JSON.stringify(growthRevenueWorkflowFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === correlationUrl) {
+          return new Response(JSON.stringify(correlationFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === secondaryCorrelationUrl) {
+          return new Response(JSON.stringify(secondaryCorrelationFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        throw new Error(`Unexpected request: ${url}`);
+      })
+    );
+
+    render(<App />);
+
+    const details = await openHub(user);
+    const officeGridSection = within(details).getByRole('heading', { name: 'Office Grid' }).closest('section');
+    expect(officeGridSection).not.toBeNull();
+
+    const officeGridLabels = Array.from(officeGridSection!.querySelectorAll('li strong')).map((node) => node.textContent);
+    expect(officeGridLabels).toEqual(['Team Lead Desk', 'QA Desk', 'Meeting Zone']);
+
+    expect(within(officeGridSection!).getAllByText('Kind · desk')).toHaveLength(2);
+    expect(within(officeGridSection!).getByText('Kind · shared')).toBeVisible();
+    expect(within(officeGridSection!).getByText('Home · Team Lead')).toBeVisible();
+    expect(within(officeGridSection!).getByText('Home · Growth Revenue Agent')).toBeVisible();
+    expect(
+      within(officeGridSection!).getByRole('button', { name: 'Select zone occupant Team Lead in Team Lead Desk' })
+    ).toBeVisible();
+    expect(within(officeGridSection!).getAllByText('Occupants · Empty')).toHaveLength(1);
+    expect(within(officeGridSection!).getByText('Severity · Normal · 1 occupant(s)')).toBeVisible();
+    expect(within(officeGridSection!).getByText('Severity · Orange · 2 occupant(s)')).toBeVisible();
+
+    const occupantButton = within(officeGridSection!).getByRole('button', {
+      name: 'Select zone occupant App Engineering Agent in Meeting Zone'
+    });
+    expect(occupantButton).toBeVisible();
+
+    await user.click(occupantButton);
+    expect(await within(details).findByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
   });
 
   it('opens agent detail and correlation drilldown directly from the active queue', async () => {
@@ -1413,19 +1817,20 @@ afterEach(() => {
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
 
     const workflowSection = within(details).getByRole('heading', { name: 'Workflow' }).closest('section');
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
     expect(workflowSection).not.toBeNull();
+    expect(correlationSection).not.toBeNull();
     await user.click(within(workflowSection!).getByRole('button', { name: /Open workflow correlation corr-app-review/ }));
 
     await waitFor(() => {
       expect(
-        within(details).queryByRole('button', { name: 'Select correlation participant agent app-engineering' })
+        within(correlationSection!).queryByRole('button', { name: 'Select correlation participant agent app-engineering' })
       ).not.toBeInTheDocument();
       expect(
-        within(details).getByRole('button', { name: 'Select correlation participant agent team-lead' })
+        within(correlationSection!).getByRole('button', { name: 'Select correlation participant agent team-lead' })
       ).toBeVisible();
-      expect(within(details).getByText('Participants · app-engineering, team-lead')).toBeVisible();
+      expect(within(correlationSection!).getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
     });
-    expect(within(details).getAllByText('Counts · 1 incidents · 1 interactions · 1 events')[0]).toBeVisible();
 
     await act(async () => {
       expect(globalThis.fetch).toHaveBeenCalledWith(correlationUrl, expect.anything());
@@ -2692,6 +3097,27 @@ afterEach(() => {
     expect(within(workflowSection!).getByText('Workflow evidence is still incomplete')).toBeVisible();
     expect(within(details).getByText('meeting-zone')).toBeVisible();
     expect(within(workflowSection!).getByText('Workflow status · blocked')).toBeVisible();
+    expect(within(workflowSection!).getByText('Latest heartbeat · 2026-03-16T08:59:30.000Z')).toBeVisible();
+    expect(within(workflowSection!).getByText('Recent interactions · 1')).toBeVisible();
+    expect(within(workflowSection!).getByText('Recent timeline · 1')).toBeVisible();
+    expect(within(workflowSection!).getByText('Recent handoffs · 1')).toBeVisible();
+    expect(within(workflowSection!).getByText('Recent reboots · 1')).toBeVisible();
+    expect(within(workflowSection!).getByText('Lead reviewed the missing workflow evidence thread')).toBeVisible();
+    expect(within(workflowSection!).getByText('Interaction · peer_watch')).toBeVisible();
+    expect(within(workflowSection!).getByText('Participants · app-engineering, team-lead')).toBeVisible();
+    expect(within(workflowSection!).getByText('Agent attached workflow evidence for lead review')).toBeVisible();
+    expect(within(workflowSection!).getByText('Timeline · agent_noted · meeting-zone')).toBeVisible();
+    expect(within(workflowSection!).getByText('Secondary review handoff completed')).toBeVisible();
+    expect(within(workflowSection!).getByText('Handoff · completed · handoff_done')).toBeVisible();
+    expect(within(workflowSection!).getByText('Reboot recommended after the workflow stalled')).toBeVisible();
+    expect(within(workflowSection!).getByText('Reboot · requested · reboot_recommended')).toBeVisible();
+
+    const incidentSection = within(details).getByRole('heading', { name: 'Incident Feed' }).closest('section');
+    expect(incidentSection).not.toBeNull();
+    expect(within(incidentSection!).getByText('Incident · peer_watch · open')).toBeVisible();
+    expect(within(incidentSection!).getByText('Counterparties · team-lead')).toBeVisible();
+    expect(within(incidentSection!).getByText('Evidence · /tmp/evidence.md')).toBeVisible();
+    expect(within(incidentSection!).getAllByText('Source · controller_event').length).toBeGreaterThan(0);
 
     await act(async () => {
       expect(globalThis.fetch).toHaveBeenCalledWith(workflowUrl, expect.anything());

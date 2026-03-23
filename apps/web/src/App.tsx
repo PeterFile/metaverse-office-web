@@ -8,7 +8,8 @@ import {
   fetchCorrelationDrilldown,
   fetchIncidents,
   fetchOfficeOperations,
-  fetchOfficeOverview
+  fetchOfficeOverview,
+  fetchTimeline
 } from './api';
 import { DetailsPanel } from './aitown/DetailsPanel';
 import { adaptWorldToScene } from './aitown/sceneAdapter';
@@ -23,6 +24,8 @@ const LazyWorldScene = lazy(() => import('./aitown/WorldScene'));
 type OperationSelection = {
   agentId: string;
 };
+
+const CREW_TIMELINE_LIMIT = 4;
 
 function isJsdomEnvironment() {
   return typeof navigator !== 'undefined' && /jsdom/i.test(navigator.userAgent);
@@ -124,6 +127,16 @@ function AppInner() {
         signal
       }),
     resourceKey: 'incident-feed'
+  });
+  const crewTimelineResource = usePolledResource({
+    enabled: hubOpen && selectedAgentId === null,
+    load: (signal) =>
+      fetchTimeline({
+        limit: CREW_TIMELINE_LIMIT,
+        window: DEFAULT_WORKFLOW_WINDOW,
+        signal
+      }),
+    resourceKey: 'timeline-replay'
   });
 
   const operationsQueueEnabled = hubOpen && (selectedAgentId === null || selectedOperationSelection !== null);
@@ -654,10 +667,14 @@ function AppInner() {
               operations={operationsResource.data}
               operationsError={operationsResource.error}
               operationsState={operationsResource.state}
+              overviewZones={overviewResource.data?.zones ?? null}
               preserveWorkflowCounterpartyCorrelation={preserveWorkflowCounterpartyCorrelation}
               selectedAgent={selectedAgent}
               selectedCorrelationId={selectedCorrelationId}
               selectedOperation={selectedOperation}
+              timelineReplay={crewTimelineResource.data}
+              timelineReplayError={crewTimelineResource.error}
+              timelineReplayState={crewTimelineResource.state}
               workflow={activeWorkflow}
               workflowError={workflowResource.error}
               workflowState={workflowResource.state}

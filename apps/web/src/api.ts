@@ -4,7 +4,8 @@ import type {
   IncidentFeedResponse,
   OfficeOperations,
   OfficeOverview,
-  ProblemResponse
+  ProblemResponse,
+  TimelineReplayResponse
 } from './types';
 
 const DEFAULT_WORKFLOW_LIMIT = 10;
@@ -132,6 +133,20 @@ export async function fetchIncidents(
   });
 
   return parseJson<IncidentFeedResponse>(response);
+}
+
+export async function fetchTimeline(
+  options: { limit?: number; window?: string; signal?: AbortSignal } = {}
+): Promise<TimelineReplayResponse> {
+  const params = new URLSearchParams({
+    limit: String(options.limit ?? DEFAULT_WORKFLOW_LIMIT),
+    window: options.window ?? DEFAULT_WORKFLOW_WINDOW
+  });
+  const response = await fetch(resolveApiUrl(`/timeline?${params.toString()}`), {
+    signal: options.signal
+  });
+
+  return parseJson<TimelineReplayResponse>(response);
 }
 
 export async function fetchCorrelationDrilldown(

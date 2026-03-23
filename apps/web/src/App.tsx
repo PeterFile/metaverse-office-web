@@ -98,6 +98,7 @@ function AppInner() {
   const { selectedAgentId, setSelectedAgentId, setWorld } = useWorld();
   const [hubOpen, setHubOpen] = useState(false);
   const [selectedCorrelationId, setSelectedCorrelationId] = useState<string | null>(null);
+  const [selectedCorrelationWasExplicit, setSelectedCorrelationWasExplicit] = useState(false);
   const [selectedOperationSelection, setSelectedOperationSelection] = useState<OperationSelection | null>(null);
   const [selectedOperationSnapshot, setSelectedOperationSnapshot] = useState<OfficeOperation | null>(null);
   const [invalidSelectedOperationCorrelationId, setInvalidSelectedOperationCorrelationId] = useState<string | null>(null);
@@ -186,6 +187,7 @@ function AppInner() {
       ) {
         correlationSelectionModeRef.current = 'auto';
         setSelectedCorrelationId(null);
+        setSelectedCorrelationWasExplicit(false);
       }
     },
     resourceKey: resolveCorrelationPollKey(selectedCorrelationId)
@@ -339,6 +341,7 @@ function AppInner() {
       lastCorrelationContextRef.current = correlationSelectionContext;
       correlationSelectionModeRef.current = 'auto';
       setSelectedCorrelationId(null);
+      setSelectedCorrelationWasExplicit(false);
     }
   }, [correlationSelectionContext, hubOpen]);
 
@@ -363,6 +366,7 @@ function AppInner() {
 
     if (nextCorrelationId !== selectedCorrelationId) {
       setSelectedCorrelationId(nextCorrelationId);
+      setSelectedCorrelationWasExplicit(false);
     }
   }, [
     activeWorkflow,
@@ -379,8 +383,10 @@ function AppInner() {
   }, []);
 
   const handleSelectCorrelation = useCallback((correlationId: string | null) => {
-    correlationSelectionModeRef.current = correlationId === null ? 'auto' : 'manual';
+    const isExplicitSelection = correlationId !== null;
+    correlationSelectionModeRef.current = isExplicitSelection ? 'manual' : 'auto';
     setSelectedCorrelationId(correlationId);
+    setSelectedCorrelationWasExplicit(isExplicitSelection);
     if (correlationId) {
       setHubOpen(true);
     }
@@ -496,11 +502,13 @@ function AppInner() {
       agentId: string | null,
       correlationId: string | null,
       operationSelection: OperationSelection | null = null,
-      correlationMode: 'auto' | 'manual' | 'preserved' = correlationId === null ? 'auto' : 'manual'
+      correlationMode: 'auto' | 'manual' | 'preserved' = correlationId === null ? 'auto' : 'manual',
+      correlationWasExplicit = correlationMode === 'manual'
     ) => {
       lastCorrelationContextRef.current = resolveCorrelationSelectionContext(agentId);
       correlationSelectionModeRef.current = correlationMode;
       setSelectedCorrelationId(correlationId);
+      setSelectedCorrelationWasExplicit(correlationId !== null && correlationWasExplicit);
       setSelectedOperationSelection(operationSelection);
       setSelectedAgentId(agentId);
     },
@@ -537,6 +545,8 @@ function AppInner() {
     overviewResource.error,
     Boolean(overviewResource.data)
   );
+  const preserveWorkflowCounterpartyCorrelation =
+    selectedCorrelationId !== null && selectedCorrelationWasExplicit;
 
   return (
     <main className="aitown-shell game-background">
@@ -644,6 +654,7 @@ function AppInner() {
               operations={operationsResource.data}
               operationsError={operationsResource.error}
               operationsState={operationsResource.state}
+              preserveWorkflowCounterpartyCorrelation={preserveWorkflowCounterpartyCorrelation}
               selectedAgent={selectedAgent}
               selectedCorrelationId={selectedCorrelationId}
               selectedOperation={selectedOperation}
@@ -652,7 +663,13 @@ function AppInner() {
               workflowState={workflowResource.state}
               world={projectedWorld}
               onSelectAgent={(agentId, correlationId = null) =>
-                selectAgent(agentId, correlationId, null, correlationId === null ? 'auto' : 'preserved')
+                selectAgent(
+                  agentId,
+                  correlationId,
+                  null,
+                  correlationId === null ? 'auto' : 'preserved',
+                  correlationId !== null && correlationId === selectedCorrelationId && selectedCorrelationWasExplicit
+                )
               }
               onSelectCorrelation={handleSelectCorrelation}
               onSelectOperation={handleSelectOperation}

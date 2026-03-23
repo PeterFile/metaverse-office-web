@@ -22,6 +22,7 @@ type DetailsPanelProps = {
   operations: OfficeOperations | null;
   operationsError: string | null;
   operationsState: LoadState;
+  preserveWorkflowCounterpartyCorrelation: boolean;
   selectedAgent: OfficeAgent | null;
   selectedCorrelationId: string | null;
   selectedOperation: OfficeOperation | null;
@@ -218,6 +219,7 @@ export function DetailsPanel({
   operations,
   operationsError,
   operationsState,
+  preserveWorkflowCounterpartyCorrelation,
   selectedAgent,
   selectedCorrelationId,
   selectedOperation,
@@ -541,6 +543,7 @@ export function DetailsPanel({
                     navigableAgentIds,
                     emptyLabel: 'No counterparties',
                     ariaLabelPrefix: 'Select workflow counterparty agent',
+                    correlationId: preserveWorkflowCounterpartyCorrelation ? selectedCorrelationId : null,
                     onSelectAgent
                   })}
                 </span>

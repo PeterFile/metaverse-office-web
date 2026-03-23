@@ -268,11 +268,75 @@ const workflowFixture = {
         metadata: {}
       }
     ],
-    recent_events: [],
-    recent_interactions: [],
+    recent_events: [
+      {
+        event_id: 'evt-workflow-1',
+        ts: '2026-03-16T08:58:00.000Z',
+        agent_id: 'app-engineering',
+        actor_id: 'app-engineering',
+        event_type: 'agent_noted',
+        severity: 'yellow',
+        current_state: 'blocked',
+        active_task: 'Fix workflow issue',
+        location: 'meeting-zone',
+        summary: 'Agent attached workflow evidence for lead review',
+        correlation_id: 'corr-app-review',
+        counterparty_agent_ids: ['team-lead'],
+        evidence_refs: ['/tmp/evidence.md'],
+        source_kind: 'workspace_snapshot',
+        metadata: {}
+      }
+    ],
+    recent_interactions: [
+      {
+        interaction_id: 'interaction-workflow-1',
+        interaction_type: 'peer_watch',
+        correlation_id: 'corr-app-review',
+        started_at: '2026-03-16T08:49:00.000Z',
+        ended_at: '2026-03-16T08:58:00.000Z',
+        participant_agent_ids: ['app-engineering', 'team-lead'],
+        trigger_event_id: 'evt-workflow-1',
+        before_state: 'coding',
+        after_state: 'blocked',
+        severity: 'orange',
+        evidence_refs: ['/tmp/evidence.md'],
+        summary: 'Lead reviewed the missing workflow evidence thread',
+        related_event_ids: ['evt-workflow-1']
+      }
+    ],
     recent_incidents: [],
-    recent_handoffs: [],
-    recent_reboots: []
+    recent_handoffs: [
+      {
+        handoff_id: 'handoff-1',
+        ts: '2026-03-16T08:57:00.000Z',
+        agent_id: 'app-engineering',
+        actor_id: 'growth-revenue',
+        phase: 'handoff_done',
+        status: 'completed',
+        severity: 'yellow',
+        summary: 'Secondary review handoff completed',
+        counterparty_agent_ids: ['growth-revenue'],
+        evidence_refs: ['/tmp/secondary-evidence.md'],
+        correlation_id: 'corr-app-secondary',
+        source_kind: 'controller_event'
+      }
+    ],
+    recent_reboots: [
+      {
+        reboot_id: 'reboot-1',
+        ts: '2026-03-16T08:40:00.000Z',
+        agent_id: 'app-engineering',
+        actor_id: 'team-lead',
+        phase: 'reboot_recommended',
+        status: 'requested',
+        severity: 'yellow',
+        summary: 'Reboot recommended after the workflow stalled',
+        counterparty_agent_ids: ['team-lead'],
+        evidence_refs: ['/tmp/reboot-note.md'],
+        correlation_id: 'corr-app-review',
+        source_kind: 'controller_event'
+      }
+    ]
   },
   correlation_ids: ['corr-app-review', 'corr-app-secondary'],
   counterparty_agent_ids: ['team-lead'],
@@ -614,6 +678,36 @@ afterEach(() => {
 
     await user.click(within(details).getByRole('button', { name: 'Inspect Team Lead' }));
     expect(within(details).queryByRole('heading', { name: 'Active Queue' })).not.toBeInTheDocument();
+  });
+
+  it('shows attention queue, watch topology, and enriched incident cards in crew overview', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    const attentionSection = within(details).getByRole('heading', { name: 'Attention Queue' }).closest('section');
+    const topologySection = within(details).getByRole('heading', { name: 'Watch Topology' }).closest('section');
+    const incidentSection = within(details).getByRole('heading', { name: 'Incident Feed' }).closest('section');
+
+    expect(attentionSection).not.toBeNull();
+    expect(topologySection).not.toBeNull();
+    expect(incidentSection).not.toBeNull();
+
+    expect(within(attentionSection!).getByRole('button', { name: 'Inspect App Engineering Agent from attention queue' })).toBeVisible();
+    expect(within(attentionSection!).getByRole('button', { name: 'Inspect Growth Revenue Agent from attention queue' })).toBeVisible();
+    expect(within(attentionSection!).getByText('Orange · Blocked')).toBeVisible();
+    expect(within(attentionSection!).getByText('Yellow · Planning')).toBeVisible();
+    expect(within(topologySection!).getByText('Team Lead -> App Engineering Agent')).toBeVisible();
+    expect(within(topologySection!).getByText('Mode · lead')).toBeVisible();
+    expect(within(topologySection!).getByText('Risk · High risk · Orange')).toBeVisible();
+    expect(within(incidentSection!).getByText('Incident · peer_watch · open')).toBeVisible();
+    expect(within(incidentSection!).getByText('Counterparties · team-lead')).toBeVisible();
+    expect(within(incidentSection!).getByText('Evidence · /tmp/evidence.md')).toBeVisible();
+    expect(within(incidentSection!).getAllByText('Source · controller_event').length).toBeGreaterThan(0);
+    expect(within(incidentSection!).getByRole('button', { name: 'Select incident agent app-engineering from incident inc-1' })).toBeVisible();
+    expect(
+      within(incidentSection!).getByRole('button', { name: /Open incident correlation corr-app-review/ })
+    ).toBeVisible();
   });
 
   it('opens agent detail and correlation drilldown directly from the active queue', async () => {
@@ -1413,19 +1507,20 @@ afterEach(() => {
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
 
     const workflowSection = within(details).getByRole('heading', { name: 'Workflow' }).closest('section');
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
     expect(workflowSection).not.toBeNull();
+    expect(correlationSection).not.toBeNull();
     await user.click(within(workflowSection!).getByRole('button', { name: /Open workflow correlation corr-app-review/ }));
 
     await waitFor(() => {
       expect(
-        within(details).queryByRole('button', { name: 'Select correlation participant agent app-engineering' })
+        within(correlationSection!).queryByRole('button', { name: 'Select correlation participant agent app-engineering' })
       ).not.toBeInTheDocument();
       expect(
-        within(details).getByRole('button', { name: 'Select correlation participant agent team-lead' })
+        within(correlationSection!).getByRole('button', { name: 'Select correlation participant agent team-lead' })
       ).toBeVisible();
-      expect(within(details).getByText('Participants · app-engineering, team-lead')).toBeVisible();
+      expect(within(correlationSection!).getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
     });
-    expect(within(details).getAllByText('Counts · 1 incidents · 1 interactions · 1 events')[0]).toBeVisible();
 
     await act(async () => {
       expect(globalThis.fetch).toHaveBeenCalledWith(correlationUrl, expect.anything());
@@ -2692,6 +2787,27 @@ afterEach(() => {
     expect(within(workflowSection!).getByText('Workflow evidence is still incomplete')).toBeVisible();
     expect(within(details).getByText('meeting-zone')).toBeVisible();
     expect(within(workflowSection!).getByText('Workflow status · blocked')).toBeVisible();
+    expect(within(workflowSection!).getByText('Latest heartbeat · 2026-03-16T08:59:30.000Z')).toBeVisible();
+    expect(within(workflowSection!).getByText('Recent interactions · 1')).toBeVisible();
+    expect(within(workflowSection!).getByText('Recent timeline · 1')).toBeVisible();
+    expect(within(workflowSection!).getByText('Recent handoffs · 1')).toBeVisible();
+    expect(within(workflowSection!).getByText('Recent reboots · 1')).toBeVisible();
+    expect(within(workflowSection!).getByText('Lead reviewed the missing workflow evidence thread')).toBeVisible();
+    expect(within(workflowSection!).getByText('Interaction · peer_watch')).toBeVisible();
+    expect(within(workflowSection!).getByText('Participants · app-engineering, team-lead')).toBeVisible();
+    expect(within(workflowSection!).getByText('Agent attached workflow evidence for lead review')).toBeVisible();
+    expect(within(workflowSection!).getByText('Timeline · agent_noted · meeting-zone')).toBeVisible();
+    expect(within(workflowSection!).getByText('Secondary review handoff completed')).toBeVisible();
+    expect(within(workflowSection!).getByText('Handoff · completed · handoff_done')).toBeVisible();
+    expect(within(workflowSection!).getByText('Reboot recommended after the workflow stalled')).toBeVisible();
+    expect(within(workflowSection!).getByText('Reboot · requested · reboot_recommended')).toBeVisible();
+
+    const incidentSection = within(details).getByRole('heading', { name: 'Incident Feed' }).closest('section');
+    expect(incidentSection).not.toBeNull();
+    expect(within(incidentSection!).getByText('Incident · peer_watch · open')).toBeVisible();
+    expect(within(incidentSection!).getByText('Counterparties · team-lead')).toBeVisible();
+    expect(within(incidentSection!).getByText('Evidence · /tmp/evidence.md')).toBeVisible();
+    expect(within(incidentSection!).getAllByText('Source · controller_event').length).toBeGreaterThan(0);
 
     await act(async () => {
       expect(globalThis.fetch).toHaveBeenCalledWith(workflowUrl, expect.anything());

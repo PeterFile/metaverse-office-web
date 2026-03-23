@@ -11,6 +11,7 @@ import type {
 } from '../types';
 import type { LoadState } from '../hooks/usePolledResource';
 import type { WorldState } from '../world/types';
+import { selectAgentBadge, selectAgentZoneLabel, selectAttentionQueue, selectWatchEdgeRisk } from '../world/selectors';
 
 type DetailsPanelProps = {
   correlation: CorrelationDrilldown | null;
@@ -168,6 +169,13 @@ function renderOperationStaleness(operation: OfficeOperation) {
   return `${SEVERITY_LABELS[operation.derived_staleness.severity]} · ${operation.derived_staleness.stale_for_minutes ?? 0}m`;
 }
 
+function renderDisplayState(value: string) {
+  return value
+    .split('_')
+    .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
 function renderCorrelationInteraction(interaction: WorkflowInteraction) {
   return (
     <li key={interaction.interaction_id} className={`aitown-record severity-${interaction.severity ?? 'normal'}`}>
@@ -187,6 +195,86 @@ function renderCorrelationTimelineEvent(event: WorkflowTimelineEvent) {
       <span>{`Counterparties · ${renderCounterparties(event.counterparty_agent_ids)}`}</span>
       <span>{`Evidence · ${renderEvidenceRefs(event.evidence_refs)}`}</span>
       <span>{`Source · ${event.source_kind}`}</span>
+    </li>
+  );
+}
+
+function renderWorkflowStatusRecord({
+  key,
+  kind,
+  severity,
+  summary,
+  status,
+  phase,
+  counterpartyAgentIds,
+  evidenceRefs,
+  sourceKind
+}: {
+  key: string;
+  kind: 'Handoff' | 'Reboot';
+  severity: keyof typeof SEVERITY_LABELS;
+  summary: string;
+  status: string;
+  phase: string;
+  counterpartyAgentIds: string[];
+  evidenceRefs: string[];
+  sourceKind: string;
+}) {
+  return (
+    <li key={key} className={`aitown-record severity-${severity}`}>
+      <strong>{summary}</strong>
+      <span>{`${kind} · ${status} · ${phase}`}</span>
+      <span>{`Counterparties · ${renderCounterparties(counterpartyAgentIds)}`}</span>
+      <span>{`Evidence · ${renderEvidenceRefs(evidenceRefs)}`}</span>
+      <span>{`Source · ${sourceKind}`}</span>
+    </li>
+  );
+}
+
+function renderIncidentRecord({
+  incident,
+  activeCorrelationId,
+  currentAgentId,
+  navigableAgentIds,
+  onSelectAgent,
+  onSelectCorrelation,
+  includeAgentPivot
+}: {
+  incident: WorkflowIncident;
+  activeCorrelationId: string | null;
+  currentAgentId: string | null;
+  navigableAgentIds: Set<string>;
+  onSelectAgent: (agentId: string | null, correlationId?: string | null) => void;
+  onSelectCorrelation: (correlationId: string | null) => void;
+  includeAgentPivot: boolean;
+}) {
+  return (
+    <li key={incident.incident_id} className={`aitown-record severity-${incident.severity}`}>
+      <strong>{incident.summary}</strong>
+      {includeAgentPivot ? (
+        <span>
+          Agent ·{' '}
+          {navigableAgentIds.has(incident.agent_id) && incident.agent_id !== currentAgentId
+            ? renderAgentPivotButton({
+                agentId: incident.agent_id,
+                ariaLabel: `Select incident agent ${incident.agent_id} from incident ${incident.incident_id}`,
+                correlationId: incident.correlation_id,
+                onSelectAgent
+              })
+            : incident.agent_id}
+        </span>
+      ) : null}
+      {renderCorrelationButton({
+        correlationId: incident.correlation_id,
+        label: incident.correlation_id ?? 'No correlation id',
+        buttonLabel: 'Open incident correlation',
+        activeCorrelationId,
+        onSelectCorrelation
+      })}
+      <span>{`Incident · ${incident.kind} · ${incident.status}`}</span>
+      <span>{`Counterparties · ${renderCounterparties(incident.counterparty_agent_ids)}`}</span>
+      <span>{`Evidence · ${renderEvidenceRefs(incident.evidence_refs)}`}</span>
+      <span>{`Source · ${incident.source_kind}`}</span>
     </li>
   );
 }
@@ -239,6 +327,8 @@ export function DetailsPanel({
     }))
     .sort(compareAgents);
   const navigableAgentIds = new Set(agents.map((agent) => agent.agentId));
+  const attentionQueue = selectAttentionQueue(world);
+  const agentNameById = new Map([...world.agents.values()].map((agent) => [agent.agent_id, agent.display_name]));
 
   if (!selectedAgent) {
     return (
@@ -276,6 +366,52 @@ export function DetailsPanel({
         </section>
 
         <section className="aitown-details__section">
+          <h3>Attention Queue</h3>
+          <ul className="aitown-records">
+            {attentionQueue.map((agent) => {
+              const badge = selectAgentBadge(agent);
+
+              return (
+                <li key={agent.agent_id} className={`aitown-record severity-${agent.severity}`}>
+                  <button
+                    type="button"
+                    className={`aitown-roster__button severity-${agent.severity}`}
+                    aria-label={`Inspect ${agent.display_name} from attention queue`}
+                    onClick={() => onSelectAgent(agent.agent_id)}
+                  >
+                    <strong>{agent.display_name}</strong>
+                    <span>{`${SEVERITY_LABELS[agent.severity]} · ${renderDisplayState(agent.raw_state)}`}</span>
+                  </button>
+                  <span>{`Zone · ${selectAgentZoneLabel(agent, world.zones)}`}</span>
+                  <span>{`Reason · ${badge.text}`}</span>
+                </li>
+              );
+            })}
+            {attentionQueue.length === 0 ? <li className="aitown-record">No agents need attention.</li> : null}
+          </ul>
+        </section>
+
+        <section className="aitown-details__section">
+          <h3>Watch Topology</h3>
+          <ul className="aitown-records">
+            {world.watch_edges.map((edge) => {
+              const risk = selectWatchEdgeRisk(edge);
+              const fromLabel = agentNameById.get(edge.from_agent_id) ?? edge.from_agent_id;
+              const toLabel = agentNameById.get(edge.to_agent_id) ?? edge.to_agent_id;
+
+              return (
+                <li key={`${edge.from_agent_id}-${edge.to_agent_id}-${edge.watch_mode}`} className={`aitown-record severity-${risk.level}`}>
+                  <strong>{`${fromLabel} -> ${toLabel}`}</strong>
+                  <span>{`Mode · ${edge.watch_mode}`}</span>
+                  <span>{`Risk · ${risk.label} · ${SEVERITY_LABELS[edge.risk_level]}`}</span>
+                </li>
+              );
+            })}
+            {world.watch_edges.length === 0 ? <li className="aitown-record">No active watch edges.</li> : null}
+          </ul>
+        </section>
+
+        <section className="aitown-details__section">
           <h3>Active Queue</h3>
           <ul className="aitown-records">
             {operationsState === 'loading' && !operations ? (
@@ -308,28 +444,17 @@ export function DetailsPanel({
               <li className="aitown-record">Loading incident feed...</li>
             ) : null}
             {incidentFeedError ? <li className="aitown-record">{incidentFeedError}</li> : null}
-            {(incidentFeed?.items ?? []).slice(0, 4).map((incident) => (
-              <li key={incident.incident_id} className={`aitown-record severity-${incident.severity}`}>
-                <strong>{incident.summary}</strong>
-                <span>
-                  {navigableAgentIds.has(incident.agent_id)
-                    ? renderAgentPivotButton({
-                        agentId: incident.agent_id,
-                        ariaLabel: `Select incident agent ${incident.agent_id} from incident ${incident.incident_id}`,
-                        correlationId: incident.correlation_id,
-                        onSelectAgent
-                      })
-                    : incident.agent_id}
-                </span>
-                {renderCorrelationButton({
-                  correlationId: incident.correlation_id,
-                  label: incident.correlation_id ?? 'No correlation id',
-                  buttonLabel: 'Open incident correlation',
-                  activeCorrelationId: selectedCorrelationId,
-                  onSelectCorrelation
-                })}
-              </li>
-            ))}
+            {(incidentFeed?.items ?? []).slice(0, 4).map((incident) =>
+              renderIncidentRecord({
+                incident,
+                activeCorrelationId: selectedCorrelationId,
+                currentAgentId: null,
+                navigableAgentIds,
+                onSelectAgent,
+                onSelectCorrelation,
+                includeAgentPivot: true
+              })
+            )}
             {incidentFeedState === 'ready' && !incidentFeedError && !incidentFeed?.items.length ? (
               <li className="aitown-record">No active incident feed.</li>
             ) : null}
@@ -515,6 +640,16 @@ export function DetailsPanel({
         {workflowState === 'loading' && !workflow ? <p>Loading workflow...</p> : null}
         {workflowError ? <p>{workflowError}</p> : null}
         <ul className="aitown-records">
+          {workflow?.detail.latest_heartbeat ? (
+            <li className="aitown-record">
+              <strong>Latest heartbeat</strong>
+              <span>{`Latest heartbeat · ${renderTimestamp(workflow.detail.latest_heartbeat.received_at ?? null, 'No heartbeat yet')}`}</span>
+              <span>{`Recent interactions · ${workflow.detail.recent_interactions.length}`}</span>
+              <span>{`Recent timeline · ${workflow.detail.recent_events.length}`}</span>
+              <span>{`Recent handoffs · ${workflow.detail.recent_handoffs.length}`}</span>
+              <span>{`Recent reboots · ${workflow.detail.recent_reboots.length}`}</span>
+            </li>
+          ) : null}
           {(workflow?.detail.open_peer_watch_alerts ?? []).map((alert) => (
             <li key={alert.alert_id} className={`aitown-record severity-${alert.severity}`}>
               <strong>{alert.summary}</strong>
@@ -561,6 +696,34 @@ export function DetailsPanel({
               ))}
             </li>
           ) : null}
+          {(workflow?.detail.recent_interactions ?? []).slice(0, 2).map(renderCorrelationInteraction)}
+          {(workflow?.detail.recent_events ?? []).slice(0, 2).map(renderCorrelationTimelineEvent)}
+          {(workflow?.detail.recent_handoffs ?? []).slice(0, 2).map((handoff) =>
+            renderWorkflowStatusRecord({
+              key: handoff.handoff_id,
+              kind: 'Handoff',
+              severity: handoff.severity,
+              summary: handoff.summary,
+              status: handoff.status,
+              phase: handoff.phase,
+              counterpartyAgentIds: handoff.counterparty_agent_ids,
+              evidenceRefs: handoff.evidence_refs,
+              sourceKind: handoff.source_kind
+            })
+          )}
+          {(workflow?.detail.recent_reboots ?? []).slice(0, 2).map((reboot) =>
+            renderWorkflowStatusRecord({
+              key: reboot.reboot_id,
+              kind: 'Reboot',
+              severity: reboot.severity,
+              summary: reboot.summary,
+              status: reboot.status,
+              phase: reboot.phase,
+              counterpartyAgentIds: reboot.counterparty_agent_ids,
+              evidenceRefs: reboot.evidence_refs,
+              sourceKind: reboot.source_kind
+            })
+          )}
         </ul>
       </section>
 
@@ -571,19 +734,17 @@ export function DetailsPanel({
             <li className="aitown-record">Loading incident feed...</li>
           ) : null}
           {incidentFeedError ? <li className="aitown-record">{incidentFeedError}</li> : null}
-          {relatedIncidents.map((incident) => (
-            <li key={incident.incident_id} className={`aitown-record severity-${incident.severity}`}>
-              <strong>{incident.summary}</strong>
-              {renderCorrelationButton({
-                correlationId: incident.correlation_id,
-                label: incident.correlation_id ?? 'No correlation id',
-                buttonLabel: 'Open incident correlation',
-                activeCorrelationId: selectedCorrelationId,
-                onSelectCorrelation
-              })}
-              <span>{incident.status}</span>
-            </li>
-          ))}
+          {relatedIncidents.map((incident) =>
+            renderIncidentRecord({
+              incident,
+              activeCorrelationId: selectedCorrelationId,
+              currentAgentId: selectedAgent.agent_id,
+              navigableAgentIds,
+              onSelectAgent,
+              onSelectCorrelation,
+              includeAgentPivot: false
+            })
+          )}
           {incidentFeedState === 'ready' && !incidentFeedError && relatedIncidents.length === 0 ? (
             <li className="aitown-record">No incident feed entries.</li>
           ) : null}

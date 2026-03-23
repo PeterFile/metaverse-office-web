@@ -870,7 +870,7 @@ test.describe('AI Town shell smoke', () => {
     await expect(detailsPanel.getByText('meeting-zone', { exact: true })).toBeVisible();
     await expect(workflowSection.getByText('No open watch alerts.')).toBeVisible();
     await expect(incidentSection.getByText('Lead completed the revenue handoff')).toBeVisible();
-    await expect(incidentSection.getByText('completed', { exact: true })).toBeVisible();
+    await expect(incidentSection.getByText('Incident · handoff · completed')).toBeVisible();
     await expect(correlationSection.getByText('corr-growth-lead-review')).toBeVisible();
 
     await page.getByRole('button', { name: 'Close Hub' }).click();

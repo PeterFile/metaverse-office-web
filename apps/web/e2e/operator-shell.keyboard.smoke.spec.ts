@@ -903,13 +903,14 @@ test.describe('AI Town shell smoke', () => {
 
     const dialog = page.getByRole('dialog', { name: 'Hub' });
     const closeButton = dialog.getByRole('button', { name: 'Close Hub' });
-    const dialogButtons = dialog.getByRole('button');
+    const lastDialogButton = dialog.getByRole('button').last();
 
     await expect(dialog).toBeVisible();
     await expect(closeButton).toBeFocused();
+    await expect(lastDialogButton).toBeVisible();
 
     await page.keyboard.press('Shift+Tab');
-    await expect(dialogButtons.last()).toBeFocused();
+    await expect(lastDialogButton).toBeFocused();
 
     await page.keyboard.press('Tab');
     await expect(closeButton).toBeFocused();
@@ -955,6 +956,7 @@ test.describe('AI Town shell smoke', () => {
     await page.getByRole('button', { name: 'Open Hub' }).click();
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
+    const clearButton = detailsPanel.getByRole('button', { name: 'Clear' });
     const incidentSection = detailsPanel.locator('section').filter({
       has: page.getByRole('heading', { name: 'Incident Feed' })
     });
@@ -975,6 +977,7 @@ test.describe('AI Town shell smoke', () => {
     await page.keyboard.press('Enter');
 
     await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+    await expect(clearButton).toBeFocused();
     await expect(detailsPanel.getByRole('heading', { name: 'Workflow' })).toBeVisible();
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
     await expect(correlationSection.getByText('corr-revenue-handoff')).toBeVisible();
@@ -988,6 +991,7 @@ test.describe('AI Town shell smoke', () => {
 
     const dialog = page.getByRole('dialog', { name: 'Hub' });
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
+    const clearButton = detailsPanel.getByRole('button', { name: 'Clear' });
     const inspectButton = detailsPanel.getByRole('button', {
       name: 'Inspect Growth Revenue Agent',
       exact: true
@@ -1009,6 +1013,7 @@ test.describe('AI Town shell smoke', () => {
     });
 
     await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+    await expect(clearButton).toBeFocused();
     await expect(correlationSection.getByText('corr-growth-lead-review')).toBeVisible();
     await expect(correlationSection.getByText('Counts · 0 incidents · 1 interactions · 2 events')).toBeVisible();
 
@@ -1020,11 +1025,99 @@ test.describe('AI Town shell smoke', () => {
     await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
   });
 
+  test(
+    'keeps an explicitly selected incident correlation instead of snapping back to the workflow default after a later workflow refresh',
+    async ({ page }) => {
+      test.setTimeout(45_000);
+      await installFastPollInterval(page);
+
+      let workflowResponses = 0;
+      let releaseDelayedRefresh: (() => void) | null = null;
+      const delayedRefreshReady = new Promise<void>((resolve) => {
+        releaseDelayedRefresh = resolve;
+      });
+      const refreshedActiveTask = 'Prepare handoff notes (verified refresh)';
+      await page.route('**/agents/growth-revenue/workflow?limit=10&window=60m', async (route) => {
+        const response = await route.fetch();
+        const workflow = (await response.json()) as {
+          detail: {
+            active_task: string;
+          };
+        };
+
+        workflowResponses += 1;
+        if (workflowResponses === 1) {
+          await route.fulfill({ response, json: workflow });
+          return;
+        }
+
+        await delayedRefreshReady;
+        await route.fulfill({
+          response,
+          json: {
+            ...workflow,
+            detail: {
+              ...workflow.detail,
+              active_task: refreshedActiveTask
+            }
+          }
+        });
+      });
+
+      await page.goto('/');
+      await page.getByRole('button', { name: 'Open Hub' }).click();
+
+      const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
+      const incidentSection = detailsPanel.locator('section').filter({
+        has: page.getByRole('heading', { name: 'Incident Feed' })
+      });
+      const correlationSection = detailsPanel.locator('section').filter({
+        has: page.getByRole('heading', { name: 'Correlation Drilldown' })
+      });
+      const selectedIncidentCorrelationButton = incidentSection.getByRole('button', {
+        name: 'Open incident correlation corr-revenue-handoff, currently selected'
+      });
+
+      await detailsPanel.getByRole('button', { name: 'Inspect Growth Revenue Agent', exact: true }).click();
+
+      await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+      await expect(correlationSection.getByText('corr-growth-lead-review')).toBeVisible();
+
+      await incidentSection.getByRole('button', { name: 'Open incident correlation corr-revenue-handoff' }).click();
+
+      await expect(correlationSection.getByText('corr-revenue-handoff')).toBeVisible();
+      await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
+      await expect(correlationSection.getByText('corr-growth-lead-review')).toHaveCount(0);
+      await expect(selectedIncidentCorrelationButton).toBeVisible();
+
+      const refreshResponse = page.waitForResponse(
+        (response) =>
+          response.request().method() === 'GET' &&
+          response.status() === 200 &&
+          response.url().includes('/agents/growth-revenue/workflow?limit=10&window=60m')
+      );
+      releaseDelayedRefresh?.();
+      await refreshResponse;
+      await expect
+        .poll(() => workflowResponses, {
+          timeout: POLL_DRIVEN_ASSERTION_TIMEOUT_MS
+        })
+        .toBeGreaterThan(1);
+
+      await expect(detailsPanel.getByText(refreshedActiveTask)).toBeVisible();
+      await expect(selectedIncidentCorrelationButton).toBeVisible();
+      await expect(correlationSection.getByText('corr-revenue-handoff')).toBeVisible();
+      await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
+      await expect(correlationSection.getByText('corr-growth-lead-review')).toHaveCount(0);
+    }
+  );
+
   test('opens a workflow correlation pivot from the selected-agent Hub via keyboard traversal', async ({ page }) => {
     await page.goto('/');
     await page.getByRole('button', { name: 'Open Hub' }).click();
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
+    const clearButton = detailsPanel.getByRole('button', { name: 'Clear' });
     const inspectButton = detailsPanel.getByRole('button', {
       name: 'Inspect Growth Revenue Agent',
       exact: true
@@ -1045,12 +1138,88 @@ test.describe('AI Town shell smoke', () => {
     });
 
     await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+    await expect(clearButton).toBeFocused();
     await focusHubControlWithTab(page, workflowCorrelationButton, 'Open workflow correlation corr-revenue-handoff');
     await expect(workflowCorrelationButton).toBeFocused();
     await page.keyboard.press('Enter');
 
     await expect(correlationSection.getByText('corr-revenue-handoff')).toBeVisible();
     await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
+  });
+
+  test('opens a workflow counterparty pivot from the selected-agent Hub via keyboard traversal', async ({ page }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Hub' }).click();
+
+    const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
+    const clearButton = detailsPanel.getByRole('button', { name: 'Clear' });
+    const inspectButton = detailsPanel.getByRole('button', {
+      name: 'Inspect Growth Revenue Agent',
+      exact: true
+    });
+
+    await focusHubControlWithTab(page, inspectButton, 'Inspect Growth Revenue Agent');
+    await expect(inspectButton).toBeFocused();
+    await page.keyboard.press('Enter');
+
+    const workflowSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Workflow' })
+    });
+    const correlationSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Correlation Drilldown' })
+    });
+    const workflowCounterpartyButton = workflowSection.getByRole('button', {
+      name: 'Select workflow counterparty agent app-engineering'
+    });
+
+    await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+    await expect(clearButton).toBeFocused();
+    await expect(correlationSection.getByText('corr-growth-lead-review')).toBeVisible();
+    await focusHubControlWithTab(page, workflowCounterpartyButton, 'Select workflow counterparty agent app-engineering');
+    await expect(workflowCounterpartyButton).toBeFocused();
+    await page.keyboard.press('Enter');
+
+    await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+    await expect(clearButton).toBeFocused();
+    await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
+    await expect(correlationSection.getByText('corr-revenue-handoff')).toBeVisible();
+    await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
+    await expect(correlationSection.getByText('corr-growth-lead-review')).toHaveCount(0);
+  });
+
+  test('opens a correlation participant pivot from the selected-agent Hub via keyboard traversal', async ({ page }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Hub' }).click();
+
+    const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
+    const clearButton = detailsPanel.getByRole('button', { name: 'Clear' });
+    const inspectButton = detailsPanel.getByRole('button', {
+      name: 'Inspect Growth Revenue Agent',
+      exact: true
+    });
+
+    await focusHubControlWithTab(page, inspectButton, 'Inspect Growth Revenue Agent');
+    await expect(inspectButton).toBeFocused();
+    await page.keyboard.press('Enter');
+
+    const correlationSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Correlation Drilldown' })
+    });
+    const correlationParticipantButton = correlationSection.getByRole('button', {
+      name: 'Select correlation participant agent team-lead'
+    });
+
+    await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+    await expect(clearButton).toBeFocused();
+    await expect(correlationSection.getByText('corr-growth-lead-review')).toBeVisible();
+    await focusHubControlWithTab(page, correlationParticipantButton, 'Select correlation participant agent team-lead');
+    await expect(correlationParticipantButton).toBeFocused();
+    await page.keyboard.press('Enter');
+
+    await expect(detailsPanel.getByRole('heading', { name: 'Team Lead' })).toBeVisible();
+    await expect(clearButton).toBeFocused();
+    await expect(correlationSection.getByText('corr-growth-lead-review')).toBeVisible();
+    await expect(correlationSection.getByText('Counts · 0 incidents · 1 interactions · 2 events')).toBeVisible();
   });
 
   test('keeps selected-agent workflow details pinned when a refresh-only workflow 404 arrives before overview drops the agent', async ({ page }) => {

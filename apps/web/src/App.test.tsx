@@ -654,9 +654,10 @@ afterEach(() => {
     await waitFor(() => {
       expect(within(operationSection!).getByText('blocked · Workflow evidence is still incomplete')).toBeVisible();
       expect(within(operationSection!).getByRole('button', { name: /Open operation correlation corr-app-review/ })).toBeVisible();
+      expect(within(operationSection!).getByRole('button', { name: 'Select operation counterparty agent team-lead' })).toBeVisible();
       expect(within(operationSection!).getByText('Location · meeting-zone')).toBeVisible();
       expect(within(operationSection!).getByText('Latest event · Workflow evidence is still incomplete')).toBeVisible();
-      expect(within(operationSection!).getByText('Counterparties · team-lead')).toBeVisible();
+      expect(operationSection!).toHaveTextContent('Counterparties · team-lead');
       expect(within(operationSection!).getByText('Evidence · /tmp/evidence.md')).toBeVisible();
       expect(within(operationSection!).getByText('Source · controller_event')).toBeVisible();
       expect(within(runContextSection!).getByText('Run blocker · Workflow evidence is still incomplete')).toBeVisible();
@@ -667,6 +668,37 @@ afterEach(() => {
       expect(within(runContextSection!).getByText('Last output · 2026-03-16T08:38:00.000Z')).toBeVisible();
       expect(within(runContextSection!).getByText('Staleness · Orange · 22m')).toBeVisible();
       expect(within(runContextSection!).getByText('Reboot recommendation · Recommended')).toBeVisible();
+    });
+  });
+
+  it('pivots from current-operation counterparties through the selected-agent flow', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent from active queue' }));
+
+    const operationSection = within(details).getByRole('heading', { name: 'Current Operation' }).closest('section');
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    expect(operationSection).not.toBeNull();
+    expect(correlationSection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(operationSection!).getByRole('button', { name: 'Select operation counterparty agent team-lead' })).toBeVisible();
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+    });
+
+    await user.click(within(operationSection!).getByRole('button', { name: 'Select operation counterparty agent team-lead' }));
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'Team Lead' })).toBeVisible();
+      expect(within(details).queryByRole('heading', { name: 'Current Operation' })).not.toBeInTheDocument();
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+    });
+
+    await act(async () => {
+      expect(globalThis.fetch).toHaveBeenCalledWith(teamLeadWorkflowUrl, expect.anything());
+      expect(globalThis.fetch).toHaveBeenCalledWith(correlationUrl, expect.anything());
     });
   });
 
@@ -833,7 +865,8 @@ afterEach(() => {
       expect(within(operationSection!).getByText('Location · review-zone')).toBeVisible();
       expect(within(operationSection!).getByText('Latest event · Merged rollout verified')).toBeVisible();
       expect(within(operationSection!).getByRole('button', { name: /Open operation correlation corr-app-followup/ })).toBeVisible();
-      expect(within(operationSection!).getByText('Counterparties · growth-revenue')).toBeVisible();
+      expect(within(operationSection!).getByRole('button', { name: 'Select operation counterparty agent growth-revenue' })).toBeVisible();
+      expect(operationSection!).toHaveTextContent('Counterparties · growth-revenue');
       expect(within(operationSection!).getByText('Evidence · /tmp/review.log')).toBeVisible();
       expect(within(operationSection!).getByText('Source · workspace_snapshot')).toBeVisible();
       expect(within(runContextSection!).getByText('Run blocker · No current blocker')).toBeVisible();

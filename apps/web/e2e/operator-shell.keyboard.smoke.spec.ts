@@ -951,6 +951,45 @@ test.describe('AI Town shell smoke', () => {
     await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
   });
 
+  test('opens a current-operation counterparty pivot from the selected-agent Hub via keyboard traversal', async ({ page }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Hub' }).click();
+
+    const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
+    const clearButton = detailsPanel.getByRole('button', { name: 'Clear' });
+    const queueButton = detailsPanel.getByRole('button', {
+      name: 'Inspect Growth Revenue Agent from active queue'
+    });
+
+    await focusHubControlWithTab(page, queueButton, 'Inspect Growth Revenue Agent from active queue');
+    await expect(queueButton).toBeFocused();
+    await page.keyboard.press('Enter');
+
+    const operationSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Current Operation' })
+    });
+    const correlationSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Correlation Drilldown' })
+    });
+    const operationCounterpartyButton = operationSection.getByRole('button', {
+      name: 'Select operation counterparty agent app-engineering'
+    });
+
+    await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+    await expect(clearButton).toBeFocused();
+    await expect(correlationSection.getByText('corr-revenue-handoff')).toBeVisible();
+    await expect(operationCounterpartyButton).toBeVisible();
+    await focusHubControlWithTab(page, operationCounterpartyButton, 'Select operation counterparty agent app-engineering');
+    await expect(operationCounterpartyButton).toBeFocused();
+    await page.keyboard.press('Enter');
+
+    await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+    await expect(clearButton).toBeFocused();
+    await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
+    await expect(correlationSection.getByText('corr-revenue-handoff')).toBeVisible();
+    await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
+  });
+
   test('carries the crew-overview incident correlation into a selected-agent pivot via keyboard traversal', async ({ page }) => {
     await page.goto('/');
     await page.getByRole('button', { name: 'Open Hub' }).click();

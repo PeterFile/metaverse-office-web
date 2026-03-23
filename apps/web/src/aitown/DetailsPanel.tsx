@@ -472,7 +472,18 @@ export function DetailsPanel({
                     onSelectCorrelation
                   })
                 : null}
-              <span>{`Counterparties · ${renderCounterparties(selectedOperation.latest_event?.counterparty_agent_ids ?? [])}`}</span>
+              <span>
+                {'Counterparties · '}
+                {renderAgentPivotList({
+                  agentIds: selectedOperation.latest_event?.counterparty_agent_ids ?? [],
+                  currentAgentId: selectedAgent.agent_id,
+                  navigableAgentIds,
+                  emptyLabel: 'No counterparties',
+                  ariaLabelPrefix: 'Select operation counterparty agent',
+                  correlationId: currentOperationIsStale ? null : selectedOperation.correlation_id,
+                  onSelectAgent
+                })}
+              </span>
               <span>{`Evidence · ${renderEvidenceRefs(selectedOperation.latest_event?.evidence_refs ?? [])}`}</span>
               <span>{`Source · ${selectedOperation.latest_event?.source_kind ?? 'No latest event source'}`}</span>
             </li>

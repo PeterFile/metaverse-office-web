@@ -1,9 +1,9 @@
 import { expect, test, type ConsoleMessage, type Locator, type Page, type Request, type Route } from '@playwright/test';
 
 import {
-  BROWSER_SMOKE_BACKEND_ORIGIN_ENV,
-  resolveBrowserSmokePorts
-} from '../scripts/browser-smoke-ports.mjs';
+  resolveBrowserSmokeReadTargetOrigin,
+  resolveBrowserSmokeWriteTargetOrigin
+} from '../scripts/run-browser-smoke.mjs';
 import { resolveViewportEdgeDragDelta } from '../scripts/viewport-reachability';
 import { findStableSample, requireStableSample } from '../scripts/stability';
 
@@ -349,37 +349,8 @@ async function enableScenario(
   );
 }
 
-function resolveBrowserSmokeWriteTargetOrigin() {
-  const explicitOrigin = process.env[BROWSER_SMOKE_BACKEND_ORIGIN_ENV]?.trim();
-  if (explicitOrigin) {
-    return explicitOrigin.replace(/\/+$/, '');
-  }
-
-  const proxyTarget = process.env.VITE_DEV_PROXY_TARGET?.trim();
-  if (proxyTarget) {
-    return proxyTarget.replace(/\/+$/, '');
-  }
-
-  if (process.env.BROWSER_SMOKE_BASE_URL?.trim()) {
-    return null;
-  }
-
-  const { backendPort } = resolveBrowserSmokePorts(process.env);
-  return `http://127.0.0.1:${backendPort}`;
-}
-
 function resolveInspectableBrowserSmokeBackendOrigin() {
-  const explicitOrigin = process.env[BROWSER_SMOKE_BACKEND_ORIGIN_ENV]?.trim();
-  if (explicitOrigin) {
-    return explicitOrigin.replace(/\/+$/, '');
-  }
-
-  if (process.env.VITE_DEV_PROXY_TARGET?.trim()) {
-    return null;
-  }
-
-  const { backendPort } = resolveBrowserSmokePorts(process.env);
-  return `http://127.0.0.1:${backendPort}`;
+  return resolveBrowserSmokeReadTargetOrigin(process.env);
 }
 
 async function attemptLoopbackWrite(page: Page, pathname: string): Promise<BrowserWriteAttemptResult> {

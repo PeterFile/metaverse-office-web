@@ -9,11 +9,14 @@ import {
   BROWSER_SMOKE_PROXY_READY_PATH,
   detectInspectableBrowserSmokeBackendOrigin,
   extractOrigin,
+  isLoopbackBrowserSmokeOrigin,
   launchManagedServer,
   parseBrowserSmokeArgs,
   resolveBrowserSmokeFrontendReadyPath,
   resolveBrowserSmokePlaywrightEnv,
+  resolveBrowserSmokeReadTargetOrigin,
   resolveBrowserSmokeRunMode,
+  resolveBrowserSmokeWriteTargetOrigin,
   resolveFrontendServerArgs,
   resolvePlaywrightArgs,
   stopManagedServer,
@@ -292,6 +295,96 @@ describe('run-browser-smoke helpers', () => {
       detectInspectableBrowserSmokeBackendOrigin('http://127.0.0.1:3000')
     ).resolves.toBe('http://127.0.0.1:3000');
     expect(globalThis.fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not probe non-loopback managed proxy targets for inspectable request logs', async () => {
+    vi.stubGlobal('fetch', vi.fn());
+
+    await expect(
+      detectInspectableBrowserSmokeBackendOrigin('https://example.com')
+    ).resolves.toBeNull();
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
+
+  it('does not derive a browser write target from a raw proxy target without an explicit inspectable backend origin', () => {
+    expect(
+      resolveBrowserSmokeWriteTargetOrigin({
+        BROWSER_SMOKE_BASE_URL: 'http://127.0.0.1:4173',
+        VITE_DEV_PROXY_TARGET: 'https://example.com'
+      })
+    ).toBeNull();
+  });
+
+  it('recovers a loopback request-log target from a raw proxy target for direct Playwright runs', () => {
+    expect(
+      resolveBrowserSmokeReadTargetOrigin({
+        VITE_DEV_PROXY_TARGET: 'http://127.0.0.1:3000/'
+      })
+    ).toBe('http://127.0.0.1:3000');
+  });
+
+  it('does not recover a request-log target from a non-loopback raw proxy target', () => {
+    expect(
+      resolveBrowserSmokeReadTargetOrigin({
+        VITE_DEV_PROXY_TARGET: 'https://example.com'
+      })
+    ).toBeNull();
+  });
+
+  it('keeps request-log reads disabled for wrapper runs unless an explicit inspectable backend origin was threaded', () => {
+    expect(
+      resolveBrowserSmokeReadTargetOrigin({
+        BROWSER_SMOKE_BASE_URL: 'http://127.0.0.1:4173',
+        VITE_DEV_PROXY_TARGET: 'http://127.0.0.1:3000'
+      })
+    ).toBeNull();
+  });
+
+  it('keeps explicit loopback request-log targets available when the wrapper threads them through', () => {
+    expect(
+      resolveBrowserSmokeReadTargetOrigin({
+        BROWSER_SMOKE_BASE_URL: 'http://127.0.0.1:4173',
+        BROWSER_SMOKE_BACKEND_ORIGIN: 'http://localhost:3210/',
+        VITE_DEV_PROXY_TARGET: 'https://example.com'
+      })
+    ).toBe('http://localhost:3210');
+  });
+
+  it('keeps loopback write targets available only when an explicit inspectable backend origin was threaded', () => {
+    expect(
+      resolveBrowserSmokeWriteTargetOrigin({
+        BROWSER_SMOKE_BASE_URL: 'http://127.0.0.1:4173',
+        BROWSER_SMOKE_BACKEND_ORIGIN: 'http://127.0.0.1:3210',
+        VITE_DEV_PROXY_TARGET: 'https://example.com'
+      })
+    ).toBe('http://127.0.0.1:3210');
+  });
+
+  it('keeps explicit localhost write targets available when the wrapper threads them through', () => {
+    expect(
+      resolveBrowserSmokeWriteTargetOrigin({
+        BROWSER_SMOKE_BASE_URL: 'http://127.0.0.1:4173',
+        BROWSER_SMOKE_BACKEND_ORIGIN: 'http://localhost:3210/',
+        VITE_DEV_PROXY_TARGET: 'https://example.com'
+      })
+    ).toBe('http://localhost:3210');
+  });
+
+  it('rejects explicit non-loopback write targets even when the wrapper threads them through', () => {
+    expect(
+      resolveBrowserSmokeWriteTargetOrigin({
+        BROWSER_SMOKE_BASE_URL: 'http://127.0.0.1:4173',
+        BROWSER_SMOKE_BACKEND_ORIGIN: 'https://example.com',
+        VITE_DEV_PROXY_TARGET: 'https://example.com'
+      })
+    ).toBeNull();
+  });
+
+  it('accepts only localhost and 127.0.0.1 as loopback inspectable origins', () => {
+    expect(isLoopbackBrowserSmokeOrigin('http://127.0.0.1:3000')).toBe(true);
+    expect(isLoopbackBrowserSmokeOrigin('http://localhost:3000')).toBe(true);
+    expect(isLoopbackBrowserSmokeOrigin('https://example.com')).toBe(false);
+    expect(isLoopbackBrowserSmokeOrigin('not a url')).toBe(false);
   });
 
   it('uses different frontend readiness paths for hermetic versus external-backend smoke runs', () => {

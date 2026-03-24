@@ -29,7 +29,11 @@ describe('browser smoke Playwright config', () => {
   });
 
   it('keeps browser-smoke proxying in Vite config so preview-mode runs reuse the same backend routes as dev', () => {
-    expect(readFileSync(resolve(process.cwd(), 'vite.config.ts'), 'utf8')).toContain('preview: proxy ? { proxy } : undefined');
+    const viteConfigSource = readFileSync(resolve(process.cwd(), 'vite.config.ts'), 'utf8');
+
+    expect(viteConfigSource).toContain("'/timeline': {");
+    expect(viteConfigSource).toContain("'/collectors': {");
+    expect(viteConfigSource).toContain('preview: proxy ? { proxy } : undefined');
   });
 
   it('still keeps env-driven fixed ports available for direct browser-smoke runs', () => {

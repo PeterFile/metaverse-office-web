@@ -19,6 +19,14 @@ export default defineConfig(({ mode }) => {
           target: proxyTarget,
           changeOrigin: true
         },
+        '/timeline': {
+          target: proxyTarget,
+          changeOrigin: true
+        },
+        '/collectors': {
+          target: proxyTarget,
+          changeOrigin: true
+        },
         '/correlations': {
           target: proxyTarget,
           changeOrigin: true

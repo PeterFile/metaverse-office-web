@@ -157,9 +157,9 @@
 
 
 ## React operator shell consumption notes
-- the first Phase 1 UI shell consumes `GET /office/overview`, `GET /agents/:id/workflow`, `GET /incidents`, and `GET /correlations/:correlation_id` only
-- the shell defaults to `GET /agents/:id/workflow?limit=10&window=60m` for the operator drawer slice, `GET /incidents?limit=10&window=60m` for the global incident feed, and `GET /correlations/:correlation_id?limit=10&window=60m` when an operator opens a correlation drill-down
-- requests stay same-origin by default; the React shell may optionally prefix them with `VITE_API_BASE_URL` when the backend explicitly allows that frontend origin via `CORS_ALLOWED_ORIGINS`, and local Vite development may still proxy `/office`, `/agents`, `/incidents`, and `/correlations` to the backend via an env-configurable target
+- the first Phase 1 UI shell consumes `GET /office/overview`, `GET /office/operations`, `GET /agents/:id/workflow`, `GET /incidents`, `GET /timeline`, `GET /collectors/controller-snapshot`, and `GET /correlations/:correlation_id` only
+- the shell defaults to `GET /agents/:id/workflow?limit=10&window=60m` for the operator drawer slice, `GET /incidents?limit=10&window=60m` for the global incident feed, `GET /timeline?limit=10&window=60m` for replay pivots, `GET /collectors/controller-snapshot` for the latest controller snapshot, and `GET /correlations/:correlation_id?limit=10&window=60m` when an operator opens a correlation drill-down
+- requests stay same-origin by default; the React shell may optionally prefix them with `VITE_API_BASE_URL` when the backend explicitly allows that frontend origin via `CORS_ALLOWED_ORIGINS`, and local Vite development may still proxy `/office`, `/agents`, `/incidents`, `/timeline`, `/correlations`, and `/collectors` to the backend via an env-configurable target
 - the shell may poll these read-only routes on a ~15s cadence; no websocket or SSE contract is introduced by this slice
 - the UI must surface explicit loading, empty, and error states rather than infer activity that is not present in the API
 - once a poll has produced a successful overview, workflow, incident, or correlation slice, later refresh failures must keep that last-good slice visible instead of replacing it with a fatal empty/error shell

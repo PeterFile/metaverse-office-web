@@ -39,9 +39,11 @@ export async function main(cliArgs = process.argv.slice(2)) {
   );
 
   if (mode.type === 'managed-frontend') {
+    const inspectableBackendOrigin = await detectInspectableBrowserSmokeBackendOrigin(mode.proxyTarget);
     await runManagedFrontendSmoke(mode.proxyTarget, {
       devServerPort: mode.devServerPort,
       frontendMode: mode.frontendMode,
+      inspectableBackendOrigin,
       playwrightArgs
     });
     return;
@@ -197,6 +199,53 @@ export function resolveBrowserSmokePlaywrightEnv(frontendOrigin, inspectableBack
     [BROWSER_SMOKE_BASE_URL_ENV]: frontendOrigin,
     [BROWSER_SMOKE_BACKEND_ORIGIN_ENV]: inspectableBackendOrigin ?? ''
   };
+}
+
+export async function detectInspectableBrowserSmokeBackendOrigin(candidateOrigin) {
+  const origin = candidateOrigin?.trim().replace(/\/+$/, '');
+  if (!origin) {
+    return null;
+  }
+
+  const requestLogUrl = `${origin}/__browser-smoke__/requests`;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 1_000);
+    let response;
+
+    try {
+      response = await fetch(requestLogUrl, {
+        method: 'GET',
+        signal: controller.signal
+      });
+    } catch {
+      if (attempt === 1) {
+        return null;
+      }
+
+      continue;
+    } finally {
+      clearTimeout(timeout);
+    }
+
+    if (response.status !== 200) {
+      return null;
+    }
+
+    const contentType = response.headers.get('content-type') ?? '';
+    if (!/\bapplication\/json\b/i.test(contentType)) {
+      return null;
+    }
+
+    try {
+      const requestLog = await response.json();
+      return Array.isArray(requestLog) ? origin : null;
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
 }
 
 export function resolveBrowserSmokeFrontendReadyPath(inspectableBackendOrigin = null) {

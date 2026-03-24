@@ -1,6 +1,16 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { RequestError, fetchOfficeOperations, fetchOfficeOverview, resolveApiUrl } from './api';
+import {
+  RequestError,
+  fetchCollectorSnapshot,
+  fetchOfficeOperations,
+  fetchOfficeOverview,
+  resolveApiUrl
+} from './api';
+
+const JSON_HEADERS = {
+  'content-type': 'application/json'
+};
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -84,9 +94,7 @@ describe('fetchOfficeOperations', () => {
             items: []
           }),
           {
-            headers: {
-              'content-type': 'application/json'
-            }
+            headers: JSON_HEADERS
           }
         )
       )
@@ -102,6 +110,99 @@ describe('fetchOfficeOperations', () => {
       '/office/operations?limit=1&state=blocked&agent_id=app-engineering',
       expect.objectContaining({ signal: undefined })
     );
+  });
+});
+
+describe('fetchCollectorSnapshot', () => {
+  it('unwraps the latest collector snapshot item from the read-only backend envelope', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            item: {
+              collected_at: '2026-03-09T18:05:00.000Z',
+              actor_id: 'team-lead',
+              summary: {
+                agent_count: 1,
+                heartbeat_count: 1,
+                tmux_observed_count: 1,
+                workspace_observed_count: 1,
+                reboot_recommended_count: 0
+              },
+              items: [
+                {
+                  agent_id: 'app-engineering',
+                  workspace_root: '/tmp/app-engineering',
+                  session_ref: '5-web3-app-engineering',
+                  evidence_refs: ['/tmp/app-engineering/todo.md'],
+                  workspace_observations: [],
+                  tmux_observations: [],
+                  supervision: {
+                    watch_target: 'growth-revenue',
+                    watched_by: ['team-lead'],
+                    needs_attention: false
+                  },
+                  heartbeat: {
+                    agent_id: 'app-engineering',
+                    actor_id: 'team-lead',
+                    received_at: '2026-03-09T18:05:00.000Z',
+                    current_state: 'coding',
+                    active_task: 'Implement HTTP handlers',
+                    last_meaningful_output_at: '2026-03-09T18:04:30.000Z',
+                    last_file_write_at: '2026-03-09T18:04:00.000Z',
+                    current_blocker: '',
+                    confidence_level: 'high',
+                    reboot_recommended: false,
+                    evidence_refs: ['/tmp/app-engineering/todo.md']
+                  }
+                }
+              ]
+            }
+          }),
+          {
+            headers: JSON_HEADERS
+          }
+        )
+      )
+    );
+
+    await expect(fetchCollectorSnapshot()).resolves.toMatchObject({
+      collected_at: '2026-03-09T18:05:00.000Z',
+      actor_id: 'team-lead',
+      summary: {
+        heartbeat_count: 1
+      },
+      items: [
+        expect.objectContaining({
+          agent_id: 'app-engineering',
+          heartbeat: expect.objectContaining({
+            current_state: 'coding'
+          })
+        })
+      ]
+    });
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/collectors/controller-snapshot',
+      expect.objectContaining({ signal: undefined })
+    );
+  });
+
+  it('returns null when the backend has not collected a snapshot yet', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({ item: null }),
+          {
+            headers: JSON_HEADERS
+          }
+        )
+      )
+    );
+
+    await expect(fetchCollectorSnapshot()).resolves.toBeNull();
   });
 });
 

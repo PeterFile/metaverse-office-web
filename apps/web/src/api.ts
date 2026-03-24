@@ -1,5 +1,6 @@
 import type {
   AgentWorkflow,
+  CollectorSnapshot,
   CorrelationDrilldown,
   IncidentFeedResponse,
   OfficeOperations,
@@ -80,6 +81,12 @@ export function resolveApiUrl(path: string, apiBaseUrl = API_BASE_URL): string {
 export async function fetchOfficeOverview(signal?: AbortSignal): Promise<OfficeOverview> {
   const response = await fetch(resolveApiUrl('/office/overview'), { signal });
   return parseJson<OfficeOverview>(response);
+}
+
+export async function fetchCollectorSnapshot(signal?: AbortSignal): Promise<CollectorSnapshot | null> {
+  const response = await fetch(resolveApiUrl('/collectors/controller-snapshot'), { signal });
+  const body = await parseJson<{ item: CollectorSnapshot | null }>(response);
+  return body.item;
 }
 
 export async function fetchOfficeOperations(

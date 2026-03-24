@@ -63,7 +63,7 @@ function createScenarioServer({ baseServer, store, now }) {
     }
 
     if ((req.method || 'GET') === 'GET' && url.pathname === '/__browser-smoke__/requests') {
-      sendJson(res, 200, requestLog);
+      sendJson(res, 200, snapshotBrowserSmokeRequestLog());
       return;
     }
 
@@ -462,7 +462,7 @@ function incrementScenarioCount(state, key) {
   return nextCount;
 }
 
-function recordBrowserSmokeRequest(req, url) {
+export function recordBrowserSmokeRequest(req, url) {
   requestLog.push({
     method: req.method || 'GET',
     pathname: url.pathname,
@@ -473,6 +473,14 @@ function recordBrowserSmokeRequest(req, url) {
   if (requestLog.length > maxRequestLogEntries) {
     requestLog.splice(0, requestLog.length - maxRequestLogEntries);
   }
+}
+
+export function snapshotBrowserSmokeRequestLog() {
+  return requestLog.map((entry) => ({ ...entry }));
+}
+
+export function resetBrowserSmokeRequestLog() {
+  requestLog.length = 0;
 }
 
 function sendJson(res, statusCode, payload) {

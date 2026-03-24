@@ -463,6 +463,10 @@ function incrementScenarioCount(state, key) {
 }
 
 export function recordBrowserSmokeRequest(req, url) {
+  if ((req.method || 'GET') === 'GET' && url.pathname === '/__browser-smoke__/requests') {
+    return;
+  }
+
   requestLog.push({
     method: req.method || 'GET',
     pathname: url.pathname,

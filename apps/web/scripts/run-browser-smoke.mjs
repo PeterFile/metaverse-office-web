@@ -11,7 +11,8 @@ import {
   BROWSER_SMOKE_DEV_SERVER_PORT_ENV,
   BROWSER_SMOKE_FRONTEND_MODE_ENV,
   readBrowserSmokePortOverride,
-  resolveBrowserSmokeFrontendMode
+  resolveBrowserSmokeFrontendMode,
+  resolveBrowserSmokePorts
 } from './browser-smoke-ports.mjs';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
@@ -201,8 +202,65 @@ export function resolveBrowserSmokePlaywrightEnv(frontendOrigin, inspectableBack
   };
 }
 
-export async function detectInspectableBrowserSmokeBackendOrigin(candidateOrigin) {
+function normalizeBrowserSmokeOrigin(candidateOrigin) {
   const origin = candidateOrigin?.trim().replace(/\/+$/, '');
+  return origin || null;
+}
+
+export function isLoopbackBrowserSmokeOrigin(candidateOrigin) {
+  const origin = normalizeBrowserSmokeOrigin(candidateOrigin);
+  if (!origin) {
+    return false;
+  }
+
+  try {
+    const parsedOrigin = new URL(origin);
+    return parsedOrigin.hostname === '127.0.0.1' || parsedOrigin.hostname === 'localhost';
+  } catch {
+    return false;
+  }
+}
+
+function normalizeLoopbackBrowserSmokeOrigin(candidateOrigin) {
+  const origin = normalizeBrowserSmokeOrigin(candidateOrigin);
+  return isLoopbackBrowserSmokeOrigin(origin) ? origin : null;
+}
+
+export function resolveBrowserSmokeReadTargetOrigin(env = process.env) {
+  const explicitOrigin = normalizeLoopbackBrowserSmokeOrigin(env[BROWSER_SMOKE_BACKEND_ORIGIN_ENV]);
+  if (explicitOrigin) {
+    return explicitOrigin;
+  }
+
+  if (env[BROWSER_SMOKE_BASE_URL_ENV]?.trim()) {
+    return null;
+  }
+
+  const rawProxyTarget = env.VITE_DEV_PROXY_TARGET?.trim();
+  if (rawProxyTarget) {
+    return normalizeLoopbackBrowserSmokeOrigin(rawProxyTarget);
+  }
+
+  const { backendPort } = resolveBrowserSmokePorts(env);
+  return `http://127.0.0.1:${backendPort}`;
+}
+
+export function resolveBrowserSmokeWriteTargetOrigin(env = process.env) {
+  const explicitOrigin = normalizeLoopbackBrowserSmokeOrigin(env[BROWSER_SMOKE_BACKEND_ORIGIN_ENV]);
+  if (explicitOrigin) {
+    return explicitOrigin;
+  }
+
+  if (env[BROWSER_SMOKE_BASE_URL_ENV]?.trim() || env.VITE_DEV_PROXY_TARGET?.trim()) {
+    return null;
+  }
+
+  const { backendPort } = resolveBrowserSmokePorts(env);
+  return `http://127.0.0.1:${backendPort}`;
+}
+
+export async function detectInspectableBrowserSmokeBackendOrigin(candidateOrigin) {
+  const origin = normalizeLoopbackBrowserSmokeOrigin(candidateOrigin);
   if (!origin) {
     return null;
   }

@@ -210,6 +210,35 @@ describe('browser smoke request log helpers', () => {
     ]);
   });
 
+  it('does not record observational reads of the request log endpoint or consume request-log capacity', () => {
+    recordBrowserSmokeRequest(
+      {
+        method: 'GET',
+        headers: {}
+      } as any,
+      new URL('http://127.0.0.1:3210/office/overview')
+    );
+
+    for (let index = 0; index < 500; index += 1) {
+      recordBrowserSmokeRequest(
+        {
+          method: 'GET',
+          headers: {}
+        } as any,
+        new URL('http://127.0.0.1:3210/__browser-smoke__/requests')
+      );
+    }
+
+    expect(snapshotBrowserSmokeRequestLog()).toEqual([
+      {
+        method: 'GET',
+        pathname: '/office/overview',
+        origin: null,
+        accessControlRequestMethod: null
+      }
+    ]);
+  });
+
   it('drops the oldest request-log entries once the cap is exceeded', () => {
     for (let index = 0; index < 205; index += 1) {
       recordBrowserSmokeRequest(

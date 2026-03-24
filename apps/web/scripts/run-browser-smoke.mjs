@@ -211,19 +211,37 @@ export async function detectInspectableBrowserSmokeBackendOrigin(candidateOrigin
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 1_000);
+    let response;
 
     try {
-      const response = await fetch(requestLogUrl, {
+      response = await fetch(requestLogUrl, {
         method: 'GET',
         signal: controller.signal
       });
-      return response.ok ? origin : null;
     } catch {
       if (attempt === 1) {
         return null;
       }
+
+      continue;
     } finally {
       clearTimeout(timeout);
+    }
+
+    if (response.status !== 200) {
+      return null;
+    }
+
+    const contentType = response.headers.get('content-type') ?? '';
+    if (!/\bapplication\/json\b/i.test(contentType)) {
+      return null;
+    }
+
+    try {
+      const requestLog = await response.json();
+      return Array.isArray(requestLog) ? origin : null;
+    } catch {
+      return null;
     }
   }
 

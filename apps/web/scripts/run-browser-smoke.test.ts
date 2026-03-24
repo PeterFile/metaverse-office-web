@@ -221,6 +221,78 @@ describe('run-browser-smoke helpers', () => {
     });
   });
 
+  it('treats a managed proxy target as inspectable only when the hermetic request log endpoint returns JSON', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify([]), {
+          status: 200,
+          headers: {
+            'content-type': 'application/json'
+          }
+        })
+      )
+    );
+
+    await expect(
+      detectInspectableBrowserSmokeBackendOrigin('http://127.0.0.1:3000')
+    ).resolves.toBe('http://127.0.0.1:3000');
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      'http://127.0.0.1:3000/__browser-smoke__/requests',
+      expect.objectContaining({ method: 'GET' })
+    );
+  });
+
+  it('does not treat a managed proxy target as inspectable when the request log endpoint is unavailable', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response('not found', {
+          status: 404
+        })
+      )
+    );
+
+    await expect(detectInspectableBrowserSmokeBackendOrigin('http://127.0.0.1:3000')).resolves.toBeNull();
+  });
+
+  it('does not treat a managed proxy target as inspectable when the request log endpoint falls back to HTML', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response('<!doctype html><title>fallback</title>', {
+          status: 200,
+          headers: {
+            'content-type': 'text/html; charset=utf-8'
+          }
+        })
+      )
+    );
+
+    await expect(detectInspectableBrowserSmokeBackendOrigin('http://127.0.0.1:3000')).resolves.toBeNull();
+  });
+
+  it('retries the inspectable backend probe once after a transient fetch failure', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockRejectedValueOnce(new Error('socket hang up'))
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify([]), {
+            status: 200,
+            headers: {
+              'content-type': 'application/json; charset=utf-8'
+            }
+          })
+        )
+    );
+
+    await expect(
+      detectInspectableBrowserSmokeBackendOrigin('http://127.0.0.1:3000')
+    ).resolves.toBe('http://127.0.0.1:3000');
+    expect(globalThis.fetch).toHaveBeenCalledTimes(2);
+  });
 
   it('uses different frontend readiness paths for hermetic versus external-backend smoke runs', () => {
     expect(BROWSER_SMOKE_FRONTEND_READY_PATH).toBe('/');

@@ -131,7 +131,7 @@ This repository mirrors the controller-approved Phase 1 scope so implementation 
 
 ## React operator shell addendum
 - the first operator shell lives under `apps/web` and uses React + TypeScript with pnpm workspace management
-- the shell consumes the existing `GET /office/overview`, `GET /office/operations`, `GET /agents/:id/workflow`, `GET /incidents`, `GET /timeline`, and `GET /correlations/:correlation_id` read models only
+- the shell consumes the existing `GET /office/overview`, `GET /office/operations`, `GET /agents/:id/workflow`, `GET /incidents`, `GET /timeline`, `GET /collectors/controller-snapshot`, and `GET /correlations/:correlation_id` read models only
 - same-origin reads are the default; the shell may optionally prefix them with `VITE_API_BASE_URL` when the backend explicitly allows that frontend origin via `CORS_ALLOWED_ORIGINS`, and local dev may still proxy `/office`, `/agents`, `/incidents`, `/timeline`, `/correlations`, and `/collectors` from Vite without changing backend semantics
 - workflow and incident surfaces may open correlation drill-down by reusing the existing read-only routes; no new write path or contract is introduced
 - shell refresh stays polling-based in Phase 1; no websocket or SSE requirement is introduced by this slice

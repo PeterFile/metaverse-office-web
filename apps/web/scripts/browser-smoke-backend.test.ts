@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   applyBrowserSmokeCors,
@@ -158,6 +158,68 @@ describe('readScenarioRequestContext', () => {
     ).toEqual({
       scenario: undefined,
       runId: 'default'
+    });
+  });
+});
+
+describe('browser smoke request log helpers', () => {
+  it('records requests and returns snapshot copies without exposing internal state', () => {
+    recordBrowserSmokeRequest(
+      {
+        method: 'OPTIONS',
+        headers: {
+          origin: 'http://127.0.0.1:4173',
+          'access-control-request-method': 'POST'
+        }
+      } as any,
+      new URL('http://127.0.0.1:3210/events')
+    );
+
+    const snapshot = snapshotBrowserSmokeRequestLog();
+    expect(snapshot).toEqual([
+      {
+        method: 'OPTIONS',
+        pathname: '/events',
+        origin: 'http://127.0.0.1:4173',
+        accessControlRequestMethod: 'POST'
+      }
+    ]);
+
+    snapshot.push({
+      method: 'GET',
+      pathname: '/tamper',
+      origin: null,
+      accessControlRequestMethod: null
+    });
+
+    expect(snapshotBrowserSmokeRequestLog()).toEqual([
+      {
+        method: 'OPTIONS',
+        pathname: '/events',
+        origin: 'http://127.0.0.1:4173',
+        accessControlRequestMethod: 'POST'
+      }
+    ]);
+  });
+
+  it('drops the oldest request-log entries once the cap is exceeded', () => {
+    for (let index = 0; index < 205; index += 1) {
+      recordBrowserSmokeRequest(
+        {
+          method: 'GET',
+          headers: {}
+        } as any,
+        new URL(`http://127.0.0.1:3210/requests/${index}`)
+      );
+    }
+
+    const snapshot = snapshotBrowserSmokeRequestLog();
+    expect(snapshot).toHaveLength(200);
+    expect(snapshot[0]).toMatchObject({
+      pathname: '/requests/5'
+    });
+    expect(snapshot.at(-1)).toMatchObject({
+      pathname: '/requests/204'
     });
   });
 });

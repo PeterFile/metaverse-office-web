@@ -2,11 +2,12 @@ import { EventEmitter } from 'node:events';
 import http from 'node:http';
 import { PassThrough } from 'node:stream';
 
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   BROWSER_SMOKE_FRONTEND_READY_PATH,
   BROWSER_SMOKE_PROXY_READY_PATH,
+  detectInspectableBrowserSmokeBackendOrigin,
   extractOrigin,
   launchManagedServer,
   parseBrowserSmokeArgs,
@@ -20,6 +21,10 @@ import {
   waitForHttpReady,
   waitForServerOrigin
 } from './run-browser-smoke.mjs';
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe('run-browser-smoke helpers', () => {
   it('keeps explicit fixed-port runs on the managed hermetic path so preview-mode smoke semantics stay consistent', () => {
@@ -105,6 +110,13 @@ describe('run-browser-smoke helpers', () => {
       type: 'managed-frontend',
       frontendMode: 'preview',
       proxyTarget: 'http://127.0.0.1:3000'
+    });
+  });
+
+  it('threads an explicit inspectable backend origin into Playwright', () => {
+    expect(resolveBrowserSmokePlaywrightEnv('http://127.0.0.1:4173', 'http://127.0.0.1:3000')).toEqual({
+      BROWSER_SMOKE_BASE_URL: 'http://127.0.0.1:4173',
+      BROWSER_SMOKE_BACKEND_ORIGIN: 'http://127.0.0.1:3000'
     });
   });
 
@@ -208,6 +220,7 @@ describe('run-browser-smoke helpers', () => {
       BROWSER_SMOKE_BACKEND_ORIGIN: ''
     });
   });
+
 
   it('uses different frontend readiness paths for hermetic versus external-backend smoke runs', () => {
     expect(BROWSER_SMOKE_FRONTEND_READY_PATH).toBe('/');

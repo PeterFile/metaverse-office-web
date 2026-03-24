@@ -1447,6 +1447,67 @@ test.describe('AI Town shell smoke', () => {
     await expect(page.getByText('Unable to load office overview.')).toHaveCount(0);
   });
 
+  test('routes Hub read models through the managed Vite proxy', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.getByRole('heading', { name: 'Metaverse Town' })).toBeVisible();
+
+    const frontendOrigin = new URL(page.url()).origin;
+    const inspectableBackendOrigin = resolveInspectableBrowserSmokeBackendOrigin();
+    const browserRequests = new Set<string>();
+    const handleRequest = (request: Request) => {
+      const url = new URL(request.url());
+      if (request.method() !== 'GET' || url.origin !== frontendOrigin) {
+        return;
+      }
+
+      if (url.pathname === '/office/operations' || url.pathname === '/timeline') {
+        browserRequests.add(url.pathname);
+      }
+    };
+
+    page.on('request', handleRequest);
+    await page.getByRole('button', { name: 'Open Hub' }).click();
+
+    try {
+      await expect(page.getByRole('dialog', { name: 'Hub' })).toBeVisible();
+
+      await expect
+        .poll(() => ({
+          operations: browserRequests.has('/office/operations'),
+          timeline: browserRequests.has('/timeline')
+        }))
+        .toEqual({
+          operations: true,
+          timeline: true
+        });
+
+      if (!inspectableBackendOrigin) {
+        return;
+      }
+
+      await expect
+        .poll(async () => {
+          const requests = await readBrowserSmokeRequestLog(inspectableBackendOrigin);
+          const proxiedGetPathnames = new Set(
+            requests
+              .filter((entry) => entry.method === 'GET' && entry.origin === null)
+              .map((entry) => entry.pathname)
+          );
+
+          return {
+            operations: proxiedGetPathnames.has('/office/operations'),
+            timeline: proxiedGetPathnames.has('/timeline')
+          };
+        })
+        .toEqual({
+          operations: true,
+          timeline: true
+        });
+    } finally {
+      page.off('request', handleRequest);
+    }
+  });
+
   test('blocks loopback browser writes against the read-only smoke backend above the helper layer', async ({ page }) => {
     await page.goto('/');
     await expect(page.getByRole('heading', { name: 'Metaverse Town' })).toBeVisible();

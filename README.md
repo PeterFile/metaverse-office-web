@@ -118,7 +118,7 @@ Optional env:
 - `BROWSER_SMOKE_FRONTEND_MODE=dev` to run the smoke wrapper against a managed Vite dev server instead of the preview build; omit it to keep the preview-mode smoke path
 - `BROWSER_SMOKE_BACKEND_PORT=3210` to pin the hermetic backend port for browser smoke while still letting the wrapper auto-select a free Vite port unless you also pin `BROWSER_SMOKE_DEV_SERVER_PORT`
 - `BROWSER_SMOKE_DEV_SERVER_PORT=4173` to pin the Vite dev-server port for browser smoke while still letting the wrapper auto-select a free hermetic backend port unless you also pin `BROWSER_SMOKE_BACKEND_PORT`
-- `VITE_API_BASE_URL=https://api.example.test` for the React shell when the backend also allows that origin via `CORS_ALLOWED_ORIGINS`; omit it to keep same-origin `/office`, `/agents`, `/incidents`, and `/correlations` requests, or keep using `VITE_DEV_PROXY_TARGET` for local Vite proxying
+- `VITE_API_BASE_URL=https://api.example.test` for the React shell when the backend also allows that origin via `CORS_ALLOWED_ORIGINS`; omit it to keep same-origin `/office`, `/agents`, `/incidents`, `/timeline`, and `/correlations` requests, or keep using `VITE_DEV_PROXY_TARGET` for local Vite proxying (`/collectors` is also proxied for local collector-snapshot inspection)
 - `CORS_ALLOWED_ORIGINS=https://frontend.example.test,http://localhost:5173` for the backend; a comma-separated list of origins allowed to make cross-origin GET requests.
 
 ### API
@@ -236,8 +236,8 @@ This keeps employee writes self-scoped and reserves cross-agent supervision/hand
 
 ### React operator shell notes
 - `apps/web` is the first living office surface for Phase 1 and stays strictly evidence-first
-- the shell consumes `GET /office/overview`, `GET /agents/:id/workflow?limit=&window=`, `GET /incidents?limit=&window=`, and `GET /correlations/:correlation_id?limit=&window=` only
-- API calls are same-origin by default; cross-origin `VITE_API_BASE_URL` deployment requires the backend to allow that frontend origin via `CORS_ALLOWED_ORIGINS`, and local development may still proxy `/office`, `/agents`, `/incidents`, and `/correlations` through Vite via `VITE_DEV_PROXY_TARGET`
+- the shell consumes `GET /office/overview`, `GET /office/operations?limit=&state=&agent_id=`, `GET /agents/:id/workflow?limit=&window=`, `GET /incidents?limit=&window=`, `GET /timeline?limit=&window=`, and `GET /correlations/:correlation_id?limit=&window=` only
+- API calls are same-origin by default; cross-origin `VITE_API_BASE_URL` deployment requires the backend to allow that frontend origin via `CORS_ALLOWED_ORIGINS`, and local development may still proxy `/office`, `/agents`, `/incidents`, `/timeline`, `/correlations`, and `/collectors` through Vite via `VITE_DEV_PROXY_TARGET`
 - workflow and incident surfaces can open correlation drill-down without introducing a new backend contract or write path
 - workflow counterparties, correlation participants, and incident agent ids remain read-only but are directly selectable so operators can pivot into another agent workflow from the current evidence surface
 - the shell polls every 15 seconds and must surface explicit loading, empty, and error states instead of inventing motion or liveness

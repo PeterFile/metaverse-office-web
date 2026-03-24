@@ -68,6 +68,72 @@ export interface OfficeOverview {
   agents: OfficeAgent[];
 }
 
+export interface CollectorWorkspaceObservation {
+  path: string;
+  file_name: string;
+  kind: 'workspace_file' | 'workspace_root';
+  last_modified_at: string;
+}
+
+export interface CollectorTmuxObservation {
+  session_name: string | null;
+  window_index: string;
+  pane_index: string;
+  pane_id: string | null;
+  pane_title: string | null;
+  pane_current_command: string | null;
+  pane_active: boolean;
+  pane_dead: boolean;
+  pane_activity_at: string | null;
+}
+
+export interface CollectorSupervision {
+  watch_target: string | null;
+  watched_by: string[];
+  needs_attention: boolean;
+}
+
+export interface CollectorHeartbeat {
+  agent_id: string;
+  actor_id: string;
+  received_at: string;
+  current_state: string;
+  active_task: string;
+  current_location?: string;
+  last_meaningful_output_at: string | null;
+  last_file_write_at: string | null;
+  current_blocker: string;
+  confidence_level: 'low' | 'medium' | 'high';
+  reboot_recommended: boolean;
+  evidence_refs?: string[];
+}
+
+export interface CollectorItem {
+  agent_id: string;
+  workspace_root: string;
+  session_ref: string;
+  evidence_refs: string[];
+  workspace_observations: CollectorWorkspaceObservation[];
+  tmux_observations: CollectorTmuxObservation[];
+  supervision: CollectorSupervision;
+  heartbeat: CollectorHeartbeat;
+}
+
+export interface CollectorSnapshotSummary {
+  agent_count: number;
+  heartbeat_count: number;
+  tmux_observed_count: number;
+  workspace_observed_count: number;
+  reboot_recommended_count: number;
+}
+
+export interface CollectorSnapshot {
+  collected_at: string;
+  actor_id: string;
+  summary: CollectorSnapshotSummary;
+  items: CollectorItem[];
+}
+
 export interface OperationsSummary {
   item_count: number;
   blocked_count: number;

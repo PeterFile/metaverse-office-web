@@ -8,10 +8,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type {
   AgentWorkflow,
+  CollectorSnapshot,
   CorrelationDrilldown,
   IncidentFeedResponse,
   OfficeOperations,
-  OfficeOverview
+  OfficeOverview,
+  TimelineReplayResponse
 } from './types';
 
 const require = createRequire(import.meta.url);
@@ -29,6 +31,7 @@ type ApiModule = typeof import('./api');
 type BackendStore = {
   appendEvent(event: BackendEvent): Promise<BackendEvent>;
   appendHeartbeat(heartbeat: BackendHeartbeat): Promise<BackendHeartbeat>;
+  appendCollectorReport(report: CollectorSnapshot): Promise<CollectorSnapshot>;
 };
 
 interface BackendEvent {
@@ -102,7 +105,7 @@ describe('read-only frontend/backend contract smoke', () => {
     expect(path.basename(harness.root)).toMatch(/^web-contract-/);
   });
 
-  it('loads /office/overview, /office/operations, /agents/:id/workflow, /incidents, and /correlations/:id from the real backend', async () => {
+  it('loads /office/overview, /office/operations, /agents/:id/workflow, /incidents, /timeline, /collectors/controller-snapshot, and /correlations/:id from the real backend', async () => {
     harness = await createHarness(() => '2026-03-09T19:00:00.000Z');
     await seedContractSlice(harness.store);
 
@@ -117,11 +120,13 @@ describe('read-only frontend/backend contract smoke', () => {
     );
 
     const api = await loadApi(harness.baseUrl);
-    const [overview, operations, workflow, incidents, correlation] = await Promise.all([
+    const [overview, operations, workflow, incidents, timeline, collectorSnapshot, correlation] = await Promise.all([
       api.fetchOfficeOverview(),
       api.fetchOfficeOperations(),
       api.fetchAgentWorkflow('app-engineering'),
       api.fetchIncidents(),
+      api.fetchTimeline(),
+      api.fetchCollectorSnapshot(),
       api.fetchCorrelationDrilldown('corr-contract')
     ]);
 
@@ -159,6 +164,21 @@ describe('read-only frontend/backend contract smoke', () => {
       {
         method: 'GET',
         origin: harness.baseUrl,
+        pathname: '/timeline',
+        query: [
+          ['limit', '10'],
+          ['window', '60m']
+        ]
+      },
+      {
+        method: 'GET',
+        origin: harness.baseUrl,
+        pathname: '/collectors/controller-snapshot',
+        query: []
+      },
+      {
+        method: 'GET',
+        origin: harness.baseUrl,
         pathname: '/correlations/corr-contract',
         query: [
           ['limit', '10'],
@@ -170,6 +190,8 @@ describe('read-only frontend/backend contract smoke', () => {
     expectOperationsContract(operations);
     expectWorkflowContract(workflow);
     expectIncidentFeedContract(incidents);
+    expectTimelineContract(timeline);
+    expectCollectorSnapshotContract(collectorSnapshot);
     expectCorrelationContract(correlation);
   });
 
@@ -217,9 +239,10 @@ describe('read-only frontend/backend contract smoke', () => {
     expect(operations.items[0]).toMatchObject({
       agent_id: 'app-engineering',
       current_state: 'blocked',
-      correlation_id: 'corr-contract',
+      correlation_id: 'collector-snapshot:2026-03-09T18:59:00.000Z',
       latest_event: {
-        source_kind: 'controller_event'
+        source_kind: 'controller_event',
+        event_type: 'peer_watch_alert_raised'
       }
     });
   });
@@ -460,6 +483,65 @@ async function seedContractSlice(store: BackendStore) {
     confidence_level: 'high',
     reboot_recommended: false
   });
+
+  await store.appendCollectorReport({
+    collected_at: '2026-03-09T18:59:00.000Z',
+    actor_id: 'team-lead',
+    summary: {
+      agent_count: 1,
+      heartbeat_count: 1,
+      tmux_observed_count: 1,
+      workspace_observed_count: 1,
+      reboot_recommended_count: 0
+    },
+    items: [
+      {
+        agent_id: 'app-engineering',
+        workspace_root: '/tmp/app-engineering',
+        session_ref: '5-web3-app-engineering',
+        evidence_refs: ['/tmp/app-engineering/todo.md', 'tmux://5-web3-app-engineering/0.1'],
+        workspace_observations: [
+          {
+            path: '/tmp/app-engineering/todo.md',
+            file_name: 'todo.md',
+            kind: 'workspace_file',
+            last_modified_at: '2026-03-09T18:58:30.000Z'
+          }
+        ],
+        tmux_observations: [
+          {
+            session_name: '5-web3-app-engineering',
+            window_index: '0',
+            pane_index: '1',
+            pane_id: '%11',
+            pane_title: 'Implement HTTP handlers',
+            pane_current_command: 'nvim',
+            pane_active: true,
+            pane_dead: false,
+            pane_activity_at: '2026-03-09T18:58:45.000Z'
+          }
+        ],
+        supervision: {
+          watch_target: 'growth-revenue',
+          watched_by: ['protocol-engineering', 'team-lead'],
+          needs_attention: false
+        },
+        heartbeat: {
+          agent_id: 'app-engineering',
+          actor_id: 'team-lead',
+          received_at: '2026-03-09T18:59:00.000Z',
+          current_state: 'blocked',
+          active_task: 'Fix the contract drift',
+          current_location: 'desk-app-engineering',
+          last_meaningful_output_at: '2026-03-09T18:58:00.000Z',
+          last_file_write_at: '2026-03-09T18:57:00.000Z',
+          current_blocker: 'Need review evidence',
+          confidence_level: 'high',
+          reboot_recommended: false
+        }
+      }
+    ]
+  });
 }
 
 function createEvent({
@@ -549,14 +631,14 @@ function expectOperationsContract(operations: OfficeOperations) {
     agent_id: 'app-engineering',
     display_name: 'App Engineering Agent',
     current_state: 'blocked',
-    correlation_id: 'corr-contract',
+    correlation_id: 'collector-snapshot:2026-03-09T18:59:00.000Z',
     current_blocker: 'Need review evidence',
     reported_severity: 'orange',
     effective_severity: 'orange',
     latest_event: {
-      event_id: 'evt_contract_handoff_completed',
-      event_type: 'agent_handoff_completed',
-      summary: 'Lead completed the contract handoff'
+      event_id: 'evt_collector_app-engineering_blocked_raised_orange_2026-03-09T18_59_00_000Z',
+      event_type: 'peer_watch_alert_raised',
+      summary: 'Collector observed blocked execution: Need review evidence'
     }
   });
   expect(operations.items[1]).toMatchObject({
@@ -569,12 +651,24 @@ function expectOperationsContract(operations: OfficeOperations) {
 function expectWorkflowContract(workflow: AgentWorkflow) {
   expect(workflow.agent_id).toBe('app-engineering');
   expect(workflow.detail.agent_id).toBe('app-engineering');
-  expect(workflow.detail.latest_heartbeat?.received_at).toBe('2026-03-09T18:58:30.000Z');
+  expect(workflow.detail.latest_heartbeat?.received_at).toBe('2026-03-09T18:59:00.000Z');
   expect(workflow.detail.current_location).toBe('desk-app-engineering');
   expect(workflow.detail.open_peer_watch_alerts).toEqual(
     expect.arrayContaining([
       expect.objectContaining({
         alert_id: 'evt_contract_peer_watch',
+        observer_agent_id: 'team-lead',
+        watcher_agent_ids: ['protocol-engineering'],
+        evidence_count: 1
+      }),
+      expect.objectContaining({
+        alert_id: 'evt_collector_app-engineering_blocked_raised_orange_2026-03-09T18_59_00_000Z',
+        observer_agent_id: 'team-lead',
+        watcher_agent_ids: ['protocol-engineering'],
+        evidence_count: 2
+      }),
+      expect.objectContaining({
+        alert_id: 'evt_contract_old_alert',
         observer_agent_id: 'team-lead',
         watcher_agent_ids: ['protocol-engineering'],
         evidence_count: 1
@@ -596,13 +690,18 @@ function expectWorkflowContract(workflow: AgentWorkflow) {
     })
   ]);
   expect(workflow.detail.recent_reboots).toEqual([]);
-  expect(workflow.correlation_ids).toEqual(['corr-contract']);
+  expect(workflow.correlation_ids).toEqual([
+    'collector-snapshot:2026-03-09T18:59:00.000Z',
+    'corr-contract'
+  ]);
   expect(workflow.counterparty_agent_ids).toEqual(['growth-revenue', 'protocol-engineering']);
   expect(workflow.incidents.map((incident) => incident.incident_id)).toEqual([
+    'evt_collector_app-engineering_blocked_raised_orange_2026-03-09T18_59_00_000Z',
     'evt_contract_handoff_completed',
     'evt_contract_peer_watch'
   ]);
   expect(workflow.interactions.map((interaction) => interaction.interaction_id)).toEqual([
+    'interaction:evt_collector_app-engineering_blocked_raised_orange_2026-03-09T18_59_00_000Z',
     'interaction:evt_contract_handoff_completed',
     'interaction:evt_contract_peer_watch',
     'interaction:evt_contract_review_started'
@@ -611,21 +710,86 @@ function expectWorkflowContract(workflow: AgentWorkflow) {
     'evt_contract_review_started',
     'evt_contract_review_completed',
     'evt_contract_peer_watch',
-    'evt_contract_handoff_completed'
+    'evt_contract_handoff_completed',
+    'evt_collector_app-engineering_blocked_raised_orange_2026-03-09T18_59_00_000Z'
   ]);
 }
 
 function expectIncidentFeedContract(feed: IncidentFeedResponse) {
   expect(feed.items.map((incident) => incident.incident_id)).toEqual([
+    'evt_collector_app-engineering_blocked_raised_orange_2026-03-09T18_59_00_000Z',
     'evt_contract_handoff_completed',
     'evt_contract_peer_watch'
   ]);
   expect(feed.items[0]).toMatchObject({
+    correlation_id: 'collector-snapshot:2026-03-09T18:59:00.000Z',
+    kind: 'peer_watch_alert',
+    severity: 'orange'
+  });
+  expect(feed.items[1]).toMatchObject({
     correlation_id: 'corr-contract',
     status: 'completed'
   });
-  expect(feed.items[1]).toMatchObject({
+  expect(feed.items[2]).toMatchObject({
     severity: 'orange'
+  });
+}
+
+function expectTimelineContract(timeline: TimelineReplayResponse) {
+  expect(timeline.items.map((event) => event.event_id)).toEqual([
+    'evt_contract_review_started',
+    'evt_contract_review_completed',
+    'evt_contract_peer_watch',
+    'evt_contract_handoff_completed',
+    'evt_collector_app-engineering_blocked_raised_orange_2026-03-09T18_59_00_000Z'
+  ]);
+  expect(timeline.items[0]).toMatchObject({
+    event_type: 'review_started',
+    correlation_id: 'corr-contract',
+    counterparty_agent_ids: ['protocol-engineering'],
+    evidence_refs: ['/tmp/contract-review-start.md'],
+    source_kind: 'controller_event'
+  });
+  expect(timeline.items[3]).toMatchObject({
+    event_type: 'agent_handoff_completed',
+    severity: 'yellow',
+    summary: 'Lead completed the contract handoff'
+  });
+}
+
+function expectCollectorSnapshotContract(snapshot: CollectorSnapshot | null) {
+  expect(snapshot).not.toBeNull();
+  expect(snapshot).toMatchObject({
+    collected_at: '2026-03-09T18:59:00.000Z',
+    actor_id: 'team-lead',
+    summary: {
+      agent_count: 1,
+      heartbeat_count: 1,
+      tmux_observed_count: 1,
+      workspace_observed_count: 1,
+      reboot_recommended_count: 0
+    }
+  });
+  expect(snapshot?.items).toHaveLength(1);
+  expect(snapshot?.items[0]).toMatchObject({
+    agent_id: 'app-engineering',
+    workspace_root: '/tmp/app-engineering',
+    session_ref: '5-web3-app-engineering',
+    evidence_refs: ['/tmp/app-engineering/todo.md', 'tmux://5-web3-app-engineering/0.1'],
+    supervision: {
+      watch_target: 'growth-revenue',
+      watched_by: ['protocol-engineering', 'team-lead'],
+      needs_attention: false
+    },
+    heartbeat: {
+      agent_id: 'app-engineering',
+      actor_id: 'team-lead',
+      current_state: 'blocked',
+      active_task: 'Fix the contract drift',
+      current_blocker: 'Need review evidence',
+      confidence_level: 'high',
+      reboot_recommended: false
+    }
   });
 }
 

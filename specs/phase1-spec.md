@@ -27,6 +27,7 @@ This repository mirrors the controller-approved Phase 1 scope so implementation 
 - agent-centric incident evidence surfaces derived from the same read-only incident feed semantics
 - agent-centric workflow query that aggregates detail, incidents, interactions, and replay evidence in one read-only response
 - office operations query that derives the first live-operations queue from the existing append-only events, heartbeats, and current agent projections
+- shared memory artifact index that derives an engineering memory surface from existing evidence refs and collector observations without introducing markdown-backed status storage or a task-assignment layer
 - pnpm workspace + React operator shell that renders the canonical office overview and agent workflow drawer without adding a write path
 
 ## Canonical state enum

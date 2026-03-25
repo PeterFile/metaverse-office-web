@@ -17,6 +17,7 @@
 - `GET /peer-watch/alerts?status=&target_agent_id=&agent_id=&watcher_agent_id=&observer_agent_id=&correlation_id=&severity=&limit=`
 - `GET /incidents?kind=&agent_id=&severity=&status=&correlation_id=&limit=&window=`
 - `GET /correlations/:correlation_id?limit=&window=`
+- `GET /memory/artifacts?limit=&window=&agent_id=&correlation_id=`
 - `GET /handoffs`
 - `GET /reboots`
 
@@ -234,6 +235,16 @@
 - `first_ts` and `last_ts` expose the temporal bounds of the full filtered correlation slice
 - the route returns `404` when the `correlation_id` matches no incidents, interactions, or events
 
+## Shared memory artifact query semantics
+- `GET /memory/artifacts` is read-only and derives a shared engineering-memory surface from existing event `evidence_refs` plus the latest collector workspace/tmux observations when available
+- supported query params are `limit`, `window`, `agent_id`, and `correlation_id`
+- the route does not create a markdown-backed status store, write path, or task-assignment surface; it reuses the append-only evidence trail already present in canonical events and collector snapshots
+- items are grouped by `artifact_ref`; repeated mentions increase `mention_count` while preserving first/last observation timestamps, including matching collector observations from the latest snapshot
+- `agent_id`, when present, matches artifacts mentioned by that agent, actor, or listed counterparties; collector-only observations stay agent-scoped instead of leaking other observed agents
+- `correlation_id`, when present, narrows to artifacts referenced by events inside that correlation slice or the matching latest collector snapshot correlation when no derived activity event exists
+- collector-only observations may expose `latest_summary` and `latest_event_type` as `null` when the latest snapshot did not materialize a canonical activity event for that artifact
+- item ordering is newest `last_seen_at` first, then highest `mention_count`, then stable `artifact_ref`
+
 ## Peer-watch alert response shape
 ```json
 {
@@ -275,6 +286,43 @@
       "evidence_refs": ["/tmp/incident-reboot.md"],
       "counterparty_agent_ids": [],
       "source_kind": "controller_event"
+    }
+  ]
+}
+```
+
+## Shared memory artifact response shape
+```json
+{
+  "generated_at": "2026-03-09T19:00:00.000Z",
+  "items": [
+    {
+      "artifact_ref": "/tmp/app-engineering/todo.md",
+      "artifact_kind": "workspace_file",
+      "file_name": "todo.md",
+      "first_seen_at": "2026-03-09T18:40:00.000Z",
+      "last_seen_at": "2026-03-09T18:58:30.000Z",
+      "mention_count": 3,
+      "agent_ids": ["app-engineering", "team-lead"],
+      "correlation_ids": ["corr-drilldown"],
+      "source_kinds": ["controller_event", "workspace_file"],
+      "latest_summary": "Lead requested a reboot after the evidence review",
+      "latest_event_type": "agent_reboot_requested",
+      "collector_last_modified_at": "2026-03-09T18:58:30.000Z"
+    },
+    {
+      "artifact_ref": "/tmp/shared.md",
+      "artifact_kind": "workspace_file",
+      "file_name": "shared.md",
+      "first_seen_at": "2026-03-09T18:17:00.000Z",
+      "last_seen_at": "2026-03-09T18:17:00.000Z",
+      "mention_count": 1,
+      "agent_ids": ["app-engineering", "team-lead"],
+      "correlation_ids": ["collector-snapshot:2026-03-09T18:18:00.000Z"],
+      "source_kinds": ["workspace_file"],
+      "latest_summary": null,
+      "latest_event_type": null,
+      "collector_last_modified_at": "2026-03-09T18:17:00.000Z"
     }
   ]
 }

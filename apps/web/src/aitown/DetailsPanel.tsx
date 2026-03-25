@@ -224,6 +224,7 @@ function renderCorrelationTimelineEvent(event: WorkflowTimelineEvent) {
     <li key={event.event_id} className={`aitown-record severity-${event.severity}`}>
       <strong>{event.summary}</strong>
       <span>{`Timeline · ${event.event_type} · ${event.location}`}</span>
+      <span>{`Severity · ${SEVERITY_LABELS[event.severity]}`}</span>
       <span>{`Counterparties · ${renderCounterparties(event.counterparty_agent_ids)}`}</span>
       <span>{`Evidence · ${renderEvidenceRefs(event.evidence_refs)}`}</span>
       <span>{`Source · ${event.source_kind}`}</span>
@@ -255,6 +256,7 @@ function renderReplayTimelineEvent({
       <strong>{event.summary}</strong>
       <span>{`Event type · ${event.event_type}`}</span>
       <span>{`Location · ${event.location}`}</span>
+      <span>{`Severity · ${SEVERITY_LABELS[event.severity]}`}</span>
       <span>{`Counterparties · ${renderCounterparties(event.counterparty_agent_ids)}`}</span>
       <span>{`Evidence · ${renderEvidenceRefs(event.evidence_refs)}`}</span>
       <span>{`Source · ${event.source_kind}`}</span>

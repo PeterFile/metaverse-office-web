@@ -1189,6 +1189,7 @@ afterEach(() => {
     expect(within(replayEvent!).getByText('Replay captured missing workflow evidence')).toBeVisible();
     expect(within(replayEvent!).getByText('Event type · peer_watch_alert_raised')).toBeVisible();
     expect(within(replayEvent!).getByText('Location · meeting-zone')).toBeVisible();
+    expect(within(replayEvent!).getByText('Severity · Orange')).toBeVisible();
     expect(within(replayEvent!).getByText('Counterparties · team-lead')).toBeVisible();
     expect(within(replayEvent!).getByText('Evidence · /tmp/evidence.md')).toBeVisible();
     expect(within(replayEvent!).getByText('Source · controller_event')).toBeVisible();
@@ -2982,8 +2983,15 @@ afterEach(() => {
     expect(await within(details).findByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
     expect(await within(details).findByText('correlation refresh failed')).toBeVisible();
     expect(within(correlationSection!).getAllByText('Participants · app-engineering, team-lead')[0]).toBeVisible();
-    expect(within(correlationSection!).getByText('Correlation · corr-app-review')).toBeVisible();
-    expect(within(correlationSection!).getByText('Severity · Orange')).toBeVisible();
+    const correlationInteractionRecord = within(correlationSection!)
+      .getByText('Lead escalated missing workflow evidence')
+      .closest('li');
+    const correlationTimelineRecord = within(correlationSection!).getByText('Workflow evidence is still incomplete').closest('li');
+    expect(correlationInteractionRecord).not.toBeNull();
+    expect(correlationTimelineRecord).not.toBeNull();
+    expect(within(correlationInteractionRecord!).getByText('Correlation · corr-app-review')).toBeVisible();
+    expect(within(correlationInteractionRecord!).getByText('Severity · Orange')).toBeVisible();
+    expect(within(correlationTimelineRecord!).getByText('Severity · Orange')).toBeVisible();
     expect(within(correlationSection!).getByText('Evidence · /tmp/evidence.md, /tmp/peer-watch.md')).toBeVisible();
     expect(correlationRequests).toBeGreaterThan(1);
   });
@@ -3646,13 +3654,20 @@ afterEach(() => {
     expect(within(workflowSection!).getByText('Recent timeline · 1')).toBeVisible();
     expect(within(workflowSection!).getByText('Recent handoffs · 1')).toBeVisible();
     expect(within(workflowSection!).getByText('Recent reboots · 1')).toBeVisible();
-    expect(within(workflowSection!).getByText('Lead reviewed the missing workflow evidence thread')).toBeVisible();
-    expect(within(workflowSection!).getByText('Interaction · peer_watch')).toBeVisible();
-    expect(within(workflowSection!).getByText('Participants · app-engineering, team-lead')).toBeVisible();
-    expect(within(workflowSection!).getByText('Correlation · corr-app-review')).toBeVisible();
-    expect(within(workflowSection!).getByText('Severity · Orange')).toBeVisible();
-    expect(within(workflowSection!).getByText('Agent attached workflow evidence for lead review')).toBeVisible();
-    expect(within(workflowSection!).getByText('Timeline · agent_noted · meeting-zone')).toBeVisible();
+    const workflowInteractionRecord = within(workflowSection!)
+      .getByText('Lead reviewed the missing workflow evidence thread')
+      .closest('li');
+    const workflowTimelineRecord = within(workflowSection!)
+      .getByText('Agent attached workflow evidence for lead review')
+      .closest('li');
+    expect(workflowInteractionRecord).not.toBeNull();
+    expect(workflowTimelineRecord).not.toBeNull();
+    expect(within(workflowInteractionRecord!).getByText('Interaction · peer_watch')).toBeVisible();
+    expect(within(workflowInteractionRecord!).getByText('Participants · app-engineering, team-lead')).toBeVisible();
+    expect(within(workflowInteractionRecord!).getByText('Correlation · corr-app-review')).toBeVisible();
+    expect(within(workflowInteractionRecord!).getByText('Severity · Orange')).toBeVisible();
+    expect(within(workflowTimelineRecord!).getByText('Timeline · agent_noted · meeting-zone')).toBeVisible();
+    expect(within(workflowTimelineRecord!).getByText('Severity · Yellow')).toBeVisible();
     expect(within(workflowSection!).getByText('Secondary review handoff completed')).toBeVisible();
     expect(within(workflowSection!).getByText('Handoff · completed · handoff_done')).toBeVisible();
     expect(within(workflowSection!).getByText('Reboot recommended after the workflow stalled')).toBeVisible();

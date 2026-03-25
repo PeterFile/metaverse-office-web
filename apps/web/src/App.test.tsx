@@ -2982,6 +2982,8 @@ afterEach(() => {
     expect(await within(details).findByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
     expect(await within(details).findByText('correlation refresh failed')).toBeVisible();
     expect(within(correlationSection!).getAllByText('Participants · app-engineering, team-lead')[0]).toBeVisible();
+    expect(within(correlationSection!).getByText('Correlation · corr-app-review')).toBeVisible();
+    expect(within(correlationSection!).getByText('Severity · Orange')).toBeVisible();
     expect(within(correlationSection!).getByText('Evidence · /tmp/evidence.md, /tmp/peer-watch.md')).toBeVisible();
     expect(correlationRequests).toBeGreaterThan(1);
   });
@@ -3647,6 +3649,8 @@ afterEach(() => {
     expect(within(workflowSection!).getByText('Lead reviewed the missing workflow evidence thread')).toBeVisible();
     expect(within(workflowSection!).getByText('Interaction · peer_watch')).toBeVisible();
     expect(within(workflowSection!).getByText('Participants · app-engineering, team-lead')).toBeVisible();
+    expect(within(workflowSection!).getByText('Correlation · corr-app-review')).toBeVisible();
+    expect(within(workflowSection!).getByText('Severity · Orange')).toBeVisible();
     expect(within(workflowSection!).getByText('Agent attached workflow evidence for lead review')).toBeVisible();
     expect(within(workflowSection!).getByText('Timeline · agent_noted · meeting-zone')).toBeVisible();
     expect(within(workflowSection!).getByText('Secondary review handoff completed')).toBeVisible();

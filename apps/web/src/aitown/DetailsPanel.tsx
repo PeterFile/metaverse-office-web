@@ -212,6 +212,8 @@ function renderCorrelationInteraction(interaction: WorkflowInteraction) {
       <strong>{interaction.summary}</strong>
       <span>{`Interaction · ${interaction.interaction_type}`}</span>
       <span>{`Participants · ${renderParticipants(interaction.participant_agent_ids)}`}</span>
+      <span>{`Correlation · ${interaction.correlation_id ?? 'No correlation id'}`}</span>
+      {interaction.severity ? <span>{`Severity · ${SEVERITY_LABELS[interaction.severity]}`}</span> : null}
       <span>{`Evidence · ${renderEvidenceRefs(interaction.evidence_refs)}`}</span>
     </li>
   );

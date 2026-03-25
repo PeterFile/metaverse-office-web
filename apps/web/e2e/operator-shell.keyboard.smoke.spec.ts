@@ -1425,6 +1425,12 @@ test.describe('operator shell smoke', () => {
 
     const frontendOrigin = new URL(page.url()).origin;
     const inspectableBackendOrigin = resolveInspectableBrowserSmokeBackendOrigin();
+    const expectedProxyPathnames = [
+      '/office/operations',
+      '/timeline',
+      '/collectors/controller-snapshot',
+      '/memory/artifacts'
+    ] as const;
     const browserRequests = new Set<string>();
     const handleRequest = (request: Request) => {
       const url = new URL(request.url());
@@ -1432,7 +1438,7 @@ test.describe('operator shell smoke', () => {
         return;
       }
 
-      if (url.pathname === '/office/operations' || url.pathname === '/timeline') {
+      if (expectedProxyPathnames.includes(url.pathname as (typeof expectedProxyPathnames)[number])) {
         browserRequests.add(url.pathname);
       }
     };
@@ -1444,14 +1450,14 @@ test.describe('operator shell smoke', () => {
       await expect(page.getByRole('dialog', { name: 'Hub' })).toBeVisible();
 
       await expect
-        .poll(() => ({
-          operations: browserRequests.has('/office/operations'),
-          timeline: browserRequests.has('/timeline')
-        }))
-        .toEqual({
-          operations: true,
-          timeline: true
-        });
+        .poll(() =>
+          Object.fromEntries(
+            expectedProxyPathnames.map((pathname) => [pathname, browserRequests.has(pathname)])
+          )
+        )
+        .toEqual(
+          Object.fromEntries(expectedProxyPathnames.map((pathname) => [pathname, true]))
+        );
 
       if (!inspectableBackendOrigin) {
         return;
@@ -1466,15 +1472,13 @@ test.describe('operator shell smoke', () => {
               .map((entry) => entry.pathname)
           );
 
-          return {
-            operations: proxiedGetPathnames.has('/office/operations'),
-            timeline: proxiedGetPathnames.has('/timeline')
-          };
+          return Object.fromEntries(
+            expectedProxyPathnames.map((pathname) => [pathname, proxiedGetPathnames.has(pathname)])
+          );
         })
-        .toEqual({
-          operations: true,
-          timeline: true
-        });
+        .toEqual(
+          Object.fromEntries(expectedProxyPathnames.map((pathname) => [pathname, true]))
+        );
     } finally {
       page.off('request', handleRequest);
     }

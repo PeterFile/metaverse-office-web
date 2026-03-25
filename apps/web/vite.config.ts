@@ -27,6 +27,10 @@ export default defineConfig(({ mode }) => {
           target: proxyTarget,
           changeOrigin: true
         },
+        '/memory': {
+          target: proxyTarget,
+          changeOrigin: true
+        },
         '/correlations': {
           target: proxyTarget,
           changeOrigin: true

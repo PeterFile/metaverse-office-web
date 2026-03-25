@@ -14,6 +14,13 @@ const teamLeadWorkflowUrl = '/agents/team-lead/workflow?limit=10&window=60m';
 const growthRevenueWorkflowUrl = '/agents/growth-revenue/workflow?limit=10&window=60m';
 const correlationUrl = '/correlations/corr-app-review?limit=10&window=60m';
 const secondaryCorrelationUrl = '/correlations/corr-app-secondary?limit=10&window=60m';
+const memoryArtifactsUrl = '/memory/artifacts?limit=4&window=60m';
+const crewOverviewSelectedCorrelationMemoryArtifactsUrl =
+  '/memory/artifacts?limit=4&window=60m&correlation_id=corr-app-secondary';
+const teamLeadMemoryArtifactsUrl = '/memory/artifacts?limit=4&window=60m&agent_id=team-lead';
+const selectedCorrelationMemoryArtifactsUrl =
+  '/memory/artifacts?limit=4&window=60m&agent_id=app-engineering&correlation_id=corr-app-review';
+const collectorSnapshotUrl = '/collectors/controller-snapshot';
 
 const overviewFixture = {
   generated_at: '2026-03-16T09:00:00.000Z',
@@ -539,6 +546,286 @@ const secondaryCorrelationFixture = {
   ]
 };
 
+const memoryArtifactsFixture = {
+  generated_at: '2026-03-16T09:00:00.000Z',
+  items: [
+    {
+      artifact_ref: '/tmp/evidence.md',
+      artifact_kind: 'evidence_ref',
+      file_name: 'evidence.md',
+      first_seen_at: '2026-03-16T08:40:00.000Z',
+      last_seen_at: '2026-03-16T08:58:00.000Z',
+      mention_count: 3,
+      agent_ids: ['app-engineering', 'team-lead'],
+      correlation_ids: ['corr-app-review'],
+      source_kinds: ['controller_event', 'workspace_snapshot'],
+      latest_summary: 'Workflow evidence anchor for the lead review trail',
+      latest_event_type: 'peer_watch_alert_raised',
+      collector_last_modified_at: '2026-03-16T08:58:00.000Z'
+    },
+    {
+      artifact_ref: '/tmp/secondary-evidence.md',
+      artifact_kind: 'evidence_ref',
+      file_name: 'secondary-evidence.md',
+      first_seen_at: '2026-03-16T08:52:00.000Z',
+      last_seen_at: '2026-03-16T08:52:00.000Z',
+      mention_count: 1,
+      agent_ids: ['app-engineering', 'growth-revenue'],
+      correlation_ids: ['corr-app-secondary'],
+      source_kinds: ['controller_event'],
+      latest_summary: 'Secondary review evidence anchor',
+      latest_event_type: 'handoff_completed',
+      collector_last_modified_at: null
+    }
+  ]
+};
+
+const collectorSnapshotFixture = {
+  collected_at: '2026-03-16T09:01:00.000Z',
+  actor_id: 'team-lead',
+  summary: {
+    agent_count: 2,
+    heartbeat_count: 2,
+    tmux_observed_count: 2,
+    workspace_observed_count: 3,
+    reboot_recommended_count: 1
+  },
+  items: [
+    {
+      agent_id: 'app-engineering',
+      workspace_root: '/tmp/app-engineering',
+      session_ref: '5-web3-app-engineering',
+      evidence_refs: ['/tmp/controller-log.md', '/tmp/evidence.md'],
+      workspace_observations: [
+        {
+          path: '/tmp/app-engineering',
+          file_name: 'app-engineering',
+          kind: 'workspace_root',
+          last_modified_at: '2026-03-16T08:59:00.000Z'
+        },
+        {
+          path: '/tmp/app-engineering/todo.md',
+          file_name: 'todo.md',
+          kind: 'workspace_file',
+          last_modified_at: '2026-03-16T08:58:45.000Z'
+        }
+      ],
+      tmux_observations: [
+        {
+          session_name: 'app-engineering',
+          window_index: '1',
+          pane_index: '0',
+          pane_id: '%1',
+          pane_title: 'editor',
+          pane_current_command: 'pnpm',
+          pane_active: true,
+          pane_dead: false,
+          pane_activity_at: '2026-03-16T08:59:10.000Z'
+        }
+      ],
+      supervision: {
+        watch_target: 'growth-revenue',
+        watched_by: ['team-lead', 'growth-revenue'],
+        needs_attention: true
+      },
+      heartbeat: {
+        agent_id: 'app-engineering',
+        actor_id: 'team-lead',
+        received_at: '2026-03-16T08:59:30.000Z',
+        current_state: 'blocked',
+        active_task: 'Fix workflow issue',
+        current_location: 'meeting-zone',
+        last_meaningful_output_at: '2026-03-16T08:58:00.000Z',
+        last_file_write_at: '2026-03-16T08:58:45.000Z',
+        current_blocker: 'Workflow evidence is still incomplete',
+        confidence_level: 'high',
+        reboot_recommended: true,
+        evidence_refs: ['/tmp/evidence.md', '/tmp/controller-log.md']
+      }
+    },
+    {
+      agent_id: 'growth-revenue',
+      workspace_root: '/tmp/growth-revenue',
+      session_ref: '6-web3-growth-revenue',
+      evidence_refs: ['/tmp/launch-note.md'],
+      workspace_observations: [
+        {
+          path: '/tmp/growth-revenue',
+          file_name: 'growth-revenue',
+          kind: 'workspace_root',
+          last_modified_at: '2026-03-16T08:58:30.000Z'
+        }
+      ],
+      tmux_observations: [
+        {
+          session_name: 'growth-revenue',
+          window_index: '2',
+          pane_index: '0',
+          pane_id: '%2',
+          pane_title: 'notes',
+          pane_current_command: 'nvim',
+          pane_active: true,
+          pane_dead: false,
+          pane_activity_at: '2026-03-16T08:58:40.000Z'
+        }
+      ],
+      supervision: {
+        watch_target: null,
+        watched_by: ['team-lead'],
+        needs_attention: false
+      },
+      heartbeat: {
+        agent_id: 'growth-revenue',
+        actor_id: 'growth-revenue',
+        received_at: '2026-03-16T08:58:40.000Z',
+        current_state: 'planning',
+        active_task: 'Review launch copy',
+        current_location: 'meeting-zone',
+        last_meaningful_output_at: '2026-03-16T08:57:00.000Z',
+        last_file_write_at: '2026-03-16T08:58:30.000Z',
+        current_blocker: '',
+        confidence_level: 'medium',
+        reboot_recommended: false,
+        evidence_refs: ['/tmp/launch-note.md']
+      }
+    }
+  ]
+};
+
+const teamLeadMemoryArtifactsFixture = {
+  generated_at: '2026-03-16T09:00:00.000Z',
+  items: [
+    {
+      artifact_ref: '/tmp/team-lead-review.md',
+      artifact_kind: 'workspace_file',
+      file_name: 'team-lead-review.md',
+      first_seen_at: '2026-03-16T08:55:00.000Z',
+      last_seen_at: '2026-03-16T08:59:00.000Z',
+      mention_count: 2,
+      agent_ids: ['team-lead'],
+      correlation_ids: [],
+      source_kinds: ['workspace_snapshot'],
+      latest_summary: 'Team lead review notes stayed local to the agent context',
+      latest_event_type: 'agent_noted',
+      collector_last_modified_at: '2026-03-16T08:59:00.000Z'
+    }
+  ]
+};
+
+const selectedCorrelationMemoryArtifactsFixture = {
+  generated_at: '2026-03-16T09:00:00.000Z',
+  items: [
+    {
+      artifact_ref: '/tmp/evidence.md',
+      artifact_kind: 'evidence_ref',
+      file_name: 'evidence.md',
+      first_seen_at: '2026-03-16T08:40:00.000Z',
+      last_seen_at: '2026-03-16T08:58:00.000Z',
+      mention_count: 3,
+      agent_ids: ['app-engineering', 'team-lead'],
+      correlation_ids: ['corr-app-review'],
+      source_kinds: ['controller_event', 'workspace_snapshot'],
+      latest_summary: 'Correlation-scoped evidence trail for the missing workflow review',
+      latest_event_type: 'peer_watch_alert_raised',
+      collector_last_modified_at: '2026-03-16T08:58:00.000Z'
+    }
+  ]
+};
+
+const crewOverviewSelectedCorrelationMemoryArtifactsFixture = {
+  generated_at: '2026-03-16T09:00:00.000Z',
+  items: [
+    {
+      artifact_ref: '/tmp/secondary-evidence.md',
+      artifact_kind: 'evidence_ref',
+      file_name: 'secondary-evidence.md',
+      first_seen_at: '2026-03-16T08:52:00.000Z',
+      last_seen_at: '2026-03-16T08:52:00.000Z',
+      mention_count: 1,
+      agent_ids: ['app-engineering', 'growth-revenue'],
+      correlation_ids: ['corr-app-secondary'],
+      source_kinds: ['controller_event'],
+      latest_summary: 'Crew-overview manual correlation memory slice',
+      latest_event_type: 'handoff_completed',
+      collector_last_modified_at: '2026-03-16T08:52:00.000Z'
+    }
+  ]
+};
+
+function jsonResponse(body: unknown) {
+  return new Response(JSON.stringify(body), {
+    headers: { 'content-type': 'application/json' }
+  });
+}
+
+function resolveDefaultFetchResponse(url: string) {
+  if (url === '/office/overview') {
+    return jsonResponse(overviewFixture);
+  }
+
+  if (url === operationsUrl || url === selectedOperationUrl) {
+    return jsonResponse(operationsFixture);
+  }
+
+  if (url === incidentsUrl) {
+    return jsonResponse(incidentFeedFixture);
+  }
+
+  if (url === timelineUrl) {
+    return jsonResponse(timelineFixture);
+  }
+
+  if (url === workflowUrl) {
+    return jsonResponse(workflowFixture);
+  }
+
+  if (url === teamLeadWorkflowUrl) {
+    return jsonResponse(teamLeadWorkflowFixture);
+  }
+
+  if (url === growthRevenueWorkflowUrl) {
+    return jsonResponse(growthRevenueWorkflowFixture);
+  }
+
+  if (url === correlationUrl) {
+    return jsonResponse(correlationFixture);
+  }
+
+  if (url === secondaryCorrelationUrl) {
+    return jsonResponse(secondaryCorrelationFixture);
+  }
+
+  if (url === memoryArtifactsUrl) {
+    return jsonResponse(memoryArtifactsFixture);
+  }
+
+  if (url === crewOverviewSelectedCorrelationMemoryArtifactsUrl) {
+    return jsonResponse(crewOverviewSelectedCorrelationMemoryArtifactsFixture);
+  }
+
+  if (url === teamLeadMemoryArtifactsUrl) {
+    return jsonResponse(teamLeadMemoryArtifactsFixture);
+  }
+
+  if (url === selectedCorrelationMemoryArtifactsUrl) {
+    return jsonResponse(selectedCorrelationMemoryArtifactsFixture);
+  }
+
+  if (url === collectorSnapshotUrl) {
+    return jsonResponse({ item: collectorSnapshotFixture });
+  }
+
+  return null;
+}
+
+function resolveTestFetchResponse(url: string) {
+  const response = resolveDefaultFetchResponse(url);
+  if (response) {
+    return response;
+  }
+
+  throw new Error(`Unexpected request: ${url}`);
+}
 async function openHub(user: ReturnType<typeof userEvent.setup>) {
   await user.click(await screen.findByRole('button', { name: 'Open Hub' }));
   return screen.findByRole('complementary', { name: 'Agent details' });
@@ -605,7 +892,7 @@ describe('App', () => {
           });
         }
 
-        throw new Error(`Unexpected request: ${url}`);
+        return resolveTestFetchResponse(url);
       })
     );
   });
@@ -725,6 +1012,92 @@ afterEach(() => {
     expect(within(details).queryByRole('heading', { name: 'Active Queue' })).not.toBeInTheDocument();
   });
 
+  it('loads a compact shared-memory queue only when Hub opens in Crew Overview', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await screen.findByRole('button', { name: 'Open Hub' });
+    expect(globalThis.fetch).not.toHaveBeenCalledWith(memoryArtifactsUrl, expect.anything());
+
+    const details = await openHub(user);
+    const memorySection = await within(details).findByRole('heading', { name: 'Shared Memory' });
+
+    expect(memorySection).toBeVisible();
+    expect(within(details).getByText('Workflow evidence anchor for the lead review trail')).toBeVisible();
+    expect(within(details).getByText('Ref · /tmp/evidence.md')).toBeVisible();
+
+    await act(async () => {
+      expect(globalThis.fetch).toHaveBeenCalledWith(memoryArtifactsUrl, expect.anything());
+    });
+  });
+
+  it('filters shared memory to a manually selected crew-overview correlation', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    const incidentSection = within(details).getByRole('heading', { name: 'Incident Feed' }).closest('section');
+    const memorySection = within(details).getByRole('heading', { name: 'Shared Memory' }).closest('section');
+    expect(incidentSection).not.toBeNull();
+    expect(memorySection).not.toBeNull();
+
+    await user.click(within(incidentSection!).getByRole('button', { name: 'Open incident correlation corr-app-secondary' }));
+
+    await waitFor(() => {
+      expect(within(memorySection!).getByText('Crew-overview manual correlation memory slice')).toBeVisible();
+      expect(within(memorySection!).getByText('Correlations · corr-app-secondary')).toBeVisible();
+    });
+    expect(
+      within(memorySection!).queryByText('Workflow evidence anchor for the lead review trail')
+    ).not.toBeInTheDocument();
+
+    await act(async () => {
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        crewOverviewSelectedCorrelationMemoryArtifactsUrl,
+        expect.anything()
+      );
+    });
+  });
+
+  it('shows selected-agent artifact context with the agent filter when no correlation is active', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect Team Lead' }));
+
+    const memorySection = within(details).getByRole('heading', { name: 'Shared Memory' }).closest('section');
+    expect(memorySection).not.toBeNull();
+
+    expect(await within(memorySection!).findByText('Team lead review notes stayed local to the agent context')).toBeVisible();
+    expect(within(memorySection!).getByText('Agents · team-lead')).toBeVisible();
+    expect(globalThis.fetch).toHaveBeenCalledWith(teamLeadMemoryArtifactsUrl, expect.anything());
+  });
+
+  it('prefers correlation-relevant artifact memory after pivoting from a selected correlation into an agent', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    expect(correlationSection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+    });
+
+    await user.click(
+      within(correlationSection!).getByRole('button', { name: 'Select correlation participant agent app-engineering' })
+    );
+
+    const memorySection = within(details).getByRole('heading', { name: 'Shared Memory' }).closest('section');
+    expect(memorySection).not.toBeNull();
+
+    expect(await within(memorySection!).findByText('Correlation-scoped evidence trail for the missing workflow review')).toBeVisible();
+    expect(within(memorySection!).getByText('Correlations · corr-app-review')).toBeVisible();
+    expect(globalThis.fetch).toHaveBeenCalledWith(selectedCorrelationMemoryArtifactsUrl, expect.anything());
+  });
+
   it('shows attention queue, watch topology, and enriched incident cards in crew overview', async () => {
     const user = userEvent.setup();
     render(<App />);
@@ -753,6 +1126,25 @@ afterEach(() => {
     expect(
       within(incidentSection!).getByRole('button', { name: /Open incident correlation corr-app-review/ })
     ).toBeVisible();
+  });
+
+  it('shows collector supervision summary and highest-signal observation items in crew overview', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    const collectorSection = within(details).getByRole('heading', { name: 'Collector Supervision' }).closest('section');
+    expect(collectorSection).not.toBeNull();
+
+    expect(await within(collectorSection!).findByText('Latest snapshot · 2026-03-16T09:01:00.000Z')).toBeVisible();
+    expect(within(collectorSection!).getByText('Heartbeats · 2')).toBeVisible();
+    expect(within(collectorSection!).getByText('Workspace observations · 3')).toBeVisible();
+    expect(within(collectorSection!).getByText('Tmux observations · 2')).toBeVisible();
+    expect(within(collectorSection!).getByText('Reboot flags · 1')).toBeVisible();
+    expect(within(collectorSection!).getByText('App Engineering Agent')).toBeVisible();
+    expect(within(collectorSection!).getByText('Needs attention · Yes')).toBeVisible();
+    expect(within(collectorSection!).getByText('Watchers · team-lead, growth-revenue')).toBeVisible();
+    expect(within(collectorSection!).getByText('Evidence · /tmp/controller-log.md, /tmp/evidence.md')).toBeVisible();
   });
 
   it('loads the timeline replay slice only when Hub opens in Crew Overview and hides it after selecting an agent', async () => {
@@ -855,7 +1247,7 @@ afterEach(() => {
           });
         }
 
-        throw new Error(`Unexpected request: ${url}`);
+        return resolveTestFetchResponse(url);
       })
     );
 
@@ -990,7 +1382,7 @@ afterEach(() => {
           });
         }
 
-        throw new Error(`Unexpected request: ${url}`);
+        return resolveTestFetchResponse(url);
       })
     );
 
@@ -1247,7 +1639,7 @@ afterEach(() => {
           });
         }
 
-        throw new Error(`Unexpected request: ${url}`);
+        return resolveTestFetchResponse(url);
       })
     );
 
@@ -1335,7 +1727,7 @@ afterEach(() => {
           });
         }
 
-        throw new Error(`Unexpected request: ${url}`);
+        return resolveTestFetchResponse(url);
       })
     );
 
@@ -1406,7 +1798,7 @@ afterEach(() => {
           });
         }
 
-        throw new Error(`Unexpected request: ${url}`);
+        return resolveTestFetchResponse(url);
       })
     );
 
@@ -1474,7 +1866,7 @@ afterEach(() => {
           });
         }
 
-        throw new Error(`Unexpected request: ${url}`);
+        return resolveTestFetchResponse(url);
       })
     );
 
@@ -1555,7 +1947,7 @@ afterEach(() => {
           });
         }
 
-        throw new Error(`Unexpected request: ${url}`);
+        return resolveTestFetchResponse(url);
       })
     );
 
@@ -1640,7 +2032,7 @@ afterEach(() => {
           });
         }
 
-        throw new Error(`Unexpected request: ${url}`);
+        return resolveTestFetchResponse(url);
       })
     );
 
@@ -1749,7 +2141,7 @@ afterEach(() => {
           );
         }
 
-        return Promise.reject(new Error(`Unexpected request: ${url}`));
+        return resolveTestFetchResponse(url);
       })
     );
 
@@ -1800,7 +2192,7 @@ afterEach(() => {
           });
         }
 
-        throw new Error(`Unexpected request: ${url}`);
+        return resolveTestFetchResponse(url);
       })
     );
 
@@ -1943,7 +2335,7 @@ afterEach(() => {
           });
         }
 
-        throw new Error(`Unexpected request: ${url}`);
+        return resolveTestFetchResponse(url);
       })
     );
 
@@ -2186,7 +2578,7 @@ afterEach(() => {
           );
         }
 
-        return Promise.reject(new Error(`Unexpected request: ${url}`));
+        return resolveTestFetchResponse(url);
       })
     );
 
@@ -2418,7 +2810,7 @@ afterEach(() => {
           });
         }
 
-        throw new Error(`Unexpected request: ${url}`);
+        return resolveTestFetchResponse(url);
       })
     );
 
@@ -2495,7 +2887,7 @@ afterEach(() => {
           });
         }
 
-        return Promise.reject(new Error(`Unexpected request: ${url}`));
+        return resolveTestFetchResponse(url);
       })
     );
 
@@ -2567,7 +2959,7 @@ afterEach(() => {
           });
         }
 
-        throw new Error(`Unexpected request: ${url}`);
+        return resolveTestFetchResponse(url);
       })
     );
 
@@ -2588,6 +2980,77 @@ afterEach(() => {
     expect(within(correlationSection!).getAllByText('Participants · app-engineering, team-lead')[0]).toBeVisible();
     expect(within(correlationSection!).getByText('Evidence · /tmp/evidence.md, /tmp/peer-watch.md')).toBeVisible();
     expect(correlationRequests).toBeGreaterThan(1);
+  });
+
+  it('keeps the last collector snapshot visible when a later poll fails', async () => {
+    (window as typeof window & { __AITOWN_POLL_INTERVAL_MS__?: number }).__AITOWN_POLL_INTERVAL_MS__ = 10;
+
+    let collectorRequests = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === '/office/overview') {
+          return new Response(JSON.stringify(overviewFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === operationsUrl) {
+          return new Response(JSON.stringify(operationsFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === incidentsUrl) {
+          return new Response(JSON.stringify(incidentFeedFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === timelineUrl) {
+          return new Response(JSON.stringify(timelineFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === collectorSnapshotUrl) {
+          collectorRequests += 1;
+          if (collectorRequests === 1) {
+            return new Response(JSON.stringify({ item: collectorSnapshotFixture }), {
+              headers: { 'content-type': 'application/json' }
+            });
+          }
+
+          return new Response(
+            JSON.stringify({ error: 'internal_error', details: 'collector snapshot refresh failed' }),
+            {
+              status: 500,
+              headers: { 'content-type': 'application/json' }
+            }
+          );
+        }
+
+        throw new Error(`Unexpected request: ${url}`);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    const collectorSection = within(details).getByRole('heading', { name: 'Collector Supervision' }).closest('section');
+    expect(collectorSection).not.toBeNull();
+
+    expect(await within(collectorSection!).findByText('Latest snapshot · 2026-03-16T09:01:00.000Z')).toBeVisible();
+
+    await waitFor(() => {
+      expect(collectorRequests).toBeGreaterThan(1);
+      expect(within(collectorSection!).getByText('Showing last collector snapshot. collector snapshot refresh failed')).toBeVisible();
+      expect(within(collectorSection!).getByText('Latest snapshot · 2026-03-16T09:01:00.000Z')).toBeVisible();
+      expect(within(collectorSection!).getByText('App Engineering Agent')).toBeVisible();
+    });
   });
 
   it('shows an empty operations queue explicitly when no active overview items exist', async () => {
@@ -2620,7 +3083,7 @@ afterEach(() => {
           });
         }
 
-        throw new Error(`Unexpected request: ${url}`);
+        return resolveTestFetchResponse(url);
       })
     );
 
@@ -2672,7 +3135,7 @@ afterEach(() => {
           });
         }
 
-        throw new Error(`Unexpected request: ${url}`);
+        return resolveTestFetchResponse(url);
       })
     );
 
@@ -2685,6 +3148,78 @@ afterEach(() => {
     expect(await within(details).findByText('operations refresh failed')).toBeVisible();
     expect(within(details).getByText('blocked · Workflow evidence is still incomplete')).toBeVisible();
     expect(operationsRequests).toBeGreaterThan(1);
+  });
+
+  it('keeps the last shared-memory queue visible when a later poll fails', async () => {
+    (window as typeof window & { __AITOWN_POLL_INTERVAL_MS__?: number }).__AITOWN_POLL_INTERVAL_MS__ = 10;
+
+    let memoryArtifactRequests = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === '/office/overview') {
+          return new Response(JSON.stringify(overviewFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === operationsUrl || url === selectedOperationUrl) {
+          return new Response(JSON.stringify(operationsFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === incidentsUrl) {
+          return new Response(JSON.stringify(incidentFeedFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === timelineUrl) {
+          return new Response(JSON.stringify(timelineFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === correlationUrl) {
+          return new Response(JSON.stringify(correlationFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === memoryArtifactsUrl) {
+          memoryArtifactRequests += 1;
+          if (memoryArtifactRequests === 1) {
+            return new Response(JSON.stringify(memoryArtifactsFixture), {
+              headers: { 'content-type': 'application/json' }
+            });
+          }
+
+          return new Response(JSON.stringify({ error: 'internal_error', details: 'shared memory refresh failed' }), {
+            status: 500,
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        return resolveTestFetchResponse(url);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    const memorySection = within(details).getByRole('heading', { name: 'Shared Memory' }).closest('section');
+    expect(memorySection).not.toBeNull();
+
+    expect(await within(memorySection!).findByText('Workflow evidence anchor for the lead review trail')).toBeVisible();
+    expect(
+      await within(memorySection!).findByText('Showing last shared-memory snapshot. shared memory refresh failed')
+    ).toBeVisible();
+    expect(within(memorySection!).getByText('Ref · /tmp/evidence.md')).toBeVisible();
+    expect(memoryArtifactRequests).toBeGreaterThan(1);
   });
 
   it('keeps selected agent summary aligned with projected world state', async () => {
@@ -2734,7 +3269,7 @@ afterEach(() => {
           });
         }
 
-        throw new Error(`Unexpected request: ${url}`);
+        return resolveTestFetchResponse(url);
       })
     );
 
@@ -2786,7 +3321,7 @@ afterEach(() => {
           });
         }
 
-        throw new Error(`Unexpected request: ${url}`);
+        return resolveTestFetchResponse(url);
       })
     );
 
@@ -2835,7 +3370,7 @@ afterEach(() => {
           });
         }
 
-        throw new Error(`Unexpected request: ${url}`);
+        return resolveTestFetchResponse(url);
       })
     );
 
@@ -2922,7 +3457,7 @@ afterEach(() => {
           });
         }
 
-        throw new Error(`Unexpected request: ${url}`);
+        return resolveTestFetchResponse(url);
       })
     );
 
@@ -2983,7 +3518,7 @@ afterEach(() => {
           });
         }
 
-        throw new Error(`Unexpected request: ${url}`);
+        return resolveTestFetchResponse(url);
       })
     );
 
@@ -3068,7 +3603,7 @@ afterEach(() => {
           });
         }
 
-        throw new Error(`Unexpected request: ${url}`);
+        return resolveTestFetchResponse(url);
       })
     );
 
@@ -3125,5 +3660,29 @@ afterEach(() => {
     await act(async () => {
       expect(globalThis.fetch).toHaveBeenCalledWith(workflowUrl, expect.anything());
     });
+  });
+
+  it('shows collector observation context for the selected agent', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
+
+    const collectorSection = await within(details).findByRole('heading', { name: 'Collector Observation' });
+    const collectorContainer = collectorSection.closest('section');
+    expect(collectorContainer).not.toBeNull();
+
+    expect(within(collectorContainer!).getByText('Heartbeat received · 2026-03-16T08:59:30.000Z')).toBeVisible();
+    expect(within(collectorContainer!).getByText('Collector state · blocked')).toBeVisible();
+    expect(within(collectorContainer!).getByText('Active task · Fix workflow issue')).toBeVisible();
+    expect(within(collectorContainer!).getByText('Current blocker · Workflow evidence is still incomplete')).toBeVisible();
+    expect(within(collectorContainer!).getByText('Attention flag · Needs attention')).toBeVisible();
+    expect(within(collectorContainer!).getByText('Reboot flag · Recommended')).toBeVisible();
+    expect(within(collectorContainer!).getByText('Watch target · growth-revenue')).toBeVisible();
+    expect(within(collectorContainer!).getByText('Watched by · team-lead, growth-revenue')).toBeVisible();
+    expect(within(collectorContainer!).getByText('Workspace observations · 2')).toBeVisible();
+    expect(within(collectorContainer!).getByText('Tmux observations · 1')).toBeVisible();
+    expect(within(collectorContainer!).getByText('Evidence · /tmp/controller-log.md, /tmp/evidence.md')).toBeVisible();
   });
 });

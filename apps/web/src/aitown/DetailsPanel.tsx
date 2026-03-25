@@ -1,7 +1,11 @@
 import type {
   AgentWorkflow,
+  CollectorItem,
+  CollectorSnapshot,
   CorrelationDrilldown,
   IncidentFeedResponse,
+  MemoryArtifact,
+  MemoryArtifactIndex,
   OfficeAgent,
   OfficeOperation,
   OfficeOperations,
@@ -17,6 +21,9 @@ import type { WorldState } from '../world/types';
 import { selectAgentBadge, selectAgentZoneLabel, selectAttentionQueue, selectWatchEdgeRisk } from '../world/selectors';
 
 type DetailsPanelProps = {
+  collectorSnapshot: CollectorSnapshot | null;
+  collectorSnapshotError: string | null;
+  collectorSnapshotState: LoadState;
   correlation: CorrelationDrilldown | null;
   correlationError: string | null;
   correlationState: LoadState;
@@ -28,6 +35,9 @@ type DetailsPanelProps = {
   operationsState: LoadState;
   overviewZones: OfficeZone[] | null;
   preserveWorkflowCounterpartyCorrelation: boolean;
+  memoryArtifacts: MemoryArtifactIndex | null;
+  memoryArtifactsError: string | null;
+  memoryArtifactsState: LoadState;
   selectedAgent: OfficeAgent | null;
   selectedCorrelationId: string | null;
   selectedOperation: OfficeOperation | null;
@@ -173,6 +183,10 @@ function renderParticipants(participantAgentIds: string[]) {
   return participantAgentIds.length > 0 ? participantAgentIds.join(', ') : 'No participants';
 }
 
+function renderNamedList(values: string[], emptyLabel: string) {
+  return values.length > 0 ? values.join(', ') : emptyLabel;
+}
+
 function renderTimestamp(value: string | null, fallback: string) {
   return value ?? fallback;
 }
@@ -302,6 +316,53 @@ function renderWorkflowStatusRecord({
   );
 }
 
+function renderSharedMemoryArtifact(artifact: MemoryArtifact) {
+  return (
+    <li key={artifact.artifact_ref} className="aitown-record">
+      <strong>{artifact.latest_summary ?? artifact.file_name}</strong>
+      <span>{`Artifact · ${artifact.file_name} · ${renderDisplayState(artifact.artifact_kind)}`}</span>
+      <span>{`Ref · ${artifact.artifact_ref}`}</span>
+      <span>{`Seen · ${artifact.last_seen_at} · ${artifact.mention_count} mentions`}</span>
+      <span>{`Agents · ${renderParticipants(artifact.agent_ids)}`}</span>
+      <span>{`Correlations · ${renderNamedList(artifact.correlation_ids, 'No correlation ids')}`}</span>
+    </li>
+  );
+}
+
+function renderSharedMemorySection({
+  memoryArtifacts,
+  memoryArtifactsError,
+  memoryArtifactsState
+}: {
+  memoryArtifacts: MemoryArtifactIndex | null;
+  memoryArtifactsError: string | null;
+  memoryArtifactsState: LoadState;
+}) {
+  const sharedMemoryWarning =
+    memoryArtifactsError && memoryArtifacts
+      ? `Showing last shared-memory snapshot. ${memoryArtifactsError}`
+      : null;
+
+  return (
+    <section className="aitown-details__section">
+      <h3>Shared Memory</h3>
+      {sharedMemoryWarning ? <p role="status">{sharedMemoryWarning}</p> : null}
+      <ul className="aitown-records">
+        {memoryArtifactsState === 'loading' && !memoryArtifacts ? (
+          <li className="aitown-record">Loading shared memory...</li>
+        ) : null}
+        {memoryArtifactsError && !memoryArtifacts ? (
+          <li className="aitown-record">{`Unable to load shared memory. ${memoryArtifactsError}`}</li>
+        ) : null}
+        {(memoryArtifacts?.items ?? []).map(renderSharedMemoryArtifact)}
+        {memoryArtifactsState === 'ready' && !memoryArtifactsError && !memoryArtifacts?.items.length ? (
+          <li className="aitown-record">No shared memory artifacts.</li>
+        ) : null}
+      </ul>
+    </section>
+  );
+}
+
 function renderIncidentRecord({
   incident,
   activeCorrelationId,
@@ -361,6 +422,49 @@ function compareAgents(
   );
 }
 
+function resolveCollectorEvidenceRefs(item: CollectorItem) {
+  return [...item.evidence_refs, ...(item.heartbeat.evidence_refs ?? [])].filter(
+    (evidenceRef, index, list) => evidenceRef && list.indexOf(evidenceRef) === index
+  );
+}
+
+function resolveCollectorSeverity(item: CollectorItem): keyof typeof SEVERITY_LABELS {
+  if (item.supervision.needs_attention) {
+    return 'orange';
+  }
+
+  if (item.heartbeat.reboot_recommended || item.supervision.watch_target || item.supervision.watched_by.length > 0) {
+    return 'yellow';
+  }
+
+  return 'normal';
+}
+
+function compareCollectorItems(left: CollectorItem, right: CollectorItem) {
+  const leftSignalScore =
+    (left.supervision.needs_attention ? 100 : 0) +
+    (left.heartbeat.reboot_recommended ? 50 : 0) +
+    (left.supervision.watch_target ? 20 : 0) +
+    left.supervision.watched_by.length * 10 +
+    resolveCollectorEvidenceRefs(left).length * 2 +
+    left.workspace_observations.length +
+    left.tmux_observations.length;
+  const rightSignalScore =
+    (right.supervision.needs_attention ? 100 : 0) +
+    (right.heartbeat.reboot_recommended ? 50 : 0) +
+    (right.supervision.watch_target ? 20 : 0) +
+    right.supervision.watched_by.length * 10 +
+    resolveCollectorEvidenceRefs(right).length * 2 +
+    right.workspace_observations.length +
+    right.tmux_observations.length;
+
+  return (
+    rightSignalScore - leftSignalScore ||
+    right.heartbeat.received_at.localeCompare(left.heartbeat.received_at) ||
+    left.agent_id.localeCompare(right.agent_id)
+  );
+}
+
 function renderZoneOccupants({
   zoneLabel,
   occupants,
@@ -412,6 +516,9 @@ function summarizeZoneSeverity(severities: Array<keyof typeof SEVERITY_LABELS>) 
 }
 
 export function DetailsPanel({
+  collectorSnapshot,
+  collectorSnapshotError,
+  collectorSnapshotState,
   correlation,
   correlationError,
   correlationState,
@@ -423,6 +530,9 @@ export function DetailsPanel({
   operationsState,
   overviewZones,
   preserveWorkflowCounterpartyCorrelation,
+  memoryArtifacts,
+  memoryArtifactsError,
+  memoryArtifactsState,
   selectedAgent,
   selectedCorrelationId,
   selectedOperation,
@@ -482,6 +592,20 @@ export function DetailsPanel({
       severitySummary: summarizeZoneSeverity(occupants.map((occupant) => occupant.severity))
     };
   });
+  const collectorWarning =
+    collectorSnapshotError && collectorSnapshot
+      ? `Showing last collector snapshot. ${collectorSnapshotError}`
+      : null;
+  const collectorSignalItems = (collectorSnapshot?.items ?? [])
+    .filter(
+      (item) =>
+        item.supervision.needs_attention ||
+        item.heartbeat.reboot_recommended ||
+        item.supervision.watch_target !== null ||
+        item.supervision.watched_by.length > 0
+    )
+    .sort(compareCollectorItems)
+    .slice(0, 3);
 
   if (!selectedAgent) {
     return (
@@ -499,6 +623,45 @@ export function DetailsPanel({
             severity {SEVERITY_LABELS[world.summary.highest_severity]}.
           </p>
         </div>
+
+        <section className="aitown-details__section">
+          <h3>Collector Supervision</h3>
+          {collectorWarning ? <p role="status">{collectorWarning}</p> : null}
+          <ul className="aitown-records">
+            {collectorSnapshotState === 'loading' && !collectorSnapshot ? (
+              <li className="aitown-record">Loading collector snapshot...</li>
+            ) : null}
+            {collectorSnapshotError && !collectorSnapshot ? (
+              <li className="aitown-record">{`Unable to load collector snapshot. ${collectorSnapshotError}`}</li>
+            ) : null}
+            {collectorSnapshot ? (
+              <li className="aitown-record">
+                <strong>{collectorSnapshot.actor_id}</strong>
+                <span>{`Latest snapshot · ${collectorSnapshot.collected_at}`}</span>
+                <span>{`Heartbeats · ${collectorSnapshot.summary.heartbeat_count}`}</span>
+                <span>{`Workspace observations · ${collectorSnapshot.summary.workspace_observed_count}`}</span>
+                <span>{`Tmux observations · ${collectorSnapshot.summary.tmux_observed_count}`}</span>
+                <span>{`Reboot flags · ${collectorSnapshot.summary.reboot_recommended_count}`}</span>
+              </li>
+            ) : null}
+            {collectorSignalItems.map((item) => (
+              <li key={item.agent_id} className={`aitown-record severity-${resolveCollectorSeverity(item)}`}>
+                <strong>{agentNameById.get(item.agent_id) ?? item.agent_id}</strong>
+                <span>{`Collector state · ${item.heartbeat.current_state}`}</span>
+                <span>{`Needs attention · ${item.supervision.needs_attention ? 'Yes' : 'No'}`}</span>
+                <span>{`Reboot flag · ${item.heartbeat.reboot_recommended ? 'Recommended' : 'No'}`}</span>
+                <span>{`Watchers · ${renderNamedList(item.supervision.watched_by, 'No watchers')}`}</span>
+                <span>{`Evidence · ${renderEvidenceRefs(resolveCollectorEvidenceRefs(item))}`}</span>
+              </li>
+            ))}
+            {collectorSnapshotState === 'ready' && !collectorSnapshotError && !collectorSnapshot ? (
+              <li className="aitown-record">No collector snapshot available yet.</li>
+            ) : null}
+            {collectorSnapshot && collectorSignalItems.length === 0 ? (
+              <li className="aitown-record">No collector attention items in latest snapshot.</li>
+            ) : null}
+          </ul>
+        </section>
 
         <section className="aitown-details__section">
           <h3>Roster</h3>
@@ -614,6 +777,12 @@ export function DetailsPanel({
             ) : null}
           </ul>
         </section>
+
+        {renderSharedMemorySection({
+          memoryArtifacts,
+          memoryArtifactsError,
+          memoryArtifactsState
+        })}
 
         <section className="aitown-details__section">
           <h3>Incident Feed</h3>
@@ -743,6 +912,8 @@ export function DetailsPanel({
   );
   const workflowHasAdditionalPivots =
     workflowPivotCorrelationIds.length > 0 || (workflow?.counterparty_agent_ids.length ?? 0) > 0;
+  const selectedCollectorItem =
+    collectorSnapshot?.items.find((item) => item.agent_id === selectedAgent.agent_id) ?? null;
 
   return (
     <aside className="aitown-panel aitown-panel--details" role="complementary" aria-label="Agent details">
@@ -780,6 +951,44 @@ export function DetailsPanel({
           <strong>{selectedAgent.reboot_recommended ? 'Recommended' : 'No'}</strong>
         </div>
       </div>
+
+      <section className="aitown-details__section">
+        <h3>Collector Observation</h3>
+        {collectorWarning ? <p role="status">{collectorWarning}</p> : null}
+        <ul className="aitown-records">
+          {collectorSnapshotState === 'loading' && !collectorSnapshot ? (
+            <li className="aitown-record">Loading collector snapshot...</li>
+          ) : null}
+          {collectorSnapshotError && !collectorSnapshot ? (
+            <li className="aitown-record">{`Unable to load collector snapshot. ${collectorSnapshotError}`}</li>
+          ) : null}
+          {collectorSnapshot && selectedCollectorItem ? (
+            <li className={`aitown-record severity-${resolveCollectorSeverity(selectedCollectorItem)}`}>
+              <strong>{agentNameById.get(selectedCollectorItem.agent_id) ?? selectedCollectorItem.agent_id}</strong>
+              <span>{`Latest snapshot · ${collectorSnapshot.collected_at}`}</span>
+              <span>{`Heartbeat received · ${selectedCollectorItem.heartbeat.received_at}`}</span>
+              <span>{`Collector state · ${selectedCollectorItem.heartbeat.current_state}`}</span>
+              <span>{`Active task · ${selectedCollectorItem.heartbeat.active_task}`}</span>
+              <span>{`Current blocker · ${renderOperationBlocker(selectedCollectorItem.heartbeat.current_blocker)}`}</span>
+              <span>{`Attention flag · ${selectedCollectorItem.supervision.needs_attention ? 'Needs attention' : 'No'}`}</span>
+              <span>{`Reboot flag · ${selectedCollectorItem.heartbeat.reboot_recommended ? 'Recommended' : 'No'}`}</span>
+              <span>{`Watch target · ${selectedCollectorItem.supervision.watch_target ?? 'No watch target'}`}</span>
+              <span>{`Watched by · ${renderNamedList(selectedCollectorItem.supervision.watched_by, 'No watchers')}`}</span>
+              <span>{`Workspace observations · ${selectedCollectorItem.workspace_observations.length}`}</span>
+              <span>{`Tmux observations · ${selectedCollectorItem.tmux_observations.length}`}</span>
+              <span>{`Workspace root · ${selectedCollectorItem.workspace_root}`}</span>
+              <span>{`Session · ${selectedCollectorItem.session_ref}`}</span>
+              <span>{`Evidence · ${renderEvidenceRefs(resolveCollectorEvidenceRefs(selectedCollectorItem))}`}</span>
+            </li>
+          ) : null}
+          {collectorSnapshotState === 'ready' && !collectorSnapshotError && !collectorSnapshot ? (
+            <li className="aitown-record">No collector snapshot available yet.</li>
+          ) : null}
+          {collectorSnapshot && !selectedCollectorItem ? (
+            <li className="aitown-record">No collector observation context for this agent in latest snapshot.</li>
+          ) : null}
+        </ul>
+      </section>
 
       {selectedOperation ? (
         <>
@@ -928,6 +1137,12 @@ export function DetailsPanel({
           )}
         </ul>
       </section>
+
+      {renderSharedMemorySection({
+        memoryArtifacts,
+        memoryArtifactsError,
+        memoryArtifactsState
+      })}
 
       <section className="aitown-details__section">
         <h3>Incident Feed</h3>

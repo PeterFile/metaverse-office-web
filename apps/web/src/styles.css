@@ -232,6 +232,61 @@ button {
   gap: 10px;
 }
 
+.aitown-status-legend {
+  position: absolute;
+  left: 18px;
+  bottom: 18px;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: min(560px, calc(100% - 36px));
+  padding: 10px 12px;
+  border-style: solid;
+  border-width: 14px;
+  border-image-source: url('/ai-town/assets/ui/box.svg');
+  border-image-repeat: stretch;
+  border-image-slice: 12.5%;
+  background: rgba(39, 24, 33, 0.82);
+  color: #f1ddb0;
+  pointer-events: none;
+}
+
+.aitown-status-legend__title {
+  color: #f5cf79;
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.aitown-status-legend__items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.aitown-status-legend__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.aitown-status-legend__token {
+  min-width: 18px;
+  padding: 2px 4px;
+  border-style: solid;
+  border-width: 10px;
+  border-image-source: url('/ai-town/assets/ui/box.svg');
+  border-image-repeat: stretch;
+  border-image-slice: 12.5%;
+  background: rgba(63, 41, 52, 0.88);
+  color: #fff9df;
+  text-align: center;
+}
+
 .aitown-panel--details {
   display: flex;
   flex-direction: column;
@@ -593,6 +648,13 @@ button {
     justify-content: flex-end;
   }
 
+  .aitown-status-legend {
+    left: 14px;
+    right: 14px;
+    bottom: 14px;
+    max-width: none;
+  }
+
   .aitown-panel--details {
     min-height: 620px;
   }
@@ -684,6 +746,17 @@ button {
     top: 256px;
     bottom: auto;
     justify-content: stretch;
+  }
+
+  .aitown-status-legend {
+    left: 10px;
+    right: 10px;
+    bottom: 10px;
+    padding: 8px 10px;
+  }
+
+  .aitown-status-legend__items {
+    gap: 6px 10px;
   }
 
   .aitown-panel__toolbar > * {

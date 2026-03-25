@@ -102,4 +102,28 @@ describe('resolveViewportClampPadding', () => {
       right: 0
     });
   });
+
+  it('does not reserve default left or bottom travel for the status legend overlay', () => {
+    document.body.innerHTML = `
+      <main class="aitown-shell">
+        <section class="aitown-panel aitown-panel--game">
+          <div class="aitown-world__host" id="host"></div>
+          <div class="aitown-status-legend" id="legend"></div>
+        </section>
+      </main>
+    `;
+
+    const host = document.getElementById('host') as HTMLDivElement;
+    const legend = document.getElementById('legend') as HTMLDivElement;
+
+    host.getBoundingClientRect = () =>
+      ({ left: 0, top: 0, right: 1000, bottom: 800, width: 1000, height: 800 } as DOMRect);
+    legend.getBoundingClientRect = () =>
+      ({ left: 0, top: 620, right: 240, bottom: 800, width: 240, height: 180 } as DOMRect);
+
+    expect(resolveViewportClampPadding(host)).toEqual({
+      top: 0,
+      right: 0
+    });
+  });
 });

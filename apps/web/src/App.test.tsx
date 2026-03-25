@@ -921,6 +921,24 @@ afterEach(() => {
     expect(screen.queryByRole('button', { name: 'Inspect App Engineering Agent' })).not.toBeInTheDocument();
   });
 
+  it('renders an accessible scene status legend for the canvas badge markers', async () => {
+    render(<App />);
+
+    const worldRegion = await screen.findByRole('region', { name: 'Office world' });
+    const legend = within(worldRegion).getByRole('list', { name: 'Scene status legend' });
+    const items = within(legend).getAllByRole('listitem');
+
+    expect(legend).toBeVisible();
+    expect(items).toHaveLength(3);
+    expect(items[0]).toHaveTextContent('#');
+    expect(items[0]).toHaveTextContent('Peer-watch alert count');
+    expect(items[1]).toHaveTextContent('!');
+    expect(items[1]).toHaveTextContent('Open alerts or workflow incidents');
+    expect(items[2]).toHaveTextContent('R');
+    expect(items[2]).toHaveTextContent('Reboot recommended');
+    expect(worldRegion).not.toHaveAttribute('aria-describedby');
+  });
+
   it('uses a full-screen scene with a dismissible hub overlay', async () => {
     const user = userEvent.setup();
     render(<App />);

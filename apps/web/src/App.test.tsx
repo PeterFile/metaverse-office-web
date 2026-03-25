@@ -1115,6 +1115,10 @@ afterEach(() => {
     expect(within(attentionSection!).getByRole('button', { name: 'Inspect Growth Revenue Agent from attention queue' })).toBeVisible();
     expect(within(attentionSection!).getByText('Orange · Blocked')).toBeVisible();
     expect(within(attentionSection!).getByText('Yellow · Planning')).toBeVisible();
+    expect(within(attentionSection!).getByText('Active task · Fix workflow issue')).toBeVisible();
+    expect(within(attentionSection!).getByText('Reboot recommendation · Recommended')).toBeVisible();
+    expect(within(attentionSection!).getByText('Active task · Review launch copy')).toBeVisible();
+    expect(within(attentionSection!).getByText('Reboot recommendation · No')).toBeVisible();
     expect(within(topologySection!).getByText('Team Lead -> App Engineering Agent')).toBeVisible();
     expect(within(topologySection!).getByText('Mode · lead')).toBeVisible();
     expect(within(topologySection!).getByText('Risk · High risk · Orange')).toBeVisible();

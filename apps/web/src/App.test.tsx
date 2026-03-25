@@ -1122,10 +1122,13 @@ afterEach(() => {
     expect(within(topologySection!).getByText('Team Lead -> App Engineering Agent')).toBeVisible();
     expect(within(topologySection!).getByText('Mode · lead')).toBeVisible();
     expect(within(topologySection!).getByText('Risk · High risk · Orange')).toBeVisible();
-    expect(within(incidentSection!).getByText('Incident · peer_watch · open')).toBeVisible();
-    expect(within(incidentSection!).getByText('Counterparties · team-lead')).toBeVisible();
-    expect(within(incidentSection!).getByText('Evidence · /tmp/evidence.md')).toBeVisible();
-    expect(within(incidentSection!).getAllByText('Source · controller_event').length).toBeGreaterThan(0);
+    const overviewIncidentRecord = within(incidentSection!).getByText('Lead is still waiting on workflow evidence').closest('li');
+    expect(overviewIncidentRecord).not.toBeNull();
+    expect(within(overviewIncidentRecord!).getByText('Incident · peer_watch · open')).toBeVisible();
+    expect(within(overviewIncidentRecord!).getByText('Severity · Orange')).toBeVisible();
+    expect(within(overviewIncidentRecord!).getByText('Counterparties · team-lead')).toBeVisible();
+    expect(within(overviewIncidentRecord!).getByText('Evidence · /tmp/evidence.md')).toBeVisible();
+    expect(within(overviewIncidentRecord!).getByText('Source · controller_event')).toBeVisible();
     expect(within(incidentSection!).getByRole('button', { name: 'Select incident agent app-engineering from incident inc-1' })).toBeVisible();
     expect(
       within(incidentSection!).getByRole('button', { name: /Open incident correlation corr-app-review/ })
@@ -1203,6 +1206,12 @@ afterEach(() => {
 
     expect(await within(correlationSection!).findByText('corr-app-review')).toBeVisible();
     expect(within(correlationSection!).getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
+    const overviewCorrelationIncidentRecord = within(correlationSection!)
+      .getByText('Lead is still waiting on workflow evidence')
+      .closest('li');
+    expect(overviewCorrelationIncidentRecord).not.toBeNull();
+    expect(within(overviewCorrelationIncidentRecord!).getByText('Incident · peer_watch · open')).toBeVisible();
+    expect(within(overviewCorrelationIncidentRecord!).getByText('Severity · Orange')).toBeVisible();
   });
 
   it('keeps the last timeline replay visible when a later replay poll fails', async () => {
@@ -2983,12 +2992,18 @@ afterEach(() => {
     expect(await within(details).findByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
     expect(await within(details).findByText('correlation refresh failed')).toBeVisible();
     expect(within(correlationSection!).getAllByText('Participants · app-engineering, team-lead')[0]).toBeVisible();
+    const correlationIncidentRecord = within(correlationSection!)
+      .getByText('Lead is still waiting on workflow evidence')
+      .closest('li');
     const correlationInteractionRecord = within(correlationSection!)
       .getByText('Lead escalated missing workflow evidence')
       .closest('li');
     const correlationTimelineRecord = within(correlationSection!).getByText('Workflow evidence is still incomplete').closest('li');
+    expect(correlationIncidentRecord).not.toBeNull();
     expect(correlationInteractionRecord).not.toBeNull();
     expect(correlationTimelineRecord).not.toBeNull();
+    expect(within(correlationIncidentRecord!).getByText('Incident · peer_watch · open')).toBeVisible();
+    expect(within(correlationIncidentRecord!).getByText('Severity · Orange')).toBeVisible();
     expect(within(correlationInteractionRecord!).getByText('Correlation · corr-app-review')).toBeVisible();
     expect(within(correlationInteractionRecord!).getByText('Severity · Orange')).toBeVisible();
     expect(within(correlationTimelineRecord!).getByText('Severity · Orange')).toBeVisible();
@@ -3668,17 +3683,24 @@ afterEach(() => {
     expect(within(workflowInteractionRecord!).getByText('Severity · Orange')).toBeVisible();
     expect(within(workflowTimelineRecord!).getByText('Timeline · agent_noted · meeting-zone')).toBeVisible();
     expect(within(workflowTimelineRecord!).getByText('Severity · Yellow')).toBeVisible();
-    expect(within(workflowSection!).getByText('Secondary review handoff completed')).toBeVisible();
-    expect(within(workflowSection!).getByText('Handoff · completed · handoff_done')).toBeVisible();
-    expect(within(workflowSection!).getByText('Reboot recommended after the workflow stalled')).toBeVisible();
-    expect(within(workflowSection!).getByText('Reboot · requested · reboot_recommended')).toBeVisible();
+    const workflowHandoffRecord = within(workflowSection!).getByText('Secondary review handoff completed').closest('li');
+    const workflowRebootRecord = within(workflowSection!).getByText('Reboot recommended after the workflow stalled').closest('li');
+    expect(workflowHandoffRecord).not.toBeNull();
+    expect(workflowRebootRecord).not.toBeNull();
+    expect(within(workflowHandoffRecord!).getByText('Handoff · completed · handoff_done')).toBeVisible();
+    expect(within(workflowHandoffRecord!).getByText('Severity · Yellow')).toBeVisible();
+    expect(within(workflowRebootRecord!).getByText('Reboot · requested · reboot_recommended')).toBeVisible();
+    expect(within(workflowRebootRecord!).getByText('Severity · Yellow')).toBeVisible();
 
     const incidentSection = within(details).getByRole('heading', { name: 'Incident Feed' }).closest('section');
     expect(incidentSection).not.toBeNull();
-    expect(within(incidentSection!).getByText('Incident · peer_watch · open')).toBeVisible();
-    expect(within(incidentSection!).getByText('Counterparties · team-lead')).toBeVisible();
-    expect(within(incidentSection!).getByText('Evidence · /tmp/evidence.md')).toBeVisible();
-    expect(within(incidentSection!).getAllByText('Source · controller_event').length).toBeGreaterThan(0);
+    const selectedIncidentRecord = within(incidentSection!).getByText('Lead is still waiting on workflow evidence').closest('li');
+    expect(selectedIncidentRecord).not.toBeNull();
+    expect(within(selectedIncidentRecord!).getByText('Incident · peer_watch · open')).toBeVisible();
+    expect(within(selectedIncidentRecord!).getByText('Severity · Orange')).toBeVisible();
+    expect(within(selectedIncidentRecord!).getByText('Counterparties · team-lead')).toBeVisible();
+    expect(within(selectedIncidentRecord!).getByText('Evidence · /tmp/evidence.md')).toBeVisible();
+    expect(within(selectedIncidentRecord!).getByText('Source · controller_event')).toBeVisible();
 
     await act(async () => {
       expect(globalThis.fetch).toHaveBeenCalledWith(workflowUrl, expect.anything());

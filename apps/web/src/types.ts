@@ -340,3 +340,23 @@ export interface CorrelationDrilldown {
   interactions: WorkflowInteraction[];
   timeline: WorkflowTimelineEvent[];
 }
+
+export interface MemoryArtifact {
+  artifact_ref: string;
+  artifact_kind: 'workspace_file' | 'tmux_observation' | 'evidence_ref';
+  file_name: string;
+  first_seen_at: string;
+  last_seen_at: string;
+  mention_count: number;
+  agent_ids: string[];
+  correlation_ids: string[];
+  source_kinds: string[];
+  latest_summary: string | null;
+  latest_event_type: string | null;
+  collector_last_modified_at: string | null;
+}
+
+export interface MemoryArtifactIndex {
+  generated_at: string;
+  items: MemoryArtifact[];
+}

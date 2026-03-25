@@ -304,6 +304,20 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
     return;
   }
 
+  if (method === 'GET' && pathname === '/memory/artifacts') {
+    sendJson(res, 200, {
+      generated_at: now(),
+      items: store.listMemoryArtifacts({
+        window: url.searchParams.get('window') || '60m',
+        agent_id: url.searchParams.get('agent_id'),
+        correlation_id: url.searchParams.get('correlation_id'),
+        limit: url.searchParams.get('limit'),
+        now: now()
+      })
+    });
+    return;
+  }
+
   if (method === 'GET' && pathname === '/reboots') {
     sendJson(res, 200, { items: store.listReboots() });
     return;

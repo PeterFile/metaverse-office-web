@@ -1499,6 +1499,796 @@ test('GET /agents/:id/incidents reuses incident feed semantics with an implicit 
   assert.equal(missingAgent.response.status, 404);
 });
 
+test('GET /memory/artifacts materializes actor and counterparty evidence plus collector observations that extend event-backed artifacts', async (t) => {
+  const { baseUrl, store } = await createHarness(t, {
+    now: () => '2026-03-09T18:20:00.000Z'
+  });
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_memory_counterparty',
+      ts: '2026-03-09T18:06:00.000Z',
+      agentId: 'growth-revenue',
+      actorId: 'team-lead',
+      eventType: 'review_started',
+      currentState: 'reviewing',
+      activeTask: 'Review the artifact coverage',
+      summary: 'Lead started review with app-engineering as counterparty',
+      severity: 'yellow',
+      correlationId: 'corr-memory',
+      counterpartyAgentIds: ['app-engineering'],
+      evidenceRefs: ['/tmp/memory-counterparty.md']
+    })
+  );
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_memory_existing_artifact',
+      ts: '2026-03-09T18:04:00.000Z',
+      agentId: 'app-engineering',
+      actorId: 'team-lead',
+      eventType: 'review_started',
+      currentState: 'idle',
+      activeTask: 'Keep shared artifact in view',
+      summary: 'Existing event already referenced the shared artifact',
+      severity: 'normal',
+      correlationId: 'corr-memory-shared',
+      counterpartyAgentIds: [],
+      evidenceRefs: ['/tmp/shared.md']
+    })
+  );
+
+  await store.appendCollectorReport({
+    collected_at: '2026-03-09T18:18:00.000Z',
+    actor_id: 'team-lead',
+    summary: {
+      agent_count: 1,
+      heartbeat_count: 1,
+      tmux_observed_count: 1,
+      workspace_observed_count: 1,
+      reboot_recommended_count: 0
+    },
+    items: [
+      {
+        agent_id: 'app-engineering',
+        workspace_root: '/tmp/app-engineering',
+        session_ref: '5-web3-app-engineering',
+        evidence_refs: ['/tmp/collector-only.md', 'tmux://5-web3-app-engineering/0.1'],
+        workspace_observations: [
+          {
+            path: '/tmp/collector-only.md',
+            file_name: 'collector-only.md',
+            kind: 'workspace_file',
+            last_modified_at: '2026-03-09T18:17:00.000Z'
+          },
+          {
+            path: '/tmp/shared.md',
+            file_name: 'shared.md',
+            kind: 'workspace_file',
+            last_modified_at: '2026-03-09T18:16:30.000Z'
+          }
+        ],
+        tmux_observations: [
+          {
+            session_name: '5-web3-app-engineering',
+            window_index: '0',
+            pane_index: '1',
+            pane_id: '%11',
+            pane_title: 'Implement HTTP handlers',
+            pane_current_command: 'nvim',
+            pane_active: true,
+            pane_dead: false,
+            pane_activity_at: '2026-03-09T18:18:30.000Z'
+          }
+        ],
+        supervision: {
+          watch_target: 'growth-revenue',
+          watched_by: ['protocol-engineering', 'team-lead'],
+          needs_attention: false
+        },
+        heartbeat: {
+          agent_id: 'app-engineering',
+          actor_id: 'team-lead',
+          received_at: '2026-03-09T18:18:00.000Z',
+          current_state: 'coding',
+          active_task: 'Implement HTTP handlers',
+          current_location: 'desk-app-engineering',
+          last_meaningful_output_at: '2026-03-09T18:16:00.000Z',
+          last_file_write_at: '2026-03-09T18:17:00.000Z',
+          current_blocker: '',
+          confidence_level: 'high',
+          reboot_recommended: false,
+          evidence_refs: ['/tmp/collector-only.md', 'tmux://5-web3-app-engineering/0.1']
+        }
+      }
+    ]
+  });
+
+  const counterpartyResponse = await requestJson(
+    `${baseUrl}/memory/artifacts?agent_id=app-engineering&correlation_id=corr-memory&window=20m&limit=10`
+  );
+  assert.equal(counterpartyResponse.response.status, 200);
+  assert.deepEqual(counterpartyResponse.body, {
+    generated_at: '2026-03-09T18:20:00.000Z',
+    items: [
+      {
+        artifact_ref: '/tmp/memory-counterparty.md',
+        artifact_kind: 'evidence_ref',
+        file_name: 'memory-counterparty.md',
+        first_seen_at: '2026-03-09T18:06:00.000Z',
+        last_seen_at: '2026-03-09T18:06:00.000Z',
+        mention_count: 1,
+        agent_ids: ['app-engineering', 'growth-revenue', 'team-lead'],
+        correlation_ids: ['corr-memory'],
+        source_kinds: ['controller_event'],
+        latest_summary: 'Lead started review with app-engineering as counterparty',
+        latest_event_type: 'review_started',
+        collector_last_modified_at: null
+      }
+    ]
+  });
+
+  const collectorOnlyResponse = await requestJson(`${baseUrl}/memory/artifacts?agent_id=app-engineering&window=20m&limit=10`);
+  assert.equal(collectorOnlyResponse.response.status, 200);
+  assert.deepEqual(collectorOnlyResponse.body.items.slice(0, 2), [
+    {
+      artifact_ref: 'tmux://5-web3-app-engineering/0.1',
+      artifact_kind: 'tmux_observation',
+      file_name: 'Implement HTTP handlers',
+      first_seen_at: '2026-03-09T18:18:00.000Z',
+      last_seen_at: '2026-03-09T18:18:30.000Z',
+      mention_count: 2,
+      agent_ids: ['app-engineering', 'team-lead'],
+      correlation_ids: ['collector-snapshot:2026-03-09T18:18:00.000Z'],
+      source_kinds: ['tmux_observation'],
+      latest_summary: 'Collector observed state change idle -> coding',
+      latest_event_type: 'agent_state_changed',
+      collector_last_modified_at: '2026-03-09T18:18:30.000Z'
+    },
+    {
+      artifact_ref: '/tmp/collector-only.md',
+      artifact_kind: 'workspace_file',
+      file_name: 'collector-only.md',
+      first_seen_at: '2026-03-09T18:17:00.000Z',
+      last_seen_at: '2026-03-09T18:17:00.000Z',
+      mention_count: 2,
+      agent_ids: ['app-engineering', 'team-lead'],
+      correlation_ids: ['collector-snapshot:2026-03-09T18:18:00.000Z'],
+      source_kinds: ['workspace_file'],
+      latest_summary: 'Collector observed workspace write to collector-only.md',
+      latest_event_type: 'agent_wrote_file',
+      collector_last_modified_at: '2026-03-09T18:17:00.000Z'
+    }
+  ]);
+
+  const sharedArtifact = collectorOnlyResponse.body.items.find((item) => item.artifact_ref === '/tmp/shared.md');
+  assert.deepEqual(sharedArtifact, {
+    artifact_ref: '/tmp/shared.md',
+    artifact_kind: 'workspace_file',
+    file_name: 'shared.md',
+    first_seen_at: '2026-03-09T18:04:00.000Z',
+    last_seen_at: '2026-03-09T18:16:30.000Z',
+    mention_count: 2,
+    agent_ids: ['app-engineering', 'team-lead'],
+    correlation_ids: ['collector-snapshot:2026-03-09T18:18:00.000Z', 'corr-memory-shared'],
+    source_kinds: ['controller_event', 'workspace_file'],
+    latest_summary: 'Existing event already referenced the shared artifact',
+    latest_event_type: 'review_started',
+    collector_last_modified_at: '2026-03-09T18:16:30.000Z'
+  });
+
+  const collectorWindowedResponse = await requestJson(`${baseUrl}/memory/artifacts?agent_id=app-engineering&window=1m&limit=10`);
+  assert.equal(collectorWindowedResponse.response.status, 200);
+  assert.deepEqual(collectorWindowedResponse.body.items, []);
+});
+
+test('GET /memory/artifacts keeps collector-only observations canonical and agent-scoped when no derived activity event exists', async (t) => {
+  const { baseUrl, store } = await createHarness(t, {
+    now: () => '2026-03-09T18:20:00.000Z'
+  });
+
+  const appState = store.getAgent('app-engineering').current_state;
+  const protocolState = store.getAgent('protocol-engineering').current_state;
+
+  await store.appendCollectorReport({
+    collected_at: '2026-03-09T18:18:00.000Z',
+    actor_id: 'team-lead',
+    summary: {
+      agent_count: 2,
+      heartbeat_count: 2,
+      tmux_observed_count: 0,
+      workspace_observed_count: 2,
+      reboot_recommended_count: 0
+    },
+    items: [
+      {
+        agent_id: 'app-engineering',
+        workspace_root: '/tmp/app-engineering',
+        session_ref: '5-web3-app-engineering',
+        evidence_refs: ['/tmp/shared.md'],
+        workspace_observations: [
+          {
+            path: '/tmp/shared.md',
+            file_name: 'shared.md',
+            kind: 'workspace_file',
+            last_modified_at: '2026-03-09T18:17:00.000Z'
+          }
+        ],
+        tmux_observations: [],
+        supervision: {
+          watch_target: 'protocol-engineering',
+          watched_by: [],
+          needs_attention: false
+        },
+        heartbeat: {
+          agent_id: 'app-engineering',
+          actor_id: 'team-lead',
+          received_at: '2026-03-09T18:18:00.000Z',
+          current_state: appState,
+          active_task: 'Inspect shared artifact',
+          current_location: 'desk-app-engineering',
+          last_meaningful_output_at: '2026-03-09T18:16:00.000Z',
+          last_file_write_at: '',
+          current_blocker: '',
+          confidence_level: 'high',
+          reboot_recommended: false,
+          evidence_refs: ['/tmp/shared.md']
+        }
+      },
+      {
+        agent_id: 'protocol-engineering',
+        workspace_root: '/tmp/protocol-engineering',
+        session_ref: '5-web3-protocol-engineering',
+        evidence_refs: ['/tmp/shared.md'],
+        workspace_observations: [
+          {
+            path: '/tmp/shared.md',
+            file_name: 'shared.md',
+            kind: 'workspace_file',
+            last_modified_at: '2026-03-09T18:17:30.000Z'
+          }
+        ],
+        tmux_observations: [],
+        supervision: {
+          watch_target: 'app-engineering',
+          watched_by: [],
+          needs_attention: false
+        },
+        heartbeat: {
+          agent_id: 'protocol-engineering',
+          actor_id: 'team-lead',
+          received_at: '2026-03-09T18:18:00.000Z',
+          current_state: protocolState,
+          active_task: 'Inspect shared artifact',
+          current_location: 'desk-protocol-engineering',
+          last_meaningful_output_at: '2026-03-09T18:16:00.000Z',
+          last_file_write_at: '',
+          current_blocker: '',
+          confidence_level: 'high',
+          reboot_recommended: false,
+          evidence_refs: ['/tmp/shared.md']
+        }
+      }
+    ]
+  });
+
+  const appResponse = await requestJson(`${baseUrl}/memory/artifacts?agent_id=app-engineering&window=20m&limit=10`);
+  const protocolResponse = await requestJson(`${baseUrl}/memory/artifacts?agent_id=protocol-engineering&window=20m&limit=10`);
+  assert.equal(appResponse.response.status, 200);
+  assert.equal(protocolResponse.response.status, 200);
+  assert.deepEqual(appResponse.body.items, [
+    {
+      artifact_ref: '/tmp/shared.md',
+      artifact_kind: 'workspace_file',
+      file_name: 'shared.md',
+      first_seen_at: '2026-03-09T18:17:00.000Z',
+      last_seen_at: '2026-03-09T18:17:00.000Z',
+      mention_count: 1,
+      agent_ids: ['app-engineering', 'team-lead'],
+      correlation_ids: ['collector-snapshot:2026-03-09T18:18:00.000Z'],
+      source_kinds: ['workspace_file'],
+      latest_summary: null,
+      latest_event_type: null,
+      collector_last_modified_at: '2026-03-09T18:17:00.000Z'
+    }
+  ]);
+  assert.deepEqual(protocolResponse.body.items, [
+    {
+      artifact_ref: '/tmp/shared.md',
+      artifact_kind: 'workspace_file',
+      file_name: 'shared.md',
+      first_seen_at: '2026-03-09T18:17:30.000Z',
+      last_seen_at: '2026-03-09T18:17:30.000Z',
+      mention_count: 1,
+      agent_ids: ['protocol-engineering', 'team-lead'],
+      correlation_ids: ['collector-snapshot:2026-03-09T18:18:00.000Z'],
+      source_kinds: ['workspace_file'],
+      latest_summary: null,
+      latest_event_type: null,
+      collector_last_modified_at: '2026-03-09T18:17:30.000Z'
+    }
+  ]);
+});
+
+test('GET /memory/artifacts does not leak collector_last_modified_at from filtered-out collector observations onto event-backed artifacts', async (t) => {
+  const { baseUrl, store } = await createHarness(t, {
+    now: () => '2026-03-09T18:20:00.000Z'
+  });
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_memory_event_only_for_app',
+      ts: '2026-03-09T18:10:00.000Z',
+      agentId: 'app-engineering',
+      actorId: 'team-lead',
+      eventType: 'review_started',
+      currentState: 'reviewing',
+      activeTask: 'Review shared evidence',
+      summary: 'Lead reviewed shared evidence with app engineering',
+      severity: 'yellow',
+      correlationId: 'corr-memory-filtered',
+      evidenceRefs: ['/tmp/shared.md']
+    })
+  );
+
+  const protocolState = store.getAgent('protocol-engineering').current_state;
+
+  await store.appendCollectorReport({
+    collected_at: '2026-03-09T18:18:00.000Z',
+    actor_id: 'team-lead',
+    summary: {
+      agent_count: 1,
+      heartbeat_count: 1,
+      tmux_observed_count: 0,
+      workspace_observed_count: 1,
+      reboot_recommended_count: 0
+    },
+    items: [
+      {
+        agent_id: 'protocol-engineering',
+        workspace_root: '/tmp/protocol-engineering',
+        session_ref: '5-web3-protocol-engineering',
+        evidence_refs: ['/tmp/shared.md'],
+        workspace_observations: [
+          {
+            path: '/tmp/shared.md',
+            file_name: 'shared.md',
+            kind: 'workspace_file',
+            last_modified_at: '2026-03-09T18:17:30.000Z'
+          }
+        ],
+        tmux_observations: [],
+        supervision: {
+          watch_target: 'app-engineering',
+          watched_by: [],
+          needs_attention: false
+        },
+        heartbeat: {
+          agent_id: 'protocol-engineering',
+          actor_id: 'team-lead',
+          received_at: '2026-03-09T18:18:00.000Z',
+          current_state: protocolState,
+          active_task: 'Inspect shared artifact',
+          current_location: 'desk-protocol-engineering',
+          last_meaningful_output_at: '2026-03-09T18:16:00.000Z',
+          last_file_write_at: '',
+          current_blocker: '',
+          confidence_level: 'high',
+          reboot_recommended: false,
+          evidence_refs: ['/tmp/shared.md']
+        }
+      }
+    ]
+  });
+
+  const response = await requestJson(
+    `${baseUrl}/memory/artifacts?agent_id=app-engineering&correlation_id=corr-memory-filtered&window=20m&limit=10`
+  );
+  assert.equal(response.response.status, 200);
+  assert.deepEqual(response.body.items, [
+    {
+      artifact_ref: '/tmp/shared.md',
+      artifact_kind: 'evidence_ref',
+      file_name: 'shared.md',
+      first_seen_at: '2026-03-09T18:10:00.000Z',
+      last_seen_at: '2026-03-09T18:10:00.000Z',
+      mention_count: 1,
+      agent_ids: ['app-engineering', 'team-lead'],
+      correlation_ids: ['corr-memory-filtered'],
+      source_kinds: ['controller_event'],
+      latest_summary: 'Lead reviewed shared evidence with app engineering',
+      latest_event_type: 'review_started',
+      collector_last_modified_at: null
+    }
+  ]);
+});
+
+test('GET /memory/artifacts keeps stable tmux refs when later collector snapshots lose pane coordinates', async (t) => {
+  const { baseUrl, store } = await createHarness(t, {
+    now: () => '2026-03-09T18:20:00.000Z'
+  });
+
+  await store.appendCollectorReport({
+    collected_at: '2026-03-09T18:18:00.000Z',
+    actor_id: 'team-lead',
+    summary: {
+      agent_count: 1,
+      heartbeat_count: 1,
+      tmux_observed_count: 1,
+      workspace_observed_count: 0,
+      reboot_recommended_count: 0
+    },
+    items: [
+      {
+        agent_id: 'app-engineering',
+        workspace_root: '/tmp/app-engineering',
+        session_ref: '5-web3-app-engineering',
+        evidence_refs: ['tmux://5-web3-app-engineering/0.1'],
+        workspace_observations: [],
+        tmux_observations: [
+          {
+            session_name: '5-web3-app-engineering',
+            window_index: '0',
+            pane_index: '1',
+            pane_id: '%11',
+            pane_title: 'Implement HTTP handlers',
+            pane_current_command: 'nvim',
+            pane_active: true,
+            pane_dead: false,
+            pane_activity_at: '2026-03-09T18:18:30.000Z'
+          }
+        ],
+        supervision: {
+          watch_target: 'growth-revenue',
+          watched_by: ['team-lead'],
+          needs_attention: false
+        },
+        heartbeat: {
+          agent_id: 'app-engineering',
+          actor_id: 'team-lead',
+          received_at: '2026-03-09T18:18:00.000Z',
+          current_state: 'coding',
+          active_task: 'Implement HTTP handlers',
+          current_location: 'desk-app-engineering',
+          last_meaningful_output_at: '2026-03-09T18:16:00.000Z',
+          last_file_write_at: '',
+          current_blocker: '',
+          confidence_level: 'high',
+          reboot_recommended: false,
+          evidence_refs: ['tmux://5-web3-app-engineering/0.1']
+        }
+      }
+    ]
+  });
+
+  await store.appendCollectorReport({
+    collected_at: '2026-03-09T18:19:00.000Z',
+    actor_id: 'team-lead',
+    summary: {
+      agent_count: 1,
+      heartbeat_count: 1,
+      tmux_observed_count: 1,
+      workspace_observed_count: 0,
+      reboot_recommended_count: 0
+    },
+    items: [
+      {
+        agent_id: 'app-engineering',
+        workspace_root: '/tmp/app-engineering',
+        session_ref: '5-web3-app-engineering',
+        evidence_refs: ['tmux://5-web3-app-engineering/0.1'],
+        workspace_observations: [],
+        tmux_observations: [
+          {
+            session_name: '5-web3-app-engineering',
+            window_index: 'null',
+            pane_index: 'null',
+            pane_id: '%11',
+            pane_title: 'Implement HTTP handlers',
+            pane_current_command: 'nvim',
+            pane_active: true,
+            pane_dead: false,
+            pane_activity_at: '2026-03-09T18:19:30.000Z'
+          }
+        ],
+        supervision: {
+          watch_target: 'growth-revenue',
+          watched_by: ['team-lead'],
+          needs_attention: false
+        },
+        heartbeat: {
+          agent_id: 'app-engineering',
+          actor_id: 'team-lead',
+          received_at: '2026-03-09T18:19:00.000Z',
+          current_state: 'reviewing',
+          active_task: 'Review HTTP handlers',
+          current_location: 'desk-app-engineering',
+          last_meaningful_output_at: '2026-03-09T18:19:00.000Z',
+          last_file_write_at: '',
+          current_blocker: '',
+          confidence_level: 'high',
+          reboot_recommended: false,
+          evidence_refs: ['tmux://5-web3-app-engineering/0.1']
+        }
+      }
+    ]
+  });
+
+  const response = await requestJson(`${baseUrl}/memory/artifacts?agent_id=app-engineering&window=20m&limit=10`);
+  assert.equal(response.response.status, 200);
+  assert.deepEqual(response.body.items, [
+    {
+      artifact_ref: 'tmux://5-web3-app-engineering/0.1',
+      artifact_kind: 'tmux_observation',
+      file_name: 'Implement HTTP handlers',
+      first_seen_at: '2026-03-09T18:18:00.000Z',
+      last_seen_at: '2026-03-09T18:19:30.000Z',
+      mention_count: 3,
+      agent_ids: ['app-engineering', 'team-lead'],
+      correlation_ids: [
+        'collector-snapshot:2026-03-09T18:18:00.000Z',
+        'collector-snapshot:2026-03-09T18:19:00.000Z'
+      ],
+      source_kinds: ['tmux_observation'],
+      latest_summary: 'Collector observed state change coding -> reviewing',
+      latest_event_type: 'agent_state_changed',
+      collector_last_modified_at: '2026-03-09T18:19:30.000Z'
+    }
+  ]);
+});
+
+test('GET /memory/artifacts exposes multiple tmux panes as distinct artifacts', async (t) => {
+  const { baseUrl, store } = await createHarness(t, {
+    now: () => '2026-03-09T18:20:00.000Z'
+  });
+
+  await store.appendCollectorReport({
+    collected_at: '2026-03-09T18:18:00.000Z',
+    actor_id: 'team-lead',
+    summary: {
+      agent_count: 1,
+      heartbeat_count: 1,
+      tmux_observed_count: 1,
+      workspace_observed_count: 0,
+      reboot_recommended_count: 0
+    },
+    items: [
+      {
+        agent_id: 'app-engineering',
+        workspace_root: '/tmp/app-engineering',
+        session_ref: '5-web3-app-engineering',
+        evidence_refs: ['tmux://5-web3-app-engineering/0.1', 'tmux://5-web3-app-engineering/0.2'],
+        workspace_observations: [],
+        tmux_observations: [
+          {
+            session_name: '5-web3-app-engineering',
+            window_index: '0',
+            pane_index: '1',
+            pane_id: '%11',
+            pane_title: 'Pane One',
+            pane_current_command: 'nvim',
+            pane_active: true,
+            pane_dead: false,
+            pane_activity_at: '2026-03-09T18:18:30.000Z'
+          },
+          {
+            session_name: '5-web3-app-engineering',
+            window_index: '0',
+            pane_index: '2',
+            pane_id: '%12',
+            pane_title: 'Pane Two',
+            pane_current_command: 'bash',
+            pane_active: false,
+            pane_dead: false,
+            pane_activity_at: '2026-03-09T18:17:30.000Z'
+          }
+        ],
+        supervision: {
+          watch_target: 'growth-revenue',
+          watched_by: ['team-lead'],
+          needs_attention: false
+        },
+        heartbeat: {
+          agent_id: 'app-engineering',
+          actor_id: 'team-lead',
+          received_at: '2026-03-09T18:18:00.000Z',
+          current_state: 'coding',
+          active_task: 'Inspect multiple panes',
+          current_location: 'desk-app-engineering',
+          last_meaningful_output_at: '2026-03-09T18:18:30.000Z',
+          last_file_write_at: '',
+          current_blocker: '',
+          confidence_level: 'high',
+          reboot_recommended: false,
+          evidence_refs: ['tmux://5-web3-app-engineering/0.1', 'tmux://5-web3-app-engineering/0.2']
+        }
+      }
+    ]
+  });
+
+  const response = await requestJson(`${baseUrl}/memory/artifacts?agent_id=app-engineering&window=20m&limit=10`);
+  assert.equal(response.response.status, 200);
+  assert.deepEqual(response.body.items.slice(0, 2), [
+    {
+      artifact_ref: 'tmux://5-web3-app-engineering/0.1',
+      artifact_kind: 'tmux_observation',
+      file_name: 'Pane One',
+      first_seen_at: '2026-03-09T18:18:00.000Z',
+      last_seen_at: '2026-03-09T18:18:30.000Z',
+      mention_count: 2,
+      agent_ids: ['app-engineering', 'team-lead'],
+      correlation_ids: ['collector-snapshot:2026-03-09T18:18:00.000Z'],
+      source_kinds: ['tmux_observation'],
+      latest_summary: 'Collector observed state change idle -> coding',
+      latest_event_type: 'agent_state_changed',
+      collector_last_modified_at: '2026-03-09T18:18:30.000Z'
+    },
+    {
+      artifact_ref: 'tmux://5-web3-app-engineering/0.2',
+      artifact_kind: 'tmux_observation',
+      file_name: 'Pane Two',
+      first_seen_at: '2026-03-09T18:17:30.000Z',
+      last_seen_at: '2026-03-09T18:17:30.000Z',
+      mention_count: 1,
+      agent_ids: ['app-engineering', 'team-lead'],
+      correlation_ids: ['collector-snapshot:2026-03-09T18:18:00.000Z'],
+      source_kinds: ['tmux_observation'],
+      latest_summary: null,
+      latest_event_type: null,
+      collector_last_modified_at: '2026-03-09T18:17:30.000Z'
+    }
+  ]);
+});
+
+
+test('GET /memory/artifacts binds collector state-change evidence to the active tmux pane instead of the first ref', async (t) => {
+  const { baseUrl, store } = await createHarness(t, {
+    now: () => '2026-03-09T18:20:00.000Z'
+  });
+
+  await store.appendCollectorReport({
+    collected_at: '2026-03-09T18:18:00.000Z',
+    actor_id: 'team-lead',
+    summary: {
+      agent_count: 1,
+      heartbeat_count: 1,
+      tmux_observed_count: 1,
+      workspace_observed_count: 0,
+      reboot_recommended_count: 0
+    },
+    items: [
+      {
+        agent_id: 'app-engineering',
+        workspace_root: '/tmp/app-engineering',
+        session_ref: '5-web3-app-engineering',
+        evidence_refs: ['tmux://5-web3-app-engineering/0.1', 'tmux://5-web3-app-engineering/0.2'],
+        workspace_observations: [],
+        tmux_observations: [
+          {
+            session_name: '5-web3-app-engineering',
+            window_index: '0',
+            pane_index: '1',
+            pane_id: '%11',
+            pane_title: 'Pane One',
+            pane_current_command: 'bash',
+            pane_active: false,
+            pane_dead: false,
+            pane_activity_at: '2026-03-09T18:17:30.000Z'
+          },
+          {
+            session_name: '5-web3-app-engineering',
+            window_index: '0',
+            pane_index: '2',
+            pane_id: '%12',
+            pane_title: 'Pane Two',
+            pane_current_command: 'nvim',
+            pane_active: true,
+            pane_dead: false,
+            pane_activity_at: '2026-03-09T18:18:30.000Z'
+          }
+        ],
+        supervision: {
+          watch_target: 'growth-revenue',
+          watched_by: ['team-lead'],
+          needs_attention: false
+        },
+        heartbeat: {
+          agent_id: 'app-engineering',
+          actor_id: 'team-lead',
+          received_at: '2026-03-09T18:18:00.000Z',
+          current_state: 'coding',
+          active_task: 'Inspect multiple panes',
+          current_location: 'desk-app-engineering',
+          last_meaningful_output_at: '2026-03-09T18:18:30.000Z',
+          last_file_write_at: '',
+          current_blocker: '',
+          confidence_level: 'high',
+          reboot_recommended: false,
+          evidence_refs: ['tmux://5-web3-app-engineering/0.1', 'tmux://5-web3-app-engineering/0.2']
+        }
+      }
+    ]
+  });
+
+  const response = await requestJson(`${baseUrl}/memory/artifacts?agent_id=app-engineering&window=20m&limit=10`);
+  assert.equal(response.response.status, 200);
+  const activePane = response.body.items.find((item) => item.artifact_ref === 'tmux://5-web3-app-engineering/0.2');
+  assert.deepEqual(activePane, {
+    artifact_ref: 'tmux://5-web3-app-engineering/0.2',
+    artifact_kind: 'tmux_observation',
+    file_name: 'Pane Two',
+    first_seen_at: '2026-03-09T18:18:00.000Z',
+    last_seen_at: '2026-03-09T18:18:30.000Z',
+    mention_count: 2,
+    agent_ids: ['app-engineering', 'team-lead'],
+    correlation_ids: ['collector-snapshot:2026-03-09T18:18:00.000Z'],
+    source_kinds: ['tmux_observation'],
+    latest_summary: 'Collector observed state change idle -> coding',
+    latest_event_type: 'agent_state_changed',
+    collector_last_modified_at: '2026-03-09T18:18:30.000Z'
+  });
+});
+
+test('GET /memory/artifacts ignores workspace_root collector observations', async (t) => {
+  const { baseUrl, store } = await createHarness(t, {
+    now: () => '2026-03-09T18:20:00.000Z'
+  });
+
+  const appState = store.getAgent('app-engineering').current_state;
+
+  await store.appendCollectorReport({
+    collected_at: '2026-03-09T18:18:00.000Z',
+    actor_id: 'team-lead',
+    summary: {
+      agent_count: 1,
+      heartbeat_count: 1,
+      tmux_observed_count: 0,
+      workspace_observed_count: 1,
+      reboot_recommended_count: 0
+    },
+    items: [
+      {
+        agent_id: 'app-engineering',
+        workspace_root: '/tmp/app-engineering',
+        session_ref: '5-web3-app-engineering',
+        evidence_refs: [],
+        workspace_observations: [
+          {
+            path: '/tmp/app-engineering',
+            file_name: 'app-engineering',
+            kind: 'workspace_root',
+            last_modified_at: '2026-03-09T18:17:00.000Z'
+          }
+        ],
+        tmux_observations: [],
+        supervision: {
+          watch_target: 'growth-revenue',
+          watched_by: ['team-lead'],
+          needs_attention: false
+        },
+        heartbeat: {
+          agent_id: 'app-engineering',
+          actor_id: 'team-lead',
+          received_at: '2026-03-09T18:18:00.000Z',
+          current_state: appState,
+          active_task: 'Inspect workspace root',
+          current_location: 'desk-app-engineering',
+          last_meaningful_output_at: '2026-03-09T18:16:00.000Z',
+          last_file_write_at: '',
+          current_blocker: '',
+          confidence_level: 'high',
+          reboot_recommended: false,
+          evidence_refs: []
+        }
+      }
+    ]
+  });
+
+  const response = await requestJson(`${baseUrl}/memory/artifacts?agent_id=app-engineering&window=20m&limit=10`);
+  assert.equal(response.response.status, 200);
+  assert.deepEqual(response.body.items, []);
+});
+
 test('GET /correlations/:correlation_id aggregates incident, interaction, and replay evidence', async (t) => {
   const { baseUrl, store } = await createHarness(t, {
     now: () => '2026-03-09T18:20:00.000Z'
@@ -2136,7 +2926,19 @@ test('collector snapshot POST emits supervision events onto existing query surfa
               'tmux://6-web3-growth-revenue/0.0'
             ],
             workspace_observations: [],
-            tmux_observations: [],
+            tmux_observations: [
+              {
+                session_name: '6-web3-growth-revenue',
+                window_index: '0',
+                pane_index: '0',
+                pane_id: '%21',
+                pane_title: 'Investigate stalled shell',
+                pane_current_command: 'bash',
+                pane_active: true,
+                pane_dead: true,
+                pane_activity_at: '2026-03-09T18:00:00.000Z'
+              }
+            ],
             supervision: {
               watch_target: 'market-intel',
               watched_by: ['app-engineering', 'team-lead'],

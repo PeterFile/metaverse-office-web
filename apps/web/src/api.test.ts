@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   RequestError,
   fetchCollectorSnapshot,
+  fetchMemoryArtifacts,
   fetchOfficeOperations,
   fetchOfficeOverview,
   resolveApiUrl
@@ -203,6 +204,82 @@ describe('fetchCollectorSnapshot', () => {
     );
 
     await expect(fetchCollectorSnapshot()).resolves.toBeNull();
+  });
+});
+
+describe('fetchMemoryArtifacts', () => {
+  it('passes limit, window, agent_id, and correlation_id filters through to the backend query string', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            generated_at: '2026-03-09T19:00:00.000Z',
+            items: []
+          }),
+          {
+            headers: JSON_HEADERS
+          }
+        )
+      )
+    );
+
+    await fetchMemoryArtifacts({
+      limit: 4,
+      window: '30m',
+      agentId: 'app-engineering',
+      correlationId: 'corr-app-review'
+    });
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/memory/artifacts?limit=4&window=30m&agent_id=app-engineering&correlation_id=corr-app-review',
+      expect.objectContaining({ signal: undefined })
+    );
+  });
+
+  it('loads the structured shared-memory artifact index envelope', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            generated_at: '2026-03-09T19:00:00.000Z',
+            items: [
+              {
+                artifact_ref: '/tmp/app-engineering/todo.md',
+                artifact_kind: 'workspace_file',
+                file_name: 'todo.md',
+                first_seen_at: '2026-03-09T18:40:00.000Z',
+                last_seen_at: '2026-03-09T18:58:30.000Z',
+                mention_count: 3,
+                agent_ids: ['app-engineering'],
+                correlation_ids: ['corr-app-review'],
+                source_kinds: ['controller_event', 'workspace_file'],
+                latest_summary: 'Workflow evidence is still incomplete',
+                latest_event_type: 'peer_watch_alert_raised',
+                collector_last_modified_at: '2026-03-09T18:58:30.000Z'
+              }
+            ]
+          }),
+          {
+            headers: JSON_HEADERS
+          }
+        )
+      )
+    );
+
+    await expect(fetchMemoryArtifacts()).resolves.toMatchObject({
+      generated_at: '2026-03-09T19:00:00.000Z',
+      items: [
+        expect.objectContaining({
+          artifact_ref: '/tmp/app-engineering/todo.md',
+          artifact_kind: 'workspace_file',
+          file_name: 'todo.md',
+          mention_count: 3,
+          latest_event_type: 'peer_watch_alert_raised'
+        })
+      ]
+    });
   });
 });
 

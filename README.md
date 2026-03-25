@@ -27,6 +27,7 @@ This repository is the implementation home for the Hermes-Agent metaverse-office
 - agent detail and agent-scoped incident queries now expose recent incident evidence by reusing the same read-only incident feed semantics
 - agent workflow query now exposes one read-only operator slice per agent by aggregating existing detail, incident, interaction, and timeline read models
 - office operations query now exposes the first live-operations queue by deriving active work from the existing append-only events, heartbeats, and agent projections
+- shared memory artifact index now exposes a read-only engineering memory surface over evidence refs and collector observations so operators can inspect what workspace/tmux artifacts are anchoring the office state without relying on markdown dumps
 - pnpm workspace bootstrap now exists with a React + TypeScript operator shell in `apps/web` that reuses the frozen read-only office/workflow/incident/correlation queries for triage
 
 ## Key documents
@@ -138,6 +139,7 @@ Optional env:
 - `GET /peer-watch/alerts?status=&target_agent_id=&agent_id=&watcher_agent_id=&observer_agent_id=&correlation_id=&severity=&limit=`
 - `GET /incidents?kind=&agent_id=&severity=&status=&correlation_id=&limit=&window=`
 - `GET /correlations/:correlation_id?limit=&window=`
+- `GET /memory/artifacts?limit=&window=&agent_id=&correlation_id=`
 - `GET /handoffs`
 - `GET /reboots`
 - `POST /events`
@@ -211,6 +213,13 @@ Optional env:
 - when `limit` is present, it caps `incidents`, `interactions`, and `timeline` individually using their existing ordering semantics; `incident_count`, `interaction_count`, and `event_count` remain the full filtered totals
 - the response also exposes deduped `participant_agent_ids`, deduped `evidence_refs`, and `first_ts` / `last_ts` bounds for the full filtered correlation slice
 - the route returns `404` when the `correlation_id` matches no incidents, interactions, or events
+
+### Shared memory artifact notes
+- `GET /memory/artifacts` is a read-only engineering memory surface derived from existing event `evidence_refs` plus the latest collector workspace/tmux observations when available
+- supported filters are `window`, `agent_id`, `correlation_id`, and `limit`
+- the route does not introduce a markdown-backed status store, write path, or separate task system; it materializes shared memory from the existing append-only evidence trail
+- items expose `artifact_ref`, `artifact_kind`, `file_name`, `first_seen_at`, `last_seen_at`, `mention_count`, `agent_ids`, `correlation_ids`, `source_kinds`, `latest_summary`, `latest_event_type`, and optional `collector_last_modified_at`
+- ordering is operational: newest `last_seen_at` first, then higher `mention_count`, then stable `artifact_ref`
 
 ### Handoff and reboot read-model notes
 - `GET /handoffs` and `GET /reboots` remain read-only derived views

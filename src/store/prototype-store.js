@@ -130,15 +130,16 @@ class PrototypeStore {
   }
 
   async appendCollectorReport(report) {
+    const normalizedReport = normalizeCollectorReport(report, this.latestCollectorReport);
     const previousAgentProjections = new Map(
       this.listAgents().map((agent) => [agent.agent_id, agent])
     );
     const collectorActivityEvents = createCollectorActivityEvents({
-      report,
+      report: normalizedReport,
       previousAgentProjections
     });
     const collectorEvents = createCollectorSupervisionEvents({
-      report,
+      report: normalizedReport,
       existingEvents: this.events
     });
     const items = [];
@@ -147,7 +148,7 @@ class PrototypeStore {
       await this.appendEvent(event);
     }
 
-    for (const item of report.items || []) {
+    for (const item of normalizedReport.items || []) {
       const heartbeat = await this.appendHeartbeat(item.heartbeat);
       items.push({
         ...item,
@@ -156,9 +157,9 @@ class PrototypeStore {
     }
 
     this.latestCollectorReport = {
-      ...report,
+      ...normalizedReport,
       summary: {
-        ...(report.summary || {}),
+        ...(normalizedReport.summary || {}),
         heartbeat_count: items.length
       },
       items
@@ -326,6 +327,14 @@ class PrototypeStore {
 
   listTimeline(filters = {}) {
     return listTimelineItems(this.events, filters);
+  }
+
+  listMemoryArtifacts(filters = {}) {
+    return listMemoryArtifactItems({
+      events: this.events,
+      latestCollectorReport: this.latestCollectorReport,
+      filters
+    });
   }
 
   listPeerWatchAlerts(filters = {}) {
@@ -1067,16 +1076,15 @@ function createCollectorFileWriteEvent({ report, item, previousProjection }) {
 
 function deriveCollectorStateEvidence(item) {
   const tmuxObservation = getLatestCollectorTmuxObservation(item);
-  if (tmuxObservation) {
+  const tmuxObservationRef = getCollectorTmuxArtifactRef(item, tmuxObservation);
+  if (tmuxObservationRef) {
     return {
       source_kind: 'tmux_observation',
-      evidence_refs: [
-        `tmux://${tmuxObservation.session_name}/${tmuxObservation.window_index}.${tmuxObservation.pane_index}`
-      ]
+      evidence_refs: [tmuxObservationRef]
     };
   }
 
-  const tmuxRef = normalizeEvidenceRefs(item.evidence_refs).find(isTmuxRef);
+  const tmuxRef = normalizeEvidenceRefs(item.evidence_refs).find(isValidTmuxRef);
   if (tmuxRef) {
     return {
       source_kind: 'tmux_observation',
@@ -1163,6 +1171,10 @@ function getLatestCollectorWorkspaceFileObservation(item, observedAt = null) {
 
 function isTmuxRef(ref) {
   return typeof ref === 'string' && ref.startsWith('tmux://');
+}
+
+function isValidTmuxRef(ref) {
+  return isTmuxRef(ref) && !/\/(null|undefined)\.(null|undefined)$/.test(ref);
 }
 
 function isWorkspaceFileRef(ref) {
@@ -1374,6 +1386,153 @@ function createCollectorMetadataBase({ report, item, derivedStaleness }) {
     last_meaningful_output_at: heartbeat.last_meaningful_output_at || null,
     last_file_write_at: heartbeat.last_file_write_at || null,
     derived_staleness: derivedStaleness
+  };
+}
+
+function normalizeCollectorReport(report = {}, previousReport = null) {
+  const previousItemsByAgentId = new Map(
+    (previousReport?.items || []).map((item) => [item.agent_id, item])
+  );
+
+  return {
+    ...report,
+    items: (report.items || []).map((item) =>
+      normalizeCollectorReportItem(item, previousItemsByAgentId.get(item.agent_id) || null)
+    )
+  };
+}
+
+function normalizeCollectorReportItem(item = {}, previousItem = null) {
+  const normalizedEvidenceRefs = normalizeEvidenceRefs(item.evidence_refs);
+  const currentStableTmuxRefs = normalizedEvidenceRefs.filter(isValidTmuxRef);
+  const previousStableTmuxRefs = normalizeEvidenceRefs(previousItem?.evidence_refs).filter(isValidTmuxRef);
+  const previousTmuxRefByPaneId = buildPreviousTmuxRefByPaneId(previousItem, previousStableTmuxRefs);
+
+  const rawTmuxObservations = item.tmux_observations || [];
+  const normalizedTmuxObservations = rawTmuxObservations.map((observation, index) =>
+    normalizeCollectorTmuxObservation(observation, {
+      currentStableTmuxRef: currentStableTmuxRefs[index] || null,
+      previousStableTmuxRefByPaneId: previousTmuxRefByPaneId
+    })
+  );
+
+  const normalizedTmuxEvidenceRefs = normalizedTmuxObservations
+    .map((observation) => observation.artifact_ref)
+    .filter(isValidTmuxRef);
+  const nonTmuxEvidenceRefs = normalizedEvidenceRefs.filter((ref) => !isTmuxRef(ref));
+  const passthroughTmuxEvidenceRefs =
+    rawTmuxObservations.length === 0 ? currentStableTmuxRefs : [];
+
+  return {
+    ...item,
+    evidence_refs: normalizeEvidenceRefs([
+      ...nonTmuxEvidenceRefs,
+      ...normalizedTmuxEvidenceRefs,
+      ...passthroughTmuxEvidenceRefs
+    ]),
+    tmux_observations: normalizedTmuxObservations
+  };
+}
+
+function buildPreviousTmuxRefByPaneId(previousItem = null, previousStableTmuxRefs = []) {
+  const mapping = new Map();
+  const previousObservations = previousItem?.tmux_observations || [];
+
+  for (let index = 0; index < previousObservations.length; index += 1) {
+    const observation = previousObservations[index];
+    const stableRef =
+      observation?.artifact_ref || previousStableTmuxRefs[index] || deriveTmuxArtifactRef(observation) || null;
+
+    if (observation?.pane_id && stableRef) {
+      mapping.set(observation.pane_id, stableRef);
+    }
+  }
+
+  return mapping;
+}
+
+function normalizeCollectorTmuxObservation(
+  observation = {},
+  { currentStableTmuxRef = null, previousStableTmuxRefByPaneId = new Map() } = {}
+) {
+  const previousStableTmuxRef = observation.pane_id
+    ? previousStableTmuxRefByPaneId.get(observation.pane_id) || null
+    : null;
+  const parsedStableRef = parseTmuxRef(currentStableTmuxRef || previousStableTmuxRef);
+
+  const paneActivityAt = normalizeCollectorTimestamp(observation.pane_activity_at);
+  const sessionName = observation.session_name || parsedStableRef?.session_name || null;
+  const windowIndex = normalizeTmuxCoordinate(observation.window_index) || parsedStableRef?.window_index || null;
+  const paneIndex = normalizeTmuxCoordinate(observation.pane_index) || parsedStableRef?.pane_index || null;
+  const paneId = observation.pane_id || parsedStableRef?.pane_id || null;
+  const artifactRef =
+    deriveTmuxArtifactRef({
+      session_name: sessionName,
+      window_index: windowIndex,
+      pane_index: paneIndex,
+      pane_id: paneId
+    }) ||
+    currentStableTmuxRef ||
+    previousStableTmuxRef ||
+    null;
+
+  return {
+    ...observation,
+    session_name: sessionName,
+    window_index: windowIndex,
+    pane_index: paneIndex,
+    pane_id: paneId,
+    pane_activity_at: paneActivityAt,
+    artifact_ref: artifactRef
+  };
+}
+
+function normalizeTmuxCoordinate(value) {
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  const normalized = `${value}`.trim();
+  if (!normalized || normalized === 'null' || normalized === 'undefined') {
+    return null;
+  }
+
+  return normalized;
+}
+
+function parseTmuxRef(ref) {
+  if (!isTmuxRef(ref)) {
+    return null;
+  }
+
+  const body = ref.slice('tmux://'.length);
+  const slashIndex = body.lastIndexOf('/');
+  if (slashIndex === -1) {
+    return {
+      session_name: null,
+      window_index: null,
+      pane_index: null,
+      pane_id: body || null
+    };
+  }
+
+  const sessionName = body.slice(0, slashIndex) || null;
+  const coordinates = body.slice(slashIndex + 1);
+  const dotIndex = coordinates.indexOf('.');
+  if (dotIndex === -1) {
+    return {
+      session_name: sessionName,
+      window_index: null,
+      pane_index: null,
+      pane_id: null
+    };
+  }
+
+  return {
+    session_name: sessionName,
+    window_index: normalizeTmuxCoordinate(coordinates.slice(0, dotIndex)),
+    pane_index: normalizeTmuxCoordinate(coordinates.slice(dotIndex + 1)),
+    pane_id: null
   };
 }
 
@@ -2046,6 +2205,462 @@ function getWorkflowCounterpartyAgentIds({
     (counterpartyAgentId) =>
       counterpartyAgentId !== agentId && counterpartyAgentId !== 'team-lead'
   );
+}
+
+function listMemoryArtifactItems({ events = [], latestCollectorReport = null, filters = {} }) {
+  const durationMs = filters.window ? parseWindow(filters.window) : null;
+  const nowMs = durationMs === null ? null : parseNowMs(filters.now);
+  const limit =
+    filters.limit === null || filters.limit === undefined || filters.limit === ''
+      ? null
+      : parseLimit(filters.limit);
+  const collectorObservations = buildCollectorObservationMap(latestCollectorReport);
+  const artifactMap = new Map();
+
+  for (const event of events) {
+    if (!matchesMemoryArtifactEventFilters(event, filters)) {
+      continue;
+    }
+
+    const eventTs = Date.parse(event.ts || 0);
+    if (durationMs !== null && nowMs !== null && eventTs < nowMs - durationMs) {
+      continue;
+    }
+
+    for (const artifactRef of normalizeEvidenceRefs(event.evidence_refs)) {
+      const collectorObservation = collectorObservations.get(artifactRef) || null;
+      const matchingCollectorObservationEntries = collectorObservation
+        ? listMatchingCollectorObservationEntries({
+            artifactRef,
+            collectorObservation,
+            filters,
+            durationMs,
+            nowMs
+          })
+        : [];
+      const collectorArtifactKind =
+        matchingCollectorObservationEntries.length > 0 ? collectorObservation.artifact_kind : null;
+      const artifactKind = deriveArtifactKind(artifactRef, collectorArtifactKind);
+      if (!matchesMemoryArtifactFilters({ artifactRef, event, artifactKind, filters })) {
+        continue;
+      }
+
+      const collectorLastModifiedAt = getCollectorObservationLastSeenAt(matchingCollectorObservationEntries);
+      const fileName = deriveArtifactFileName(
+        artifactRef,
+        matchingCollectorObservationEntries.length > 0 ? collectorObservation : null
+      );
+      const key = artifactRef;
+      const existing = artifactMap.get(key) || {
+        artifact_ref: artifactRef,
+        artifact_kind: artifactKind,
+        file_name: fileName,
+        first_seen_at: event.ts,
+        last_seen_at: event.ts,
+        mention_count: 0,
+        agent_ids: new Set(),
+        correlation_ids: new Set(),
+        source_kinds: new Set(),
+        latest_summary: event.summary,
+        latest_event_type: event.event_type,
+        latest_event_ts: event.ts,
+        collector_last_modified_at: collectorLastModifiedAt
+      };
+
+      if (
+        collectorLastModifiedAt &&
+        (!existing.collector_last_modified_at ||
+          Date.parse(collectorLastModifiedAt) > Date.parse(existing.collector_last_modified_at))
+      ) {
+        existing.collector_last_modified_at = collectorLastModifiedAt;
+      }
+
+      existing.artifact_kind = rankArtifactKind(existing.artifact_kind, artifactKind);
+      if (!existing.file_name || existing.file_name === existing.artifact_ref) {
+        existing.file_name = fileName;
+      }
+      existing.first_seen_at = compareIsoAsc(existing.first_seen_at, event.ts) <= 0 ? existing.first_seen_at : event.ts;
+      existing.last_seen_at = compareIsoAsc(existing.last_seen_at, event.ts) >= 0 ? existing.last_seen_at : event.ts;
+      existing.mention_count += 1;
+      existing.agent_ids.add(event.agent_id);
+      if (event.actor_id) {
+        existing.agent_ids.add(event.actor_id);
+      }
+      for (const counterpartyAgentId of event.counterparty_agent_ids || []) {
+        existing.agent_ids.add(counterpartyAgentId);
+      }
+      if (event.correlation_id) {
+        existing.correlation_ids.add(event.correlation_id);
+      }
+      existing.source_kinds.add(event.source_kind);
+      if (Date.parse(event.ts || 0) >= Date.parse(existing.latest_event_ts || 0)) {
+        existing.latest_event_ts = event.ts;
+        existing.latest_summary = event.summary;
+        existing.latest_event_type = event.event_type;
+      }
+      if (!existing.collector_last_modified_at && collectorLastModifiedAt) {
+        existing.collector_last_modified_at = collectorLastModifiedAt;
+      }
+
+      artifactMap.set(key, existing);
+    }
+  }
+
+  for (const [artifactRef, collectorObservation] of collectorObservations.entries()) {
+    const matchingObservationEntries = listMatchingCollectorObservationEntries({
+      artifactRef,
+      collectorObservation,
+      filters,
+      durationMs,
+      nowMs
+    });
+    if (matchingObservationEntries.length === 0) {
+      continue;
+    }
+
+    const firstSeenAt = matchingObservationEntries.reduce(
+      (earliest, entry) => (compareIsoAsc(earliest, entry.observed_at) <= 0 ? earliest : entry.observed_at),
+      matchingObservationEntries[0].observed_at
+    );
+    const lastSeenAt = matchingObservationEntries.reduce(
+      (latest, entry) => (compareIsoAsc(latest, entry.observed_at) >= 0 ? latest : entry.observed_at),
+      matchingObservationEntries[0].observed_at
+    );
+
+    const existing = artifactMap.get(artifactRef);
+    if (existing) {
+      existing.artifact_kind = rankArtifactKind(existing.artifact_kind, collectorObservation.artifact_kind);
+      existing.first_seen_at = compareIsoAsc(existing.first_seen_at, firstSeenAt) <= 0 ? existing.first_seen_at : firstSeenAt;
+      existing.last_seen_at = compareIsoAsc(existing.last_seen_at, lastSeenAt) >= 0 ? existing.last_seen_at : lastSeenAt;
+      existing.mention_count += matchingObservationEntries.length;
+      for (const participantAgentId of matchingObservationEntries.flatMap((entry) => entry.participant_agent_ids || [])) {
+        existing.agent_ids.add(participantAgentId);
+      }
+      for (const correlationId of matchingObservationEntries.flatMap((entry) => (entry.correlation_id ? [entry.correlation_id] : []))) {
+        existing.correlation_ids.add(correlationId);
+      }
+      for (const sourceKind of matchingObservationEntries.flatMap((entry) => (entry.source_kind ? [entry.source_kind] : []))) {
+        existing.source_kinds.add(sourceKind);
+      }
+      if (
+        !existing.collector_last_modified_at ||
+        Date.parse(lastSeenAt) > Date.parse(existing.collector_last_modified_at)
+      ) {
+        existing.collector_last_modified_at = lastSeenAt;
+      }
+      if (!existing.file_name || existing.file_name === existing.artifact_ref) {
+        existing.file_name = collectorObservation.file_name || deriveFileNameFromRef(artifactRef);
+      }
+      artifactMap.set(artifactRef, existing);
+      continue;
+    }
+
+    artifactMap.set(artifactRef, {
+      artifact_ref: artifactRef,
+      artifact_kind: collectorObservation.artifact_kind,
+      file_name: collectorObservation.file_name || deriveFileNameFromRef(artifactRef),
+      first_seen_at: firstSeenAt,
+      last_seen_at: lastSeenAt,
+      mention_count: matchingObservationEntries.length,
+      agent_ids: new Set(matchingObservationEntries.flatMap((entry) => entry.participant_agent_ids || [])),
+      correlation_ids: new Set(
+        matchingObservationEntries.flatMap((entry) => (entry.correlation_id ? [entry.correlation_id] : []))
+      ),
+      source_kinds: new Set(
+        matchingObservationEntries.flatMap((entry) => (entry.source_kind ? [entry.source_kind] : []))
+      ),
+      latest_summary: null,
+      latest_event_type: null,
+      latest_event_ts: lastSeenAt,
+      collector_last_modified_at: lastSeenAt
+    });
+  }
+
+  const items = Array.from(artifactMap.values())
+    .map((artifact) => ({
+      artifact_ref: artifact.artifact_ref,
+      artifact_kind: artifact.artifact_kind,
+      file_name: artifact.file_name,
+      first_seen_at: artifact.first_seen_at,
+      last_seen_at: artifact.last_seen_at,
+      mention_count: artifact.mention_count,
+      agent_ids: Array.from(artifact.agent_ids).sort(),
+      correlation_ids: Array.from(artifact.correlation_ids).sort(),
+      source_kinds: Array.from(artifact.source_kinds).sort(),
+      latest_summary: artifact.latest_summary,
+      latest_event_type: artifact.latest_event_type,
+      collector_last_modified_at: artifact.collector_last_modified_at
+    }))
+    .sort((left, right) => {
+      const lastSeenDelta = Date.parse(right.last_seen_at || 0) - Date.parse(left.last_seen_at || 0);
+      if (lastSeenDelta !== 0) {
+        return lastSeenDelta;
+      }
+
+      if (right.mention_count !== left.mention_count) {
+        return right.mention_count - left.mention_count;
+      }
+
+      return left.artifact_ref.localeCompare(right.artifact_ref);
+    });
+
+  return applyOptionalLimit(items, limit);
+}
+
+function buildCollectorObservationMap(report) {
+  const observations = new Map();
+  const correlationId = createCollectorCorrelationId(report?.collected_at);
+
+  for (const item of report?.items || []) {
+    for (const workspaceObservation of item.workspace_observations || []) {
+      if (!workspaceObservation?.path || workspaceObservation.kind !== 'workspace_file') {
+        continue;
+      }
+
+      mergeCollectorObservation(observations, workspaceObservation.path, {
+        artifact_kind: 'workspace_file',
+        file_name: workspaceObservation.file_name || deriveFileNameFromRef(workspaceObservation.path),
+        last_modified_at: workspaceObservation.last_modified_at || null,
+        observed_agent_id: item.agent_id,
+        participant_agent_ids: normalizeAgentIds([item.agent_id, report?.actor_id]),
+        correlation_id: correlationId,
+        source_kind: 'workspace_file'
+      });
+    }
+
+    const itemTmuxObservations = item.tmux_observations || [];
+
+    for (const tmuxObservation of itemTmuxObservations) {
+      const tmuxRef = getCollectorTmuxArtifactRef(item, tmuxObservation, tmuxObservation?.artifact_ref || null);
+      if (!tmuxRef) {
+        continue;
+      }
+
+      mergeCollectorObservation(observations, tmuxRef, {
+        artifact_kind: 'tmux_observation',
+        file_name: tmuxObservation.pane_title || tmuxObservation.pane_current_command || tmuxRef,
+        last_modified_at: tmuxObservation.pane_activity_at || null,
+        observed_agent_id: item.agent_id,
+        participant_agent_ids: normalizeAgentIds([item.agent_id, report?.actor_id]),
+        correlation_id: correlationId,
+        source_kind: 'tmux_observation'
+      });
+    }
+  }
+
+  return observations;
+}
+
+function mergeCollectorObservation(observations, artifactRef, nextObservation) {
+  const existing = observations.get(artifactRef);
+  const entry = {
+    observed_agent_id: nextObservation.observed_agent_id || null,
+    participant_agent_ids: normalizeAgentIds(nextObservation.participant_agent_ids || []),
+    correlation_id: nextObservation.correlation_id || null,
+    source_kind: nextObservation.source_kind || null,
+    observed_at: nextObservation.last_modified_at || null
+  };
+
+  if (!existing) {
+    observations.set(artifactRef, {
+      artifact_kind: nextObservation.artifact_kind,
+      file_name: nextObservation.file_name,
+      last_modified_at: nextObservation.last_modified_at,
+      entries: [entry]
+    });
+    return;
+  }
+
+  existing.artifact_kind = rankArtifactKind(existing.artifact_kind, nextObservation.artifact_kind);
+  if (!existing.file_name || existing.file_name === artifactRef) {
+    existing.file_name = nextObservation.file_name;
+  }
+  if (
+    nextObservation.last_modified_at &&
+    (!existing.last_modified_at || Date.parse(nextObservation.last_modified_at) > Date.parse(existing.last_modified_at))
+  ) {
+    existing.last_modified_at = nextObservation.last_modified_at;
+  }
+  existing.entries = [...(existing.entries || []), entry];
+  observations.set(artifactRef, existing);
+}
+
+function matchesMemoryArtifactEventFilters(event, filters = {}) {
+  if (filters.event_type && event.event_type !== filters.event_type) {
+    return false;
+  }
+
+  if (filters.severity && event.severity !== filters.severity) {
+    return false;
+  }
+
+  if (filters.correlation_id && event.correlation_id !== filters.correlation_id) {
+    return false;
+  }
+
+  return true;
+}
+
+function matchesMemoryArtifactFilters({ artifactRef, event, artifactKind, filters }) {
+  if (filters.agent_id) {
+    const participantAgentIds = normalizeAgentIds([
+      event.agent_id,
+      event.actor_id,
+      ...(event.counterparty_agent_ids || [])
+    ]);
+
+    if (!participantAgentIds.includes(filters.agent_id)) {
+      return false;
+    }
+  }
+
+  if (filters.correlation_id && event.correlation_id !== filters.correlation_id) {
+    return false;
+  }
+
+  if (filters.artifact_kind && artifactKind !== filters.artifact_kind) {
+    return false;
+  }
+
+  if (filters.artifact_ref && artifactRef !== filters.artifact_ref) {
+    return false;
+  }
+
+  return true;
+}
+
+function listMatchingCollectorObservationEntries({
+  artifactRef,
+  collectorObservation,
+  filters,
+  durationMs = null,
+  nowMs = null
+}) {
+  if (filters.artifact_ref && artifactRef !== filters.artifact_ref) {
+    return [];
+  }
+
+  if (filters.artifact_kind && collectorObservation.artifact_kind !== filters.artifact_kind) {
+    return [];
+  }
+
+  return (collectorObservation.entries || [])
+    .map((entry) => ({
+      ...entry,
+      observed_at: entry.observed_at || collectorObservation.last_modified_at || null
+    }))
+    .filter((entry) => {
+      if (filters.agent_id) {
+        const participantAgentIds = normalizeAgentIds(entry.participant_agent_ids || []);
+        if (!participantAgentIds.includes(filters.agent_id)) {
+          return false;
+        }
+      }
+
+      if (filters.correlation_id && entry.correlation_id !== filters.correlation_id) {
+        return false;
+      }
+
+      if (durationMs !== null && nowMs !== null && Date.parse(entry.observed_at || 0) < nowMs - durationMs) {
+        return false;
+      }
+
+      return true;
+    });
+}
+
+function deriveArtifactKind(artifactRef, collectorArtifactKind = null) {
+  if (collectorArtifactKind) {
+    return collectorArtifactKind;
+  }
+
+  if (artifactRef.startsWith('tmux://')) {
+    return 'tmux_observation';
+  }
+
+  if (/\/(inbox|outbox|todo)\.md$/i.test(artifactRef)) {
+    return 'workspace_file';
+  }
+
+  return 'evidence_ref';
+}
+
+function getCollectorObservationLastSeenAt(entries = []) {
+  if (entries.length === 0) {
+    return null;
+  }
+
+  return entries.reduce(
+    (latest, entry) => (compareIsoAsc(latest, entry.observed_at) >= 0 ? latest : entry.observed_at),
+    entries[0].observed_at
+  );
+}
+
+function rankArtifactKind(left, right) {
+  const rank = {
+    evidence_ref: 0,
+    workspace_file: 1,
+    tmux_observation: 2
+  };
+
+  return rank[right] > rank[left] ? right : left;
+}
+
+function deriveArtifactFileName(artifactRef, collectorObservation) {
+  return collectorObservation?.file_name || deriveFileNameFromRef(artifactRef);
+}
+
+function deriveFileNameFromRef(value) {
+  if (typeof value !== 'string' || value.length === 0) {
+    return 'unknown';
+  }
+
+  if (value.startsWith('tmux://')) {
+    const segments = value.replace(/^tmux:\/\//, '').split('/');
+    return segments[segments.length - 1] || value;
+  }
+
+  const parts = value.split('/').filter(Boolean);
+  return parts[parts.length - 1] || value;
+}
+
+function deriveTmuxArtifactRef(tmuxObservation) {
+  if (
+    tmuxObservation?.session_name &&
+    tmuxObservation.window_index !== undefined &&
+    tmuxObservation.window_index !== null &&
+    tmuxObservation.window_index !== 'null' &&
+    tmuxObservation.window_index !== 'undefined' &&
+    tmuxObservation.pane_index !== undefined &&
+    tmuxObservation.pane_index !== null &&
+    tmuxObservation.pane_index !== 'null' &&
+    tmuxObservation.pane_index !== 'undefined'
+  ) {
+    return `tmux://${tmuxObservation.session_name}/${tmuxObservation.window_index}.${tmuxObservation.pane_index}`;
+  }
+
+  if (tmuxObservation?.pane_id) {
+    return `tmux://${tmuxObservation.pane_id}`;
+  }
+
+  return null;
+}
+
+function getCollectorTmuxArtifactRef(item, tmuxObservation, fallbackTmuxRef = null) {
+  if (fallbackTmuxRef) {
+    return fallbackTmuxRef;
+  }
+
+  const observationRef = deriveTmuxArtifactRef(tmuxObservation);
+  if (observationRef) {
+    return observationRef;
+  }
+
+  return normalizeEvidenceRefs(item?.evidence_refs).find(isValidTmuxRef) || null;
+}
+
+function compareIsoAsc(left, right) {
+  return Date.parse(left || 0) - Date.parse(right || 0);
 }
 
 function collectCorrelationTimestamps({ incidents = [], interactions = [], timeline = [] }) {

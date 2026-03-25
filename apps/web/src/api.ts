@@ -3,6 +3,7 @@ import type {
   CollectorSnapshot,
   CorrelationDrilldown,
   IncidentFeedResponse,
+  MemoryArtifactIndex,
   OfficeOperations,
   OfficeOverview,
   ProblemResponse,
@@ -172,6 +173,29 @@ export async function fetchCorrelationDrilldown(
   );
 
   return parseJson<CorrelationDrilldown>(response);
+}
+
+export async function fetchMemoryArtifacts(
+  options: { limit?: number; window?: string; agentId?: string; correlationId?: string; signal?: AbortSignal } = {}
+): Promise<MemoryArtifactIndex> {
+  const params = new URLSearchParams({
+    limit: String(options.limit ?? DEFAULT_WORKFLOW_LIMIT),
+    window: options.window ?? DEFAULT_WORKFLOW_WINDOW
+  });
+
+  if (options.agentId) {
+    params.set('agent_id', options.agentId);
+  }
+
+  if (options.correlationId) {
+    params.set('correlation_id', options.correlationId);
+  }
+
+  const response = await fetch(resolveApiUrl(`/memory/artifacts?${params.toString()}`), {
+    signal: options.signal
+  });
+
+  return parseJson<MemoryArtifactIndex>(response);
 }
 
 export { DEFAULT_WORKFLOW_LIMIT, DEFAULT_WORKFLOW_WINDOW };

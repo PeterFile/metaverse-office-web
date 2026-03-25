@@ -5,8 +5,10 @@ import {
   DEFAULT_WORKFLOW_WINDOW,
   RequestError,
   fetchAgentWorkflow,
+  fetchCollectorSnapshot,
   fetchCorrelationDrilldown,
   fetchIncidents,
+  fetchMemoryArtifacts,
   fetchOfficeOperations,
   fetchOfficeOverview,
   fetchTimeline
@@ -26,6 +28,7 @@ type OperationSelection = {
 };
 
 const CREW_TIMELINE_LIMIT = 4;
+const MEMORY_ARTIFACT_LIMIT = 4;
 
 function isJsdomEnvironment() {
   return typeof navigator !== 'undefined' && /jsdom/i.test(navigator.userAgent);
@@ -60,6 +63,29 @@ function resolveCorrelationPollKey(selectedCorrelationId: string | null) {
 
 function resolveCorrelationSelectionContext(selectedAgentId: string | null) {
   return selectedAgentId ?? '__crew-overview__';
+}
+
+function resolveMemoryArtifactResourceKey(
+  selectedAgentId: string | null,
+  selectedCorrelationId: string | null
+) {
+  return `memory-artifacts:${selectedAgentId ?? 'crew-overview'}:${selectedCorrelationId ?? '__all__'}`;
+}
+
+function resolveSharedMemoryCorrelationId(
+  selectedAgentId: string | null,
+  selectedCorrelationId: string | null,
+  selectedCorrelationWasExplicit: boolean
+) {
+  if (!selectedCorrelationId) {
+    return null;
+  }
+
+  if (selectedAgentId) {
+    return selectedCorrelationId;
+  }
+
+  return selectedCorrelationWasExplicit ? selectedCorrelationId : null;
 }
 
 function selectDefaultCorrelationId({
@@ -138,6 +164,11 @@ function AppInner() {
       }),
     resourceKey: 'timeline-replay'
   });
+  const collectorSnapshotResource = usePolledResource({
+    enabled: hubOpen,
+    load: (signal) => fetchCollectorSnapshot(signal),
+    resourceKey: 'collector-controller-snapshot'
+  });
 
   const operationsQueueEnabled = hubOpen && (selectedAgentId === null || selectedOperationSelection !== null);
 
@@ -183,6 +214,24 @@ function AppInner() {
 
   const activeWorkflow =
     workflowResource.data?.agent_id === selectedAgentId ? workflowResource.data : null;
+  const sharedMemoryCorrelationId = resolveSharedMemoryCorrelationId(
+    selectedAgentId,
+    selectedCorrelationId,
+    selectedCorrelationWasExplicit
+  );
+
+  const memoryArtifactsResource = usePolledResource({
+    enabled: hubOpen,
+    load: (signal) =>
+      fetchMemoryArtifacts({
+        limit: MEMORY_ARTIFACT_LIMIT,
+        window: DEFAULT_WORKFLOW_WINDOW,
+        agentId: selectedAgentId ?? undefined,
+        correlationId: sharedMemoryCorrelationId ?? undefined,
+        signal
+      }),
+    resourceKey: resolveMemoryArtifactResourceKey(selectedAgentId, sharedMemoryCorrelationId)
+  });
 
   const correlationResource = usePolledResource({
     enabled: hubOpen && selectedCorrelationId !== null,
@@ -518,6 +567,15 @@ function AppInner() {
       correlationMode: 'auto' | 'manual' | 'preserved' = correlationId === null ? 'auto' : 'manual',
       correlationWasExplicit = correlationMode === 'manual'
     ) => {
+      if (!agentId) {
+        lastSelectedAgentRef.current = null;
+      } else {
+        const overviewMatch = overviewResource.data?.agents.find((agent) => agent.agent_id === agentId) ?? null;
+        if (overviewMatch) {
+          lastSelectedAgentRef.current = overviewMatch;
+        }
+      }
+
       lastCorrelationContextRef.current = resolveCorrelationSelectionContext(agentId);
       correlationSelectionModeRef.current = correlationMode;
       setSelectedCorrelationId(correlationId);
@@ -525,7 +583,7 @@ function AppInner() {
       setSelectedOperationSelection(operationSelection);
       setSelectedAgentId(agentId);
     },
-    [setSelectedAgentId]
+    [overviewResource.data, setSelectedAgentId]
   );
 
   const handleSceneSelectAgent = useCallback(
@@ -658,6 +716,9 @@ function AppInner() {
               </button>
             </div>
             <DetailsPanel
+              collectorSnapshot={collectorSnapshotResource.data}
+              collectorSnapshotError={collectorSnapshotResource.error}
+              collectorSnapshotState={collectorSnapshotResource.state}
               correlation={activeCorrelation}
               correlationError={correlationResource.error}
               correlationState={correlationResource.state}
@@ -679,6 +740,9 @@ function AppInner() {
               workflowError={workflowResource.error}
               workflowState={workflowResource.state}
               world={projectedWorld}
+              memoryArtifacts={memoryArtifactsResource.data}
+              memoryArtifactsError={memoryArtifactsResource.error}
+              memoryArtifactsState={memoryArtifactsResource.state}
               onSelectAgent={(agentId, correlationId = null) =>
                 selectAgent(
                   agentId,

@@ -698,6 +698,8 @@ export function DetailsPanel({
                     <strong>{agent.display_name}</strong>
                     <span>{`${SEVERITY_LABELS[agent.severity]} · ${renderDisplayState(agent.raw_state)}`}</span>
                   </button>
+                  <span>{`Active task · ${agent.active_task}`}</span>
+                  <span>{`Reboot recommendation · ${agent.reboot_recommended ? 'Recommended' : 'No'}`}</span>
                   <span>{`Zone · ${selectAgentZoneLabel(agent, world.zones)}`}</span>
                   <span>{`Reason · ${badge.text}`}</span>
                 </li>

@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import App, { resolveOverviewRefreshWarning, resolveSelectedAgent } from './App';
-import type { OfficeAgent } from './types';
+import type { AgentWorkflow, OfficeAgent } from './types';
 
 const operationsUrl = '/office/operations?limit=4';
 const selectedOperationUrl = '/office/operations?agent_id=app-engineering';
@@ -294,6 +294,7 @@ const workflowFixture = {
     open_peer_watch_alerts: [
       {
         alert_id: 'alert-1',
+        ts: '2026-03-16T08:50:00.000Z',
         agent_id: 'app-engineering',
         target_agent_id: 'app-engineering',
         actor_id: 'team-lead',
@@ -317,6 +318,7 @@ const workflowFixture = {
         ts: '2026-03-16T08:58:00.000Z',
         agent_id: 'app-engineering',
         actor_id: 'app-engineering',
+        agent_role: 'app-engineering',
         event_type: 'agent_noted',
         severity: 'yellow',
         current_state: 'blocked',
@@ -386,7 +388,7 @@ const workflowFixture = {
   incidents: [],
   interactions: [],
   timeline: []
-};
+} satisfies AgentWorkflow;
 
 const teamLeadWorkflowFixture = {
   agent_id: 'team-lead',
@@ -412,7 +414,7 @@ const teamLeadWorkflowFixture = {
   incidents: [],
   interactions: [],
   timeline: []
-};
+} satisfies AgentWorkflow;
 
 const growthRevenueWorkflowFixture = {
   agent_id: 'growth-revenue',
@@ -438,7 +440,7 @@ const growthRevenueWorkflowFixture = {
   incidents: [],
   interactions: [],
   timeline: []
-};
+} satisfies AgentWorkflow;
 
 const correlationFixture = {
   correlation_id: 'corr-app-review',

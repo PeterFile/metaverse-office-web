@@ -1,4 +1,6 @@
 import type {
+  AgentEventsResponse,
+  AgentInteractionsResponse,
   AgentWorkflow,
   CollectorSnapshot,
   CorrelationDrilldown,
@@ -6,6 +8,7 @@ import type {
   MemoryArtifactIndex,
   OfficeOperations,
   OfficeOverview,
+  PeerWatchAlertsResponse,
   ProblemResponse,
   TimelineReplayResponse
 } from './types';
@@ -111,6 +114,82 @@ export async function fetchOfficeOperations(
   return parseJson<OfficeOperations>(response);
 }
 
+export async function fetchAgentEvents(
+  agentId: string,
+  options: {
+    limit?: number;
+    eventType?: string;
+    severity?: string;
+    correlationId?: string;
+    signal?: AbortSignal;
+  } = {}
+): Promise<AgentEventsResponse> {
+  const params = new URLSearchParams({
+    limit: String(options.limit ?? DEFAULT_WORKFLOW_LIMIT)
+  });
+
+  if (options.eventType) {
+    params.set('event_type', options.eventType);
+  }
+  if (options.severity) {
+    params.set('severity', options.severity);
+  }
+  if (options.correlationId) {
+    params.set('correlation_id', options.correlationId);
+  }
+
+  const suffix = params.size > 0 ? `?${params.toString()}` : '';
+  const response = await fetch(
+    resolveApiUrl(`/agents/${encodeURIComponent(agentId)}/events${suffix}`),
+    {
+      signal: options.signal
+    }
+  );
+
+  return parseJson<AgentEventsResponse>(response);
+}
+
+export async function fetchAgentInteractions(
+  agentId: string,
+  options: {
+    limit?: number;
+    window?: string;
+    interactionType?: string;
+    counterpartyAgentId?: string;
+    severity?: string;
+    correlationId?: string;
+    signal?: AbortSignal;
+  } = {}
+): Promise<AgentInteractionsResponse> {
+  const params = new URLSearchParams({
+    limit: String(options.limit ?? DEFAULT_WORKFLOW_LIMIT),
+    window: options.window ?? DEFAULT_WORKFLOW_WINDOW
+  });
+
+  if (options.interactionType) {
+    params.set('interaction_type', options.interactionType);
+  }
+  if (options.counterpartyAgentId) {
+    params.set('counterparty_agent_id', options.counterpartyAgentId);
+  }
+  if (options.severity) {
+    params.set('severity', options.severity);
+  }
+  if (options.correlationId) {
+    params.set('correlation_id', options.correlationId);
+  }
+
+  const suffix = params.size > 0 ? `?${params.toString()}` : '';
+  const response = await fetch(
+    resolveApiUrl(`/agents/${encodeURIComponent(agentId)}/interactions${suffix}`),
+    {
+      signal: options.signal
+    }
+  );
+
+  return parseJson<AgentInteractionsResponse>(response);
+}
+
 export async function fetchAgentWorkflow(
   agentId: string,
   options: { limit?: number; window?: string; signal?: AbortSignal } = {}
@@ -155,6 +234,52 @@ export async function fetchTimeline(
   });
 
   return parseJson<TimelineReplayResponse>(response);
+}
+
+export async function fetchPeerWatchAlerts(
+  options: {
+    status?: string;
+    targetAgentId?: string;
+    agentId?: string;
+    watcherAgentId?: string;
+    observerAgentId?: string;
+    correlationId?: string;
+    severity?: string;
+    limit?: number;
+    signal?: AbortSignal;
+  } = {}
+): Promise<PeerWatchAlertsResponse> {
+  const params = new URLSearchParams();
+
+  if (options.status) {
+    params.set('status', options.status);
+  }
+  if (options.targetAgentId) {
+    params.set('target_agent_id', options.targetAgentId);
+  }
+  if (options.agentId) {
+    params.set('agent_id', options.agentId);
+  }
+  if (options.watcherAgentId) {
+    params.set('watcher_agent_id', options.watcherAgentId);
+  }
+  if (options.observerAgentId) {
+    params.set('observer_agent_id', options.observerAgentId);
+  }
+  if (options.correlationId) {
+    params.set('correlation_id', options.correlationId);
+  }
+  if (options.severity) {
+    params.set('severity', options.severity);
+  }
+  params.set('limit', String(options.limit ?? DEFAULT_WORKFLOW_LIMIT));
+
+  const suffix = params.size > 0 ? `?${params.toString()}` : '';
+  const response = await fetch(resolveApiUrl(`/peer-watch/alerts${suffix}`), {
+    signal: options.signal
+  });
+
+  return parseJson<PeerWatchAlertsResponse>(response);
 }
 
 export async function fetchCorrelationDrilldown(

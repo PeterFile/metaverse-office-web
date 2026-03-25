@@ -2,10 +2,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   RequestError,
+  fetchAgentEvents,
+  fetchAgentInteractions,
   fetchCollectorSnapshot,
   fetchMemoryArtifacts,
   fetchOfficeOperations,
   fetchOfficeOverview,
+  fetchPeerWatchAlerts,
   resolveApiUrl
 } from './api';
 
@@ -204,6 +207,416 @@ describe('fetchCollectorSnapshot', () => {
     );
 
     await expect(fetchCollectorSnapshot()).resolves.toBeNull();
+  });
+});
+
+describe('fetchAgentEvents', () => {
+  it('applies the default bounded limit when callers omit event filters', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            agent_id: 'app-engineering',
+            items: []
+          }),
+          {
+            headers: JSON_HEADERS
+          }
+        )
+      )
+    );
+
+    await fetchAgentEvents('app-engineering');
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/agents/app-engineering/events?limit=10',
+      expect.objectContaining({ signal: undefined })
+    );
+  });
+
+  it('passes limit, event_type, severity, and correlation_id filters through to the backend query string', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            agent_id: 'app-engineering',
+            items: []
+          }),
+          {
+            headers: JSON_HEADERS
+          }
+        )
+      )
+    );
+
+    await fetchAgentEvents('app-engineering', {
+      limit: 2,
+      eventType: 'peer_watch_alert_raised',
+      severity: 'orange',
+      correlationId: 'corr-app-review'
+    });
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/agents/app-engineering/events?limit=2&event_type=peer_watch_alert_raised&severity=orange&correlation_id=corr-app-review',
+      expect.objectContaining({ signal: undefined })
+    );
+  });
+
+  it('maps unknown-agent 404 responses into RequestError metadata for event reads', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            error: 'not_found',
+            details: 'unknown agent unknown-agent'
+          }),
+          {
+            status: 404,
+            headers: JSON_HEADERS
+          }
+        )
+      )
+    );
+
+    await expect(fetchAgentEvents('unknown-agent')).rejects.toMatchObject({
+      name: 'RequestError',
+      status: 404,
+      code: 'not_found',
+      message: 'unknown agent unknown-agent'
+    });
+  });
+
+  it('loads the agent-scoped event envelope returned by the backend', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            agent_id: 'app-engineering',
+            items: [
+              {
+                event_id: 'evt-app-review',
+                ts: '2026-03-09T18:45:00.000Z',
+                agent_id: 'app-engineering',
+                actor_id: 'team-lead',
+                agent_role: 'app-engineering',
+                event_type: 'peer_watch_alert_raised',
+                severity: 'orange',
+                current_state: 'blocked',
+                active_task: 'Fix the contract drift',
+                location: 'review-zone',
+                summary: 'Protocol engineering flagged the contract drift',
+                correlation_id: 'corr-app-review',
+                counterparty_agent_ids: ['protocol-engineering'],
+                evidence_refs: ['/tmp/contract-peer-watch.md'],
+                source_kind: 'controller_event',
+                metadata: {}
+              }
+            ]
+          }),
+          {
+            headers: JSON_HEADERS
+          }
+        )
+      )
+    );
+
+    await expect(fetchAgentEvents('app-engineering')).resolves.toMatchObject({
+      agent_id: 'app-engineering',
+      items: [
+        expect.objectContaining({
+          event_id: 'evt-app-review',
+          agent_role: 'app-engineering',
+          event_type: 'peer_watch_alert_raised',
+          correlation_id: 'corr-app-review'
+        })
+      ]
+    });
+  });
+});
+
+describe('fetchAgentInteractions', () => {
+  it('applies the default bounded limit and window when callers omit interaction filters', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            agent_id: 'app-engineering',
+            items: []
+          }),
+          {
+            headers: JSON_HEADERS
+          }
+        )
+      )
+    );
+
+    await fetchAgentInteractions('app-engineering');
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/agents/app-engineering/interactions?limit=10&window=60m',
+      expect.objectContaining({ signal: undefined })
+    );
+  });
+
+  it('passes limit, window, interaction_type, counterparty_agent_id, severity, and correlation_id filters through to the backend query string', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            agent_id: 'app-engineering',
+            items: []
+          }),
+          {
+            headers: JSON_HEADERS
+          }
+        )
+      )
+    );
+
+    await fetchAgentInteractions('app-engineering', {
+      limit: 3,
+      window: '30m',
+      interactionType: 'peer_watch',
+      counterpartyAgentId: 'protocol-engineering',
+      severity: 'orange',
+      correlationId: 'corr-app-review'
+    });
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/agents/app-engineering/interactions?limit=3&window=30m&interaction_type=peer_watch&counterparty_agent_id=protocol-engineering&severity=orange&correlation_id=corr-app-review',
+      expect.objectContaining({ signal: undefined })
+    );
+  });
+
+  it('maps unknown-agent 404 responses into RequestError metadata for interaction reads', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            error: 'not_found',
+            details: 'unknown agent unknown-agent'
+          }),
+          {
+            status: 404,
+            headers: JSON_HEADERS
+          }
+        )
+      )
+    );
+
+    await expect(fetchAgentInteractions('unknown-agent')).rejects.toMatchObject({
+      name: 'RequestError',
+      status: 404,
+      code: 'not_found',
+      message: 'unknown agent unknown-agent'
+    });
+  });
+
+  it('loads the agent-scoped interaction envelope returned by the backend', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            agent_id: 'app-engineering',
+            items: [
+              {
+                interaction_id: 'interaction:evt-app-review',
+                interaction_type: 'peer_watch',
+                correlation_id: 'corr-app-review',
+                started_at: '2026-03-09T18:40:00.000Z',
+                ended_at: '2026-03-09T18:45:00.000Z',
+                participant_agent_ids: ['app-engineering', 'protocol-engineering', 'team-lead'],
+                trigger_event_id: 'evt-app-review',
+                before_state: 'coding',
+                after_state: 'blocked',
+                severity: 'orange',
+                evidence_refs: ['/tmp/contract-peer-watch.md'],
+                summary: 'Protocol engineering flagged the contract drift',
+                related_event_ids: ['evt-app-review']
+              }
+            ]
+          }),
+          {
+            headers: JSON_HEADERS
+          }
+        )
+      )
+    );
+
+    await expect(fetchAgentInteractions('app-engineering')).resolves.toMatchObject({
+      agent_id: 'app-engineering',
+      items: [
+        expect.objectContaining({
+          interaction_id: 'interaction:evt-app-review',
+          interaction_type: 'peer_watch',
+          participant_agent_ids: ['app-engineering', 'protocol-engineering', 'team-lead']
+        })
+      ]
+    });
+  });
+});
+
+describe('fetchPeerWatchAlerts', () => {
+  it('applies the default bounded limit when callers omit alert filters', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            items: []
+          }),
+          {
+            headers: JSON_HEADERS
+          }
+        )
+      )
+    );
+
+    await fetchPeerWatchAlerts();
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/peer-watch/alerts?limit=10',
+      expect.objectContaining({ signal: undefined })
+    );
+  });
+
+  it('passes read-only peer-watch filters through to the backend query string', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            items: []
+          }),
+          {
+            headers: JSON_HEADERS
+          }
+        )
+      )
+    );
+
+    await fetchPeerWatchAlerts({
+      status: 'open',
+      targetAgentId: 'app-engineering',
+      watcherAgentId: 'protocol-engineering',
+      observerAgentId: 'team-lead',
+      correlationId: 'corr-app-review',
+      severity: 'orange',
+      limit: 2
+    });
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/peer-watch/alerts?status=open&target_agent_id=app-engineering&watcher_agent_id=protocol-engineering&observer_agent_id=team-lead&correlation_id=corr-app-review&severity=orange&limit=2',
+      expect.objectContaining({ signal: undefined })
+    );
+  });
+
+  it('supports the backward-compatible agent_id alias for peer-watch filters', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            items: []
+          }),
+          {
+            headers: JSON_HEADERS
+          }
+        )
+      )
+    );
+
+    await fetchPeerWatchAlerts({
+      agentId: 'app-engineering',
+      limit: 2
+    });
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/peer-watch/alerts?agent_id=app-engineering&limit=2',
+      expect.objectContaining({ signal: undefined })
+    );
+  });
+
+  it('preserves conflicting target_agent_id and agent_id peer-watch filters for backend resolution', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            items: []
+          }),
+          {
+            headers: JSON_HEADERS
+          }
+        )
+      )
+    );
+
+    await fetchPeerWatchAlerts({
+      targetAgentId: 'app-engineering',
+      agentId: 'growth-revenue',
+      limit: 2
+    });
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/peer-watch/alerts?target_agent_id=app-engineering&agent_id=growth-revenue&limit=2',
+      expect.objectContaining({ signal: undefined })
+    );
+  });
+
+  it('loads the peer-watch alert envelope returned by the backend', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            items: [
+              {
+                alert_id: 'evt-app-review',
+                ts: '2026-03-09T18:45:00.000Z',
+                agent_id: 'app-engineering',
+                target_agent_id: 'app-engineering',
+                actor_id: 'team-lead',
+                observer_agent_id: 'team-lead',
+                watcher_agent_ids: ['protocol-engineering'],
+                severity: 'orange',
+                status: 'open',
+                current_state: 'blocked',
+                active_task: 'Fix the contract drift',
+                summary: 'Protocol engineering flagged the contract drift',
+                evidence_refs: ['/tmp/contract-peer-watch.md'],
+                evidence_count: 1,
+                correlation_id: 'corr-app-review',
+                source_kind: 'controller_event',
+                metadata: {}
+              }
+            ]
+          }),
+          {
+            headers: JSON_HEADERS
+          }
+        )
+      )
+    );
+
+    await expect(fetchPeerWatchAlerts()).resolves.toMatchObject({
+      items: [
+        expect.objectContaining({
+          alert_id: 'evt-app-review',
+          ts: '2026-03-09T18:45:00.000Z',
+          target_agent_id: 'app-engineering',
+          watcher_agent_ids: ['protocol-engineering']
+        })
+      ]
+    });
   });
 });
 

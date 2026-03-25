@@ -804,12 +804,13 @@ const SHELLS = [
   { name: 'portrait', viewport: { width: 390, height: 844 } }
 ] as const;
 
-test.describe('AI Town shell smoke', () => {
-  test('renders the new default shell and allows roster-driven selection through the Hub overlay', async ({ page }) => {
+test.describe('operator shell smoke', () => {
+  test('renders the default shell with operator-shell framing and allows roster-driven selection through the Hub overlay', async ({ page }) => {
     await page.goto('/');
 
-    await expect(page.getByRole('heading', { name: 'Metaverse Town' })).toBeVisible();
-    await expect(page.getByRole('region', { name: 'Town world' })).toBeVisible();
+    await expect(page.getByText('Metaverse Office operator shell')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Metaverse Office' })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Office world' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Open Hub' })).toBeVisible();
     await expect(page.getByRole('complementary', { name: 'Agent details' })).toHaveCount(0);
 
@@ -1402,8 +1403,8 @@ test.describe('AI Town shell smoke', () => {
     await installFastPollInterval(page);
     await page.goto('/');
 
-    await expect(page.getByRole('heading', { name: 'Metaverse Town' })).toBeVisible();
-    await expect(page.getByRole('region', { name: 'Town world' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Metaverse Office' })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Office world' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Open Hub' })).toBeVisible();
 
     await enableScenario(page, 'degraded-refresh');
@@ -1412,15 +1413,15 @@ test.describe('AI Town shell smoke', () => {
       timeout: POLL_DRIVEN_ASSERTION_TIMEOUT_MS
     });
     await expect(page.getByText('overview refresh failed')).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Metaverse Town' })).toBeVisible();
-    await expect(page.getByRole('region', { name: 'Town world' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Metaverse Office' })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Office world' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Open Hub' })).toBeVisible();
     await expect(page.getByText('Unable to load office overview.')).toHaveCount(0);
   });
 
   test('routes Hub read models through the managed Vite proxy', async ({ page }) => {
     await page.goto('/');
-    await expect(page.getByRole('heading', { name: 'Metaverse Town' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Metaverse Office' })).toBeVisible();
 
     const frontendOrigin = new URL(page.url()).origin;
     const inspectableBackendOrigin = resolveInspectableBrowserSmokeBackendOrigin();
@@ -1481,7 +1482,7 @@ test.describe('AI Town shell smoke', () => {
 
   test('blocks loopback browser writes against the read-only smoke backend above the helper layer', async ({ page }) => {
     await page.goto('/');
-    await expect(page.getByRole('heading', { name: 'Metaverse Town' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Metaverse Office' })).toBeVisible();
 
     const frontendOrigin = new URL(page.url()).origin;
     const inspectableBackendOrigin = resolveInspectableBrowserSmokeBackendOrigin();

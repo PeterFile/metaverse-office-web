@@ -313,6 +313,7 @@ function renderWorkflowStatusRecord({
     <li key={key} className={`aitown-record severity-${severity}`}>
       <strong>{summary}</strong>
       <span>{`${kind} · ${status} · ${phase}`}</span>
+      <span>{`Severity · ${SEVERITY_LABELS[severity]}`}</span>
       <span>{`Counterparties · ${renderCounterparties(counterpartyAgentIds)}`}</span>
       <span>{`Evidence · ${renderEvidenceRefs(evidenceRefs)}`}</span>
       <span>{`Source · ${sourceKind}`}</span>
@@ -408,6 +409,7 @@ function renderIncidentRecord({
         onSelectCorrelation
       })}
       <span>{`Incident · ${incident.kind} · ${incident.status}`}</span>
+      <span>{`Severity · ${SEVERITY_LABELS[incident.severity]}`}</span>
       <span>{`Counterparties · ${renderCounterparties(incident.counterparty_agent_ids)}`}</span>
       <span>{`Evidence · ${renderEvidenceRefs(incident.evidence_refs)}`}</span>
       <span>{`Source · ${incident.source_kind}`}</span>
@@ -868,6 +870,7 @@ export function DetailsPanel({
                   <li key={incident.incident_id} className={`aitown-record severity-${incident.severity}`}>
                     <strong>{incident.summary}</strong>
                     <span>{`Incident · ${incident.kind} · ${incident.status}`}</span>
+                    <span>{`Severity · ${SEVERITY_LABELS[incident.severity]}`}</span>
                     <span>{`Counterparties · ${renderCounterparties(incident.counterparty_agent_ids)}`}</span>
                     <span>{`Evidence · ${renderEvidenceRefs(incident.evidence_refs)}`}</span>
                     <span>{`Source · ${incident.source_kind}`}</span>
@@ -1203,6 +1206,7 @@ export function DetailsPanel({
                 <li key={incident.incident_id} className={`aitown-record severity-${incident.severity}`}>
                   <strong>{incident.summary}</strong>
                   <span>{`Incident · ${incident.kind} · ${incident.status}`}</span>
+                  <span>{`Severity · ${SEVERITY_LABELS[incident.severity]}`}</span>
                   <span>{`Counterparties · ${renderCounterparties(incident.counterparty_agent_ids)}`}</span>
                   <span>{`Evidence · ${renderEvidenceRefs(incident.evidence_refs)}`}</span>
                   <span>{`Source · ${incident.source_kind}`}</span>

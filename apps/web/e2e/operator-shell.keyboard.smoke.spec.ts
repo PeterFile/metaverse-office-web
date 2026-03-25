@@ -841,8 +841,10 @@ test.describe('operator shell smoke', () => {
     await expect(detailsPanel.getByText('Prepare handoff notes')).toBeVisible();
     await expect(detailsPanel.getByText('meeting-zone', { exact: true })).toBeVisible();
     await expect(workflowSection.getByText('No open watch alerts.')).toBeVisible();
-    await expect(incidentSection.getByText('Lead completed the revenue handoff')).toBeVisible();
-    await expect(incidentSection.getByText('Incident · handoff · completed')).toBeVisible();
+    const handoffIncidentRecord = incidentSection.getByText('Lead completed the revenue handoff').locator('..');
+    await expect(handoffIncidentRecord.getByText('Lead completed the revenue handoff')).toBeVisible();
+    await expect(handoffIncidentRecord.getByText('Incident · handoff · completed')).toBeVisible();
+    await expect(handoffIncidentRecord.getByText('Severity · Yellow')).toBeVisible();
     await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toBeVisible();
 
     await page.getByRole('button', { name: 'Close Hub' }).click();

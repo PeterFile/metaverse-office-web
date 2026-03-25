@@ -1,0 +1,728 @@
+import { render, screen, within } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
+import { DetailsPanel } from './DetailsPanel';
+import type {
+  AgentWorkflow,
+  CollectorSnapshot,
+  CorrelationDrilldown,
+  MemoryArtifactIndex,
+  OfficeAgent,
+  OfficeOperation,
+  OfficeOperations
+} from '../types';
+import type { WorldState } from '../world/types';
+
+type DetailsPanelProps = Parameters<typeof DetailsPanel>[0];
+
+function buildWorld(): WorldState {
+  return {
+    generated_at: '2026-03-16T09:00:00.000Z',
+    projection_ts: '2026-03-16T09:00:00.000Z',
+    agents: new Map([
+      [
+        'app-engineering',
+        {
+          agent_id: 'app-engineering',
+          display_name: 'App Engineering Agent',
+          kind: 'employee',
+          raw_state: 'blocked',
+          raw_location: 'delivery-desk',
+          active_task: 'Fix workflow issue',
+          reboot_recommended: true,
+          phase: 'blocked',
+          zone: 'delivery-desk',
+          severity: 'orange',
+          severity_reason: 'Workflow evidence still missing',
+          staleness: {
+            severity: 'yellow',
+            stale_for_ms: 300000,
+            stale_for_minutes: 5,
+            last_meaningful_output_at: '2026-03-16T08:58:00.000Z'
+          },
+          recent_trail: [],
+          open_alert_count: 2,
+          has_open_incidents: true
+        }
+      ],
+      [
+        'team-lead',
+        {
+          agent_id: 'team-lead',
+          display_name: 'Team Lead',
+          kind: 'lead',
+          raw_state: 'reviewing',
+          raw_location: 'review-desk',
+          active_task: 'Review queue',
+          reboot_recommended: false,
+          phase: 'reviewing',
+          zone: 'review-desk',
+          severity: 'yellow',
+          severity_reason: 'Watching blocked agents',
+          staleness: null,
+          recent_trail: [],
+          open_alert_count: 0,
+          has_open_incidents: false
+        }
+      ],
+      [
+        'growth-revenue',
+        {
+          agent_id: 'growth-revenue',
+          display_name: 'Growth Revenue Agent',
+          kind: 'employee',
+          raw_state: 'waiting',
+          raw_location: 'growth-desk',
+          active_task: 'Review copy',
+          reboot_recommended: false,
+          phase: 'waiting',
+          zone: 'growth-desk',
+          severity: 'red',
+          severity_reason: 'Waiting on upstream input',
+          staleness: null,
+          recent_trail: [],
+          open_alert_count: 0,
+          has_open_incidents: false
+        }
+      ]
+    ]),
+    zones: [
+      {
+        zone_id: 'delivery-desk',
+        label: 'Delivery Desk',
+        kind: 'desk',
+        grid_x: 0,
+        grid_y: 0,
+        grid_w: 1,
+        grid_h: 1,
+        home_agent_id: 'app-engineering',
+        occupant_ids: ['app-engineering']
+      }
+    ],
+    watch_edges: [
+      {
+        from_agent_id: 'team-lead',
+        to_agent_id: 'app-engineering',
+        watch_mode: 'lead',
+        risk_level: 'yellow'
+      },
+      {
+        from_agent_id: 'app-engineering',
+        to_agent_id: 'growth-revenue',
+        watch_mode: 'peer',
+        risk_level: 'red'
+      }
+    ],
+    incidents: [],
+    summary: {
+      total_agents: 3,
+      blocked_count: 1,
+      reboot_count: 1,
+      severity_buckets: {
+        normal: 0,
+        yellow: 1,
+        orange: 1,
+        red: 1
+      },
+      highest_severity: 'red'
+    },
+    data_quality: {
+      overview_available: true,
+      workflow_agent_ids: ['app-engineering'],
+      incident_feed_available: true,
+      last_overview_at: '2026-03-16T09:00:00.000Z',
+      degraded_reasons: []
+    }
+  };
+}
+
+function buildSelectedAgent(): OfficeAgent {
+  return {
+    agent_id: 'app-engineering',
+    display_name: 'App Engineering Agent',
+    kind: 'employee',
+    current_state: 'blocked',
+    active_task: 'Fix workflow issue',
+    current_location: 'delivery-desk',
+    effective_severity: 'orange',
+    reported_severity: 'yellow',
+    severity: 'orange',
+    derived_staleness: {
+      severity: 'yellow',
+      stale_for_ms: 300000,
+      stale_for_minutes: 5,
+      last_meaningful_output_at: '2026-03-16T08:58:00.000Z'
+    },
+    reboot_recommended: true
+  };
+}
+
+function buildSelectedOperation(): OfficeOperation {
+  return {
+    agent_id: 'app-engineering',
+    display_name: 'App Engineering Agent',
+    kind: 'employee',
+    current_state: 'blocked',
+    active_task: 'Fix workflow issue',
+    current_blocker: 'Waiting on review sign-off',
+    current_location: 'delivery-desk',
+    reported_severity: 'yellow',
+    effective_severity: 'orange',
+    derived_staleness: {
+      severity: 'yellow',
+      stale_for_ms: 300000,
+      stale_for_minutes: 5,
+      last_meaningful_output_at: '2026-03-16T08:58:00.000Z'
+    },
+    reboot_recommended: true,
+    last_event_at: '2026-03-16T08:58:30.000Z',
+    last_heartbeat_at: '2026-03-16T08:59:30.000Z',
+    last_meaningful_output_at: '2026-03-16T08:58:00.000Z',
+    correlation_id: 'corr-app-review',
+    latest_event: {
+      event_id: 'evt-1',
+      event_type: 'agent_noted',
+      ts: '2026-03-16T08:58:30.000Z',
+      summary: 'Followed up on missing workflow evidence',
+      source_kind: 'controller_event',
+      evidence_refs: ['/evidence/review.md'],
+      counterparty_agent_ids: ['growth-revenue']
+    }
+  };
+}
+
+function buildOperations(): OfficeOperations {
+  return {
+    generated_at: '2026-03-16T09:00:00.000Z',
+    summary: {
+      item_count: 1,
+      blocked_count: 1,
+      reboot_recommended_count: 1,
+      state_buckets: {
+        blocked: 1
+      },
+      severity_buckets: {
+        normal: 0,
+        yellow: 0,
+        orange: 1,
+        red: 0
+      }
+    },
+    items: [buildSelectedOperation()]
+  };
+}
+
+function buildWorkflow(): AgentWorkflow {
+  return {
+    agent_id: 'app-engineering',
+    correlation_ids: ['corr-app-review'],
+    counterparty_agent_ids: ['team-lead'],
+    incidents: [],
+    interactions: [],
+    timeline: [],
+    detail: {
+      agent_id: 'app-engineering',
+      display_name: 'App Engineering Agent',
+      current_state: 'blocked',
+      active_task: 'Fix workflow issue',
+      current_location: 'delivery-desk',
+      latest_heartbeat: {
+        agent_id: 'app-engineering',
+        received_at: '2026-03-16T08:59:30.000Z'
+      },
+      open_peer_watch_alerts: [],
+      recent_events: [
+        {
+          event_id: 'evt-2',
+          ts: '2026-03-16T08:57:00.000Z',
+          agent_id: 'app-engineering',
+          actor_id: 'controller',
+          event_type: 'workflow_event',
+          severity: 'yellow',
+          current_state: 'blocked',
+          active_task: 'Fix workflow issue',
+          location: 'delivery-desk',
+          summary: 'Workflow evidence still incomplete',
+          correlation_id: 'corr-app-review',
+          counterparty_agent_ids: ['team-lead'],
+          evidence_refs: ['/evidence/log.md'],
+          source_kind: 'workflow_event',
+          metadata: {}
+        }
+      ],
+      recent_interactions: [],
+      recent_incidents: [],
+      recent_handoffs: [],
+      recent_reboots: []
+    }
+  };
+}
+
+function buildCorrelation(): CorrelationDrilldown {
+  return {
+    correlation_id: 'corr-app-review',
+    participant_agent_ids: ['app-engineering', 'team-lead'],
+    evidence_refs: ['/evidence/correlation.md'],
+    first_ts: '2026-03-16T08:40:00.000Z',
+    last_ts: '2026-03-16T08:58:30.000Z',
+    incident_count: 1,
+    interaction_count: 1,
+    event_count: 1,
+    incidents: [
+      {
+        incident_id: 'inc-1',
+        kind: 'peer_watch',
+        ts: '2026-03-16T08:50:00.000Z',
+        agent_id: 'app-engineering',
+        actor_id: 'controller',
+        status: 'open',
+        severity: 'orange',
+        summary: 'Lead is still waiting on workflow evidence',
+        correlation_id: 'corr-app-review',
+        evidence_refs: ['/evidence/correlation.md'],
+        counterparty_agent_ids: ['team-lead'],
+        source_kind: 'controller_event'
+      }
+    ],
+    interactions: [
+      {
+        interaction_id: 'int-1',
+        interaction_type: 'peer_watch',
+        correlation_id: 'corr-app-review',
+        started_at: '2026-03-16T08:45:00.000Z',
+        participant_agent_ids: ['app-engineering', 'team-lead'],
+        trigger_event_id: 'evt-1',
+        severity: 'yellow',
+        evidence_refs: ['/evidence/review.md'],
+        summary: 'Reviewed the missing workflow package'
+      }
+    ],
+    timeline: [
+      {
+        event_id: 'evt-3',
+        ts: '2026-03-16T08:56:00.000Z',
+        agent_id: 'app-engineering',
+        actor_id: 'controller',
+        event_type: 'timeline_note',
+        severity: 'yellow',
+        current_state: 'blocked',
+        location: 'delivery-desk',
+        summary: 'Replay captured workflow follow-up',
+        correlation_id: 'corr-app-review',
+        counterparty_agent_ids: ['team-lead'],
+        evidence_refs: ['/evidence/correlation.md'],
+        source_kind: 'timeline_replay'
+      }
+    ]
+  };
+}
+
+function buildSecondaryCorrelation(): CorrelationDrilldown {
+  return {
+    correlation_id: 'corr-app-secondary',
+    participant_agent_ids: ['app-engineering', 'growth-revenue'],
+    evidence_refs: ['/evidence/secondary-correlation.md'],
+    first_ts: '2026-03-16T08:52:00.000Z',
+    last_ts: '2026-03-16T08:54:00.000Z',
+    incident_count: 1,
+    interaction_count: 0,
+    event_count: 1,
+    incidents: [
+      {
+        incident_id: 'inc-2',
+        kind: 'handoff',
+        ts: '2026-03-16T08:52:00.000Z',
+        agent_id: 'app-engineering',
+        actor_id: 'growth-revenue',
+        status: 'completed',
+        severity: 'yellow',
+        summary: 'Secondary review handoff finished',
+        correlation_id: 'corr-app-secondary',
+        evidence_refs: ['/evidence/secondary-correlation.md'],
+        counterparty_agent_ids: ['growth-revenue'],
+        source_kind: 'controller_event'
+      }
+    ],
+    interactions: [],
+    timeline: [
+      {
+        event_id: 'evt-4',
+        ts: '2026-03-16T08:54:00.000Z',
+        agent_id: 'app-engineering',
+        actor_id: 'growth-revenue',
+        event_type: 'handoff_completed',
+        severity: 'yellow',
+        current_state: 'blocked',
+        location: 'delivery-desk',
+        summary: 'Secondary review evidence shipped',
+        correlation_id: 'corr-app-secondary',
+        counterparty_agent_ids: ['growth-revenue'],
+        evidence_refs: ['/evidence/secondary-correlation.md'],
+        source_kind: 'timeline_replay'
+      }
+    ]
+  };
+}
+
+function buildCollectorSnapshot(): CollectorSnapshot {
+  return {
+    collected_at: '2026-03-16T09:00:00.000Z',
+    actor_id: 'collector-watch',
+    summary: {
+      agent_count: 3,
+      heartbeat_count: 3,
+      tmux_observed_count: 1,
+      workspace_observed_count: 2,
+      reboot_recommended_count: 1
+    },
+    items: [
+      {
+        agent_id: 'app-engineering',
+        workspace_root: '/workspace/app-engineering',
+        session_ref: 'sess-1',
+        evidence_refs: ['/evidence/log.md'],
+        workspace_observations: [],
+        tmux_observations: [],
+        supervision: {
+          watch_target: 'growth-revenue',
+          watched_by: ['team-lead'],
+          needs_attention: true
+        },
+        heartbeat: {
+          agent_id: 'app-engineering',
+          actor_id: 'collector-watch',
+          received_at: '2026-03-16T08:59:30.000Z',
+          current_state: 'blocked',
+          active_task: 'Fix workflow issue',
+          current_location: 'delivery-desk',
+          last_meaningful_output_at: '2026-03-16T08:58:00.000Z',
+          last_file_write_at: '2026-03-16T08:57:00.000Z',
+          current_blocker: 'Waiting on review sign-off',
+          confidence_level: 'high',
+          reboot_recommended: true,
+          evidence_refs: ['/evidence/controller.md']
+        }
+      }
+    ]
+  };
+}
+
+function buildMemoryArtifacts(): MemoryArtifactIndex {
+  return {
+    generated_at: '2026-03-16T09:00:00.000Z',
+    items: [
+      {
+        artifact_ref: 'artifact/replay-bundle',
+        artifact_kind: 'evidence_ref',
+        file_name: 'replay-bundle.md',
+        first_seen_at: '2026-03-16T08:45:00.000Z',
+        last_seen_at: '2026-03-16T08:58:00.000Z',
+        mention_count: 2,
+        agent_ids: ['app-engineering'],
+        correlation_ids: ['corr-app-review'],
+        source_kinds: ['timeline_replay'],
+        latest_summary: 'Replay evidence bundle',
+        latest_event_type: 'timeline_note',
+        collector_last_modified_at: '2026-03-16T08:58:00.000Z'
+      },
+      {
+        artifact_ref: 'artifact/review-note',
+        artifact_kind: 'workspace_file',
+        file_name: 'review-note.md',
+        first_seen_at: '2026-03-16T08:42:00.000Z',
+        last_seen_at: '2026-03-16T08:57:00.000Z',
+        mention_count: 1,
+        agent_ids: ['app-engineering', 'team-lead'],
+        correlation_ids: ['corr-app-review'],
+        source_kinds: ['evidence_ref'],
+        latest_summary: 'Review note',
+        latest_event_type: 'workflow_event',
+        collector_last_modified_at: '2026-03-16T08:57:00.000Z'
+      }
+    ]
+  };
+}
+
+function buildProps(overrides: Partial<DetailsPanelProps> = {}): DetailsPanelProps {
+  return {
+    collectorSnapshot: buildCollectorSnapshot(),
+    collectorSnapshotError: null,
+    collectorSnapshotState: 'ready',
+    correlation: buildCorrelation(),
+    correlationError: null,
+    correlationState: 'ready',
+    incidentFeed: null,
+    incidentFeedError: null,
+    incidentFeedState: 'ready',
+    operations: buildOperations(),
+    operationsError: null,
+    operationsState: 'ready',
+    overviewZones: null,
+    preserveWorkflowCounterpartyCorrelation: false,
+    memoryArtifacts: buildMemoryArtifacts(),
+    memoryArtifactsError: null,
+    memoryArtifactsState: 'ready',
+    selectedAgent: buildSelectedAgent(),
+    selectedCorrelationId: 'corr-app-review',
+    selectedOperation: buildSelectedOperation(),
+    timelineReplay: null,
+    timelineReplayError: null,
+    timelineReplayState: 'ready',
+    workflow: buildWorkflow(),
+    workflowError: null,
+    workflowState: 'ready',
+    world: buildWorld(),
+    onSelectAgent: vi.fn(),
+    onSelectCorrelation: vi.fn(),
+    onSelectOperation: vi.fn(),
+    ...overrides
+  };
+}
+
+describe('DetailsPanel accountability signals', () => {
+  it('shows a selected agent responsibility chain with current evidence, sources, and correlation context', () => {
+    render(<DetailsPanel {...buildProps()} />);
+
+    const section = screen.getByRole('heading', { name: 'Audit Signals' }).closest('section');
+    expect(section).not.toBeNull();
+
+    expect(within(section!).getByText('Responsibility chain')).toBeVisible();
+    expect(
+      within(section!).getByText(
+        'Who · Team Lead -> App Engineering Agent (lead, Elevated); App Engineering Agent -> Growth Revenue Agent (peer, High risk)'
+      )
+    ).toBeVisible();
+    expect(within(section!).getByText('What · Followed up on missing workflow evidence')).toBeVisible();
+    expect(
+      within(section!).getByText(
+        'Evidence · /evidence/review.md, /evidence/log.md, /evidence/correlation.md'
+      )
+    ).toBeVisible();
+    expect(
+      within(section!).getByText(
+        'Artifacts · Replay evidence bundle (artifact/replay-bundle), Review note (artifact/review-note)'
+      )
+    ).toBeVisible();
+    expect(
+      within(section!).getByText(
+        'Source · controller_event, workflow_event, timeline_replay, evidence_ref'
+      )
+    ).toBeVisible();
+    expect(
+      within(section!).getByRole('button', {
+        name: 'Open accountability correlation corr-app-review, currently selected'
+      })
+    ).toBeVisible();
+    expect(section).toHaveTextContent('1 incidents · 1 interactions · 1 events');
+  });
+
+  it('uses the latest top-level workflow timeline event when detail feeds are empty', () => {
+    const workflow: AgentWorkflow = {
+      ...buildWorkflow(),
+      interactions: [],
+      incidents: [],
+      timeline: [
+        {
+          event_id: 'evt-older',
+          ts: '2026-03-16T08:54:00.000Z',
+          agent_id: 'app-engineering',
+          actor_id: 'controller',
+          event_type: 'timeline_note',
+          severity: 'yellow',
+          current_state: 'blocked',
+          location: 'delivery-desk',
+          summary: 'Older accountability signal',
+          correlation_id: 'corr-app-review',
+          counterparty_agent_ids: ['team-lead'],
+          evidence_refs: ['/evidence/older.md'],
+          source_kind: 'timeline_replay'
+        },
+        {
+          event_id: 'evt-latest',
+          ts: '2026-03-16T08:59:00.000Z',
+          agent_id: 'app-engineering',
+          actor_id: 'controller',
+          event_type: 'timeline_note',
+          severity: 'orange',
+          current_state: 'blocked',
+          location: 'delivery-desk',
+          summary: 'Latest accountability signal',
+          correlation_id: 'corr-app-review',
+          counterparty_agent_ids: ['team-lead'],
+          evidence_refs: ['/evidence/latest.md'],
+          source_kind: 'controller_event'
+        }
+      ],
+      detail: {
+        ...buildWorkflow().detail,
+        open_peer_watch_alerts: [],
+        recent_events: [],
+        recent_interactions: [],
+        recent_incidents: [],
+        recent_handoffs: [],
+        recent_reboots: []
+      }
+    };
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          collectorSnapshot: null,
+          correlation: null,
+          memoryArtifacts: { generated_at: '2026-03-16T09:00:00.000Z', items: [] },
+          selectedCorrelationId: null,
+          selectedOperation: null,
+          workflow
+        })}
+      />
+    );
+
+    const section = screen.getByRole('heading', { name: 'Audit Signals' }).closest('section');
+    expect(section).not.toBeNull();
+
+    expect(within(section!).getByText('What · Latest accountability signal')).toBeVisible();
+    expect(within(section!).queryByText('What · Older accountability signal')).not.toBeInTheDocument();
+  });
+
+  it('keeps evidence, artifacts, and sources aligned to the displayed correlation', () => {
+    const workflow: AgentWorkflow = {
+      ...buildWorkflow(),
+      correlation_ids: ['corr-app-secondary'],
+      detail: {
+        ...buildWorkflow().detail,
+        recent_events: [
+          {
+            ...buildWorkflow().detail.recent_events[0],
+            event_id: 'evt-review',
+            summary: 'Primary review evidence still missing',
+            correlation_id: 'corr-app-review',
+            evidence_refs: ['/evidence/review-only.md'],
+            source_kind: 'workflow_event'
+          },
+          {
+            ...buildWorkflow().detail.recent_events[0],
+            event_id: 'evt-secondary',
+            summary: 'Secondary review evidence shipped',
+            correlation_id: 'corr-app-secondary',
+            evidence_refs: ['/evidence/secondary-workflow.md'],
+            source_kind: 'handoff_log'
+          }
+        ]
+      }
+    };
+    const memoryArtifacts: MemoryArtifactIndex = {
+      generated_at: '2026-03-16T09:00:00.000Z',
+      items: [
+        ...buildMemoryArtifacts().items,
+        {
+          artifact_ref: 'artifact/secondary-bundle',
+          artifact_kind: 'evidence_ref',
+          file_name: 'secondary-bundle.md',
+          first_seen_at: '2026-03-16T08:52:00.000Z',
+          last_seen_at: '2026-03-16T08:54:00.000Z',
+          mention_count: 1,
+          agent_ids: ['app-engineering', 'growth-revenue'],
+          correlation_ids: ['corr-app-secondary'],
+          source_kinds: ['handoff_log'],
+          latest_summary: 'Secondary evidence bundle',
+          latest_event_type: 'handoff_completed',
+          collector_last_modified_at: '2026-03-16T08:54:00.000Z'
+        }
+      ]
+    };
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          correlation: buildSecondaryCorrelation(),
+          memoryArtifacts,
+          selectedCorrelationId: 'corr-app-secondary',
+          workflow
+        })}
+      />
+    );
+
+    const section = screen.getByRole('heading', { name: 'Audit Signals' }).closest('section');
+    expect(section).not.toBeNull();
+
+    expect(within(section!).getByText('What · Secondary review evidence shipped')).toBeVisible();
+    expect(
+      within(section!).getByText(
+        'Evidence · /evidence/secondary-workflow.md, /evidence/secondary-correlation.md'
+      )
+    ).toBeVisible();
+    expect(
+      within(section!).getByText('Artifacts · Secondary evidence bundle (artifact/secondary-bundle)')
+    ).toBeVisible();
+    expect(within(section!).getByText('Source · handoff_log, controller_event, timeline_replay')).toBeVisible();
+    expect(within(section!).queryByText(/review-only\.md/)).not.toBeInTheDocument();
+    expect(within(section!).queryByText(/Replay evidence bundle/)).not.toBeInTheDocument();
+    expect(within(section!).queryByText(/collector:collector-watch/)).not.toBeInTheDocument();
+    expect(within(section!).queryByRole('button', { name: /Open accountability correlation corr-app-review/ })).not.toBeInTheDocument();
+    expect(
+      within(section!).getByRole('button', {
+        name: 'Open accountability correlation corr-app-secondary, currently selected'
+      })
+    ).toBeVisible();
+  });
+
+  it('uses aligned peer-watch alerts as the live accountability signal when they are the only correlation-aligned source', () => {
+    const workflow: AgentWorkflow = {
+      ...buildWorkflow(),
+      correlation_ids: ['corr-peer-watch-only'],
+      timeline: [],
+      interactions: [],
+      incidents: [],
+      detail: {
+        ...buildWorkflow().detail,
+        open_peer_watch_alerts: [
+          {
+            alert_id: 'alert-1',
+            agent_id: 'app-engineering',
+            target_agent_id: 'growth-revenue',
+            actor_id: 'team-lead',
+            observer_agent_id: 'team-lead',
+            watcher_agent_ids: ['team-lead'],
+            severity: 'orange',
+            status: 'open',
+            current_state: 'blocked',
+            active_task: 'Escalate missing evidence',
+            summary: 'Peer watch alert: waiting on aligned workflow evidence',
+            evidence_refs: ['/evidence/peer-watch-only.md'],
+            evidence_count: 1,
+            correlation_id: 'corr-peer-watch-only',
+            source_kind: 'peer_watch_alert',
+            metadata: {}
+          }
+        ],
+        recent_events: [],
+        recent_interactions: [],
+        recent_incidents: [],
+        recent_handoffs: [],
+        recent_reboots: []
+      }
+    };
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          correlation: null,
+          memoryArtifacts: { generated_at: '2026-03-16T09:00:00.000Z', items: [] },
+          selectedCorrelationId: 'corr-peer-watch-only',
+          selectedOperation: null,
+          workflow
+        })}
+      />
+    );
+
+    const section = screen.getByRole('heading', { name: 'Audit Signals' }).closest('section');
+    expect(section).not.toBeNull();
+
+    expect(
+      within(section!).getByText('What · Peer watch alert: waiting on aligned workflow evidence')
+    ).toBeVisible();
+    expect(within(section!).getByText('Evidence · /evidence/peer-watch-only.md')).toBeVisible();
+    expect(within(section!).getByText('Source · peer_watch_alert')).toBeVisible();
+    expect(within(section!).queryByText(/What · Waiting on review sign-off/)).not.toBeInTheDocument();
+    expect(within(section!).queryByText(/What · Fix workflow issue/)).not.toBeInTheDocument();
+  });
+});

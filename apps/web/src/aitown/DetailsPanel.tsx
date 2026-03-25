@@ -187,6 +187,26 @@ function renderNamedList(values: string[], emptyLabel: string) {
   return values.length > 0 ? values.join(', ') : emptyLabel;
 }
 
+function dedupeNonEmptyStrings(values: Array<string | null | undefined>) {
+  return values.filter((value, index, list): value is string => Boolean(value) && list.indexOf(value) === index);
+}
+
+function isAlignedCorrelation(itemCorrelationId: string | null | undefined, correlationId: string | null) {
+  if (!correlationId) {
+    return true;
+  }
+
+  return itemCorrelationId === correlationId;
+}
+
+function findFirstNonEmptyString(values: Array<string | null | undefined>) {
+  return values.find((value): value is string => Boolean(value?.trim())) ?? null;
+}
+
+function selectLatestTimelineEvent(timeline: WorkflowTimelineEvent[]) {
+  return timeline.length > 0 ? timeline[timeline.length - 1] : null;
+}
+
 function renderTimestamp(value: string | null, fallback: string) {
   return value ?? fallback;
 }
@@ -899,6 +919,8 @@ export function DetailsPanel({
       ? 'Showing last operation snapshot. Operation is no longer in the active queue.'
       : null;
   const currentOperationIsStale = currentOperationWarning !== null;
+  const selectedOperationLatestEvent = currentOperationIsStale ? null : selectedOperation?.latest_event ?? null;
+  const latestWorkflowTimelineEvent = selectLatestTimelineEvent(workflow?.timeline ?? []);
   const workflowIncidents = dedupeIncidents([
     ...(workflow?.incidents ?? []),
     ...(workflow?.detail.recent_incidents ?? [])
@@ -923,6 +945,124 @@ export function DetailsPanel({
     workflowPivotCorrelationIds.length > 0 || (workflow?.counterparty_agent_ids.length ?? 0) > 0;
   const selectedCollectorItem =
     collectorSnapshot?.items.find((item) => item.agent_id === selectedAgent.agent_id) ?? null;
+  const outboundWatchers = world.watch_edges.filter((edge) => edge.from_agent_id === selectedAgent.agent_id);
+  const selectedOperationCorrelationId = currentOperationIsStale ? null : selectedOperation?.correlation_id ?? null;
+  const accountabilityCorrelationId =
+    selectedCorrelationId ?? selectedOperationCorrelationId ?? correlation?.correlation_id ?? workflow?.correlation_ids[0] ?? null;
+  const alignedWorkflowAlerts = (workflow?.detail.open_peer_watch_alerts ?? []).filter((alert) =>
+    isAlignedCorrelation(alert.correlation_id, accountabilityCorrelationId)
+  );
+  const alignedWorkflowEvents = (workflow?.detail.recent_events ?? []).filter((event) =>
+    isAlignedCorrelation(event.correlation_id, accountabilityCorrelationId)
+  );
+  const alignedWorkflowInteractions = (workflow?.detail.recent_interactions ?? []).filter((interaction) =>
+    isAlignedCorrelation(interaction.correlation_id, accountabilityCorrelationId)
+  );
+  const alignedWorkflowIncidents = (workflow?.detail.recent_incidents ?? []).filter((incident) =>
+    isAlignedCorrelation(incident.correlation_id, accountabilityCorrelationId)
+  );
+  const alignedWorkflowHandoffs = (workflow?.detail.recent_handoffs ?? []).filter((handoff) =>
+    isAlignedCorrelation(handoff.correlation_id, accountabilityCorrelationId)
+  );
+  const alignedWorkflowReboots = (workflow?.detail.recent_reboots ?? []).filter((reboot) =>
+    isAlignedCorrelation(reboot.correlation_id, accountabilityCorrelationId)
+  );
+  const alignedWorkflowTimeline = (workflow?.timeline ?? []).filter((event) =>
+    isAlignedCorrelation(event.correlation_id, accountabilityCorrelationId)
+  );
+  const alignedWorkflowIncidentHistory = (workflow?.incidents ?? []).filter((incident) =>
+    isAlignedCorrelation(incident.correlation_id, accountabilityCorrelationId)
+  );
+  const alignedWorkflowHistoryInteraction =
+    workflow?.interactions.find((interaction) =>
+      isAlignedCorrelation(interaction.correlation_id, accountabilityCorrelationId)
+    ) ?? null;
+  const alignedCorrelation = correlation && accountabilityCorrelationId === correlation.correlation_id ? correlation : null;
+  const alignedWorkflowTimelineEvent = selectLatestTimelineEvent(alignedWorkflowTimeline);
+  const alignedCorrelationTimelineEvent = selectLatestTimelineEvent(alignedCorrelation?.timeline ?? []);
+  const includeSelectedOperationSignal =
+    selectedOperationLatestEvent !== null && selectedOperationCorrelationId === accountabilityCorrelationId;
+  const accountabilityMemoryArtifacts = (memoryArtifacts?.items ?? [])
+    .filter(
+      (artifact) =>
+        accountabilityCorrelationId
+          ? artifact.correlation_ids.includes(accountabilityCorrelationId)
+          : artifact.agent_ids.includes(selectedAgent.agent_id) ||
+            (selectedOperationCorrelationId ? artifact.correlation_ids.includes(selectedOperationCorrelationId) : false)
+    )
+    .slice(0, 2);
+  const responsibilityChain = [
+    ...inboundWatchers.map((edge) => {
+      const risk = selectWatchEdgeRisk(edge);
+      const fromLabel = agentNameById.get(edge.from_agent_id) ?? edge.from_agent_id;
+
+      return `${fromLabel} -> ${selectedAgent.display_name} (${edge.watch_mode}, ${risk.label})`;
+    }),
+    ...outboundWatchers.map((edge) => {
+      const risk = selectWatchEdgeRisk(edge);
+      const toLabel = agentNameById.get(edge.to_agent_id) ?? edge.to_agent_id;
+
+      return `${selectedAgent.display_name} -> ${toLabel} (${edge.watch_mode}, ${risk.label})`;
+    })
+  ];
+  const accountabilityWhat = findFirstNonEmptyString([
+    includeSelectedOperationSignal ? selectedOperationLatestEvent?.summary : null,
+    alignedWorkflowEvents[0]?.summary,
+    alignedWorkflowInteractions[0]?.summary,
+    alignedWorkflowIncidents[0]?.summary,
+    alignedWorkflowHandoffs[0]?.summary,
+    alignedWorkflowReboots[0]?.summary,
+    alignedWorkflowTimelineEvent?.summary,
+    alignedWorkflowHistoryInteraction?.summary,
+    alignedWorkflowIncidentHistory[0]?.summary,
+    alignedCorrelation?.interactions[0]?.summary,
+    alignedCorrelation?.incidents[0]?.summary,
+    alignedCorrelationTimelineEvent?.summary,
+    alignedWorkflowAlerts[0]?.summary,
+    accountabilityCorrelationId ? null : latestWorkflowTimelineEvent?.summary,
+    accountabilityCorrelationId ? null : workflow?.interactions[0]?.summary,
+    accountabilityCorrelationId ? null : workflow?.incidents[0]?.summary,
+    selectedCollectorItem?.heartbeat.current_blocker,
+    selectedCollectorItem?.heartbeat.active_task,
+    selectedAgent.active_task
+  ]);
+  const accountabilityEvidenceRefs = dedupeNonEmptyStrings([
+    ...(includeSelectedOperationSignal ? selectedOperationLatestEvent?.evidence_refs ?? [] : []),
+    ...alignedWorkflowAlerts.flatMap((alert) => alert.evidence_refs),
+    ...alignedWorkflowEvents.flatMap((event) => event.evidence_refs),
+    ...alignedWorkflowInteractions.flatMap((interaction) => interaction.evidence_refs),
+    ...alignedWorkflowIncidents.flatMap((incident) => incident.evidence_refs),
+    ...alignedWorkflowHandoffs.flatMap((handoff) => handoff.evidence_refs),
+    ...alignedWorkflowReboots.flatMap((reboot) => reboot.evidence_refs),
+    ...alignedWorkflowTimeline.flatMap((event) => event.evidence_refs),
+    ...(workflow?.interactions
+      .filter((interaction) => isAlignedCorrelation(interaction.correlation_id, accountabilityCorrelationId))
+      .flatMap((interaction) => interaction.evidence_refs) ?? []),
+    ...alignedWorkflowIncidentHistory.flatMap((incident) => incident.evidence_refs),
+    ...(alignedCorrelation?.evidence_refs ?? []),
+    ...(accountabilityCorrelationId || !selectedCollectorItem ? [] : resolveCollectorEvidenceRefs(selectedCollectorItem))
+  ]).slice(0, 4);
+  const accountabilityArtifacts = accountabilityMemoryArtifacts.map(
+    (artifact) => `${artifact.latest_summary ?? artifact.file_name} (${artifact.artifact_ref})`
+  );
+  const accountabilitySources = dedupeNonEmptyStrings([
+    includeSelectedOperationSignal ? selectedOperationLatestEvent?.source_kind : null,
+    ...alignedWorkflowAlerts.map((alert) => alert.source_kind),
+    ...alignedWorkflowEvents.map((event) => event.source_kind),
+    ...alignedWorkflowIncidents.map((incident) => incident.source_kind),
+    ...alignedWorkflowHandoffs.map((handoff) => handoff.source_kind),
+    ...alignedWorkflowReboots.map((reboot) => reboot.source_kind),
+    ...alignedWorkflowTimeline.map((event) => event.source_kind),
+    ...alignedWorkflowIncidentHistory.map((incident) => incident.source_kind),
+    ...(alignedCorrelation?.incidents.map((incident) => incident.source_kind) ?? []),
+    ...(alignedCorrelation?.timeline.map((event) => event.source_kind) ?? []),
+    ...accountabilityMemoryArtifacts.flatMap((artifact) => artifact.source_kinds),
+    accountabilityCorrelationId || !collectorSnapshot ? null : `collector:${collectorSnapshot.actor_id}`
+  ]).slice(0, 5);
+  const accountabilityCorrelationCounts =
+    alignedCorrelation
+      ? `${alignedCorrelation.incident_count} incidents · ${alignedCorrelation.interaction_count} interactions · ${alignedCorrelation.event_count} events`
+      : null;
 
   return (
     <aside className="aitown-panel aitown-panel--details" role="complementary" aria-label="Agent details">
@@ -1054,6 +1194,33 @@ export function DetailsPanel({
         </section>
         </>
       ) : null}
+
+      <section className="aitown-details__section">
+        <h3>Audit Signals</h3>
+        <ul className="aitown-records">
+          <li className={`aitown-record severity-${selectedAgent.effective_severity}`}>
+            <strong>Responsibility chain</strong>
+            <span>{`Who · ${responsibilityChain.length > 0 ? responsibilityChain.join('; ') : 'No active watch chain'}`}</span>
+            <span>{`What · ${accountabilityWhat ?? 'No live accountability signal'}`}</span>
+            <span>{`Evidence · ${renderNamedList(accountabilityEvidenceRefs, 'No loaded evidence refs')}`}</span>
+            <span>{`Artifacts · ${renderNamedList(accountabilityArtifacts, 'No linked memory artifacts')}`}</span>
+            <span>{`Source · ${renderNamedList(accountabilitySources, 'No loaded source signals')}`}</span>
+            <span>
+              Correlation ·{' '}
+              {accountabilityCorrelationId
+                ? renderCorrelationButton({
+                    correlationId: accountabilityCorrelationId,
+                    label: accountabilityCorrelationId,
+                    buttonLabel: 'Open accountability correlation',
+                    activeCorrelationId: selectedCorrelationId,
+                    onSelectCorrelation
+                  })
+                : 'No active correlation id'}
+              {accountabilityCorrelationCounts ? ` · ${accountabilityCorrelationCounts}` : null}
+            </span>
+          </li>
+        </ul>
+      </section>
 
       <section className="aitown-details__section">
         <h3>Workflow</h3>

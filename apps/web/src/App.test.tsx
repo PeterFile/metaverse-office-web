@@ -1697,6 +1697,23 @@ afterEach(() => {
     (window as typeof window & { __AITOWN_POLL_INTERVAL_MS__?: number }).__AITOWN_POLL_INTERVAL_MS__ = 10;
 
     let operationsRequests = 0;
+    const staleOperationFixture = {
+      ...operationsFixture,
+      items: [
+        {
+          ...operationsFixture.items[0],
+          latest_event: operationsFixture.items[0].latest_event
+            ? {
+                ...operationsFixture.items[0].latest_event,
+                summary: 'Stale queue snapshot should not win',
+                source_kind: 'api_cache',
+                evidence_refs: ['/tmp/stale.md']
+              }
+            : null
+        },
+        operationsFixture.items[1]
+      ]
+    };
     vi.stubGlobal(
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
@@ -1710,7 +1727,7 @@ afterEach(() => {
 
         if (url === operationsUrl) {
           operationsRequests += 1;
-          return new Response(JSON.stringify(operationsFixture), {
+          return new Response(JSON.stringify(staleOperationFixture), {
             headers: { 'content-type': 'application/json' }
           });
         }
@@ -1754,7 +1771,9 @@ afterEach(() => {
     const operationSection = await within(details).findByRole('heading', { name: 'Current Operation' });
     expect(operationSection).toBeVisible();
 
+    const auditSignalsSection = within(details).getByRole('heading', { name: 'Audit Signals' }).closest('section');
     const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    expect(auditSignalsSection).not.toBeNull();
     expect(correlationSection).not.toBeNull();
 
     await waitFor(() => {
@@ -1762,6 +1781,19 @@ afterEach(() => {
       expect(globalThis.fetch).toHaveBeenCalledWith(selectedOperationUrl, expect.anything());
       expect(within(details).getByText('Showing last operation snapshot. operations refresh failed')).toBeVisible();
       expect(within(details).getByText('blocked · Workflow evidence is still incomplete')).toBeVisible();
+      expect(within(details).getByText('Latest event · Stale queue snapshot should not win')).toBeVisible();
+      expect(within(auditSignalsSection!).getByText('What · Agent attached workflow evidence for lead review')).toBeVisible();
+      expect(within(auditSignalsSection!).queryByText('What · Stale queue snapshot should not win')).not.toBeInTheDocument();
+      expect(
+        within(auditSignalsSection!).getByText(
+          'Evidence · /tmp/evidence.md, /tmp/reboot-note.md, /tmp/peer-watch.md'
+        )
+      ).toBeVisible();
+      expect(within(auditSignalsSection!).queryByText(/\/tmp\/secondary-evidence\.md/)).not.toBeInTheDocument();
+      expect(within(auditSignalsSection!).queryByText(/\/tmp\/stale\.md/)).not.toBeInTheDocument();
+      expect(within(auditSignalsSection!).getByText('Source · controller_event, workspace_snapshot')).toBeVisible();
+      expect(within(auditSignalsSection!).queryByText(/collector:team-lead/)).not.toBeInTheDocument();
+      expect(within(auditSignalsSection!).queryByText(/api_cache/)).not.toBeInTheDocument();
       expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
       expect(within(correlationSection!).queryByText('operations refresh failed')).not.toBeInTheDocument();
     });
@@ -1898,6 +1930,96 @@ afterEach(() => {
       expect(within(details).getByText('Showing last operation snapshot. Operation is no longer in the active queue.')).toBeVisible();
       expect(within(details).getByText('blocked · Workflow evidence is still incomplete')).toBeVisible();
     });
+  });
+
+  it('clears stale operation-derived accountability correlation when the queue snapshot expires', async () => {
+    (window as typeof window & { __AITOWN_POLL_INTERVAL_MS__?: number }).__AITOWN_POLL_INTERVAL_MS__ = 10;
+
+    let dropSelectedOperation = false;
+    const workflowWithoutCorrelations = {
+      ...workflowFixture,
+      correlation_ids: [],
+      detail: {
+        ...workflowFixture.detail,
+        open_peer_watch_alerts: []
+      }
+    };
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === '/office/overview') {
+          return new Response(JSON.stringify(overviewFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === operationsUrl) {
+          return new Response(JSON.stringify(operationsFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === selectedOperationUrl) {
+          return new Response(JSON.stringify(dropSelectedOperation ? emptyOperationsFixture : operationsFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === incidentsUrl) {
+          return new Response(JSON.stringify(incidentFeedFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === workflowUrl) {
+          return new Response(JSON.stringify(workflowWithoutCorrelations), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === correlationUrl) {
+          return new Response(JSON.stringify(correlationFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        return resolveTestFetchResponse(url);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent from active queue' }));
+
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    const auditSection = within(details).getByRole('heading', { name: 'Audit Signals' }).closest('section');
+    expect(correlationSection).not.toBeNull();
+    expect(auditSection).not.toBeNull();
+
+    expect(await within(correlationSection!).findByText('corr-app-review')).toBeVisible();
+    expect(
+      within(auditSection!).getByRole('button', {
+        name: 'Open accountability correlation corr-app-review, currently selected'
+      })
+    ).toBeVisible();
+
+    dropSelectedOperation = true;
+
+    await waitFor(() => {
+      expect(within(details).getByText('Showing last operation snapshot. Operation is no longer in the active queue.')).toBeVisible();
+      expect(within(correlationSection!).getByText('No correlation selected.')).toBeVisible();
+      expect(within(auditSection!).getByText('Correlation · No active correlation id')).toBeVisible();
+    });
+
+    expect(within(correlationSection!).queryByText('corr-app-review')).not.toBeInTheDocument();
+    expect(
+      within(auditSection!).queryByRole('button', { name: /Open accountability correlation corr-app-review/ })
+    ).not.toBeInTheDocument();
   });
 
   it('falls back to the live workflow correlation when the queue snapshot becomes stale', async () => {

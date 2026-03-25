@@ -616,13 +616,16 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-  it('renders the AI Town shell as the default frontend', async () => {
+  it('renders the operator shell as the default frontend', async () => {
     render(<App />);
 
-    expect(await screen.findByRole('heading', { name: 'Metaverse Town' })).toBeVisible();
-    expect(screen.getByText('AI Town-derived world shell for Metaverse Office.')).toBeVisible();
+    expect(await screen.findByRole('heading', { name: 'Metaverse Office' })).toBeVisible();
+    expect(screen.getByText('Metaverse Office operator shell')).toBeVisible();
+    expect(
+      screen.getByText('Operator shell for real-running, supervised, replayable, accountable agents.')
+    ).toBeVisible();
 
-    const worldRegion = screen.getByRole('region', { name: 'Town world' });
+    const worldRegion = screen.getByRole('region', { name: 'Office world' });
     expect(worldRegion).toBeVisible();
     expect(within(worldRegion).getByText('Loading world renderer...')).toBeVisible();
 
@@ -639,7 +642,7 @@ afterEach(() => {
     expect(hubTrigger).toBeVisible();
     expect(screen.queryByRole('complementary', { name: 'Agent details' })).not.toBeInTheDocument();
 
-    const worldRegion = screen.getByRole('region', { name: 'Town world' });
+    const worldRegion = screen.getByRole('region', { name: 'Office world' });
     expect(worldRegion.className).toContain('aitown-panel--game-fullscreen');
 
     await user.click(hubTrigger);
@@ -2838,7 +2841,7 @@ afterEach(() => {
 
     render(<App />);
 
-    expect(await screen.findByRole('heading', { name: 'Metaverse Town' })).toBeVisible();
+    expect(await screen.findByRole('heading', { name: 'Metaverse Office' })).toBeVisible();
     expect(screen.getByText(/Snapshot 2026-03-16T09:00:00.000Z/)).toBeVisible();
 
     expect(await screen.findByText('Showing last office snapshot.')).toBeVisible();

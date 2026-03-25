@@ -564,15 +564,15 @@ function AppInner() {
   return (
     <main className="aitown-shell game-background">
       <section className="aitown-shell__layout aitown-shell__layout--fullscreen">
-        <section className="aitown-panel aitown-panel--game aitown-panel--game-fullscreen" role="region" aria-label="Town world">
+        <section className="aitown-panel aitown-panel--game aitown-panel--game-fullscreen" role="region" aria-label="Office world">
           <header className="aitown-shell__header">
             <div className="aitown-shell__brand">
-              <span className="aitown-shell__eyebrow">Metaverse Office</span>
-              <h1 className="game-title">Metaverse Town</h1>
-              <p>AI Town-derived world shell for Metaverse Office.</p>
+              <span className="aitown-shell__eyebrow">Metaverse Office operator shell</span>
+              <h1 className="game-title">Metaverse Office</h1>
+              <p>Operator shell for real-running, supervised, replayable, accountable agents.</p>
             </div>
 
-            <div className="aitown-shell__stats" aria-label="Town summary">
+            <div className="aitown-shell__stats" aria-label="Office summary">
               <div className="aitown-shell__stat">
                 <span>Agents</span>
                 <strong>{overviewResource.data?.summary.agent_count ?? 0}</strong>

@@ -172,6 +172,103 @@ function renderAgentPivotList({
   });
 }
 
+function renderResponsibilityAgent({
+  agentId,
+  label,
+  currentAgentId,
+  navigableAgentIds,
+  correlationId = null,
+  onSelectAgent
+}: {
+  agentId: string;
+  label: string;
+  currentAgentId: string;
+  navigableAgentIds: Set<string>;
+  correlationId?: string | null;
+  onSelectAgent: (agentId: string | null, correlationId?: string | null) => void;
+}) {
+  if (agentId === currentAgentId || !navigableAgentIds.has(agentId)) {
+    return label;
+  }
+
+  return renderAgentPivotButton({
+    agentId,
+    label,
+    ariaLabel: `Select responsibility chain agent ${agentId}`,
+    correlationId,
+    onSelectAgent
+  });
+}
+
+function renderResponsibilityChain({
+  selectedAgentId,
+  selectedAgentLabel,
+  inboundWatchers,
+  outboundWatchers,
+  agentNameById,
+  navigableAgentIds,
+  correlationId,
+  onSelectAgent
+}: {
+  selectedAgentId: string;
+  selectedAgentLabel: string;
+  inboundWatchers: WorldState['watch_edges'];
+  outboundWatchers: WorldState['watch_edges'];
+  agentNameById: Map<string, string>;
+  navigableAgentIds: Set<string>;
+  correlationId?: string | null;
+  onSelectAgent: (agentId: string | null, correlationId?: string | null) => void;
+}) {
+  const chainItems = [
+    ...inboundWatchers.map((edge) => ({
+      key: `inbound-${edge.from_agent_id}-${edge.to_agent_id}-${edge.watch_mode}`,
+      fromAgentId: edge.from_agent_id,
+      fromLabel: agentNameById.get(edge.from_agent_id) ?? edge.from_agent_id,
+      toAgentId: selectedAgentId,
+      toLabel: selectedAgentLabel,
+      watchMode: edge.watch_mode,
+      riskLabel: selectWatchEdgeRisk(edge).label
+    })),
+    ...outboundWatchers.map((edge) => ({
+      key: `outbound-${edge.from_agent_id}-${edge.to_agent_id}-${edge.watch_mode}`,
+      fromAgentId: selectedAgentId,
+      fromLabel: selectedAgentLabel,
+      toAgentId: edge.to_agent_id,
+      toLabel: agentNameById.get(edge.to_agent_id) ?? edge.to_agent_id,
+      watchMode: edge.watch_mode,
+      riskLabel: selectWatchEdgeRisk(edge).label
+    }))
+  ];
+
+  if (chainItems.length === 0) {
+    return 'No active watch chain';
+  }
+
+  return chainItems.map((item, index) => (
+    <span key={item.key}>
+      {index > 0 ? '; ' : null}
+      {renderResponsibilityAgent({
+        agentId: item.fromAgentId,
+        label: item.fromLabel,
+        currentAgentId: selectedAgentId,
+        navigableAgentIds,
+        correlationId,
+        onSelectAgent
+      })}
+      {' -> '}
+      {renderResponsibilityAgent({
+        agentId: item.toAgentId,
+        label: item.toLabel,
+        currentAgentId: selectedAgentId,
+        navigableAgentIds,
+        correlationId,
+        onSelectAgent
+      })}
+      {` (${item.watchMode}, ${item.riskLabel})`}
+    </span>
+  ));
+}
+
 function renderEvidenceRefs(evidenceRefs: string[]) {
   return evidenceRefs.length > 0 ? evidenceRefs.join(', ') : 'No evidence refs';
 }
@@ -1165,20 +1262,6 @@ export function DetailsPanel({
             (selectedOperationCorrelationId ? artifact.correlation_ids.includes(selectedOperationCorrelationId) : false)
     )
     .slice(0, 2);
-  const responsibilityChain = [
-    ...inboundWatchers.map((edge) => {
-      const risk = selectWatchEdgeRisk(edge);
-      const fromLabel = agentNameById.get(edge.from_agent_id) ?? edge.from_agent_id;
-
-      return `${fromLabel} -> ${selectedAgent.display_name} (${edge.watch_mode}, ${risk.label})`;
-    }),
-    ...outboundWatchers.map((edge) => {
-      const risk = selectWatchEdgeRisk(edge);
-      const toLabel = agentNameById.get(edge.to_agent_id) ?? edge.to_agent_id;
-
-      return `${selectedAgent.display_name} -> ${toLabel} (${edge.watch_mode}, ${risk.label})`;
-    })
-  ];
   const accountabilityWhat = findFirstNonEmptyString([
     includeSelectedOperationSignal ? selectedOperationLatestEvent?.summary : null,
     alignedWorkflowEvents[0]?.summary,
@@ -1374,7 +1457,19 @@ export function DetailsPanel({
         <ul className="aitown-records">
           <li className={`aitown-record severity-${selectedAgent.effective_severity}`}>
             <strong>Responsibility chain</strong>
-            <span>{`Who · ${responsibilityChain.length > 0 ? responsibilityChain.join('; ') : 'No active watch chain'}`}</span>
+            <span>
+              Who ·{' '}
+              {renderResponsibilityChain({
+                selectedAgentId: selectedAgent.agent_id,
+                selectedAgentLabel: selectedAgent.display_name,
+                inboundWatchers,
+                outboundWatchers,
+                agentNameById,
+                navigableAgentIds,
+                correlationId: accountabilityCorrelationId,
+                onSelectAgent
+              })}
+            </span>
             <span>{`What · ${accountabilityWhat ?? 'No live accountability signal'}`}</span>
             <span>{`Evidence · ${renderNamedList(accountabilityEvidenceRefs, 'No loaded evidence refs')}`}</span>
             <span>{`Artifacts · ${renderNamedList(accountabilityArtifacts, 'No linked memory artifacts')}`}</span>

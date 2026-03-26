@@ -522,6 +522,54 @@ describe('DetailsPanel accountability signals', () => {
     expect(within(correlationCard!).getByText('State · blocked -> reviewing')).toBeVisible();
   });
 
+  it('renders read-only observability metadata for correlation and replay timeline events', () => {
+    render(
+      <DetailsPanel
+        {...buildProps({
+          selectedAgent: null,
+          selectedOperation: null,
+          timelineReplay: {
+            items: [
+              {
+                event_id: 'evt-replay',
+                ts: '2026-03-16T08:59:00.000Z',
+                agent_id: 'app-engineering',
+                actor_id: 'team-lead',
+                event_type: 'peer_watch_alert_raised',
+                severity: 'orange',
+                current_state: 'blocked',
+                location: 'delivery-desk',
+                summary: 'Replay event with observability metadata',
+                correlation_id: 'corr-app-review',
+                counterparty_agent_ids: ['team-lead'],
+                evidence_refs: ['/evidence/replay.md'],
+                source_kind: 'controller_event'
+              }
+            ]
+          }
+        })}
+      />
+    );
+
+    const correlationSection = screen.getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    const replaySection = screen.getByRole('heading', { name: 'Timeline Replay' }).closest('section');
+    expect(correlationSection).not.toBeNull();
+    expect(replaySection).not.toBeNull();
+
+    const correlationCard = within(correlationSection!).getByText('Replay captured workflow follow-up').closest('li');
+    const replayCard = within(replaySection!).getByText('Replay event with observability metadata').closest('li');
+    expect(correlationCard).not.toBeNull();
+    expect(replayCard).not.toBeNull();
+
+    expect(within(correlationCard!).getByText('At · 2026-03-16T08:56:00.000Z')).toBeVisible();
+    expect(within(correlationCard!).getByText('Actor · controller')).toBeVisible();
+    expect(within(correlationCard!).getByText('State · blocked')).toBeVisible();
+
+    expect(within(replayCard!).getByText('At · 2026-03-16T08:59:00.000Z')).toBeVisible();
+    expect(within(replayCard!).getByText('Actor · team-lead')).toBeVisible();
+    expect(within(replayCard!).getByText('State · blocked')).toBeVisible();
+  });
+
   it('shows a selected agent responsibility chain with current evidence, sources, and correlation context', () => {
     render(<DetailsPanel {...buildProps()} />);
 

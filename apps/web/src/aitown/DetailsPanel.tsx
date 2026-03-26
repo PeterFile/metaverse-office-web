@@ -286,7 +286,10 @@ function renderCorrelationTimelineEvent(event: WorkflowTimelineEvent) {
   return (
     <li key={event.event_id} className={`aitown-record severity-${event.severity}`}>
       <strong>{event.summary}</strong>
+      <span>{`At · ${renderTimestamp(event.ts, 'No event timestamp')}`}</span>
+      <span>{`Actor · ${event.actor_id}`}</span>
       <span>{`Timeline · ${event.event_type} · ${event.location}`}</span>
+      <span>{`State · ${event.current_state}`}</span>
       <span>{`Severity · ${SEVERITY_LABELS[event.severity]}`}</span>
       <span>{`Counterparties · ${renderCounterparties(event.counterparty_agent_ids)}`}</span>
       <span>{`Evidence · ${renderEvidenceRefs(event.evidence_refs)}`}</span>
@@ -317,8 +320,11 @@ function renderReplayTimelineEvent({
   return (
     <li key={event.event_id} className={`aitown-record severity-${event.severity}`}>
       <strong>{event.summary}</strong>
+      <span>{`At · ${renderTimestamp(event.ts, 'No event timestamp')}`}</span>
+      <span>{`Actor · ${event.actor_id}`}</span>
       <span>{`Event type · ${event.event_type}`}</span>
       <span>{`Location · ${event.location}`}</span>
+      <span>{`State · ${event.current_state}`}</span>
       <span>{`Severity · ${SEVERITY_LABELS[event.severity]}`}</span>
       <span>{`Counterparties · ${renderCounterparties(event.counterparty_agent_ids)}`}</span>
       <span>{`Evidence · ${renderEvidenceRefs(event.evidence_refs)}`}</span>

@@ -1022,6 +1022,52 @@ describe('DetailsPanel shared memory', () => {
     expect(onSelectAgent).toHaveBeenCalledWith('team-lead', 'corr-app-review');
   });
 
+  it('falls back to the artifact correlation when no correlation is currently selected', async () => {
+    const user = userEvent.setup();
+    const onSelectAgent = vi.fn();
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          memoryArtifacts: {
+            generated_at: '2026-03-16T09:00:00.000Z',
+            items: [
+              {
+                artifact_ref: 'artifact/secondary-review',
+                artifact_kind: 'evidence_ref',
+                file_name: 'secondary-review.md',
+                first_seen_at: '2026-03-16T08:52:00.000Z',
+                last_seen_at: '2026-03-16T08:54:00.000Z',
+                mention_count: 1,
+                agent_ids: ['app-engineering', 'growth-revenue'],
+                correlation_ids: ['', 'corr-app-secondary', 'corr-app-review'],
+                source_kinds: ['controller_event'],
+                latest_summary: 'Secondary review memory anchor',
+                latest_event_type: 'handoff_completed',
+                collector_last_modified_at: '2026-03-16T08:54:00.000Z'
+              }
+            ]
+          },
+          onSelectAgent,
+          selectedAgent: null,
+          selectedCorrelationId: null,
+          selectedOperation: null
+        })}
+      />
+    );
+
+    const section = screen.getByRole('heading', { name: 'Shared Memory' }).closest('section');
+    expect(section).not.toBeNull();
+
+    await user.click(
+      within(section!).getByRole('button', {
+        name: 'Select shared memory agent growth-revenue'
+      })
+    );
+
+    expect(onSelectAgent).toHaveBeenCalledWith('growth-revenue', 'corr-app-secondary');
+  });
+
   it('renders a no-correlation artifact path without shared-memory correlation pivots', () => {
     render(
       <DetailsPanel

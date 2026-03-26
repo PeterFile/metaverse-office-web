@@ -21,6 +21,10 @@ const crewOverviewSelectedCorrelationMemoryArtifactsUrl =
 const teamLeadMemoryArtifactsUrl = '/memory/artifacts?limit=4&window=60m&agent_id=team-lead';
 const teamLeadSelectedCorrelationMemoryArtifactsUrl =
   '/memory/artifacts?limit=4&window=60m&agent_id=team-lead&correlation_id=corr-app-review';
+const growthRevenueSelectedSecondaryCorrelationMemoryArtifactsUrl =
+  '/memory/artifacts?limit=4&window=60m&agent_id=growth-revenue&correlation_id=corr-app-secondary';
+const growthRevenueSelectedReviewCorrelationMemoryArtifactsUrl =
+  '/memory/artifacts?limit=4&window=60m&agent_id=growth-revenue&correlation_id=corr-app-review';
 const selectedCorrelationMemoryArtifactsUrl =
   '/memory/artifacts?limit=4&window=60m&agent_id=app-engineering&correlation_id=corr-app-review';
 const collectorSnapshotUrl = '/collectors/controller-snapshot';
@@ -757,6 +761,46 @@ const selectedCorrelationMemoryArtifactsFixture = {
   ]
 };
 
+const growthRevenueSelectedSecondaryCorrelationMemoryArtifactsFixture = {
+  generated_at: '2026-03-16T09:00:00.000Z',
+  items: [
+    {
+      artifact_ref: '/tmp/secondary-evidence.md',
+      artifact_kind: 'evidence_ref',
+      file_name: 'secondary-evidence.md',
+      first_seen_at: '2026-03-16T08:52:00.000Z',
+      last_seen_at: '2026-03-16T08:52:00.000Z',
+      mention_count: 1,
+      agent_ids: ['app-engineering', 'growth-revenue'],
+      correlation_ids: ['corr-app-secondary'],
+      source_kinds: ['controller_event'],
+      latest_summary: 'Growth revenue preserved the artifact-selected correlation',
+      latest_event_type: 'handoff_completed',
+      collector_last_modified_at: null
+    }
+  ]
+};
+
+const growthRevenueSelectedReviewCorrelationMemoryArtifactsFixture = {
+  generated_at: '2026-03-16T09:00:00.000Z',
+  items: [
+    {
+      artifact_ref: '/tmp/evidence.md',
+      artifact_kind: 'evidence_ref',
+      file_name: 'evidence.md',
+      first_seen_at: '2026-03-16T08:45:00.000Z',
+      last_seen_at: '2026-03-16T08:58:00.000Z',
+      mention_count: 2,
+      agent_ids: ['app-engineering', 'growth-revenue'],
+      correlation_ids: ['corr-app-review'],
+      source_kinds: ['controller_event'],
+      latest_summary: 'Growth revenue preserved the active crew-overview correlation',
+      latest_event_type: 'peer_watch_alert_raised',
+      collector_last_modified_at: null
+    }
+  ]
+};
+
 const crewOverviewSelectedCorrelationMemoryArtifactsFixture = {
   generated_at: '2026-03-16T09:00:00.000Z',
   items: [
@@ -838,6 +882,14 @@ function resolveDefaultFetchResponse(url: string) {
 
   if (url === selectedCorrelationMemoryArtifactsUrl) {
     return jsonResponse(selectedCorrelationMemoryArtifactsFixture);
+  }
+
+  if (url === growthRevenueSelectedSecondaryCorrelationMemoryArtifactsUrl) {
+    return jsonResponse(growthRevenueSelectedSecondaryCorrelationMemoryArtifactsFixture);
+  }
+
+  if (url === growthRevenueSelectedReviewCorrelationMemoryArtifactsUrl) {
+    return jsonResponse(growthRevenueSelectedReviewCorrelationMemoryArtifactsFixture);
   }
 
   if (url === collectorSnapshotUrl) {
@@ -1113,6 +1165,52 @@ afterEach(() => {
     });
   });
 
+  it('preserves the active crew-overview correlation when pivoting through shared-memory agents', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    const memorySection = within(details).getByRole('heading', { name: 'Shared Memory' }).closest('section');
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    expect(memorySection).not.toBeNull();
+    expect(correlationSection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+      expect(
+        within(memorySection!).getByRole('button', {
+          name: 'Select shared memory agent growth-revenue'
+        })
+      ).toBeVisible();
+    });
+
+    await user.click(
+      within(memorySection!).getByRole('button', {
+        name: 'Select shared memory agent growth-revenue'
+      })
+    );
+
+    await waitFor(() => {
+      const activeCorrelationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+      const activeMemorySection = within(details).getByRole('heading', { name: 'Shared Memory' }).closest('section');
+
+      expect(activeCorrelationSection).not.toBeNull();
+      expect(activeMemorySection).not.toBeNull();
+      expect(within(details).getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+      expect(within(activeCorrelationSection!).getByText('corr-app-review')).toBeVisible();
+      expect(
+        within(activeMemorySection!).getByText('Growth revenue preserved the active crew-overview correlation')
+      ).toBeVisible();
+    });
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(growthRevenueWorkflowUrl, expect.anything());
+    expect(globalThis.fetch).toHaveBeenCalledWith(correlationUrl, expect.anything());
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      growthRevenueSelectedReviewCorrelationMemoryArtifactsUrl,
+      expect.anything()
+    );
+  });
+
   it('shows selected-agent artifact context with the agent filter when no correlation is active', async () => {
     const user = userEvent.setup();
     render(<App />);
@@ -1203,6 +1301,65 @@ afterEach(() => {
     expect(globalThis.fetch).toHaveBeenCalledWith(teamLeadWorkflowUrl, expect.anything());
     expect(globalThis.fetch).toHaveBeenCalledWith(correlationUrl, expect.anything());
     expect(globalThis.fetch).toHaveBeenCalledWith(teamLeadSelectedCorrelationMemoryArtifactsUrl, expect.anything());
+  });
+
+  it('falls back to the artifact correlation when pivoting from crew overview through shared memory', async () => {
+    const crewOverviewWithoutCorrelationIncidentFeedFixture = {
+      items: incidentFeedFixture.items.map((incident) => ({
+        ...incident,
+        correlation_id: null
+      }))
+    };
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === incidentsUrl) {
+          return jsonResponse(crewOverviewWithoutCorrelationIncidentFeedFixture);
+        }
+
+        return resolveTestFetchResponse(url);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    const memorySection = within(details).getByRole('heading', { name: 'Shared Memory' }).closest('section');
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    expect(memorySection).not.toBeNull();
+    expect(correlationSection).not.toBeNull();
+
+    expect(within(correlationSection!).getByText('No correlation selected.')).toBeVisible();
+
+    await user.click(
+      within(memorySection!).getByRole('button', {
+        name: 'Select shared memory agent growth-revenue'
+      })
+    );
+
+    await waitFor(() => {
+      const activeCorrelationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+      const activeMemorySection = within(details).getByRole('heading', { name: 'Shared Memory' }).closest('section');
+
+      expect(activeCorrelationSection).not.toBeNull();
+      expect(activeMemorySection).not.toBeNull();
+      expect(within(details).getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+      expect(within(activeCorrelationSection!).getByText('corr-app-secondary')).toBeVisible();
+      expect(
+        within(activeMemorySection!).getByText('Growth revenue preserved the artifact-selected correlation')
+      ).toBeVisible();
+    });
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(growthRevenueWorkflowUrl, expect.anything());
+    expect(globalThis.fetch).toHaveBeenCalledWith(secondaryCorrelationUrl, expect.anything());
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      growthRevenueSelectedSecondaryCorrelationMemoryArtifactsUrl,
+      expect.anything()
+    );
   });
 
   it('shows attention queue, watch topology, and enriched incident cards in crew overview', async () => {

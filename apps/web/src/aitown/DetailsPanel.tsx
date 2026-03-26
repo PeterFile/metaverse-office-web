@@ -459,6 +459,9 @@ function renderSharedMemoryArtifact({
   onSelectAgent: (agentId: string | null, correlationId?: string | null) => void;
   onSelectCorrelation: (correlationId: string | null) => void;
 }) {
+  const artifactCorrelationId = findFirstNonEmptyString(artifact.correlation_ids);
+  const preservedCorrelationId = activeCorrelationId ?? artifactCorrelationId;
+
   return (
     <li key={artifact.artifact_ref} className="aitown-record">
       <strong>{artifact.latest_summary ?? artifact.file_name}</strong>
@@ -473,7 +476,7 @@ function renderSharedMemoryArtifact({
           navigableAgentIds,
           emptyLabel: 'No agents',
           ariaLabelPrefix: 'Select shared memory agent',
-          correlationId: activeCorrelationId,
+          correlationId: preservedCorrelationId,
           onSelectAgent
         })}
       </span>
@@ -797,12 +800,7 @@ export function DetailsPanel({
     )
     .sort(compareCollectorItems)
     .slice(0, 3);
-  const sharedMemoryActiveCorrelationId =
-    selectedAgent !== null
-      ? selectedCorrelationId
-      : preserveWorkflowCounterpartyCorrelation
-        ? selectedCorrelationId
-        : null;
+  const sharedMemoryActiveCorrelationId = selectedCorrelationId;
 
   if (!selectedAgent) {
     return (

@@ -838,7 +838,7 @@ test.describe('operator shell smoke', () => {
 
     await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
     await expect(detailsPanel.getByRole('heading', { name: 'Workflow' })).toBeVisible();
-    await expect(detailsPanel.getByText('Prepare handoff notes')).toBeVisible();
+    await expect(detailsPanel.locator('.aitown-details__head').getByText('Prepare handoff notes', { exact: true })).toBeVisible();
     await expect(detailsPanel.getByText('meeting-zone', { exact: true })).toBeVisible();
     await expect(workflowSection.getByText('No open watch alerts.')).toBeVisible();
     const handoffIncidentRecord = incidentSection.getByText('Lead completed the revenue handoff').locator('..');

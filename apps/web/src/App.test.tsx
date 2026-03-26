@@ -1065,8 +1065,15 @@ afterEach(() => {
 
     await waitFor(() => {
       expect(within(memorySection!).getByText('Crew-overview manual correlation memory slice')).toBeVisible();
-      expect(within(memorySection!).getByText('Correlations · corr-app-secondary')).toBeVisible();
+      expect(
+        within(memorySection!).getByRole('button', {
+          name: 'Open shared memory correlation corr-app-secondary, currently selected'
+        })
+      ).toBeVisible();
     });
+    expect(within(memorySection!).getByText('Latest event type · handoff_completed')).toBeVisible();
+    expect(within(memorySection!).getByText('Source kinds · controller_event')).toBeVisible();
+    expect(within(memorySection!).getByText('Collector modified · 2026-03-16T08:52:00.000Z')).toBeVisible();
     expect(
       within(memorySection!).queryByText('Workflow evidence anchor for the lead review trail')
     ).not.toBeInTheDocument();
@@ -1091,6 +1098,15 @@ afterEach(() => {
 
     expect(await within(memorySection!).findByText('Team lead review notes stayed local to the agent context')).toBeVisible();
     expect(within(memorySection!).getByText('Agents · team-lead')).toBeVisible();
+    expect(within(memorySection!).getByText('Correlations · No correlation ids')).toBeVisible();
+    expect(within(memorySection!).getByText('Latest event type · agent_noted')).toBeVisible();
+    expect(within(memorySection!).getByText('Source kinds · workspace_snapshot')).toBeVisible();
+    expect(within(memorySection!).getByText('Collector modified · 2026-03-16T08:59:00.000Z')).toBeVisible();
+    expect(
+      within(memorySection!).queryByRole('button', {
+        name: /Open shared memory correlation/
+      })
+    ).not.toBeInTheDocument();
     expect(globalThis.fetch).toHaveBeenCalledWith(teamLeadMemoryArtifactsUrl, expect.anything());
   });
 
@@ -1114,7 +1130,11 @@ afterEach(() => {
     expect(memorySection).not.toBeNull();
 
     expect(await within(memorySection!).findByText('Correlation-scoped evidence trail for the missing workflow review')).toBeVisible();
-    expect(within(memorySection!).getByText('Correlations · corr-app-review')).toBeVisible();
+    expect(
+      within(memorySection!).getByRole('button', {
+        name: 'Open shared memory correlation corr-app-review, currently selected'
+      })
+    ).toBeVisible();
     expect(globalThis.fetch).toHaveBeenCalledWith(selectedCorrelationMemoryArtifactsUrl, expect.anything());
   });
 

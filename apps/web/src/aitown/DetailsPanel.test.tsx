@@ -481,6 +481,44 @@ function buildProps(overrides: Partial<DetailsPanelProps> = {}): DetailsPanelPro
 }
 
 describe('DetailsPanel accountability signals', () => {
+  it('renders incident feed cards with timestamp and actor metadata', () => {
+    render(
+      <DetailsPanel
+        {...buildProps({
+          incidentFeed: {
+            items: [
+              {
+                incident_id: 'inc-feed-1',
+                kind: 'peer_watch',
+                ts: '2026-03-16T08:50:00.000Z',
+                agent_id: 'app-engineering',
+                actor_id: 'team-lead',
+                status: 'open',
+                severity: 'orange',
+                summary: 'Lead is still waiting on workflow evidence',
+                correlation_id: 'corr-app-review',
+                evidence_refs: ['/evidence/review.md'],
+                counterparty_agent_ids: ['team-lead'],
+                source_kind: 'controller_event'
+              }
+            ]
+          },
+          selectedAgent: null,
+          selectedOperation: null
+        })}
+      />
+    );
+
+    const section = screen.getByRole('heading', { name: 'Incident Feed' }).closest('section');
+    expect(section).not.toBeNull();
+
+    const incidentCard = within(section!).getByText('Lead is still waiting on workflow evidence').closest('li');
+    expect(incidentCard).not.toBeNull();
+
+    expect(within(incidentCard!).getByText('At · 2026-03-16T08:50:00.000Z')).toBeVisible();
+    expect(within(incidentCard!).getByText('Actor · team-lead')).toBeVisible();
+  });
+
   it('renders workflow and correlation interaction cards with timing and transition metadata', () => {
     const interaction = {
       ...buildCorrelation().interactions[0],

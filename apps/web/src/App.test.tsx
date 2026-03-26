@@ -19,6 +19,8 @@ const memoryArtifactsUrl = '/memory/artifacts?limit=4&window=60m';
 const crewOverviewSelectedCorrelationMemoryArtifactsUrl =
   '/memory/artifacts?limit=4&window=60m&correlation_id=corr-app-secondary';
 const teamLeadMemoryArtifactsUrl = '/memory/artifacts?limit=4&window=60m&agent_id=team-lead';
+const teamLeadSelectedCorrelationMemoryArtifactsUrl =
+  '/memory/artifacts?limit=4&window=60m&agent_id=team-lead&correlation_id=corr-app-review';
 const selectedCorrelationMemoryArtifactsUrl =
   '/memory/artifacts?limit=4&window=60m&agent_id=app-engineering&correlation_id=corr-app-review';
 const collectorSnapshotUrl = '/collectors/controller-snapshot';
@@ -715,6 +717,26 @@ const teamLeadMemoryArtifactsFixture = {
   ]
 };
 
+const teamLeadSelectedCorrelationMemoryArtifactsFixture = {
+  generated_at: '2026-03-16T09:00:00.000Z',
+  items: [
+    {
+      artifact_ref: '/tmp/evidence.md',
+      artifact_kind: 'evidence_ref',
+      file_name: 'evidence.md',
+      first_seen_at: '2026-03-16T08:40:00.000Z',
+      last_seen_at: '2026-03-16T08:58:00.000Z',
+      mention_count: 3,
+      agent_ids: ['app-engineering', 'team-lead'],
+      correlation_ids: ['corr-app-review'],
+      source_kinds: ['controller_event', 'workspace_snapshot'],
+      latest_summary: 'Team lead preserved the active review evidence context',
+      latest_event_type: 'peer_watch_alert_raised',
+      collector_last_modified_at: '2026-03-16T08:58:00.000Z'
+    }
+  ]
+};
+
 const selectedCorrelationMemoryArtifactsFixture = {
   generated_at: '2026-03-16T09:00:00.000Z',
   items: [
@@ -808,6 +830,10 @@ function resolveDefaultFetchResponse(url: string) {
 
   if (url === teamLeadMemoryArtifactsUrl) {
     return jsonResponse(teamLeadMemoryArtifactsFixture);
+  }
+
+  if (url === teamLeadSelectedCorrelationMemoryArtifactsUrl) {
+    return jsonResponse(teamLeadSelectedCorrelationMemoryArtifactsFixture);
   }
 
   if (url === selectedCorrelationMemoryArtifactsUrl) {
@@ -1098,7 +1124,7 @@ afterEach(() => {
     expect(memorySection).not.toBeNull();
 
     expect(await within(memorySection!).findByText('Team lead review notes stayed local to the agent context')).toBeVisible();
-    expect(within(memorySection!).getByText('Agents · team-lead')).toBeVisible();
+    expect(memorySection).toHaveTextContent('Agents · team-lead');
     expect(within(memorySection!).getByText('Correlations · No correlation ids')).toBeVisible();
     expect(within(memorySection!).getByText('Latest event type · agent_noted')).toBeVisible();
     expect(within(memorySection!).getByText('Source kinds · workspace_snapshot')).toBeVisible();
@@ -1137,6 +1163,46 @@ afterEach(() => {
       })
     ).toBeVisible();
     expect(globalThis.fetch).toHaveBeenCalledWith(selectedCorrelationMemoryArtifactsUrl, expect.anything());
+  });
+
+  it('preserves the active correlation when pivoting through shared-memory agents', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
+
+    const memorySection = within(details).getByRole('heading', { name: 'Shared Memory' }).closest('section');
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    expect(memorySection).not.toBeNull();
+    expect(correlationSection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+      expect(
+        within(memorySection!).getByRole('button', {
+          name: 'Select shared memory agent team-lead'
+        })
+      ).toBeVisible();
+    });
+
+    await user.click(
+      within(memorySection!).getByRole('button', {
+        name: 'Select shared memory agent team-lead'
+      })
+    );
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'Team Lead' })).toBeVisible();
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+      expect(
+        within(memorySection!).getByText('Team lead preserved the active review evidence context')
+      ).toBeVisible();
+    });
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(teamLeadWorkflowUrl, expect.anything());
+    expect(globalThis.fetch).toHaveBeenCalledWith(correlationUrl, expect.anything());
+    expect(globalThis.fetch).toHaveBeenCalledWith(teamLeadSelectedCorrelationMemoryArtifactsUrl, expect.anything());
   });
 
   it('shows attention queue, watch topology, and enriched incident cards in crew overview', async () => {

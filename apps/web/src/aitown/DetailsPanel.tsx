@@ -425,10 +425,16 @@ function renderWorkflowPeerWatchAlert({
 function renderSharedMemoryArtifact({
   artifact,
   activeCorrelationId,
+  currentAgentId,
+  navigableAgentIds,
+  onSelectAgent,
   onSelectCorrelation
 }: {
   artifact: MemoryArtifact;
   activeCorrelationId: string | null;
+  currentAgentId: string | null;
+  navigableAgentIds: Set<string>;
+  onSelectAgent: (agentId: string | null, correlationId?: string | null) => void;
   onSelectCorrelation: (correlationId: string | null) => void;
 }) {
   return (
@@ -437,7 +443,18 @@ function renderSharedMemoryArtifact({
       <span>{`Artifact · ${artifact.file_name} · ${renderDisplayState(artifact.artifact_kind)}`}</span>
       <span>{`Ref · ${artifact.artifact_ref}`}</span>
       <span>{`Seen · ${artifact.last_seen_at} · ${artifact.mention_count} mentions`}</span>
-      <span>{`Agents · ${renderParticipants(artifact.agent_ids)}`}</span>
+      <span>
+        Agents ·{' '}
+        {renderAgentPivotList({
+          agentIds: artifact.agent_ids,
+          currentAgentId,
+          navigableAgentIds,
+          emptyLabel: 'No agents',
+          ariaLabelPrefix: 'Select shared memory agent',
+          correlationId: activeCorrelationId,
+          onSelectAgent
+        })}
+      </span>
       <span>
         Correlations ·{' '}
         {renderCorrelationPivotList({
@@ -464,12 +481,18 @@ function renderSharedMemorySection({
   memoryArtifactsError,
   memoryArtifactsState,
   activeCorrelationId,
+  currentAgentId,
+  navigableAgentIds,
+  onSelectAgent,
   onSelectCorrelation
 }: {
   memoryArtifacts: MemoryArtifactIndex | null;
   memoryArtifactsError: string | null;
   memoryArtifactsState: LoadState;
   activeCorrelationId: string | null;
+  currentAgentId: string | null;
+  navigableAgentIds: Set<string>;
+  onSelectAgent: (agentId: string | null, correlationId?: string | null) => void;
   onSelectCorrelation: (correlationId: string | null) => void;
 }) {
   const sharedMemoryWarning =
@@ -492,6 +515,9 @@ function renderSharedMemorySection({
           renderSharedMemoryArtifact({
             artifact,
             activeCorrelationId,
+            currentAgentId,
+            navigableAgentIds,
+            onSelectAgent,
             onSelectCorrelation
           })
         )}
@@ -932,6 +958,9 @@ export function DetailsPanel({
           memoryArtifactsError,
           memoryArtifactsState,
           activeCorrelationId: sharedMemoryActiveCorrelationId,
+          currentAgentId: null,
+          navigableAgentIds,
+          onSelectAgent,
           onSelectCorrelation
         })}
 
@@ -1436,6 +1465,9 @@ export function DetailsPanel({
         memoryArtifactsError,
         memoryArtifactsState,
         activeCorrelationId: sharedMemoryActiveCorrelationId,
+        currentAgentId: selectedAgent.agent_id,
+        navigableAgentIds,
+        onSelectAgent,
         onSelectCorrelation
       })}
 

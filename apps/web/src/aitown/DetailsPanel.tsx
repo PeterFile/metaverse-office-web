@@ -261,10 +261,19 @@ function renderDisplayState(value: string) {
 }
 
 function renderCorrelationInteraction(interaction: WorkflowInteraction) {
+  const stateTransition =
+    interaction.before_state && interaction.after_state
+      ? `${interaction.before_state} -> ${interaction.after_state}`
+      : interaction.before_state ?? interaction.after_state ?? null;
+
   return (
     <li key={interaction.interaction_id} className={`aitown-record severity-${interaction.severity ?? 'normal'}`}>
       <strong>{interaction.summary}</strong>
       <span>{`Interaction · ${interaction.interaction_type}`}</span>
+      <span>{`Started · ${interaction.started_at}`}</span>
+      {interaction.ended_at ? <span>{`Ended · ${interaction.ended_at}`}</span> : null}
+      <span>{`Trigger · ${interaction.trigger_event_id}`}</span>
+      {stateTransition ? <span>{`State · ${stateTransition}`}</span> : null}
       <span>{`Participants · ${renderParticipants(interaction.participant_agent_ids)}`}</span>
       <span>{`Correlation · ${interaction.correlation_id ?? 'No correlation id'}`}</span>
       {interaction.severity ? <span>{`Severity · ${SEVERITY_LABELS[interaction.severity]}`}</span> : null}

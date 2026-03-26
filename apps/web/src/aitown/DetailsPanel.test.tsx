@@ -728,3 +728,49 @@ describe('DetailsPanel accountability signals', () => {
     expect(within(section!).queryByText(/What · Fix workflow issue/)).not.toBeInTheDocument();
   });
 });
+
+describe('DetailsPanel shared memory', () => {
+  it('renders a no-correlation artifact path without shared-memory correlation pivots', () => {
+    render(
+      <DetailsPanel
+        {...buildProps({
+          memoryArtifacts: {
+            generated_at: '2026-03-16T09:00:00.000Z',
+            items: [
+              {
+                artifact_ref: 'artifact/team-lead-note',
+                artifact_kind: 'workspace_file',
+                file_name: 'team-lead-note.md',
+                first_seen_at: '2026-03-16T08:55:00.000Z',
+                last_seen_at: '2026-03-16T08:59:00.000Z',
+                mention_count: 2,
+                agent_ids: ['team-lead'],
+                correlation_ids: [],
+                source_kinds: ['workspace_snapshot'],
+                latest_summary: 'Team lead kept a local review note',
+                latest_event_type: 'agent_noted',
+                collector_last_modified_at: '2026-03-16T08:59:00.000Z'
+              }
+            ]
+          },
+          selectedCorrelationId: null,
+          selectedOperation: null
+        })}
+      />
+    );
+
+    const section = screen.getByRole('heading', { name: 'Shared Memory' }).closest('section');
+    expect(section).not.toBeNull();
+
+    expect(within(section!).getByText('Team lead kept a local review note')).toBeVisible();
+    expect(within(section!).getByText('Correlations · No correlation ids')).toBeVisible();
+    expect(within(section!).getByText('Latest event type · agent_noted')).toBeVisible();
+    expect(within(section!).getByText('Source kinds · workspace_snapshot')).toBeVisible();
+    expect(within(section!).getByText('Collector modified · 2026-03-16T08:59:00.000Z')).toBeVisible();
+    expect(
+      within(section!).queryByRole('button', {
+        name: /Open shared memory correlation/
+      })
+    ).not.toBeInTheDocument();
+  });
+});

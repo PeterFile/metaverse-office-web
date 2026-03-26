@@ -191,6 +191,39 @@ function dedupeNonEmptyStrings(values: Array<string | null | undefined>) {
   return values.filter((value, index, list): value is string => Boolean(value) && list.indexOf(value) === index);
 }
 
+function renderCorrelationPivotList({
+  correlationIds,
+  activeCorrelationId,
+  emptyLabel,
+  buttonLabel,
+  onSelectCorrelation
+}: {
+  correlationIds: string[];
+  activeCorrelationId: string | null;
+  emptyLabel: string;
+  buttonLabel: string;
+  onSelectCorrelation: (correlationId: string | null) => void;
+}) {
+  const uniqueCorrelationIds = dedupeNonEmptyStrings(correlationIds);
+
+  if (uniqueCorrelationIds.length === 0) {
+    return emptyLabel;
+  }
+
+  return uniqueCorrelationIds.map((correlationId, index) => (
+    <span key={`${buttonLabel}-${correlationId}`}>
+      {index > 0 ? ', ' : null}
+      {renderCorrelationButton({
+        correlationId,
+        label: correlationId,
+        buttonLabel,
+        activeCorrelationId,
+        onSelectCorrelation
+      })}
+    </span>
+  ));
+}
+
 function isAlignedCorrelation(itemCorrelationId: string | null | undefined, correlationId: string | null) {
   if (!correlationId) {
     return true;
@@ -341,7 +374,15 @@ function renderWorkflowStatusRecord({
   );
 }
 
-function renderSharedMemoryArtifact(artifact: MemoryArtifact) {
+function renderSharedMemoryArtifact({
+  artifact,
+  activeCorrelationId,
+  onSelectCorrelation
+}: {
+  artifact: MemoryArtifact;
+  activeCorrelationId: string | null;
+  onSelectCorrelation: (correlationId: string | null) => void;
+}) {
   return (
     <li key={artifact.artifact_ref} className="aitown-record">
       <strong>{artifact.latest_summary ?? artifact.file_name}</strong>
@@ -349,7 +390,23 @@ function renderSharedMemoryArtifact(artifact: MemoryArtifact) {
       <span>{`Ref · ${artifact.artifact_ref}`}</span>
       <span>{`Seen · ${artifact.last_seen_at} · ${artifact.mention_count} mentions`}</span>
       <span>{`Agents · ${renderParticipants(artifact.agent_ids)}`}</span>
-      <span>{`Correlations · ${renderNamedList(artifact.correlation_ids, 'No correlation ids')}`}</span>
+      <span>
+        Correlations ·{' '}
+        {renderCorrelationPivotList({
+          correlationIds: artifact.correlation_ids,
+          activeCorrelationId,
+          emptyLabel: 'No correlation ids',
+          buttonLabel: 'Open shared memory correlation',
+          onSelectCorrelation
+        })}
+      </span>
+      {artifact.latest_event_type ? <span>{`Latest event type · ${artifact.latest_event_type}`}</span> : null}
+      {artifact.source_kinds.length > 0 ? (
+        <span>{`Source kinds · ${renderNamedList(dedupeNonEmptyStrings(artifact.source_kinds), 'No source kinds')}`}</span>
+      ) : null}
+      {artifact.collector_last_modified_at ? (
+        <span>{`Collector modified · ${artifact.collector_last_modified_at}`}</span>
+      ) : null}
     </li>
   );
 }
@@ -357,11 +414,15 @@ function renderSharedMemoryArtifact(artifact: MemoryArtifact) {
 function renderSharedMemorySection({
   memoryArtifacts,
   memoryArtifactsError,
-  memoryArtifactsState
+  memoryArtifactsState,
+  activeCorrelationId,
+  onSelectCorrelation
 }: {
   memoryArtifacts: MemoryArtifactIndex | null;
   memoryArtifactsError: string | null;
   memoryArtifactsState: LoadState;
+  activeCorrelationId: string | null;
+  onSelectCorrelation: (correlationId: string | null) => void;
 }) {
   const sharedMemoryWarning =
     memoryArtifactsError && memoryArtifacts
@@ -379,7 +440,13 @@ function renderSharedMemorySection({
         {memoryArtifactsError && !memoryArtifacts ? (
           <li className="aitown-record">{`Unable to load shared memory. ${memoryArtifactsError}`}</li>
         ) : null}
-        {(memoryArtifacts?.items ?? []).map(renderSharedMemoryArtifact)}
+        {(memoryArtifacts?.items ?? []).map((artifact) =>
+          renderSharedMemoryArtifact({
+            artifact,
+            activeCorrelationId,
+            onSelectCorrelation
+          })
+        )}
         {memoryArtifactsState === 'ready' && !memoryArtifactsError && !memoryArtifacts?.items.length ? (
           <li className="aitown-record">No shared memory artifacts.</li>
         ) : null}
@@ -632,6 +699,12 @@ export function DetailsPanel({
     )
     .sort(compareCollectorItems)
     .slice(0, 3);
+  const sharedMemoryActiveCorrelationId =
+    selectedAgent !== null
+      ? selectedCorrelationId
+      : preserveWorkflowCounterpartyCorrelation
+        ? selectedCorrelationId
+        : null;
 
   if (!selectedAgent) {
     return (
@@ -809,7 +882,9 @@ export function DetailsPanel({
         {renderSharedMemorySection({
           memoryArtifacts,
           memoryArtifactsError,
-          memoryArtifactsState
+          memoryArtifactsState,
+          activeCorrelationId: sharedMemoryActiveCorrelationId,
+          onSelectCorrelation
         })}
 
         <section className="aitown-details__section">
@@ -1317,7 +1392,9 @@ export function DetailsPanel({
       {renderSharedMemorySection({
         memoryArtifacts,
         memoryArtifactsError,
-        memoryArtifactsState
+        memoryArtifactsState,
+        activeCorrelationId: sharedMemoryActiveCorrelationId,
+        onSelectCorrelation
       })}
 
       <section className="aitown-details__section">

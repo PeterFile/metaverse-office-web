@@ -821,6 +821,77 @@ describe('DetailsPanel accountability signals', () => {
 });
 
 describe('DetailsPanel workflow peer-watch alerts', () => {
+  it('renders read-only metadata for selected-agent workflow handoff and reboot cards', async () => {
+    const user = userEvent.setup();
+    const onSelectCorrelation = vi.fn();
+    const workflow: AgentWorkflow = {
+      ...buildWorkflow(),
+      detail: {
+        ...buildWorkflow().detail,
+        recent_handoffs: [
+          {
+            handoff_id: 'handoff-1',
+            ts: '2026-03-16T08:57:00.000Z',
+            agent_id: 'app-engineering',
+            actor_id: 'growth-revenue',
+            phase: 'handoff_done',
+            status: 'completed',
+            severity: 'yellow',
+            summary: 'Secondary review handoff completed',
+            counterparty_agent_ids: ['growth-revenue'],
+            evidence_refs: ['/evidence/secondary-handoff.md'],
+            correlation_id: 'corr-app-secondary',
+            source_kind: 'controller_event'
+          }
+        ],
+        recent_reboots: [
+          {
+            reboot_id: 'reboot-1',
+            ts: '2026-03-16T08:40:00.000Z',
+            agent_id: 'app-engineering',
+            actor_id: 'team-lead',
+            phase: 'reboot_recommended',
+            status: 'requested',
+            severity: 'yellow',
+            summary: 'Reboot recommended after the workflow stalled',
+            counterparty_agent_ids: ['team-lead'],
+            evidence_refs: ['/evidence/reboot-note.md'],
+            correlation_id: 'corr-app-review',
+            source_kind: 'controller_event'
+          }
+        ]
+      }
+    };
+
+    render(<DetailsPanel {...buildProps({ onSelectCorrelation, workflow })} />);
+
+    const section = screen.getByRole('heading', { name: 'Workflow' }).closest('section');
+    expect(section).not.toBeNull();
+
+    const handoffRecord = within(section!).getByText('Secondary review handoff completed').closest('li');
+    const rebootRecord = within(section!).getByText('Reboot recommended after the workflow stalled').closest('li');
+    expect(handoffRecord).not.toBeNull();
+    expect(rebootRecord).not.toBeNull();
+
+    expect(within(handoffRecord!).getByText('At · 2026-03-16T08:57:00.000Z')).toBeVisible();
+    expect(within(handoffRecord!).getByText('Actor · growth-revenue')).toBeVisible();
+    const handoffPivot = within(handoffRecord!).getByRole('button', {
+      name: 'Open workflow status correlation corr-app-secondary'
+    });
+    expect(handoffPivot).toBeVisible();
+
+    expect(within(rebootRecord!).getByText('At · 2026-03-16T08:40:00.000Z')).toBeVisible();
+    expect(within(rebootRecord!).getByText('Actor · team-lead')).toBeVisible();
+    expect(
+      within(rebootRecord!).getByRole('button', {
+        name: 'Open workflow status correlation corr-app-review, currently selected'
+      })
+    ).toBeVisible();
+
+    await user.click(handoffPivot);
+    expect(onSelectCorrelation).toHaveBeenCalledWith('corr-app-secondary');
+  });
+
   it('renders read-only observability metadata for selected-agent workflow alerts', () => {
     const workflow: AgentWorkflow = {
       ...buildWorkflow(),

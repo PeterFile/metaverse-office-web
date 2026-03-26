@@ -355,6 +355,48 @@ describe('read-only frontend/backend contract smoke', () => {
     expectPeerWatchAlertsContract(alerts);
   });
 
+  it('loads /agents/:id/incidents from the real backend with explicit read-only filters intact', async () => {
+    harness = await createHarness(() => '2026-03-09T19:00:00.000Z');
+    await seedContractSlice(harness.store);
+
+    const nativeFetch = globalThis.fetch.bind(globalThis);
+    const requests: RequestContract[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+        requests.push(getRequestContract(input, harness!.baseUrl, init));
+        return nativeFetch(input, init);
+      })
+    );
+
+    const api = await loadApi(harness.baseUrl);
+    const incidents = await api.fetchAgentIncidents('app-engineering', {
+      kind: 'peer_watch_alert',
+      severity: 'orange',
+      status: 'open',
+      correlationId: 'corr-contract',
+      limit: 2,
+      window: '60m'
+    });
+
+    expect(requests).toEqual([
+      {
+        method: 'GET',
+        origin: harness.baseUrl,
+        pathname: '/agents/app-engineering/incidents',
+        query: [
+          ['correlation_id', 'corr-contract'],
+          ['kind', 'peer_watch_alert'],
+          ['limit', '2'],
+          ['severity', 'orange'],
+          ['status', 'open'],
+          ['window', '60m']
+        ]
+      }
+    ]);
+    expectAgentIncidentsContract(incidents);
+  });
+
   it('sends explicit default read-only bounds for /agents/:id/events, /agents/:id/interactions, and /peer-watch/alerts', async () => {
     harness = await createHarness(() => '2026-03-09T19:00:00.000Z');
     await seedContractSlice(harness.store);
@@ -430,6 +472,42 @@ describe('read-only frontend/backend contract smoke', () => {
     ]);
     expect(aliasAlerts.items.map((alert) => alert.alert_id)).toEqual([
       'evt_collector_app-engineering_blocked_raised_orange_2026-03-09T18_59_00_000Z',
+      'evt_contract_peer_watch'
+    ]);
+  });
+
+  it('sends explicit default read-only bounds for /agents/:id/incidents', async () => {
+    harness = await createHarness(() => '2026-03-09T19:00:00.000Z');
+    await seedContractSlice(harness.store);
+
+    const nativeFetch = globalThis.fetch.bind(globalThis);
+    const requests: RequestContract[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+        requests.push(getRequestContract(input, harness!.baseUrl, init));
+        return nativeFetch(input, init);
+      })
+    );
+
+    const api = await loadApi(harness.baseUrl);
+    const incidents = await api.fetchAgentIncidents('app-engineering');
+
+    expect(requests).toEqual([
+      {
+        method: 'GET',
+        origin: harness.baseUrl,
+        pathname: '/agents/app-engineering/incidents',
+        query: [
+          ['limit', '10'],
+          ['window', '60m']
+        ]
+      }
+    ]);
+    expect(incidents.agent_id).toBe('app-engineering');
+    expect(incidents.items.map((incident) => incident.incident_id)).toEqual([
+      'evt_collector_app-engineering_blocked_raised_orange_2026-03-09T18_59_00_000Z',
+      'evt_contract_handoff_completed',
       'evt_contract_peer_watch'
     ]);
   });
@@ -603,6 +681,52 @@ describe('read-only frontend/backend contract smoke', () => {
     const api = await loadApi(harness.baseUrl);
 
     await expect(api.fetchAgentInteractions('unknown-agent')).rejects.toMatchObject({
+      name: 'RequestError',
+      status: 404,
+      code: 'not_found',
+      message: 'unknown agent unknown-agent'
+    });
+    expect(responses).toHaveLength(1);
+    expect(responses[0].status).toBe(404);
+    expect(responses[0].contentType).toContain('application/json');
+    expect(responses[0].body).toMatchObject({
+      error: 'not_found',
+      details: 'unknown agent unknown-agent'
+    });
+  });
+
+  it('surfaces unknown-agent incident 404s through the frontend request parser against the real backend', async () => {
+    harness = await createHarness(() => '2026-03-09T19:00:00.000Z');
+
+    const nativeFetch = globalThis.fetch.bind(globalThis);
+    const responses: Array<{
+      status: number;
+      contentType: string | null;
+      body: {
+        error?: string;
+        details?: string;
+      };
+    }> = [];
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+        const response = await nativeFetch(input, init);
+        responses.push({
+          status: response.status,
+          contentType: response.headers.get('content-type'),
+          body: (await response.clone().json()) as {
+            error?: string;
+            details?: string;
+          }
+        });
+        return response;
+      })
+    );
+
+    const api = await loadApi(harness.baseUrl);
+
+    await expect(api.fetchAgentIncidents('unknown-agent')).rejects.toMatchObject({
       name: 'RequestError',
       status: 404,
       code: 'not_found',
@@ -1226,6 +1350,20 @@ function expectAgentEventsContract(events: AgentEventsResponse) {
       event_id: 'evt_contract_peer_watch',
       agent_role: 'app-engineering',
       event_type: 'peer_watch_alert_raised',
+      severity: 'orange',
+      correlation_id: 'corr-contract',
+      evidence_refs: ['/tmp/contract-peer-watch.md']
+    })
+  ]);
+}
+
+function expectAgentIncidentsContract(incidents: IncidentFeedResponse & { agent_id: string }) {
+  expect(incidents.agent_id).toBe('app-engineering');
+  expect(incidents.items).toEqual([
+    expect.objectContaining({
+      incident_id: 'evt_contract_peer_watch',
+      kind: 'peer_watch_alert',
+      status: 'open',
       severity: 'orange',
       correlation_id: 'corr-contract',
       evidence_refs: ['/tmp/contract-peer-watch.md']

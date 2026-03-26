@@ -1,4 +1,5 @@
 import { render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { DetailsPanel } from './DetailsPanel';
 import type {
@@ -879,6 +880,39 @@ describe('DetailsPanel workflow peer-watch alerts', () => {
 });
 
 describe('DetailsPanel shared memory', () => {
+  it('renders shared-memory agent pivots and preserves the active correlation when pivoting', async () => {
+    const user = userEvent.setup();
+    const onSelectAgent = vi.fn();
+
+    render(<DetailsPanel {...buildProps({ onSelectAgent })} />);
+
+    const section = screen.getByRole('heading', { name: 'Shared Memory' }).closest('section');
+    expect(section).not.toBeNull();
+
+    const artifactRecord = within(section!).getByText('Review note').closest('li');
+    expect(artifactRecord).not.toBeNull();
+
+    expect(within(artifactRecord!).getByText('app-engineering')).toBeVisible();
+    expect(
+      within(artifactRecord!).queryByRole('button', {
+        name: 'Select shared memory agent app-engineering'
+      })
+    ).not.toBeInTheDocument();
+    expect(
+      within(artifactRecord!).getByRole('button', {
+        name: 'Select shared memory agent team-lead'
+      })
+    ).toBeVisible();
+
+    await user.click(
+      within(artifactRecord!).getByRole('button', {
+        name: 'Select shared memory agent team-lead'
+      })
+    );
+
+    expect(onSelectAgent).toHaveBeenCalledWith('team-lead', 'corr-app-review');
+  });
+
   it('renders a no-correlation artifact path without shared-memory correlation pivots', () => {
     render(
       <DetailsPanel

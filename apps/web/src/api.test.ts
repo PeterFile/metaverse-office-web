@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   RequestError,
   fetchAgentEvents,
+  fetchAgentIncidents,
   fetchAgentInteractions,
   fetchCollectorSnapshot,
   fetchMemoryArtifacts,
@@ -458,6 +459,132 @@ describe('fetchAgentInteractions', () => {
           interaction_id: 'interaction:evt-app-review',
           interaction_type: 'peer_watch',
           participant_agent_ids: ['app-engineering', 'protocol-engineering', 'team-lead']
+        })
+      ]
+    });
+  });
+});
+
+describe('fetchAgentIncidents', () => {
+  it('applies the default bounded limit and window when callers omit incident filters', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            agent_id: 'app-engineering',
+            items: []
+          }),
+          {
+            headers: JSON_HEADERS
+          }
+        )
+      )
+    );
+
+    await fetchAgentIncidents('app-engineering');
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/agents/app-engineering/incidents?limit=10&window=60m',
+      expect.objectContaining({ signal: undefined })
+    );
+  });
+
+  it('passes kind, severity, status, correlation_id, limit, and window filters through to the backend query string', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            agent_id: 'app-engineering',
+            items: []
+          }),
+          {
+            headers: JSON_HEADERS
+          }
+        )
+      )
+    );
+
+    await fetchAgentIncidents('app-engineering', {
+      kind: 'peer_watch_alert',
+      severity: 'orange',
+      status: 'open',
+      correlationId: 'corr-app-review',
+      limit: 3,
+      window: '30m'
+    });
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/agents/app-engineering/incidents?limit=3&window=30m&kind=peer_watch_alert&severity=orange&status=open&correlation_id=corr-app-review',
+      expect.objectContaining({ signal: undefined })
+    );
+  });
+
+  it('maps unknown-agent 404 responses into RequestError metadata for incident reads', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            error: 'not_found',
+            details: 'unknown agent unknown-agent'
+          }),
+          {
+            status: 404,
+            headers: JSON_HEADERS
+          }
+        )
+      )
+    );
+
+    await expect(fetchAgentIncidents('unknown-agent')).rejects.toMatchObject({
+      name: 'RequestError',
+      status: 404,
+      code: 'not_found',
+      message: 'unknown agent unknown-agent'
+    });
+  });
+
+  it('loads the agent-scoped incident envelope returned by the backend', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            agent_id: 'app-engineering',
+            items: [
+              {
+                incident_id: 'evt-app-review',
+                kind: 'peer_watch_alert',
+                ts: '2026-03-09T18:45:00.000Z',
+                agent_id: 'app-engineering',
+                actor_id: 'team-lead',
+                status: 'open',
+                severity: 'orange',
+                summary: 'Protocol engineering flagged the contract drift',
+                correlation_id: 'corr-app-review',
+                evidence_refs: ['/tmp/contract-peer-watch.md'],
+                counterparty_agent_ids: ['protocol-engineering'],
+                source_kind: 'controller_event'
+              }
+            ]
+          }),
+          {
+            headers: JSON_HEADERS
+          }
+        )
+      )
+    );
+
+    await expect(fetchAgentIncidents('app-engineering')).resolves.toMatchObject({
+      agent_id: 'app-engineering',
+      items: [
+        expect.objectContaining({
+          incident_id: 'evt-app-review',
+          kind: 'peer_watch_alert',
+          status: 'open',
+          correlation_id: 'corr-app-review'
         })
       ]
     });

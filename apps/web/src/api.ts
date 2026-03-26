@@ -190,6 +190,47 @@ export async function fetchAgentInteractions(
   return parseJson<AgentInteractionsResponse>(response);
 }
 
+export async function fetchAgentIncidents(
+  agentId: string,
+  options: {
+    kind?: string;
+    severity?: string;
+    status?: string;
+    correlationId?: string;
+    limit?: number;
+    window?: string;
+    signal?: AbortSignal;
+  } = {}
+): Promise<IncidentFeedResponse & { agent_id: string }> {
+  const params = new URLSearchParams({
+    limit: String(options.limit ?? DEFAULT_WORKFLOW_LIMIT),
+    window: options.window ?? DEFAULT_WORKFLOW_WINDOW
+  });
+
+  if (options.kind) {
+    params.set('kind', options.kind);
+  }
+  if (options.severity) {
+    params.set('severity', options.severity);
+  }
+  if (options.status) {
+    params.set('status', options.status);
+  }
+  if (options.correlationId) {
+    params.set('correlation_id', options.correlationId);
+  }
+
+  const suffix = params.size > 0 ? `?${params.toString()}` : '';
+  const response = await fetch(
+    resolveApiUrl(`/agents/${encodeURIComponent(agentId)}/incidents${suffix}`),
+    {
+      signal: options.signal
+    }
+  );
+
+  return parseJson<IncidentFeedResponse & { agent_id: string }>(response);
+}
+
 export async function fetchAgentWorkflow(
   agentId: string,
   options: { limit?: number; window?: string; signal?: AbortSignal } = {}

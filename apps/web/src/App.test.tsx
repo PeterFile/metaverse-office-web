@@ -3943,8 +3943,22 @@ afterEach(() => {
     expect(workflowHandoffRecord).not.toBeNull();
     expect(workflowRebootRecord).not.toBeNull();
     expect(within(workflowHandoffRecord!).getByText('Handoff · completed · handoff_done')).toBeVisible();
+    expect(within(workflowHandoffRecord!).getByText('At · 2026-03-16T08:57:00.000Z')).toBeVisible();
+    expect(within(workflowHandoffRecord!).getByText('Actor · growth-revenue')).toBeVisible();
+    expect(
+      within(workflowHandoffRecord!).getByRole('button', {
+        name: 'Open workflow status correlation corr-app-secondary'
+      })
+    ).toBeVisible();
     expect(within(workflowHandoffRecord!).getByText('Severity · Yellow')).toBeVisible();
     expect(within(workflowRebootRecord!).getByText('Reboot · requested · reboot_recommended')).toBeVisible();
+    expect(within(workflowRebootRecord!).getByText('At · 2026-03-16T08:40:00.000Z')).toBeVisible();
+    expect(within(workflowRebootRecord!).getByText('Actor · team-lead')).toBeVisible();
+    expect(
+      within(workflowRebootRecord!).getByRole('button', {
+        name: 'Open workflow status correlation corr-app-review, currently selected'
+      })
+    ).toBeVisible();
     expect(within(workflowRebootRecord!).getByText('Severity · Yellow')).toBeVisible();
 
     const incidentSection = within(details).getByRole('heading', { name: 'Incident Feed' }).closest('section');

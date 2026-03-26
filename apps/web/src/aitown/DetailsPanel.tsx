@@ -362,29 +362,51 @@ function renderWorkflowStatusRecord({
   kind,
   severity,
   summary,
+  ts,
+  actorId,
   status,
   phase,
   counterpartyAgentIds,
   evidenceRefs,
-  sourceKind
+  correlationId,
+  activeCorrelationId,
+  sourceKind,
+  onSelectCorrelation
 }: {
   key: string;
   kind: 'Handoff' | 'Reboot';
   severity: keyof typeof SEVERITY_LABELS;
   summary: string;
+  ts: string;
+  actorId: string;
   status: string;
   phase: string;
   counterpartyAgentIds: string[];
   evidenceRefs: string[];
+  correlationId: string | null;
+  activeCorrelationId: string | null;
   sourceKind: string;
+  onSelectCorrelation: (correlationId: string | null) => void;
 }) {
   return (
     <li key={key} className={`aitown-record severity-${severity}`}>
       <strong>{summary}</strong>
       <span>{`${kind} · ${status} · ${phase}`}</span>
+      <span>{`At · ${renderTimestamp(ts, 'No status timestamp')}`}</span>
+      <span>{`Actor · ${actorId}`}</span>
       <span>{`Severity · ${SEVERITY_LABELS[severity]}`}</span>
       <span>{`Counterparties · ${renderCounterparties(counterpartyAgentIds)}`}</span>
       <span>{`Evidence · ${renderEvidenceRefs(evidenceRefs)}`}</span>
+      <span>
+        Correlation pivot ·{' '}
+        {renderCorrelationButton({
+          correlationId,
+          label: correlationId ?? 'No correlation id',
+          buttonLabel: 'Open workflow status correlation',
+          activeCorrelationId,
+          onSelectCorrelation
+        })}
+      </span>
       <span>{`Source · ${sourceKind}`}</span>
     </li>
   );
@@ -1437,11 +1459,16 @@ export function DetailsPanel({
               kind: 'Handoff',
               severity: handoff.severity,
               summary: handoff.summary,
+              ts: handoff.ts,
+              actorId: handoff.actor_id,
               status: handoff.status,
               phase: handoff.phase,
               counterpartyAgentIds: handoff.counterparty_agent_ids,
               evidenceRefs: handoff.evidence_refs,
-              sourceKind: handoff.source_kind
+              correlationId: handoff.correlation_id,
+              activeCorrelationId: selectedCorrelationId,
+              sourceKind: handoff.source_kind,
+              onSelectCorrelation
             })
           )}
           {(workflow?.detail.recent_reboots ?? []).slice(0, 2).map((reboot) =>
@@ -1450,11 +1477,16 @@ export function DetailsPanel({
               kind: 'Reboot',
               severity: reboot.severity,
               summary: reboot.summary,
+              ts: reboot.ts,
+              actorId: reboot.actor_id,
               status: reboot.status,
               phase: reboot.phase,
               counterpartyAgentIds: reboot.counterparty_agent_ids,
               evidenceRefs: reboot.evidence_refs,
-              sourceKind: reboot.source_kind
+              correlationId: reboot.correlation_id,
+              activeCorrelationId: selectedCorrelationId,
+              sourceKind: reboot.source_kind,
+              onSelectCorrelation
             })
           )}
         </ul>

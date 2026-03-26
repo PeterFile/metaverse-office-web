@@ -614,13 +614,13 @@ describe('DetailsPanel accountability signals', () => {
 
     const section = screen.getByRole('heading', { name: 'Audit Signals' }).closest('section');
     expect(section).not.toBeNull();
+    const record = within(section!).getByText('Responsibility chain').closest('li');
+    expect(record).not.toBeNull();
 
     expect(within(section!).getByText('Responsibility chain')).toBeVisible();
-    expect(
-      within(section!).getByText(
-        'Who · Team Lead -> App Engineering Agent (lead, Elevated); App Engineering Agent -> Growth Revenue Agent (peer, High risk)'
-      )
-    ).toBeVisible();
+    expect(record!).toHaveTextContent(
+      'Who · Team Lead -> App Engineering Agent (lead, Elevated); App Engineering Agent -> Growth Revenue Agent (peer, High risk)'
+    );
     expect(within(section!).getByText('What · Followed up on missing workflow evidence')).toBeVisible();
     expect(
       within(section!).getByText(
@@ -643,6 +643,40 @@ describe('DetailsPanel accountability signals', () => {
       })
     ).toBeVisible();
     expect(section).toHaveTextContent('1 incidents · 1 interactions · 1 events');
+  });
+
+  it('renders non-current accountability chain agents as pivots and keeps the current agent as plain text', async () => {
+    const user = userEvent.setup();
+    const onSelectAgent = vi.fn();
+
+    render(<DetailsPanel {...buildProps({ onSelectAgent })} />);
+
+    const section = screen.getByRole('heading', { name: 'Audit Signals' }).closest('section');
+    expect(section).not.toBeNull();
+
+    expect(
+      within(section!).queryByRole('button', {
+        name: 'Select responsibility chain agent app-engineering'
+      })
+    ).not.toBeInTheDocument();
+    expect(
+      within(section!).getByRole('button', {
+        name: 'Select responsibility chain agent team-lead'
+      })
+    ).toBeVisible();
+    expect(
+      within(section!).getByRole('button', {
+        name: 'Select responsibility chain agent growth-revenue'
+      })
+    ).toBeVisible();
+
+    await user.click(
+      within(section!).getByRole('button', {
+        name: 'Select responsibility chain agent team-lead'
+      })
+    );
+
+    expect(onSelectAgent).toHaveBeenCalledWith('team-lead', 'corr-app-review');
   });
 
   it('uses the latest top-level workflow timeline event when detail feeds are empty', () => {

@@ -236,6 +236,7 @@ function buildWorkflow(): AgentWorkflow {
           ts: '2026-03-16T08:57:00.000Z',
           agent_id: 'app-engineering',
           actor_id: 'controller',
+          agent_role: 'app-engineering',
           event_type: 'workflow_event',
           severity: 'yellow',
           current_state: 'blocked',
@@ -677,6 +678,7 @@ describe('DetailsPanel accountability signals', () => {
         open_peer_watch_alerts: [
           {
             alert_id: 'alert-1',
+            ts: '2026-03-16T08:58:00.000Z',
             agent_id: 'app-engineering',
             target_agent_id: 'growth-revenue',
             actor_id: 'team-lead',

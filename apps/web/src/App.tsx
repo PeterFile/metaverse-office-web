@@ -14,6 +14,7 @@ import {
   fetchTimeline
 } from './api';
 import { DetailsPanel } from './aitown/DetailsPanel';
+import { SceneStatusLegend } from './aitown/SceneStatusLegend';
 import { adaptWorldToScene } from './aitown/sceneAdapter';
 import { WorldProvider, useWorld } from './context/WorldContext';
 import { usePolledResource } from './hooks/usePolledResource';
@@ -674,6 +675,7 @@ function AppInner() {
               </button>
             ) : null}
           </div>
+          <SceneStatusLegend />
 
           {overviewRefreshWarning ? (
             <div className="aitown-world__placeholder aitown-world__placeholder--warning" role="status">

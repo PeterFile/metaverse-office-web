@@ -29,6 +29,7 @@ import {
   type ViewportInspector
 } from './viewport';
 import { resolveViewportClampPadding } from './viewportClampPadding';
+import { resolveSceneAgentStatusBadge } from './agentStatusBadge';
 
 const SEVERITY_COLORS = {
   normal: 0x8ed16f,
@@ -49,6 +50,13 @@ const nameLabelStyle = new TextStyle({
   fontSize: 10,
   fill: 0xffffff,
   stroke: { color: 0x20162a, width: 4, join: 'round' }
+});
+
+const statusBadgeStyle = new TextStyle({
+  fontFamily: '"VCR OSD Mono", monospace',
+  fontSize: 8,
+  fill: 0xf9f5d7,
+  stroke: { color: 0x20162a, width: 3, join: 'round' }
 });
 
 function buildTileTextures(
@@ -179,6 +187,42 @@ function createZoneLabel(zone: SceneZone, selectedAgentIds: Set<string>, tileDim
   return container;
 }
 
+function createAgentStatusBadge(agent: SceneAgent) {
+  const badge = resolveSceneAgentStatusBadge(agent);
+
+  if (!badge) {
+    return null;
+  }
+
+  const container = new Container();
+  const background = new Graphics();
+  const left = -badge.width / 2;
+  const top = -badge.height / 2;
+
+  background.roundRect(left, top, badge.width, badge.height, 5).fill({
+    color: agent.selected ? 0x36232c : 0x251a28,
+    alpha: 0.94
+  });
+  background.roundRect(left, top, badge.width, badge.height, 5).stroke({
+    color: agent.selected ? 0xffd785 : 0xd7c0a1,
+    width: 1,
+    alpha: 0.88
+  });
+
+  const label = new Text({
+    text: badge.text,
+    style: statusBadgeStyle,
+    resolution: 2
+  });
+  label.anchor.set(0.5, 0.5);
+
+  container.position.set(badge.offsetX, badge.offsetY);
+  container.eventMode = 'none';
+  container.addChild(background, label);
+
+  return container;
+}
+
 function createAgentSprite(agent: SceneAgent, onSelect: (agentId: string | null) => void, characterTextures: Record<string, Texture[]>) {
   const container = new Container();
   container.position.set(agent.position.x, agent.position.y);
@@ -222,6 +266,7 @@ function createAgentSprite(agent: SceneAgent, onSelect: (agentId: string | null)
     color: severityColor,
     alpha: 1
   });
+  const statusBadge = createAgentStatusBadge(agent);
 
   container.on('pointertap', (event) => {
     event.stopPropagation();
@@ -229,6 +274,9 @@ function createAgentSprite(agent: SceneAgent, onSelect: (agentId: string | null)
   });
 
   container.addChild(shadow, aura, character, statusDot, nameLabel);
+  if (statusBadge) {
+    container.addChild(statusBadge);
+  }
 
   return container;
 }

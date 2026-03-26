@@ -115,7 +115,10 @@ describe('adaptWorldToScene', () => {
       agentId: 'app-engineering',
       zoneId: 'meeting-zone',
       severity: 'orange',
-      selected: true
+      selected: true,
+      rebootRecommended: true,
+      openAlertCount: 1,
+      hasOpenIncidents: true
     });
     expect(appEngineering?.characterKey).toMatch(/^f[1-8]$/);
     expect(appEngineering?.position.x).toBeGreaterThan(0);

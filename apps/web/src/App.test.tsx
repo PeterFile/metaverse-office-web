@@ -8,6 +8,7 @@ import type { AgentWorkflow, OfficeAgent } from './types';
 const operationsUrl = '/office/operations?limit=4';
 const selectedOperationUrl = '/office/operations?agent_id=app-engineering';
 const incidentsUrl = '/incidents?limit=10&window=60m';
+const selectedAgentIncidentsUrl = '/agents/app-engineering/incidents?limit=10&window=60m';
 const timelineUrl = '/timeline?limit=4&window=60m';
 const workflowUrl = '/agents/app-engineering/workflow?limit=10&window=60m';
 const teamLeadWorkflowUrl = '/agents/team-lead/workflow?limit=10&window=60m';
@@ -3526,6 +3527,32 @@ afterEach(() => {
     expect(within(details).queryByText('No incident feed entries.')).not.toBeInTheDocument();
   });
 
+  it('keeps selected-agent incident rendering on the existing workflow/global request surface', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
+
+    expect(await within(details).findByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+    const incidentSection = within(details).getByRole('heading', { name: 'Incident Feed' }).closest('section');
+    expect(incidentSection).not.toBeNull();
+    const selectedIncidentRecord = await within(incidentSection!).findByText('Lead is still waiting on workflow evidence');
+    expect(selectedIncidentRecord.closest('li')).not.toBeNull();
+    expect(within(selectedIncidentRecord.closest('li')!).getByText('Incident · peer_watch · open')).toBeVisible();
+
+    await waitFor(() => {
+      const requestedUrls = vi
+        .mocked(globalThis.fetch)
+        .mock
+        .calls.map(([input]) => (typeof input === 'string' ? input : input.toString()));
+
+      expect(requestedUrls).toContain(incidentsUrl);
+      expect(requestedUrls).toContain(workflowUrl);
+      expect(requestedUrls).not.toContain(selectedAgentIncidentsUrl);
+    });
+  });
+
   it('shows a degraded warning when overview refresh fails after initial load', () => {
     expect(resolveOverviewRefreshWarning('overview refresh failed', true)).toBe('overview refresh failed');
     expect(resolveOverviewRefreshWarning('overview refresh failed', false)).toBeNull();
@@ -3630,7 +3657,6 @@ afterEach(() => {
         if (url === workflowUrl) {
           workflowRequests += 1;
           if (workflowRequests === 1) {
-            allowOverviewDrop = true;
             return new Response(JSON.stringify(workflowFixture), {
               headers: { 'content-type': 'application/json' }
             });
@@ -3658,6 +3684,7 @@ afterEach(() => {
     const details = await openHub(user);
     await user.click(await within(details).findByRole('button', { name: 'Inspect App Engineering Agent' }));
     expect(await within(details).findByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+    allowOverviewDrop = true;
 
     await waitFor(() => {
       expect(within(details).getByRole('heading', { name: 'Crew Overview' })).toBeVisible();

@@ -197,6 +197,7 @@ export interface WorkflowDetail {
 
 export interface WorkflowPeerWatchAlert {
   alert_id: string;
+  ts: string;
   agent_id: string;
   target_agent_id: string;
   actor_id: string;
@@ -219,6 +220,7 @@ export interface WorkflowDetailEvent {
   ts: string;
   agent_id: string;
   actor_id: string;
+  agent_role: string;
   event_type: string;
   severity: Severity;
   current_state: string;
@@ -325,6 +327,24 @@ export interface AgentWorkflow {
 
 export interface IncidentFeedResponse {
   items: WorkflowIncident[];
+}
+
+export type AgentEvent = WorkflowDetailEvent;
+
+export interface AgentEventsResponse {
+  agent_id: string;
+  items: AgentEvent[];
+}
+
+export interface AgentInteractionsResponse {
+  agent_id: string;
+  items: WorkflowInteraction[];
+}
+
+export type PeerWatchAlert = WorkflowPeerWatchAlert;
+
+export interface PeerWatchAlertsResponse {
+  items: PeerWatchAlert[];
 }
 
 export interface CorrelationDrilldown {

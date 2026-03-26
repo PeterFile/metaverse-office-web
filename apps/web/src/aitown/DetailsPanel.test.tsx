@@ -480,6 +480,48 @@ function buildProps(overrides: Partial<DetailsPanelProps> = {}): DetailsPanelPro
 }
 
 describe('DetailsPanel accountability signals', () => {
+  it('renders workflow and correlation interaction cards with timing and transition metadata', () => {
+    const interaction = {
+      ...buildCorrelation().interactions[0],
+      ended_at: '2026-03-16T08:47:30.000Z',
+      before_state: 'blocked',
+      after_state: 'reviewing'
+    };
+    const workflow: AgentWorkflow = {
+      ...buildWorkflow(),
+      detail: {
+        ...buildWorkflow().detail,
+        recent_interactions: [interaction]
+      }
+    };
+    const correlation: CorrelationDrilldown = {
+      ...buildCorrelation(),
+      interactions: [interaction]
+    };
+
+    render(<DetailsPanel {...buildProps({ workflow, correlation })} />);
+
+    const workflowSection = screen.getByRole('heading', { name: 'Workflow' }).closest('section');
+    expect(workflowSection).not.toBeNull();
+
+    const workflowCard = within(workflowSection!).getByText('Reviewed the missing workflow package').closest('li');
+    expect(workflowCard).not.toBeNull();
+    expect(within(workflowCard!).getByText('Started · 2026-03-16T08:45:00.000Z')).toBeVisible();
+    expect(within(workflowCard!).getByText('Ended · 2026-03-16T08:47:30.000Z')).toBeVisible();
+    expect(within(workflowCard!).getByText('Trigger · evt-1')).toBeVisible();
+    expect(within(workflowCard!).getByText('State · blocked -> reviewing')).toBeVisible();
+
+    const correlationSection = screen.getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    expect(correlationSection).not.toBeNull();
+
+    const correlationCard = within(correlationSection!).getByText('Reviewed the missing workflow package').closest('li');
+    expect(correlationCard).not.toBeNull();
+    expect(within(correlationCard!).getByText('Started · 2026-03-16T08:45:00.000Z')).toBeVisible();
+    expect(within(correlationCard!).getByText('Ended · 2026-03-16T08:47:30.000Z')).toBeVisible();
+    expect(within(correlationCard!).getByText('Trigger · evt-1')).toBeVisible();
+    expect(within(correlationCard!).getByText('State · blocked -> reviewing')).toBeVisible();
+  });
+
   it('shows a selected agent responsibility chain with current evidence, sources, and correlation context', () => {
     render(<DetailsPanel {...buildProps()} />);
 

@@ -628,10 +628,15 @@ describe('DetailsPanel accountability signals', () => {
       )
     ).toBeVisible();
     expect(
-      within(section!).getByText(
-        'Artifacts · Replay evidence bundle (artifact/replay-bundle), Review note (artifact/review-note)'
-      )
-    ).toBeVisible();
+      within(section!).getByRole('button', {
+        name: 'Jump to shared memory artifact artifact/replay-bundle'
+      })
+    ).toHaveTextContent('Replay evidence bundle (artifact/replay-bundle)');
+    expect(
+      within(section!).getByRole('button', {
+        name: 'Jump to shared memory artifact artifact/review-note'
+      })
+    ).toHaveTextContent('Review note (artifact/review-note)');
     expect(
       within(section!).getByText(
         'Source · controller_event, workflow_event, timeline_replay, evidence_ref'
@@ -677,6 +682,32 @@ describe('DetailsPanel accountability signals', () => {
     );
 
     expect(onSelectAgent).toHaveBeenCalledWith('team-lead', 'corr-app-review');
+  });
+
+  it('jumps from an accountability artifact to the matching shared-memory record without changing selection state', async () => {
+    const user = userEvent.setup();
+    const onSelectAgent = vi.fn();
+    const onSelectCorrelation = vi.fn();
+
+    render(<DetailsPanel {...buildProps({ onSelectAgent, onSelectCorrelation })} />);
+
+    const auditSection = screen.getByRole('heading', { name: 'Audit Signals' }).closest('section');
+    const sharedMemorySection = screen.getByRole('heading', { name: 'Shared Memory' }).closest('section');
+    expect(auditSection).not.toBeNull();
+    expect(sharedMemorySection).not.toBeNull();
+
+    const artifactRecord = within(sharedMemorySection!).getByText('Review note').closest('li');
+    expect(artifactRecord).not.toBeNull();
+
+    await user.click(
+      within(auditSection!).getByRole('button', {
+        name: 'Jump to shared memory artifact artifact/review-note'
+      })
+    );
+
+    expect(document.activeElement).toBe(artifactRecord);
+    expect(onSelectAgent).not.toHaveBeenCalled();
+    expect(onSelectCorrelation).not.toHaveBeenCalled();
   });
 
   it('uses the latest top-level workflow timeline event when detail feeds are empty', () => {
@@ -815,8 +846,10 @@ describe('DetailsPanel accountability signals', () => {
       )
     ).toBeVisible();
     expect(
-      within(section!).getByText('Artifacts · Secondary evidence bundle (artifact/secondary-bundle)')
-    ).toBeVisible();
+      within(section!).getByRole('button', {
+        name: 'Jump to shared memory artifact artifact/secondary-bundle'
+      })
+    ).toHaveTextContent('Secondary evidence bundle (artifact/secondary-bundle)');
     expect(within(section!).getByText('Source · handoff_log, controller_event, timeline_replay')).toBeVisible();
     expect(within(section!).queryByText(/review-only\.md/)).not.toBeInTheDocument();
     expect(within(section!).queryByText(/Replay evidence bundle/)).not.toBeInTheDocument();

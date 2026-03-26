@@ -130,6 +130,55 @@ function renderAgentPivotButton({
   );
 }
 
+function resolveSharedMemoryArtifactDomId(artifactRef: string) {
+  return `aitown-shared-memory-${encodeURIComponent(artifactRef)}`;
+}
+
+function focusSharedMemoryArtifact(artifactRef: string) {
+  if (typeof document === 'undefined') {
+    return;
+  }
+
+  const target = document.getElementById(resolveSharedMemoryArtifactDomId(artifactRef));
+
+  if (!(target instanceof HTMLElement)) {
+    return;
+  }
+
+  target.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+  target.focus();
+}
+
+function renderAccountabilityArtifactJumpList({
+  artifacts,
+  onJump
+}: {
+  artifacts: MemoryArtifact[];
+  onJump: (artifactRef: string) => void;
+}) {
+  if (artifacts.length === 0) {
+    return 'No linked memory artifacts';
+  }
+
+  return artifacts.map((artifact, index) => {
+    const label = `${artifact.latest_summary ?? artifact.file_name} (${artifact.artifact_ref})`;
+
+    return (
+      <span key={artifact.artifact_ref}>
+        {index > 0 ? ', ' : null}
+        <button
+          type="button"
+          className="aitown-link-button"
+          aria-label={`Jump to shared memory artifact ${artifact.artifact_ref}`}
+          onClick={() => onJump(artifact.artifact_ref)}
+        >
+          {label}
+        </button>
+      </span>
+    );
+  });
+}
+
 function renderAgentPivotList({
   agentIds,
   currentAgentId,
@@ -560,7 +609,13 @@ function renderSharedMemoryArtifact({
   const preservedCorrelationId = activeCorrelationId ?? artifactCorrelationId;
 
   return (
-    <li key={artifact.artifact_ref} className="aitown-record">
+    <li
+      key={artifact.artifact_ref}
+      id={resolveSharedMemoryArtifactDomId(artifact.artifact_ref)}
+      className="aitown-record"
+      data-shared-memory-target="true"
+      tabIndex={-1}
+    >
       <strong>{artifact.latest_summary ?? artifact.file_name}</strong>
       <span>{`Artifact · ${artifact.file_name} · ${renderDisplayState(artifact.artifact_kind)}`}</span>
       <span>{`Ref · ${artifact.artifact_ref}`}</span>
@@ -1299,9 +1354,6 @@ export function DetailsPanel({
     ...(alignedCorrelation?.evidence_refs ?? []),
     ...(accountabilityCorrelationId || !selectedCollectorItem ? [] : resolveCollectorEvidenceRefs(selectedCollectorItem))
   ]).slice(0, 4);
-  const accountabilityArtifacts = accountabilityMemoryArtifacts.map(
-    (artifact) => `${artifact.latest_summary ?? artifact.file_name} (${artifact.artifact_ref})`
-  );
   const accountabilitySources = dedupeNonEmptyStrings([
     includeSelectedOperationSignal ? selectedOperationLatestEvent?.source_kind : null,
     ...alignedWorkflowAlerts.map((alert) => alert.source_kind),
@@ -1472,7 +1524,13 @@ export function DetailsPanel({
             </span>
             <span>{`What · ${accountabilityWhat ?? 'No live accountability signal'}`}</span>
             <span>{`Evidence · ${renderNamedList(accountabilityEvidenceRefs, 'No loaded evidence refs')}`}</span>
-            <span>{`Artifacts · ${renderNamedList(accountabilityArtifacts, 'No linked memory artifacts')}`}</span>
+            <span>
+              Artifacts ·{' '}
+              {renderAccountabilityArtifactJumpList({
+                artifacts: accountabilityMemoryArtifacts,
+                onJump: focusSharedMemoryArtifact
+              })}
+            </span>
             <span>{`Source · ${renderNamedList(accountabilitySources, 'No loaded source signals')}`}</span>
             <span>
               Correlation ·{' '}

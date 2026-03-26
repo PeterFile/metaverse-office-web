@@ -591,6 +591,8 @@ function renderIncidentRecord({
         activeCorrelationId,
         onSelectCorrelation
       })}
+      <span>{`At · ${renderTimestamp(incident.ts, 'No incident timestamp')}`}</span>
+      <span>{`Actor · ${incident.actor_id}`}</span>
       <span>{`Incident · ${incident.kind} · ${incident.status}`}</span>
       <span>{`Severity · ${SEVERITY_LABELS[incident.severity]}`}</span>
       <span>{`Counterparties · ${renderCounterparties(incident.counterparty_agent_ids)}`}</span>

@@ -1231,6 +1231,8 @@ afterEach(() => {
     expect(within(topologySection!).getByText('Risk · High risk · Orange')).toBeVisible();
     const overviewIncidentRecord = within(incidentSection!).getByText('Lead is still waiting on workflow evidence').closest('li');
     expect(overviewIncidentRecord).not.toBeNull();
+    expect(within(overviewIncidentRecord!).getByText('At · 2026-03-16T08:50:00.000Z')).toBeVisible();
+    expect(within(overviewIncidentRecord!).getByText('Actor · team-lead')).toBeVisible();
     expect(within(overviewIncidentRecord!).getByText('Incident · peer_watch · open')).toBeVisible();
     expect(within(overviewIncidentRecord!).getByText('Severity · Orange')).toBeVisible();
     expect(within(overviewIncidentRecord!).getByText('Counterparties · team-lead')).toBeVisible();
@@ -3965,6 +3967,8 @@ afterEach(() => {
     expect(incidentSection).not.toBeNull();
     const selectedIncidentRecord = within(incidentSection!).getByText('Lead is still waiting on workflow evidence').closest('li');
     expect(selectedIncidentRecord).not.toBeNull();
+    expect(within(selectedIncidentRecord!).getByText('At · 2026-03-16T08:50:00.000Z')).toBeVisible();
+    expect(within(selectedIncidentRecord!).getByText('Actor · team-lead')).toBeVisible();
     expect(within(selectedIncidentRecord!).getByText('Incident · peer_watch · open')).toBeVisible();
     expect(within(selectedIncidentRecord!).getByText('Severity · Orange')).toBeVisible();
     expect(within(selectedIncidentRecord!).getByText('Counterparties · team-lead')).toBeVisible();

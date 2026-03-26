@@ -729,6 +729,65 @@ describe('DetailsPanel accountability signals', () => {
   });
 });
 
+describe('DetailsPanel workflow peer-watch alerts', () => {
+  it('renders read-only observability metadata for selected-agent workflow alerts', () => {
+    const workflow: AgentWorkflow = {
+      ...buildWorkflow(),
+      detail: {
+        ...buildWorkflow().detail,
+        open_peer_watch_alerts: [
+          {
+            alert_id: 'alert-observability',
+            ts: '2026-03-16T08:55:00.000Z',
+            agent_id: 'app-engineering',
+            target_agent_id: 'app-engineering',
+            actor_id: 'team-lead',
+            observer_agent_id: 'team-lead',
+            watcher_agent_ids: ['growth-revenue', 'team-lead'],
+            severity: 'orange',
+            status: 'open',
+            current_state: 'blocked',
+            active_task: 'Fix workflow issue',
+            summary: 'Peer watch still waiting on review evidence',
+            evidence_refs: ['/evidence/review.md', '/evidence/log.md'],
+            evidence_count: 2,
+            correlation_id: 'corr-app-review',
+            source_kind: 'controller_event',
+            metadata: {}
+          }
+        ]
+      }
+    };
+
+    render(<DetailsPanel {...buildProps({ workflow })} />);
+
+    const section = screen.getByRole('heading', { name: 'Workflow' }).closest('section');
+    expect(section).not.toBeNull();
+
+    const alertRecord = within(section!)
+      .getByText('Peer watch still waiting on review evidence')
+      .closest('li');
+    expect(alertRecord).not.toBeNull();
+
+    expect(
+      within(alertRecord!).getByRole('button', {
+        name: 'Open workflow correlation corr-app-review, currently selected'
+      })
+    ).toBeVisible();
+    expect(within(alertRecord!).getByText('At · 2026-03-16T08:55:00.000Z')).toBeVisible();
+    expect(within(alertRecord!).getByText('Observer · team-lead')).toBeVisible();
+    expect(within(alertRecord!).getByText('Watchers · growth-revenue, team-lead')).toBeVisible();
+    expect(within(alertRecord!).getByText('Status · open')).toBeVisible();
+    expect(within(alertRecord!).getByText('Workflow status · blocked')).toBeVisible();
+    expect(within(alertRecord!).getByText('Task · Fix workflow issue')).toBeVisible();
+    expect(
+      within(alertRecord!).getByText('Evidence · /evidence/review.md, /evidence/log.md')
+    ).toBeVisible();
+    expect(within(alertRecord!).getByText('Evidence count · 2')).toBeVisible();
+    expect(within(alertRecord!).getByText('Source · controller_event')).toBeVisible();
+  });
+});
+
 describe('DetailsPanel shared memory', () => {
   it('renders a no-correlation artifact path without shared-memory correlation pivots', () => {
     render(

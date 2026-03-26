@@ -13,6 +13,7 @@ import type {
   TimelineReplayResponse,
   WorkflowIncident,
   WorkflowInteraction,
+  WorkflowPeerWatchAlert,
   WorkflowTimelineEvent
 } from '../types';
 import type { LoadState } from '../hooks/usePolledResource';
@@ -370,6 +371,38 @@ function renderWorkflowStatusRecord({
       <span>{`Counterparties · ${renderCounterparties(counterpartyAgentIds)}`}</span>
       <span>{`Evidence · ${renderEvidenceRefs(evidenceRefs)}`}</span>
       <span>{`Source · ${sourceKind}`}</span>
+    </li>
+  );
+}
+
+function renderWorkflowPeerWatchAlert({
+  alert,
+  activeCorrelationId,
+  onSelectCorrelation
+}: {
+  alert: WorkflowPeerWatchAlert;
+  activeCorrelationId: string | null;
+  onSelectCorrelation: (correlationId: string | null) => void;
+}) {
+  return (
+    <li key={alert.alert_id} className={`aitown-record severity-${alert.severity}`}>
+      <strong>{alert.summary}</strong>
+      {renderCorrelationButton({
+        correlationId: alert.correlation_id,
+        label: alert.correlation_id ?? 'No correlation id',
+        buttonLabel: 'Open workflow correlation',
+        activeCorrelationId,
+        onSelectCorrelation
+      })}
+      <span>{`At · ${renderTimestamp(alert.ts, 'No alert timestamp')}`}</span>
+      <span>{`Observer · ${alert.observer_agent_id}`}</span>
+      <span>{`Watchers · ${renderNamedList(alert.watcher_agent_ids, 'No watchers')}`}</span>
+      <span>{`Status · ${alert.status}`}</span>
+      <span>{`Workflow status · ${alert.current_state}`}</span>
+      <span>{`Task · ${alert.active_task}`}</span>
+      <span>{`Evidence · ${renderEvidenceRefs(alert.evidence_refs)}`}</span>
+      <span>{`Evidence count · ${alert.evidence_count}`}</span>
+      <span>{`Source · ${alert.source_kind}`}</span>
     </li>
   );
 }
@@ -1312,19 +1345,13 @@ export function DetailsPanel({
               <span>{`Recent reboots · ${workflow.detail.recent_reboots.length}`}</span>
             </li>
           ) : null}
-          {(workflow?.detail.open_peer_watch_alerts ?? []).map((alert) => (
-            <li key={alert.alert_id} className={`aitown-record severity-${alert.severity}`}>
-              <strong>{alert.summary}</strong>
-              {renderCorrelationButton({
-                correlationId: alert.correlation_id,
-                label: alert.correlation_id ?? 'No correlation id',
-                buttonLabel: 'Open workflow correlation',
-                activeCorrelationId: selectedCorrelationId,
-                onSelectCorrelation
-              })}
-              <span>{`Workflow status · ${alert.current_state}`}</span>
-            </li>
-          ))}
+          {(workflow?.detail.open_peer_watch_alerts ?? []).map((alert) =>
+            renderWorkflowPeerWatchAlert({
+              alert,
+              activeCorrelationId: selectedCorrelationId,
+              onSelectCorrelation
+            })
+          )}
           {workflow && workflow.detail.open_peer_watch_alerts.length === 0 ? (
             <li className="aitown-record">No open watch alerts.</li>
           ) : null}

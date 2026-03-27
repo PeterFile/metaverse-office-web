@@ -18,6 +18,7 @@ const secondaryCorrelationUrl = '/correlations/corr-app-secondary?limit=10&windo
 const memoryArtifactsUrl = '/memory/artifacts?limit=4&window=60m';
 const crewOverviewSelectedCorrelationMemoryArtifactsUrl =
   '/memory/artifacts?limit=4&window=60m&correlation_id=corr-app-secondary';
+const appEngineeringMemoryArtifactsUrl = '/memory/artifacts?limit=4&window=60m&agent_id=app-engineering';
 const teamLeadMemoryArtifactsUrl = '/memory/artifacts?limit=4&window=60m&agent_id=team-lead';
 const teamLeadSelectedCorrelationMemoryArtifactsUrl =
   '/memory/artifacts?limit=4&window=60m&agent_id=team-lead&correlation_id=corr-app-review';
@@ -902,6 +903,10 @@ function resolveDefaultFetchResponse(url: string) {
     return jsonResponse(crewOverviewSelectedCorrelationMemoryArtifactsFixture);
   }
 
+  if (url === appEngineeringMemoryArtifactsUrl) {
+    return jsonResponse(memoryArtifactsFixture);
+  }
+
   if (url === teamLeadMemoryArtifactsUrl) {
     return jsonResponse(teamLeadMemoryArtifactsFixture);
   }
@@ -1447,7 +1452,17 @@ afterEach(() => {
     expect(within(collectorSection!).getByText('App Engineering Agent')).toBeVisible();
     expect(within(collectorSection!).getByText('Needs attention · Yes')).toBeVisible();
     expect(within(collectorSection!).getByText('Watchers · team-lead, growth-revenue')).toBeVisible();
-    expect(within(collectorSection!).getByText('Evidence · /tmp/controller-log.md, /tmp/evidence.md')).toBeVisible();
+    expect(collectorSection!).toHaveTextContent('Evidence · /tmp/controller-log.md, /tmp/evidence.md');
+    expect(
+      within(collectorSection!).getByRole('button', {
+        name: 'Jump to collector evidence ref /tmp/evidence.md'
+      })
+    ).toBeVisible();
+    expect(
+      within(collectorSection!).queryByRole('button', {
+        name: 'Jump to collector evidence ref /tmp/controller-log.md'
+      })
+    ).not.toBeInTheDocument();
   });
 
   it('loads the timeline replay slice only when Hub opens in Crew Overview and hides it after selecting an agent', async () => {
@@ -5195,7 +5210,11 @@ afterEach(() => {
 
     const collectorSection = await within(details).findByRole('heading', { name: 'Collector Observation' });
     const collectorContainer = collectorSection.closest('section');
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    const memorySection = within(details).getByRole('heading', { name: 'Shared Memory' }).closest('section');
     expect(collectorContainer).not.toBeNull();
+    expect(correlationSection).not.toBeNull();
+    expect(memorySection).not.toBeNull();
 
     expect(within(collectorContainer!).getByText('Heartbeat received · 2026-03-16T08:59:30.000Z')).toBeVisible();
     expect(within(collectorContainer!).getByText('Collector state · blocked')).toBeVisible();
@@ -5207,6 +5226,44 @@ afterEach(() => {
     expect(within(collectorContainer!).getByText('Watched by · team-lead, growth-revenue')).toBeVisible();
     expect(within(collectorContainer!).getByText('Workspace observations · 2')).toBeVisible();
     expect(within(collectorContainer!).getByText('Tmux observations · 1')).toBeVisible();
-    expect(within(collectorContainer!).getByText('Evidence · /tmp/controller-log.md, /tmp/evidence.md')).toBeVisible();
+    expect(collectorContainer!).toHaveTextContent('Evidence · /tmp/controller-log.md, /tmp/evidence.md');
+    const collectorEvidenceLine = within(collectorContainer!).getByText(
+      (_content, element) =>
+        element?.tagName === 'SPAN' &&
+        element.textContent === 'Evidence · /tmp/controller-log.md, /tmp/evidence.md'
+    );
+    const artifactRecord = within(memorySection!).getByText('Ref · /tmp/evidence.md').closest('li');
+    expect(artifactRecord).not.toBeNull();
+    expect(
+      within(collectorEvidenceLine).getByRole('button', {
+        name: 'Jump to collector evidence ref /tmp/evidence.md'
+      })
+    ).toBeVisible();
+    expect(
+      within(collectorEvidenceLine).queryByRole('button', {
+        name: 'Jump to collector evidence ref /tmp/controller-log.md'
+      })
+    ).not.toBeInTheDocument();
+
+    const fetchCallCountBeforeJump = vi.mocked(globalThis.fetch).mock.calls.length;
+
+    await user.click(
+      within(collectorEvidenceLine).getByRole('button', {
+        name: 'Jump to collector evidence ref /tmp/evidence.md'
+      })
+    );
+
+    expect(document.activeElement).toBe(artifactRecord);
+    expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+    expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+
+    const newFetchUrlsAfterJump = vi
+      .mocked(globalThis.fetch)
+      .mock.calls.slice(fetchCallCountBeforeJump)
+      .map(([input]) => (typeof input === 'string' ? input : input.toString()));
+    expect(newFetchUrlsAfterJump).not.toContain(workflowUrl);
+    expect(newFetchUrlsAfterJump).not.toContain(correlationUrl);
+    expect(newFetchUrlsAfterJump).not.toContain(appEngineeringMemoryArtifactsUrl);
+    expect(newFetchUrlsAfterJump).not.toContain(selectedCorrelationMemoryArtifactsUrl);
   });
 });

@@ -1173,16 +1173,28 @@ export function DetailsPanel({
                 <span>{`Reboot flags · ${collectorSnapshot.summary.reboot_recommended_count}`}</span>
               </li>
             ) : null}
-            {collectorSignalItems.map((item) => (
-              <li key={item.agent_id} className={`aitown-record severity-${resolveCollectorSeverity(item)}`}>
-                <strong>{agentNameById.get(item.agent_id) ?? item.agent_id}</strong>
-                <span>{`Collector state · ${item.heartbeat.current_state}`}</span>
-                <span>{`Needs attention · ${item.supervision.needs_attention ? 'Yes' : 'No'}`}</span>
-                <span>{`Reboot flag · ${item.heartbeat.reboot_recommended ? 'Recommended' : 'No'}`}</span>
-                <span>{`Watchers · ${renderNamedList(item.supervision.watched_by, 'No watchers')}`}</span>
-                <span>{`Evidence · ${renderEvidenceRefs(resolveCollectorEvidenceRefs(item))}`}</span>
-              </li>
-            ))}
+            {collectorSignalItems.map((item) => {
+              const collectorEvidenceRefs = resolveCollectorEvidenceRefs(item);
+
+              return (
+                <li key={item.agent_id} className={`aitown-record severity-${resolveCollectorSeverity(item)}`}>
+                  <strong>{agentNameById.get(item.agent_id) ?? item.agent_id}</strong>
+                  <span>{`Collector state · ${item.heartbeat.current_state}`}</span>
+                  <span>{`Needs attention · ${item.supervision.needs_attention ? 'Yes' : 'No'}`}</span>
+                  <span>{`Reboot flag · ${item.heartbeat.reboot_recommended ? 'Recommended' : 'No'}`}</span>
+                  <span>{`Watchers · ${renderNamedList(item.supervision.watched_by, 'No watchers')}`}</span>
+                  <span>
+                    Evidence ·{' '}
+                    {renderSharedMemoryEvidenceRefs({
+                      evidenceRefs: collectorEvidenceRefs,
+                      sharedMemoryArtifactRefs,
+                      onJump: focusSharedMemoryArtifact,
+                      jumpAriaLabelPrefix: 'Jump to collector evidence ref'
+                    })}
+                  </span>
+                </li>
+              );
+            })}
             {collectorSnapshotState === 'ready' && !collectorSnapshotError && !collectorSnapshot ? (
               <li className="aitown-record">No collector snapshot available yet.</li>
             ) : null}
@@ -1486,6 +1498,7 @@ export function DetailsPanel({
     workflowPivotCorrelationIds.length > 0 || (workflow?.counterparty_agent_ids.length ?? 0) > 0;
   const selectedCollectorItem =
     collectorSnapshot?.items.find((item) => item.agent_id === selectedAgent.agent_id) ?? null;
+  const selectedCollectorEvidenceRefs = selectedCollectorItem ? resolveCollectorEvidenceRefs(selectedCollectorItem) : [];
   const outboundWatchers = world.watch_edges.filter((edge) => edge.from_agent_id === selectedAgent.agent_id);
   const selectedOperationCorrelationId = currentOperationIsStale ? null : selectedOperation?.correlation_id ?? null;
   const accountabilityCorrelationId =
@@ -1567,7 +1580,7 @@ export function DetailsPanel({
       .flatMap((interaction) => interaction.evidence_refs) ?? []),
     ...alignedWorkflowIncidentHistory.flatMap((incident) => incident.evidence_refs),
     ...(alignedCorrelation?.evidence_refs ?? []),
-    ...(accountabilityCorrelationId || !selectedCollectorItem ? [] : resolveCollectorEvidenceRefs(selectedCollectorItem))
+    ...(accountabilityCorrelationId || !selectedCollectorItem ? [] : selectedCollectorEvidenceRefs)
   ]).slice(0, 4);
   const accountabilitySources = dedupeNonEmptyStrings([
     includeSelectedOperationSignal ? selectedOperationLatestEvent?.source_kind : null,
@@ -1651,7 +1664,15 @@ export function DetailsPanel({
               <span>{`Tmux observations · ${selectedCollectorItem.tmux_observations.length}`}</span>
               <span>{`Workspace root · ${selectedCollectorItem.workspace_root}`}</span>
               <span>{`Session · ${selectedCollectorItem.session_ref}`}</span>
-              <span>{`Evidence · ${renderEvidenceRefs(resolveCollectorEvidenceRefs(selectedCollectorItem))}`}</span>
+              <span>
+                Evidence ·{' '}
+                {renderSharedMemoryEvidenceRefs({
+                  evidenceRefs: selectedCollectorEvidenceRefs,
+                  sharedMemoryArtifactRefs,
+                  onJump: focusSharedMemoryArtifact,
+                  jumpAriaLabelPrefix: 'Jump to collector evidence ref'
+                })}
+              </span>
             </li>
           ) : null}
           {collectorSnapshotState === 'ready' && !collectorSnapshotError && !collectorSnapshot ? (

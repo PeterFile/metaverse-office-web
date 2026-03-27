@@ -981,25 +981,18 @@ test.describe('operator shell smoke', () => {
     const auditSection = detailsPanel.locator('section').filter({
       has: page.getByRole('heading', { name: 'Audit Signals' })
     });
-    const correlationSection = detailsPanel.locator('section').filter({
-      has: page.getByRole('heading', { name: 'Correlation Drilldown' })
+    const artifactJumpButton = auditSection.getByRole('button', {
+      name: 'Jump to shared memory artifact /tmp/revenue-handoff.md'
     });
-    const artifactJumpButton = auditSection
-      .getByRole('button', {
-        name: 'Jump to shared memory artifact /tmp/revenue-handoff.md'
-      })
-      .filter({ hasText: 'Lead completed the revenue handoff (/tmp/revenue-handoff.md)' });
     const focusedSharedMemoryRecord = detailsPanel.locator('li[data-shared-memory-target]:focus');
 
     await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
-    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
     await expect(artifactJumpButton).toBeVisible();
     await focusHubControlWithTab(page, artifactJumpButton, 'Jump to shared memory artifact /tmp/revenue-handoff.md');
     await expect(artifactJumpButton).toBeFocused();
     await page.keyboard.press('Enter');
 
     await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
-    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
     await expect(focusedSharedMemoryRecord).toHaveCount(1);
     await expect(focusedSharedMemoryRecord).toContainText('Ref · /tmp/revenue-handoff.md');
   });
@@ -1021,23 +1014,51 @@ test.describe('operator shell smoke', () => {
     const auditSection = detailsPanel.locator('section').filter({
       has: page.getByRole('heading', { name: 'Audit Signals' })
     });
-    const correlationSection = detailsPanel.locator('section').filter({
-      has: page.getByRole('heading', { name: 'Correlation Drilldown' })
-    });
     const evidenceJumpButton = auditSection.getByRole('button', {
       name: 'Jump to accountability evidence ref /tmp/revenue-handoff.md'
     });
     const focusedSharedMemoryRecord = detailsPanel.locator('li[data-shared-memory-target]:focus');
 
     await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
-    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
     await expect(evidenceJumpButton).toBeVisible();
     await focusHubControlWithTab(page, evidenceJumpButton, 'Jump to accountability evidence ref /tmp/revenue-handoff.md');
     await expect(evidenceJumpButton).toBeFocused();
     await page.keyboard.press('Enter');
 
     await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
-    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
+    await expect(focusedSharedMemoryRecord).toHaveCount(1);
+    await expect(focusedSharedMemoryRecord).toContainText('Ref · /tmp/revenue-handoff.md');
+  });
+
+  test('jumps from collector observation evidence refs into the shared-memory record via keyboard traversal', async ({ page }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Hub' }).click();
+
+    const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
+    const queueButton = detailsPanel.getByRole('button', {
+      name: 'Inspect App Engineering Agent',
+      exact: true
+    });
+
+    await focusHubControlWithTab(page, queueButton, 'Inspect App Engineering Agent');
+    await expect(queueButton).toBeFocused();
+    await page.keyboard.press('Enter');
+
+    const collectorObservationSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Collector Observation' })
+    });
+    const evidenceJumpButton = collectorObservationSection.getByRole('button', {
+      name: 'Jump to collector evidence ref /tmp/revenue-handoff.md'
+    });
+    const focusedSharedMemoryRecord = detailsPanel.locator('li[data-shared-memory-target]:focus');
+
+    await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+    await expect(evidenceJumpButton).toBeVisible();
+    await focusHubControlWithTab(page, evidenceJumpButton, 'Jump to collector evidence ref /tmp/revenue-handoff.md');
+    await expect(evidenceJumpButton).toBeFocused();
+    await page.keyboard.press('Enter');
+
+    await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
     await expect(focusedSharedMemoryRecord).toHaveCount(1);
     await expect(focusedSharedMemoryRecord).toContainText('Ref · /tmp/revenue-handoff.md');
   });

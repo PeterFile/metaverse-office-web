@@ -571,6 +571,54 @@ async function seedBrowserSmokeSlice(store) {
     confidence_level: 'high',
     reboot_recommended: false
   });
+
+  await store.appendCollectorReport({
+    collected_at: '2026-03-10T23:59:40.000Z',
+    actor_id: 'team-lead',
+    summary: {
+      agent_count: 1,
+      heartbeat_count: 1,
+      tmux_observed_count: 0,
+      workspace_observed_count: 1,
+      reboot_recommended_count: 0
+    },
+    items: [
+      {
+        agent_id: 'app-engineering',
+        workspace_root: '/tmp/app-engineering',
+        session_ref: '5-web3-app-engineering',
+        evidence_refs: ['/tmp/revenue-handoff.md'],
+        workspace_observations: [
+          {
+            path: '/tmp/revenue-handoff.md',
+            file_name: 'revenue-handoff.md',
+            kind: 'workspace_file',
+            last_modified_at: '2026-03-10T23:39:00.000Z'
+          }
+        ],
+        tmux_observations: [],
+        supervision: {
+          watch_target: 'growth-revenue',
+          watched_by: ['team-lead'],
+          needs_attention: false
+        },
+        heartbeat: {
+          agent_id: 'app-engineering',
+          actor_id: 'team-lead',
+          received_at: '2026-03-10T23:59:30.000Z',
+          current_state: store.getAgent('app-engineering').current_state,
+          active_task: 'Confirm the revenue handoff',
+          current_location: 'delivery-desk',
+          last_meaningful_output_at: '2026-03-10T23:58:00.000Z',
+          last_file_write_at: '2026-03-10T23:39:00.000Z',
+          current_blocker: '',
+          confidence_level: 'high',
+          reboot_recommended: false,
+          evidence_refs: ['/tmp/revenue-handoff.md']
+        }
+      }
+    ]
+  });
 }
 
 function createEvent({

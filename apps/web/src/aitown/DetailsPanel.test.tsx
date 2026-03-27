@@ -1121,6 +1121,98 @@ describe('DetailsPanel accountability signals', () => {
     expect(onSelectCorrelation).not.toHaveBeenCalled();
   });
 
+  it('jumps from matching collector evidence refs to shared memory in both collector surfaces while leaving non-matching refs as plain text', async () => {
+    const user = userEvent.setup();
+    const onSelectAgent = vi.fn();
+    const onSelectCorrelation = vi.fn();
+    const memoryArtifacts: MemoryArtifactIndex = {
+      generated_at: '2026-03-16T09:00:00.000Z',
+      items: [
+        ...buildMemoryArtifacts().items,
+        {
+          artifact_ref: '/evidence/controller.md',
+          artifact_kind: 'evidence_ref',
+          file_name: 'controller.md',
+          first_seen_at: '2026-03-16T08:46:00.000Z',
+          last_seen_at: '2026-03-16T08:59:30.000Z',
+          mention_count: 2,
+          agent_ids: ['app-engineering'],
+          correlation_ids: ['corr-app-review'],
+          source_kinds: ['workspace_snapshot'],
+          latest_summary: 'Collector evidence anchor',
+          latest_event_type: 'agent_noted',
+          collector_last_modified_at: '2026-03-16T08:59:30.000Z'
+        }
+      ]
+    };
+
+    const { rerender } = render(
+      <DetailsPanel
+        {...buildProps({
+          memoryArtifacts,
+          onSelectAgent,
+          onSelectCorrelation,
+          selectedAgent: null,
+          selectedOperation: null
+        })}
+      />
+    );
+
+    const collectorSection = screen.getByRole('heading', { name: 'Collector Supervision' }).closest('section');
+    expect(collectorSection).not.toBeNull();
+
+    const collectorOverviewEvidenceLine = within(collectorSection!).getByText(
+      (_content, element) =>
+        element?.tagName === 'SPAN' &&
+        element.textContent === 'Evidence · /evidence/log.md, /evidence/controller.md'
+    );
+    expect(
+      within(collectorOverviewEvidenceLine).getByRole('button', {
+        name: 'Jump to collector evidence ref /evidence/controller.md'
+      })
+    ).toBeVisible();
+    expect(
+      within(collectorOverviewEvidenceLine).queryByRole('button', {
+        name: 'Jump to collector evidence ref /evidence/log.md'
+      })
+    ).not.toBeInTheDocument();
+
+    rerender(<DetailsPanel {...buildProps({ memoryArtifacts, onSelectAgent, onSelectCorrelation })} />);
+
+    const collectorObservationSection = screen.getByRole('heading', { name: 'Collector Observation' }).closest('section');
+    const sharedMemorySection = screen.getByRole('heading', { name: 'Shared Memory' }).closest('section');
+    expect(collectorObservationSection).not.toBeNull();
+    expect(sharedMemorySection).not.toBeNull();
+
+    const collectorObservationEvidenceLine = within(collectorObservationSection!).getByText(
+      (_content, element) =>
+        element?.tagName === 'SPAN' &&
+        element.textContent === 'Evidence · /evidence/log.md, /evidence/controller.md'
+    );
+    const artifactRecord = within(sharedMemorySection!).getByText('Ref · /evidence/controller.md').closest('li');
+    expect(artifactRecord).not.toBeNull();
+    expect(
+      within(collectorObservationEvidenceLine).getByRole('button', {
+        name: 'Jump to collector evidence ref /evidence/controller.md'
+      })
+    ).toBeVisible();
+    expect(
+      within(collectorObservationEvidenceLine).queryByRole('button', {
+        name: 'Jump to collector evidence ref /evidence/log.md'
+      })
+    ).not.toBeInTheDocument();
+
+    await user.click(
+      within(collectorObservationEvidenceLine).getByRole('button', {
+        name: 'Jump to collector evidence ref /evidence/controller.md'
+      })
+    );
+
+    expect(document.activeElement).toBe(artifactRecord);
+    expect(onSelectAgent).not.toHaveBeenCalled();
+    expect(onSelectCorrelation).not.toHaveBeenCalled();
+  });
+
   it('jumps from matching top-level correlation evidence refs to shared memory in crew overview while leaving non-matching refs as plain text', async () => {
     const user = userEvent.setup();
     const onSelectAgent = vi.fn();

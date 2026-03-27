@@ -3012,6 +3012,45 @@ afterEach(() => {
     expect(globalThis.fetch).not.toHaveBeenCalledWith(teamLeadSelectedCorrelationMemoryArtifactsUrl, expect.anything());
   });
 
+  it('jumps from correlation-timeline evidence refs to shared memory without changing the selected agent or correlation', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent from active queue' }));
+
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    const memorySection = within(details).getByRole('heading', { name: 'Shared Memory' }).closest('section');
+    expect(correlationSection).not.toBeNull();
+    expect(memorySection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+      expect(within(memorySection!).getByText('Ref · /tmp/evidence.md')).toBeVisible();
+    });
+
+    const timelineRecord = within(correlationSection!).getByText('Workflow evidence is still incomplete').closest('li');
+    const artifactRecord = within(memorySection!).getByText('Ref · /tmp/evidence.md').closest('li');
+    expect(timelineRecord).not.toBeNull();
+    expect(artifactRecord).not.toBeNull();
+
+    const fetchCallCountBeforeJump = vi.mocked(globalThis.fetch).mock.calls.length;
+
+    await user.click(
+      within(timelineRecord!).getByRole('button', {
+        name: 'Jump to shared memory artifact /tmp/evidence.md'
+      })
+    );
+
+    expect(document.activeElement).toBe(artifactRecord);
+    expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+    expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+    expect(vi.mocked(globalThis.fetch).mock.calls).toHaveLength(fetchCallCountBeforeJump);
+    expect(globalThis.fetch).not.toHaveBeenCalledWith(teamLeadWorkflowUrl, expect.anything());
+    expect(globalThis.fetch).not.toHaveBeenCalledWith(teamLeadSelectedCorrelationMemoryArtifactsUrl, expect.anything());
+  });
+
   it('pivots from correlation incident agents while preserving the active correlation', async () => {
     const originalFetch = globalThis.fetch;
     vi.stubGlobal(

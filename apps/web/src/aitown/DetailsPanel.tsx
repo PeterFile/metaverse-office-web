@@ -479,7 +479,19 @@ function renderCorrelationInteraction({
   );
 }
 
-function renderCorrelationTimelineEvent(event: WorkflowTimelineEvent) {
+function renderCorrelationTimelineEvent(
+  input:
+    | WorkflowTimelineEvent
+    | {
+        event: WorkflowTimelineEvent;
+        sharedMemoryArtifactRefs?: ReadonlySet<string>;
+        enableSharedMemoryEvidenceJump?: boolean;
+      }
+) {
+  const event = 'event' in input ? input.event : input;
+  const sharedMemoryArtifactRefs = 'event' in input ? input.sharedMemoryArtifactRefs : undefined;
+  const enableSharedMemoryEvidenceJump = 'event' in input ? (input.enableSharedMemoryEvidenceJump ?? false) : false;
+
   return (
     <li key={event.event_id} className={`aitown-record severity-${event.severity}`}>
       <strong>{event.summary}</strong>
@@ -489,7 +501,18 @@ function renderCorrelationTimelineEvent(event: WorkflowTimelineEvent) {
       <span>{`State · ${event.current_state}`}</span>
       <span>{`Severity · ${SEVERITY_LABELS[event.severity]}`}</span>
       <span>{`Counterparties · ${renderCounterparties(event.counterparty_agent_ids)}`}</span>
-      <span>{`Evidence · ${renderEvidenceRefs(event.evidence_refs)}`}</span>
+      {enableSharedMemoryEvidenceJump && sharedMemoryArtifactRefs ? (
+        <span>
+          Evidence ·{' '}
+          {renderSharedMemoryEvidenceRefs({
+            evidenceRefs: event.evidence_refs,
+            sharedMemoryArtifactRefs,
+            onJump: focusSharedMemoryArtifact
+          })}
+        </span>
+      ) : (
+        <span>{`Evidence · ${renderEvidenceRefs(event.evidence_refs)}`}</span>
+      )}
       <span>{`Source · ${event.source_kind}`}</span>
     </li>
   );
@@ -1305,12 +1328,12 @@ export function DetailsPanel({
                     activeCorrelationId: sharedMemoryActiveCorrelationId,
                     currentAgentId: null,
                     navigableAgentIds,
-                  sharedMemoryArtifactRefs,
-                  enableSharedMemoryEvidenceJump: true,
-                  onSelectAgent,
-                  onSelectCorrelation,
-                  includeAgentPivot: false,
-                  includeCorrelationPivot: false
+                    sharedMemoryArtifactRefs,
+                    enableSharedMemoryEvidenceJump: true,
+                    onSelectAgent,
+                    onSelectCorrelation,
+                    includeAgentPivot: false,
+                    includeCorrelationPivot: false
                   })
                 )}
                 {correlation.interactions.map((interaction) =>
@@ -1320,7 +1343,13 @@ export function DetailsPanel({
                     enableSharedMemoryEvidenceJump: true
                   })
                 )}
-                {correlation.timeline.map(renderCorrelationTimelineEvent)}
+                {correlation.timeline.map((event) =>
+                  renderCorrelationTimelineEvent({
+                    event,
+                    sharedMemoryArtifactRefs,
+                    enableSharedMemoryEvidenceJump: true
+                  })
+                )}
               </>
             ) : null}
             {correlationState !== 'loading' && !correlationError && !correlation ? (
@@ -1827,7 +1856,13 @@ export function DetailsPanel({
                   enableSharedMemoryEvidenceJump: true
                 })
               )}
-              {correlation.timeline.map(renderCorrelationTimelineEvent)}
+              {correlation.timeline.map((event) =>
+                renderCorrelationTimelineEvent({
+                  event,
+                  sharedMemoryArtifactRefs,
+                  enableSharedMemoryEvidenceJump: true
+                })
+              )}
             </>
           ) : null}
           {correlationState !== 'loading' && !correlationError && !correlation ? (

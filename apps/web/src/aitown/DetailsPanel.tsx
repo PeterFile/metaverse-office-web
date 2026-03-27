@@ -1346,6 +1346,7 @@ export function DetailsPanel({
                 currentAgentId: null,
                 navigableAgentIds,
                 sharedMemoryArtifactRefs,
+                enableSharedMemoryEvidenceJump: true,
                 onSelectAgent,
                 onSelectCorrelation,
                 includeAgentPivot: true
@@ -1938,6 +1939,7 @@ export function DetailsPanel({
               currentAgentId: selectedAgent.agent_id,
               navigableAgentIds,
               sharedMemoryArtifactRefs,
+              enableSharedMemoryEvidenceJump: true,
               onSelectAgent,
               onSelectCorrelation,
               includeAgentPivot: false

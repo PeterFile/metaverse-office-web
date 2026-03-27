@@ -1765,7 +1765,10 @@ describe('DetailsPanel workflow peer-watch alerts', () => {
     expect(onSelectCorrelation).toHaveBeenCalledWith('corr-app-secondary');
   });
 
-  it('renders read-only observability metadata for selected-agent workflow alerts', () => {
+  it('jumps from matching selected-agent workflow peer-watch alert evidence refs to shared memory while leaving non-matching refs as plain text', async () => {
+    const user = userEvent.setup();
+    const onSelectAgent = vi.fn();
+    const onSelectCorrelation = vi.fn();
     const workflow: AgentWorkflow = {
       ...buildWorkflow(),
       detail: {
@@ -1784,7 +1787,7 @@ describe('DetailsPanel workflow peer-watch alerts', () => {
             current_state: 'blocked',
             active_task: 'Fix workflow issue',
             summary: 'Peer watch still waiting on review evidence',
-            evidence_refs: ['/evidence/review.md', '/evidence/log.md'],
+            evidence_refs: ['/evidence/review.md', '/evidence/missing.md'],
             evidence_count: 2,
             correlation_id: 'corr-app-review',
             source_kind: 'controller_event',
@@ -1793,16 +1796,42 @@ describe('DetailsPanel workflow peer-watch alerts', () => {
         ]
       }
     };
+    const memoryArtifacts: MemoryArtifactIndex = {
+      generated_at: '2026-03-16T09:00:00.000Z',
+      items: [
+        ...buildMemoryArtifacts().items,
+        {
+          artifact_ref: '/evidence/review.md',
+          artifact_kind: 'evidence_ref',
+          file_name: 'review.md',
+          first_seen_at: '2026-03-16T08:49:00.000Z',
+          last_seen_at: '2026-03-16T08:55:00.000Z',
+          mention_count: 2,
+          agent_ids: ['app-engineering', 'team-lead'],
+          correlation_ids: ['corr-app-review'],
+          source_kinds: ['controller_event'],
+          latest_summary: 'Peer-watch alert evidence anchor',
+          latest_event_type: 'peer_watch_alert_raised',
+          collector_last_modified_at: '2026-03-16T08:55:00.000Z'
+        }
+      ]
+    };
 
-    render(<DetailsPanel {...buildProps({ workflow })} />);
+    render(
+      <DetailsPanel {...buildProps({ workflow, memoryArtifacts, onSelectAgent, onSelectCorrelation })} />
+    );
 
-    const section = screen.getByRole('heading', { name: 'Workflow' }).closest('section');
-    expect(section).not.toBeNull();
+    const workflowSection = screen.getByRole('heading', { name: 'Workflow' }).closest('section');
+    const sharedMemorySection = screen.getByRole('heading', { name: 'Shared Memory' }).closest('section');
+    expect(workflowSection).not.toBeNull();
+    expect(sharedMemorySection).not.toBeNull();
 
-    const alertRecord = within(section!)
+    const alertRecord = within(workflowSection!)
       .getByText('Peer watch still waiting on review evidence')
       .closest('li');
+    const artifactRecord = within(sharedMemorySection!).getByText('Ref · /evidence/review.md').closest('li');
     expect(alertRecord).not.toBeNull();
+    expect(artifactRecord).not.toBeNull();
 
     expect(
       within(alertRecord!).getByRole('button', {
@@ -1816,10 +1845,28 @@ describe('DetailsPanel workflow peer-watch alerts', () => {
     expect(within(alertRecord!).getByText('Workflow status · blocked')).toBeVisible();
     expect(within(alertRecord!).getByText('Task · Fix workflow issue')).toBeVisible();
     expect(
-      within(alertRecord!).getByText('Evidence · /evidence/review.md, /evidence/log.md')
-    ).toBeVisible();
+      within(alertRecord!).getByRole('button', {
+        name: 'Jump to shared memory artifact /evidence/review.md'
+      })
+    ).toHaveTextContent('/evidence/review.md');
+    expect(alertRecord).toHaveTextContent('Evidence · /evidence/review.md, /evidence/missing.md');
+    expect(
+      within(alertRecord!).queryByRole('button', {
+        name: 'Jump to shared memory artifact /evidence/missing.md'
+      })
+    ).not.toBeInTheDocument();
     expect(within(alertRecord!).getByText('Evidence count · 2')).toBeVisible();
     expect(within(alertRecord!).getByText('Source · controller_event')).toBeVisible();
+
+    await user.click(
+      within(alertRecord!).getByRole('button', {
+        name: 'Jump to shared memory artifact /evidence/review.md'
+      })
+    );
+
+    expect(document.activeElement).toBe(artifactRecord);
+    expect(onSelectAgent).not.toHaveBeenCalled();
+    expect(onSelectCorrelation).not.toHaveBeenCalled();
   });
 });
 

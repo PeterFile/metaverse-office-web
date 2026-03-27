@@ -713,7 +713,8 @@ function renderIncidentRecord({
   navigableAgentIds,
   onSelectAgent,
   onSelectCorrelation,
-  includeAgentPivot
+  includeAgentPivot,
+  includeCorrelationPivot = true
 }: {
   incident: WorkflowIncident;
   activeCorrelationId: string | null;
@@ -722,6 +723,7 @@ function renderIncidentRecord({
   onSelectAgent: (agentId: string | null, correlationId?: string | null) => void;
   onSelectCorrelation: (correlationId: string | null) => void;
   includeAgentPivot: boolean;
+  includeCorrelationPivot?: boolean;
 }) {
   return (
     <li key={incident.incident_id} className={`aitown-record severity-${incident.severity}`}>
@@ -739,13 +741,15 @@ function renderIncidentRecord({
             : incident.agent_id}
         </span>
       ) : null}
-      {renderCorrelationButton({
-        correlationId: incident.correlation_id,
-        label: incident.correlation_id ?? 'No correlation id',
-        buttonLabel: 'Open incident correlation',
-        activeCorrelationId,
-        onSelectCorrelation
-      })}
+      {includeCorrelationPivot
+        ? renderCorrelationButton({
+            correlationId: incident.correlation_id,
+            label: incident.correlation_id ?? 'No correlation id',
+            buttonLabel: 'Open incident correlation',
+            activeCorrelationId,
+            onSelectCorrelation
+          })
+        : null}
       <span>{`At · ${renderTimestamp(incident.ts, 'No incident timestamp')}`}</span>
       <span>{`Actor · ${incident.actor_id}`}</span>
       <span>{`Incident · ${incident.kind} · ${incident.status}`}</span>
@@ -1705,16 +1709,18 @@ export function DetailsPanel({
                 <span>{`Evidence · ${renderEvidenceRefs(correlation.evidence_refs)}`}</span>
                 <span>{`Counts · ${correlation.incident_count} incidents · ${correlation.interaction_count} interactions · ${correlation.event_count} events`}</span>
               </li>
-              {correlation.incidents.map((incident) => (
-                <li key={incident.incident_id} className={`aitown-record severity-${incident.severity}`}>
-                  <strong>{incident.summary}</strong>
-                  <span>{`Incident · ${incident.kind} · ${incident.status}`}</span>
-                  <span>{`Severity · ${SEVERITY_LABELS[incident.severity]}`}</span>
-                  <span>{`Counterparties · ${renderCounterparties(incident.counterparty_agent_ids)}`}</span>
-                  <span>{`Evidence · ${renderEvidenceRefs(incident.evidence_refs)}`}</span>
-                  <span>{`Source · ${incident.source_kind}`}</span>
-                </li>
-              ))}
+              {correlation.incidents.map((incident) =>
+                renderIncidentRecord({
+                  incident,
+                  activeCorrelationId: selectedCorrelationId,
+                  currentAgentId: selectedAgent.agent_id,
+                  navigableAgentIds,
+                  onSelectAgent,
+                  onSelectCorrelation,
+                  includeAgentPivot: true,
+                  includeCorrelationPivot: false
+                })
+              )}
               {correlation.interactions.map(renderCorrelationInteraction)}
               {correlation.timeline.map(renderCorrelationTimelineEvent)}
             </>

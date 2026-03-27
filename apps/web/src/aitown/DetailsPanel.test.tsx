@@ -763,6 +763,52 @@ describe('DetailsPanel accountability signals', () => {
     expect(onSelectAgent).toHaveBeenCalledWith('team-lead', 'corr-app-review');
   });
 
+  it('renders correlation timeline counterparties as pivots only for navigable non-current agents', async () => {
+    const user = userEvent.setup();
+    const onSelectAgent = vi.fn();
+    const correlation: CorrelationDrilldown = {
+      ...buildCorrelation(),
+      timeline: [
+        {
+          ...buildCorrelation().timeline[0],
+          counterparty_agent_ids: ['app-engineering', 'team-lead', 'ghost-agent']
+        }
+      ]
+    };
+
+    render(<DetailsPanel {...buildProps({ correlation, onSelectAgent })} />);
+
+    const section = screen.getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    expect(section).not.toBeNull();
+
+    const timelineRecord = within(section!).getByText('Replay captured workflow follow-up').closest('li');
+    expect(timelineRecord).not.toBeNull();
+    expect(
+      within(timelineRecord!).queryByRole('button', {
+        name: 'Select correlation timeline counterparty agent app-engineering'
+      })
+    ).not.toBeInTheDocument();
+    expect(
+      within(timelineRecord!).queryByRole('button', {
+        name: 'Select correlation timeline counterparty agent ghost-agent'
+      })
+    ).not.toBeInTheDocument();
+    expect(timelineRecord).toHaveTextContent('Counterparties · app-engineering, team-lead, ghost-agent');
+    expect(
+      within(timelineRecord!).getByRole('button', {
+        name: 'Select correlation timeline counterparty agent team-lead'
+      })
+    ).toBeVisible();
+
+    await user.click(
+      within(timelineRecord!).getByRole('button', {
+        name: 'Select correlation timeline counterparty agent team-lead'
+      })
+    );
+
+    expect(onSelectAgent).toHaveBeenCalledWith('team-lead', 'corr-app-review');
+  });
+
   it('jumps from an accountability artifact to the matching shared-memory record without changing selection state', async () => {
     const user = userEvent.setup();
     const onSelectAgent = vi.fn();

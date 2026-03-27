@@ -3217,6 +3217,112 @@ afterEach(() => {
     expect(globalThis.fetch).not.toHaveBeenCalledWith(teamLeadSelectedCorrelationMemoryArtifactsUrl, expect.anything());
   });
 
+  it('jumps from selected-agent workflow handoff and reboot evidence refs to shared memory without changing the selected agent or correlation', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === workflowUrl) {
+          return jsonResponse({
+            ...workflowFixture,
+            detail: {
+              ...workflowFixture.detail,
+              recent_handoffs: [
+                {
+                  ...workflowFixture.detail.recent_handoffs[0],
+                  evidence_refs: ['/tmp/evidence.md', '/tmp/missing.md']
+                }
+              ],
+              recent_reboots: [
+                {
+                  ...workflowFixture.detail.recent_reboots[0],
+                  evidence_refs: ['/tmp/evidence.md', '/tmp/missing.md']
+                }
+              ]
+            }
+          } satisfies AgentWorkflow);
+        }
+
+        return resolveTestFetchResponse(url);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
+
+    const workflowSection = within(details).getByRole('heading', { name: 'Workflow' }).closest('section');
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    const memorySection = within(details).getByRole('heading', { name: 'Shared Memory' }).closest('section');
+    expect(workflowSection).not.toBeNull();
+    expect(correlationSection).not.toBeNull();
+    expect(memorySection).not.toBeNull();
+
+    await user.click(within(workflowSection!).getByRole('button', { name: /Open workflow correlation corr-app-review/ }));
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+      expect(within(memorySection!).getByText('Ref · /tmp/evidence.md')).toBeVisible();
+      expect(within(workflowSection!).getByText('Secondary review handoff completed')).toBeVisible();
+      expect(within(workflowSection!).getByText('Reboot recommended after the workflow stalled')).toBeVisible();
+    });
+
+    const handoffRecord = within(workflowSection!).getByText('Secondary review handoff completed').closest('li');
+    const rebootRecord = within(workflowSection!).getByText('Reboot recommended after the workflow stalled').closest('li');
+    const artifactRecord = within(memorySection!).getByText('Ref · /tmp/evidence.md').closest('li');
+    expect(handoffRecord).not.toBeNull();
+    expect(rebootRecord).not.toBeNull();
+    expect(artifactRecord).not.toBeNull();
+    expect(handoffRecord).toHaveTextContent('Evidence · /tmp/evidence.md, /tmp/missing.md');
+    expect(rebootRecord).toHaveTextContent('Evidence · /tmp/evidence.md, /tmp/missing.md');
+    expect(
+      within(handoffRecord!).getByRole('button', {
+        name: 'Jump to shared memory artifact /tmp/evidence.md'
+      })
+    ).toBeVisible();
+    expect(
+      within(rebootRecord!).getByRole('button', {
+        name: 'Jump to shared memory artifact /tmp/evidence.md'
+      })
+    ).toBeVisible();
+    expect(
+      within(handoffRecord!).queryByRole('button', {
+        name: 'Jump to shared memory artifact /tmp/missing.md'
+      })
+    ).not.toBeInTheDocument();
+    expect(
+      within(rebootRecord!).queryByRole('button', {
+        name: 'Jump to shared memory artifact /tmp/missing.md'
+      })
+    ).not.toBeInTheDocument();
+
+    const fetchCallCountBeforeJump = vi.mocked(globalThis.fetch).mock.calls.length;
+
+    await user.click(
+      within(handoffRecord!).getByRole('button', {
+        name: 'Jump to shared memory artifact /tmp/evidence.md'
+      })
+    );
+    expect(document.activeElement).toBe(artifactRecord);
+
+    await user.click(
+      within(rebootRecord!).getByRole('button', {
+        name: 'Jump to shared memory artifact /tmp/evidence.md'
+      })
+    );
+
+    expect(document.activeElement).toBe(artifactRecord);
+    expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+    expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+    expect(vi.mocked(globalThis.fetch).mock.calls).toHaveLength(fetchCallCountBeforeJump);
+    expect(globalThis.fetch).not.toHaveBeenCalledWith(teamLeadWorkflowUrl, expect.anything());
+    expect(globalThis.fetch).not.toHaveBeenCalledWith(teamLeadSelectedCorrelationMemoryArtifactsUrl, expect.anything());
+  });
+
   it('jumps from correlation-incident evidence refs to shared memory without changing the selected agent or correlation', async () => {
     const user = userEvent.setup();
     render(<App />);

@@ -1613,8 +1613,9 @@ describe('DetailsPanel workflow peer-watch alerts', () => {
     expect(onSelectCorrelation).not.toHaveBeenCalled();
   });
 
-  it('renders read-only metadata for selected-agent workflow handoff and reboot cards', async () => {
+  it('jumps from matching selected-agent workflow handoff and reboot evidence refs to shared memory while leaving non-matching refs as plain text', async () => {
     const user = userEvent.setup();
+    const onSelectAgent = vi.fn();
     const onSelectCorrelation = vi.fn();
     const workflow: AgentWorkflow = {
       ...buildWorkflow(),
@@ -1631,7 +1632,7 @@ describe('DetailsPanel workflow peer-watch alerts', () => {
             severity: 'yellow',
             summary: 'Secondary review handoff completed',
             counterparty_agent_ids: ['growth-revenue'],
-            evidence_refs: ['/evidence/secondary-handoff.md'],
+            evidence_refs: ['/evidence/secondary-handoff.md', '/evidence/missing-handoff.md'],
             correlation_id: 'corr-app-secondary',
             source_kind: 'controller_event'
           }
@@ -1647,26 +1648,79 @@ describe('DetailsPanel workflow peer-watch alerts', () => {
             severity: 'yellow',
             summary: 'Reboot recommended after the workflow stalled',
             counterparty_agent_ids: ['team-lead'],
-            evidence_refs: ['/evidence/reboot-note.md'],
+            evidence_refs: ['/evidence/reboot-note.md', '/evidence/missing-reboot.md'],
             correlation_id: 'corr-app-review',
             source_kind: 'controller_event'
           }
         ]
       }
     };
+    const memoryArtifacts: MemoryArtifactIndex = {
+      generated_at: '2026-03-16T09:00:00.000Z',
+      items: [
+        ...buildMemoryArtifacts().items,
+        {
+          artifact_ref: '/evidence/secondary-handoff.md',
+          artifact_kind: 'evidence_ref',
+          file_name: 'secondary-handoff.md',
+          first_seen_at: '2026-03-16T08:56:00.000Z',
+          last_seen_at: '2026-03-16T08:57:00.000Z',
+          mention_count: 1,
+          agent_ids: ['app-engineering', 'growth-revenue'],
+          correlation_ids: ['corr-app-secondary'],
+          source_kinds: ['controller_event'],
+          latest_summary: 'Workflow handoff evidence anchor',
+          latest_event_type: 'handoff_completed',
+          collector_last_modified_at: null
+        },
+        {
+          artifact_ref: '/evidence/reboot-note.md',
+          artifact_kind: 'evidence_ref',
+          file_name: 'reboot-note.md',
+          first_seen_at: '2026-03-16T08:39:00.000Z',
+          last_seen_at: '2026-03-16T08:40:00.000Z',
+          mention_count: 1,
+          agent_ids: ['app-engineering', 'team-lead'],
+          correlation_ids: ['corr-app-review'],
+          source_kinds: ['controller_event'],
+          latest_summary: 'Workflow reboot evidence anchor',
+          latest_event_type: 'reboot_requested',
+          collector_last_modified_at: null
+        }
+      ]
+    };
 
-    render(<DetailsPanel {...buildProps({ onSelectCorrelation, workflow })} />);
+    render(<DetailsPanel {...buildProps({ memoryArtifacts, onSelectAgent, onSelectCorrelation, workflow })} />);
 
     const section = screen.getByRole('heading', { name: 'Workflow' }).closest('section');
+    const sharedMemorySection = screen.getByRole('heading', { name: 'Shared Memory' }).closest('section');
     expect(section).not.toBeNull();
+    expect(sharedMemorySection).not.toBeNull();
 
     const handoffRecord = within(section!).getByText('Secondary review handoff completed').closest('li');
     const rebootRecord = within(section!).getByText('Reboot recommended after the workflow stalled').closest('li');
+    const handoffArtifactRecord = within(sharedMemorySection!)
+      .getByText('Ref · /evidence/secondary-handoff.md')
+      .closest('li');
+    const rebootArtifactRecord = within(sharedMemorySection!).getByText('Ref · /evidence/reboot-note.md').closest('li');
     expect(handoffRecord).not.toBeNull();
     expect(rebootRecord).not.toBeNull();
+    expect(handoffArtifactRecord).not.toBeNull();
+    expect(rebootArtifactRecord).not.toBeNull();
 
     expect(within(handoffRecord!).getByText('At · 2026-03-16T08:57:00.000Z')).toBeVisible();
     expect(within(handoffRecord!).getByText('Actor · growth-revenue')).toBeVisible();
+    expect(handoffRecord).toHaveTextContent('Evidence · /evidence/secondary-handoff.md, /evidence/missing-handoff.md');
+    expect(
+      within(handoffRecord!).getByRole('button', {
+        name: 'Jump to shared memory artifact /evidence/secondary-handoff.md'
+      })
+    ).toHaveTextContent('/evidence/secondary-handoff.md');
+    expect(
+      within(handoffRecord!).queryByRole('button', {
+        name: 'Jump to shared memory artifact /evidence/missing-handoff.md'
+      })
+    ).not.toBeInTheDocument();
     const handoffPivot = within(handoffRecord!).getByRole('button', {
       name: 'Open workflow status correlation corr-app-secondary'
     });
@@ -1674,11 +1728,38 @@ describe('DetailsPanel workflow peer-watch alerts', () => {
 
     expect(within(rebootRecord!).getByText('At · 2026-03-16T08:40:00.000Z')).toBeVisible();
     expect(within(rebootRecord!).getByText('Actor · team-lead')).toBeVisible();
+    expect(rebootRecord).toHaveTextContent('Evidence · /evidence/reboot-note.md, /evidence/missing-reboot.md');
+    expect(
+      within(rebootRecord!).getByRole('button', {
+        name: 'Jump to shared memory artifact /evidence/reboot-note.md'
+      })
+    ).toHaveTextContent('/evidence/reboot-note.md');
+    expect(
+      within(rebootRecord!).queryByRole('button', {
+        name: 'Jump to shared memory artifact /evidence/missing-reboot.md'
+      })
+    ).not.toBeInTheDocument();
     expect(
       within(rebootRecord!).getByRole('button', {
         name: 'Open workflow status correlation corr-app-review, currently selected'
       })
     ).toBeVisible();
+
+    await user.click(
+      within(handoffRecord!).getByRole('button', {
+        name: 'Jump to shared memory artifact /evidence/secondary-handoff.md'
+      })
+    );
+    expect(document.activeElement).toBe(handoffArtifactRecord);
+
+    await user.click(
+      within(rebootRecord!).getByRole('button', {
+        name: 'Jump to shared memory artifact /evidence/reboot-note.md'
+      })
+    );
+    expect(document.activeElement).toBe(rebootArtifactRecord);
+    expect(onSelectAgent).not.toHaveBeenCalled();
+    expect(onSelectCorrelation).not.toHaveBeenCalled();
 
     await user.click(handoffPivot);
     expect(onSelectCorrelation).toHaveBeenCalledWith('corr-app-secondary');

@@ -484,13 +484,22 @@ function renderCorrelationTimelineEvent(
     | WorkflowTimelineEvent
     | {
         event: WorkflowTimelineEvent;
+        activeCorrelationId?: string | null;
+        currentAgentId?: string | null;
+        navigableAgentIds?: Set<string>;
+        onSelectAgent?: (agentId: string | null, correlationId?: string | null) => void;
         sharedMemoryArtifactRefs?: ReadonlySet<string>;
         enableSharedMemoryEvidenceJump?: boolean;
       }
 ) {
   const event = 'event' in input ? input.event : input;
+  const activeCorrelationId = 'event' in input ? (input.activeCorrelationId ?? null) : null;
+  const currentAgentId = 'event' in input ? (input.currentAgentId ?? null) : null;
+  const navigableAgentIds = 'event' in input ? input.navigableAgentIds : undefined;
+  const onSelectAgent = 'event' in input ? input.onSelectAgent : undefined;
   const sharedMemoryArtifactRefs = 'event' in input ? input.sharedMemoryArtifactRefs : undefined;
   const enableSharedMemoryEvidenceJump = 'event' in input ? (input.enableSharedMemoryEvidenceJump ?? false) : false;
+  const canRenderCounterpartyPivots = Boolean(navigableAgentIds && onSelectAgent);
 
   return (
     <li key={event.event_id} className={`aitown-record severity-${event.severity}`}>
@@ -500,7 +509,20 @@ function renderCorrelationTimelineEvent(
       <span>{`Timeline · ${event.event_type} · ${event.location}`}</span>
       <span>{`State · ${event.current_state}`}</span>
       <span>{`Severity · ${SEVERITY_LABELS[event.severity]}`}</span>
-      <span>{`Counterparties · ${renderCounterparties(event.counterparty_agent_ids)}`}</span>
+      <span>
+        Counterparties ·{' '}
+        {canRenderCounterpartyPivots && navigableAgentIds && onSelectAgent
+          ? renderAgentPivotList({
+              agentIds: event.counterparty_agent_ids,
+              currentAgentId,
+              navigableAgentIds,
+              emptyLabel: 'No counterparties',
+              ariaLabelPrefix: 'Select correlation timeline counterparty agent',
+              correlationId: activeCorrelationId ?? event.correlation_id,
+              onSelectAgent
+            })
+          : renderCounterparties(event.counterparty_agent_ids)}
+      </span>
       {enableSharedMemoryEvidenceJump && sharedMemoryArtifactRefs ? (
         <span>
           Evidence ·{' '}
@@ -1346,6 +1368,10 @@ export function DetailsPanel({
                 {correlation.timeline.map((event) =>
                   renderCorrelationTimelineEvent({
                     event,
+                    activeCorrelationId: sharedMemoryActiveCorrelationId,
+                    currentAgentId: null,
+                    navigableAgentIds,
+                    onSelectAgent,
                     sharedMemoryArtifactRefs,
                     enableSharedMemoryEvidenceJump: true
                   })
@@ -1859,6 +1885,10 @@ export function DetailsPanel({
               {correlation.timeline.map((event) =>
                 renderCorrelationTimelineEvent({
                   event,
+                  activeCorrelationId: selectedCorrelationId,
+                  currentAgentId: selectedAgent.agent_id,
+                  navigableAgentIds,
+                  onSelectAgent,
                   sharedMemoryArtifactRefs,
                   enableSharedMemoryEvidenceJump: true
                 })

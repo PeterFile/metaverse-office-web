@@ -1796,7 +1796,13 @@ export function DetailsPanel({
               enableSharedMemoryEvidenceJump: true
             })
           )}
-          {(workflow?.detail.recent_events ?? []).slice(0, 2).map(renderCorrelationTimelineEvent)}
+          {(workflow?.detail.recent_events ?? []).slice(0, 2).map((event) =>
+            renderCorrelationTimelineEvent({
+              event,
+              sharedMemoryArtifactRefs,
+              enableSharedMemoryEvidenceJump: true
+            })
+          )}
           {(workflow?.detail.recent_handoffs ?? []).slice(0, 2).map((handoff) =>
             renderWorkflowStatusRecord({
               key: handoff.handoff_id,

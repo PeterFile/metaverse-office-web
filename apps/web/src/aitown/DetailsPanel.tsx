@@ -714,6 +714,7 @@ function renderIncidentRecord({
   onSelectAgent,
   onSelectCorrelation,
   includeAgentPivot,
+  includeCounterpartyPivots = false,
   includeCorrelationPivot = true
 }: {
   incident: WorkflowIncident;
@@ -723,6 +724,7 @@ function renderIncidentRecord({
   onSelectAgent: (agentId: string | null, correlationId?: string | null) => void;
   onSelectCorrelation: (correlationId: string | null) => void;
   includeAgentPivot: boolean;
+  includeCounterpartyPivots?: boolean;
   includeCorrelationPivot?: boolean;
 }) {
   return (
@@ -754,7 +756,20 @@ function renderIncidentRecord({
       <span>{`Actor · ${incident.actor_id}`}</span>
       <span>{`Incident · ${incident.kind} · ${incident.status}`}</span>
       <span>{`Severity · ${SEVERITY_LABELS[incident.severity]}`}</span>
-      <span>{`Counterparties · ${renderCounterparties(incident.counterparty_agent_ids)}`}</span>
+      <span>
+        Counterparties ·{' '}
+        {includeCounterpartyPivots
+          ? renderAgentPivotList({
+              agentIds: incident.counterparty_agent_ids,
+              currentAgentId,
+              navigableAgentIds,
+              emptyLabel: 'No counterparties',
+              ariaLabelPrefix: 'Select correlation incident counterparty agent',
+              correlationId: incident.correlation_id,
+              onSelectAgent
+            })
+          : renderCounterparties(incident.counterparty_agent_ids)}
+      </span>
       <span>{`Evidence · ${renderEvidenceRefs(incident.evidence_refs)}`}</span>
       <span>{`Source · ${incident.source_kind}`}</span>
     </li>
@@ -1718,6 +1733,7 @@ export function DetailsPanel({
                   onSelectAgent,
                   onSelectCorrelation,
                   includeAgentPivot: true,
+                  includeCounterpartyPivots: true,
                   includeCorrelationPivot: false
                 })
               )}

@@ -722,6 +722,47 @@ describe('DetailsPanel accountability signals', () => {
     expect(onSelectAgent).toHaveBeenCalledWith('team-lead', 'corr-app-review');
   });
 
+  it('renders correlation incident counterparties as pivots for non-current agents and keeps the current agent as plain text', async () => {
+    const user = userEvent.setup();
+    const onSelectAgent = vi.fn();
+    const correlation: CorrelationDrilldown = {
+      ...buildCorrelation(),
+      incidents: [
+        {
+          ...buildCorrelation().incidents[0],
+          counterparty_agent_ids: ['app-engineering', 'team-lead']
+        }
+      ]
+    };
+
+    render(<DetailsPanel {...buildProps({ correlation, onSelectAgent })} />);
+
+    const section = screen.getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    expect(section).not.toBeNull();
+
+    const incidentRecord = within(section!).getByText('Lead is still waiting on workflow evidence').closest('li');
+    expect(incidentRecord).not.toBeNull();
+    expect(
+      within(incidentRecord!).queryByRole('button', {
+        name: 'Select correlation incident counterparty agent app-engineering'
+      })
+    ).not.toBeInTheDocument();
+    expect(incidentRecord).toHaveTextContent('Counterparties · app-engineering, team-lead');
+    expect(
+      within(incidentRecord!).getByRole('button', {
+        name: 'Select correlation incident counterparty agent team-lead'
+      })
+    ).toBeVisible();
+
+    await user.click(
+      within(incidentRecord!).getByRole('button', {
+        name: 'Select correlation incident counterparty agent team-lead'
+      })
+    );
+
+    expect(onSelectAgent).toHaveBeenCalledWith('team-lead', 'corr-app-review');
+  });
+
   it('jumps from an accountability artifact to the matching shared-memory record without changing selection state', async () => {
     const user = userEvent.setup();
     const onSelectAgent = vi.fn();

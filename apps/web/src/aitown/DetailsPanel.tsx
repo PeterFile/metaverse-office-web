@@ -1683,7 +1683,14 @@ export function DetailsPanel({
                   onSelectAgent
                 })}
               </span>
-              <span>{`Evidence · ${renderEvidenceRefs(selectedOperation.latest_event?.evidence_refs ?? [])}`}</span>
+              <span>
+                Evidence ·{' '}
+                {renderSharedMemoryEvidenceRefs({
+                  evidenceRefs: selectedOperation.latest_event?.evidence_refs ?? [],
+                  sharedMemoryArtifactRefs,
+                  onJump: focusSharedMemoryArtifact
+                })}
+              </span>
               <span>{`Source · ${selectedOperation.latest_event?.source_kind ?? 'No latest event source'}`}</span>
             </li>
           </ul>

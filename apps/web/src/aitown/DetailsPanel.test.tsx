@@ -800,11 +800,7 @@ describe('DetailsPanel accountability signals', () => {
       'Who · Team Lead -> App Engineering Agent (lead, Elevated); App Engineering Agent -> Growth Revenue Agent (peer, High risk)'
     );
     expect(within(section!).getByText('What · Followed up on missing workflow evidence')).toBeVisible();
-    expect(
-      within(section!).getByText(
-        'Evidence · /evidence/review.md, /evidence/log.md, /evidence/correlation.md'
-      )
-    ).toBeVisible();
+    expect(record!).toHaveTextContent('Evidence · /evidence/review.md, /evidence/log.md, /evidence/correlation.md');
     expect(
       within(section!).getByRole('button', {
         name: 'Jump to shared memory artifact artifact/replay-bundle'
@@ -1051,6 +1047,72 @@ describe('DetailsPanel accountability signals', () => {
     await user.click(
       within(auditSection!).getByRole('button', {
         name: 'Jump to shared memory artifact artifact/review-note'
+      })
+    );
+
+    expect(document.activeElement).toBe(artifactRecord);
+    expect(onSelectAgent).not.toHaveBeenCalled();
+    expect(onSelectCorrelation).not.toHaveBeenCalled();
+  });
+
+  it('jumps from matching accountability evidence refs to shared memory while leaving non-matching refs as plain text', async () => {
+    const user = userEvent.setup();
+    const onSelectAgent = vi.fn();
+    const onSelectCorrelation = vi.fn();
+    const memoryArtifacts: MemoryArtifactIndex = {
+      generated_at: '2026-03-16T09:00:00.000Z',
+      items: [
+        ...buildMemoryArtifacts().items,
+        {
+          artifact_ref: '/evidence/review.md',
+          artifact_kind: 'evidence_ref',
+          file_name: 'review.md',
+          first_seen_at: '2026-03-16T08:46:00.000Z',
+          last_seen_at: '2026-03-16T08:58:00.000Z',
+          mention_count: 2,
+          agent_ids: ['app-engineering', 'team-lead'],
+          correlation_ids: ['corr-app-review'],
+          source_kinds: ['controller_event'],
+          latest_summary: 'Review evidence anchor',
+          latest_event_type: 'workflow_event',
+          collector_last_modified_at: '2026-03-16T08:58:00.000Z'
+        }
+      ]
+    };
+
+    render(<DetailsPanel {...buildProps({ memoryArtifacts, onSelectAgent, onSelectCorrelation })} />);
+
+    const auditSection = screen.getByRole('heading', { name: 'Audit Signals' }).closest('section');
+    const sharedMemorySection = screen.getByRole('heading', { name: 'Shared Memory' }).closest('section');
+    expect(auditSection).not.toBeNull();
+    expect(sharedMemorySection).not.toBeNull();
+
+    const evidenceLine = within(auditSection!).getByText(
+      (_content, element) =>
+        element?.tagName === 'SPAN' &&
+        element.textContent === 'Evidence · /evidence/review.md, /evidence/log.md, /evidence/correlation.md'
+    );
+    const artifactRecord = within(sharedMemorySection!).getByText('Ref · /evidence/review.md').closest('li');
+    expect(artifactRecord).not.toBeNull();
+    expect(
+      within(evidenceLine).getByRole('button', {
+        name: 'Jump to accountability evidence ref /evidence/review.md'
+      })
+    ).toBeVisible();
+    expect(
+      within(evidenceLine).queryByRole('button', {
+        name: 'Jump to accountability evidence ref /evidence/log.md'
+      })
+    ).not.toBeInTheDocument();
+    expect(
+      within(evidenceLine).queryByRole('button', {
+        name: 'Jump to accountability evidence ref /evidence/correlation.md'
+      })
+    ).not.toBeInTheDocument();
+
+    await user.click(
+      within(evidenceLine).getByRole('button', {
+        name: 'Jump to accountability evidence ref /evidence/review.md'
       })
     );
 
@@ -1530,11 +1592,7 @@ describe('DetailsPanel accountability signals', () => {
     expect(section).not.toBeNull();
 
     expect(within(section!).getByText('What · Secondary review evidence shipped')).toBeVisible();
-    expect(
-      within(section!).getByText(
-        'Evidence · /evidence/secondary-workflow.md, /evidence/secondary-correlation.md'
-      )
-    ).toBeVisible();
+    expect(section!).toHaveTextContent('Evidence · /evidence/secondary-workflow.md, /evidence/secondary-correlation.md');
     expect(
       within(section!).getByRole('button', {
         name: 'Jump to shared memory artifact artifact/secondary-bundle'
@@ -1608,7 +1666,7 @@ describe('DetailsPanel accountability signals', () => {
     expect(
       within(section!).getByText('What · Peer watch alert: waiting on aligned workflow evidence')
     ).toBeVisible();
-    expect(within(section!).getByText('Evidence · /evidence/peer-watch-only.md')).toBeVisible();
+    expect(section!).toHaveTextContent('Evidence · /evidence/peer-watch-only.md');
     expect(within(section!).getByText('Source · peer_watch_alert')).toBeVisible();
     expect(within(section!).queryByText(/What · Waiting on review sign-off/)).not.toBeInTheDocument();
     expect(within(section!).queryByText(/What · Fix workflow issue/)).not.toBeInTheDocument();

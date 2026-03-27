@@ -3036,6 +3036,96 @@ afterEach(() => {
     expect(vi.mocked(globalThis.fetch).mock.calls).toHaveLength(fetchCallCountBeforeJump);
   });
 
+  it('jumps from selected-agent workflow interaction evidence refs to shared memory without changing the selected agent or correlation', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === workflowUrl) {
+          return jsonResponse({
+            ...workflowFixture,
+            detail: {
+              ...workflowFixture.detail,
+              recent_interactions: [
+                {
+                  ...workflowFixture.detail.recent_interactions[0],
+                  evidence_refs: ['/tmp/evidence.md', '/tmp/missing.md'],
+                  summary: 'Lead reviewed the selected-agent workflow interaction evidence'
+                }
+              ]
+            }
+          } satisfies AgentWorkflow);
+        }
+
+        return resolveTestFetchResponse(url);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
+
+    const workflowSection = within(details).getByRole('heading', { name: 'Workflow' }).closest('section');
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    const memorySection = within(details).getByRole('heading', { name: 'Shared Memory' }).closest('section');
+    expect(workflowSection).not.toBeNull();
+    expect(correlationSection).not.toBeNull();
+    expect(memorySection).not.toBeNull();
+
+    await user.click(within(workflowSection!).getByRole('button', { name: /Open workflow correlation corr-app-review/ }));
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+      expect(within(memorySection!).getByText('Ref · /tmp/evidence.md')).toBeVisible();
+      expect(
+        within(workflowSection!).getByText('Lead reviewed the selected-agent workflow interaction evidence')
+      ).toBeVisible();
+    });
+
+    const interactionRecord = within(workflowSection!)
+      .getByText('Lead reviewed the selected-agent workflow interaction evidence')
+      .closest('li');
+    const artifactRecord = within(memorySection!).getByText('Ref · /tmp/evidence.md').closest('li');
+    expect(interactionRecord).not.toBeNull();
+    expect(artifactRecord).not.toBeNull();
+    expect(interactionRecord).toHaveTextContent('Participants · app-engineering, team-lead');
+    expect(interactionRecord).toHaveTextContent('Evidence · /tmp/evidence.md, /tmp/missing.md');
+    expect(
+      within(interactionRecord!).queryByRole('button', {
+        name: 'Select correlation interaction participant agent team-lead'
+      })
+    ).not.toBeInTheDocument();
+    expect(
+      within(interactionRecord!).getByRole('button', {
+        name: 'Jump to shared memory artifact /tmp/evidence.md'
+      })
+    ).toBeVisible();
+    expect(
+      within(interactionRecord!).queryByRole('button', {
+        name: 'Jump to shared memory artifact /tmp/missing.md'
+      })
+    ).not.toBeInTheDocument();
+
+    const fetchCallCountBeforeJump = vi.mocked(globalThis.fetch).mock.calls.length;
+
+    await user.click(
+      within(interactionRecord!).getByRole('button', {
+        name: 'Jump to shared memory artifact /tmp/evidence.md'
+      })
+    );
+
+    expect(document.activeElement).toBe(artifactRecord);
+    expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+    expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+    expect(vi.mocked(globalThis.fetch).mock.calls).toHaveLength(fetchCallCountBeforeJump);
+    expect(globalThis.fetch).not.toHaveBeenCalledWith(teamLeadWorkflowUrl, expect.anything());
+    expect(globalThis.fetch).not.toHaveBeenCalledWith(teamLeadSelectedCorrelationMemoryArtifactsUrl, expect.anything());
+  });
+
   it('jumps from correlation-incident evidence refs to shared memory without changing the selected agent or correlation', async () => {
     const user = userEvent.setup();
     render(<App />);

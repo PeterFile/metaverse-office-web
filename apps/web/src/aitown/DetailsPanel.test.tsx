@@ -1532,6 +1532,87 @@ describe('DetailsPanel workflow peer-watch alerts', () => {
     expect(onSelectCorrelation).not.toHaveBeenCalled();
   });
 
+  it('jumps from matching selected-agent workflow recent-event evidence refs to shared memory while leaving non-matching refs as plain text', async () => {
+    const user = userEvent.setup();
+    const onSelectAgent = vi.fn();
+    const onSelectCorrelation = vi.fn();
+    const workflow: AgentWorkflow = {
+      ...buildWorkflow(),
+      detail: {
+        ...buildWorkflow().detail,
+        recent_events: [
+          {
+            ...buildWorkflow().detail.recent_events[0],
+            counterparty_agent_ids: ['app-engineering', 'team-lead', 'ghost-agent'],
+            evidence_refs: ['/evidence/workflow-event.md', '/evidence/missing.md'],
+            summary: 'Agent attached selected-agent workflow event evidence for lead review'
+          }
+        ]
+      }
+    };
+    const memoryArtifacts: MemoryArtifactIndex = {
+      generated_at: '2026-03-16T09:00:00.000Z',
+      items: [
+        ...buildMemoryArtifacts().items,
+        {
+          artifact_ref: '/evidence/workflow-event.md',
+          artifact_kind: 'evidence_ref',
+          file_name: 'workflow-event.md',
+          first_seen_at: '2026-03-16T08:58:00.000Z',
+          last_seen_at: '2026-03-16T08:59:00.000Z',
+          mention_count: 2,
+          agent_ids: ['app-engineering', 'team-lead'],
+          correlation_ids: ['corr-app-review'],
+          source_kinds: ['workspace_snapshot'],
+          latest_summary: 'Workflow event evidence anchor',
+          latest_event_type: 'agent_noted',
+          collector_last_modified_at: '2026-03-16T08:59:00.000Z'
+        }
+      ]
+    };
+
+    render(<DetailsPanel {...buildProps({ workflow, memoryArtifacts, onSelectAgent, onSelectCorrelation })} />);
+
+    const workflowSection = screen.getByRole('heading', { name: 'Workflow' }).closest('section');
+    const sharedMemorySection = screen.getByRole('heading', { name: 'Shared Memory' }).closest('section');
+    expect(workflowSection).not.toBeNull();
+    expect(sharedMemorySection).not.toBeNull();
+
+    const eventRecord = within(workflowSection!)
+      .getByText('Agent attached selected-agent workflow event evidence for lead review')
+      .closest('li');
+    const artifactRecord = within(sharedMemorySection!).getByText('Ref · /evidence/workflow-event.md').closest('li');
+    expect(eventRecord).not.toBeNull();
+    expect(artifactRecord).not.toBeNull();
+    expect(eventRecord).toHaveTextContent('Counterparties · app-engineering, team-lead, ghost-agent');
+    expect(
+      within(eventRecord!).queryByRole('button', {
+        name: 'Select correlation timeline counterparty agent team-lead'
+      })
+    ).not.toBeInTheDocument();
+    expect(
+      within(eventRecord!).getByRole('button', {
+        name: 'Jump to shared memory artifact /evidence/workflow-event.md'
+      })
+    ).toHaveTextContent('/evidence/workflow-event.md');
+    expect(eventRecord).toHaveTextContent('Evidence · /evidence/workflow-event.md, /evidence/missing.md');
+    expect(
+      within(eventRecord!).queryByRole('button', {
+        name: 'Jump to shared memory artifact /evidence/missing.md'
+      })
+    ).not.toBeInTheDocument();
+
+    await user.click(
+      within(eventRecord!).getByRole('button', {
+        name: 'Jump to shared memory artifact /evidence/workflow-event.md'
+      })
+    );
+
+    expect(document.activeElement).toBe(artifactRecord);
+    expect(onSelectAgent).not.toHaveBeenCalled();
+    expect(onSelectCorrelation).not.toHaveBeenCalled();
+  });
+
   it('renders read-only metadata for selected-agent workflow handoff and reboot cards', async () => {
     const user = userEvent.setup();
     const onSelectCorrelation = vi.fn();

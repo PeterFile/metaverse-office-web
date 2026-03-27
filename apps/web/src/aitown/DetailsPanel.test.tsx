@@ -789,6 +789,74 @@ describe('DetailsPanel accountability signals', () => {
     expect(onSelectCorrelation).not.toHaveBeenCalled();
   });
 
+  it('jumps from matching correlation-incident evidence refs to shared memory while leaving non-matching refs as plain text', async () => {
+    const user = userEvent.setup();
+    const onSelectAgent = vi.fn();
+    const onSelectCorrelation = vi.fn();
+    const correlation: CorrelationDrilldown = {
+      ...buildCorrelation(),
+      incidents: [
+        {
+          ...buildCorrelation().incidents[0],
+          evidence_refs: ['/evidence/correlation.md', '/evidence/missing.md']
+        }
+      ]
+    };
+    const memoryArtifacts: MemoryArtifactIndex = {
+      generated_at: '2026-03-16T09:00:00.000Z',
+      items: [
+        ...buildMemoryArtifacts().items,
+        {
+          artifact_ref: '/evidence/correlation.md',
+          artifact_kind: 'evidence_ref',
+          file_name: 'correlation.md',
+          first_seen_at: '2026-03-16T08:49:00.000Z',
+          last_seen_at: '2026-03-16T08:58:00.000Z',
+          mention_count: 2,
+          agent_ids: ['app-engineering', 'team-lead'],
+          correlation_ids: ['corr-app-review'],
+          source_kinds: ['controller_event'],
+          latest_summary: 'Correlation evidence anchor',
+          latest_event_type: 'peer_watch_alert_raised',
+          collector_last_modified_at: '2026-03-16T08:58:00.000Z'
+        }
+      ]
+    };
+
+    render(<DetailsPanel {...buildProps({ correlation, memoryArtifacts, onSelectAgent, onSelectCorrelation })} />);
+
+    const correlationSection = screen.getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    const sharedMemorySection = screen.getByRole('heading', { name: 'Shared Memory' }).closest('section');
+    expect(correlationSection).not.toBeNull();
+    expect(sharedMemorySection).not.toBeNull();
+
+    const incidentRecord = within(correlationSection!).getByText('Lead is still waiting on workflow evidence').closest('li');
+    const artifactRecord = within(sharedMemorySection!).getByText('Ref · /evidence/correlation.md').closest('li');
+    expect(incidentRecord).not.toBeNull();
+    expect(artifactRecord).not.toBeNull();
+    expect(
+      within(incidentRecord!).getByRole('button', {
+        name: 'Jump to shared memory artifact /evidence/correlation.md'
+      })
+    ).toHaveTextContent('/evidence/correlation.md');
+    expect(incidentRecord).toHaveTextContent('Evidence · /evidence/correlation.md, /evidence/missing.md');
+    expect(
+      within(incidentRecord!).queryByRole('button', {
+        name: 'Jump to shared memory artifact /evidence/missing.md'
+      })
+    ).not.toBeInTheDocument();
+
+    await user.click(
+      within(incidentRecord!).getByRole('button', {
+        name: 'Jump to shared memory artifact /evidence/correlation.md'
+      })
+    );
+
+    expect(document.activeElement).toBe(artifactRecord);
+    expect(onSelectAgent).not.toHaveBeenCalled();
+    expect(onSelectCorrelation).not.toHaveBeenCalled();
+  });
+
   it('uses the latest top-level workflow timeline event when detail feeds are empty', () => {
     const workflow: AgentWorkflow = {
       ...buildWorkflow(),

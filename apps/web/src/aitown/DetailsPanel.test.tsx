@@ -809,6 +809,52 @@ describe('DetailsPanel accountability signals', () => {
     expect(onSelectAgent).toHaveBeenCalledWith('team-lead', 'corr-app-review');
   });
 
+  it('renders correlation interaction participants as pivots only for navigable non-current agents', async () => {
+    const user = userEvent.setup();
+    const onSelectAgent = vi.fn();
+    const correlation: CorrelationDrilldown = {
+      ...buildCorrelation(),
+      interactions: [
+        {
+          ...buildCorrelation().interactions[0],
+          participant_agent_ids: ['app-engineering', 'team-lead', 'ghost-agent']
+        }
+      ]
+    };
+
+    render(<DetailsPanel {...buildProps({ correlation, onSelectAgent })} />);
+
+    const section = screen.getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    expect(section).not.toBeNull();
+
+    const interactionRecord = within(section!).getByText('Reviewed the missing workflow package').closest('li');
+    expect(interactionRecord).not.toBeNull();
+    expect(
+      within(interactionRecord!).queryByRole('button', {
+        name: 'Select correlation interaction participant agent app-engineering'
+      })
+    ).not.toBeInTheDocument();
+    expect(
+      within(interactionRecord!).queryByRole('button', {
+        name: 'Select correlation interaction participant agent ghost-agent'
+      })
+    ).not.toBeInTheDocument();
+    expect(interactionRecord).toHaveTextContent('Participants · app-engineering, team-lead, ghost-agent');
+    expect(
+      within(interactionRecord!).getByRole('button', {
+        name: 'Select correlation interaction participant agent team-lead'
+      })
+    ).toBeVisible();
+
+    await user.click(
+      within(interactionRecord!).getByRole('button', {
+        name: 'Select correlation interaction participant agent team-lead'
+      })
+    );
+
+    expect(onSelectAgent).toHaveBeenCalledWith('team-lead', 'corr-app-review');
+  });
+
   it('jumps from an accountability artifact to the matching shared-memory record without changing selection state', async () => {
     const user = userEvent.setup();
     const onSelectAgent = vi.fn();

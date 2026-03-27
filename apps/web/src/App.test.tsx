@@ -530,6 +530,16 @@ const correlationTimelineCounterpartyPivotFixture = {
   ]
 };
 
+const correlationInteractionParticipantPivotFixture = {
+  ...correlationFixture,
+  interactions: [
+    {
+      ...correlationFixture.interactions[0],
+      participant_agent_ids: ['app-engineering', 'team-lead', 'ghost-agent']
+    }
+  ]
+};
+
 const secondaryCorrelationFixture = {
   correlation_id: 'corr-app-secondary',
   participant_agent_ids: ['app-engineering', 'growth-revenue'],
@@ -3202,6 +3212,59 @@ afterEach(() => {
     });
   });
 
+  it('pivots from correlation interaction participants while preserving the active correlation', async () => {
+    const originalFetch = globalThis.fetch;
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === correlationUrl) {
+          return new Response(JSON.stringify(correlationInteractionParticipantPivotFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        return originalFetch(input, init);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
+
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    expect(correlationSection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+      expect(
+        within(correlationSection!).getByRole('button', {
+          name: 'Select correlation interaction participant agent team-lead'
+        })
+      ).toBeVisible();
+    });
+
+    await user.click(
+      within(correlationSection!).getByRole('button', {
+        name: 'Select correlation interaction participant agent team-lead'
+      })
+    );
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'Team Lead' })).toBeVisible();
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+    });
+
+    await act(async () => {
+      expect(globalThis.fetch).toHaveBeenCalledWith(teamLeadWorkflowUrl, expect.anything());
+      expect(globalThis.fetch).toHaveBeenCalledWith(teamLeadSelectedCorrelationMemoryArtifactsUrl, expect.anything());
+    });
+  });
+
   it('pivots from correlation participants through the selected-agent flow', async () => {
     const user = userEvent.setup();
     render(<App />);
@@ -3392,7 +3455,9 @@ afterEach(() => {
 
     const details = await openHub(user);
     const incidentSection = within(details).getByRole('heading', { name: 'Incident Feed' }).closest('section');
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
     expect(incidentSection).not.toBeNull();
+    expect(correlationSection).not.toBeNull();
 
     await user.click(within(incidentSection!).getByRole('button', { name: /Open incident correlation corr-app-review/ }));
 
@@ -3402,7 +3467,9 @@ afterEach(() => {
     expect(
       within(details).getByRole('button', { name: 'Select correlation participant agent team-lead' })
     ).toBeVisible();
-    expect(within(details).getByText('Participants · app-engineering, team-lead')).toBeVisible();
+    expect(within(correlationSection!).getByText('corr-app-review').closest('li')).toHaveTextContent(
+      'Participants · app-engineering, team-lead'
+    );
 
     await act(async () => {
       expect(globalThis.fetch).toHaveBeenCalledWith(correlationUrl, expect.anything());
@@ -3738,7 +3805,9 @@ afterEach(() => {
 
     expect(await within(details).findByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
     expect(await within(details).findByText('correlation refresh failed')).toBeVisible();
-    expect(within(correlationSection!).getAllByText('Participants · app-engineering, team-lead')[0]).toBeVisible();
+    expect(within(correlationSection!).getByText('corr-app-review').closest('li')).toHaveTextContent(
+      'Participants · app-engineering, team-lead'
+    );
     const correlationIncidentRecord = within(correlationSection!)
       .getByText('Lead is still waiting on workflow evidence')
       .closest('li');

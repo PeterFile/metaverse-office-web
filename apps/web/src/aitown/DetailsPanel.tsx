@@ -1363,7 +1363,14 @@ export function DetailsPanel({
                       onSelectAgent
                     })}
                   </span>
-                  <span>{`Evidence · ${renderEvidenceRefs(correlation.evidence_refs)}`}</span>
+                  <span>
+                    Evidence ·{' '}
+                    {renderSharedMemoryEvidenceRefs({
+                      evidenceRefs: correlation.evidence_refs,
+                      sharedMemoryArtifactRefs,
+                      onJump: focusSharedMemoryArtifact
+                    })}
+                  </span>
                   <span>{`Counts · ${correlation.incident_count} incidents · ${correlation.interaction_count} interactions · ${correlation.event_count} events`}</span>
                 </li>
                 {correlation.incidents.map((incident) =>
@@ -1883,7 +1890,14 @@ export function DetailsPanel({
                     onSelectAgent
                   })}
                 </span>
-                <span>{`Evidence · ${renderEvidenceRefs(correlation.evidence_refs)}`}</span>
+                <span>
+                  Evidence ·{' '}
+                  {renderSharedMemoryEvidenceRefs({
+                    evidenceRefs: correlation.evidence_refs,
+                    sharedMemoryArtifactRefs,
+                    onJump: focusSharedMemoryArtifact
+                  })}
+                </span>
                 <span>{`Counts · ${correlation.incident_count} incidents · ${correlation.interaction_count} interactions · ${correlation.event_count} events`}</span>
               </li>
               {correlation.incidents.map((incident) =>

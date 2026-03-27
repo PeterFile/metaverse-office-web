@@ -609,6 +609,98 @@ describe('DetailsPanel accountability signals', () => {
     expect(within(replayCard!).getByText('State · blocked')).toBeVisible();
   });
 
+  it('jumps from matching timeline-replay evidence refs to shared memory while leaving non-matching refs as plain text', async () => {
+    const user = userEvent.setup();
+    const onSelectAgent = vi.fn();
+    const onSelectCorrelation = vi.fn();
+    const memoryArtifacts: MemoryArtifactIndex = {
+      generated_at: '2026-03-16T09:00:00.000Z',
+      items: [
+        ...buildMemoryArtifacts().items,
+        {
+          artifact_ref: '/evidence/replay.md',
+          artifact_kind: 'evidence_ref',
+          file_name: 'replay.md',
+          first_seen_at: '2026-03-16T08:54:00.000Z',
+          last_seen_at: '2026-03-16T08:59:00.000Z',
+          mention_count: 2,
+          agent_ids: ['app-engineering', 'team-lead'],
+          correlation_ids: ['corr-app-review'],
+          source_kinds: ['controller_event'],
+          latest_summary: 'Replay evidence anchor',
+          latest_event_type: 'peer_watch_alert_raised',
+          collector_last_modified_at: '2026-03-16T08:59:00.000Z'
+        }
+      ]
+    };
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          memoryArtifacts,
+          onSelectAgent,
+          onSelectCorrelation,
+          selectedAgent: null,
+          selectedOperation: null,
+          timelineReplay: {
+            items: [
+              {
+                event_id: 'evt-replay',
+                ts: '2026-03-16T08:59:00.000Z',
+                agent_id: 'app-engineering',
+                actor_id: 'team-lead',
+                event_type: 'peer_watch_alert_raised',
+                severity: 'orange',
+                current_state: 'blocked',
+                location: 'delivery-desk',
+                summary: 'Replay event with evidence jump',
+                correlation_id: 'corr-app-review',
+                counterparty_agent_ids: ['team-lead'],
+                evidence_refs: ['/evidence/replay.md', '/evidence/missing.md'],
+                source_kind: 'controller_event'
+              }
+            ]
+          }
+        })}
+      />
+    );
+
+    const replaySection = screen.getByRole('heading', { name: 'Timeline Replay' }).closest('section');
+    const sharedMemorySection = screen.getByRole('heading', { name: 'Shared Memory' }).closest('section');
+    expect(replaySection).not.toBeNull();
+    expect(sharedMemorySection).not.toBeNull();
+
+    const replayRecord = within(replaySection!)
+      .getByRole('button', {
+        name: 'Jump to shared memory artifact /evidence/replay.md'
+      })
+      .closest('li');
+    const artifactRecord = within(sharedMemorySection!).getByText('Ref · /evidence/replay.md').closest('li');
+    expect(replayRecord).not.toBeNull();
+    expect(artifactRecord).not.toBeNull();
+    expect(replayRecord).toHaveTextContent('Evidence · /evidence/replay.md, /evidence/missing.md');
+    expect(
+      within(replayRecord!).getByRole('button', {
+        name: 'Jump to shared memory artifact /evidence/replay.md'
+      })
+    ).toHaveTextContent('/evidence/replay.md');
+    expect(
+      within(replayRecord!).queryByRole('button', {
+        name: 'Jump to shared memory artifact /evidence/missing.md'
+      })
+    ).not.toBeInTheDocument();
+
+    await user.click(
+      within(replayRecord!).getByRole('button', {
+        name: 'Jump to shared memory artifact /evidence/replay.md'
+      })
+    );
+
+    expect(document.activeElement).toBe(artifactRecord);
+    expect(onSelectAgent).not.toHaveBeenCalled();
+    expect(onSelectCorrelation).not.toHaveBeenCalled();
+  });
+
   it('jumps from matching current-operation evidence refs to shared memory while leaving non-matching refs as plain text', async () => {
     const user = userEvent.setup();
     const onSelectAgent = vi.fn();

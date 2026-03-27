@@ -568,6 +568,7 @@ function renderReplayTimelineEvent({
   agentLabel,
   currentAgentId,
   navigableAgentIds,
+  sharedMemoryArtifactRefs,
   onSelectAgent,
   onSelectCorrelation
 }: {
@@ -576,6 +577,7 @@ function renderReplayTimelineEvent({
   agentLabel: string;
   currentAgentId: string | null;
   navigableAgentIds: Set<string>;
+  sharedMemoryArtifactRefs: ReadonlySet<string>;
   onSelectAgent: (agentId: string | null, correlationId?: string | null) => void;
   onSelectCorrelation: (correlationId: string | null) => void;
 }) {
@@ -591,7 +593,14 @@ function renderReplayTimelineEvent({
       <span>{`State · ${event.current_state}`}</span>
       <span>{`Severity · ${SEVERITY_LABELS[event.severity]}`}</span>
       <span>{`Counterparties · ${renderCounterparties(event.counterparty_agent_ids)}`}</span>
-      <span>{`Evidence · ${renderEvidenceRefs(event.evidence_refs)}`}</span>
+      <span>
+        Evidence ·{' '}
+        {renderSharedMemoryEvidenceRefs({
+          evidenceRefs: event.evidence_refs,
+          sharedMemoryArtifactRefs,
+          onJump: focusSharedMemoryArtifact
+        })}
+      </span>
       <span>{`Source · ${event.source_kind}`}</span>
       {event.correlation_id ? (
         <span>
@@ -1348,6 +1357,7 @@ export function DetailsPanel({
                 agentLabel: agentNameById.get(event.agent_id) ?? event.agent_id,
                 currentAgentId: null,
                 navigableAgentIds,
+                sharedMemoryArtifactRefs,
                 onSelectAgent,
                 onSelectCorrelation
               })

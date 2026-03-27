@@ -687,10 +687,12 @@ function renderWorkflowStatusRecord({
 
 function renderWorkflowPeerWatchAlert({
   alert,
+  sharedMemoryArtifactRefs,
   activeCorrelationId,
   onSelectCorrelation
 }: {
   alert: WorkflowPeerWatchAlert;
+  sharedMemoryArtifactRefs: ReadonlySet<string>;
   activeCorrelationId: string | null;
   onSelectCorrelation: (correlationId: string | null) => void;
 }) {
@@ -710,7 +712,14 @@ function renderWorkflowPeerWatchAlert({
       <span>{`Status · ${alert.status}`}</span>
       <span>{`Workflow status · ${alert.current_state}`}</span>
       <span>{`Task · ${alert.active_task}`}</span>
-      <span>{`Evidence · ${renderEvidenceRefs(alert.evidence_refs)}`}</span>
+      <span>
+        Evidence ·{' '}
+        {renderSharedMemoryEvidenceRefs({
+          evidenceRefs: alert.evidence_refs,
+          sharedMemoryArtifactRefs,
+          onJump: focusSharedMemoryArtifact
+        })}
+      </span>
       <span>{`Evidence count · ${alert.evidence_count}`}</span>
       <span>{`Source · ${alert.source_kind}`}</span>
     </li>
@@ -1761,6 +1770,7 @@ export function DetailsPanel({
           {(workflow?.detail.open_peer_watch_alerts ?? []).map((alert) =>
             renderWorkflowPeerWatchAlert({
               alert,
+              sharedMemoryArtifactRefs,
               activeCorrelationId: selectedCorrelationId,
               onSelectCorrelation
             })

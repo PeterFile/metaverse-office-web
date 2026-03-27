@@ -1428,7 +1428,12 @@ afterEach(() => {
     expect(within(overviewIncidentRecord!).getByText('Incident · peer_watch · open')).toBeVisible();
     expect(within(overviewIncidentRecord!).getByText('Severity · Orange')).toBeVisible();
     expect(within(overviewIncidentRecord!).getByText('Counterparties · team-lead')).toBeVisible();
-    expect(within(overviewIncidentRecord!).getByText('Evidence · /tmp/evidence.md')).toBeVisible();
+    expect(overviewIncidentRecord).toHaveTextContent('Evidence · /tmp/evidence.md');
+    expect(
+      within(overviewIncidentRecord!).getByRole('button', {
+        name: 'Jump to shared memory artifact /tmp/evidence.md'
+      })
+    ).toBeVisible();
     expect(within(overviewIncidentRecord!).getByText('Source · controller_event')).toBeVisible();
     expect(within(incidentSection!).getByRole('button', { name: 'Select incident agent app-engineering from incident inc-1' })).toBeVisible();
     expect(
@@ -5193,7 +5198,12 @@ afterEach(() => {
     expect(within(selectedIncidentRecord!).getByText('Incident · peer_watch · open')).toBeVisible();
     expect(within(selectedIncidentRecord!).getByText('Severity · Orange')).toBeVisible();
     expect(within(selectedIncidentRecord!).getByText('Counterparties · team-lead')).toBeVisible();
-    expect(within(selectedIncidentRecord!).getByText('Evidence · /tmp/evidence.md')).toBeVisible();
+    expect(selectedIncidentRecord).toHaveTextContent('Evidence · /tmp/evidence.md');
+    expect(
+      within(selectedIncidentRecord!).getByRole('button', {
+        name: 'Jump to shared memory artifact /tmp/evidence.md'
+      })
+    ).toBeVisible();
     expect(within(selectedIncidentRecord!).getByText('Source · controller_event')).toBeVisible();
 
     await act(async () => {

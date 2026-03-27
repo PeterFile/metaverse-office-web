@@ -519,6 +519,176 @@ describe('DetailsPanel accountability signals', () => {
     expect(within(incidentCard!).getByText('Actor · team-lead')).toBeVisible();
   });
 
+  it('jumps from matching crew-overview incident feed evidence refs to shared memory while leaving non-matching refs as plain text', async () => {
+    const user = userEvent.setup();
+    const onSelectAgent = vi.fn();
+    const onSelectCorrelation = vi.fn();
+    const memoryArtifacts: MemoryArtifactIndex = {
+      generated_at: '2026-03-16T09:00:00.000Z',
+      items: [
+        {
+          artifact_ref: '/evidence/review.md',
+          artifact_kind: 'evidence_ref',
+          file_name: 'review.md',
+          first_seen_at: '2026-03-16T08:42:00.000Z',
+          last_seen_at: '2026-03-16T08:58:00.000Z',
+          mention_count: 2,
+          agent_ids: ['app-engineering', 'team-lead'],
+          correlation_ids: ['corr-app-review'],
+          source_kinds: ['controller_event'],
+          latest_summary: 'Incident feed evidence anchor',
+          latest_event_type: 'peer_watch',
+          collector_last_modified_at: '2026-03-16T08:58:00.000Z'
+        }
+      ]
+    };
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          incidentFeed: {
+            items: [
+              {
+                incident_id: 'inc-feed-1',
+                kind: 'peer_watch',
+                ts: '2026-03-16T08:50:00.000Z',
+                agent_id: 'app-engineering',
+                actor_id: 'team-lead',
+                status: 'open',
+                severity: 'orange',
+                summary: 'Lead is still waiting on workflow evidence',
+                correlation_id: 'corr-app-review',
+                evidence_refs: ['/evidence/review.md', '/evidence/missing.md'],
+                counterparty_agent_ids: ['team-lead'],
+                source_kind: 'controller_event'
+              }
+            ]
+          },
+          memoryArtifacts,
+          onSelectAgent,
+          onSelectCorrelation,
+          selectedAgent: null,
+          selectedOperation: null
+        })}
+      />
+    );
+
+    const incidentSection = screen.getByRole('heading', { name: 'Incident Feed' }).closest('section');
+    const sharedMemorySection = screen.getByRole('heading', { name: 'Shared Memory' }).closest('section');
+    expect(incidentSection).not.toBeNull();
+    expect(sharedMemorySection).not.toBeNull();
+
+    const incidentRecord = within(incidentSection!).getByText('Lead is still waiting on workflow evidence').closest('li');
+    const artifactRecord = within(sharedMemorySection!).getByText('Ref · /evidence/review.md').closest('li');
+    expect(incidentRecord).not.toBeNull();
+    expect(artifactRecord).not.toBeNull();
+    expect(incidentRecord).toHaveTextContent('Evidence · /evidence/review.md, /evidence/missing.md');
+    expect(
+      within(incidentRecord!).getByRole('button', {
+        name: 'Jump to shared memory artifact /evidence/review.md'
+      })
+    ).toHaveTextContent('/evidence/review.md');
+    expect(
+      within(incidentRecord!).queryByRole('button', {
+        name: 'Jump to shared memory artifact /evidence/missing.md'
+      })
+    ).not.toBeInTheDocument();
+
+    await user.click(
+      within(incidentRecord!).getByRole('button', {
+        name: 'Jump to shared memory artifact /evidence/review.md'
+      })
+    );
+
+    expect(document.activeElement).toBe(artifactRecord);
+    expect(onSelectAgent).not.toHaveBeenCalled();
+    expect(onSelectCorrelation).not.toHaveBeenCalled();
+  });
+
+  it('jumps from matching selected-agent incident feed evidence refs to shared memory while leaving non-matching refs as plain text', async () => {
+    const user = userEvent.setup();
+    const onSelectAgent = vi.fn();
+    const onSelectCorrelation = vi.fn();
+    const memoryArtifacts: MemoryArtifactIndex = {
+      generated_at: '2026-03-16T09:00:00.000Z',
+      items: [
+        {
+          artifact_ref: '/evidence/review.md',
+          artifact_kind: 'evidence_ref',
+          file_name: 'review.md',
+          first_seen_at: '2026-03-16T08:42:00.000Z',
+          last_seen_at: '2026-03-16T08:58:00.000Z',
+          mention_count: 2,
+          agent_ids: ['app-engineering', 'team-lead'],
+          correlation_ids: ['corr-app-review'],
+          source_kinds: ['controller_event'],
+          latest_summary: 'Incident feed evidence anchor',
+          latest_event_type: 'peer_watch',
+          collector_last_modified_at: '2026-03-16T08:58:00.000Z'
+        }
+      ]
+    };
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          incidentFeed: {
+            items: [
+              {
+                incident_id: 'inc-feed-1',
+                kind: 'peer_watch',
+                ts: '2026-03-16T08:50:00.000Z',
+                agent_id: 'app-engineering',
+                actor_id: 'team-lead',
+                status: 'open',
+                severity: 'orange',
+                summary: 'Lead is still waiting on workflow evidence',
+                correlation_id: 'corr-app-review',
+                evidence_refs: ['/evidence/review.md', '/evidence/missing.md'],
+                counterparty_agent_ids: ['team-lead'],
+                source_kind: 'controller_event'
+              }
+            ]
+          },
+          memoryArtifacts,
+          onSelectAgent,
+          onSelectCorrelation
+        })}
+      />
+    );
+
+    const incidentSection = screen.getByRole('heading', { name: 'Incident Feed' }).closest('section');
+    const sharedMemorySection = screen.getByRole('heading', { name: 'Shared Memory' }).closest('section');
+    expect(incidentSection).not.toBeNull();
+    expect(sharedMemorySection).not.toBeNull();
+
+    const incidentRecord = within(incidentSection!).getByText('Lead is still waiting on workflow evidence').closest('li');
+    const artifactRecord = within(sharedMemorySection!).getByText('Ref · /evidence/review.md').closest('li');
+    expect(incidentRecord).not.toBeNull();
+    expect(artifactRecord).not.toBeNull();
+    expect(incidentRecord).toHaveTextContent('Evidence · /evidence/review.md, /evidence/missing.md');
+    expect(
+      within(incidentRecord!).getByRole('button', {
+        name: 'Jump to shared memory artifact /evidence/review.md'
+      })
+    ).toHaveTextContent('/evidence/review.md');
+    expect(
+      within(incidentRecord!).queryByRole('button', {
+        name: 'Jump to shared memory artifact /evidence/missing.md'
+      })
+    ).not.toBeInTheDocument();
+
+    await user.click(
+      within(incidentRecord!).getByRole('button', {
+        name: 'Jump to shared memory artifact /evidence/review.md'
+      })
+    );
+
+    expect(document.activeElement).toBe(artifactRecord);
+    expect(onSelectAgent).not.toHaveBeenCalled();
+    expect(onSelectCorrelation).not.toHaveBeenCalled();
+  });
+
   it('renders workflow and correlation interaction cards with timing and transition metadata', () => {
     const interaction = {
       ...buildCorrelation().interactions[0],

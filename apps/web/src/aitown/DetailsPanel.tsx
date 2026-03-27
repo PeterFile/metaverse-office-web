@@ -1790,7 +1790,11 @@ export function DetailsPanel({
             </li>
           ) : null}
           {(workflow?.detail.recent_interactions ?? []).slice(0, 2).map((interaction) =>
-            renderCorrelationInteraction({ interaction })
+            renderCorrelationInteraction({
+              interaction,
+              sharedMemoryArtifactRefs,
+              enableSharedMemoryEvidenceJump: true
+            })
           )}
           {(workflow?.detail.recent_events ?? []).slice(0, 2).map(renderCorrelationTimelineEvent)}
           {(workflow?.detail.recent_handoffs ?? []).slice(0, 2).map((handoff) =>

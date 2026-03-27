@@ -632,6 +632,7 @@ function renderWorkflowStatusRecord({
   phase,
   counterpartyAgentIds,
   evidenceRefs,
+  sharedMemoryArtifactRefs,
   correlationId,
   activeCorrelationId,
   sourceKind,
@@ -647,6 +648,7 @@ function renderWorkflowStatusRecord({
   phase: string;
   counterpartyAgentIds: string[];
   evidenceRefs: string[];
+  sharedMemoryArtifactRefs: ReadonlySet<string>;
   correlationId: string | null;
   activeCorrelationId: string | null;
   sourceKind: string;
@@ -660,7 +662,14 @@ function renderWorkflowStatusRecord({
       <span>{`Actor · ${actorId}`}</span>
       <span>{`Severity · ${SEVERITY_LABELS[severity]}`}</span>
       <span>{`Counterparties · ${renderCounterparties(counterpartyAgentIds)}`}</span>
-      <span>{`Evidence · ${renderEvidenceRefs(evidenceRefs)}`}</span>
+      <span>
+        Evidence ·{' '}
+        {renderSharedMemoryEvidenceRefs({
+          evidenceRefs,
+          sharedMemoryArtifactRefs,
+          onJump: focusSharedMemoryArtifact
+        })}
+      </span>
       <span>
         Correlation pivot ·{' '}
         {renderCorrelationButton({
@@ -1815,6 +1824,7 @@ export function DetailsPanel({
               phase: handoff.phase,
               counterpartyAgentIds: handoff.counterparty_agent_ids,
               evidenceRefs: handoff.evidence_refs,
+              sharedMemoryArtifactRefs,
               correlationId: handoff.correlation_id,
               activeCorrelationId: selectedCorrelationId,
               sourceKind: handoff.source_kind,
@@ -1833,6 +1843,7 @@ export function DetailsPanel({
               phase: reboot.phase,
               counterpartyAgentIds: reboot.counterparty_agent_ids,
               evidenceRefs: reboot.evidence_refs,
+              sharedMemoryArtifactRefs,
               correlationId: reboot.correlation_id,
               activeCorrelationId: selectedCorrelationId,
               sourceKind: reboot.source_kind,

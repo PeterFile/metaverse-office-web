@@ -1490,7 +1490,10 @@ afterEach(() => {
     expect(within(replayEvent!).getByText('Location · meeting-zone')).toBeVisible();
     expect(within(replayEvent!).getByText('Severity · Orange')).toBeVisible();
     expect(within(replayEvent!).getByText('Counterparties · team-lead')).toBeVisible();
-    expect(within(replayEvent!).getByText('Evidence · /tmp/evidence.md')).toBeVisible();
+    expect(replayEvent).toHaveTextContent('Evidence · /tmp/evidence.md');
+    expect(
+      within(replayEvent!).getByRole('button', { name: 'Jump to shared memory artifact /tmp/evidence.md' })
+    ).toBeVisible();
     expect(within(replayEvent!).getByText('Source · controller_event')).toBeVisible();
     expect(
       within(replayEvent!).getByRole('button', { name: 'Select replay agent app-engineering from event evt-timeline-1' })

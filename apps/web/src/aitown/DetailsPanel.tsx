@@ -438,7 +438,15 @@ function renderDisplayState(value: string) {
     .join(' ');
 }
 
-function renderCorrelationInteraction(interaction: WorkflowInteraction) {
+function renderCorrelationInteraction({
+  interaction,
+  sharedMemoryArtifactRefs,
+  enableSharedMemoryEvidenceJump = false
+}: {
+  interaction: WorkflowInteraction;
+  sharedMemoryArtifactRefs?: ReadonlySet<string>;
+  enableSharedMemoryEvidenceJump?: boolean;
+}) {
   const stateTransition =
     interaction.before_state && interaction.after_state
       ? `${interaction.before_state} -> ${interaction.after_state}`
@@ -455,7 +463,18 @@ function renderCorrelationInteraction(interaction: WorkflowInteraction) {
       <span>{`Participants · ${renderParticipants(interaction.participant_agent_ids)}`}</span>
       <span>{`Correlation · ${interaction.correlation_id ?? 'No correlation id'}`}</span>
       {interaction.severity ? <span>{`Severity · ${SEVERITY_LABELS[interaction.severity]}`}</span> : null}
-      <span>{`Evidence · ${renderEvidenceRefs(interaction.evidence_refs)}`}</span>
+      {enableSharedMemoryEvidenceJump && sharedMemoryArtifactRefs ? (
+        <span>
+          Evidence ·{' '}
+          {renderSharedMemoryEvidenceRefs({
+            evidenceRefs: interaction.evidence_refs,
+            sharedMemoryArtifactRefs,
+            onJump: focusSharedMemoryArtifact
+          })}
+        </span>
+      ) : (
+        <span>{`Evidence · ${renderEvidenceRefs(interaction.evidence_refs)}`}</span>
+      )}
     </li>
   );
 }
@@ -1294,7 +1313,13 @@ export function DetailsPanel({
                   includeCorrelationPivot: false
                   })
                 )}
-                {correlation.interactions.map(renderCorrelationInteraction)}
+                {correlation.interactions.map((interaction) =>
+                  renderCorrelationInteraction({
+                    interaction,
+                    sharedMemoryArtifactRefs,
+                    enableSharedMemoryEvidenceJump: true
+                  })
+                )}
                 {correlation.timeline.map(renderCorrelationTimelineEvent)}
               </>
             ) : null}
@@ -1676,7 +1701,9 @@ export function DetailsPanel({
               ))}
             </li>
           ) : null}
-          {(workflow?.detail.recent_interactions ?? []).slice(0, 2).map(renderCorrelationInteraction)}
+          {(workflow?.detail.recent_interactions ?? []).slice(0, 2).map((interaction) =>
+            renderCorrelationInteraction({ interaction })
+          )}
           {(workflow?.detail.recent_events ?? []).slice(0, 2).map(renderCorrelationTimelineEvent)}
           {(workflow?.detail.recent_handoffs ?? []).slice(0, 2).map((handoff) =>
             renderWorkflowStatusRecord({
@@ -1793,7 +1820,13 @@ export function DetailsPanel({
                   includeCorrelationPivot: false
                 })
               )}
-              {correlation.interactions.map(renderCorrelationInteraction)}
+              {correlation.interactions.map((interaction) =>
+                renderCorrelationInteraction({
+                  interaction,
+                  sharedMemoryArtifactRefs,
+                  enableSharedMemoryEvidenceJump: true
+                })
+              )}
               {correlation.timeline.map(renderCorrelationTimelineEvent)}
             </>
           ) : null}

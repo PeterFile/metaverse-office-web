@@ -440,13 +440,22 @@ function renderDisplayState(value: string) {
 
 function renderCorrelationInteraction({
   interaction,
+  activeCorrelationId = null,
+  currentAgentId,
+  navigableAgentIds,
+  onSelectAgent,
   sharedMemoryArtifactRefs,
   enableSharedMemoryEvidenceJump = false
 }: {
   interaction: WorkflowInteraction;
+  activeCorrelationId?: string | null;
+  currentAgentId?: string | null;
+  navigableAgentIds?: Set<string>;
+  onSelectAgent?: (agentId: string | null, correlationId?: string | null) => void;
   sharedMemoryArtifactRefs?: ReadonlySet<string>;
   enableSharedMemoryEvidenceJump?: boolean;
 }) {
+  const canRenderParticipantPivots = Boolean(navigableAgentIds && onSelectAgent);
   const stateTransition =
     interaction.before_state && interaction.after_state
       ? `${interaction.before_state} -> ${interaction.after_state}`
@@ -460,7 +469,20 @@ function renderCorrelationInteraction({
       {interaction.ended_at ? <span>{`Ended · ${interaction.ended_at}`}</span> : null}
       <span>{`Trigger · ${interaction.trigger_event_id}`}</span>
       {stateTransition ? <span>{`State · ${stateTransition}`}</span> : null}
-      <span>{`Participants · ${renderParticipants(interaction.participant_agent_ids)}`}</span>
+      <span>
+        Participants ·{' '}
+        {canRenderParticipantPivots && navigableAgentIds && onSelectAgent
+          ? renderAgentPivotList({
+              agentIds: interaction.participant_agent_ids,
+              currentAgentId: currentAgentId ?? null,
+              navigableAgentIds,
+              emptyLabel: 'No participants',
+              ariaLabelPrefix: 'Select correlation interaction participant agent',
+              correlationId: activeCorrelationId ?? interaction.correlation_id,
+              onSelectAgent
+            })
+          : renderParticipants(interaction.participant_agent_ids)}
+      </span>
       <span>{`Correlation · ${interaction.correlation_id ?? 'No correlation id'}`}</span>
       {interaction.severity ? <span>{`Severity · ${SEVERITY_LABELS[interaction.severity]}`}</span> : null}
       {enableSharedMemoryEvidenceJump && sharedMemoryArtifactRefs ? (
@@ -1361,6 +1383,10 @@ export function DetailsPanel({
                 {correlation.interactions.map((interaction) =>
                   renderCorrelationInteraction({
                     interaction,
+                    activeCorrelationId: sharedMemoryActiveCorrelationId,
+                    currentAgentId: null,
+                    navigableAgentIds,
+                    onSelectAgent,
                     sharedMemoryArtifactRefs,
                     enableSharedMemoryEvidenceJump: true
                   })
@@ -1878,6 +1904,10 @@ export function DetailsPanel({
               {correlation.interactions.map((interaction) =>
                 renderCorrelationInteraction({
                   interaction,
+                  activeCorrelationId: selectedCorrelationId,
+                  currentAgentId: selectedAgent.agent_id,
+                  navigableAgentIds,
+                  onSelectAgent,
                   sharedMemoryArtifactRefs,
                   enableSharedMemoryEvidenceJump: true
                 })

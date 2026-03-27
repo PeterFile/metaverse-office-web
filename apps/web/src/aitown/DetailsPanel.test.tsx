@@ -684,6 +684,44 @@ describe('DetailsPanel accountability signals', () => {
     expect(onSelectAgent).toHaveBeenCalledWith('team-lead', 'corr-app-review');
   });
 
+  it('renders correlation incident agents as pivots when they are not the current agent and preserves the active correlation', async () => {
+    const user = userEvent.setup();
+    const onSelectAgent = vi.fn();
+    const correlation: CorrelationDrilldown = {
+      ...buildCorrelation(),
+      incidents: [
+        {
+          ...buildCorrelation().incidents[0],
+          agent_id: 'team-lead'
+        }
+      ]
+    };
+
+    render(<DetailsPanel {...buildProps({ correlation, onSelectAgent })} />);
+
+    const section = screen.getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    expect(section).not.toBeNull();
+
+    expect(
+      within(section!).getByRole('button', {
+        name: 'Select incident agent team-lead from incident inc-1'
+      })
+    ).toBeVisible();
+    expect(
+      within(section!).queryByRole('button', {
+        name: 'Open incident correlation corr-app-review, currently selected'
+      })
+    ).not.toBeInTheDocument();
+
+    await user.click(
+      within(section!).getByRole('button', {
+        name: 'Select incident agent team-lead from incident inc-1'
+      })
+    );
+
+    expect(onSelectAgent).toHaveBeenCalledWith('team-lead', 'corr-app-review');
+  });
+
   it('jumps from an accountability artifact to the matching shared-memory record without changing selection state', async () => {
     const user = userEvent.setup();
     const onSelectAgent = vi.fn();

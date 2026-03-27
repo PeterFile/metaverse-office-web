@@ -2168,11 +2168,9 @@ afterEach(() => {
       expect(within(details).getByText('Latest event · Stale queue snapshot should not win')).toBeVisible();
       expect(within(auditSignalsSection!).getByText('What · Agent attached workflow evidence for lead review')).toBeVisible();
       expect(within(auditSignalsSection!).queryByText('What · Stale queue snapshot should not win')).not.toBeInTheDocument();
-      expect(
-        within(auditSignalsSection!).getByText(
-          'Evidence · /tmp/evidence.md, /tmp/reboot-note.md, /tmp/peer-watch.md'
-        )
-      ).toBeVisible();
+      expect(auditSignalsSection!).toHaveTextContent(
+        'Evidence · /tmp/evidence.md, /tmp/reboot-note.md, /tmp/peer-watch.md'
+      );
       expect(within(auditSignalsSection!).queryByText(/\/tmp\/secondary-evidence\.md/)).not.toBeInTheDocument();
       expect(within(auditSignalsSection!).queryByText(/\/tmp\/stale\.md/)).not.toBeInTheDocument();
       expect(within(auditSignalsSection!).getByText('Source · controller_event, workspace_snapshot')).toBeVisible();
@@ -3028,9 +3026,15 @@ afterEach(() => {
 
     const artifactRecord = within(memorySection!).getByText('Ref · /tmp/evidence.md').closest('li');
     expect(artifactRecord).not.toBeNull();
+    const artifactLine = within(auditSection!).getByText(
+      (_content, element) =>
+        element?.tagName === 'SPAN' &&
+        element.textContent ===
+          'Artifacts · Correlation-scoped evidence trail for the missing workflow review (/tmp/evidence.md)'
+    );
 
     await user.click(
-      within(auditSection!).getByRole('button', {
+      within(artifactLine).getByRole('button', {
         name: 'Jump to shared memory artifact /tmp/evidence.md'
       })
     );
@@ -3038,6 +3042,82 @@ afterEach(() => {
     expect(document.activeElement).toBe(artifactRecord);
     expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
     expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+    expect(globalThis.fetch).not.toHaveBeenCalledWith(teamLeadWorkflowUrl, expect.anything());
+    expect(globalThis.fetch).not.toHaveBeenCalledWith(teamLeadSelectedCorrelationMemoryArtifactsUrl, expect.anything());
+  });
+
+  it('jumps from matching audit-signal accountability evidence refs to shared memory without changing the selected agent or accountability correlation', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent from active queue' }));
+
+    const auditSection = within(details).getByRole('heading', { name: 'Audit Signals' }).closest('section');
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    const memorySection = within(details).getByRole('heading', { name: 'Shared Memory' }).closest('section');
+    expect(auditSection).not.toBeNull();
+    expect(correlationSection).not.toBeNull();
+    expect(memorySection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+      expect(
+        within(auditSection!).getByText(
+          (_content, element) =>
+            element?.tagName === 'SPAN' &&
+            element.textContent === 'Evidence · /tmp/evidence.md, /tmp/reboot-note.md, /tmp/peer-watch.md'
+        )
+      ).toBeVisible();
+      expect(
+        within(auditSection!).getByRole('button', {
+          name: 'Open accountability correlation corr-app-review, currently selected'
+        })
+      ).toBeVisible();
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+      expect(within(memorySection!).getByText('Ref · /tmp/evidence.md')).toBeVisible();
+    });
+
+    const evidenceLine = within(auditSection!).getByText(
+      (_content, element) =>
+        element?.tagName === 'SPAN' &&
+        element.textContent === 'Evidence · /tmp/evidence.md, /tmp/reboot-note.md, /tmp/peer-watch.md'
+    );
+    const artifactRecord = within(memorySection!).getByText('Ref · /tmp/evidence.md').closest('li');
+    expect(artifactRecord).not.toBeNull();
+    expect(
+      within(evidenceLine).getByRole('button', {
+        name: 'Jump to accountability evidence ref /tmp/evidence.md'
+      })
+    ).toBeVisible();
+    expect(
+      within(evidenceLine).queryByRole('button', {
+        name: 'Jump to accountability evidence ref /tmp/reboot-note.md'
+      })
+    ).not.toBeInTheDocument();
+    expect(
+      within(evidenceLine).queryByRole('button', {
+        name: 'Jump to accountability evidence ref /tmp/peer-watch.md'
+      })
+    ).not.toBeInTheDocument();
+
+    const fetchCallCountBeforeJump = vi.mocked(globalThis.fetch).mock.calls.length;
+
+    await user.click(
+      within(evidenceLine).getByRole('button', {
+        name: 'Jump to accountability evidence ref /tmp/evidence.md'
+      })
+    );
+
+    expect(document.activeElement).toBe(artifactRecord);
+    expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+    expect(
+      within(auditSection!).getByRole('button', {
+        name: 'Open accountability correlation corr-app-review, currently selected'
+      })
+    ).toBeVisible();
+    expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+    expect(vi.mocked(globalThis.fetch).mock.calls).toHaveLength(fetchCallCountBeforeJump);
     expect(globalThis.fetch).not.toHaveBeenCalledWith(teamLeadWorkflowUrl, expect.anything());
     expect(globalThis.fetch).not.toHaveBeenCalledWith(teamLeadSelectedCorrelationMemoryArtifactsUrl, expect.anything());
   });

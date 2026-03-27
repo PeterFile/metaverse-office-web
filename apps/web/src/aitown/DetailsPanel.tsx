@@ -325,11 +325,13 @@ function renderEvidenceRefs(evidenceRefs: string[]) {
 function renderSharedMemoryEvidenceRefs({
   evidenceRefs,
   sharedMemoryArtifactRefs,
-  onJump
+  onJump,
+  jumpAriaLabelPrefix = 'Jump to shared memory artifact'
 }: {
   evidenceRefs: string[];
   sharedMemoryArtifactRefs: ReadonlySet<string>;
   onJump: (artifactRef: string) => void;
+  jumpAriaLabelPrefix?: string;
 }) {
   if (evidenceRefs.length === 0) {
     return 'No evidence refs';
@@ -342,7 +344,7 @@ function renderSharedMemoryEvidenceRefs({
         <button
           type="button"
           className="aitown-link-button"
-          aria-label={`Jump to shared memory artifact ${evidenceRef}`}
+          aria-label={`${jumpAriaLabelPrefix} ${evidenceRef}`}
           onClick={() => onJump(evidenceRef)}
         >
           {evidenceRef}
@@ -1743,7 +1745,17 @@ export function DetailsPanel({
               })}
             </span>
             <span>{`What · ${accountabilityWhat ?? 'No live accountability signal'}`}</span>
-            <span>{`Evidence · ${renderNamedList(accountabilityEvidenceRefs, 'No loaded evidence refs')}`}</span>
+            <span>
+              Evidence ·{' '}
+              {accountabilityEvidenceRefs.length > 0
+                ? renderSharedMemoryEvidenceRefs({
+                    evidenceRefs: accountabilityEvidenceRefs,
+                    sharedMemoryArtifactRefs,
+                    onJump: focusSharedMemoryArtifact,
+                    jumpAriaLabelPrefix: 'Jump to accountability evidence ref'
+                  })
+                : 'No loaded evidence refs'}
+            </span>
             <span>
               Artifacts ·{' '}
               {renderAccountabilityArtifactJumpList({

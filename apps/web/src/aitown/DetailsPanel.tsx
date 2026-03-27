@@ -322,6 +322,38 @@ function renderEvidenceRefs(evidenceRefs: string[]) {
   return evidenceRefs.length > 0 ? evidenceRefs.join(', ') : 'No evidence refs';
 }
 
+function renderSharedMemoryEvidenceRefs({
+  evidenceRefs,
+  sharedMemoryArtifactRefs,
+  onJump
+}: {
+  evidenceRefs: string[];
+  sharedMemoryArtifactRefs: ReadonlySet<string>;
+  onJump: (artifactRef: string) => void;
+}) {
+  if (evidenceRefs.length === 0) {
+    return 'No evidence refs';
+  }
+
+  return evidenceRefs.map((evidenceRef, index) => (
+    <span key={`${evidenceRef}-${index}`}>
+      {index > 0 ? ', ' : null}
+      {sharedMemoryArtifactRefs.has(evidenceRef) ? (
+        <button
+          type="button"
+          className="aitown-link-button"
+          aria-label={`Jump to shared memory artifact ${evidenceRef}`}
+          onClick={() => onJump(evidenceRef)}
+        >
+          {evidenceRef}
+        </button>
+      ) : (
+        <span>{evidenceRef}</span>
+      )}
+    </span>
+  ));
+}
+
 function renderCounterparties(counterpartyAgentIds: string[]) {
   return counterpartyAgentIds.length > 0 ? counterpartyAgentIds.join(', ') : 'No counterparties';
 }
@@ -711,6 +743,8 @@ function renderIncidentRecord({
   activeCorrelationId,
   currentAgentId,
   navigableAgentIds,
+  sharedMemoryArtifactRefs,
+  enableSharedMemoryEvidenceJump = false,
   onSelectAgent,
   onSelectCorrelation,
   includeAgentPivot,
@@ -721,6 +755,8 @@ function renderIncidentRecord({
   activeCorrelationId: string | null;
   currentAgentId: string | null;
   navigableAgentIds: Set<string>;
+  sharedMemoryArtifactRefs: ReadonlySet<string>;
+  enableSharedMemoryEvidenceJump?: boolean;
   onSelectAgent: (agentId: string | null, correlationId?: string | null) => void;
   onSelectCorrelation: (correlationId: string | null) => void;
   includeAgentPivot: boolean;
@@ -770,7 +806,18 @@ function renderIncidentRecord({
             })
           : renderCounterparties(incident.counterparty_agent_ids)}
       </span>
-      <span>{`Evidence · ${renderEvidenceRefs(incident.evidence_refs)}`}</span>
+      {enableSharedMemoryEvidenceJump ? (
+        <span>
+          Evidence ·{' '}
+          {renderSharedMemoryEvidenceRefs({
+            evidenceRefs: incident.evidence_refs,
+            sharedMemoryArtifactRefs,
+            onJump: focusSharedMemoryArtifact
+          })}
+        </span>
+      ) : (
+        <span>{`Evidence · ${renderEvidenceRefs(incident.evidence_refs)}`}</span>
+      )}
       <span>{`Source · ${incident.source_kind}`}</span>
     </li>
   );
@@ -972,6 +1019,7 @@ export function DetailsPanel({
     .sort(compareCollectorItems)
     .slice(0, 3);
   const sharedMemoryActiveCorrelationId = selectedCorrelationId;
+  const sharedMemoryArtifactRefs = new Set((memoryArtifacts?.items ?? []).map((artifact) => artifact.artifact_ref));
 
   if (!selectedAgent) {
     return (
@@ -1170,6 +1218,7 @@ export function DetailsPanel({
                 activeCorrelationId: selectedCorrelationId,
                 currentAgentId: null,
                 navigableAgentIds,
+                sharedMemoryArtifactRefs,
                 onSelectAgent,
                 onSelectCorrelation,
                 includeAgentPivot: true
@@ -1231,16 +1280,20 @@ export function DetailsPanel({
                   <span>{`Evidence · ${renderEvidenceRefs(correlation.evidence_refs)}`}</span>
                   <span>{`Counts · ${correlation.incident_count} incidents · ${correlation.interaction_count} interactions · ${correlation.event_count} events`}</span>
                 </li>
-                {correlation.incidents.map((incident) => (
-                  <li key={incident.incident_id} className={`aitown-record severity-${incident.severity}`}>
-                    <strong>{incident.summary}</strong>
-                    <span>{`Incident · ${incident.kind} · ${incident.status}`}</span>
-                    <span>{`Severity · ${SEVERITY_LABELS[incident.severity]}`}</span>
-                    <span>{`Counterparties · ${renderCounterparties(incident.counterparty_agent_ids)}`}</span>
-                    <span>{`Evidence · ${renderEvidenceRefs(incident.evidence_refs)}`}</span>
-                    <span>{`Source · ${incident.source_kind}`}</span>
-                  </li>
-                ))}
+                {correlation.incidents.map((incident) =>
+                  renderIncidentRecord({
+                    incident,
+                    activeCorrelationId: sharedMemoryActiveCorrelationId,
+                    currentAgentId: null,
+                    navigableAgentIds,
+                  sharedMemoryArtifactRefs,
+                  enableSharedMemoryEvidenceJump: true,
+                  onSelectAgent,
+                  onSelectCorrelation,
+                  includeAgentPivot: false,
+                  includeCorrelationPivot: false
+                  })
+                )}
                 {correlation.interactions.map(renderCorrelationInteraction)}
                 {correlation.timeline.map(renderCorrelationTimelineEvent)}
               </>
@@ -1688,6 +1741,7 @@ export function DetailsPanel({
               activeCorrelationId: selectedCorrelationId,
               currentAgentId: selectedAgent.agent_id,
               navigableAgentIds,
+              sharedMemoryArtifactRefs,
               onSelectAgent,
               onSelectCorrelation,
               includeAgentPivot: false
@@ -1730,6 +1784,8 @@ export function DetailsPanel({
                   activeCorrelationId: selectedCorrelationId,
                   currentAgentId: selectedAgent.agent_id,
                   navigableAgentIds,
+                  sharedMemoryArtifactRefs,
+                  enableSharedMemoryEvidenceJump: true,
                   onSelectAgent,
                   onSelectCorrelation,
                   includeAgentPivot: true,

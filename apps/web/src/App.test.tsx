@@ -3844,6 +3844,42 @@ afterEach(() => {
     });
   });
 
+  it('pivots from correlation timeline actors while preserving the active correlation', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
+
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    expect(correlationSection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+      expect(
+        within(correlationSection!).getByRole('button', {
+          name: 'Select correlation timeline actor from event evt-1 team-lead'
+        })
+      ).toBeVisible();
+    });
+
+    await user.click(
+      within(correlationSection!).getByRole('button', {
+        name: 'Select correlation timeline actor from event evt-1 team-lead'
+      })
+    );
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'Team Lead' })).toBeVisible();
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+    });
+
+    await act(async () => {
+      expect(globalThis.fetch).toHaveBeenCalledWith(teamLeadWorkflowUrl, expect.anything());
+      expect(globalThis.fetch).toHaveBeenCalledWith(teamLeadSelectedCorrelationMemoryArtifactsUrl, expect.anything());
+    });
+  });
+
   it('pivots from correlation timeline counterparties while preserving the active correlation', async () => {
     const originalFetch = globalThis.fetch;
 

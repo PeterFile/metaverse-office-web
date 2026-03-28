@@ -1233,6 +1233,52 @@ test.describe('operator shell smoke', () => {
     await expect(correlationSection.getByText('Counts · 0 incidents · 1 interactions · 2 events')).toBeVisible();
   });
 
+  test('keeps the active replay correlation when opening a replay actor pivot via keyboard traversal', async ({ page }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Hub' }).click();
+
+    const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
+    const clearButton = detailsPanel.getByRole('button', { name: 'Clear' });
+    const replaySection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Timeline Replay' })
+    });
+    const correlationSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Correlation Drilldown' })
+    });
+    const replayRecord = replaySection.locator('li').filter({
+      has: page.getByText('Lead started reviewing the growth handoff notes', { exact: true })
+    });
+    const replayCorrelationButton = replayRecord.getByRole('button', {
+      name: 'Open replay correlation corr-growth-lead-review'
+    });
+    const replayActorButton = replayRecord.getByRole('button', {
+      name: 'Select replay actor from event evt_growth_review_started team-lead'
+    });
+
+    await expect(detailsPanel.getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
+
+    await focusHubControlWithTab(page, replayCorrelationButton, 'Open replay correlation corr-growth-lead-review');
+    await expect(replayCorrelationButton).toBeFocused();
+    await page.keyboard.press('Enter');
+
+    await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toBeVisible();
+    await expect(correlationSection.getByText('Counts · 0 incidents · 1 interactions · 2 events')).toBeVisible();
+
+    await focusHubControlWithTab(
+      page,
+      replayActorButton,
+      'Select replay actor from event evt_growth_review_started team-lead'
+    );
+    await expect(replayActorButton).toBeFocused();
+    await page.keyboard.press('Enter');
+
+    await expect(detailsPanel.getByRole('heading', { name: 'Team Lead' })).toBeVisible();
+    await expect(clearButton).toBeFocused();
+    await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
+    await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toBeVisible();
+    await expect(correlationSection.getByText('Counts · 0 incidents · 1 interactions · 2 events')).toBeVisible();
+  });
+
   test('keeps the clicked selected-agent incident correlation when opening an incident counterparty pivot via keyboard traversal', async ({ page }) => {
     await page.goto('/');
     await page.getByRole('button', { name: 'Open Hub' }).click();

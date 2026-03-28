@@ -981,12 +981,12 @@ describe('DetailsPanel accountability signals', () => {
               {
                 event_id: 'evt-replay',
                 ts: '2026-03-16T08:59:00.000Z',
-                agent_id: 'app-engineering',
-                actor_id: 'team-lead',
+                agent_id: 'growth-revenue',
+                actor_id: 'growth-revenue',
                 event_type: 'peer_watch_alert_raised',
                 severity: 'orange',
-                current_state: 'blocked',
-                location: 'delivery-desk',
+                current_state: 'planning',
+                location: 'growth-desk',
                 summary: 'Replay event with observability metadata',
                 correlation_id: 'corr-app-review',
                 counterparty_agent_ids: ['team-lead'],
@@ -1014,8 +1014,127 @@ describe('DetailsPanel accountability signals', () => {
     expect(within(correlationCard!).getByText('State · blocked')).toBeVisible();
 
     expect(within(replayCard!).getByText('At · 2026-03-16T08:59:00.000Z')).toBeVisible();
-    expect(within(replayCard!).getByText('Actor · team-lead')).toBeVisible();
-    expect(within(replayCard!).getByText('State · blocked')).toBeVisible();
+    expect(replayCard).toHaveTextContent('Actor · growth-revenue');
+    expect(within(replayCard!).getByText('State · planning')).toBeVisible();
+    expect(
+      within(replayCard!).getByRole('button', {
+        name: 'Select replay actor from event evt-replay growth-revenue'
+      })
+    ).toBeVisible();
+    expect(
+      within(replayCard!).getByRole('button', {
+        name: 'Select replay agent growth-revenue from event evt-replay'
+      })
+    ).toBeVisible();
+  });
+
+  it('renders replay actors as pivots when navigable, preserves the active correlation, and leaves unknown actors as plain text', async () => {
+    const user = userEvent.setup();
+    const onSelectAgent = vi.fn();
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          onSelectAgent,
+          selectedAgent: null,
+          selectedOperation: null,
+          selectedCorrelationId: 'corr-app-secondary',
+          timelineReplay: {
+            items: [
+              {
+                event_id: 'evt-replay-actor-1',
+                ts: '2026-03-16T08:59:00.000Z',
+                agent_id: 'app-engineering',
+                actor_id: 'team-lead',
+                event_type: 'peer_watch_alert_raised',
+                severity: 'orange',
+                current_state: 'blocked',
+                location: 'delivery-desk',
+                summary: 'Navigable replay actor stays actionable',
+                correlation_id: 'corr-app-review',
+                counterparty_agent_ids: ['team-lead'],
+                evidence_refs: ['/evidence/replay.md'],
+                source_kind: 'controller_event'
+              },
+              {
+                event_id: 'evt-replay-actor-2',
+                ts: '2026-03-16T08:58:00.000Z',
+                agent_id: 'growth-revenue',
+                actor_id: 'growth-revenue',
+                event_type: 'agent_noted',
+                severity: 'yellow',
+                current_state: 'planning',
+                location: 'growth-desk',
+                summary: 'Replay actor matching the replay agent stays actionable',
+                correlation_id: 'corr-app-secondary',
+                counterparty_agent_ids: [],
+                evidence_refs: ['/evidence/replay-current.md'],
+                source_kind: 'workspace_snapshot'
+              },
+              {
+                event_id: 'evt-replay-actor-3',
+                ts: '2026-03-16T08:57:00.000Z',
+                agent_id: 'app-engineering',
+                actor_id: 'ghost-agent',
+                event_type: 'agent_noted',
+                severity: 'yellow',
+                current_state: 'blocked',
+                location: 'delivery-desk',
+                summary: 'Unknown replay actor stays plain text',
+                correlation_id: 'corr-app-secondary',
+                counterparty_agent_ids: [],
+                evidence_refs: ['/evidence/replay-unknown.md'],
+                source_kind: 'workspace_snapshot'
+              }
+            ]
+          }
+        })}
+      />
+    );
+
+    const section = screen.getByRole('heading', { name: 'Timeline Replay' }).closest('section');
+    expect(section).not.toBeNull();
+
+    const navigableRecord = within(section!).getByText('Navigable replay actor stays actionable').closest('li');
+    const duplicateRecord = within(section!).getByText('Replay actor matching the replay agent stays actionable').closest('li');
+    const unknownRecord = within(section!).getByText('Unknown replay actor stays plain text').closest('li');
+    expect(navigableRecord).not.toBeNull();
+    expect(duplicateRecord).not.toBeNull();
+    expect(unknownRecord).not.toBeNull();
+
+    expect(
+      within(navigableRecord!).getByRole('button', {
+        name: 'Select replay actor from event evt-replay-actor-1 team-lead'
+      })
+    ).toBeVisible();
+    expect(
+      within(navigableRecord!).getByRole('button', {
+        name: 'Select replay agent app-engineering from event evt-replay-actor-1'
+      })
+    ).toBeVisible();
+    expect(
+      within(duplicateRecord!).getByRole('button', {
+        name: 'Select replay actor from event evt-replay-actor-2 growth-revenue'
+      })
+    ).toBeVisible();
+    expect(
+      within(duplicateRecord!).getByRole('button', {
+        name: 'Select replay agent growth-revenue from event evt-replay-actor-2'
+      })
+    ).toBeVisible();
+    expect(
+      within(unknownRecord!).queryByRole('button', {
+        name: 'Select replay actor from event evt-replay-actor-3 ghost-agent'
+      })
+    ).not.toBeInTheDocument();
+
+    await user.click(
+      within(navigableRecord!).getByRole('button', {
+        name: 'Select replay actor from event evt-replay-actor-1 team-lead'
+      })
+    );
+
+    expect(onSelectAgent).toHaveBeenCalledWith('team-lead', 'corr-app-secondary');
   });
 
   it('jumps from matching timeline-replay evidence refs to shared memory while leaving non-matching refs as plain text', async () => {

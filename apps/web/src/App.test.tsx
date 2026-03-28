@@ -4384,6 +4384,85 @@ afterEach(() => {
     });
   });
 
+  it('preserves the clicked selected-agent workflow status correlation when opening a workflow status actor pivot', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
+
+    const workflowSection = within(details).getByRole('heading', { name: 'Workflow' }).closest('section');
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    expect(workflowSection).not.toBeNull();
+    expect(correlationSection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+    });
+
+    await user.click(
+      within(workflowSection!).getByRole('button', {
+        name: 'Select workflow status actor from handoff handoff-1 growth-revenue'
+      })
+    );
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+      expect(within(details).queryByRole('heading', { name: 'Current Operation' })).not.toBeInTheDocument();
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+      expect(within(correlationSection!).getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
+      expect(within(correlationSection!).queryByText('corr-growth-lead-review')).not.toBeInTheDocument();
+    });
+
+    await act(async () => {
+      expect(globalThis.fetch).toHaveBeenCalledWith(growthRevenueWorkflowUrl, expect.anything());
+      expect(globalThis.fetch).toHaveBeenCalledWith(correlationUrl, expect.anything());
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        growthRevenueSelectedReviewCorrelationMemoryArtifactsUrl,
+        expect.anything()
+      );
+    });
+  });
+
+  it('preserves the clicked selected-agent workflow status correlation when opening a workflow reboot actor pivot', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
+
+    const workflowSection = within(details).getByRole('heading', { name: 'Workflow' }).closest('section');
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    expect(workflowSection).not.toBeNull();
+    expect(correlationSection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+    });
+
+    await user.click(
+      within(workflowSection!).getByRole('button', {
+        name: 'Select workflow status actor from reboot reboot-1 team-lead'
+      })
+    );
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'Team Lead' })).toBeVisible();
+      expect(within(details).queryByRole('heading', { name: 'Current Operation' })).not.toBeInTheDocument();
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+      expect(within(correlationSection!).getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
+      expect(within(correlationSection!).queryByText('corr-growth-lead-review')).not.toBeInTheDocument();
+    });
+
+    await act(async () => {
+      expect(globalThis.fetch).toHaveBeenCalledWith(teamLeadWorkflowUrl, expect.anything());
+      expect(globalThis.fetch).toHaveBeenCalledWith(correlationUrl, expect.anything());
+      expect(globalThis.fetch).toHaveBeenCalledWith(teamLeadSelectedCorrelationMemoryArtifactsUrl, expect.anything());
+    });
+  });
+
   it('does not preserve a carried crew-overview incident correlation when later pivoting through workflow counterparties', async () => {
     const user = userEvent.setup();
     render(<App />);
@@ -5410,7 +5489,11 @@ afterEach(() => {
     expect(workflowRebootRecord).not.toBeNull();
     expect(within(workflowHandoffRecord!).getByText('Handoff · completed · handoff_done')).toBeVisible();
     expect(within(workflowHandoffRecord!).getByText('At · 2026-03-16T08:57:00.000Z')).toBeVisible();
-    expect(within(workflowHandoffRecord!).getByText('Actor · growth-revenue')).toBeVisible();
+    expect(
+      within(workflowHandoffRecord!).getByRole('button', {
+        name: 'Select workflow status actor from handoff handoff-1 growth-revenue'
+      })
+    ).toBeVisible();
     expect(
       within(workflowHandoffRecord!).getByRole('button', {
         name: 'Open workflow status correlation corr-app-secondary'
@@ -5419,7 +5502,11 @@ afterEach(() => {
     expect(within(workflowHandoffRecord!).getByText('Severity · Yellow')).toBeVisible();
     expect(within(workflowRebootRecord!).getByText('Reboot · requested · reboot_recommended')).toBeVisible();
     expect(within(workflowRebootRecord!).getByText('At · 2026-03-16T08:40:00.000Z')).toBeVisible();
-    expect(within(workflowRebootRecord!).getByText('Actor · team-lead')).toBeVisible();
+    expect(
+      within(workflowRebootRecord!).getByRole('button', {
+        name: 'Select workflow status actor from reboot reboot-1 team-lead'
+      })
+    ).toBeVisible();
     expect(
       within(workflowRebootRecord!).getByRole('button', {
         name: 'Open workflow status correlation corr-app-review, currently selected'

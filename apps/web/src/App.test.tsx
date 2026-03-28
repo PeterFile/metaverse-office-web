@@ -3714,6 +3714,116 @@ afterEach(() => {
     ).not.toBeInTheDocument();
   });
 
+  it('preserves the active selected correlation when opening a workflow peer-watch watcher pivot', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent from active queue' }));
+
+    const workflowSection = within(details).getByRole('heading', { name: 'Workflow' }).closest('section');
+    const incidentSection = within(details).getByRole('heading', { name: 'Incident Feed' }).closest('section');
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    expect(workflowSection).not.toBeNull();
+    expect(incidentSection).not.toBeNull();
+    expect(correlationSection).not.toBeNull();
+
+    await user.click(within(incidentSection!).getByRole('button', { name: 'Open incident correlation corr-app-secondary' }));
+    await waitFor(() => {
+      expect(within(correlationSection!).getByText('corr-app-secondary')).toBeVisible();
+    });
+
+    await user.click(
+      within(workflowSection!).getByRole('button', {
+        name: 'Select workflow peer-watch watcher from alert alert-1 growth-revenue'
+      })
+    );
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+      expect(within(details).queryByRole('heading', { name: 'Current Operation' })).not.toBeInTheDocument();
+      expect(within(correlationSection!).getByText('corr-app-secondary')).toBeVisible();
+      expect(within(correlationSection!).getByText('Counts · 1 incidents · 0 interactions · 1 events')).toBeVisible();
+      expect(within(correlationSection!).queryByText('corr-app-review')).not.toBeInTheDocument();
+    });
+
+    await act(async () => {
+      expect(globalThis.fetch).toHaveBeenCalledWith(growthRevenueWorkflowUrl, expect.anything());
+      expect(globalThis.fetch).toHaveBeenCalledWith(secondaryCorrelationUrl, expect.anything());
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        growthRevenueSelectedSecondaryCorrelationMemoryArtifactsUrl,
+        expect.anything()
+      );
+    });
+  });
+
+  it('keeps current and unknown workflow peer-watch watchers as plain text', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === workflowUrl) {
+          return jsonResponse({
+            ...workflowFixture,
+            detail: {
+              ...workflowFixture.detail,
+              open_peer_watch_alerts: [
+                {
+                  ...workflowFixture.detail.open_peer_watch_alerts[0],
+                  alert_id: 'alert-watcher-current',
+                  watcher_agent_ids: ['app-engineering'],
+                  summary: 'Current watcher stays plain text'
+                },
+                {
+                  ...workflowFixture.detail.open_peer_watch_alerts[0],
+                  alert_id: 'alert-watcher-unknown',
+                  watcher_agent_ids: ['ghost-agent'],
+                  summary: 'Unknown watcher stays plain text'
+                }
+              ]
+            }
+          } satisfies AgentWorkflow);
+        }
+
+        return resolveTestFetchResponse(url);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
+
+    const workflowSection = within(details).getByRole('heading', { name: 'Workflow' }).closest('section');
+    expect(workflowSection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+      expect(within(workflowSection!).getByText('Current watcher stays plain text')).toBeVisible();
+      expect(within(workflowSection!).getByText('Unknown watcher stays plain text')).toBeVisible();
+    });
+
+    const currentRecord = within(workflowSection!).getByText('Current watcher stays plain text').closest('li');
+    const unknownRecord = within(workflowSection!).getByText('Unknown watcher stays plain text').closest('li');
+    expect(currentRecord).not.toBeNull();
+    expect(unknownRecord).not.toBeNull();
+
+    expect(currentRecord).toHaveTextContent('Watchers · app-engineering');
+    expect(
+      within(currentRecord!).queryByRole('button', {
+        name: 'Select workflow peer-watch watcher from alert alert-watcher-current app-engineering'
+      })
+    ).not.toBeInTheDocument();
+    expect(unknownRecord).toHaveTextContent('Watchers · ghost-agent');
+    expect(
+      within(unknownRecord!).queryByRole('button', {
+        name: 'Select workflow peer-watch watcher from alert alert-watcher-unknown ghost-agent'
+      })
+    ).not.toBeInTheDocument();
+  });
+
   it('jumps from selected-agent workflow handoff and reboot evidence refs to shared memory without changing the selected agent or correlation', async () => {
     vi.stubGlobal(
       'fetch',

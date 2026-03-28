@@ -809,7 +809,18 @@ function renderWorkflowPeerWatchAlert({
             })
           : alert.observer_agent_id}
       </span>
-      <span>{`Watchers · ${renderNamedList(alert.watcher_agent_ids, 'No watchers')}`}</span>
+      <span>
+        Watchers ·{' '}
+        {renderAgentPivotList({
+          agentIds: alert.watcher_agent_ids,
+          currentAgentId,
+          navigableAgentIds,
+          emptyLabel: 'No watchers',
+          ariaLabelPrefix: `Select workflow peer-watch watcher from alert ${alert.alert_id}`,
+          correlationId: preservedCorrelationId,
+          onSelectAgent
+        })}
+      </span>
       <span>{`Status · ${alert.status}`}</span>
       <span>{`Workflow status · ${alert.current_state}`}</span>
       <span>{`Task · ${alert.active_task}`}</span>

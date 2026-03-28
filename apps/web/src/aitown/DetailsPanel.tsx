@@ -712,6 +712,7 @@ function renderWorkflowStatusRecord({
   const preservedCorrelationId = activeCorrelationId ?? correlationId;
   const canNavigateToActor = actorId !== currentAgentId && navigableAgentIds.has(actorId);
   const actorPivotAriaLabelPrefix = `Select workflow status actor from ${kind.toLowerCase()}`;
+  const counterpartyPivotAriaLabelPrefix = `Select workflow status counterparty from ${kind.toLowerCase()} ${key}`;
 
   return (
     <li key={key} className={`aitown-record severity-${severity}`}>
@@ -730,7 +731,18 @@ function renderWorkflowStatusRecord({
           : actorId}
       </span>
       <span>{`Severity · ${SEVERITY_LABELS[severity]}`}</span>
-      <span>{`Counterparties · ${renderCounterparties(counterpartyAgentIds)}`}</span>
+      <span>
+        Counterparties ·{' '}
+        {renderAgentPivotList({
+          agentIds: counterpartyAgentIds,
+          currentAgentId,
+          navigableAgentIds,
+          emptyLabel: 'No counterparties',
+          ariaLabelPrefix: counterpartyPivotAriaLabelPrefix,
+          correlationId: preservedCorrelationId,
+          onSelectAgent
+        })}
+      </span>
       <span>
         Evidence ·{' '}
         {renderSharedMemoryEvidenceRefs({

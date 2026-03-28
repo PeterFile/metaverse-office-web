@@ -864,6 +864,7 @@ function renderIncidentRecord({
   onSelectCorrelation,
   includeAgentPivot,
   includeActorPivot = false,
+  actorPivotAriaLabelPrefix = 'Select incident feed actor from incident',
   includeCounterpartyPivots = false,
   counterpartyPivotAriaLabelPrefix = 'Select correlation incident counterparty agent',
   includeCorrelationPivot = true
@@ -878,6 +879,7 @@ function renderIncidentRecord({
   onSelectCorrelation: (correlationId: string | null) => void;
   includeAgentPivot: boolean;
   includeActorPivot?: boolean;
+  actorPivotAriaLabelPrefix?: string;
   includeCounterpartyPivots?: boolean;
   counterpartyPivotAriaLabelPrefix?: string;
   includeCorrelationPivot?: boolean;
@@ -913,7 +915,7 @@ function renderIncidentRecord({
         {includeActorPivot && incident.actor_id !== currentAgentId && navigableAgentIds.has(incident.actor_id)
           ? renderAgentPivotButton({
               agentId: incident.actor_id,
-              ariaLabel: `Select incident feed actor from incident ${incident.incident_id} ${incident.actor_id}`,
+              ariaLabel: `${actorPivotAriaLabelPrefix} ${incident.incident_id} ${incident.actor_id}`,
               correlationId: incident.correlation_id,
               onSelectAgent
             })
@@ -1444,6 +1446,8 @@ export function DetailsPanel({
                     onSelectAgent,
                     onSelectCorrelation,
                     includeAgentPivot: false,
+                    includeActorPivot: true,
+                    actorPivotAriaLabelPrefix: 'Select correlation incident actor from incident',
                     includeCorrelationPivot: false
                   })
                 )}
@@ -2014,6 +2018,8 @@ export function DetailsPanel({
                   onSelectAgent,
                   onSelectCorrelation,
                   includeAgentPivot: true,
+                  includeActorPivot: true,
+                  actorPivotAriaLabelPrefix: 'Select correlation incident actor from incident',
                   includeCounterpartyPivots: true,
                   includeCorrelationPivot: false
                 })

@@ -1305,6 +1305,114 @@ describe('DetailsPanel accountability signals', () => {
     expect(onSelectAgent).toHaveBeenCalledWith('team-lead', 'corr-app-review');
   });
 
+  it('renders crew-overview correlation incident actors as pivots and carries the active correlation', async () => {
+    const user = userEvent.setup();
+    const onSelectAgent = vi.fn();
+    const correlation: CorrelationDrilldown = {
+      ...buildCorrelation(),
+      incidents: [
+        {
+          ...buildCorrelation().incidents[0],
+          actor_id: 'team-lead'
+        }
+      ]
+    };
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          correlation,
+          onSelectAgent,
+          selectedAgent: null,
+          selectedOperation: null
+        })}
+      />
+    );
+
+    const section = screen.getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    expect(section).not.toBeNull();
+
+    expect(
+      within(section!).getByRole('button', {
+        name: 'Select correlation incident actor from incident inc-1 team-lead'
+      })
+    ).toBeVisible();
+
+    await user.click(
+      within(section!).getByRole('button', {
+        name: 'Select correlation incident actor from incident inc-1 team-lead'
+      })
+    );
+
+    expect(onSelectAgent).toHaveBeenCalledWith('team-lead', 'corr-app-review');
+  });
+
+  it('renders selected-agent correlation incident actors as pivots only for navigable non-current agents', async () => {
+    const user = userEvent.setup();
+    const onSelectAgent = vi.fn();
+    const baseIncident = buildCorrelation().incidents[0];
+    const correlation: CorrelationDrilldown = {
+      ...buildCorrelation(),
+      incident_count: 3,
+      incidents: [
+        {
+          ...baseIncident,
+          incident_id: 'inc-actor-1',
+          actor_id: 'team-lead',
+          summary: 'Navigable correlation actor stays actionable'
+        },
+        {
+          ...baseIncident,
+          incident_id: 'inc-actor-2',
+          actor_id: 'app-engineering',
+          summary: 'Current correlation actor stays plain text'
+        },
+        {
+          ...baseIncident,
+          incident_id: 'inc-actor-3',
+          actor_id: 'ghost-agent',
+          summary: 'Unknown correlation actor stays plain text'
+        }
+      ]
+    };
+
+    render(<DetailsPanel {...buildProps({ correlation, onSelectAgent })} />);
+
+    const section = screen.getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    expect(section).not.toBeNull();
+
+    const navigableIncident = within(section!).getByText('Navigable correlation actor stays actionable').closest('li');
+    const currentIncident = within(section!).getByText('Current correlation actor stays plain text').closest('li');
+    const unknownIncident = within(section!).getByText('Unknown correlation actor stays plain text').closest('li');
+    expect(navigableIncident).not.toBeNull();
+    expect(currentIncident).not.toBeNull();
+    expect(unknownIncident).not.toBeNull();
+
+    expect(
+      within(navigableIncident!).getByRole('button', {
+        name: 'Select correlation incident actor from incident inc-actor-1 team-lead'
+      })
+    ).toBeVisible();
+    expect(
+      within(currentIncident!).queryByRole('button', {
+        name: 'Select correlation incident actor from incident inc-actor-2 app-engineering'
+      })
+    ).not.toBeInTheDocument();
+    expect(
+      within(unknownIncident!).queryByRole('button', {
+        name: 'Select correlation incident actor from incident inc-actor-3 ghost-agent'
+      })
+    ).not.toBeInTheDocument();
+
+    await user.click(
+      within(navigableIncident!).getByRole('button', {
+        name: 'Select correlation incident actor from incident inc-actor-1 team-lead'
+      })
+    );
+
+    expect(onSelectAgent).toHaveBeenCalledWith('team-lead', 'corr-app-review');
+  });
+
   it('renders correlation incident counterparties as pivots for non-current agents and keeps the current agent as plain text', async () => {
     const user = userEvent.setup();
     const onSelectAgent = vi.fn();

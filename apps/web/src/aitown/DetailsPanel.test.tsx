@@ -2162,6 +2162,110 @@ describe('DetailsPanel accountability signals', () => {
     ).not.toBeInTheDocument();
   });
 
+  it('renders the selected-agent collector observation watched-by row as watcher pivots only for navigable non-current agents and preserves the active correlation', async () => {
+    const user = userEvent.setup();
+    const onSelectAgent = vi.fn();
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          onSelectAgent,
+          selectedCorrelationId: 'corr-app-secondary'
+        })}
+      />
+    );
+
+    const collectorObservationSection = screen.getByRole('heading', { name: 'Collector Observation' }).closest('section');
+    expect(collectorObservationSection).not.toBeNull();
+
+    const watchedByLine = within(collectorObservationSection!).getByText(
+      (_content, element) => element?.tagName === 'SPAN' && element.textContent === 'Watched by · team-lead'
+    );
+
+    expect(
+      within(watchedByLine).getByRole('button', {
+        name: 'Select collector observation watcher team-lead'
+      })
+    ).toBeVisible();
+
+    await user.click(
+      within(watchedByLine).getByRole('button', {
+        name: 'Select collector observation watcher team-lead'
+      })
+    );
+
+    expect(onSelectAgent).toHaveBeenCalledWith('team-lead', 'corr-app-secondary');
+  });
+
+  it('keeps current, unknown, and empty collector observation watchers as plain text', () => {
+    const baseCollectorSnapshot = buildCollectorSnapshot();
+    const baseCollectorItem = baseCollectorSnapshot.items[0];
+
+    const { rerender } = render(
+      <DetailsPanel
+        {...buildProps({
+          collectorSnapshot: {
+            ...baseCollectorSnapshot,
+            items: [
+              {
+                ...baseCollectorItem,
+                supervision: {
+                  ...baseCollectorItem.supervision,
+                  watched_by: ['app-engineering', 'ghost-agent']
+                }
+              }
+            ]
+          }
+        })}
+      />
+    );
+
+    const currentAndUnknownLine = within(screen.getByRole('heading', { name: 'Collector Observation' }).closest('section')!).getByText(
+      (_content, element) =>
+        element?.tagName === 'SPAN' && element.textContent === 'Watched by · app-engineering, ghost-agent'
+    );
+
+    expect(
+      within(currentAndUnknownLine).queryByRole('button', {
+        name: 'Select collector observation watcher app-engineering'
+      })
+    ).not.toBeInTheDocument();
+    expect(
+      within(currentAndUnknownLine).queryByRole('button', {
+        name: 'Select collector observation watcher ghost-agent'
+      })
+    ).not.toBeInTheDocument();
+
+    rerender(
+      <DetailsPanel
+        {...buildProps({
+          collectorSnapshot: {
+            ...baseCollectorSnapshot,
+            items: [
+              {
+                ...baseCollectorItem,
+                supervision: {
+                  ...baseCollectorItem.supervision,
+                  watched_by: []
+                }
+              }
+            ]
+          }
+        })}
+      />
+    );
+
+    const emptyLine = within(screen.getByRole('heading', { name: 'Collector Observation' }).closest('section')!).getByText(
+      (_content, element) => element?.tagName === 'SPAN' && element.textContent === 'Watched by · No watchers'
+    );
+
+    expect(
+      within(emptyLine).queryByRole('button', {
+        name: /Select collector observation watcher/
+      })
+    ).not.toBeInTheDocument();
+  });
+
   it('jumps from matching top-level correlation evidence refs to shared memory in crew overview while leaving non-matching refs as plain text', async () => {
     const user = userEvent.setup();
     const onSelectAgent = vi.fn();

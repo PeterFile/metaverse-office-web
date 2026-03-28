@@ -318,6 +318,35 @@ function renderResponsibilityChain({
   ));
 }
 
+function renderCollectorWatchTarget({
+  watchTarget,
+  currentAgentId,
+  navigableAgentIds,
+  correlationId,
+  onSelectAgent
+}: {
+  watchTarget: string | null;
+  currentAgentId: string;
+  navigableAgentIds: Set<string>;
+  correlationId: string | null;
+  onSelectAgent: (agentId: string | null, correlationId?: string | null) => void;
+}) {
+  if (!watchTarget) {
+    return 'No watch target';
+  }
+
+  if (watchTarget === currentAgentId || !navigableAgentIds.has(watchTarget)) {
+    return watchTarget;
+  }
+
+  return renderAgentPivotButton({
+    agentId: watchTarget,
+    ariaLabel: `Select collector observation watch target ${watchTarget}`,
+    correlationId,
+    onSelectAgent
+  });
+}
+
 function renderEvidenceRefs(evidenceRefs: string[]) {
   return evidenceRefs.length > 0 ? evidenceRefs.join(', ') : 'No evidence refs';
 }
@@ -1781,7 +1810,16 @@ export function DetailsPanel({
               <span>{`Current blocker · ${renderOperationBlocker(selectedCollectorItem.heartbeat.current_blocker)}`}</span>
               <span>{`Attention flag · ${selectedCollectorItem.supervision.needs_attention ? 'Needs attention' : 'No'}`}</span>
               <span>{`Reboot flag · ${selectedCollectorItem.heartbeat.reboot_recommended ? 'Recommended' : 'No'}`}</span>
-              <span>{`Watch target · ${selectedCollectorItem.supervision.watch_target ?? 'No watch target'}`}</span>
+              <span>
+                Watch target ·{' '}
+                {renderCollectorWatchTarget({
+                  watchTarget: selectedCollectorItem.supervision.watch_target,
+                  currentAgentId: selectedAgent.agent_id,
+                  navigableAgentIds,
+                  correlationId: selectedCorrelationId,
+                  onSelectAgent
+                })}
+              </span>
               <span>{`Watched by · ${renderNamedList(selectedCollectorItem.supervision.watched_by, 'No watchers')}`}</span>
               <span>{`Workspace observations · ${selectedCollectorItem.workspace_observations.length}`}</span>
               <span>{`Tmux observations · ${selectedCollectorItem.tmux_observations.length}`}</span>

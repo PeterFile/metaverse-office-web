@@ -523,13 +523,27 @@ function renderCorrelationTimelineEvent(
   const onSelectAgent = 'event' in input ? input.onSelectAgent : undefined;
   const sharedMemoryArtifactRefs = 'event' in input ? input.sharedMemoryArtifactRefs : undefined;
   const enableSharedMemoryEvidenceJump = 'event' in input ? (input.enableSharedMemoryEvidenceJump ?? false) : false;
+  const preservedCorrelationId = activeCorrelationId ?? event.correlation_id;
   const canRenderCounterpartyPivots = Boolean(navigableAgentIds && onSelectAgent);
+  const canRenderActorPivot = Boolean(
+    navigableAgentIds && onSelectAgent && event.actor_id !== currentAgentId && navigableAgentIds.has(event.actor_id)
+  );
 
   return (
     <li key={event.event_id} className={`aitown-record severity-${event.severity}`}>
       <strong>{event.summary}</strong>
       <span>{`At · ${renderTimestamp(event.ts, 'No event timestamp')}`}</span>
-      <span>{`Actor · ${event.actor_id}`}</span>
+      <span>
+        Actor ·{' '}
+        {canRenderActorPivot && onSelectAgent
+          ? renderAgentPivotButton({
+              agentId: event.actor_id,
+              ariaLabel: `Select correlation timeline actor from event ${event.event_id} ${event.actor_id}`,
+              correlationId: preservedCorrelationId,
+              onSelectAgent
+            })
+          : event.actor_id}
+      </span>
       <span>{`Timeline · ${event.event_type} · ${event.location}`}</span>
       <span>{`State · ${event.current_state}`}</span>
       <span>{`Severity · ${SEVERITY_LABELS[event.severity]}`}</span>
@@ -542,7 +556,7 @@ function renderCorrelationTimelineEvent(
               navigableAgentIds,
               emptyLabel: 'No counterparties',
               ariaLabelPrefix: 'Select correlation timeline counterparty agent',
-              correlationId: activeCorrelationId ?? event.correlation_id,
+              correlationId: preservedCorrelationId,
               onSelectAgent
             })
           : renderCounterparties(event.counterparty_agent_ids)}

@@ -1454,6 +1454,114 @@ describe('DetailsPanel accountability signals', () => {
     expect(onSelectAgent).toHaveBeenCalledWith('team-lead', 'corr-app-review');
   });
 
+  it('renders crew-overview correlation timeline actors as pivots and carries the active correlation', async () => {
+    const user = userEvent.setup();
+    const onSelectAgent = vi.fn();
+    const correlation: CorrelationDrilldown = {
+      ...buildCorrelation(),
+      timeline: [
+        {
+          ...buildCorrelation().timeline[0],
+          actor_id: 'team-lead'
+        }
+      ]
+    };
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          correlation,
+          onSelectAgent,
+          selectedAgent: null,
+          selectedOperation: null
+        })}
+      />
+    );
+
+    const section = screen.getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    expect(section).not.toBeNull();
+
+    expect(
+      within(section!).getByRole('button', {
+        name: 'Select correlation timeline actor from event evt-3 team-lead'
+      })
+    ).toBeVisible();
+
+    await user.click(
+      within(section!).getByRole('button', {
+        name: 'Select correlation timeline actor from event evt-3 team-lead'
+      })
+    );
+
+    expect(onSelectAgent).toHaveBeenCalledWith('team-lead', 'corr-app-review');
+  });
+
+  it('renders selected-agent correlation timeline actors as pivots only for navigable non-current agents', async () => {
+    const user = userEvent.setup();
+    const onSelectAgent = vi.fn();
+    const baseTimelineEvent = buildCorrelation().timeline[0];
+    const correlation: CorrelationDrilldown = {
+      ...buildCorrelation(),
+      event_count: 3,
+      timeline: [
+        {
+          ...baseTimelineEvent,
+          event_id: 'evt-timeline-actor-1',
+          actor_id: 'team-lead',
+          summary: 'Navigable correlation timeline actor stays actionable'
+        },
+        {
+          ...baseTimelineEvent,
+          event_id: 'evt-timeline-actor-2',
+          actor_id: 'app-engineering',
+          summary: 'Current correlation timeline actor stays plain text'
+        },
+        {
+          ...baseTimelineEvent,
+          event_id: 'evt-timeline-actor-3',
+          actor_id: 'ghost-agent',
+          summary: 'Unknown correlation timeline actor stays plain text'
+        }
+      ]
+    };
+
+    render(<DetailsPanel {...buildProps({ correlation, onSelectAgent })} />);
+
+    const section = screen.getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    expect(section).not.toBeNull();
+
+    const navigableRecord = within(section!).getByText('Navigable correlation timeline actor stays actionable').closest('li');
+    const currentRecord = within(section!).getByText('Current correlation timeline actor stays plain text').closest('li');
+    const unknownRecord = within(section!).getByText('Unknown correlation timeline actor stays plain text').closest('li');
+    expect(navigableRecord).not.toBeNull();
+    expect(currentRecord).not.toBeNull();
+    expect(unknownRecord).not.toBeNull();
+
+    expect(
+      within(navigableRecord!).getByRole('button', {
+        name: 'Select correlation timeline actor from event evt-timeline-actor-1 team-lead'
+      })
+    ).toBeVisible();
+    expect(
+      within(currentRecord!).queryByRole('button', {
+        name: 'Select correlation timeline actor from event evt-timeline-actor-2 app-engineering'
+      })
+    ).not.toBeInTheDocument();
+    expect(
+      within(unknownRecord!).queryByRole('button', {
+        name: 'Select correlation timeline actor from event evt-timeline-actor-3 ghost-agent'
+      })
+    ).not.toBeInTheDocument();
+
+    await user.click(
+      within(navigableRecord!).getByRole('button', {
+        name: 'Select correlation timeline actor from event evt-timeline-actor-1 team-lead'
+      })
+    );
+
+    expect(onSelectAgent).toHaveBeenCalledWith('team-lead', 'corr-app-review');
+  });
+
   it('renders correlation timeline counterparties as pivots only for navigable non-current agents', async () => {
     const user = userEvent.setup();
     const onSelectAgent = vi.fn();

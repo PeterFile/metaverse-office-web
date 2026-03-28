@@ -4463,6 +4463,179 @@ afterEach(() => {
     });
   });
 
+  it('preserves the clicked selected-agent workflow status correlation when opening a workflow status counterparty pivot', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
+
+    const workflowSection = within(details).getByRole('heading', { name: 'Workflow' }).closest('section');
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    expect(workflowSection).not.toBeNull();
+    expect(correlationSection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+    });
+
+    await user.click(
+      within(workflowSection!).getByRole('button', {
+        name: 'Select workflow status counterparty from handoff handoff-1 growth-revenue'
+      })
+    );
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+      expect(within(details).queryByRole('heading', { name: 'Current Operation' })).not.toBeInTheDocument();
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+      expect(within(correlationSection!).getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
+      expect(within(correlationSection!).queryByText('corr-growth-lead-review')).not.toBeInTheDocument();
+    });
+
+    await act(async () => {
+      expect(globalThis.fetch).toHaveBeenCalledWith(growthRevenueWorkflowUrl, expect.anything());
+      expect(globalThis.fetch).toHaveBeenCalledWith(correlationUrl, expect.anything());
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        growthRevenueSelectedReviewCorrelationMemoryArtifactsUrl,
+        expect.anything()
+      );
+    });
+  });
+
+  it('falls back to a workflow status record correlation when no correlation is selected and keeps current or unknown counterparties as plain text', async () => {
+    const workflowWithoutSelectedCorrelation = {
+      ...workflowFixture,
+      detail: {
+        ...workflowFixture.detail,
+        open_peer_watch_alerts: [],
+        recent_handoffs: [
+          {
+            ...workflowFixture.detail.recent_handoffs[0],
+            counterparty_agent_ids: ['growth-revenue', 'app-engineering', 'ghost-agent']
+          }
+        ],
+        recent_reboots: [
+          {
+            ...workflowFixture.detail.recent_reboots[0],
+            counterparty_agent_ids: ['team-lead', 'app-engineering', 'ghost-agent']
+          }
+        ]
+      },
+      correlation_ids: []
+    } satisfies AgentWorkflow;
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === '/office/overview') {
+          return new Response(JSON.stringify(overviewFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === incidentsUrl) {
+          return new Response(JSON.stringify(incidentFeedFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === timelineUrl) {
+          return new Response(JSON.stringify(timelineFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === workflowUrl) {
+          return new Response(JSON.stringify(workflowWithoutSelectedCorrelation), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        return resolveTestFetchResponse(url);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
+
+    const workflowSection = within(details).getByRole('heading', { name: 'Workflow' }).closest('section');
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    expect(workflowSection).not.toBeNull();
+    expect(correlationSection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+      expect(within(correlationSection!).getByText('No correlation selected.')).toBeVisible();
+    });
+
+    const workflowHandoffRecord = within(workflowSection!).getByText('Secondary review handoff completed').closest('li');
+    const workflowRebootRecord = within(workflowSection!).getByText('Reboot recommended after the workflow stalled').closest('li');
+    expect(workflowHandoffRecord).not.toBeNull();
+    expect(workflowRebootRecord).not.toBeNull();
+
+    expect(
+      within(workflowHandoffRecord!).getByRole('button', {
+        name: 'Select workflow status counterparty from handoff handoff-1 growth-revenue'
+      })
+    ).toBeVisible();
+    expect(
+      within(workflowHandoffRecord!).queryByRole('button', {
+        name: 'Select workflow status counterparty from handoff handoff-1 app-engineering'
+      })
+    ).not.toBeInTheDocument();
+    expect(
+      within(workflowHandoffRecord!).queryByRole('button', {
+        name: 'Select workflow status counterparty from handoff handoff-1 ghost-agent'
+      })
+    ).not.toBeInTheDocument();
+    expect(workflowHandoffRecord).toHaveTextContent('Counterparties · growth-revenue, app-engineering, ghost-agent');
+
+    expect(
+      within(workflowRebootRecord!).getByRole('button', {
+        name: 'Select workflow status counterparty from reboot reboot-1 team-lead'
+      })
+    ).toBeVisible();
+    expect(
+      within(workflowRebootRecord!).queryByRole('button', {
+        name: 'Select workflow status counterparty from reboot reboot-1 app-engineering'
+      })
+    ).not.toBeInTheDocument();
+    expect(
+      within(workflowRebootRecord!).queryByRole('button', {
+        name: 'Select workflow status counterparty from reboot reboot-1 ghost-agent'
+      })
+    ).not.toBeInTheDocument();
+    expect(workflowRebootRecord).toHaveTextContent('Counterparties · team-lead, app-engineering, ghost-agent');
+
+    await user.click(
+      within(workflowHandoffRecord!).getByRole('button', {
+        name: 'Select workflow status counterparty from handoff handoff-1 growth-revenue'
+      })
+    );
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+      expect(within(correlationSection!).getByText('corr-app-secondary')).toBeVisible();
+      expect(within(correlationSection!).queryByText('corr-app-review')).not.toBeInTheDocument();
+    });
+
+    await act(async () => {
+      expect(globalThis.fetch).toHaveBeenCalledWith(growthRevenueWorkflowUrl, expect.anything());
+      expect(globalThis.fetch).toHaveBeenCalledWith(secondaryCorrelationUrl, expect.anything());
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        growthRevenueSelectedSecondaryCorrelationMemoryArtifactsUrl,
+        expect.anything()
+      );
+    });
+  });
+
   it('does not preserve a carried crew-overview incident correlation when later pivoting through workflow counterparties', async () => {
     const user = userEvent.setup();
     render(<App />);
@@ -5496,6 +5669,11 @@ afterEach(() => {
     ).toBeVisible();
     expect(
       within(workflowHandoffRecord!).getByRole('button', {
+        name: 'Select workflow status counterparty from handoff handoff-1 growth-revenue'
+      })
+    ).toBeVisible();
+    expect(
+      within(workflowHandoffRecord!).getByRole('button', {
         name: 'Open workflow status correlation corr-app-secondary'
       })
     ).toBeVisible();
@@ -5505,6 +5683,11 @@ afterEach(() => {
     expect(
       within(workflowRebootRecord!).getByRole('button', {
         name: 'Select workflow status actor from reboot reboot-1 team-lead'
+      })
+    ).toBeVisible();
+    expect(
+      within(workflowRebootRecord!).getByRole('button', {
+        name: 'Select workflow status counterparty from reboot reboot-1 team-lead'
       })
     ).toBeVisible();
     expect(

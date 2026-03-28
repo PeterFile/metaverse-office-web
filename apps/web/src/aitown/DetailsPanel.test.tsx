@@ -481,7 +481,10 @@ function buildProps(overrides: Partial<DetailsPanelProps> = {}): DetailsPanelPro
 }
 
 describe('DetailsPanel accountability signals', () => {
-  it('renders incident feed cards with timestamp and actor metadata', () => {
+  it('renders crew-overview incident feed actors as pivots and carries the clicked incident correlation', async () => {
+    const user = userEvent.setup();
+    const onSelectAgent = vi.fn();
+
     render(
       <DetailsPanel
         {...buildProps({
@@ -503,6 +506,7 @@ describe('DetailsPanel accountability signals', () => {
               }
             ]
           },
+          onSelectAgent,
           selectedAgent: null,
           selectedOperation: null
         })}
@@ -516,7 +520,20 @@ describe('DetailsPanel accountability signals', () => {
     expect(incidentCard).not.toBeNull();
 
     expect(within(incidentCard!).getByText('At · 2026-03-16T08:50:00.000Z')).toBeVisible();
-    expect(within(incidentCard!).getByText('Actor · team-lead')).toBeVisible();
+    expect(incidentCard!).toHaveTextContent('Actor · team-lead');
+    expect(
+      within(incidentCard!).getByRole('button', {
+        name: 'Select incident feed actor from incident inc-feed-1 team-lead'
+      })
+    ).toBeVisible();
+
+    await user.click(
+      within(incidentCard!).getByRole('button', {
+        name: 'Select incident feed actor from incident inc-feed-1 team-lead'
+      })
+    );
+
+    expect(onSelectAgent).toHaveBeenCalledWith('team-lead', 'corr-app-review');
   });
 
   it('jumps from matching crew-overview incident feed evidence refs to shared memory while leaving non-matching refs as plain text', async () => {
@@ -806,6 +823,105 @@ describe('DetailsPanel accountability signals', () => {
     await user.click(
       within(incidentRecord!).getByRole('button', {
         name: 'Select incident feed counterparty agent from incident inc-feed-2 growth-revenue'
+      })
+    );
+
+    expect(onSelectAgent).toHaveBeenCalledWith('growth-revenue', 'corr-app-secondary');
+  });
+
+  it('renders selected-agent incident feed actors as pivots only for navigable non-current agents', async () => {
+    const user = userEvent.setup();
+    const onSelectAgent = vi.fn();
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          incidentFeed: {
+            items: [
+              {
+                incident_id: 'inc-feed-2',
+                kind: 'handoff',
+                ts: '2026-03-16T08:52:00.000Z',
+                agent_id: 'app-engineering',
+                actor_id: 'growth-revenue',
+                status: 'completed',
+                severity: 'yellow',
+                summary: 'App engineering finished the secondary review handoff',
+                correlation_id: 'corr-app-secondary',
+                evidence_refs: ['/evidence/secondary-handoff.md'],
+                counterparty_agent_ids: ['growth-revenue'],
+                source_kind: 'controller_event'
+              },
+              {
+                incident_id: 'inc-feed-3',
+                kind: 'peer_watch',
+                ts: '2026-03-16T08:53:00.000Z',
+                agent_id: 'app-engineering',
+                actor_id: 'app-engineering',
+                status: 'open',
+                severity: 'orange',
+                summary: 'App engineering is still blocked on review follow-up',
+                correlation_id: 'corr-app-review',
+                evidence_refs: ['/evidence/review.md'],
+                counterparty_agent_ids: [],
+                source_kind: 'controller_event'
+              },
+              {
+                incident_id: 'inc-feed-4',
+                kind: 'peer_watch',
+                ts: '2026-03-16T08:54:00.000Z',
+                agent_id: 'app-engineering',
+                actor_id: 'ghost-agent',
+                status: 'open',
+                severity: 'yellow',
+                summary: 'Unknown watcher is still waiting on workflow evidence',
+                correlation_id: 'corr-app-ghost',
+                evidence_refs: ['/evidence/ghost.md'],
+                counterparty_agent_ids: [],
+                source_kind: 'controller_event'
+              }
+            ]
+          },
+          onSelectAgent
+        })}
+      />
+    );
+
+    const incidentSection = screen.getByRole('heading', { name: 'Incident Feed' }).closest('section');
+    expect(incidentSection).not.toBeNull();
+
+    const navigableActorRecord = within(incidentSection!)
+      .getByText('App engineering finished the secondary review handoff')
+      .closest('li');
+    const currentActorRecord = within(incidentSection!)
+      .getByText('App engineering is still blocked on review follow-up')
+      .closest('li');
+    const unknownActorRecord = within(incidentSection!)
+      .getByText('Unknown watcher is still waiting on workflow evidence')
+      .closest('li');
+    expect(navigableActorRecord).not.toBeNull();
+    expect(currentActorRecord).not.toBeNull();
+    expect(unknownActorRecord).not.toBeNull();
+
+    expect(
+      within(navigableActorRecord!).getByRole('button', {
+        name: 'Select incident feed actor from incident inc-feed-2 growth-revenue'
+      })
+    ).toBeVisible();
+    expect(
+      within(currentActorRecord!).queryByRole('button', {
+        name: 'Select incident feed actor from incident inc-feed-3 app-engineering'
+      })
+    ).not.toBeInTheDocument();
+    expect(
+      within(unknownActorRecord!).queryByRole('button', {
+        name: 'Select incident feed actor from incident inc-feed-4 ghost-agent'
+      })
+    ).not.toBeInTheDocument();
+
+    await user.click(
+      within(navigableActorRecord!).getByRole('button', {
+        name: 'Select incident feed actor from incident inc-feed-2 growth-revenue'
       })
     );
 

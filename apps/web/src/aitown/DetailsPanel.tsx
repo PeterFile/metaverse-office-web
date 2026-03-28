@@ -863,6 +863,7 @@ function renderIncidentRecord({
   onSelectAgent,
   onSelectCorrelation,
   includeAgentPivot,
+  includeActorPivot = false,
   includeCounterpartyPivots = false,
   counterpartyPivotAriaLabelPrefix = 'Select correlation incident counterparty agent',
   includeCorrelationPivot = true
@@ -876,6 +877,7 @@ function renderIncidentRecord({
   onSelectAgent: (agentId: string | null, correlationId?: string | null) => void;
   onSelectCorrelation: (correlationId: string | null) => void;
   includeAgentPivot: boolean;
+  includeActorPivot?: boolean;
   includeCounterpartyPivots?: boolean;
   counterpartyPivotAriaLabelPrefix?: string;
   includeCorrelationPivot?: boolean;
@@ -906,7 +908,17 @@ function renderIncidentRecord({
           })
         : null}
       <span>{`At · ${renderTimestamp(incident.ts, 'No incident timestamp')}`}</span>
-      <span>{`Actor · ${incident.actor_id}`}</span>
+      <span>
+        Actor ·{' '}
+        {includeActorPivot && incident.actor_id !== currentAgentId && navigableAgentIds.has(incident.actor_id)
+          ? renderAgentPivotButton({
+              agentId: incident.actor_id,
+              ariaLabel: `Select incident feed actor from incident ${incident.incident_id} ${incident.actor_id}`,
+              correlationId: incident.correlation_id,
+              onSelectAgent
+            })
+          : incident.actor_id}
+      </span>
       <span>{`Incident · ${incident.kind} · ${incident.status}`}</span>
       <span>{`Severity · ${SEVERITY_LABELS[incident.severity]}`}</span>
       <span>
@@ -1352,6 +1364,7 @@ export function DetailsPanel({
                 onSelectAgent,
                 onSelectCorrelation,
                 includeAgentPivot: true,
+                includeActorPivot: true,
                 includeCounterpartyPivots: true,
                 counterpartyPivotAriaLabelPrefix: `Select incident feed counterparty agent from incident ${incident.incident_id}`
               })
@@ -1947,6 +1960,7 @@ export function DetailsPanel({
               onSelectAgent,
               onSelectCorrelation,
               includeAgentPivot: false,
+              includeActorPivot: true,
               includeCounterpartyPivots: true,
               counterpartyPivotAriaLabelPrefix: `Select incident feed counterparty agent from incident ${incident.incident_id}`
             })

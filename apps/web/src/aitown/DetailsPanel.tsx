@@ -600,6 +600,7 @@ function renderReplayTimelineEvent({
   const canNavigateToAgent = event.agent_id !== currentAgentId && navigableAgentIds.has(event.agent_id);
   const preservedCorrelationId = activeCorrelationId ?? event.correlation_id;
   const canNavigateToActor = event.actor_id !== currentAgentId && navigableAgentIds.has(event.actor_id);
+  const currentReplayAgentId = currentAgentId ?? event.agent_id;
 
   return (
     <li key={event.event_id} className={`aitown-record severity-${event.severity}`}>
@@ -620,7 +621,18 @@ function renderReplayTimelineEvent({
       <span>{`Location · ${event.location}`}</span>
       <span>{`State · ${event.current_state}`}</span>
       <span>{`Severity · ${SEVERITY_LABELS[event.severity]}`}</span>
-      <span>{`Counterparties · ${renderCounterparties(event.counterparty_agent_ids)}`}</span>
+      <span>
+        Counterparties ·{' '}
+        {renderAgentPivotList({
+          agentIds: event.counterparty_agent_ids,
+          currentAgentId: currentReplayAgentId,
+          navigableAgentIds,
+          emptyLabel: 'No counterparties',
+          ariaLabelPrefix: `Select replay counterparty from event ${event.event_id}`,
+          correlationId: preservedCorrelationId,
+          onSelectAgent
+        })}
+      </span>
       <span>
         Evidence ·{' '}
         {renderSharedMemoryEvidenceRefs({

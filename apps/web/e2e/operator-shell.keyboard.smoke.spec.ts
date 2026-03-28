@@ -1692,6 +1692,103 @@ test.describe('operator shell smoke', () => {
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toHaveCount(0);
   });
 
+  test('keeps the active workflow correlation when opening a workflow peer-watch observer pivot via keyboard traversal', async ({
+    page
+  }) => {
+    await page.route('**/agents/app-engineering/workflow?limit=10&window=60m', async (route) => {
+      const response = await route.fetch();
+      const workflow = (await response.json()) as {
+        detail: {
+          active_task: string;
+          open_peer_watch_alerts?: unknown[];
+        };
+      };
+
+      await route.fulfill({
+        response,
+        json: {
+          ...workflow,
+          detail: {
+            ...workflow.detail,
+            open_peer_watch_alerts: [
+              {
+                alert_id: 'alert-browser-peer-watch-observer',
+                ts: '2026-03-10T23:00:00.000Z',
+                agent_id: 'app-engineering',
+                target_agent_id: 'app-engineering',
+                actor_id: 'team-lead',
+                observer_agent_id: 'team-lead',
+                watcher_agent_ids: ['growth-revenue'],
+                severity: 'orange',
+                status: 'open',
+                current_state: 'blocked',
+                active_task: workflow.detail.active_task,
+                summary: 'Revenue handoff is still waiting on app confirmation',
+                evidence_refs: ['/tmp/revenue-handoff.md'],
+                evidence_count: 1,
+                correlation_id: 'corr-app-peer-watch',
+                source_kind: 'controller_event',
+                metadata: {}
+              },
+              ...(workflow.detail.open_peer_watch_alerts ?? [])
+            ]
+          }
+        }
+      });
+    });
+
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Hub' }).click();
+
+    const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
+    const clearButton = detailsPanel.getByRole('button', { name: 'Clear' });
+    const inspectButton = detailsPanel.getByRole('button', {
+      name: 'Inspect App Engineering Agent',
+      exact: true
+    });
+
+    await focusHubControlWithTab(page, inspectButton, 'Inspect App Engineering Agent');
+    await expect(inspectButton).toBeFocused();
+    await page.keyboard.press('Enter');
+
+    const workflowSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Workflow' })
+    });
+    const correlationSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Correlation Drilldown' })
+    });
+    const workflowCorrelationButton = workflowSection.getByRole('button', {
+      name: 'Open workflow correlation collector-snapshot:2026-03-10T23:59:40.000Z'
+    });
+    const observerButton = workflowSection.getByRole('button', {
+      name: 'Select workflow peer-watch observer from alert alert-browser-peer-watch-observer team-lead'
+    });
+
+    await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+    await expect(clearButton).toBeFocused();
+    await focusHubControlWithTab(
+      page,
+      workflowCorrelationButton,
+      'Open workflow correlation collector-snapshot:2026-03-10T23:59:40.000Z'
+    );
+    await expect(workflowCorrelationButton).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(correlationSection.getByText('collector-snapshot:2026-03-10T23:59:40.000Z', { exact: true })).toBeVisible();
+    await focusHubControlWithTab(
+      page,
+      observerButton,
+      'Select workflow peer-watch observer from alert alert-browser-peer-watch-observer team-lead'
+    );
+    await expect(observerButton).toBeFocused();
+    await page.keyboard.press('Enter');
+
+    await expect(detailsPanel.getByRole('heading', { name: 'Team Lead' })).toBeVisible();
+    await expect(clearButton).toBeFocused();
+    await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
+    await expect(correlationSection.getByText('collector-snapshot:2026-03-10T23:59:40.000Z', { exact: true })).toBeVisible();
+    await expect(correlationSection.getByText('No correlation selected.')).toHaveCount(0);
+  });
+
   test('opens a correlation participant pivot from the selected-agent Hub via keyboard traversal', async ({ page }) => {
     await page.goto('/');
     await page.getByRole('button', { name: 'Open Hub' }).click();
@@ -1752,7 +1849,7 @@ test.describe('operator shell smoke', () => {
     await page.getByRole('button', { name: 'Open Hub' }).click();
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
-    await detailsPanel.getByRole('button', { name: 'Inspect App Engineering Agent' }).click();
+    await detailsPanel.getByRole('button', { name: 'Inspect App Engineering Agent', exact: true }).click();
     await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
 
     await expect(detailsPanel.getByText('unknown agent app-engineering')).toBeVisible();

@@ -770,13 +770,23 @@ function renderWorkflowPeerWatchAlert({
   alert,
   sharedMemoryArtifactRefs,
   activeCorrelationId,
+  currentAgentId,
+  navigableAgentIds,
+  onSelectAgent,
   onSelectCorrelation
 }: {
   alert: WorkflowPeerWatchAlert;
   sharedMemoryArtifactRefs: ReadonlySet<string>;
   activeCorrelationId: string | null;
+  currentAgentId: string | null;
+  navigableAgentIds: Set<string>;
+  onSelectAgent: (agentId: string | null, correlationId?: string | null) => void;
   onSelectCorrelation: (correlationId: string | null) => void;
 }) {
+  const preservedCorrelationId = activeCorrelationId ?? alert.correlation_id;
+  const canNavigateToObserver =
+    alert.observer_agent_id !== currentAgentId && navigableAgentIds.has(alert.observer_agent_id);
+
   return (
     <li key={alert.alert_id} className={`aitown-record severity-${alert.severity}`}>
       <strong>{alert.summary}</strong>
@@ -788,7 +798,17 @@ function renderWorkflowPeerWatchAlert({
         onSelectCorrelation
       })}
       <span>{`At · ${renderTimestamp(alert.ts, 'No alert timestamp')}`}</span>
-      <span>{`Observer · ${alert.observer_agent_id}`}</span>
+      <span>
+        Observer ·{' '}
+        {canNavigateToObserver
+          ? renderAgentPivotButton({
+              agentId: alert.observer_agent_id,
+              ariaLabel: `Select workflow peer-watch observer from alert ${alert.alert_id} ${alert.observer_agent_id}`,
+              correlationId: preservedCorrelationId,
+              onSelectAgent
+            })
+          : alert.observer_agent_id}
+      </span>
       <span>{`Watchers · ${renderNamedList(alert.watcher_agent_ids, 'No watchers')}`}</span>
       <span>{`Status · ${alert.status}`}</span>
       <span>{`Workflow status · ${alert.current_state}`}</span>
@@ -1914,6 +1934,9 @@ export function DetailsPanel({
               alert,
               sharedMemoryArtifactRefs,
               activeCorrelationId: selectedCorrelationId,
+              currentAgentId: selectedAgent?.agent_id ?? null,
+              navigableAgentIds,
+              onSelectAgent,
               onSelectCorrelation
             })
           )}

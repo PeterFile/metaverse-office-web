@@ -22,6 +22,8 @@ const appEngineeringMemoryArtifactsUrl = '/memory/artifacts?limit=4&window=60m&a
 const teamLeadMemoryArtifactsUrl = '/memory/artifacts?limit=4&window=60m&agent_id=team-lead';
 const teamLeadSelectedCorrelationMemoryArtifactsUrl =
   '/memory/artifacts?limit=4&window=60m&agent_id=team-lead&correlation_id=corr-app-review';
+const teamLeadSelectedSecondaryCorrelationMemoryArtifactsUrl =
+  '/memory/artifacts?limit=4&window=60m&agent_id=team-lead&correlation_id=corr-app-secondary';
 const growthRevenueSelectedSecondaryCorrelationMemoryArtifactsUrl =
   '/memory/artifacts?limit=4&window=60m&agent_id=growth-revenue&correlation_id=corr-app-secondary';
 const growthRevenueSelectedReviewCorrelationMemoryArtifactsUrl =
@@ -772,6 +774,26 @@ const teamLeadSelectedCorrelationMemoryArtifactsFixture = {
   ]
 };
 
+const teamLeadSelectedSecondaryCorrelationMemoryArtifactsFixture = {
+  generated_at: '2026-03-16T09:00:00.000Z',
+  items: [
+    {
+      artifact_ref: '/tmp/secondary-evidence.md',
+      artifact_kind: 'evidence_ref',
+      file_name: 'secondary-evidence.md',
+      first_seen_at: '2026-03-16T08:52:00.000Z',
+      last_seen_at: '2026-03-16T08:52:00.000Z',
+      mention_count: 1,
+      agent_ids: ['app-engineering', 'team-lead'],
+      correlation_ids: ['corr-app-secondary'],
+      source_kinds: ['controller_event'],
+      latest_summary: 'Team lead preserved the carried secondary workflow correlation',
+      latest_event_type: 'handoff_completed',
+      collector_last_modified_at: null
+    }
+  ]
+};
+
 const selectedCorrelationMemoryArtifactsFixture = {
   generated_at: '2026-03-16T09:00:00.000Z',
   items: [
@@ -913,6 +935,10 @@ function resolveDefaultFetchResponse(url: string) {
 
   if (url === teamLeadSelectedCorrelationMemoryArtifactsUrl) {
     return jsonResponse(teamLeadSelectedCorrelationMemoryArtifactsFixture);
+  }
+
+  if (url === teamLeadSelectedSecondaryCorrelationMemoryArtifactsUrl) {
+    return jsonResponse(teamLeadSelectedSecondaryCorrelationMemoryArtifactsFixture);
   }
 
   if (url === selectedCorrelationMemoryArtifactsUrl) {
@@ -3569,6 +3595,123 @@ afterEach(() => {
     expect(vi.mocked(globalThis.fetch).mock.calls).toHaveLength(fetchCallCountBeforeJump);
     expect(globalThis.fetch).not.toHaveBeenCalledWith(teamLeadWorkflowUrl, expect.anything());
     expect(globalThis.fetch).not.toHaveBeenCalledWith(teamLeadSelectedCorrelationMemoryArtifactsUrl, expect.anything());
+  });
+
+  it('preserves the active selected correlation when opening a workflow peer-watch observer pivot', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    const incidentSection = within(details).getByRole('heading', { name: 'Incident Feed' }).closest('section');
+    expect(incidentSection).not.toBeNull();
+
+    await user.click(
+      within(incidentSection!).getByRole('button', {
+        name: 'Select incident agent app-engineering from incident inc-2'
+      })
+    );
+
+    const workflowSection = within(details).getByRole('heading', { name: 'Workflow' }).closest('section');
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    expect(workflowSection).not.toBeNull();
+    expect(correlationSection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+      expect(within(correlationSection!).getByText('corr-app-secondary')).toBeVisible();
+    });
+
+    await user.click(
+      within(workflowSection!).getByRole('button', {
+        name: 'Select workflow peer-watch observer from alert alert-1 team-lead'
+      })
+    );
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'Team Lead' })).toBeVisible();
+      expect(within(details).queryByRole('heading', { name: 'Current Operation' })).not.toBeInTheDocument();
+      expect(within(correlationSection!).getByText('corr-app-secondary')).toBeVisible();
+      expect(within(correlationSection!).getByText('Counts · 1 incidents · 0 interactions · 1 events')).toBeVisible();
+      expect(within(correlationSection!).queryByText('corr-app-review')).not.toBeInTheDocument();
+    });
+
+    await act(async () => {
+      expect(globalThis.fetch).toHaveBeenCalledWith(teamLeadWorkflowUrl, expect.anything());
+      expect(globalThis.fetch).toHaveBeenCalledWith(secondaryCorrelationUrl, expect.anything());
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        teamLeadSelectedSecondaryCorrelationMemoryArtifactsUrl,
+        expect.anything()
+      );
+    });
+  });
+
+  it('keeps current and unknown workflow peer-watch observers as plain text', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === workflowUrl) {
+          return jsonResponse({
+            ...workflowFixture,
+            detail: {
+              ...workflowFixture.detail,
+              open_peer_watch_alerts: [
+                {
+                  ...workflowFixture.detail.open_peer_watch_alerts[0],
+                  alert_id: 'alert-observer-current',
+                  observer_agent_id: 'app-engineering',
+                  actor_id: 'app-engineering',
+                  summary: 'Current observer stays plain text'
+                },
+                {
+                  ...workflowFixture.detail.open_peer_watch_alerts[0],
+                  alert_id: 'alert-observer-unknown',
+                  observer_agent_id: 'ghost-agent',
+                  actor_id: 'ghost-agent',
+                  summary: 'Unknown observer stays plain text'
+                }
+              ]
+            }
+          } satisfies AgentWorkflow);
+        }
+
+        return resolveTestFetchResponse(url);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
+
+    const workflowSection = within(details).getByRole('heading', { name: 'Workflow' }).closest('section');
+    expect(workflowSection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+      expect(within(workflowSection!).getByText('Current observer stays plain text')).toBeVisible();
+      expect(within(workflowSection!).getByText('Unknown observer stays plain text')).toBeVisible();
+    });
+
+    const currentRecord = within(workflowSection!).getByText('Current observer stays plain text').closest('li');
+    const unknownRecord = within(workflowSection!).getByText('Unknown observer stays plain text').closest('li');
+    expect(currentRecord).not.toBeNull();
+    expect(unknownRecord).not.toBeNull();
+
+    expect(currentRecord).toHaveTextContent('Observer · app-engineering');
+    expect(
+      within(currentRecord!).queryByRole('button', {
+        name: 'Select workflow peer-watch observer from alert alert-observer-current app-engineering'
+      })
+    ).not.toBeInTheDocument();
+    expect(unknownRecord).toHaveTextContent('Observer · ghost-agent');
+    expect(
+      within(unknownRecord!).queryByRole('button', {
+        name: 'Select workflow peer-watch observer from alert alert-observer-unknown ghost-agent'
+      })
+    ).not.toBeInTheDocument();
   });
 
   it('jumps from selected-agent workflow handoff and reboot evidence refs to shared memory without changing the selected agent or correlation', async () => {

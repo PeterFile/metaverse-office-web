@@ -1820,7 +1820,18 @@ export function DetailsPanel({
                   onSelectAgent
                 })}
               </span>
-              <span>{`Watched by · ${renderNamedList(selectedCollectorItem.supervision.watched_by, 'No watchers')}`}</span>
+              <span>
+                Watched by ·{' '}
+                {renderAgentPivotList({
+                  agentIds: selectedCollectorItem.supervision.watched_by,
+                  currentAgentId: selectedAgent.agent_id,
+                  navigableAgentIds,
+                  emptyLabel: 'No watchers',
+                  ariaLabelPrefix: 'Select collector observation watcher',
+                  correlationId: selectedCorrelationId,
+                  onSelectAgent
+                })}
+              </span>
               <span>{`Workspace observations · ${selectedCollectorItem.workspace_observations.length}`}</span>
               <span>{`Tmux observations · ${selectedCollectorItem.tmux_observations.length}`}</span>
               <span>{`Workspace root · ${selectedCollectorItem.workspace_root}`}</span>

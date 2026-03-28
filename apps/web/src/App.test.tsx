@@ -6006,7 +6006,19 @@ afterEach(() => {
         name: 'Select collector observation watch target growth-revenue'
       })
     ).toBeVisible();
-    expect(within(collectorContainer!).getByText('Watched by · team-lead, growth-revenue')).toBeVisible();
+    const watchedByLine = within(collectorContainer!).getByText(
+      (_content, element) => element?.tagName === 'SPAN' && element.textContent === 'Watched by · team-lead, growth-revenue'
+    );
+    expect(
+      within(watchedByLine).getByRole('button', {
+        name: 'Select collector observation watcher team-lead'
+      })
+    ).toBeVisible();
+    expect(
+      within(watchedByLine).getByRole('button', {
+        name: 'Select collector observation watcher growth-revenue'
+      })
+    ).toBeVisible();
     expect(within(collectorContainer!).getByText('Workspace observations · 2')).toBeVisible();
     expect(within(collectorContainer!).getByText('Tmux observations · 1')).toBeVisible();
     expect(collectorContainer!).toHaveTextContent('Evidence · /tmp/controller-log.md, /tmp/evidence.md');
@@ -6093,6 +6105,54 @@ afterEach(() => {
       expect(globalThis.fetch).toHaveBeenCalledWith(correlationUrl, expect.anything());
       expect(globalThis.fetch).toHaveBeenCalledWith(
         growthRevenueSelectedReviewCorrelationMemoryArtifactsUrl,
+        expect.anything()
+      );
+    });
+  });
+
+  it('preserves the active selected-agent correlation when pivoting through collector observation watchers', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
+
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    const collectorSection = within(details).getByRole('heading', { name: 'Collector Observation' }).closest('section');
+    expect(correlationSection).not.toBeNull();
+    expect(collectorSection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+      expect(
+        within(collectorSection!).getByRole('button', {
+          name: 'Select collector observation watcher team-lead'
+        })
+      ).toBeVisible();
+    });
+
+    await user.click(
+      within(collectorSection!).getByRole('button', {
+        name: 'Select collector observation watcher team-lead'
+      })
+    );
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'Team Lead' })).toBeVisible();
+      expect(within(details).queryByRole('heading', { name: 'Current Operation' })).not.toBeInTheDocument();
+      const nextCorrelationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+      expect(nextCorrelationSection).not.toBeNull();
+      expect(within(nextCorrelationSection!).getByText('corr-app-review')).toBeVisible();
+      expect(within(nextCorrelationSection!).getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
+      expect(within(nextCorrelationSection!).queryByText('corr-app-secondary')).not.toBeInTheDocument();
+    });
+
+    await act(async () => {
+      expect(globalThis.fetch).toHaveBeenCalledWith(teamLeadWorkflowUrl, expect.anything());
+      expect(globalThis.fetch).toHaveBeenCalledWith(correlationUrl, expect.anything());
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        teamLeadSelectedCorrelationMemoryArtifactsUrl,
         expect.anything()
       );
     });

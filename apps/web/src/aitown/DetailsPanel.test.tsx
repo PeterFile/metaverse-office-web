@@ -2047,6 +2047,121 @@ describe('DetailsPanel accountability signals', () => {
     expect(onSelectCorrelation).not.toHaveBeenCalled();
   });
 
+  it('renders the selected-agent collector observation watch target as a pivot only for navigable non-current targets and preserves the active correlation', async () => {
+    const user = userEvent.setup();
+    const onSelectAgent = vi.fn();
+    const baseCollectorSnapshot = buildCollectorSnapshot();
+    const baseCollectorItem = baseCollectorSnapshot.items[0];
+
+    const { rerender } = render(
+      <DetailsPanel {...buildProps({ onSelectAgent, selectedCorrelationId: 'corr-app-review' })} />
+    );
+
+    const collectorObservationSection = screen.getByRole('heading', { name: 'Collector Observation' }).closest('section');
+    expect(collectorObservationSection).not.toBeNull();
+
+    const navigableWatchTargetLine = within(collectorObservationSection!).getByText(
+      (_content, element) => element?.tagName === 'SPAN' && element.textContent === 'Watch target · growth-revenue'
+    );
+    expect(
+      within(navigableWatchTargetLine).getByRole('button', {
+        name: 'Select collector observation watch target growth-revenue'
+      })
+    ).toBeVisible();
+
+    await user.click(
+      within(navigableWatchTargetLine).getByRole('button', {
+        name: 'Select collector observation watch target growth-revenue'
+      })
+    );
+
+    expect(onSelectAgent).toHaveBeenCalledWith('growth-revenue', 'corr-app-review');
+
+    rerender(
+      <DetailsPanel
+        {...buildProps({
+          collectorSnapshot: {
+            ...baseCollectorSnapshot,
+            items: [
+              {
+                ...baseCollectorItem,
+                supervision: {
+                  ...baseCollectorItem.supervision,
+                  watch_target: 'app-engineering'
+                }
+              }
+            ]
+          }
+        })}
+      />
+    );
+
+    const currentWatchTargetLine = within(screen.getByRole('heading', { name: 'Collector Observation' }).closest('section')!).getByText(
+      (_content, element) => element?.tagName === 'SPAN' && element.textContent === 'Watch target · app-engineering'
+    );
+    expect(
+      within(currentWatchTargetLine).queryByRole('button', {
+        name: 'Select collector observation watch target app-engineering'
+      })
+    ).not.toBeInTheDocument();
+
+    rerender(
+      <DetailsPanel
+        {...buildProps({
+          collectorSnapshot: {
+            ...baseCollectorSnapshot,
+            items: [
+              {
+                ...baseCollectorItem,
+                supervision: {
+                  ...baseCollectorItem.supervision,
+                  watch_target: 'ghost-agent'
+                }
+              }
+            ]
+          }
+        })}
+      />
+    );
+
+    const unknownWatchTargetLine = within(screen.getByRole('heading', { name: 'Collector Observation' }).closest('section')!).getByText(
+      (_content, element) => element?.tagName === 'SPAN' && element.textContent === 'Watch target · ghost-agent'
+    );
+    expect(
+      within(unknownWatchTargetLine).queryByRole('button', {
+        name: 'Select collector observation watch target ghost-agent'
+      })
+    ).not.toBeInTheDocument();
+
+    rerender(
+      <DetailsPanel
+        {...buildProps({
+          collectorSnapshot: {
+            ...baseCollectorSnapshot,
+            items: [
+              {
+                ...baseCollectorItem,
+                supervision: {
+                  ...baseCollectorItem.supervision,
+                  watch_target: null
+                }
+              }
+            ]
+          }
+        })}
+      />
+    );
+
+    const missingWatchTargetLine = within(screen.getByRole('heading', { name: 'Collector Observation' }).closest('section')!).getByText(
+      (_content, element) => element?.tagName === 'SPAN' && element.textContent === 'Watch target · No watch target'
+    );
+    expect(
+      within(missingWatchTargetLine).queryByRole('button', {
+        name: /Select collector observation watch target/
+      })
+    ).not.toBeInTheDocument();
+  });
+
   it('jumps from matching top-level correlation evidence refs to shared memory in crew overview while leaving non-matching refs as plain text', async () => {
     const user = userEvent.setup();
     const onSelectAgent = vi.fn();

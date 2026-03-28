@@ -598,12 +598,24 @@ function renderReplayTimelineEvent({
   onSelectCorrelation: (correlationId: string | null) => void;
 }) {
   const canNavigateToAgent = event.agent_id !== currentAgentId && navigableAgentIds.has(event.agent_id);
+  const preservedCorrelationId = activeCorrelationId ?? event.correlation_id;
+  const canNavigateToActor = event.actor_id !== currentAgentId && navigableAgentIds.has(event.actor_id);
 
   return (
     <li key={event.event_id} className={`aitown-record severity-${event.severity}`}>
       <strong>{event.summary}</strong>
       <span>{`At · ${renderTimestamp(event.ts, 'No event timestamp')}`}</span>
-      <span>{`Actor · ${event.actor_id}`}</span>
+      <span>
+        Actor ·{' '}
+        {canNavigateToActor
+          ? renderAgentPivotButton({
+              agentId: event.actor_id,
+              ariaLabel: `Select replay actor from event ${event.event_id} ${event.actor_id}`,
+              correlationId: preservedCorrelationId,
+              onSelectAgent
+            })
+          : event.actor_id}
+      </span>
       <span>{`Event type · ${event.event_type}`}</span>
       <span>{`Location · ${event.location}`}</span>
       <span>{`State · ${event.current_state}`}</span>

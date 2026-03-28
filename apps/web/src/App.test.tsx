@@ -1543,6 +1543,39 @@ afterEach(() => {
     expect(within(overviewCorrelationIncidentRecord!).getByText('Severity · Orange')).toBeVisible();
   });
 
+  it('pivots from timeline replay actors while carrying replay correlation context', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    const replaySection = (await within(details).findByRole('heading', { name: 'Timeline Replay' })).closest('section');
+    const replayEvent = within(replaySection!)
+      .getByText('Replay captured missing workflow evidence')
+      .closest('li');
+
+    expect(replaySection).not.toBeNull();
+    expect(replayEvent).not.toBeNull();
+
+    await user.click(
+      within(replayEvent!).getByRole('button', {
+        name: 'Select replay actor from event evt-timeline-1 team-lead'
+      })
+    );
+
+    let selectedCorrelationSection: HTMLElement | null = null;
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'Team Lead' })).toBeVisible();
+      selectedCorrelationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+      expect(selectedCorrelationSection).not.toBeNull();
+      expect(within(selectedCorrelationSection!).getByText('corr-app-review')).toBeVisible();
+    });
+
+    await act(async () => {
+      expect(globalThis.fetch).toHaveBeenCalledWith(teamLeadWorkflowUrl, expect.anything());
+      expect(globalThis.fetch).toHaveBeenCalledWith(teamLeadSelectedCorrelationMemoryArtifactsUrl, expect.anything());
+    });
+  });
+
   it('keeps the last timeline replay visible when a later replay poll fails', async () => {
     (window as typeof window & { __AITOWN_POLL_INTERVAL_MS__?: number }).__AITOWN_POLL_INTERVAL_MS__ = 10;
 

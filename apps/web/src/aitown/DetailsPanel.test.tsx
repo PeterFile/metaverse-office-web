@@ -689,6 +689,129 @@ describe('DetailsPanel accountability signals', () => {
     expect(onSelectCorrelation).not.toHaveBeenCalled();
   });
 
+  it('renders crew-overview incident feed counterparties as pivots and carries the clicked incident correlation', async () => {
+    const user = userEvent.setup();
+    const onSelectAgent = vi.fn();
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          incidentFeed: {
+            items: [
+              {
+                incident_id: 'inc-feed-2',
+                kind: 'handoff',
+                ts: '2026-03-16T08:52:00.000Z',
+                agent_id: 'app-engineering',
+                actor_id: 'growth-revenue',
+                status: 'completed',
+                severity: 'yellow',
+                summary: 'App engineering finished the secondary review handoff',
+                correlation_id: 'corr-app-secondary',
+                evidence_refs: ['/evidence/secondary-handoff.md'],
+                counterparty_agent_ids: ['growth-revenue', 'ghost-agent'],
+                source_kind: 'controller_event'
+              }
+            ]
+          },
+          onSelectAgent,
+          selectedAgent: null,
+          selectedOperation: null
+        })}
+      />
+    );
+
+    const incidentSection = screen.getByRole('heading', { name: 'Incident Feed' }).closest('section');
+    expect(incidentSection).not.toBeNull();
+
+    const incidentRecord = within(incidentSection!)
+      .getByText('App engineering finished the secondary review handoff')
+      .closest('li');
+    expect(incidentRecord).not.toBeNull();
+    expect(incidentRecord).toHaveTextContent('Counterparties · growth-revenue, ghost-agent');
+    expect(
+      within(incidentRecord!).getByRole('button', {
+        name: 'Select incident feed counterparty agent from incident inc-feed-2 growth-revenue'
+      })
+    ).toBeVisible();
+    expect(
+      within(incidentRecord!).queryByRole('button', {
+        name: 'Select incident feed counterparty agent from incident inc-feed-2 ghost-agent'
+      })
+    ).not.toBeInTheDocument();
+
+    await user.click(
+      within(incidentRecord!).getByRole('button', {
+        name: 'Select incident feed counterparty agent from incident inc-feed-2 growth-revenue'
+      })
+    );
+
+    expect(onSelectAgent).toHaveBeenCalledWith('growth-revenue', 'corr-app-secondary');
+  });
+
+  it('renders selected-agent incident feed counterparties as pivots only for navigable non-current agents', async () => {
+    const user = userEvent.setup();
+    const onSelectAgent = vi.fn();
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          incidentFeed: {
+            items: [
+              {
+                incident_id: 'inc-feed-2',
+                kind: 'handoff',
+                ts: '2026-03-16T08:52:00.000Z',
+                agent_id: 'app-engineering',
+                actor_id: 'growth-revenue',
+                status: 'completed',
+                severity: 'yellow',
+                summary: 'App engineering finished the secondary review handoff',
+                correlation_id: 'corr-app-secondary',
+                evidence_refs: ['/evidence/secondary-handoff.md'],
+                counterparty_agent_ids: ['app-engineering', 'growth-revenue', 'ghost-agent'],
+                source_kind: 'controller_event'
+              }
+            ]
+          },
+          onSelectAgent
+        })}
+      />
+    );
+
+    const incidentSection = screen.getByRole('heading', { name: 'Incident Feed' }).closest('section');
+    expect(incidentSection).not.toBeNull();
+
+    const incidentRecord = within(incidentSection!)
+      .getByText('App engineering finished the secondary review handoff')
+      .closest('li');
+    expect(incidentRecord).not.toBeNull();
+    expect(incidentRecord).toHaveTextContent('Counterparties · app-engineering, growth-revenue, ghost-agent');
+    expect(
+      within(incidentRecord!).queryByRole('button', {
+        name: 'Select incident feed counterparty agent from incident inc-feed-2 app-engineering'
+      })
+    ).not.toBeInTheDocument();
+    expect(
+      within(incidentRecord!).getByRole('button', {
+        name: 'Select incident feed counterparty agent from incident inc-feed-2 growth-revenue'
+      })
+    ).toBeVisible();
+    expect(
+      within(incidentRecord!).queryByRole('button', {
+        name: 'Select incident feed counterparty agent from incident inc-feed-2 ghost-agent'
+      })
+    ).not.toBeInTheDocument();
+
+    await user.click(
+      within(incidentRecord!).getByRole('button', {
+        name: 'Select incident feed counterparty agent from incident inc-feed-2 growth-revenue'
+      })
+    );
+
+    expect(onSelectAgent).toHaveBeenCalledWith('growth-revenue', 'corr-app-secondary');
+  });
+
   it('renders workflow and correlation interaction cards with timing and transition metadata', () => {
     const interaction = {
       ...buildCorrelation().interactions[0],

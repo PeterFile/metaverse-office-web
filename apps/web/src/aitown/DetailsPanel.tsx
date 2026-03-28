@@ -864,6 +864,7 @@ function renderIncidentRecord({
   onSelectCorrelation,
   includeAgentPivot,
   includeCounterpartyPivots = false,
+  counterpartyPivotAriaLabelPrefix = 'Select correlation incident counterparty agent',
   includeCorrelationPivot = true
 }: {
   incident: WorkflowIncident;
@@ -876,6 +877,7 @@ function renderIncidentRecord({
   onSelectCorrelation: (correlationId: string | null) => void;
   includeAgentPivot: boolean;
   includeCounterpartyPivots?: boolean;
+  counterpartyPivotAriaLabelPrefix?: string;
   includeCorrelationPivot?: boolean;
 }) {
   return (
@@ -915,7 +917,7 @@ function renderIncidentRecord({
               currentAgentId,
               navigableAgentIds,
               emptyLabel: 'No counterparties',
-              ariaLabelPrefix: 'Select correlation incident counterparty agent',
+              ariaLabelPrefix: counterpartyPivotAriaLabelPrefix,
               correlationId: incident.correlation_id,
               onSelectAgent
             })
@@ -1349,7 +1351,9 @@ export function DetailsPanel({
                 enableSharedMemoryEvidenceJump: true,
                 onSelectAgent,
                 onSelectCorrelation,
-                includeAgentPivot: true
+                includeAgentPivot: true,
+                includeCounterpartyPivots: true,
+                counterpartyPivotAriaLabelPrefix: `Select incident feed counterparty agent from incident ${incident.incident_id}`
               })
             )}
             {incidentFeedState === 'ready' && !incidentFeedError && !incidentFeed?.items.length ? (
@@ -1942,7 +1946,9 @@ export function DetailsPanel({
               enableSharedMemoryEvidenceJump: true,
               onSelectAgent,
               onSelectCorrelation,
-              includeAgentPivot: false
+              includeAgentPivot: false,
+              includeCounterpartyPivots: true,
+              counterpartyPivotAriaLabelPrefix: `Select incident feed counterparty agent from incident ${incident.incident_id}`
             })
           )}
           {incidentFeedState === 'ready' && !incidentFeedError && relatedIncidents.length === 0 ? (

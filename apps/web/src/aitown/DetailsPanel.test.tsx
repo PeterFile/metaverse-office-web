@@ -1137,6 +1137,96 @@ describe('DetailsPanel accountability signals', () => {
     expect(onSelectAgent).toHaveBeenCalledWith('team-lead', 'corr-app-secondary');
   });
 
+  it('renders replay counterparties as pivots only for navigable non-current agents, uses event-specific labels, and preserves the active correlation', async () => {
+    const user = userEvent.setup();
+    const onSelectAgent = vi.fn();
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          onSelectAgent,
+          selectedAgent: null,
+          selectedOperation: null,
+          selectedCorrelationId: 'corr-app-secondary',
+          timelineReplay: {
+            items: [
+              {
+                event_id: 'evt-replay-counterparty-1',
+                ts: '2026-03-16T08:59:00.000Z',
+                agent_id: 'app-engineering',
+                actor_id: 'team-lead',
+                event_type: 'peer_watch_alert_raised',
+                severity: 'orange',
+                current_state: 'blocked',
+                location: 'delivery-desk',
+                summary: 'Replay counterparties keep the active correlation',
+                correlation_id: 'corr-app-review',
+                counterparty_agent_ids: ['app-engineering', 'team-lead', 'ghost-agent'],
+                evidence_refs: ['/evidence/replay.md'],
+                source_kind: 'controller_event'
+              },
+              {
+                event_id: 'evt-replay-counterparty-2',
+                ts: '2026-03-16T08:58:00.000Z',
+                agent_id: 'growth-revenue',
+                actor_id: 'growth-revenue',
+                event_type: 'agent_noted',
+                severity: 'yellow',
+                current_state: 'planning',
+                location: 'growth-desk',
+                summary: 'Repeated replay counterparty stays uniquely addressable',
+                correlation_id: 'corr-app-review',
+                counterparty_agent_ids: ['team-lead'],
+                evidence_refs: ['/evidence/replay-secondary.md'],
+                source_kind: 'workspace_snapshot'
+              }
+            ]
+          }
+        })}
+      />
+    );
+
+    const section = screen.getByRole('heading', { name: 'Timeline Replay' }).closest('section');
+    expect(section).not.toBeNull();
+
+    const firstRecord = within(section!).getByText('Replay counterparties keep the active correlation').closest('li');
+    const secondRecord = within(section!)
+      .getByText('Repeated replay counterparty stays uniquely addressable')
+      .closest('li');
+    expect(firstRecord).not.toBeNull();
+    expect(secondRecord).not.toBeNull();
+    expect(firstRecord).toHaveTextContent('Counterparties · app-engineering, team-lead, ghost-agent');
+    expect(secondRecord).toHaveTextContent('Counterparties · team-lead');
+    expect(
+      within(firstRecord!).queryByRole('button', {
+        name: 'Select replay counterparty from event evt-replay-counterparty-1 app-engineering'
+      })
+    ).not.toBeInTheDocument();
+    expect(
+      within(firstRecord!).getByRole('button', {
+        name: 'Select replay counterparty from event evt-replay-counterparty-1 team-lead'
+      })
+    ).toBeVisible();
+    expect(
+      within(firstRecord!).queryByRole('button', {
+        name: 'Select replay counterparty from event evt-replay-counterparty-1 ghost-agent'
+      })
+    ).not.toBeInTheDocument();
+    expect(
+      within(secondRecord!).getByRole('button', {
+        name: 'Select replay counterparty from event evt-replay-counterparty-2 team-lead'
+      })
+    ).toBeVisible();
+
+    await user.click(
+      within(firstRecord!).getByRole('button', {
+        name: 'Select replay counterparty from event evt-replay-counterparty-1 team-lead'
+      })
+    );
+
+    expect(onSelectAgent).toHaveBeenCalledWith('team-lead', 'corr-app-secondary');
+  });
+
   it('jumps from matching timeline-replay evidence refs to shared memory while leaving non-matching refs as plain text', async () => {
     const user = userEvent.setup();
     const onSelectAgent = vi.fn();

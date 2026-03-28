@@ -1519,7 +1519,12 @@ afterEach(() => {
     expect(within(replayEvent!).getByText('Event type · peer_watch_alert_raised')).toBeVisible();
     expect(within(replayEvent!).getByText('Location · meeting-zone')).toBeVisible();
     expect(within(replayEvent!).getByText('Severity · Orange')).toBeVisible();
-    expect(within(replayEvent!).getByText('Counterparties · team-lead')).toBeVisible();
+    expect(replayEvent).toHaveTextContent('Counterparties · team-lead');
+    expect(
+      within(replayEvent!).getByRole('button', {
+        name: 'Select replay counterparty from event evt-timeline-1 team-lead'
+      })
+    ).toBeVisible();
     expect(replayEvent).toHaveTextContent('Evidence · /tmp/evidence.md');
     expect(
       within(replayEvent!).getByRole('button', { name: 'Jump to shared memory artifact /tmp/evidence.md' })
@@ -1559,6 +1564,42 @@ afterEach(() => {
     await user.click(
       within(replayEvent!).getByRole('button', {
         name: 'Select replay actor from event evt-timeline-1 team-lead'
+      })
+    );
+
+    let selectedCorrelationSection: HTMLElement | null = null;
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'Team Lead' })).toBeVisible();
+      selectedCorrelationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+      expect(selectedCorrelationSection).not.toBeNull();
+      expect(within(selectedCorrelationSection!).getByText('corr-app-review')).toBeVisible();
+    });
+
+    await act(async () => {
+      expect(globalThis.fetch).toHaveBeenCalledWith(teamLeadWorkflowUrl, expect.anything());
+      expect(globalThis.fetch).toHaveBeenCalledWith(teamLeadSelectedCorrelationMemoryArtifactsUrl, expect.anything());
+    });
+  });
+
+  it('pivots from timeline replay counterparties while carrying the active replay correlation context', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    const replaySection = (await within(details).findByRole('heading', { name: 'Timeline Replay' })).closest('section');
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    const replayEvent = within(replaySection!)
+      .getByText('Replay captured missing workflow evidence')
+      .closest('li');
+
+    expect(replaySection).not.toBeNull();
+    expect(correlationSection).not.toBeNull();
+    expect(replayEvent).not.toBeNull();
+    expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+
+    await user.click(
+      within(replayEvent!).getByRole('button', {
+        name: 'Select replay counterparty from event evt-timeline-1 team-lead'
       })
     );
 

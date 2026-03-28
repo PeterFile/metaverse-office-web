@@ -685,6 +685,9 @@ function renderWorkflowStatusRecord({
   correlationId,
   activeCorrelationId,
   sourceKind,
+  currentAgentId,
+  navigableAgentIds,
+  onSelectAgent,
   onSelectCorrelation
 }: {
   key: string;
@@ -701,14 +704,31 @@ function renderWorkflowStatusRecord({
   correlationId: string | null;
   activeCorrelationId: string | null;
   sourceKind: string;
+  currentAgentId: string | null;
+  navigableAgentIds: Set<string>;
+  onSelectAgent: (agentId: string | null, correlationId?: string | null) => void;
   onSelectCorrelation: (correlationId: string | null) => void;
 }) {
+  const preservedCorrelationId = activeCorrelationId ?? correlationId;
+  const canNavigateToActor = actorId !== currentAgentId && navigableAgentIds.has(actorId);
+  const actorPivotAriaLabelPrefix = `Select workflow status actor from ${kind.toLowerCase()}`;
+
   return (
     <li key={key} className={`aitown-record severity-${severity}`}>
       <strong>{summary}</strong>
       <span>{`${kind} · ${status} · ${phase}`}</span>
       <span>{`At · ${renderTimestamp(ts, 'No status timestamp')}`}</span>
-      <span>{`Actor · ${actorId}`}</span>
+      <span>
+        Actor ·{' '}
+        {canNavigateToActor
+          ? renderAgentPivotButton({
+              agentId: actorId,
+              ariaLabel: `${actorPivotAriaLabelPrefix} ${key} ${actorId}`,
+              correlationId: preservedCorrelationId,
+              onSelectAgent
+            })
+          : actorId}
+      </span>
       <span>{`Severity · ${SEVERITY_LABELS[severity]}`}</span>
       <span>{`Counterparties · ${renderCounterparties(counterpartyAgentIds)}`}</span>
       <span>
@@ -1948,6 +1968,9 @@ export function DetailsPanel({
               correlationId: handoff.correlation_id,
               activeCorrelationId: selectedCorrelationId,
               sourceKind: handoff.source_kind,
+              currentAgentId: selectedAgent.agent_id,
+              navigableAgentIds,
+              onSelectAgent,
               onSelectCorrelation
             })
           )}
@@ -1967,6 +1990,9 @@ export function DetailsPanel({
               correlationId: reboot.correlation_id,
               activeCorrelationId: selectedCorrelationId,
               sourceKind: reboot.source_kind,
+              currentAgentId: selectedAgent.agent_id,
+              navigableAgentIds,
+              onSelectAgent,
               onSelectCorrelation
             })
           )}

@@ -2871,7 +2871,10 @@ describe('DetailsPanel workflow peer-watch alerts', () => {
     expect(rebootArtifactRecord).not.toBeNull();
 
     expect(within(handoffRecord!).getByText('At · 2026-03-16T08:57:00.000Z')).toBeVisible();
-    expect(within(handoffRecord!).getByText('Actor · growth-revenue')).toBeVisible();
+    const handoffActorPivot = within(handoffRecord!).getByRole('button', {
+      name: 'Select workflow status actor from handoff handoff-1 growth-revenue'
+    });
+    expect(handoffActorPivot).toBeVisible();
     expect(handoffRecord).toHaveTextContent('Evidence · /evidence/secondary-handoff.md, /evidence/missing-handoff.md');
     expect(
       within(handoffRecord!).getByRole('button', {
@@ -2889,7 +2892,11 @@ describe('DetailsPanel workflow peer-watch alerts', () => {
     expect(handoffPivot).toBeVisible();
 
     expect(within(rebootRecord!).getByText('At · 2026-03-16T08:40:00.000Z')).toBeVisible();
-    expect(within(rebootRecord!).getByText('Actor · team-lead')).toBeVisible();
+    expect(
+      within(rebootRecord!).getByRole('button', {
+        name: 'Select workflow status actor from reboot reboot-1 team-lead'
+      })
+    ).toBeVisible();
     expect(rebootRecord).toHaveTextContent('Evidence · /evidence/reboot-note.md, /evidence/missing-reboot.md');
     expect(
       within(rebootRecord!).getByRole('button', {
@@ -2920,11 +2927,139 @@ describe('DetailsPanel workflow peer-watch alerts', () => {
       })
     );
     expect(document.activeElement).toBe(rebootArtifactRecord);
-    expect(onSelectAgent).not.toHaveBeenCalled();
     expect(onSelectCorrelation).not.toHaveBeenCalled();
+
+    await user.click(handoffActorPivot);
+    expect(onSelectAgent).toHaveBeenCalledWith('growth-revenue', 'corr-app-review');
 
     await user.click(handoffPivot);
     expect(onSelectCorrelation).toHaveBeenCalledWith('corr-app-secondary');
+  });
+
+  it('falls back to each workflow status record correlation when no correlation is currently selected', async () => {
+    const user = userEvent.setup();
+    const onSelectAgent = vi.fn();
+    const workflow: AgentWorkflow = {
+      ...buildWorkflow(),
+      detail: {
+        ...buildWorkflow().detail,
+        recent_handoffs: [
+          {
+            handoff_id: 'handoff-fallback-actor',
+            ts: '2026-03-16T08:57:00.000Z',
+            agent_id: 'app-engineering',
+            actor_id: 'growth-revenue',
+            phase: 'handoff_done',
+            status: 'completed',
+            severity: 'yellow',
+            summary: 'Fallback handoff actor keeps its own correlation',
+            counterparty_agent_ids: ['growth-revenue'],
+            evidence_refs: [],
+            correlation_id: 'corr-app-secondary',
+            source_kind: 'controller_event'
+          }
+        ],
+        recent_reboots: [
+          {
+            reboot_id: 'reboot-fallback-actor',
+            ts: '2026-03-16T08:40:00.000Z',
+            agent_id: 'app-engineering',
+            actor_id: 'team-lead',
+            phase: 'reboot_recommended',
+            status: 'requested',
+            severity: 'yellow',
+            summary: 'Fallback reboot actor keeps its own correlation',
+            counterparty_agent_ids: ['team-lead'],
+            evidence_refs: [],
+            correlation_id: 'corr-app-review',
+            source_kind: 'controller_event'
+          }
+        ]
+      }
+    };
+
+    render(<DetailsPanel {...buildProps({ onSelectAgent, selectedCorrelationId: null, workflow })} />);
+
+    const section = screen.getByRole('heading', { name: 'Workflow' }).closest('section');
+    expect(section).not.toBeNull();
+
+    await user.click(
+      within(section!).getByRole('button', {
+        name: 'Select workflow status actor from handoff handoff-fallback-actor growth-revenue'
+      })
+    );
+    expect(onSelectAgent).toHaveBeenNthCalledWith(1, 'growth-revenue', 'corr-app-secondary');
+
+    await user.click(
+      within(section!).getByRole('button', {
+        name: 'Select workflow status actor from reboot reboot-fallback-actor team-lead'
+      })
+    );
+    expect(onSelectAgent).toHaveBeenNthCalledWith(2, 'team-lead', 'corr-app-review');
+  });
+
+  it('keeps unknown and current workflow status actors as plain text', () => {
+    const workflow: AgentWorkflow = {
+      ...buildWorkflow(),
+      detail: {
+        ...buildWorkflow().detail,
+        recent_handoffs: [
+          {
+            handoff_id: 'handoff-current-actor',
+            ts: '2026-03-16T08:57:00.000Z',
+            agent_id: 'app-engineering',
+            actor_id: 'app-engineering',
+            phase: 'handoff_done',
+            status: 'completed',
+            severity: 'yellow',
+            summary: 'Current agent completed the follow-up handoff',
+            counterparty_agent_ids: ['team-lead'],
+            evidence_refs: [],
+            correlation_id: 'corr-app-review',
+            source_kind: 'controller_event'
+          }
+        ],
+        recent_reboots: [
+          {
+            reboot_id: 'reboot-unknown-actor',
+            ts: '2026-03-16T08:40:00.000Z',
+            agent_id: 'app-engineering',
+            actor_id: 'ghost-agent',
+            phase: 'reboot_recommended',
+            status: 'requested',
+            severity: 'yellow',
+            summary: 'Unknown actor requested a reboot',
+            counterparty_agent_ids: [],
+            evidence_refs: [],
+            correlation_id: 'corr-app-review',
+            source_kind: 'controller_event'
+          }
+        ]
+      }
+    };
+
+    render(<DetailsPanel {...buildProps({ workflow })} />);
+
+    const section = screen.getByRole('heading', { name: 'Workflow' }).closest('section');
+    expect(section).not.toBeNull();
+
+    const currentActorRecord = within(section!).getByText('Current agent completed the follow-up handoff').closest('li');
+    const unknownActorRecord = within(section!).getByText('Unknown actor requested a reboot').closest('li');
+    expect(currentActorRecord).not.toBeNull();
+    expect(unknownActorRecord).not.toBeNull();
+
+    expect(currentActorRecord).toHaveTextContent('Actor · app-engineering');
+    expect(
+      within(currentActorRecord!).queryByRole('button', {
+        name: 'Select workflow status actor from handoff handoff-current-actor app-engineering'
+      })
+    ).not.toBeInTheDocument();
+    expect(unknownActorRecord).toHaveTextContent('Actor · ghost-agent');
+    expect(
+      within(unknownActorRecord!).queryByRole('button', {
+        name: 'Select workflow status actor from reboot reboot-unknown-actor ghost-agent'
+      })
+    ).not.toBeInTheDocument();
   });
 
   it('jumps from matching selected-agent workflow peer-watch alert evidence refs to shared memory while leaving non-matching refs as plain text', async () => {

@@ -1424,7 +1424,12 @@ afterEach(() => {
     const overviewIncidentRecord = within(incidentSection!).getByText('Lead is still waiting on workflow evidence').closest('li');
     expect(overviewIncidentRecord).not.toBeNull();
     expect(within(overviewIncidentRecord!).getByText('At · 2026-03-16T08:50:00.000Z')).toBeVisible();
-    expect(within(overviewIncidentRecord!).getByText('Actor · team-lead')).toBeVisible();
+    expect(overviewIncidentRecord!).toHaveTextContent('Actor · team-lead');
+    expect(
+      within(overviewIncidentRecord!).getByRole('button', {
+        name: 'Select incident feed actor from incident inc-1 team-lead'
+      })
+    ).toBeVisible();
     expect(within(overviewIncidentRecord!).getByText('Incident · peer_watch · open')).toBeVisible();
     expect(within(overviewIncidentRecord!).getByText('Severity · Orange')).toBeVisible();
     expect(overviewIncidentRecord).toHaveTextContent('Counterparties · team-lead');
@@ -4192,6 +4197,47 @@ afterEach(() => {
     });
   });
 
+  it('preserves the clicked selected-agent incident correlation when opening an incident actor pivot', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
+
+    const incidentSection = within(details).getByRole('heading', { name: 'Incident Feed' }).closest('section');
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    expect(incidentSection).not.toBeNull();
+    expect(correlationSection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+    });
+
+    await user.click(
+      within(incidentSection!).getByRole('button', {
+        name: 'Select incident feed actor from incident inc-2 growth-revenue'
+      })
+    );
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+      expect(within(details).queryByRole('heading', { name: 'Current Operation' })).not.toBeInTheDocument();
+      expect(within(correlationSection!).getByText('corr-app-secondary')).toBeVisible();
+      expect(within(correlationSection!).getByText('Counts · 1 incidents · 0 interactions · 1 events')).toBeVisible();
+      expect(within(correlationSection!).queryByText('corr-app-review')).not.toBeInTheDocument();
+    });
+
+    await act(async () => {
+      expect(globalThis.fetch).toHaveBeenCalledWith(growthRevenueWorkflowUrl, expect.anything());
+      expect(globalThis.fetch).toHaveBeenCalledWith(secondaryCorrelationUrl, expect.anything());
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        growthRevenueSelectedSecondaryCorrelationMemoryArtifactsUrl,
+        expect.anything()
+      );
+    });
+  });
+
   it('does not preserve a carried crew-overview incident correlation when later pivoting through workflow counterparties', async () => {
     const user = userEvent.setup();
     render(<App />);
@@ -5240,7 +5286,7 @@ afterEach(() => {
     const selectedIncidentRecord = within(incidentSection!).getByText('Lead is still waiting on workflow evidence').closest('li');
     expect(selectedIncidentRecord).not.toBeNull();
     expect(within(selectedIncidentRecord!).getByText('At · 2026-03-16T08:50:00.000Z')).toBeVisible();
-    expect(within(selectedIncidentRecord!).getByText('Actor · team-lead')).toBeVisible();
+    expect(selectedIncidentRecord!).toHaveTextContent('Actor · team-lead');
     expect(within(selectedIncidentRecord!).getByText('Incident · peer_watch · open')).toBeVisible();
     expect(within(selectedIncidentRecord!).getByText('Severity · Orange')).toBeVisible();
     expect(selectedIncidentRecord).toHaveTextContent('Counterparties · team-lead');

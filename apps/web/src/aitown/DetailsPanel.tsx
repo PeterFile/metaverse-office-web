@@ -593,6 +593,8 @@ function renderCorrelationTimelineEvent(
         onSelectAgent?: (agentId: string | null, correlationId?: string | null) => void;
         sharedMemoryArtifactRefs?: ReadonlySet<string>;
         enableSharedMemoryEvidenceJump?: boolean;
+        actorPivotAriaLabelPrefix?: string;
+        counterpartyPivotAriaLabelPrefix?: string;
       }
 ) {
   const event = 'event' in input ? input.event : input;
@@ -602,6 +604,10 @@ function renderCorrelationTimelineEvent(
   const onSelectAgent = 'event' in input ? input.onSelectAgent : undefined;
   const sharedMemoryArtifactRefs = 'event' in input ? input.sharedMemoryArtifactRefs : undefined;
   const enableSharedMemoryEvidenceJump = 'event' in input ? (input.enableSharedMemoryEvidenceJump ?? false) : false;
+  const actorPivotAriaLabelPrefix =
+    'event' in input ? (input.actorPivotAriaLabelPrefix ?? 'Select correlation timeline actor from event') : 'Select correlation timeline actor from event';
+  const counterpartyPivotAriaLabelPrefix =
+    'event' in input ? (input.counterpartyPivotAriaLabelPrefix ?? 'Select correlation timeline counterparty agent') : 'Select correlation timeline counterparty agent';
   const preservedCorrelationId = activeCorrelationId ?? event.correlation_id;
   const canRenderCounterpartyPivots = Boolean(navigableAgentIds && onSelectAgent);
   const canRenderActorPivot = Boolean(
@@ -617,7 +623,7 @@ function renderCorrelationTimelineEvent(
         {canRenderActorPivot && onSelectAgent
           ? renderAgentPivotButton({
               agentId: event.actor_id,
-              ariaLabel: `Select correlation timeline actor from event ${event.event_id} ${event.actor_id}`,
+              ariaLabel: `${actorPivotAriaLabelPrefix} ${event.event_id} ${event.actor_id}`,
               correlationId: preservedCorrelationId,
               onSelectAgent
             })
@@ -634,7 +640,7 @@ function renderCorrelationTimelineEvent(
               currentAgentId,
               navigableAgentIds,
               emptyLabel: 'No counterparties',
-              ariaLabelPrefix: 'Select correlation timeline counterparty agent',
+              ariaLabelPrefix: counterpartyPivotAriaLabelPrefix,
               correlationId: preservedCorrelationId,
               onSelectAgent
             })
@@ -2192,6 +2198,12 @@ export function DetailsPanel({
           {(workflow?.detail.recent_events ?? []).slice(0, 2).map((event) =>
             renderCorrelationTimelineEvent({
               event,
+              activeCorrelationId: selectedCorrelationId,
+              currentAgentId: selectedAgent.agent_id,
+              navigableAgentIds,
+              onSelectAgent,
+              actorPivotAriaLabelPrefix: 'Select workflow recent event actor from event',
+              counterpartyPivotAriaLabelPrefix: `Select workflow recent event counterparty from event ${event.event_id}`,
               sharedMemoryArtifactRefs,
               enableSharedMemoryEvidenceJump: true
             })

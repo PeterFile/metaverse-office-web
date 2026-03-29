@@ -1204,6 +1204,70 @@ describe('DetailsPanel accountability signals', () => {
     expect(onSelectCorrelation).toHaveBeenCalledWith('corr-app-secondary');
   });
 
+  it('renders selected-agent workflow recent-event actor and counterparty pivots with workflow-local accessible names and preserves the active correlation', async () => {
+    const user = userEvent.setup();
+    const onSelectAgent = vi.fn();
+    const workflow: AgentWorkflow = {
+      ...buildWorkflow(),
+      detail: {
+        ...buildWorkflow().detail,
+        recent_events: [
+          {
+            ...buildWorkflow().detail.recent_events[0],
+            event_id: 'evt-workflow-recent',
+            actor_id: 'team-lead',
+            summary: 'Workflow recent event pivots keep the active correlation',
+            counterparty_agent_ids: ['app-engineering', 'growth-revenue', 'ghost-agent']
+          }
+        ]
+      }
+    };
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          onSelectAgent,
+          selectedCorrelationId: 'corr-app-secondary',
+          workflow
+        })}
+      />
+    );
+
+    const workflowSection = screen.getByRole('heading', { name: 'Workflow' }).closest('section');
+    expect(workflowSection).not.toBeNull();
+
+    const eventRecord = within(workflowSection!)
+      .getByText('Workflow recent event pivots keep the active correlation')
+      .closest('li');
+    expect(eventRecord).not.toBeNull();
+
+    const actorPivot = within(eventRecord!).getByRole('button', {
+      name: 'Select workflow recent event actor from event evt-workflow-recent team-lead'
+    });
+    const counterpartyPivot = within(eventRecord!).getByRole('button', {
+      name: 'Select workflow recent event counterparty from event evt-workflow-recent growth-revenue'
+    });
+    expect(actorPivot).toBeVisible();
+    expect(counterpartyPivot).toBeVisible();
+    expect(eventRecord).toHaveTextContent('Counterparties · app-engineering, growth-revenue, ghost-agent');
+    expect(
+      within(eventRecord!).queryByRole('button', {
+        name: 'Select workflow recent event counterparty from event evt-workflow-recent app-engineering'
+      })
+    ).not.toBeInTheDocument();
+    expect(
+      within(eventRecord!).queryByRole('button', {
+        name: 'Select workflow recent event counterparty from event evt-workflow-recent ghost-agent'
+      })
+    ).not.toBeInTheDocument();
+
+    await user.click(actorPivot);
+    await user.click(counterpartyPivot);
+
+    expect(onSelectAgent).toHaveBeenNthCalledWith(1, 'team-lead', 'corr-app-secondary');
+    expect(onSelectAgent).toHaveBeenNthCalledWith(2, 'growth-revenue', 'corr-app-secondary');
+  });
+
   it('renders read-only observability metadata for correlation and replay timeline events', () => {
     render(
       <DetailsPanel
@@ -4134,10 +4198,10 @@ describe('DetailsPanel workflow peer-watch alerts', () => {
     expect(artifactRecord).not.toBeNull();
     expect(eventRecord).toHaveTextContent('Counterparties · app-engineering, team-lead, ghost-agent');
     expect(
-      within(eventRecord!).queryByRole('button', {
-        name: 'Select correlation timeline counterparty agent team-lead'
+      within(eventRecord!).getByRole('button', {
+        name: 'Select workflow recent event counterparty from event evt-2 team-lead'
       })
-    ).not.toBeInTheDocument();
+    ).toBeVisible();
     expect(
       within(eventRecord!).getByRole('button', {
         name: 'Jump to shared memory artifact /evidence/workflow-event.md'

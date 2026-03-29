@@ -1252,6 +1252,65 @@ afterEach(() => {
     });
   });
 
+  it('opens a crew-overview active-queue correlation without selecting an agent', async () => {
+    const operationsWithSecondaryCorrelation = {
+      ...operationsFixture,
+      items: [
+        {
+          ...operationsFixture.items[0],
+          correlation_id: 'corr-app-secondary'
+        },
+        operationsFixture.items[1]
+      ]
+    };
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === operationsUrl) {
+          return jsonResponse(operationsWithSecondaryCorrelation);
+        }
+
+        return resolveTestFetchResponse(url);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    const queueSection = within(details).getByRole('heading', { name: 'Active Queue' }).closest('section');
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    expect(queueSection).not.toBeNull();
+    expect(correlationSection).not.toBeNull();
+
+    await user.click(
+      within(queueSection!).getByRole('button', {
+        name: 'Open active queue correlation corr-app-secondary'
+      })
+    );
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
+      expect(within(details).queryByRole('heading', { name: 'App Engineering Agent' })).not.toBeInTheDocument();
+      expect(within(details).queryByRole('button', { name: 'Clear' })).not.toBeInTheDocument();
+      expect(within(correlationSection!).getByText('corr-app-secondary')).toBeVisible();
+      expect(within(correlationSection!).queryByText('corr-app-review')).not.toBeInTheDocument();
+    });
+
+    await act(async () => {
+      expect(globalThis.fetch).toHaveBeenCalledWith(secondaryCorrelationUrl, expect.anything());
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        crewOverviewSelectedCorrelationMemoryArtifactsUrl,
+        expect.anything()
+      );
+      expect(globalThis.fetch).not.toHaveBeenCalledWith(workflowUrl, expect.anything());
+      expect(globalThis.fetch).not.toHaveBeenCalledWith(selectedOperationUrl, expect.anything());
+    });
+  });
+
   it('preserves the active crew-overview correlation when pivoting through shared-memory agents', async () => {
     const user = userEvent.setup();
     render(<App />);

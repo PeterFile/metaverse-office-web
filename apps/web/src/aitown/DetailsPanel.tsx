@@ -1572,7 +1572,7 @@ export function DetailsPanel({
             ) : null}
             {operationsError ? <li className="aitown-record">{operationsError}</li> : null}
             {(operations?.items ?? []).slice(0, 4).map((operation) => (
-              <li key={operation.agent_id} className={`aitown-record severity-${operation.effective_severity}`}>
+              <li key={operation.agent_id} className="aitown-queue-record">
                 <button
                   type="button"
                   className={`aitown-roster__button severity-${operation.effective_severity}`}
@@ -1582,6 +1582,16 @@ export function DetailsPanel({
                   <strong>{operation.display_name}</strong>
                   <span>{`${operation.current_state} · ${operation.current_blocker || operation.active_task}`}</span>
                 </button>
+                <span className="aitown-queue-record__meta">
+                  Correlation ·{' '}
+                  {renderCorrelationButton({
+                    correlationId: operation.correlation_id,
+                    label: operation.correlation_id ?? 'No correlation id',
+                    buttonLabel: 'Open active queue correlation',
+                    activeCorrelationId: selectedCorrelationId,
+                    onSelectCorrelation
+                  })}
+                </span>
               </li>
             ))}
             {operationsState === 'ready' && !operationsError && !operations?.items.length ? (

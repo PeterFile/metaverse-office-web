@@ -549,6 +549,100 @@ describe('DetailsPanel accountability signals', () => {
     expect(onSelectAgent).toHaveBeenCalledWith('app-engineering', 'corr-app-secondary');
   });
 
+  it('renders crew-overview active-queue correlation pivots only for rows with a correlation id', async () => {
+    const user = userEvent.setup();
+    const onSelectCorrelation = vi.fn();
+    const onSelectOperation = vi.fn();
+    const operations: OfficeOperations = {
+      generated_at: '2026-03-16T09:00:00.000Z',
+      summary: {
+        item_count: 2,
+        blocked_count: 1,
+        reboot_recommended_count: 1,
+        state_buckets: {
+          blocked: 1,
+          reviewing: 1
+        },
+        severity_buckets: {
+          normal: 1,
+          yellow: 0,
+          orange: 1,
+          red: 0
+        }
+      },
+      items: [
+        buildSelectedOperation(),
+        {
+          ...buildSelectedOperation(),
+          agent_id: 'team-lead',
+          display_name: 'Team Lead',
+          kind: 'lead',
+          current_state: 'reviewing',
+          active_task: 'Coordinate rollout',
+          current_blocker: '',
+          current_location: 'lead-desk',
+          reported_severity: 'normal',
+          effective_severity: 'normal',
+          derived_staleness: {
+            severity: 'normal',
+            stale_for_ms: 60000,
+            stale_for_minutes: 1,
+            last_meaningful_output_at: '2026-03-16T08:59:00.000Z'
+          },
+          reboot_recommended: false,
+          last_event_at: null,
+          last_heartbeat_at: null,
+          last_meaningful_output_at: null,
+          correlation_id: null,
+          latest_event: null
+        }
+      ]
+    };
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          onSelectCorrelation,
+          onSelectOperation,
+          operations,
+          selectedAgent: null,
+          selectedCorrelationId: null,
+          selectedOperation: null,
+          workflow: null
+        })}
+      />
+    );
+
+    const section = screen.getByRole('heading', { name: 'Active Queue' }).closest('section');
+    expect(section).not.toBeNull();
+
+    const appRecord = within(section!)
+      .getByRole('button', { name: 'Inspect App Engineering Agent from active queue' })
+      .closest('li');
+    const teamLeadRecord = within(section!)
+      .getByRole('button', { name: 'Inspect Team Lead from active queue' })
+      .closest('li');
+    expect(appRecord).not.toBeNull();
+    expect(teamLeadRecord).not.toBeNull();
+    expect(appRecord!).toHaveTextContent('Correlation · corr-app-review');
+    expect(teamLeadRecord!).toHaveTextContent('Correlation · No correlation id');
+
+    const activeQueueCorrelationButton = within(appRecord!).getByRole('button', {
+      name: 'Open active queue correlation corr-app-review'
+    });
+    expect(activeQueueCorrelationButton).toBeVisible();
+    expect(
+      within(teamLeadRecord!).queryByRole('button', {
+        name: /Open active queue correlation/
+      })
+    ).not.toBeInTheDocument();
+
+    await user.click(activeQueueCorrelationButton);
+
+    expect(onSelectCorrelation).toHaveBeenCalledWith('corr-app-review');
+    expect(onSelectOperation).not.toHaveBeenCalled();
+  });
+
   it('renders crew-overview incident feed actors as pivots and carries the clicked incident correlation', async () => {
     const user = userEvent.setup();
     const onSelectAgent = vi.fn();

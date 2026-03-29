@@ -405,6 +405,18 @@ button {
   font-size: 0.84rem;
 }
 
+.aitown-queue-record {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.aitown-queue-record__meta {
+  padding: 0 10px;
+  color: #d3c39c;
+  font-size: 0.84rem;
+}
+
 .aitown-roster {
   display: flex;
   flex-direction: column;

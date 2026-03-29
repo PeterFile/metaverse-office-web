@@ -12,6 +12,7 @@ const selectedAgentIncidentsUrl = '/agents/app-engineering/incidents?limit=10&wi
 const timelineUrl = '/timeline?limit=4&window=60m';
 const workflowUrl = '/agents/app-engineering/workflow?limit=10&window=60m';
 const teamLeadWorkflowUrl = '/agents/team-lead/workflow?limit=10&window=60m';
+const teamLeadIncidentsUrl = '/agents/team-lead/incidents?limit=10&window=60m';
 const growthRevenueWorkflowUrl = '/agents/growth-revenue/workflow?limit=10&window=60m';
 const correlationUrl = '/correlations/corr-app-review?limit=10&window=60m';
 const secondaryCorrelationUrl = '/correlations/corr-app-secondary?limit=10&window=60m';
@@ -1469,7 +1470,16 @@ afterEach(() => {
     expect(within(attentionSection!).getByText('Reboot recommendation · Recommended')).toBeVisible();
     expect(within(attentionSection!).getByText('Active task · Review launch copy')).toBeVisible();
     expect(within(attentionSection!).getByText('Reboot recommendation · No')).toBeVisible();
-    expect(within(topologySection!).getByText('Team Lead -> App Engineering Agent')).toBeVisible();
+    expect(
+      within(topologySection!).getByRole('button', {
+        name: 'Select watch topology source agent from lead edge team-lead app-engineering'
+      })
+    ).toBeVisible();
+    expect(
+      within(topologySection!).getByRole('button', {
+        name: 'Select watch topology target agent from lead edge team-lead app-engineering'
+      })
+    ).toBeVisible();
     expect(within(topologySection!).getByText('Mode · lead')).toBeVisible();
     expect(within(topologySection!).getByText('Risk · High risk · Orange')).toBeVisible();
     const overviewIncidentRecord = within(incidentSection!).getByText('Lead is still waiting on workflow evidence').closest('li');
@@ -1500,6 +1510,52 @@ afterEach(() => {
     expect(
       within(incidentSection!).getByRole('button', { name: /Open incident correlation corr-app-review/ })
     ).toBeVisible();
+  });
+
+  it('pivots from watch topology endpoints through the existing selected-agent path without widening requests', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    const topologySection = within(details).getByRole('heading', { name: 'Watch Topology' }).closest('section');
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    expect(topologySection).not.toBeNull();
+    expect(correlationSection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+      expect(
+        within(topologySection!).getByRole('button', {
+          name: 'Select watch topology source agent from lead edge team-lead app-engineering'
+        })
+      ).toBeVisible();
+    });
+
+    const fetchCallCountBeforePivot = vi.mocked(globalThis.fetch).mock.calls.length;
+
+    await user.click(
+      within(topologySection!).getByRole('button', {
+        name: 'Select watch topology source agent from lead edge team-lead app-engineering'
+      })
+    );
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'Team Lead' })).toBeVisible();
+      expect(within(details).queryByRole('heading', { name: 'Current Operation' })).not.toBeInTheDocument();
+      const nextCorrelationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+      expect(nextCorrelationSection).not.toBeNull();
+      expect(within(nextCorrelationSection!).getByText('corr-app-review')).toBeVisible();
+      expect(within(nextCorrelationSection!).getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
+    });
+
+    const newFetchUrlsAfterPivot = vi
+      .mocked(globalThis.fetch)
+      .mock.calls.slice(fetchCallCountBeforePivot)
+      .map(([input]) => (typeof input === 'string' ? input : input.toString()));
+
+    expect(newFetchUrlsAfterPivot).toContain(teamLeadWorkflowUrl);
+    expect(newFetchUrlsAfterPivot).toContain(teamLeadSelectedCorrelationMemoryArtifactsUrl);
+    expect(newFetchUrlsAfterPivot).not.toContain(teamLeadIncidentsUrl);
   });
 
   it('shows collector supervision summary and highest-signal observation items in crew overview', async () => {

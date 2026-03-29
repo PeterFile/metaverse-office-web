@@ -481,6 +481,74 @@ function buildProps(overrides: Partial<DetailsPanelProps> = {}): DetailsPanelPro
 }
 
 describe('DetailsPanel accountability signals', () => {
+  it('renders crew-overview watch topology endpoints as pivots only for navigable agents and preserves the active correlation', async () => {
+    const user = userEvent.setup();
+    const onSelectAgent = vi.fn();
+    const world: WorldState = {
+      ...buildWorld(),
+      watch_edges: [
+        {
+          from_agent_id: 'team-lead',
+          to_agent_id: 'app-engineering',
+          watch_mode: 'lead',
+          risk_level: 'yellow'
+        },
+        {
+          from_agent_id: 'ghost-agent',
+          to_agent_id: 'growth-revenue',
+          watch_mode: 'peer',
+          risk_level: 'red'
+        }
+      ]
+    };
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          onSelectAgent,
+          selectedAgent: null,
+          selectedCorrelationId: 'corr-app-secondary',
+          selectedOperation: null,
+          world
+        })}
+      />
+    );
+
+    const section = screen.getByRole('heading', { name: 'Watch Topology' }).closest('section');
+    expect(section).not.toBeNull();
+
+    const leadEdge = within(section!).getByText((_, element) => element?.tagName === 'STRONG' && element.textContent === 'Team Lead -> App Engineering Agent')
+      .closest('li');
+    expect(leadEdge).not.toBeNull();
+    expect(
+      within(leadEdge!).getByRole('button', {
+        name: 'Select watch topology source agent from lead edge team-lead app-engineering'
+      })
+    ).toBeVisible();
+    const leadTargetPivot = within(leadEdge!).getByRole('button', {
+      name: 'Select watch topology target agent from lead edge team-lead app-engineering'
+    });
+    expect(leadTargetPivot).toBeVisible();
+
+    const ghostEdge = within(section!).getByText((_, element) => element?.tagName === 'STRONG' && element.textContent === 'ghost-agent -> Growth Revenue Agent')
+      .closest('li');
+    expect(ghostEdge).not.toBeNull();
+    expect(
+      within(ghostEdge!).queryByRole('button', {
+        name: 'Select watch topology source agent from peer edge ghost-agent growth-revenue'
+      })
+    ).not.toBeInTheDocument();
+    expect(
+      within(ghostEdge!).getByRole('button', {
+        name: 'Select watch topology target agent from peer edge ghost-agent growth-revenue'
+      })
+    ).toBeVisible();
+
+    await user.click(leadTargetPivot);
+
+    expect(onSelectAgent).toHaveBeenCalledWith('app-engineering', 'corr-app-secondary');
+  });
+
   it('renders crew-overview incident feed actors as pivots and carries the clicked incident correlation', async () => {
     const user = userEvent.setup();
     const onSelectAgent = vi.fn();

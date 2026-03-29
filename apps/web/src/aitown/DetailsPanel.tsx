@@ -249,6 +249,40 @@ function renderResponsibilityAgent({
   });
 }
 
+function renderWatchTopologyAgent({
+  agentId,
+  label,
+  roleLabel,
+  watchMode,
+  fromAgentId,
+  toAgentId,
+  navigableAgentIds,
+  correlationId,
+  onSelectAgent
+}: {
+  agentId: string;
+  label: string;
+  roleLabel: 'source' | 'target';
+  watchMode: string;
+  fromAgentId: string;
+  toAgentId: string;
+  navigableAgentIds: Set<string>;
+  correlationId: string | null;
+  onSelectAgent: (agentId: string | null, correlationId?: string | null) => void;
+}) {
+  if (!navigableAgentIds.has(agentId)) {
+    return label;
+  }
+
+  return renderAgentPivotButton({
+    agentId,
+    label,
+    ariaLabel: `Select watch topology ${roleLabel} agent from ${watchMode} edge ${fromAgentId} ${toAgentId}`,
+    correlationId,
+    onSelectAgent
+  });
+}
+
 function renderResponsibilityChain({
   selectedAgentId,
   selectedAgentLabel,
@@ -1496,7 +1530,31 @@ export function DetailsPanel({
 
               return (
                 <li key={`${edge.from_agent_id}-${edge.to_agent_id}-${edge.watch_mode}`} className={`aitown-record severity-${risk.level}`}>
-                  <strong>{`${fromLabel} -> ${toLabel}`}</strong>
+                  <strong>
+                    {renderWatchTopologyAgent({
+                      agentId: edge.from_agent_id,
+                      label: fromLabel,
+                      roleLabel: 'source',
+                      watchMode: edge.watch_mode,
+                      fromAgentId: edge.from_agent_id,
+                      toAgentId: edge.to_agent_id,
+                      navigableAgentIds,
+                      correlationId: selectedCorrelationId,
+                      onSelectAgent
+                    })}
+                    {' -> '}
+                    {renderWatchTopologyAgent({
+                      agentId: edge.to_agent_id,
+                      label: toLabel,
+                      roleLabel: 'target',
+                      watchMode: edge.watch_mode,
+                      fromAgentId: edge.from_agent_id,
+                      toAgentId: edge.to_agent_id,
+                      navigableAgentIds,
+                      correlationId: selectedCorrelationId,
+                      onSelectAgent
+                    })}
+                  </strong>
                   <span>{`Mode · ${edge.watch_mode}`}</span>
                   <span>{`Risk · ${risk.label} · ${SEVERITY_LABELS[edge.risk_level]}`}</span>
                 </li>

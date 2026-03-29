@@ -322,12 +322,14 @@ function renderCollectorWatchTarget({
   watchTarget,
   currentAgentId,
   navigableAgentIds,
+  ariaLabelPrefix = 'Select collector observation watch target',
   correlationId,
   onSelectAgent
 }: {
   watchTarget: string | null;
   currentAgentId: string;
   navigableAgentIds: Set<string>;
+  ariaLabelPrefix?: string;
   correlationId: string | null;
   onSelectAgent: (agentId: string | null, correlationId?: string | null) => void;
 }) {
@@ -341,7 +343,7 @@ function renderCollectorWatchTarget({
 
   return renderAgentPivotButton({
     agentId: watchTarget,
-    ariaLabel: `Select collector observation watch target ${watchTarget}`,
+    ariaLabel: `${ariaLabelPrefix} ${watchTarget}`,
     correlationId,
     onSelectAgent
   });
@@ -1328,6 +1330,17 @@ export function DetailsPanel({
                   <span>{`Collector state · ${item.heartbeat.current_state}`}</span>
                   <span>{`Needs attention · ${item.supervision.needs_attention ? 'Yes' : 'No'}`}</span>
                   <span>{`Reboot flag · ${item.heartbeat.reboot_recommended ? 'Recommended' : 'No'}`}</span>
+                  <span>
+                    Watch target ·{' '}
+                    {renderCollectorWatchTarget({
+                      watchTarget: item.supervision.watch_target,
+                      currentAgentId: item.agent_id,
+                      navigableAgentIds,
+                      ariaLabelPrefix: `Select collector supervision watch target from collector ${item.agent_id}`,
+                      correlationId: selectedCorrelationId,
+                      onSelectAgent
+                    })}
+                  </span>
                   <span>
                     Watchers ·{' '}
                     {renderAgentPivotList({

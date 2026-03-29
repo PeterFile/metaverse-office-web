@@ -2104,6 +2104,63 @@ describe('DetailsPanel accountability signals', () => {
     expect(onSelectAgent).toHaveBeenLastCalledWith('team-lead', null);
   });
 
+  it('renders crew-overview collector supervision watch targets as pivots for navigable non-row agents and preserves the active correlation, otherwise keeps no-correlation behavior', async () => {
+    const user = userEvent.setup();
+    const onSelectAgent = vi.fn();
+
+    const { rerender } = render(
+      <DetailsPanel
+        {...buildProps({
+          onSelectAgent,
+          selectedAgent: null,
+          selectedCorrelationId: 'corr-app-secondary',
+          selectedOperation: null
+        })}
+      />
+    );
+
+    const collectorSupervisionSection = screen.getByRole('heading', { name: 'Collector Supervision' }).closest('section');
+    expect(collectorSupervisionSection).not.toBeNull();
+
+    const watchTargetLine = within(collectorSupervisionSection!).getByText(
+      (_content, element) =>
+        element?.tagName === 'SPAN' && element.textContent === 'Watch target · growth-revenue'
+    );
+
+    expect(
+      within(watchTargetLine).getByRole('button', {
+        name: 'Select collector supervision watch target from collector app-engineering growth-revenue'
+      })
+    ).toBeVisible();
+
+    await user.click(
+      within(watchTargetLine).getByRole('button', {
+        name: 'Select collector supervision watch target from collector app-engineering growth-revenue'
+      })
+    );
+
+    expect(onSelectAgent).toHaveBeenCalledWith('growth-revenue', 'corr-app-secondary');
+
+    rerender(
+      <DetailsPanel
+        {...buildProps({
+          onSelectAgent,
+          selectedAgent: null,
+          selectedCorrelationId: null,
+          selectedOperation: null
+        })}
+      />
+    );
+
+    await user.click(
+      within(screen.getByRole('heading', { name: 'Collector Supervision' }).closest('section')!).getByRole('button', {
+        name: 'Select collector supervision watch target from collector app-engineering growth-revenue'
+      })
+    );
+
+    expect(onSelectAgent).toHaveBeenLastCalledWith('growth-revenue', null);
+  });
+
   it('keeps unknown and empty crew-overview collector supervision watchers as plain text', () => {
     const baseCollectorSnapshot = buildCollectorSnapshot();
     const baseCollectorItem = baseCollectorSnapshot.items[0];
@@ -2167,6 +2224,106 @@ describe('DetailsPanel accountability signals', () => {
     expect(
       within(emptyWatcherLine).queryByRole('button', {
         name: /Select collector supervision watcher/
+      })
+    ).not.toBeInTheDocument();
+  });
+
+  it('keeps row-current, unknown, and empty crew-overview collector supervision watch targets as plain text', () => {
+    const baseCollectorSnapshot = buildCollectorSnapshot();
+    const baseCollectorItem = baseCollectorSnapshot.items[0];
+
+    const { rerender } = render(
+      <DetailsPanel
+        {...buildProps({
+          selectedAgent: null,
+          selectedOperation: null,
+          collectorSnapshot: {
+            ...baseCollectorSnapshot,
+            items: [
+              {
+                ...baseCollectorItem,
+                supervision: {
+                  ...baseCollectorItem.supervision,
+                  watch_target: 'app-engineering'
+                }
+              }
+            ]
+          }
+        })}
+      />
+    );
+
+    const rowCurrentWatchTargetLine = within(
+      screen.getByRole('heading', { name: 'Collector Supervision' }).closest('section')!
+    ).getByText((_content, element) => element?.tagName === 'SPAN' && element.textContent === 'Watch target · app-engineering');
+
+    expect(
+      within(rowCurrentWatchTargetLine).queryByRole('button', {
+        name: 'Select collector supervision watch target from collector app-engineering app-engineering'
+      })
+    ).not.toBeInTheDocument();
+
+    rerender(
+      <DetailsPanel
+        {...buildProps({
+          selectedAgent: null,
+          selectedOperation: null,
+          collectorSnapshot: {
+            ...baseCollectorSnapshot,
+            items: [
+              {
+                ...baseCollectorItem,
+                supervision: {
+                  ...baseCollectorItem.supervision,
+                  watch_target: 'ghost-agent'
+                }
+              }
+            ]
+          }
+        })}
+      />
+    );
+
+    const unknownWatchTargetLine = within(
+      screen.getByRole('heading', { name: 'Collector Supervision' }).closest('section')!
+    ).getByText((_content, element) => element?.tagName === 'SPAN' && element.textContent === 'Watch target · ghost-agent');
+
+    expect(
+      within(unknownWatchTargetLine).queryByRole('button', {
+        name: 'Select collector supervision watch target from collector app-engineering ghost-agent'
+      })
+    ).not.toBeInTheDocument();
+
+    rerender(
+      <DetailsPanel
+        {...buildProps({
+          selectedAgent: null,
+          selectedOperation: null,
+          collectorSnapshot: {
+            ...baseCollectorSnapshot,
+            items: [
+              {
+                ...baseCollectorItem,
+                supervision: {
+                  ...baseCollectorItem.supervision,
+                  watch_target: null
+                }
+              }
+            ]
+          }
+        })}
+      />
+    );
+
+    const missingWatchTargetLine = within(
+      screen.getByRole('heading', { name: 'Collector Supervision' }).closest('section')!
+    ).getByText(
+      (_content, element) => element?.tagName === 'SPAN' && element.textContent === 'Watch target · No watch target'
+    );
+
+    expect(
+      within(missingWatchTargetLine).queryByRole('button', {
+        name: /Select collector supervision watch target/
       })
     ).not.toBeInTheDocument();
   });

@@ -19,6 +19,7 @@ const memoryArtifactsUrl = '/memory/artifacts?limit=4&window=60m';
 const crewOverviewSelectedCorrelationMemoryArtifactsUrl =
   '/memory/artifacts?limit=4&window=60m&correlation_id=corr-app-secondary';
 const appEngineeringMemoryArtifactsUrl = '/memory/artifacts?limit=4&window=60m&agent_id=app-engineering';
+const growthRevenueMemoryArtifactsUrl = '/memory/artifacts?limit=4&window=60m&agent_id=growth-revenue';
 const teamLeadMemoryArtifactsUrl = '/memory/artifacts?limit=4&window=60m&agent_id=team-lead';
 const teamLeadSelectedCorrelationMemoryArtifactsUrl =
   '/memory/artifacts?limit=4&window=60m&agent_id=team-lead&correlation_id=corr-app-review';
@@ -754,6 +755,26 @@ const teamLeadMemoryArtifactsFixture = {
   ]
 };
 
+const growthRevenueMemoryArtifactsFixture = {
+  generated_at: '2026-03-16T09:00:00.000Z',
+  items: [
+    {
+      artifact_ref: '/tmp/growth-revenue-plan.md',
+      artifact_kind: 'workspace_file',
+      file_name: 'growth-revenue-plan.md',
+      first_seen_at: '2026-03-16T08:54:00.000Z',
+      last_seen_at: '2026-03-16T08:58:30.000Z',
+      mention_count: 1,
+      agent_ids: ['growth-revenue'],
+      correlation_ids: [],
+      source_kinds: ['workspace_snapshot'],
+      latest_summary: 'Growth revenue draft remained on the agent-only path',
+      latest_event_type: 'agent_noted',
+      collector_last_modified_at: '2026-03-16T08:58:30.000Z'
+    }
+  ]
+};
+
 const teamLeadSelectedCorrelationMemoryArtifactsFixture = {
   generated_at: '2026-03-16T09:00:00.000Z',
   items: [
@@ -927,6 +948,10 @@ function resolveDefaultFetchResponse(url: string) {
 
   if (url === appEngineeringMemoryArtifactsUrl) {
     return jsonResponse(memoryArtifactsFixture);
+  }
+
+  if (url === growthRevenueMemoryArtifactsUrl) {
+    return jsonResponse(growthRevenueMemoryArtifactsFixture);
   }
 
   if (url === teamLeadMemoryArtifactsUrl) {
@@ -1496,7 +1521,13 @@ afterEach(() => {
     const growthRevenueCollectorRecord = within(collectorSection!).getByText('Growth Revenue Agent').closest('li');
     expect(appEngineeringCollectorRecord).not.toBeNull();
     expect(growthRevenueCollectorRecord).not.toBeNull();
+    expect(appEngineeringCollectorRecord!).toHaveTextContent('Watch target · growth-revenue');
     expect(appEngineeringCollectorRecord!).toHaveTextContent('Watchers · team-lead, growth-revenue');
+    expect(
+      within(appEngineeringCollectorRecord!).getByRole('button', {
+        name: 'Select collector supervision watch target from collector app-engineering growth-revenue'
+      })
+    ).toBeVisible();
     expect(
       within(appEngineeringCollectorRecord!).getByRole('button', {
         name: 'Select collector supervision watcher from collector app-engineering team-lead'
@@ -1512,6 +1543,7 @@ afterEach(() => {
         name: 'Select collector supervision watcher from collector growth-revenue team-lead'
       })
     ).toBeVisible();
+    expect(growthRevenueCollectorRecord!).toHaveTextContent('Watch target · No watch target');
     expect(collectorSection!).toHaveTextContent('Evidence · /tmp/controller-log.md, /tmp/evidence.md');
     expect(
       within(collectorSection!).getByRole('button', {
@@ -1523,6 +1555,50 @@ afterEach(() => {
         name: 'Jump to collector evidence ref /tmp/controller-log.md'
       })
     ).not.toBeInTheDocument();
+  });
+
+  it('preserves the active crew-overview correlation when pivoting through a collector supervision watch target', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    const collectorSection = within(details).getByRole('heading', { name: 'Collector Supervision' }).closest('section');
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    expect(collectorSection).not.toBeNull();
+    expect(correlationSection).not.toBeNull();
+
+    const appEngineeringCollectorRecord = within(collectorSection!).getByText('App Engineering Agent').closest('li');
+    expect(appEngineeringCollectorRecord).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+      expect(
+        within(appEngineeringCollectorRecord!).getByRole('button', {
+          name: 'Select collector supervision watch target from collector app-engineering growth-revenue'
+        })
+      ).toBeVisible();
+    });
+
+    await user.click(
+      within(appEngineeringCollectorRecord!).getByRole('button', {
+        name: 'Select collector supervision watch target from collector app-engineering growth-revenue'
+      })
+    );
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+      expect(within(details).queryByRole('heading', { name: 'Current Operation' })).not.toBeInTheDocument();
+      const nextCorrelationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+      expect(nextCorrelationSection).not.toBeNull();
+      expect(within(nextCorrelationSection!).getByText('corr-app-review')).toBeVisible();
+      expect(within(nextCorrelationSection!).getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
+    });
+
+    await act(async () => {
+      expect(globalThis.fetch).toHaveBeenCalledWith(growthRevenueWorkflowUrl, expect.anything());
+      expect(globalThis.fetch).toHaveBeenCalledWith(correlationUrl, expect.anything());
+      expect(globalThis.fetch).toHaveBeenCalledWith(growthRevenueSelectedReviewCorrelationMemoryArtifactsUrl, expect.anything());
+    });
   });
 
   it('preserves the active crew-overview correlation when pivoting through collector supervision watchers', async () => {
@@ -1567,6 +1643,71 @@ afterEach(() => {
       expect(globalThis.fetch).toHaveBeenCalledWith(correlationUrl, expect.anything());
       expect(globalThis.fetch).toHaveBeenCalledWith(teamLeadSelectedCorrelationMemoryArtifactsUrl, expect.anything());
     });
+  });
+
+  it('keeps crew-overview collector supervision watch-target pivots on the existing no-correlation path when no active correlation is selected', async () => {
+    const crewOverviewWithoutCorrelationIncidentFeedFixture = {
+      items: incidentFeedFixture.items.map((incident) => ({
+        ...incident,
+        correlation_id: null
+      }))
+    };
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === incidentsUrl) {
+          return jsonResponse(crewOverviewWithoutCorrelationIncidentFeedFixture);
+        }
+
+        return resolveTestFetchResponse(url);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    const collectorSection = within(details).getByRole('heading', { name: 'Collector Supervision' }).closest('section');
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    expect(collectorSection).not.toBeNull();
+    expect(correlationSection).not.toBeNull();
+
+    const appEngineeringCollectorRecord = within(collectorSection!).getByText('App Engineering Agent').closest('li');
+    expect(appEngineeringCollectorRecord).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(correlationSection!).getByText('No correlation selected.')).toBeVisible();
+      expect(
+        within(appEngineeringCollectorRecord!).getByRole('button', {
+          name: 'Select collector supervision watch target from collector app-engineering growth-revenue'
+        })
+      ).toBeVisible();
+    });
+
+    await user.click(
+      within(appEngineeringCollectorRecord!).getByRole('button', {
+        name: 'Select collector supervision watch target from collector app-engineering growth-revenue'
+      })
+    );
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+      expect(within(details).queryByRole('heading', { name: 'Current Operation' })).not.toBeInTheDocument();
+      const nextCorrelationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+      expect(nextCorrelationSection).not.toBeNull();
+      expect(within(nextCorrelationSection!).getByText('No correlation selected.')).toBeVisible();
+    });
+
+    await act(async () => {
+      expect(globalThis.fetch).toHaveBeenCalledWith(growthRevenueWorkflowUrl, expect.anything());
+    });
+
+    expect(globalThis.fetch).not.toHaveBeenCalledWith(correlationUrl, expect.anything());
+    expect(globalThis.fetch).not.toHaveBeenCalledWith(growthRevenueSelectedReviewCorrelationMemoryArtifactsUrl, expect.anything());
+    expect(globalThis.fetch).toHaveBeenCalledWith(growthRevenueMemoryArtifactsUrl, expect.anything());
   });
 
   it('keeps crew-overview collector supervision watcher pivots on the existing no-correlation path when no active correlation is selected', async () => {

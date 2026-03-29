@@ -3705,6 +3705,71 @@ afterEach(() => {
     });
   });
 
+  it('preserves the active selected-agent workflow correlation when pivoting through workflow interaction participants', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
+
+    const workflowSection = within(details).getByRole('heading', { name: 'Workflow' }).closest('section');
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    expect(workflowSection).not.toBeNull();
+    expect(correlationSection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+      expect(
+        within(workflowSection!).getByRole('button', { name: /Open workflow correlation corr-app-secondary/ })
+      ).toBeVisible();
+      expect(
+        within(workflowSection!).getByRole('button', {
+          name: 'Select workflow interaction participant from interaction interaction-workflow-1 team-lead'
+        })
+      ).toBeVisible();
+    });
+
+    expect(
+      within(workflowSection!).queryByRole('button', {
+        name: 'Select correlation interaction participant agent team-lead'
+      })
+    ).not.toBeInTheDocument();
+
+    await user.click(
+      within(workflowSection!).getByRole('button', { name: /Open workflow correlation corr-app-secondary/ })
+    );
+
+    await waitFor(() => {
+      expect(within(correlationSection!).getByText('corr-app-secondary')).toBeVisible();
+      expect(within(correlationSection!).queryByText('corr-app-review')).not.toBeInTheDocument();
+    });
+
+    await user.click(
+      within(workflowSection!).getByRole('button', {
+        name: 'Select workflow interaction participant from interaction interaction-workflow-1 team-lead'
+      })
+    );
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'Team Lead' })).toBeVisible();
+      expect(within(correlationSection!).getByText('corr-app-secondary')).toBeVisible();
+      expect(within(correlationSection!).queryByText('corr-app-review')).not.toBeInTheDocument();
+    });
+
+    await act(async () => {
+      expect(globalThis.fetch).toHaveBeenCalledWith(teamLeadWorkflowUrl, expect.anything());
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        teamLeadSelectedSecondaryCorrelationMemoryArtifactsUrl,
+        expect.anything()
+      );
+      expect(globalThis.fetch).not.toHaveBeenCalledWith(
+        teamLeadSelectedCorrelationMemoryArtifactsUrl,
+        expect.anything()
+      );
+    });
+  });
+
   it('preserves the clicked selected-agent workflow correlation when opening a workflow recent-event actor pivot', async () => {
     vi.stubGlobal(
       'fetch',
@@ -4241,13 +4306,18 @@ afterEach(() => {
     const artifactRecord = within(memorySection!).getByText('Ref · /tmp/evidence.md').closest('li');
     expect(interactionRecord).not.toBeNull();
     expect(artifactRecord).not.toBeNull();
-    expect(interactionRecord).toHaveTextContent('Participants · app-engineering, team-lead');
+    expect(interactionRecord).toHaveTextContent(/Participants · app-engineering\s*,\s*team-lead/);
     expect(interactionRecord).toHaveTextContent('Evidence · /tmp/evidence.md, /tmp/missing.md');
     expect(
       within(interactionRecord!).queryByRole('button', {
         name: 'Select correlation interaction participant agent team-lead'
       })
     ).not.toBeInTheDocument();
+    expect(
+      within(interactionRecord!).getByRole('button', {
+        name: 'Select workflow interaction participant from interaction interaction-workflow-1 team-lead'
+      })
+    ).toBeVisible();
     expect(
       within(interactionRecord!).getByRole('button', {
         name: 'Jump to shared memory artifact /tmp/evidence.md'
@@ -6755,7 +6825,12 @@ afterEach(() => {
     expect(workflowInteractionRecord).not.toBeNull();
     expect(workflowTimelineRecord).not.toBeNull();
     expect(within(workflowInteractionRecord!).getByText('Interaction · peer_watch')).toBeVisible();
-    expect(within(workflowInteractionRecord!).getByText('Participants · app-engineering, team-lead')).toBeVisible();
+    expect(workflowInteractionRecord!).toHaveTextContent(/Participants · app-engineering\s*,\s*team-lead/);
+    expect(
+      within(workflowInteractionRecord!).getByRole('button', {
+        name: 'Select workflow interaction participant from interaction interaction-workflow-1 team-lead'
+      })
+    ).toBeVisible();
     expect(workflowInteractionRecord!).toHaveTextContent('Correlation · corr-app-review');
     expect(
       within(workflowInteractionRecord!).getByRole('button', {

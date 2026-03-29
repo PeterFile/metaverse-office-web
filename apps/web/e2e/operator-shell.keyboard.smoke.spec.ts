@@ -1746,6 +1746,89 @@ test.describe('operator shell smoke', () => {
     await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toHaveCount(0);
   });
 
+  test('keeps the active workflow correlation when opening a workflow interaction participant pivot via keyboard traversal', async ({
+    page
+  }) => {
+    await page.route('**/agents/growth-revenue/workflow?limit=10&window=60m', async (route) => {
+      const response = await route.fetch();
+      const workflow = (await response.json()) as {
+        detail: {
+          recent_interactions?: unknown[];
+        };
+      };
+
+      await route.fulfill({
+        response,
+        json: {
+          ...workflow,
+          detail: {
+            ...workflow.detail,
+            recent_interactions: [
+              {
+                interaction_id: 'interaction-browser-workflow-participant',
+                interaction_type: 'handoff',
+                correlation_id: 'corr-revenue-handoff',
+                started_at: '2026-03-10T23:35:00.000Z',
+                ended_at: '2026-03-10T23:40:00.000Z',
+                participant_agent_ids: ['growth-revenue', 'app-engineering', 'ghost-agent'],
+                trigger_event_id: 'evt_revenue_handoff_completed',
+                before_state: 'reviewing',
+                after_state: 'planning',
+                severity: 'yellow',
+                evidence_refs: ['/tmp/revenue-handoff.md'],
+                summary: 'Workflow interaction participant pivot keeps the active growth correlation',
+                related_event_ids: ['evt_revenue_handoff_completed']
+              },
+              ...(workflow.detail.recent_interactions ?? [])
+            ]
+          }
+        }
+      });
+    });
+
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Hub' }).click();
+
+    const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
+    const clearButton = detailsPanel.getByRole('button', { name: 'Clear' });
+    const inspectButton = detailsPanel.getByRole('button', {
+      name: 'Inspect Growth Revenue Agent',
+      exact: true
+    });
+    const workflowSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Workflow' })
+    });
+    const correlationSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Correlation Drilldown' })
+    });
+
+    await focusHubControlWithTab(page, inspectButton, 'Inspect Growth Revenue Agent');
+    await expect(inspectButton).toBeFocused();
+    await page.keyboard.press('Enter');
+
+    const workflowInteractionParticipantButton = workflowSection.getByRole('button', {
+      name: 'Select workflow interaction participant from interaction interaction-browser-workflow-participant app-engineering'
+    });
+
+    await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+    await expect(clearButton).toBeFocused();
+    await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toBeVisible();
+    await focusHubControlWithTab(
+      page,
+      workflowInteractionParticipantButton,
+      'Select workflow interaction participant from interaction interaction-browser-workflow-participant app-engineering'
+    );
+    await expect(workflowInteractionParticipantButton).toBeFocused();
+    await page.keyboard.press('Enter');
+
+    await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+    await expect(clearButton).toBeFocused();
+    await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
+    await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toBeVisible();
+    await expect(correlationSection.getByText('Counts · 0 incidents · 1 interactions · 2 events')).toBeVisible();
+    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toHaveCount(0);
+  });
+
   test('keeps the active workflow correlation when opening a workflow counterparty pivot via keyboard traversal', async ({ page }) => {
     await page.goto('/');
     await page.getByRole('button', { name: 'Open Hub' }).click();

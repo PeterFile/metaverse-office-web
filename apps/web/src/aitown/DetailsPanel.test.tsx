@@ -1204,6 +1204,79 @@ describe('DetailsPanel accountability signals', () => {
     expect(onSelectCorrelation).toHaveBeenCalledWith('corr-app-secondary');
   });
 
+  it('renders selected-agent workflow interaction participant pivots with workflow-local accessible names and preserves the active selected correlation', async () => {
+    const user = userEvent.setup();
+    const onSelectAgent = vi.fn();
+    const workflow: AgentWorkflow = {
+      ...buildWorkflow(),
+      detail: {
+        ...buildWorkflow().detail,
+        recent_interactions: [
+          {
+            interaction_id: 'interaction-workflow-participants',
+            interaction_type: 'peer_watch',
+            correlation_id: 'corr-app-review',
+            started_at: '2026-03-16T08:49:00.000Z',
+            ended_at: '2026-03-16T08:58:00.000Z',
+            participant_agent_ids: ['app-engineering', 'team-lead', 'ghost-agent'],
+            trigger_event_id: 'evt-workflow-participants',
+            before_state: 'coding',
+            after_state: 'blocked',
+            severity: 'orange',
+            evidence_refs: [],
+            summary: 'Workflow interaction participant pivot preserves the selected correlation',
+            related_event_ids: ['evt-workflow-participants']
+          }
+        ]
+      }
+    };
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          onSelectAgent,
+          selectedCorrelationId: 'corr-app-secondary',
+          workflow
+        })}
+      />
+    );
+
+    const workflowSection = screen.getByRole('heading', { name: 'Workflow' }).closest('section');
+    expect(workflowSection).not.toBeNull();
+
+    const interactionRecord = within(workflowSection!)
+      .getByText('Workflow interaction participant pivot preserves the selected correlation')
+      .closest('li');
+    expect(interactionRecord).not.toBeNull();
+    expect(interactionRecord).toHaveTextContent(
+      /Participants · app-engineering\s*,\s*team-lead\s*,\s*ghost-agent/
+    );
+    expect(
+      within(interactionRecord!).queryByRole('button', {
+        name: 'Select workflow interaction participant from interaction interaction-workflow-participants app-engineering'
+      })
+    ).not.toBeInTheDocument();
+    expect(
+      within(interactionRecord!).queryByRole('button', {
+        name: 'Select workflow interaction participant from interaction interaction-workflow-participants ghost-agent'
+      })
+    ).not.toBeInTheDocument();
+    expect(
+      within(interactionRecord!).queryByRole('button', {
+        name: 'Select correlation interaction participant agent team-lead'
+      })
+    ).not.toBeInTheDocument();
+
+    const participantPivot = within(interactionRecord!).getByRole('button', {
+      name: 'Select workflow interaction participant from interaction interaction-workflow-participants team-lead'
+    });
+    expect(participantPivot).toBeVisible();
+
+    await user.click(participantPivot);
+
+    expect(onSelectAgent).toHaveBeenCalledWith('team-lead', 'corr-app-secondary');
+  });
+
   it('renders selected-agent workflow recent-event actor and counterparty pivots with workflow-local accessible names and preserves the active correlation', async () => {
     const user = userEvent.setup();
     const onSelectAgent = vi.fn();
@@ -4119,6 +4192,11 @@ describe('DetailsPanel workflow peer-watch alerts', () => {
         name: 'Select correlation interaction participant agent team-lead'
       })
     ).not.toBeInTheDocument();
+    expect(
+      within(interactionRecord!).getByRole('button', {
+        name: 'Select workflow interaction participant from interaction interaction-workflow-1 team-lead'
+      })
+    ).toBeVisible();
     expect(
       within(interactionRecord!).getByRole('button', {
         name: 'Jump to shared memory artifact /evidence/workflow-interaction.md'

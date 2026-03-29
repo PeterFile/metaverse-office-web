@@ -2161,6 +2161,54 @@ describe('DetailsPanel accountability signals', () => {
     expect(onSelectAgent).toHaveBeenLastCalledWith('growth-revenue', null);
   });
 
+  it('renders crew-overview collector supervision row agents as pivots, carries the active correlation when present, and otherwise keeps no-correlation behavior', async () => {
+    const user = userEvent.setup();
+    const onSelectAgent = vi.fn();
+
+    const { rerender } = render(
+      <DetailsPanel
+        {...buildProps({
+          onSelectAgent,
+          selectedAgent: null,
+          selectedCorrelationId: 'corr-app-secondary',
+          selectedOperation: null
+        })}
+      />
+    );
+
+    const collectorSupervisionSection = screen.getByRole('heading', { name: 'Collector Supervision' }).closest('section');
+    expect(collectorSupervisionSection).not.toBeNull();
+
+    const agentButton = within(collectorSupervisionSection!).getByRole('button', {
+      name: 'Select collector supervision agent app-engineering'
+    });
+    expect(agentButton).toBeVisible();
+    expect(agentButton).toHaveTextContent('App Engineering Agent');
+
+    await user.click(agentButton);
+
+    expect(onSelectAgent).toHaveBeenCalledWith('app-engineering', 'corr-app-secondary');
+
+    rerender(
+      <DetailsPanel
+        {...buildProps({
+          onSelectAgent,
+          selectedAgent: null,
+          selectedCorrelationId: null,
+          selectedOperation: null
+        })}
+      />
+    );
+
+    await user.click(
+      within(screen.getByRole('heading', { name: 'Collector Supervision' }).closest('section')!).getByRole('button', {
+        name: 'Select collector supervision agent app-engineering'
+      })
+    );
+
+    expect(onSelectAgent).toHaveBeenLastCalledWith('app-engineering', null);
+  });
+
   it('keeps unknown and empty crew-overview collector supervision watchers as plain text', () => {
     const baseCollectorSnapshot = buildCollectorSnapshot();
     const baseCollectorItem = baseCollectorSnapshot.items[0];
@@ -2224,6 +2272,44 @@ describe('DetailsPanel accountability signals', () => {
     expect(
       within(emptyWatcherLine).queryByRole('button', {
         name: /Select collector supervision watcher/
+      })
+    ).not.toBeInTheDocument();
+  });
+
+  it('keeps unknown crew-overview collector supervision row agents as plain text', () => {
+    const baseCollectorSnapshot = buildCollectorSnapshot();
+    const baseCollectorItem = baseCollectorSnapshot.items[0];
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          selectedAgent: null,
+          selectedOperation: null,
+          collectorSnapshot: {
+            ...baseCollectorSnapshot,
+            items: [
+              {
+                ...baseCollectorItem,
+                agent_id: 'ghost-agent',
+                heartbeat: {
+                  ...baseCollectorItem.heartbeat,
+                  agent_id: 'ghost-agent'
+                }
+              }
+            ]
+          }
+        })}
+      />
+    );
+
+    const collectorRecord = within(screen.getByRole('heading', { name: 'Collector Supervision' }).closest('section')!).getByText(
+      'ghost-agent'
+    ).closest('li');
+    expect(collectorRecord).not.toBeNull();
+
+    expect(
+      within(collectorRecord!).queryByRole('button', {
+        name: 'Select collector supervision agent ghost-agent'
       })
     ).not.toBeInTheDocument();
   });

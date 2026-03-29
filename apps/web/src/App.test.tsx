@@ -2316,8 +2316,16 @@ afterEach(() => {
 
     expect(within(officeGridSection!).getAllByText('Kind · desk')).toHaveLength(2);
     expect(within(officeGridSection!).getByText('Kind · shared')).toBeVisible();
-    expect(within(officeGridSection!).getByText('Home · Team Lead')).toBeVisible();
-    expect(within(officeGridSection!).getByText('Home · Growth Revenue Agent')).toBeVisible();
+    expect(
+      within(officeGridSection!).getByRole('button', {
+        name: 'Select home agent Team Lead in Team Lead Desk'
+      })
+    ).toBeVisible();
+    expect(
+      within(officeGridSection!).getByRole('button', {
+        name: 'Select home agent Growth Revenue Agent in QA Desk'
+      })
+    ).toBeVisible();
     expect(
       within(officeGridSection!).getByRole('button', { name: 'Select zone occupant Team Lead in Team Lead Desk' })
     ).toBeVisible();
@@ -2332,6 +2340,135 @@ afterEach(() => {
 
     await user.click(occupantButton);
     expect(await within(details).findByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+  });
+
+  it('preserves a manually selected crew-overview correlation when pivoting through an office-grid zone occupant', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    const incidentSection = within(details).getByRole('heading', { name: 'Incident Feed' }).closest('section');
+    const officeGridSection = within(details).getByRole('heading', { name: 'Office Grid' }).closest('section');
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    expect(incidentSection).not.toBeNull();
+    expect(officeGridSection).not.toBeNull();
+    expect(correlationSection).not.toBeNull();
+
+    await user.click(within(incidentSection!).getByRole('button', { name: 'Open incident correlation corr-app-secondary' }));
+
+    await waitFor(() => {
+      expect(within(correlationSection!).getByText('corr-app-secondary')).toBeVisible();
+      expect(within(correlationSection!).getByText('Counts · 1 incidents · 0 interactions · 1 events')).toBeVisible();
+    });
+
+    await user.click(
+      within(officeGridSection!).getByRole('button', {
+        name: 'Select zone occupant App Engineering Agent in Meeting Zone'
+      })
+    );
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+      const nextCorrelationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+      expect(nextCorrelationSection).not.toBeNull();
+      expect(within(nextCorrelationSection!).getByText('corr-app-secondary')).toBeVisible();
+      expect(within(nextCorrelationSection!).queryByText('corr-app-review')).not.toBeInTheDocument();
+    });
+  });
+
+  it('preserves the active crew-overview correlation when pivoting through office-grid home agents', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    const officeGridSection = within(details).getByRole('heading', { name: 'Office Grid' }).closest('section');
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    expect(officeGridSection).not.toBeNull();
+    expect(correlationSection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+      expect(
+        within(officeGridSection!).getByRole('button', {
+          name: 'Select home agent Team Lead in Team Lead Desk'
+        })
+      ).toBeVisible();
+    });
+
+    await user.click(
+      within(officeGridSection!).getByRole('button', {
+        name: 'Select home agent Team Lead in Team Lead Desk'
+      })
+    );
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'Team Lead' })).toBeVisible();
+      const nextCorrelationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+      expect(nextCorrelationSection).not.toBeNull();
+      expect(within(nextCorrelationSection!).getByText('corr-app-review')).toBeVisible();
+      expect(within(nextCorrelationSection!).getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
+    });
+
+    await act(async () => {
+      expect(globalThis.fetch).toHaveBeenCalledWith(teamLeadWorkflowUrl, expect.anything());
+      expect(globalThis.fetch).toHaveBeenCalledWith(correlationUrl, expect.anything());
+      expect(globalThis.fetch).toHaveBeenCalledWith(teamLeadSelectedCorrelationMemoryArtifactsUrl, expect.anything());
+    });
+  });
+
+  it('keeps the office-grid home-agent no-correlation path agent-only', async () => {
+    const crewOverviewWithoutCorrelationIncidentFeedFixture = {
+      items: incidentFeedFixture.items.map((incident) => ({
+        ...incident,
+        correlation_id: null
+      }))
+    };
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === incidentsUrl) {
+          return jsonResponse(crewOverviewWithoutCorrelationIncidentFeedFixture);
+        }
+
+        return resolveTestFetchResponse(url);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    const officeGridSection = within(details).getByRole('heading', { name: 'Office Grid' }).closest('section');
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    expect(officeGridSection).not.toBeNull();
+    expect(correlationSection).not.toBeNull();
+    expect(within(correlationSection!).getByText('No correlation selected.')).toBeVisible();
+
+    await user.click(
+      within(officeGridSection!).getByRole('button', {
+        name: 'Select home agent Team Lead in Team Lead Desk'
+      })
+    );
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'Team Lead' })).toBeVisible();
+      const nextCorrelationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+      expect(nextCorrelationSection).not.toBeNull();
+      expect(within(nextCorrelationSection!).getByText('No correlation selected.')).toBeVisible();
+    });
+
+    const requestedUrls = vi
+      .mocked(globalThis.fetch)
+      .mock
+      .calls.map(([input]) => (typeof input === 'string' ? input : input.toString()));
+
+    expect(requestedUrls).toContain(teamLeadWorkflowUrl);
+    expect(requestedUrls).toContain(teamLeadMemoryArtifactsUrl);
+    expect(requestedUrls).not.toContain(correlationUrl);
+    expect(requestedUrls).not.toContain(teamLeadSelectedCorrelationMemoryArtifactsUrl);
   });
 
   it('opens agent detail and correlation drilldown directly from the active queue', async () => {

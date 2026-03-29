@@ -925,6 +925,63 @@ test.describe('operator shell smoke', () => {
     await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
   });
 
+  test('opens a crew-overview active-queue correlation drilldown via keyboard traversal without selecting an agent', async ({
+    page
+  }) => {
+    await page.route('**/office/operations?limit=4', async (route) => {
+      const response = await route.fetch();
+      const operations = (await response.json()) as {
+        items: Array<{
+          agent_id: string;
+          correlation_id: string | null;
+        }>;
+      };
+
+      await route.fulfill({
+        response,
+        json: {
+          ...operations,
+          items: operations.items.map((item) =>
+            item.agent_id === 'team-lead'
+              ? {
+                  ...item,
+                  correlation_id: 'corr-growth-lead-review'
+                }
+              : item
+          )
+        }
+      });
+    });
+
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Hub' }).click();
+
+    const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
+    const correlationSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Correlation Drilldown' })
+    });
+    const activeQueueCorrelationButton = detailsPanel.getByRole('button', {
+      name: 'Open active queue correlation corr-growth-lead-review'
+    });
+
+    await expect(detailsPanel.getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
+    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
+    await focusHubControlWithTab(
+      page,
+      activeQueueCorrelationButton,
+      'Open active queue correlation corr-growth-lead-review'
+    );
+    await expect(activeQueueCorrelationButton).toBeFocused();
+    await page.keyboard.press('Enter');
+
+    await expect(detailsPanel.getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
+    await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
+    await expect(detailsPanel.getByRole('button', { name: 'Clear' })).toHaveCount(0);
+    await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toBeVisible();
+    await expect(correlationSection.getByText('Counts · 0 incidents · 1 interactions · 2 events')).toBeVisible();
+    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toHaveCount(0);
+  });
+
   test('opens a current-operation counterparty pivot from the selected-agent Hub via keyboard traversal', async ({ page }) => {
     await page.goto('/');
     await page.getByRole('button', { name: 'Open Hub' }).click();

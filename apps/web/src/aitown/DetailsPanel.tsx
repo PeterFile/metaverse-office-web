@@ -513,7 +513,8 @@ function renderCorrelationInteraction({
   onSelectAgent,
   onSelectCorrelation,
   sharedMemoryArtifactRefs,
-  enableSharedMemoryEvidenceJump = false
+  enableSharedMemoryEvidenceJump = false,
+  participantAriaLabelPrefix = 'Select correlation interaction participant agent'
 }: {
   interaction: WorkflowInteraction;
   activeCorrelationId?: string | null;
@@ -523,6 +524,7 @@ function renderCorrelationInteraction({
   onSelectCorrelation?: (correlationId: string | null) => void;
   sharedMemoryArtifactRefs?: ReadonlySet<string>;
   enableSharedMemoryEvidenceJump?: boolean;
+  participantAriaLabelPrefix?: string;
 }) {
   const canRenderParticipantPivots = Boolean(navigableAgentIds && onSelectAgent);
   const interactionCorrelationId = findFirstNonEmptyString([interaction.correlation_id]);
@@ -547,7 +549,7 @@ function renderCorrelationInteraction({
               currentAgentId: currentAgentId ?? null,
               navigableAgentIds,
               emptyLabel: 'No participants',
-              ariaLabelPrefix: 'Select correlation interaction participant agent',
+              ariaLabelPrefix: participantAriaLabelPrefix,
               correlationId: activeCorrelationId ?? interaction.correlation_id,
               onSelectAgent
             })
@@ -2190,7 +2192,11 @@ export function DetailsPanel({
             renderCorrelationInteraction({
               interaction,
               activeCorrelationId: selectedCorrelationId,
+              currentAgentId: selectedAgent.agent_id,
+              navigableAgentIds,
+              onSelectAgent,
               onSelectCorrelation,
+              participantAriaLabelPrefix: `Select workflow interaction participant from interaction ${interaction.interaction_id}`,
               sharedMemoryArtifactRefs,
               enableSharedMemoryEvidenceJump: true
             })

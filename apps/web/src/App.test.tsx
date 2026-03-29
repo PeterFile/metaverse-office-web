@@ -3643,6 +3643,68 @@ afterEach(() => {
     });
   });
 
+  it('opens a selected-agent workflow interaction correlation pivot without clearing the selected agent', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === workflowUrl) {
+          return jsonResponse({
+            ...workflowFixture,
+            detail: {
+              ...workflowFixture.detail,
+              recent_interactions: [
+                {
+                  ...workflowFixture.detail.recent_interactions[0],
+                  interaction_id: 'interaction-app-secondary',
+                  correlation_id: 'corr-app-secondary',
+                  summary: 'Workflow interaction pivot opens the secondary correlation'
+                }
+              ]
+            }
+          } satisfies AgentWorkflow);
+        }
+
+        return resolveTestFetchResponse(url);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
+
+    const workflowSection = within(details).getByRole('heading', { name: 'Workflow' }).closest('section');
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    expect(workflowSection).not.toBeNull();
+    expect(correlationSection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+    });
+
+    await user.click(
+      within(workflowSection!).getByRole('button', {
+        name: 'Open workflow interaction correlation from interaction interaction-app-secondary corr-app-secondary'
+      })
+    );
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+      expect(within(details).queryByRole('heading', { name: 'Current Operation' })).not.toBeInTheDocument();
+      expect(within(correlationSection!).getByText('corr-app-secondary')).toBeVisible();
+      expect(within(correlationSection!).getByText('Counts · 1 incidents · 0 interactions · 1 events')).toBeVisible();
+      expect(within(correlationSection!).queryByText('corr-app-review')).not.toBeInTheDocument();
+    });
+
+    await act(async () => {
+      expect(globalThis.fetch).toHaveBeenCalledWith(secondaryCorrelationUrl, expect.anything());
+    });
+  });
+
   it('keeps unknown workflow and correlation agent ids as plain text instead of broken pivots', async () => {
     const incidentFeedWithUnknownAgentFixture = {
       ...incidentFeedFixture,
@@ -6633,7 +6695,12 @@ afterEach(() => {
     expect(workflowTimelineRecord).not.toBeNull();
     expect(within(workflowInteractionRecord!).getByText('Interaction · peer_watch')).toBeVisible();
     expect(within(workflowInteractionRecord!).getByText('Participants · app-engineering, team-lead')).toBeVisible();
-    expect(within(workflowInteractionRecord!).getByText('Correlation · corr-app-review')).toBeVisible();
+    expect(workflowInteractionRecord!).toHaveTextContent('Correlation · corr-app-review');
+    expect(
+      within(workflowInteractionRecord!).getByRole('button', {
+        name: 'Open workflow interaction correlation from interaction interaction-workflow-1 corr-app-review, currently selected'
+      })
+    ).toBeVisible();
     expect(within(workflowInteractionRecord!).getByText('Severity · Orange')).toBeVisible();
     expect(within(workflowTimelineRecord!).getByText('Timeline · agent_noted · meeting-zone')).toBeVisible();
     expect(within(workflowTimelineRecord!).getByText('Severity · Yellow')).toBeVisible();

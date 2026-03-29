@@ -1323,10 +1323,22 @@ export function DetailsPanel({
             ) : null}
             {collectorSignalItems.map((item) => {
               const collectorEvidenceRefs = resolveCollectorEvidenceRefs(item);
+              const collectorLabel = agentNameById.get(item.agent_id) ?? item.agent_id;
+              const canNavigateToCollectorAgent = navigableAgentIds.has(item.agent_id);
 
               return (
                 <li key={item.agent_id} className={`aitown-record severity-${resolveCollectorSeverity(item)}`}>
-                  <strong>{agentNameById.get(item.agent_id) ?? item.agent_id}</strong>
+                  <strong>
+                    {canNavigateToCollectorAgent
+                      ? renderAgentPivotButton({
+                          agentId: item.agent_id,
+                          label: collectorLabel,
+                          ariaLabel: `Select collector supervision agent ${item.agent_id}`,
+                          correlationId: selectedCorrelationId,
+                          onSelectAgent
+                        })
+                      : collectorLabel}
+                  </strong>
                   <span>{`Collector state · ${item.heartbeat.current_state}`}</span>
                   <span>{`Needs attention · ${item.supervision.needs_attention ? 'Yes' : 'No'}`}</span>
                   <span>{`Reboot flag · ${item.heartbeat.reboot_recommended ? 'Recommended' : 'No'}`}</span>

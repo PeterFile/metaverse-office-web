@@ -1328,7 +1328,18 @@ export function DetailsPanel({
                   <span>{`Collector state · ${item.heartbeat.current_state}`}</span>
                   <span>{`Needs attention · ${item.supervision.needs_attention ? 'Yes' : 'No'}`}</span>
                   <span>{`Reboot flag · ${item.heartbeat.reboot_recommended ? 'Recommended' : 'No'}`}</span>
-                  <span>{`Watchers · ${renderNamedList(item.supervision.watched_by, 'No watchers')}`}</span>
+                  <span>
+                    Watchers ·{' '}
+                    {renderAgentPivotList({
+                      agentIds: item.supervision.watched_by,
+                      currentAgentId: null,
+                      navigableAgentIds,
+                      emptyLabel: 'No watchers',
+                      ariaLabelPrefix: `Select collector supervision watcher from collector ${item.agent_id}`,
+                      correlationId: selectedCorrelationId,
+                      onSelectAgent
+                    })}
+                  </span>
                   <span>
                     Evidence ·{' '}
                     {renderSharedMemoryEvidenceRefs({

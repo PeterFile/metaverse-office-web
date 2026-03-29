@@ -2047,6 +2047,130 @@ describe('DetailsPanel accountability signals', () => {
     expect(onSelectCorrelation).not.toHaveBeenCalled();
   });
 
+  it('renders crew-overview collector supervision watchers as pivots and carries the active correlation when present, otherwise keeps no-correlation behavior', async () => {
+    const user = userEvent.setup();
+    const onSelectAgent = vi.fn();
+
+    const { rerender } = render(
+      <DetailsPanel
+        {...buildProps({
+          onSelectAgent,
+          selectedAgent: null,
+          selectedCorrelationId: 'corr-app-secondary',
+          selectedOperation: null
+        })}
+      />
+    );
+
+    const collectorSupervisionSection = screen.getByRole('heading', { name: 'Collector Supervision' }).closest('section');
+    expect(collectorSupervisionSection).not.toBeNull();
+
+    const watcherLine = within(collectorSupervisionSection!).getByText(
+      (_content, element) =>
+        element?.tagName === 'SPAN' && element.textContent === 'Watchers · team-lead'
+    );
+
+    expect(
+      within(watcherLine).getByRole('button', {
+        name: 'Select collector supervision watcher from collector app-engineering team-lead'
+      })
+    ).toBeVisible();
+
+    await user.click(
+      within(watcherLine).getByRole('button', {
+        name: 'Select collector supervision watcher from collector app-engineering team-lead'
+      })
+    );
+
+    expect(onSelectAgent).toHaveBeenCalledWith('team-lead', 'corr-app-secondary');
+
+    rerender(
+      <DetailsPanel
+        {...buildProps({
+          onSelectAgent,
+          selectedAgent: null,
+          selectedCorrelationId: null,
+          selectedOperation: null
+        })}
+      />
+    );
+
+    await user.click(
+      within(screen.getByRole('heading', { name: 'Collector Supervision' }).closest('section')!).getByRole('button', {
+        name: 'Select collector supervision watcher from collector app-engineering team-lead'
+      })
+    );
+
+    expect(onSelectAgent).toHaveBeenLastCalledWith('team-lead', null);
+  });
+
+  it('keeps unknown and empty crew-overview collector supervision watchers as plain text', () => {
+    const baseCollectorSnapshot = buildCollectorSnapshot();
+    const baseCollectorItem = baseCollectorSnapshot.items[0];
+
+    const { rerender } = render(
+      <DetailsPanel
+        {...buildProps({
+          selectedAgent: null,
+          selectedOperation: null,
+          collectorSnapshot: {
+            ...baseCollectorSnapshot,
+            items: [
+              {
+                ...baseCollectorItem,
+                supervision: {
+                  ...baseCollectorItem.supervision,
+                  watched_by: ['ghost-agent']
+                }
+              }
+            ]
+          }
+        })}
+      />
+    );
+
+    const unknownWatcherLine = within(screen.getByRole('heading', { name: 'Collector Supervision' }).closest('section')!).getByText(
+      (_content, element) => element?.tagName === 'SPAN' && element.textContent === 'Watchers · ghost-agent'
+    );
+
+    expect(
+      within(unknownWatcherLine).queryByRole('button', {
+        name: 'Select collector supervision watcher ghost-agent'
+      })
+    ).not.toBeInTheDocument();
+
+    rerender(
+      <DetailsPanel
+        {...buildProps({
+          selectedAgent: null,
+          selectedOperation: null,
+          collectorSnapshot: {
+            ...baseCollectorSnapshot,
+            items: [
+              {
+                ...baseCollectorItem,
+                supervision: {
+                  ...baseCollectorItem.supervision,
+                  watched_by: []
+                }
+              }
+            ]
+          }
+        })}
+      />
+    );
+
+    const emptyWatcherLine = within(screen.getByRole('heading', { name: 'Collector Supervision' }).closest('section')!).getByText(
+      (_content, element) => element?.tagName === 'SPAN' && element.textContent === 'Watchers · No watchers'
+    );
+
+    expect(
+      within(emptyWatcherLine).queryByRole('button', {
+        name: /Select collector supervision watcher/
+      })
+    ).not.toBeInTheDocument();
+  });
+
   it('renders the selected-agent collector observation watch target as a pivot only for navigable non-current targets and preserves the active correlation', async () => {
     const user = userEvent.setup();
     const onSelectAgent = vi.fn();

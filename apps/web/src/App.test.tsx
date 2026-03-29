@@ -1492,7 +1492,26 @@ afterEach(() => {
     expect(within(collectorSection!).getByText('Reboot flags · 1')).toBeVisible();
     expect(within(collectorSection!).getByText('App Engineering Agent')).toBeVisible();
     expect(within(collectorSection!).getByText('Needs attention · Yes')).toBeVisible();
-    expect(within(collectorSection!).getByText('Watchers · team-lead, growth-revenue')).toBeVisible();
+    const appEngineeringCollectorRecord = within(collectorSection!).getByText('App Engineering Agent').closest('li');
+    const growthRevenueCollectorRecord = within(collectorSection!).getByText('Growth Revenue Agent').closest('li');
+    expect(appEngineeringCollectorRecord).not.toBeNull();
+    expect(growthRevenueCollectorRecord).not.toBeNull();
+    expect(appEngineeringCollectorRecord!).toHaveTextContent('Watchers · team-lead, growth-revenue');
+    expect(
+      within(appEngineeringCollectorRecord!).getByRole('button', {
+        name: 'Select collector supervision watcher from collector app-engineering team-lead'
+      })
+    ).toBeVisible();
+    expect(
+      within(appEngineeringCollectorRecord!).getByRole('button', {
+        name: 'Select collector supervision watcher from collector app-engineering growth-revenue'
+      })
+    ).toBeVisible();
+    expect(
+      within(growthRevenueCollectorRecord!).getByRole('button', {
+        name: 'Select collector supervision watcher from collector growth-revenue team-lead'
+      })
+    ).toBeVisible();
     expect(collectorSection!).toHaveTextContent('Evidence · /tmp/controller-log.md, /tmp/evidence.md');
     expect(
       within(collectorSection!).getByRole('button', {
@@ -1504,6 +1523,115 @@ afterEach(() => {
         name: 'Jump to collector evidence ref /tmp/controller-log.md'
       })
     ).not.toBeInTheDocument();
+  });
+
+  it('preserves the active crew-overview correlation when pivoting through collector supervision watchers', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    const collectorSection = within(details).getByRole('heading', { name: 'Collector Supervision' }).closest('section');
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    expect(collectorSection).not.toBeNull();
+    expect(correlationSection).not.toBeNull();
+
+    const growthRevenueCollectorRecord = within(collectorSection!).getByText('Growth Revenue Agent').closest('li');
+    expect(growthRevenueCollectorRecord).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+      expect(
+        within(growthRevenueCollectorRecord!).getByRole('button', {
+          name: 'Select collector supervision watcher from collector growth-revenue team-lead'
+        })
+      ).toBeVisible();
+    });
+
+    await user.click(
+      within(growthRevenueCollectorRecord!).getByRole('button', {
+        name: 'Select collector supervision watcher from collector growth-revenue team-lead'
+      })
+    );
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'Team Lead' })).toBeVisible();
+      expect(within(details).queryByRole('heading', { name: 'Current Operation' })).not.toBeInTheDocument();
+      const nextCorrelationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+      expect(nextCorrelationSection).not.toBeNull();
+      expect(within(nextCorrelationSection!).getByText('corr-app-review')).toBeVisible();
+      expect(within(nextCorrelationSection!).getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
+    });
+
+    await act(async () => {
+      expect(globalThis.fetch).toHaveBeenCalledWith(teamLeadWorkflowUrl, expect.anything());
+      expect(globalThis.fetch).toHaveBeenCalledWith(correlationUrl, expect.anything());
+      expect(globalThis.fetch).toHaveBeenCalledWith(teamLeadSelectedCorrelationMemoryArtifactsUrl, expect.anything());
+    });
+  });
+
+  it('keeps crew-overview collector supervision watcher pivots on the existing no-correlation path when no active correlation is selected', async () => {
+    const crewOverviewWithoutCorrelationIncidentFeedFixture = {
+      items: incidentFeedFixture.items.map((incident) => ({
+        ...incident,
+        correlation_id: null
+      }))
+    };
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === incidentsUrl) {
+          return jsonResponse(crewOverviewWithoutCorrelationIncidentFeedFixture);
+        }
+
+        return resolveTestFetchResponse(url);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    const collectorSection = within(details).getByRole('heading', { name: 'Collector Supervision' }).closest('section');
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    expect(collectorSection).not.toBeNull();
+    expect(correlationSection).not.toBeNull();
+
+    const growthRevenueCollectorRecord = within(collectorSection!).getByText('Growth Revenue Agent').closest('li');
+    expect(growthRevenueCollectorRecord).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(correlationSection!).getByText('No correlation selected.')).toBeVisible();
+      expect(
+        within(growthRevenueCollectorRecord!).getByRole('button', {
+          name: 'Select collector supervision watcher from collector growth-revenue team-lead'
+        })
+      ).toBeVisible();
+    });
+
+    await user.click(
+      within(growthRevenueCollectorRecord!).getByRole('button', {
+        name: 'Select collector supervision watcher from collector growth-revenue team-lead'
+      })
+    );
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'Team Lead' })).toBeVisible();
+      expect(within(details).queryByRole('heading', { name: 'Current Operation' })).not.toBeInTheDocument();
+      const nextCorrelationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+      expect(nextCorrelationSection).not.toBeNull();
+      expect(within(nextCorrelationSection!).getByText('No correlation selected.')).toBeVisible();
+    });
+
+    await act(async () => {
+      expect(globalThis.fetch).toHaveBeenCalledWith(teamLeadWorkflowUrl, expect.anything());
+    });
+
+    expect(globalThis.fetch).not.toHaveBeenCalledWith(correlationUrl, expect.anything());
+    expect(globalThis.fetch).not.toHaveBeenCalledWith(teamLeadSelectedCorrelationMemoryArtifactsUrl, expect.anything());
+    expect(globalThis.fetch).toHaveBeenCalledWith(teamLeadMemoryArtifactsUrl, expect.anything());
   });
 
   it('loads the timeline replay slice only when Hub opens in Crew Overview and hides it after selecting an agent', async () => {

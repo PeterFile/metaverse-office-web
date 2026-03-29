@@ -511,6 +511,7 @@ function renderCorrelationInteraction({
   currentAgentId,
   navigableAgentIds,
   onSelectAgent,
+  onSelectCorrelation,
   sharedMemoryArtifactRefs,
   enableSharedMemoryEvidenceJump = false
 }: {
@@ -519,10 +520,12 @@ function renderCorrelationInteraction({
   currentAgentId?: string | null;
   navigableAgentIds?: Set<string>;
   onSelectAgent?: (agentId: string | null, correlationId?: string | null) => void;
+  onSelectCorrelation?: (correlationId: string | null) => void;
   sharedMemoryArtifactRefs?: ReadonlySet<string>;
   enableSharedMemoryEvidenceJump?: boolean;
 }) {
   const canRenderParticipantPivots = Boolean(navigableAgentIds && onSelectAgent);
+  const interactionCorrelationId = findFirstNonEmptyString([interaction.correlation_id]);
   const stateTransition =
     interaction.before_state && interaction.after_state
       ? `${interaction.before_state} -> ${interaction.after_state}`
@@ -550,7 +553,18 @@ function renderCorrelationInteraction({
             })
           : renderParticipants(interaction.participant_agent_ids)}
       </span>
-      <span>{`Correlation · ${interaction.correlation_id ?? 'No correlation id'}`}</span>
+      <span>
+        Correlation ·{' '}
+        {onSelectCorrelation
+          ? renderCorrelationButton({
+              correlationId: interactionCorrelationId,
+              label: interactionCorrelationId ?? 'No correlation id',
+              buttonLabel: `Open workflow interaction correlation from interaction ${interaction.interaction_id}`,
+              activeCorrelationId,
+              onSelectCorrelation
+            })
+          : interactionCorrelationId ?? 'No correlation id'}
+      </span>
       {interaction.severity ? <span>{`Severity · ${SEVERITY_LABELS[interaction.severity]}`}</span> : null}
       {enableSharedMemoryEvidenceJump && sharedMemoryArtifactRefs ? (
         <span>
@@ -2169,6 +2183,8 @@ export function DetailsPanel({
           {(workflow?.detail.recent_interactions ?? []).slice(0, 2).map((interaction) =>
             renderCorrelationInteraction({
               interaction,
+              activeCorrelationId: selectedCorrelationId,
+              onSelectCorrelation,
               sharedMemoryArtifactRefs,
               enableSharedMemoryEvidenceJump: true
             })

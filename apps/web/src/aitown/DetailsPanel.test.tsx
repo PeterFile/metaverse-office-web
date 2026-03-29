@@ -1132,6 +1132,78 @@ describe('DetailsPanel accountability signals', () => {
     expect(within(correlationCard!).getByText('State · blocked -> reviewing')).toBeVisible();
   });
 
+  it('renders selected-agent workflow interaction correlation pivots only for populated ids and uses interaction-local accessible names', async () => {
+    const user = userEvent.setup();
+    const onSelectCorrelation = vi.fn();
+    const workflow: AgentWorkflow = {
+      ...buildWorkflow(),
+      detail: {
+        ...buildWorkflow().detail,
+        recent_interactions: [
+          {
+            interaction_id: 'interaction-workflow-correlation',
+            interaction_type: 'peer_watch',
+            correlation_id: 'corr-app-secondary',
+            started_at: '2026-03-16T08:49:00.000Z',
+            ended_at: '2026-03-16T08:58:00.000Z',
+            participant_agent_ids: ['app-engineering', 'team-lead'],
+            trigger_event_id: 'evt-workflow-correlation',
+            before_state: 'coding',
+            after_state: 'blocked',
+            severity: 'orange',
+            evidence_refs: [],
+            summary: 'Workflow interaction correlation becomes a pivot',
+            related_event_ids: ['evt-workflow-correlation']
+          },
+          {
+            interaction_id: 'interaction-workflow-empty-correlation',
+            interaction_type: 'peer_watch',
+            correlation_id: '',
+            started_at: '2026-03-16T08:59:00.000Z',
+            ended_at: null,
+            participant_agent_ids: ['app-engineering'],
+            trigger_event_id: 'evt-workflow-empty-correlation',
+            before_state: null,
+            after_state: 'blocked',
+            severity: 'yellow',
+            evidence_refs: [],
+            summary: 'Workflow interaction without a correlation id stays plain text',
+            related_event_ids: ['evt-workflow-empty-correlation']
+          }
+        ]
+      }
+    };
+
+    render(<DetailsPanel {...buildProps({ onSelectCorrelation, workflow })} />);
+
+    const workflowSection = screen.getByRole('heading', { name: 'Workflow' }).closest('section');
+    expect(workflowSection).not.toBeNull();
+
+    const pivotRecord = within(workflowSection!)
+      .getByText('Workflow interaction correlation becomes a pivot')
+      .closest('li');
+    const plainTextRecord = within(workflowSection!)
+      .getByText('Workflow interaction without a correlation id stays plain text')
+      .closest('li');
+    expect(pivotRecord).not.toBeNull();
+    expect(plainTextRecord).not.toBeNull();
+
+    const interactionCorrelationButton = within(pivotRecord!).getByRole('button', {
+      name: 'Open workflow interaction correlation from interaction interaction-workflow-correlation corr-app-secondary'
+    });
+    expect(interactionCorrelationButton).toHaveTextContent('corr-app-secondary');
+    expect(plainTextRecord).toHaveTextContent('Correlation · No correlation id');
+    expect(
+      within(plainTextRecord!).queryByRole('button', {
+        name: /Open workflow interaction correlation from interaction/
+      })
+    ).not.toBeInTheDocument();
+
+    await user.click(interactionCorrelationButton);
+
+    expect(onSelectCorrelation).toHaveBeenCalledWith('corr-app-secondary');
+  });
+
   it('renders read-only observability metadata for correlation and replay timeline events', () => {
     render(
       <DetailsPanel

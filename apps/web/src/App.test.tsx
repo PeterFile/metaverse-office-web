@@ -3705,6 +3705,67 @@ afterEach(() => {
     });
   });
 
+  it('preserves the clicked selected-agent workflow correlation when opening a workflow recent-event actor pivot', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === workflowUrl) {
+          return jsonResponse({
+            ...workflowFixture,
+            detail: {
+              ...workflowFixture.detail,
+              recent_events: [
+                {
+                  ...workflowFixture.detail.recent_events[0],
+                  actor_id: 'team-lead',
+                  summary: 'Workflow recent event actor pivot keeps the active review correlation'
+                }
+              ]
+            }
+          } satisfies AgentWorkflow);
+        }
+
+        return resolveTestFetchResponse(url);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
+
+    const workflowSection = within(details).getByRole('heading', { name: 'Workflow' }).closest('section');
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    expect(workflowSection).not.toBeNull();
+    expect(correlationSection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+    });
+
+    await user.click(
+      within(workflowSection!).getByRole('button', {
+        name: 'Select workflow recent event actor from event evt-workflow-1 team-lead'
+      })
+    );
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'Team Lead' })).toBeVisible();
+      expect(within(details).queryByRole('heading', { name: 'Current Operation' })).not.toBeInTheDocument();
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+    });
+
+    await act(async () => {
+      expect(globalThis.fetch).toHaveBeenCalledWith(teamLeadWorkflowUrl, expect.anything());
+      expect(globalThis.fetch).toHaveBeenCalledWith(correlationUrl, expect.anything());
+      expect(globalThis.fetch).toHaveBeenCalledWith(teamLeadSelectedCorrelationMemoryArtifactsUrl, expect.anything());
+    });
+  });
+
   it('keeps unknown workflow and correlation agent ids as plain text instead of broken pivots', async () => {
     const incidentFeedWithUnknownAgentFixture = {
       ...incidentFeedFixture,
@@ -4274,10 +4335,10 @@ afterEach(() => {
     expect(eventRecord).toHaveTextContent('Counterparties · app-engineering, team-lead, ghost-agent');
     expect(eventRecord).toHaveTextContent('Evidence · /tmp/evidence.md, /tmp/missing.md');
     expect(
-      within(eventRecord!).queryByRole('button', {
-        name: 'Select correlation timeline counterparty agent team-lead'
+      within(eventRecord!).getByRole('button', {
+        name: 'Select workflow recent event counterparty from event evt-workflow-1 team-lead'
       })
-    ).not.toBeInTheDocument();
+    ).toBeVisible();
     expect(
       within(eventRecord!).getByRole('button', {
         name: 'Jump to shared memory artifact /tmp/evidence.md'

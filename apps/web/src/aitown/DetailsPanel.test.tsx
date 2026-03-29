@@ -2209,6 +2209,63 @@ describe('DetailsPanel accountability signals', () => {
     expect(onSelectAgent).toHaveBeenLastCalledWith('app-engineering', null);
   });
 
+  it('renders the crew-overview collector snapshot actor as a pivot when navigable and preserves the active correlation, otherwise keeps the no-correlation path unchanged', async () => {
+    const user = userEvent.setup();
+    const onSelectAgent = vi.fn();
+    const baseCollectorSnapshot = buildCollectorSnapshot();
+
+    const { rerender } = render(
+      <DetailsPanel
+        {...buildProps({
+          collectorSnapshot: {
+            ...baseCollectorSnapshot,
+            actor_id: 'team-lead'
+          },
+          onSelectAgent,
+          selectedAgent: null,
+          selectedCorrelationId: 'corr-app-secondary',
+          selectedOperation: null
+        })}
+      />
+    );
+
+    const collectorSupervisionSection = screen.getByRole('heading', { name: 'Collector Supervision' }).closest('section');
+    expect(collectorSupervisionSection).not.toBeNull();
+
+    const actorButton = within(collectorSupervisionSection!).getByRole('button', {
+      name: 'Select collector snapshot actor team-lead'
+    });
+    expect(actorButton).toBeVisible();
+    expect(actorButton).toHaveTextContent('team-lead');
+
+    await user.click(actorButton);
+
+    expect(onSelectAgent).toHaveBeenCalledWith('team-lead', 'corr-app-secondary');
+
+    rerender(
+      <DetailsPanel
+        {...buildProps({
+          collectorSnapshot: {
+            ...baseCollectorSnapshot,
+            actor_id: 'team-lead'
+          },
+          onSelectAgent,
+          selectedAgent: null,
+          selectedCorrelationId: null,
+          selectedOperation: null
+        })}
+      />
+    );
+
+    await user.click(
+      within(screen.getByRole('heading', { name: 'Collector Supervision' }).closest('section')!).getByRole('button', {
+        name: 'Select collector snapshot actor team-lead'
+      })
+    );
+
+    expect(onSelectAgent).toHaveBeenLastCalledWith('team-lead', null);
+  });
+
   it('keeps unknown and empty crew-overview collector supervision watchers as plain text', () => {
     const baseCollectorSnapshot = buildCollectorSnapshot();
     const baseCollectorItem = baseCollectorSnapshot.items[0];
@@ -2310,6 +2367,54 @@ describe('DetailsPanel accountability signals', () => {
     expect(
       within(collectorRecord!).queryByRole('button', {
         name: 'Select collector supervision agent ghost-agent'
+      })
+    ).not.toBeInTheDocument();
+  });
+
+  it('keeps unknown crew-overview collector snapshot actors as plain text', () => {
+    const baseCollectorSnapshot = buildCollectorSnapshot();
+
+    const { rerender } = render(
+      <DetailsPanel
+        {...buildProps({
+          selectedAgent: null,
+          selectedOperation: null,
+          collectorSnapshot: {
+            ...baseCollectorSnapshot,
+            actor_id: 'ghost-agent'
+          }
+        })}
+      />
+    );
+
+    const collectorSummaryRecord = within(
+      screen.getByRole('heading', { name: 'Collector Supervision' }).closest('section')!
+    )
+      .getByText('ghost-agent')
+      .closest('li');
+    expect(collectorSummaryRecord).not.toBeNull();
+    expect(
+      within(collectorSummaryRecord!).queryByRole('button', {
+        name: 'Select collector snapshot actor ghost-agent'
+      })
+    ).not.toBeInTheDocument();
+
+    rerender(
+      <DetailsPanel
+        {...buildProps({
+          selectedAgent: null,
+          selectedOperation: null,
+          collectorSnapshot: {
+            ...baseCollectorSnapshot,
+            actor_id: 'collector-watch'
+          }
+        })}
+      />
+    );
+
+    expect(
+      within(screen.getByRole('heading', { name: 'Collector Supervision' }).closest('section')!).queryByRole('button', {
+        name: 'Select collector snapshot actor collector-watch'
       })
     ).not.toBeInTheDocument();
   });

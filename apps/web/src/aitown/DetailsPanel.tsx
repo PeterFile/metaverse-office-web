@@ -1313,7 +1313,16 @@ export function DetailsPanel({
             ) : null}
             {collectorSnapshot ? (
               <li className="aitown-record">
-                <strong>{collectorSnapshot.actor_id}</strong>
+                <strong>
+                  {navigableAgentIds.has(collectorSnapshot.actor_id)
+                    ? renderAgentPivotButton({
+                        agentId: collectorSnapshot.actor_id,
+                        ariaLabel: `Select collector snapshot actor ${collectorSnapshot.actor_id}`,
+                        correlationId: selectedCorrelationId,
+                        onSelectAgent
+                      })
+                    : collectorSnapshot.actor_id}
+                </strong>
                 <span>{`Latest snapshot · ${collectorSnapshot.collected_at}`}</span>
                 <span>{`Heartbeats · ${collectorSnapshot.summary.heartbeat_count}`}</span>
                 <span>{`Workspace observations · ${collectorSnapshot.summary.workspace_observed_count}`}</span>

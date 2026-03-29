@@ -2519,6 +2519,99 @@ describe('DetailsPanel accountability signals', () => {
     ).not.toBeInTheDocument();
   });
 
+  it('renders crew-overview office-grid home agents as pivots when navigable, preserves the active correlation, and keeps unassigned or unknown homes as plain text', async () => {
+    const user = userEvent.setup();
+    const onSelectAgent = vi.fn();
+    const world = buildWorld();
+    const officeGridWorld: WorldState = {
+      ...world,
+      zones: [
+        ...world.zones,
+        {
+          zone_id: 'unassigned-desk',
+          label: 'Unassigned Desk',
+          kind: 'desk',
+          grid_x: 1,
+          grid_y: 0,
+          grid_w: 1,
+          grid_h: 1,
+          home_agent_id: null,
+          occupant_ids: []
+        },
+        {
+          zone_id: 'ghost-desk',
+          label: 'Ghost Desk',
+          kind: 'desk',
+          grid_x: 2,
+          grid_y: 0,
+          grid_w: 1,
+          grid_h: 1,
+          home_agent_id: 'ghost-agent',
+          occupant_ids: []
+        }
+      ]
+    };
+
+    const { rerender } = render(
+      <DetailsPanel
+        {...buildProps({
+          onSelectAgent,
+          selectedAgent: null,
+          selectedCorrelationId: 'corr-app-review',
+          selectedOperation: null,
+          world: officeGridWorld
+        })}
+      />
+    );
+
+    const officeGridSection = screen.getByRole('heading', { name: 'Office Grid' }).closest('section');
+    expect(officeGridSection).not.toBeNull();
+
+    const homeButton = within(officeGridSection!).getByRole('button', {
+      name: 'Select home agent App Engineering Agent in Delivery Desk'
+    });
+    expect(homeButton).toBeVisible();
+    expect(
+      within(officeGridSection!).getByRole('button', {
+        name: 'Select zone occupant App Engineering Agent in Delivery Desk'
+      })
+    ).toBeVisible();
+    expect(within(officeGridSection!).getByText('Home · Unassigned')).toBeVisible();
+
+    const unknownHomeLine = within(officeGridSection!).getByText(
+      (_content, element) => element?.tagName === 'SPAN' && element.textContent === 'Home · ghost-agent'
+    );
+    expect(
+      within(unknownHomeLine).queryByRole('button', {
+        name: 'Select home agent ghost-agent in Ghost Desk'
+      })
+    ).not.toBeInTheDocument();
+
+    await user.click(homeButton);
+
+    expect(onSelectAgent).toHaveBeenCalledWith('app-engineering', 'corr-app-review');
+
+    rerender(
+      <DetailsPanel
+        {...buildProps({
+          onSelectAgent,
+          selectedAgent: null,
+          selectedCorrelationId: null,
+          selectedOperation: null,
+          world: officeGridWorld
+        })}
+      />
+    );
+
+    await user.click(
+      within(screen.getByRole('heading', { name: 'Office Grid' }).closest('section')!).getByRole('button', {
+        name: 'Select home agent App Engineering Agent in Delivery Desk'
+      })
+    );
+
+    expect(onSelectAgent).toHaveBeenLastCalledWith('app-engineering', null);
+  });
+
   it('renders the selected-agent collector observation watch target as a pivot only for navigable non-current targets and preserves the active correlation', async () => {
     const user = userEvent.setup();
     const onSelectAgent = vi.fn();

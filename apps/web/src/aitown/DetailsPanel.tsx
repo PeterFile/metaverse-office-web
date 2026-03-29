@@ -1145,12 +1145,14 @@ function renderZoneOccupants({
   occupants,
   currentAgentId,
   navigableAgentIds,
+  correlationId,
   onSelectAgent
 }: {
   zoneLabel: string;
   occupants: Array<{ agentId: string; displayName: string }>;
   currentAgentId: string | null;
   navigableAgentIds: Set<string>;
+  correlationId?: string | null;
   onSelectAgent: (agentId: string | null, correlationId?: string | null) => void;
 }) {
   if (occupants.length === 0) {
@@ -1168,6 +1170,7 @@ function renderZoneOccupants({
             agentId: occupant.agentId,
             label: occupant.displayName,
             ariaLabel: `Select zone occupant ${occupant.displayName} in ${zoneLabel}`,
+            correlationId,
             onSelectAgent
           })
         ) : (
@@ -1444,24 +1447,41 @@ export function DetailsPanel({
         <section className="aitown-details__section">
           <h3>Office Grid</h3>
           <ul className="aitown-records">
-            {officeGrid.map(({ zone, occupants, homeAgentLabel, severitySummary }) => (
-              <li key={zone.zone_id} className="aitown-record">
-                <strong>{zone.label}</strong>
-                <span>{`Kind · ${zone.kind}`}</span>
-                <span>{`Home · ${homeAgentLabel ?? 'Unassigned'}`}</span>
-                <span>
-                  Occupants ·{' '}
-                  {renderZoneOccupants({
-                    zoneLabel: zone.label,
-                    occupants,
-                    currentAgentId: null,
-                    navigableAgentIds,
-                    onSelectAgent
-                  })}
-                </span>
-                <span>{`Severity · ${severitySummary}`}</span>
-              </li>
-            ))}
+            {officeGrid.map(({ zone, occupants, homeAgentLabel, severitySummary }) => {
+              const homeAgentId = zone.home_agent_id;
+              const canNavigateToHomeAgent = homeAgentId !== null && navigableAgentIds.has(homeAgentId);
+
+              return (
+                <li key={zone.zone_id} className="aitown-record">
+                  <strong>{zone.label}</strong>
+                  <span>{`Kind · ${zone.kind}`}</span>
+                  <span>
+                    Home ·{' '}
+                    {canNavigateToHomeAgent && homeAgentLabel
+                      ? renderAgentPivotButton({
+                          agentId: homeAgentId,
+                          label: homeAgentLabel,
+                          ariaLabel: `Select home agent ${homeAgentLabel} in ${zone.label}`,
+                          correlationId: selectedCorrelationId,
+                          onSelectAgent
+                        })
+                      : (homeAgentLabel ?? 'Unassigned')}
+                  </span>
+                  <span>
+                    Occupants ·{' '}
+                    {renderZoneOccupants({
+                      zoneLabel: zone.label,
+                      occupants,
+                      currentAgentId: null,
+                      navigableAgentIds,
+                      correlationId: selectedCorrelationId,
+                      onSelectAgent
+                    })}
+                  </span>
+                  <span>{`Severity · ${severitySummary}`}</span>
+                </li>
+              );
+            })}
             {officeGrid.length === 0 ? <li className="aitown-record">No office zones available.</li> : null}
           </ul>
         </section>

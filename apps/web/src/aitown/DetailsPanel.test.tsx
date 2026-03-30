@@ -4019,6 +4019,190 @@ describe('DetailsPanel accountability signals', () => {
 });
 
 describe('DetailsPanel workflow peer-watch alerts', () => {
+  it('renders a navigable workflow peer-watch target pivot with row-local context and preserves the active correlation', async () => {
+    const user = userEvent.setup();
+    const onSelectAgent = vi.fn();
+    const workflow: AgentWorkflow = {
+      ...buildWorkflow(),
+      detail: {
+        ...buildWorkflow().detail,
+        open_peer_watch_alerts: [
+          {
+            alert_id: 'alert-target-pivot',
+            ts: '2026-03-16T08:55:00.000Z',
+            agent_id: 'app-engineering',
+            target_agent_id: 'growth-revenue',
+            actor_id: 'team-lead',
+            observer_agent_id: 'team-lead',
+            watcher_agent_ids: ['team-lead'],
+            severity: 'orange',
+            status: 'open',
+            current_state: 'blocked',
+            active_task: 'Fix workflow issue',
+            summary: 'Peer watch target stays actionable',
+            evidence_refs: [],
+            evidence_count: 0,
+            correlation_id: 'corr-app-review',
+            source_kind: 'controller_event',
+            metadata: {}
+          }
+        ]
+      }
+    };
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          onSelectAgent,
+          selectedCorrelationId: 'corr-app-secondary',
+          workflow
+        })}
+      />
+    );
+
+    const section = screen.getByRole('heading', { name: 'Workflow' }).closest('section');
+    expect(section).not.toBeNull();
+
+    const alertRecord = within(section!).getByText('Peer watch target stays actionable').closest('li');
+    expect(alertRecord).not.toBeNull();
+    expect(alertRecord).toHaveTextContent('Target · growth-revenue');
+
+    const targetPivot = within(alertRecord!).getByRole('button', {
+      name: 'Select workflow peer-watch target from alert alert-target-pivot growth-revenue'
+    });
+    expect(targetPivot).toBeVisible();
+
+    await user.click(targetPivot);
+
+    expect(onSelectAgent).toHaveBeenCalledWith('growth-revenue', 'corr-app-secondary');
+  });
+
+  it('falls back to the workflow peer-watch alert correlation when no correlation is currently selected for target pivots', async () => {
+    const user = userEvent.setup();
+    const onSelectAgent = vi.fn();
+    const workflow: AgentWorkflow = {
+      ...buildWorkflow(),
+      detail: {
+        ...buildWorkflow().detail,
+        open_peer_watch_alerts: [
+          {
+            alert_id: 'alert-target-fallback',
+            ts: '2026-03-16T08:56:00.000Z',
+            agent_id: 'app-engineering',
+            target_agent_id: 'growth-revenue',
+            actor_id: 'team-lead',
+            observer_agent_id: 'team-lead',
+            watcher_agent_ids: ['team-lead'],
+            severity: 'yellow',
+            status: 'open',
+            current_state: 'blocked',
+            active_task: 'Fix workflow issue',
+            summary: 'Peer watch target falls back to the alert correlation',
+            evidence_refs: [],
+            evidence_count: 0,
+            correlation_id: 'corr-app-secondary',
+            source_kind: 'controller_event',
+            metadata: {}
+          }
+        ]
+      }
+    };
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          correlation: null,
+          onSelectAgent,
+          selectedCorrelationId: null,
+          workflow
+        })}
+      />
+    );
+
+    const section = screen.getByRole('heading', { name: 'Workflow' }).closest('section');
+    expect(section).not.toBeNull();
+
+    await user.click(
+      within(section!).getByRole('button', {
+        name: 'Select workflow peer-watch target from alert alert-target-fallback growth-revenue'
+      })
+    );
+
+    expect(onSelectAgent).toHaveBeenCalledWith('growth-revenue', 'corr-app-secondary');
+  });
+
+  it('keeps current and unknown workflow peer-watch targets as plain text', () => {
+    const workflow: AgentWorkflow = {
+      ...buildWorkflow(),
+      detail: {
+        ...buildWorkflow().detail,
+        open_peer_watch_alerts: [
+          {
+            alert_id: 'alert-target-current',
+            ts: '2026-03-16T08:55:00.000Z',
+            agent_id: 'app-engineering',
+            target_agent_id: 'app-engineering',
+            actor_id: 'team-lead',
+            observer_agent_id: 'team-lead',
+            watcher_agent_ids: ['growth-revenue'],
+            severity: 'orange',
+            status: 'open',
+            current_state: 'blocked',
+            active_task: 'Fix workflow issue',
+            summary: 'Current target stays plain text',
+            evidence_refs: [],
+            evidence_count: 0,
+            correlation_id: 'corr-app-review',
+            source_kind: 'controller_event',
+            metadata: {}
+          },
+          {
+            alert_id: 'alert-target-unknown',
+            ts: '2026-03-16T08:54:00.000Z',
+            agent_id: 'app-engineering',
+            target_agent_id: 'ghost-agent',
+            actor_id: 'team-lead',
+            observer_agent_id: 'team-lead',
+            watcher_agent_ids: ['growth-revenue'],
+            severity: 'yellow',
+            status: 'open',
+            current_state: 'blocked',
+            active_task: 'Fix workflow issue',
+            summary: 'Unknown target stays plain text',
+            evidence_refs: [],
+            evidence_count: 0,
+            correlation_id: 'corr-app-review',
+            source_kind: 'controller_event',
+            metadata: {}
+          }
+        ]
+      }
+    };
+
+    render(<DetailsPanel {...buildProps({ workflow })} />);
+
+    const section = screen.getByRole('heading', { name: 'Workflow' }).closest('section');
+    expect(section).not.toBeNull();
+
+    const currentRecord = within(section!).getByText('Current target stays plain text').closest('li');
+    const unknownRecord = within(section!).getByText('Unknown target stays plain text').closest('li');
+    expect(currentRecord).not.toBeNull();
+    expect(unknownRecord).not.toBeNull();
+
+    expect(currentRecord).toHaveTextContent('Target · app-engineering');
+    expect(
+      within(currentRecord!).queryByRole('button', {
+        name: 'Select workflow peer-watch target from alert alert-target-current app-engineering'
+      })
+    ).not.toBeInTheDocument();
+    expect(unknownRecord).toHaveTextContent('Target · ghost-agent');
+    expect(
+      within(unknownRecord!).queryByRole('button', {
+        name: 'Select workflow peer-watch target from alert alert-target-unknown ghost-agent'
+      })
+    ).not.toBeInTheDocument();
+  });
+
   it('renders a navigable workflow peer-watch observer pivot with row-local context and preserves the active correlation', async () => {
     const user = userEvent.setup();
     const onSelectAgent = vi.fn();

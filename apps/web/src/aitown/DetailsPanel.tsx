@@ -929,6 +929,7 @@ function renderWorkflowPeerWatchAlert({
   onSelectCorrelation: (correlationId: string | null) => void;
 }) {
   const preservedCorrelationId = activeCorrelationId ?? alert.correlation_id;
+  const canNavigateToTarget = alert.target_agent_id !== currentAgentId && navigableAgentIds.has(alert.target_agent_id);
   const canNavigateToObserver =
     alert.observer_agent_id !== currentAgentId && navigableAgentIds.has(alert.observer_agent_id);
 
@@ -943,6 +944,17 @@ function renderWorkflowPeerWatchAlert({
         onSelectCorrelation
       })}
       <span>{`At · ${renderTimestamp(alert.ts, 'No alert timestamp')}`}</span>
+      <span>
+        Target ·{' '}
+        {canNavigateToTarget
+          ? renderAgentPivotButton({
+              agentId: alert.target_agent_id,
+              ariaLabel: `Select workflow peer-watch target from alert ${alert.alert_id} ${alert.target_agent_id}`,
+              correlationId: preservedCorrelationId,
+              onSelectAgent
+            })
+          : alert.target_agent_id}
+      </span>
       <span>
         Observer ·{' '}
         {canNavigateToObserver

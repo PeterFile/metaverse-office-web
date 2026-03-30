@@ -654,6 +654,7 @@ function renderCorrelationTimelineEvent(
         onSelectAgent?: (agentId: string | null, correlationId?: string | null) => void;
         sharedMemoryArtifactRefs?: ReadonlySet<string>;
         enableSharedMemoryEvidenceJump?: boolean;
+        subjectPivotAriaLabelPrefix?: string;
         actorPivotAriaLabelPrefix?: string;
         counterpartyPivotAriaLabelPrefix?: string;
       }
@@ -665,12 +666,19 @@ function renderCorrelationTimelineEvent(
   const onSelectAgent = 'event' in input ? input.onSelectAgent : undefined;
   const sharedMemoryArtifactRefs = 'event' in input ? input.sharedMemoryArtifactRefs : undefined;
   const enableSharedMemoryEvidenceJump = 'event' in input ? (input.enableSharedMemoryEvidenceJump ?? false) : false;
+  const subjectPivotAriaLabelPrefix =
+    'event' in input
+      ? (input.subjectPivotAriaLabelPrefix ?? 'Select correlation timeline subject agent from event')
+      : 'Select correlation timeline subject agent from event';
   const actorPivotAriaLabelPrefix =
     'event' in input ? (input.actorPivotAriaLabelPrefix ?? 'Select correlation timeline actor from event') : 'Select correlation timeline actor from event';
   const counterpartyPivotAriaLabelPrefix =
     'event' in input ? (input.counterpartyPivotAriaLabelPrefix ?? 'Select correlation timeline counterparty agent') : 'Select correlation timeline counterparty agent';
   const preservedCorrelationId = activeCorrelationId ?? event.correlation_id;
   const canRenderCounterpartyPivots = Boolean(navigableAgentIds && onSelectAgent);
+  const canRenderSubjectPivot = Boolean(
+    navigableAgentIds && onSelectAgent && event.agent_id !== currentAgentId && navigableAgentIds.has(event.agent_id)
+  );
   const canRenderActorPivot = Boolean(
     navigableAgentIds && onSelectAgent && event.actor_id !== currentAgentId && navigableAgentIds.has(event.actor_id)
   );
@@ -679,6 +687,17 @@ function renderCorrelationTimelineEvent(
     <li key={event.event_id} className={`aitown-record severity-${event.severity}`}>
       <strong>{event.summary}</strong>
       <span>{`At · ${renderTimestamp(event.ts, 'No event timestamp')}`}</span>
+      <span>
+        Subject ·{' '}
+        {canRenderSubjectPivot && onSelectAgent
+          ? renderAgentPivotButton({
+              agentId: event.agent_id,
+              ariaLabel: `${subjectPivotAriaLabelPrefix} ${event.event_id} ${event.agent_id}`,
+              correlationId: preservedCorrelationId,
+              onSelectAgent
+            })
+          : event.agent_id}
+      </span>
       <span>
         Actor ·{' '}
         {canRenderActorPivot && onSelectAgent
@@ -2282,6 +2301,7 @@ export function DetailsPanel({
               currentAgentId: selectedAgent.agent_id,
               navigableAgentIds,
               onSelectAgent,
+              subjectPivotAriaLabelPrefix: 'Select workflow recent event subject agent from event',
               actorPivotAriaLabelPrefix: 'Select workflow recent event actor from event',
               counterpartyPivotAriaLabelPrefix: `Select workflow recent event counterparty from event ${event.event_id}`,
               sharedMemoryArtifactRefs,

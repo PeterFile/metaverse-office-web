@@ -1,5 +1,8 @@
 import { SCENE_AGENT_STATUS_LEGEND } from './agentStatusBadge';
 
+const SELECTED_SUPERVISION_NOTE =
+  'Selected links only. Gold rings mark selected/linked agents; arrows run watcher to target; thick links mean lead watch; colors show target severity.';
+
 export function SceneStatusLegend() {
   return (
     <div id="scene-status-legend" className="aitown-status-legend">
@@ -14,6 +17,7 @@ export function SceneStatusLegend() {
           </li>
         ))}
       </ul>
+      <p className="aitown-status-legend__note">{SELECTED_SUPERVISION_NOTE}</p>
     </div>
   );
 }

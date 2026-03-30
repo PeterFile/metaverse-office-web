@@ -1161,6 +1161,12 @@ afterEach(() => {
     expect(items[1]).toHaveTextContent('Open alerts or workflow incidents');
     expect(items[2]).toHaveTextContent('R');
     expect(items[2]).toHaveTextContent('Reboot recommended');
+    expect(within(worldRegion).queryByText('Selected supervision')).not.toBeInTheDocument();
+    expect(
+      within(worldRegion).getByText(
+        'Selected links only. Gold rings mark selected/linked agents; arrows run watcher to target; thick links mean lead watch; colors show target severity.'
+      )
+    ).toBeVisible();
     expect(worldRegion).not.toHaveAttribute('aria-describedby');
   });
 

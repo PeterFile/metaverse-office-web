@@ -227,7 +227,8 @@ Optional env:
 
 ### Controlled write rule
 Prototype writes require `x-actor-id: <agent_id>`.
-This keeps employee writes self-scoped and reserves cross-agent supervision/handoff/reboot events for `team-lead`.
+This keeps employee writes self-scoped and reserves cross-agent task dispatch plus review/meeting/supervision/handoff/reboot events for `team-lead`.
+`agent_received_task` stays visible through the existing event/read surfaces but does not advance `last_meaningful_output_at` by itself.
 
 ### Collector snapshot notes
 - `POST /collectors/controller-snapshot` is lead-only and requires `x-actor-id: team-lead`

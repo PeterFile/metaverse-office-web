@@ -2658,6 +2658,74 @@ test('write endpoints reject missing headers, invalid payloads, and actor-bounda
   assert.match(invalidHeartbeat.body.error, /validation_failed/);
 });
 
+test('POST /events allows team-lead task dispatch without advancing meaningful-output freshness', async (t) => {
+  const { baseUrl } = await createHarness(t);
+
+  const baselineHeartbeat = await requestJson(`${baseUrl}/heartbeats`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-actor-id': 'app-engineering'
+    },
+    body: JSON.stringify({
+      agent_id: 'app-engineering',
+      current_state: 'coding',
+      active_task: 'Maintain websocket reconnection path',
+      last_meaningful_output_at: '2026-03-09T17:45:00.000Z',
+      last_file_write_at: '2026-03-09T17:45:00.000Z',
+      current_blocker: '',
+      confidence_level: 'high',
+      reboot_recommended: false
+    })
+  });
+  assert.equal(baselineHeartbeat.response.status, 201);
+
+  const dispatch = await requestJson(`${baseUrl}/events`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-actor-id': 'team-lead'
+    },
+    body: JSON.stringify({
+      event_id: 'evt_dispatch_task',
+      ts: '2026-03-09T18:04:30.000Z',
+      agent_id: 'app-engineering',
+      agent_role: 'app-engineering',
+      event_type: 'agent_received_task',
+      current_state: 'planning',
+      active_task: 'Investigate controller queue drift',
+      summary: 'Controller dispatched a new cross-agent task',
+      severity: 'normal',
+      correlation_id: 'corr-task-dispatch',
+      counterparty_agent_ids: ['team-lead'],
+      evidence_refs: [],
+      source_kind: 'controller_event',
+      metadata: {}
+    })
+  });
+
+  assert.equal(dispatch.response.status, 201);
+  assert.equal(dispatch.body.item.actor_id, 'team-lead');
+  assert.equal(dispatch.body.item.event_type, 'agent_received_task');
+
+  const agent = await requestJson(`${baseUrl}/agents/app-engineering`);
+  assert.equal(agent.response.status, 200);
+  assert.equal(agent.body.item.active_task, 'Investigate controller queue drift');
+  assert.equal(agent.body.item.current_state, 'planning');
+  assert.equal(agent.body.item.last_meaningful_output_at, '2026-03-09T17:45:00.000Z');
+  assert.equal(agent.body.item.recent_events[0].event_id, 'evt_dispatch_task');
+  assert.equal(agent.body.item.recent_events[0].actor_id, 'team-lead');
+
+  const overview = await requestJson(`${baseUrl}/office/overview`);
+  assert.equal(overview.response.status, 200);
+
+  const appEngineering = overview.body.agents.find((item) => item.agent_id === 'app-engineering');
+  assert.equal(appEngineering.active_task, 'Investigate controller queue drift');
+  assert.equal(appEngineering.last_meaningful_output_at, '2026-03-09T17:45:00.000Z');
+  assert.equal(appEngineering.derived_staleness.severity, 'yellow');
+  assert.equal(appEngineering.effective_severity, 'yellow');
+});
+
 test('GET /office/overview derives yellow and orange staleness without fabricating red', async (t) => {
   const { baseUrl } = await createHarness(t);
 

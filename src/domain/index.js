@@ -74,7 +74,6 @@ const MEETING_ZONE_EVENT_TYPES = new Set([
 ]);
 
 const MEANINGFUL_OUTPUT_EVENT_TYPES = new Set([
-  'agent_received_task',
   'agent_wrote_file',
   'agent_asked_question',
   'agent_replied',
@@ -602,11 +601,12 @@ function validateEventPayload(payload, options = {}) {
     if (
       actorAgent.kind === 'lead' &&
       actorAgent.agent_id !== targetAgent.agent_id &&
+      payload.event_type !== 'agent_received_task' &&
       !CONTROLLER_EVENT_TYPES.has(payload.event_type) &&
       !isCollectorDerivedActivity
     ) {
       errors.push(
-        'lead cross-agent events must be supervision, handoff, reboot, review, meeting, or collector-derived observation events'
+        'lead cross-agent events must be task dispatch, supervision, handoff, reboot, review, meeting, or collector-derived observation events'
       );
     }
   }

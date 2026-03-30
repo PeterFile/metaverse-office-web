@@ -1829,6 +1829,210 @@ test.describe('operator shell smoke', () => {
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toHaveCount(0);
   });
 
+  test('falls back to the workflow interaction correlation when opening a workflow interaction participant pivot via keyboard traversal', async ({
+    page
+  }) => {
+    const requestedUrls: string[] = [];
+    page.on('request', (request) => {
+      try {
+        const url = new URL(request.url());
+        requestedUrls.push(`${url.pathname}${url.search}`);
+      } catch {
+        requestedUrls.push(request.url());
+      }
+    });
+
+    await page.route('**/agents/app-engineering/workflow?limit=10&window=60m', async (route) => {
+      const response = await route.fetch();
+      const workflow = (await response.json()) as {
+        correlation_ids?: string[];
+        detail: {
+          open_peer_watch_alerts?: unknown[];
+          recent_interactions?: unknown[];
+        };
+      };
+
+      await route.fulfill({
+        response,
+        json: {
+          ...workflow,
+          correlation_ids: [],
+          detail: {
+            ...workflow.detail,
+            open_peer_watch_alerts: [],
+            recent_interactions: [
+              {
+                interaction_id: 'interaction-browser-workflow-participant-fallback',
+                interaction_type: 'peer_watch',
+                correlation_id: 'corr-app-review',
+                started_at: '2026-03-16T08:49:00.000Z',
+                ended_at: '2026-03-16T08:58:00.000Z',
+                participant_agent_ids: ['app-engineering', 'team-lead', 'ghost-agent'],
+                trigger_event_id: 'evt-browser-workflow-participant-fallback',
+                before_state: 'coding',
+                after_state: 'blocked',
+                severity: 'orange',
+                evidence_refs: [],
+                summary: 'Workflow interaction participant pivot falls back to its own correlation',
+                related_event_ids: ['evt-browser-workflow-participant-fallback']
+              },
+              ...(workflow.detail.recent_interactions ?? [])
+            ]
+          }
+        }
+      });
+    });
+
+    await page.route('**/correlations/corr-app-review?limit=10&window=60m', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        json: {
+          correlation_id: 'corr-app-review',
+          participant_agent_ids: ['app-engineering', 'team-lead'],
+          evidence_refs: ['/tmp/evidence.md', '/tmp/peer-watch.md'],
+          first_ts: '2026-03-16T08:49:00.000Z',
+          last_ts: '2026-03-16T08:50:00.000Z',
+          incident_count: 1,
+          interaction_count: 1,
+          event_count: 1,
+          incidents: [
+            {
+              incident_id: 'inc-browser-app-review',
+              kind: 'peer_watch',
+              ts: '2026-03-16T08:50:00.000Z',
+              agent_id: 'app-engineering',
+              actor_id: 'team-lead',
+              status: 'open',
+              severity: 'orange',
+              summary: 'Lead is still waiting on workflow evidence',
+              correlation_id: 'corr-app-review',
+              evidence_refs: ['/tmp/evidence.md'],
+              counterparty_agent_ids: ['team-lead'],
+              source_kind: 'controller_event'
+            }
+          ],
+          interactions: [
+            {
+              interaction_id: 'interaction-browser-workflow-participant-fallback',
+              interaction_type: 'peer_watch',
+              correlation_id: 'corr-app-review',
+              started_at: '2026-03-16T08:49:00.000Z',
+              ended_at: '2026-03-16T08:58:00.000Z',
+              participant_agent_ids: ['app-engineering', 'team-lead'],
+              trigger_event_id: 'evt-browser-workflow-participant-fallback',
+              before_state: 'coding',
+              after_state: 'blocked',
+              severity: 'orange',
+              evidence_refs: ['/tmp/evidence.md'],
+              summary: 'Workflow interaction participant pivot falls back to its own correlation',
+              related_event_ids: ['evt-browser-workflow-participant-fallback']
+            }
+          ],
+          timeline: [
+            {
+              event_id: 'evt-browser-workflow-participant-fallback',
+              ts: '2026-03-16T08:50:00.000Z',
+              agent_id: 'app-engineering',
+              actor_id: 'team-lead',
+              event_type: 'peer_watch_alert_raised',
+              severity: 'orange',
+              current_state: 'blocked',
+              location: 'meeting-zone',
+              summary: 'Workflow evidence is still incomplete',
+              correlation_id: 'corr-app-review',
+              counterparty_agent_ids: ['team-lead'],
+              evidence_refs: ['/tmp/evidence.md'],
+              source_kind: 'controller_event'
+            }
+          ]
+        }
+      });
+    });
+
+    await page.route('**/memory/artifacts?limit=4&window=60m&agent_id=team-lead&correlation_id=corr-app-review', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        json: {
+          generated_at: '2026-03-16T09:00:00.000Z',
+          items: [
+            {
+              artifact_ref: '/tmp/evidence.md',
+              artifact_kind: 'evidence_ref',
+              file_name: 'evidence.md',
+              first_seen_at: '2026-03-16T08:40:00.000Z',
+              last_seen_at: '2026-03-16T08:58:00.000Z',
+              mention_count: 3,
+              agent_ids: ['app-engineering', 'team-lead'],
+              correlation_ids: ['corr-app-review'],
+              source_kinds: ['controller_event', 'workspace_snapshot'],
+              latest_summary: 'Team lead preserved the active review evidence context',
+              latest_event_type: 'peer_watch_alert_raised',
+              collector_last_modified_at: '2026-03-16T08:58:00.000Z'
+            }
+          ]
+        }
+      });
+    });
+
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Hub' }).click();
+
+    const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
+    const clearButton = detailsPanel.getByRole('button', { name: 'Clear' });
+    const inspectButton = detailsPanel.getByRole('button', {
+      name: 'Inspect App Engineering Agent',
+      exact: true
+    });
+    const workflowSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Workflow' })
+    });
+    const correlationSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Correlation Drilldown' })
+    });
+    const workflowInteractionRecord = workflowSection.locator('li').filter({
+      hasText: 'Workflow interaction participant pivot falls back to its own correlation'
+    });
+    const workflowInteractionParticipantButton = workflowSection.getByRole('button', {
+      name: 'Select workflow interaction participant from interaction interaction-browser-workflow-participant-fallback team-lead'
+    });
+
+    await focusHubControlWithTab(page, inspectButton, 'Inspect App Engineering Agent');
+    await expect(inspectButton).toBeFocused();
+    await page.keyboard.press('Enter');
+
+    await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+    await expect(clearButton).toBeFocused();
+    await expect(correlationSection.getByText('No correlation selected.')).toBeVisible();
+    await expect(workflowInteractionRecord).toHaveCount(1);
+    await expect(workflowInteractionRecord).toContainText('Participants · app-engineering, team-lead, ghost-agent');
+    await expect(
+      workflowInteractionRecord.locator('button, a[href], [tabindex]:not([tabindex="-1"])').filter({ hasText: 'app-engineering' })
+    ).toHaveCount(0);
+    await expect(
+      workflowInteractionRecord.locator('button, a[href], [tabindex]:not([tabindex="-1"])').filter({ hasText: 'ghost-agent' })
+    ).toHaveCount(0);
+    await focusHubControlWithTab(
+      page,
+      workflowInteractionParticipantButton,
+      'Select workflow interaction participant from interaction interaction-browser-workflow-participant-fallback team-lead'
+    );
+    await expect(workflowInteractionParticipantButton).toBeFocused();
+    await page.keyboard.press('Enter');
+
+    await expect(detailsPanel.getByRole('heading', { name: 'Team Lead' })).toBeVisible();
+    await expect(clearButton).toBeFocused();
+    await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
+    await expect(correlationSection.getByText('corr-app-review', { exact: true })).toBeVisible();
+    await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
+    await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toHaveCount(0);
+    await expect(correlationSection.getByText('No correlation selected.')).toHaveCount(0);
+    expect(requestedUrls).toContain('/correlations/corr-app-review?limit=10&window=60m');
+    expect(requestedUrls).toContain('/memory/artifacts?limit=4&window=60m&agent_id=team-lead&correlation_id=corr-app-review');
+    expect(requestedUrls).not.toContain('/correlations/corr-growth-lead-review?limit=10&window=60m');
+  });
+
   test('keeps the active workflow correlation when opening a workflow counterparty pivot via keyboard traversal', async ({ page }) => {
     await page.goto('/');
     await page.getByRole('button', { name: 'Open Hub' }).click();

@@ -13,24 +13,42 @@ export interface SceneWatchOverlaySegment {
   riskLevel: SceneWatchEdge['riskLevel'];
 }
 
+export type WatchOverlayAgentEmphasis = 'selected' | 'watch-participant';
+
+export function resolveWatchOverlayAgentEmphasisById(
+  selectedAgentId: string | null,
+  watchEdges: SceneWatchEdge[]
+) {
+  const emphasisByAgentId = new Map<string, WatchOverlayAgentEmphasis>();
+
+  if (!selectedAgentId) {
+    return emphasisByAgentId;
+  }
+
+  emphasisByAgentId.set(selectedAgentId, 'selected');
+
+  for (const edge of watchEdges) {
+    if (edge.fromAgentId !== selectedAgentId && edge.toAgentId !== selectedAgentId) {
+      continue;
+    }
+
+    if (edge.fromAgentId !== selectedAgentId) {
+      emphasisByAgentId.set(edge.fromAgentId, 'watch-participant');
+    }
+
+    if (edge.toAgentId !== selectedAgentId) {
+      emphasisByAgentId.set(edge.toAgentId, 'watch-participant');
+    }
+  }
+
+  return emphasisByAgentId;
+}
+
 export function resolveWatchOverlayAgentIds(
   selectedAgentId: string | null,
   watchEdges: SceneWatchEdge[]
 ) {
-  const agentIds = new Set<string>();
-
-  if (!selectedAgentId) {
-    return agentIds;
-  }
-
-  agentIds.add(selectedAgentId);
-
-  for (const edge of watchEdges) {
-    agentIds.add(edge.fromAgentId);
-    agentIds.add(edge.toAgentId);
-  }
-
-  return agentIds;
+  return new Set(resolveWatchOverlayAgentEmphasisById(selectedAgentId, watchEdges).keys());
 }
 
 function resolveWatchAnchor(point: ScenePoint) {

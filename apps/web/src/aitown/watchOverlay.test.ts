@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { resolveWatchOverlayAgentIds, resolveWatchOverlaySegments } from './watchOverlay';
+import {
+  resolveWatchOverlayAgentEmphasisById,
+  resolveWatchOverlayAgentIds,
+  resolveWatchOverlaySegments
+} from './watchOverlay';
 import type { AiTownSceneModel, SceneAgent } from './types';
 
 function makeAgent(overrides: Partial<SceneAgent> = {}): SceneAgent {
@@ -191,5 +195,41 @@ describe('resolveWatchOverlayAgentIds', () => {
 
   it('returns an empty set when no agent is selected', () => {
     expect(resolveWatchOverlayAgentIds(null, makeScene().watchEdges)).toEqual(new Set());
+  });
+});
+
+describe('resolveWatchOverlayAgentEmphasisById', () => {
+  it('marks the selected agent and connected watch endpoints with distinct roles', () => {
+    expect(resolveWatchOverlayAgentEmphasisById('app-engineering', makeScene().watchEdges)).toEqual(
+      new Map([
+        ['app-engineering', 'selected'],
+        ['team-lead', 'watch-participant'],
+        ['growth-revenue', 'watch-participant']
+      ])
+    );
+  });
+
+  it('keeps the selected role when the selected agent appears on multiple watch edges', () => {
+    expect(
+      resolveWatchOverlayAgentEmphasisById('app-engineering', [
+        ...makeScene().watchEdges,
+        {
+          fromAgentId: 'growth-revenue',
+          toAgentId: 'app-engineering',
+          watchMode: 'peer',
+          riskLevel: 'yellow'
+        }
+      ])
+    ).toEqual(
+      new Map([
+        ['app-engineering', 'selected'],
+        ['team-lead', 'watch-participant'],
+        ['growth-revenue', 'watch-participant']
+      ])
+    );
+  });
+
+  it('returns an empty map when no agent is selected', () => {
+    expect(resolveWatchOverlayAgentEmphasisById(null, makeScene().watchEdges)).toEqual(new Map());
   });
 });

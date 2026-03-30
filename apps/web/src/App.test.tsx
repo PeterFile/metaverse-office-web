@@ -2,8 +2,61 @@ import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('./aitown/WorldScene', () => ({
+  default: function MockWorldScene({
+    scene,
+    onSelectAgent
+  }: {
+    scene: {
+      selectedAgentId: string | null;
+      watchEdges: Array<{
+        fromAgentId: string;
+        toAgentId: string;
+        watchMode: 'lead' | 'peer';
+        riskLevel: 'normal' | 'yellow' | 'orange' | 'red';
+      }>;
+      agents: Array<{
+        agentId: string;
+        displayName: string;
+      }>;
+    };
+    onSelectAgent: (agentId: string | null) => void;
+  }) {
+    const labelByAgentId = new Map(scene.agents.map((agent) => [agent.agentId, agent.displayName]));
+
+    return (
+      <div data-testid="mock-world-scene">
+        <button type="button" onClick={() => onSelectAgent('app-engineering')}>
+          Select scene agent app-engineering
+        </button>
+        {scene.watchEdges.length > 0 ? (
+          <section aria-label="Selected watch links">
+            <span>{`${scene.selectedAgentId} watch links`}</span>
+            <ul aria-label="Selected watch link list">
+              {scene.watchEdges.map((edge) => (
+                <li key={`${edge.fromAgentId}:${edge.toAgentId}:${edge.watchMode}`}>
+                  {`${edge.watchMode} ${labelByAgentId.get(edge.fromAgentId) ?? edge.fromAgentId} -> ${labelByAgentId.get(edge.toAgentId) ?? edge.toAgentId} ${edge.riskLevel}`}
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
+      </div>
+    );
+  }
+}));
+
 import App, { resolveOverviewRefreshWarning, resolveSelectedAgent } from './App';
 import type { AgentWorkflow, OfficeAgent } from './types';
+
+const DEFAULT_NAVIGATOR_USER_AGENT = window.navigator.userAgent;
+
+function setNavigatorUserAgent(userAgent: string) {
+  Object.defineProperty(window.navigator, 'userAgent', {
+    configurable: true,
+    value: userAgent
+  });
+}
 
 const operationsUrl = '/office/operations?limit=4';
 const allOperationsUrl = '/office/operations';
@@ -1223,6 +1276,7 @@ describe('App', () => {
 afterEach(() => {
   vi.useRealTimers();
   delete (window as typeof window & { __AITOWN_POLL_INTERVAL_MS__?: number }).__AITOWN_POLL_INTERVAL_MS__;
+  setNavigatorUserAgent(DEFAULT_NAVIGATOR_USER_AGENT);
   vi.unstubAllGlobals();
 });
 
@@ -1266,6 +1320,26 @@ afterEach(() => {
       )
     ).toBeVisible();
     expect(worldRegion).not.toHaveAttribute('aria-describedby');
+  });
+
+  it('routes selected-agent watch links into the scene overlay path without widening scene data', async () => {
+    const user = userEvent.setup();
+
+    setNavigatorUserAgent('VitestBrowser');
+    render(<App />);
+
+    const selectButton = await screen.findByRole('button', { name: 'Select scene agent app-engineering' });
+    await user.click(selectButton);
+
+    const watchLinkList = await screen.findByRole('list', { name: 'Selected watch link list' });
+    const items = within(watchLinkList).getAllByRole('listitem');
+
+    expect(screen.getByText('app-engineering watch links')).toBeVisible();
+    expect(items).toHaveLength(1);
+    expect(items[0]).toHaveTextContent('lead');
+    expect(items[0]).toHaveTextContent('Team Lead');
+    expect(items[0]).toHaveTextContent('App Engineering Agent');
+    expect(items[0]).toHaveTextContent('orange');
   });
 
   it('uses a full-screen scene with a dismissible hub overlay', async () => {

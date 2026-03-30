@@ -126,4 +126,28 @@ describe('resolveViewportClampPadding', () => {
       right: 0
     });
   });
+
+  it('extends right travel for the selected-watch caption overlay without reserving bottom travel', () => {
+    document.body.innerHTML = `
+      <main class="aitown-shell">
+        <section class="aitown-panel aitown-panel--game">
+          <div class="aitown-world__host" id="host"></div>
+          <div class="aitown-watch-overlay" id="overlay"></div>
+        </section>
+      </main>
+    `;
+
+    const host = document.getElementById('host') as HTMLDivElement;
+    const overlay = document.getElementById('overlay') as HTMLDivElement;
+
+    host.getBoundingClientRect = () =>
+      ({ left: 0, top: 0, right: 1000, bottom: 800, width: 1000, height: 800 } as DOMRect);
+    overlay.getBoundingClientRect = () =>
+      ({ left: 700, top: 560, right: 1000, bottom: 800, width: 300, height: 240 } as DOMRect);
+
+    expect(resolveViewportClampPadding(host)).toEqual({
+      top: 0,
+      right: 300
+    });
+  });
 });

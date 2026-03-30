@@ -806,6 +806,13 @@ const SHELLS = [
 
 test.describe('operator shell smoke', () => {
   test('renders the default shell with operator-shell framing and allows roster-driven selection through the Hub overlay', async ({ page }) => {
+    const selectedOperationRequests: string[] = [];
+    await page.route('**/office/operations?agent_id=growth-revenue', async (route) => {
+      const url = new URL(route.request().url());
+      selectedOperationRequests.push(`${url.pathname}${url.search}`);
+      await route.continue();
+    });
+
     await page.goto('/');
 
     await expect(page.getByText('Metaverse Office operator shell')).toBeVisible();
@@ -829,27 +836,82 @@ test.describe('operator shell smoke', () => {
     const workflowSection = detailsPanel.locator('section').filter({
       has: page.getByRole('heading', { name: 'Workflow' })
     });
+    const operationSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Current Operation' })
+    });
     const incidentSection = detailsPanel.locator('section').filter({
       has: page.getByRole('heading', { name: 'Incident Feed' })
     });
     const correlationSection = detailsPanel.locator('section').filter({
       has: page.getByRole('heading', { name: 'Correlation Drilldown' })
     });
+    const runContextSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Run Context' })
+    });
 
     await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+    await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toBeVisible();
+    await expect(detailsPanel.getByRole('heading', { name: 'Run Context' })).toBeVisible();
     await expect(detailsPanel.getByRole('heading', { name: 'Workflow' })).toBeVisible();
     await expect(detailsPanel.locator('.aitown-details__head').getByText('Prepare handoff notes', { exact: true })).toBeVisible();
     await expect(detailsPanel.getByText('meeting-zone', { exact: true })).toBeVisible();
+    await expect(operationSection.getByText('planning · Prepare handoff notes')).toBeVisible();
+    await expect(runContextSection.getByText(/Run blocker ·/)).toBeVisible();
     await expect(workflowSection.getByText('No open watch alerts.')).toBeVisible();
     const handoffIncidentRecord = incidentSection.getByText('Lead completed the revenue handoff').locator('..');
     await expect(handoffIncidentRecord.getByText('Lead completed the revenue handoff')).toBeVisible();
     await expect(handoffIncidentRecord.getByText('Incident · handoff · completed')).toBeVisible();
     await expect(handoffIncidentRecord.getByText('Severity · Yellow')).toBeVisible();
-    await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toBeVisible();
+    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
+    expect(selectedOperationRequests).toContain('/office/operations?agent_id=growth-revenue');
 
     await page.getByRole('button', { name: 'Close Hub' }).click();
     await expect(page.getByRole('complementary', { name: 'Agent details' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Open Hub' })).toBeVisible();
+  });
+
+  test('keeps the last direct-selection Current Operation visible when a roster selection later degrades', async ({
+    page
+  }) => {
+    test.setTimeout(45_000);
+    await installFastPollInterval(page);
+
+    const selectedOperationRequests: string[] = [];
+    await page.route('**/office/operations?agent_id=growth-revenue', async (route) => {
+      const url = new URL(route.request().url());
+      selectedOperationRequests.push(`${url.pathname}${url.search}`);
+      await route.continue();
+    });
+
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Hub' }).click();
+
+    const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
+    const operationSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Current Operation' })
+    });
+    const runContextSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Run Context' })
+    });
+
+    await detailsPanel.getByRole('button', { name: 'Inspect Growth Revenue Agent', exact: true }).click();
+
+    await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+    await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toBeVisible();
+    await expect(detailsPanel.getByRole('heading', { name: 'Run Context' })).toBeVisible();
+    await expect(operationSection.getByText('planning · Prepare handoff notes')).toBeVisible();
+    await expect(runContextSection.getByText(/Run blocker ·/)).toBeVisible();
+    await expect(runContextSection.getByText(/Latest event type ·/)).toBeVisible();
+    expect(selectedOperationRequests).toContain('/office/operations?agent_id=growth-revenue');
+
+    await enableScenario(page, 'selected-operation-refresh-failure');
+
+    await expect(detailsPanel.getByText('Showing last operation snapshot. operations refresh failed')).toBeVisible({
+      timeout: POLL_DRIVEN_ASSERTION_TIMEOUT_MS
+    });
+    await expect(operationSection.getByText('planning · Prepare handoff notes')).toBeVisible();
+    await expect(runContextSection.getByText(/Run blocker ·/)).toBeVisible();
+    await expect(runContextSection.getByText(/Latest event type ·/)).toBeVisible();
   });
 
   test('treats Hub as a dismissible dialog and restores trigger focus on Escape', async ({ page }) => {
@@ -1241,8 +1303,8 @@ test.describe('operator shell smoke', () => {
 
     await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
     await expect(clearButton).toBeFocused();
-    await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toBeVisible();
-    await expect(correlationSection.getByText('Counts · 0 incidents · 1 interactions · 2 events')).toBeVisible();
+    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
+    await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
 
     await focusHubControlWithTab(page, incidentCorrelationButton, 'Open incident correlation corr-revenue-handoff');
     await expect(incidentCorrelationButton).toBeFocused();
@@ -1321,15 +1383,26 @@ test.describe('operator shell smoke', () => {
     await expect(inspectButton).toBeFocused();
     await page.keyboard.press('Enter');
 
+    const workflowSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Workflow' })
+    });
     const correlationSection = detailsPanel.locator('section').filter({
       has: page.getByRole('heading', { name: 'Correlation Drilldown' })
     });
     const timelineActorButton = correlationSection.getByRole('button', {
       name: 'Select correlation timeline actor from event evt_growth_review_started team-lead'
     });
+    const workflowCorrelationButton = workflowSection.getByRole('button', {
+      name: 'Open workflow correlation corr-growth-lead-review'
+    });
 
     await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
     await expect(clearButton).toBeFocused();
+    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
+    await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
+    await focusHubControlWithTab(page, workflowCorrelationButton, 'Open workflow correlation corr-growth-lead-review');
+    await expect(workflowCorrelationButton).toBeFocused();
+    await page.keyboard.press('Enter');
     await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('Counts · 0 incidents · 1 interactions · 2 events')).toBeVisible();
 
@@ -1469,7 +1542,8 @@ test.describe('operator shell smoke', () => {
 
     await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
     await expect(clearButton).toBeFocused();
-    await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toBeVisible();
+    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
+    await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
 
     await focusHubControlWithTab(
       page,
@@ -1514,7 +1588,8 @@ test.describe('operator shell smoke', () => {
 
     await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
     await expect(clearButton).toBeFocused();
-    await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toBeVisible();
+    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
+    await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
 
     await focusHubControlWithTab(
       page,
@@ -1596,7 +1671,7 @@ test.describe('operator shell smoke', () => {
         await detailsPanel.getByRole('button', { name: 'Inspect Growth Revenue Agent', exact: true }).click();
 
         await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
-        await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toBeVisible();
+        await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
 
         await incidentSection.getByRole('button', { name: 'Open incident correlation corr-revenue-handoff' }).click();
 
@@ -1730,7 +1805,7 @@ test.describe('operator shell smoke', () => {
     });
 
     await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
-    await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toBeVisible();
+    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
     await focusHubControlWithTab(
       page,
       workflowInteractionCorrelationButton,
@@ -1740,7 +1815,7 @@ test.describe('operator shell smoke', () => {
     await page.keyboard.press('Enter');
 
     await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
-    await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
+    await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toBeVisible();
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
     await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toHaveCount(0);
@@ -1812,7 +1887,7 @@ test.describe('operator shell smoke', () => {
 
     await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
     await expect(clearButton).toBeFocused();
-    await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toBeVisible();
+    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
     await focusHubControlWithTab(
       page,
       workflowInteractionParticipantButton,
@@ -1824,9 +1899,9 @@ test.describe('operator shell smoke', () => {
     await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
     await expect(clearButton).toBeFocused();
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
-    await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toBeVisible();
-    await expect(correlationSection.getByText('Counts · 0 incidents · 1 interactions · 2 events')).toBeVisible();
-    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toHaveCount(0);
+    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
+    await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
+    await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toHaveCount(0);
   });
 
   test('falls back to the workflow interaction correlation when opening a workflow interaction participant pivot via keyboard traversal', async ({
@@ -2063,7 +2138,7 @@ test.describe('operator shell smoke', () => {
 
     await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
     await expect(clearButton).toBeFocused();
-    await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toBeVisible();
+    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
     await focusHubControlWithTab(page, workflowCorrelationButton, 'Open workflow correlation corr-revenue-handoff');
     await expect(workflowCorrelationButton).toBeFocused();
     await page.keyboard.press('Enter');
@@ -2111,7 +2186,7 @@ test.describe('operator shell smoke', () => {
 
     await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
     await expect(clearButton).toBeFocused();
-    await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toBeVisible();
+    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
     await focusHubControlWithTab(
       page,
       workflowStatusActorButton,
@@ -2123,9 +2198,9 @@ test.describe('operator shell smoke', () => {
     await expect(detailsPanel.getByRole('heading', { name: 'Team Lead' })).toBeVisible();
     await expect(clearButton).toBeFocused();
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
-    await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toBeVisible();
-    await expect(correlationSection.getByText('Counts · 0 incidents · 1 interactions · 2 events')).toBeVisible();
-    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toHaveCount(0);
+    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
+    await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
+    await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toHaveCount(0);
   });
 
   test('keeps the active workflow correlation when opening a workflow status counterparty pivot via keyboard traversal', async ({
@@ -2157,7 +2232,7 @@ test.describe('operator shell smoke', () => {
 
     await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
     await expect(clearButton).toBeFocused();
-    await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toBeVisible();
+    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
     await focusHubControlWithTab(
       page,
       workflowStatusCounterpartyButton,
@@ -2169,9 +2244,9 @@ test.describe('operator shell smoke', () => {
     await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
     await expect(clearButton).toBeFocused();
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
-    await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toBeVisible();
-    await expect(correlationSection.getByText('Counts · 0 incidents · 1 interactions · 2 events')).toBeVisible();
-    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toHaveCount(0);
+    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
+    await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
+    await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toHaveCount(0);
   });
 
   test('keeps the active workflow correlation when opening a workflow recent-event actor pivot via keyboard traversal', async ({
@@ -2203,7 +2278,7 @@ test.describe('operator shell smoke', () => {
 
     await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
     await expect(clearButton).toBeFocused();
-    await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toBeVisible();
+    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
     await focusHubControlWithTab(
       page,
       workflowRecentEventActorButton,
@@ -2215,9 +2290,9 @@ test.describe('operator shell smoke', () => {
     await expect(detailsPanel.getByRole('heading', { name: 'Team Lead' })).toBeVisible();
     await expect(clearButton).toBeFocused();
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
-    await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toBeVisible();
-    await expect(correlationSection.getByText('Counts · 0 incidents · 1 interactions · 2 events')).toBeVisible();
-    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toHaveCount(0);
+    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
+    await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
+    await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toHaveCount(0);
   });
 
   test('keeps the active workflow correlation when opening a workflow peer-watch observer pivot via keyboard traversal', async ({
@@ -2438,7 +2513,7 @@ test.describe('operator shell smoke', () => {
 
     await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
     await expect(clearButton).toBeFocused();
-    await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toBeVisible();
+    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
     await focusHubControlWithTab(page, correlationParticipantButton, 'Select correlation participant agent team-lead');
     await expect(correlationParticipantButton).toBeFocused();
     await page.keyboard.press('Enter');

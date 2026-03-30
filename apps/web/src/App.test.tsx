@@ -7,6 +7,8 @@ import type { AgentWorkflow, OfficeAgent } from './types';
 
 const operationsUrl = '/office/operations?limit=4';
 const selectedOperationUrl = '/office/operations?agent_id=app-engineering';
+const teamLeadSelectedOperationUrl = '/office/operations?agent_id=team-lead';
+const growthRevenueSelectedOperationUrl = '/office/operations?agent_id=growth-revenue';
 const incidentsUrl = '/incidents?limit=10&window=60m';
 const selectedAgentIncidentsUrl = '/agents/app-engineering/incidents?limit=10&window=60m';
 const timelineUrl = '/timeline?limit=4&window=60m';
@@ -204,6 +206,53 @@ const operationsFixture = {
       latest_event: null
     }
   ]
+};
+
+const directSelectionOperationFixture = {
+  ...operationsFixture,
+  summary: {
+    ...operationsFixture.summary,
+    item_count: 1,
+    blocked_count: 0,
+    reboot_recommended_count: 0
+  },
+  items: [
+    {
+      ...operationsFixture.items[0],
+      current_state: 'working',
+      current_blocker: '',
+      active_task: 'Load current operation snapshot',
+      reboot_recommended: false,
+      latest_event: {
+        event_id: 'evt-direct-selection-1',
+        event_type: 'agent_received_task',
+        ts: '2026-03-16T08:56:00.000Z',
+        summary: 'Controller assigned the direct-selection snapshot task',
+        source_kind: 'controller_event',
+        evidence_refs: ['/tmp/direct-selection.md'],
+        counterparty_agent_ids: []
+      }
+    }
+  ]
+};
+
+const teamLeadOperationFixture = {
+  generated_at: '2026-03-16T09:00:00.000Z',
+  summary: {
+    item_count: 1,
+    blocked_count: 0,
+    reboot_recommended_count: 0,
+    state_buckets: {
+      reviewing: 1
+    },
+    severity_buckets: {
+      normal: 1,
+      yellow: 0,
+      orange: 0,
+      red: 0
+    }
+  },
+  items: [operationsFixture.items[1]]
 };
 
 const emptyOperationsFixture = {
@@ -911,6 +960,14 @@ function resolveDefaultFetchResponse(url: string) {
     return jsonResponse(operationsFixture);
   }
 
+  if (url === teamLeadSelectedOperationUrl) {
+    return jsonResponse(teamLeadOperationFixture);
+  }
+
+  if (url === growthRevenueSelectedOperationUrl) {
+    return jsonResponse(emptyOperationsFixture);
+  }
+
   if (url === incidentsUrl) {
     return jsonResponse(incidentFeedFixture);
   }
@@ -1214,6 +1271,90 @@ afterEach(() => {
 
     await act(async () => {
       expect(globalThis.fetch).toHaveBeenCalledWith(memoryArtifactsUrl, expect.anything());
+    });
+  });
+
+  it('loads the selected agent operation snapshot for direct active roster selection and preserves the last good snapshot on refresh failure', async () => {
+    (window as typeof window & { __AITOWN_POLL_INTERVAL_MS__?: number }).__AITOWN_POLL_INTERVAL_MS__ = 10;
+
+    let selectedOperationRequests = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === selectedOperationUrl) {
+          selectedOperationRequests += 1;
+
+          if (selectedOperationRequests === 1) {
+            return jsonResponse(directSelectionOperationFixture);
+          }
+
+          return new Response(JSON.stringify({ error: 'internal_error', details: 'operations refresh failed' }), {
+            status: 500,
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        return resolveTestFetchResponse(url);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
+
+    const operationSection = await within(details).findByRole('heading', { name: 'Current Operation' });
+    const runContextSection = within(details).getByRole('heading', { name: 'Run Context' }).closest('section');
+    expect(operationSection).toBeVisible();
+    expect(runContextSection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(globalThis.fetch).toHaveBeenCalledWith(selectedOperationUrl, expect.anything());
+      expect(within(details).getByText('working · Load current operation snapshot')).toBeVisible();
+      expect(within(details).getByText('Latest event · Controller assigned the direct-selection snapshot task')).toBeVisible();
+      expect(within(runContextSection!).getByText('Latest event type · agent_received_task')).toBeVisible();
+    });
+
+    await waitFor(() => {
+      expect(selectedOperationRequests).toBeGreaterThan(1);
+      expect(within(details).getByText('Showing last operation snapshot. operations refresh failed')).toBeVisible();
+      expect(within(details).getByText('working · Load current operation snapshot')).toBeVisible();
+      expect(within(runContextSection!).getByText('Latest event type · agent_received_task')).toBeVisible();
+    });
+  });
+
+  it('keeps direct inactive roster selection without a current operation section', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === growthRevenueSelectedOperationUrl) {
+          return jsonResponse(emptyOperationsFixture);
+        }
+
+        return resolveTestFetchResponse(url);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
+    expect(await within(details).findByRole('heading', { name: 'Current Operation' })).toBeVisible();
+
+    await user.click(within(details).getByRole('button', { name: 'Clear' }));
+    await user.click(within(details).getByRole('button', { name: 'Inspect Growth Revenue Agent' }));
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+      expect(globalThis.fetch).toHaveBeenCalledWith(growthRevenueSelectedOperationUrl, expect.anything());
+      expect(within(details).queryByRole('heading', { name: 'Current Operation' })).not.toBeInTheDocument();
+      expect(within(details).queryByRole('heading', { name: 'Run Context' })).not.toBeInTheDocument();
     });
   });
 
@@ -3429,7 +3570,7 @@ afterEach(() => {
     });
   });
 
-  it('clears queue-derived operation context before a fresh roster selection', async () => {
+  it('clears stale queue-derived operation context before a fresh roster selection', async () => {
     const user = userEvent.setup();
     render(<App />);
 
@@ -3442,7 +3583,9 @@ afterEach(() => {
 
     await waitFor(() => {
       expect(within(details).getByRole('heading', { name: 'Team Lead' })).toBeVisible();
-      expect(within(details).queryByRole('heading', { name: 'Current Operation' })).not.toBeInTheDocument();
+      expect(within(details).getByRole('heading', { name: 'Current Operation' })).toBeVisible();
+      expect(within(details).getByText('reviewing · Coordinate rollout')).toBeVisible();
+      expect(within(details).queryByText('blocked · Workflow evidence is still incomplete')).not.toBeInTheDocument();
     });
   });
 
@@ -3643,7 +3786,7 @@ afterEach(() => {
     });
   });
 
-  it('opens a selected-agent workflow interaction correlation pivot without clearing the selected agent', async () => {
+  it('opens a selected-agent workflow interaction correlation pivot without clearing the selected agent operation snapshot', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
@@ -3694,7 +3837,7 @@ afterEach(() => {
 
     await waitFor(() => {
       expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
-      expect(within(details).queryByRole('heading', { name: 'Current Operation' })).not.toBeInTheDocument();
+      expect(within(details).getByRole('heading', { name: 'Current Operation' })).toBeVisible();
       expect(within(correlationSection!).getByText('corr-app-secondary')).toBeVisible();
       expect(within(correlationSection!).getByText('Counts · 1 incidents · 0 interactions · 1 events')).toBeVisible();
       expect(within(correlationSection!).queryByText('corr-app-review')).not.toBeInTheDocument();
@@ -5678,7 +5821,7 @@ afterEach(() => {
     });
   });
 
-  it('falls back to a workflow status record correlation when no correlation is selected and keeps current or unknown counterparties as plain text', async () => {
+  it('keeps the current-operation correlation when the workflow has none and keeps current or unknown counterparties as plain text', async () => {
     const workflowWithoutSelectedCorrelation = {
       ...workflowFixture,
       detail: {
@@ -5746,7 +5889,9 @@ afterEach(() => {
 
     await waitFor(() => {
       expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
-      expect(within(correlationSection!).getByText('No correlation selected.')).toBeVisible();
+      expect(within(details).getByRole('heading', { name: 'Current Operation' })).toBeVisible();
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+      expect(within(correlationSection!).queryByText('No correlation selected.')).not.toBeInTheDocument();
     });
 
     const workflowHandoffRecord = within(workflowSection!).getByText('Secondary review handoff completed').closest('li');
@@ -5796,21 +5941,20 @@ afterEach(() => {
 
     await waitFor(() => {
       expect(within(details).getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
-      expect(within(correlationSection!).getByText('corr-app-secondary')).toBeVisible();
-      expect(within(correlationSection!).queryByText('corr-app-review')).not.toBeInTheDocument();
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+      expect(within(correlationSection!).queryByText('corr-app-secondary')).not.toBeInTheDocument();
     });
 
     await act(async () => {
       expect(globalThis.fetch).toHaveBeenCalledWith(growthRevenueWorkflowUrl, expect.anything());
-      expect(globalThis.fetch).toHaveBeenCalledWith(secondaryCorrelationUrl, expect.anything());
       expect(globalThis.fetch).toHaveBeenCalledWith(
-        growthRevenueSelectedSecondaryCorrelationMemoryArtifactsUrl,
+        growthRevenueSelectedReviewCorrelationMemoryArtifactsUrl,
         expect.anything()
       );
     });
   });
 
-  it('falls back to a workflow interaction correlation when no correlation is selected and keeps current or unknown participants as plain text', async () => {
+  it('keeps the current-operation correlation when the workflow has no selected interaction correlation and keeps current or unknown participants as plain text', async () => {
     const workflowWithoutSelectedCorrelation = {
       ...workflowFixture,
       detail: {
@@ -5872,7 +6016,9 @@ afterEach(() => {
 
     await waitFor(() => {
       expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
-      expect(within(correlationSection!).getByText('No correlation selected.')).toBeVisible();
+      expect(within(details).getByRole('heading', { name: 'Current Operation' })).toBeVisible();
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+      expect(within(correlationSection!).queryByText('No correlation selected.')).not.toBeInTheDocument();
     });
 
     const workflowInteractionRecord = within(workflowSection!)

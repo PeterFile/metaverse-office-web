@@ -52,6 +52,7 @@ type DetailsPanelProps = {
   workflowState: LoadState;
   world: WorldState;
   onSelectAgent: (agentId: string | null, correlationId?: string | null) => void;
+  onInspectAgent: (agentId: string | null) => void;
   onSelectCorrelation: (correlationId: string | null) => void;
   onSelectOperation: (operation: OfficeOperation) => void;
 };
@@ -1336,6 +1337,7 @@ export function DetailsPanel({
   workflowState,
   world,
   onSelectAgent,
+  onInspectAgent,
   onSelectCorrelation,
   onSelectOperation
 }: DetailsPanelProps) {
@@ -1522,7 +1524,7 @@ export function DetailsPanel({
                 type="button"
                 className={`aitown-roster__button severity-${agent.severity}`}
                 aria-label={`Inspect ${agent.displayName}`}
-                onClick={() => onSelectAgent(agent.agentId)}
+                onClick={() => onInspectAgent(agent.agentId)}
               >
                 <strong>{agent.displayName}</strong>
                 <span>{SEVERITY_LABELS[agent.severity]}</span>

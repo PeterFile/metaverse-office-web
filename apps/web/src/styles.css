@@ -419,6 +419,25 @@ button {
   gap: 3px;
 }
 
+.aitown-queue-record__button {
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 4px;
+}
+
+.aitown-queue-record__status {
+  color: #efe3bc;
+}
+
+.aitown-queue-record__preview {
+  max-width: 100%;
+  color: #d3c39c;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
 .aitown-queue-record__meta {
   padding: 0 10px;
   color: #d3c39c;

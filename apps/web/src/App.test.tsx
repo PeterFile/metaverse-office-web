@@ -2917,6 +2917,16 @@ afterEach(() => {
     const filteredQueueButton = await within(queueSection!).findByRole('button', {
       name: 'Inspect App Engineering Agent from active queue'
     });
+    expect(filteredQueueButton).toHaveAttribute(
+      'aria-describedby',
+      'aitown-active-queue-status-app-engineering aitown-active-queue-preview-app-engineering'
+    );
+    expect(document.getElementById('aitown-active-queue-status-app-engineering')).toHaveTextContent(
+      'blocked · Workflow evidence is still incomplete'
+    );
+    expect(document.getElementById('aitown-active-queue-preview-app-engineering')).toHaveTextContent(
+      'Event · Workflow evidence is still incomplete · Source · controller_event · Freshness · 2026-03-16T08:50:00.000Z · Heartbeat · 2026-03-16T08:59:30.000Z · Output · 2026-03-16T08:38:00.000Z · Staleness · Orange · 22m · Reboot · Recommended'
+    );
     expect(
       within(queueSection!).queryByRole('button', { name: 'Inspect Team Lead from active queue' })
     ).not.toBeInTheDocument();

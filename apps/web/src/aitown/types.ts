@@ -58,10 +58,18 @@ export interface SceneAgent {
   hasOpenIncidents: boolean;
 }
 
+export interface SceneWatchEdge {
+  fromAgentId: string;
+  toAgentId: string;
+  watchMode: 'lead' | 'peer';
+  riskLevel: Severity;
+}
+
 export interface AiTownSceneModel {
   map: AiTownMapData;
   zones: SceneZone[];
   agents: SceneAgent[];
+  watchEdges: SceneWatchEdge[];
   selectedAgentId: string | null;
   pixelWidth: number;
   pixelHeight: number;

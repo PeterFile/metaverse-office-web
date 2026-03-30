@@ -2,7 +2,14 @@ import type { WorldAgent, WorldState } from '../world/types';
 
 import { CHARACTER_KEYS } from './characters';
 import { GENTLE_MAP } from './mapData';
-import type { AiTownSceneModel, CharacterKey, Facing, ScenePoint, SceneZone } from './types';
+import type {
+  AiTownSceneModel,
+  CharacterKey,
+  Facing,
+  ScenePoint,
+  SceneWatchEdge,
+  SceneZone
+} from './types';
 
 const DESK_ANCHORS: ScenePoint[] = [
   { x: 9.5, y: 11.5 },
@@ -160,10 +167,28 @@ export function adaptWorldToScene(
     };
   });
 
+  const sceneAgentIds = new Set(agents.map((agent) => agent.agentId));
+  const watchEdges: SceneWatchEdge[] = selectedAgentId
+    ? world.watch_edges
+        .filter(
+          (edge) =>
+            (edge.from_agent_id === selectedAgentId || edge.to_agent_id === selectedAgentId) &&
+            sceneAgentIds.has(edge.from_agent_id) &&
+            sceneAgentIds.has(edge.to_agent_id)
+        )
+        .map((edge) => ({
+          fromAgentId: edge.from_agent_id,
+          toAgentId: edge.to_agent_id,
+          watchMode: edge.watch_mode,
+          riskLevel: edge.risk_level
+        }))
+    : [];
+
   return {
     map: GENTLE_MAP,
     zones,
     agents,
+    watchEdges,
     selectedAgentId,
     pixelWidth: GENTLE_MAP.width * GENTLE_MAP.tileDim,
     pixelHeight: GENTLE_MAP.height * GENTLE_MAP.tileDim

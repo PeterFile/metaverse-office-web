@@ -51,6 +51,26 @@ const world: WorldState = {
         open_alert_count: 1,
         has_open_incidents: true
       }
+    ],
+    [
+      'growth-revenue',
+      {
+        agent_id: 'growth-revenue',
+        display_name: 'Growth Revenue Agent',
+        kind: 'employee',
+        raw_state: 'waiting',
+        raw_location: 'growth-desk',
+        active_task: 'Review launch copy',
+        reboot_recommended: false,
+        phase: 'waiting',
+        zone: 'growth-desk',
+        severity: 'red',
+        severity_reason: 'waiting on upstream input',
+        staleness: null,
+        recent_trail: [],
+        open_alert_count: 0,
+        has_open_incidents: false
+      }
     ]
   ]),
   zones: [
@@ -75,21 +95,51 @@ const world: WorldState = {
       grid_h: 1,
       home_agent_id: null,
       occupant_ids: ['app-engineering']
+    },
+    {
+      zone_id: 'growth-desk',
+      label: 'Growth Desk',
+      kind: 'desk',
+      grid_x: 2,
+      grid_y: 1,
+      grid_w: 1,
+      grid_h: 1,
+      home_agent_id: 'growth-revenue',
+      occupant_ids: ['growth-revenue']
     }
   ],
-  watch_edges: [],
+  watch_edges: [
+    {
+      from_agent_id: 'team-lead',
+      to_agent_id: 'app-engineering',
+      watch_mode: 'lead',
+      risk_level: 'orange'
+    },
+    {
+      from_agent_id: 'app-engineering',
+      to_agent_id: 'growth-revenue',
+      watch_mode: 'peer',
+      risk_level: 'red'
+    },
+    {
+      from_agent_id: 'growth-revenue',
+      to_agent_id: 'team-lead',
+      watch_mode: 'peer',
+      risk_level: 'yellow'
+    }
+  ],
   incidents: [],
   summary: {
-    total_agents: 2,
+    total_agents: 3,
     blocked_count: 1,
     reboot_count: 1,
     severity_buckets: {
       normal: 1,
       yellow: 0,
       orange: 1,
-      red: 0
+      red: 1
     },
-    highest_severity: 'orange'
+    highest_severity: 'red'
   },
   data_quality: {
     overview_available: true,
@@ -107,8 +157,8 @@ describe('adaptWorldToScene', () => {
     expect(scene.map.width).toBeGreaterThan(40);
     expect(scene.map.height).toBeGreaterThan(30);
 
-    expect(scene.zones).toHaveLength(2);
-    expect(scene.zones.map((zone) => zone.zoneId)).toEqual(['lead-desk', 'meeting-zone']);
+    expect(scene.zones).toHaveLength(3);
+    expect(scene.zones.map((zone) => zone.zoneId)).toEqual(['lead-desk', 'meeting-zone', 'growth-desk']);
 
     const appEngineering = scene.agents.find((agent) => agent.agentId === 'app-engineering');
     expect(appEngineering).toMatchObject({
@@ -145,5 +195,30 @@ describe('adaptWorldToScene', () => {
     });
     expect(teamLead?.position.x).not.toBeCloseTo(20.5 * scene.map.tileDim, 4);
     expect(teamLead?.position.y).not.toBeCloseTo(15.5 * scene.map.tileDim, 4);
+  });
+
+  it('projects only inbound and outbound watch edges for the selected agent', () => {
+    const scene = adaptWorldToScene(world, 'app-engineering');
+
+    expect(scene.watchEdges).toEqual([
+      {
+        fromAgentId: 'team-lead',
+        toAgentId: 'app-engineering',
+        watchMode: 'lead',
+        riskLevel: 'orange'
+      },
+      {
+        fromAgentId: 'app-engineering',
+        toAgentId: 'growth-revenue',
+        watchMode: 'peer',
+        riskLevel: 'red'
+      }
+    ]);
+  });
+
+  it('keeps the supervision overlay empty when no agent is selected', () => {
+    const scene = adaptWorldToScene(world, null);
+
+    expect(scene.watchEdges).toEqual([]);
   });
 });

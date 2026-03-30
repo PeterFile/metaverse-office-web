@@ -2,6 +2,8 @@ import type {
   AgentWorkflow,
   CollectorItem,
   CollectorSnapshot,
+  CollectorTmuxObservation,
+  CollectorWorkspaceObservation,
   CorrelationDrilldown,
   IncidentFeedResponse,
   MemoryArtifact,
@@ -503,6 +505,62 @@ function renderDisplayState(value: string) {
     .split('_')
     .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
     .join(' ');
+}
+
+function selectLatestWorkspaceObservation(workspaceObservations: CollectorWorkspaceObservation[]) {
+  return workspaceObservations
+    .filter((observation) => observation.kind === 'workspace_file')
+    .reduce<CollectorWorkspaceObservation | null>(
+      (latestObservation, observation) =>
+        !latestObservation || observation.last_modified_at.localeCompare(latestObservation.last_modified_at) > 0
+          ? observation
+          : latestObservation,
+      null
+    );
+}
+
+function renderWorkspaceObservationPreview(observation: CollectorWorkspaceObservation) {
+  return `${observation.file_name} · ${observation.last_modified_at}`;
+}
+
+function selectLatestTmuxObservation(tmuxObservations: CollectorTmuxObservation[]) {
+  return tmuxObservations
+    .filter((observation) => Boolean(observation.pane_activity_at))
+    .reduce<CollectorTmuxObservation | null>((latestObservation, observation) => {
+      if (!latestObservation) {
+        return observation;
+      }
+
+      return observation.pane_activity_at!.localeCompare(latestObservation.pane_activity_at!) > 0
+        ? observation
+        : latestObservation;
+    }, null);
+}
+
+function renderTmuxObservationPreview(observation: CollectorTmuxObservation) {
+  const paneLabel = observation.session_name
+    ? `${observation.session_name} ${observation.window_index}:${observation.pane_index}`
+    : `${observation.window_index}:${observation.pane_index}`;
+  const previewLabel = findFirstNonEmptyString([observation.pane_current_command, observation.pane_title, paneLabel]) ?? paneLabel;
+
+  return observation.pane_activity_at ? `${previewLabel} · ${observation.pane_activity_at}` : previewLabel;
+}
+
+function renderCollectorProvenancePreview(item: CollectorItem) {
+  const latestWorkspaceObservation = selectLatestWorkspaceObservation(item.workspace_observations);
+  const latestTmuxObservation = selectLatestTmuxObservation(item.tmux_observations);
+
+  return (
+    <>
+      <span>{`Confidence · ${renderDisplayState(item.heartbeat.confidence_level)}`}</span>
+      <span>{`Last output · ${item.heartbeat.last_meaningful_output_at ?? 'None'}`}</span>
+      <span>{`Last file write · ${item.heartbeat.last_file_write_at ?? 'None'}`}</span>
+      <span>
+        {`Workspace preview · ${latestWorkspaceObservation ? renderWorkspaceObservationPreview(latestWorkspaceObservation) : 'None'}`}
+      </span>
+      <span>{`Tmux preview · ${latestTmuxObservation ? renderTmuxObservationPreview(latestTmuxObservation) : 'None'}`}</span>
+    </>
+  );
 }
 
 function renderCorrelationInteraction({
@@ -1410,6 +1468,7 @@ export function DetailsPanel({
                   <span>{`Collector state · ${item.heartbeat.current_state}`}</span>
                   <span>{`Needs attention · ${item.supervision.needs_attention ? 'Yes' : 'No'}`}</span>
                   <span>{`Reboot flag · ${item.heartbeat.reboot_recommended ? 'Recommended' : 'No'}`}</span>
+                  {renderCollectorProvenancePreview(item)}
                   <span>
                     Watch target ·{' '}
                     {renderCollectorWatchTarget({
@@ -1965,6 +2024,7 @@ export function DetailsPanel({
               <span>{`Current blocker · ${renderOperationBlocker(selectedCollectorItem.heartbeat.current_blocker)}`}</span>
               <span>{`Attention flag · ${selectedCollectorItem.supervision.needs_attention ? 'Needs attention' : 'No'}`}</span>
               <span>{`Reboot flag · ${selectedCollectorItem.heartbeat.reboot_recommended ? 'Recommended' : 'No'}`}</span>
+              {renderCollectorProvenancePreview(selectedCollectorItem)}
               <span>
                 Watch target ·{' '}
                 {renderCollectorWatchTarget({

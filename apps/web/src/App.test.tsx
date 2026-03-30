@@ -1963,6 +1963,7 @@ afterEach(() => {
     expect(growthRevenueCollectorRecord).not.toBeNull();
     expect(appEngineeringCollectorRecord!).toHaveTextContent('Watch target · growth-revenue');
     expect(appEngineeringCollectorRecord!).toHaveTextContent('Watchers · team-lead, growth-revenue');
+    expect(appEngineeringCollectorRecord!).toHaveTextContent('Watch graph alignment · Target + watcher mismatch');
     expect(
       within(appEngineeringCollectorRecord!).getByRole('button', {
         name: 'Select collector supervision watch target from collector app-engineering growth-revenue'
@@ -1984,6 +1985,7 @@ afterEach(() => {
       })
     ).toBeVisible();
     expect(growthRevenueCollectorRecord!).toHaveTextContent('Watch target · No watch target');
+    expect(growthRevenueCollectorRecord!).toHaveTextContent('Watch graph alignment · Watcher mismatch');
     expect(collectorSection!).toHaveTextContent('Evidence · /tmp/controller-log.md, /tmp/evidence.md');
     expect(
       within(collectorSection!).getByRole('button', {
@@ -7993,6 +7995,7 @@ afterEach(() => {
     expect(within(collectorContainer!).getByText('Current blocker · Workflow evidence is still incomplete')).toBeVisible();
     expect(within(collectorContainer!).getByText('Attention flag · Needs attention')).toBeVisible();
     expect(within(collectorContainer!).getByText('Reboot flag · Recommended')).toBeVisible();
+    expect(within(collectorContainer!).getByText('Watch graph alignment · Target + watcher mismatch')).toBeVisible();
     const collectorWatchTargetLine = within(collectorContainer!).getByText(
       (_content, element) => element?.tagName === 'SPAN' && element.textContent === 'Watch target · growth-revenue'
     );

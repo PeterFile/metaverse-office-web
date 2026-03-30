@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import * as watchOverlay from './watchOverlay';
 import {
   resolveWatchOverlayAgentEmphasisById,
   resolveWatchOverlayAgentIds,
@@ -183,6 +184,82 @@ describe('resolveWatchOverlaySegments', () => {
         })
       )
     ).toEqual([]);
+  });
+});
+
+describe('resolveWatchOverlayCaptionItems', () => {
+  it('describes each rendered selected-agent watch link with watcher and target labels', () => {
+    const resolveWatchOverlayCaptionItems = (
+      watchOverlay as typeof watchOverlay & {
+        resolveWatchOverlayCaptionItems?: (
+          scene: Pick<AiTownSceneModel, 'agents' | 'selectedAgentId' | 'watchEdges'>
+        ) => Array<{
+          watcherAgentId: string;
+          targetAgentId: string;
+          watcherLabel: string;
+          targetLabel: string;
+          watchMode: 'lead' | 'peer';
+          riskLevel: 'normal' | 'yellow' | 'orange' | 'red';
+        }>;
+      }
+    ).resolveWatchOverlayCaptionItems;
+
+    expect(resolveWatchOverlayCaptionItems).toBeTypeOf('function');
+    expect(resolveWatchOverlayCaptionItems?.(makeScene())).toEqual([
+      {
+        watcherAgentId: 'team-lead',
+        targetAgentId: 'app-engineering',
+        watcherLabel: 'Team Lead',
+        targetLabel: 'App Engineering Agent',
+        watchMode: 'lead',
+        riskLevel: 'orange'
+      },
+      {
+        watcherAgentId: 'app-engineering',
+        targetAgentId: 'growth-revenue',
+        watcherLabel: 'App Engineering Agent',
+        targetLabel: 'Growth Revenue Agent',
+        watchMode: 'peer',
+        riskLevel: 'red'
+      }
+    ]);
+  });
+
+  it('omits watch links that do not render a visible scene segment', () => {
+    const resolveWatchOverlayCaptionItems = (
+      watchOverlay as typeof watchOverlay & {
+        resolveWatchOverlayCaptionItems?: (
+          scene: Pick<AiTownSceneModel, 'agents' | 'selectedAgentId' | 'watchEdges'>
+        ) => unknown[];
+      }
+    ).resolveWatchOverlayCaptionItems;
+    const scene = makeScene({
+      agents: [
+        makeAgent({
+          agentId: 'app-engineering',
+          selected: true,
+          position: { x: 120, y: 180 }
+        }),
+        makeAgent({
+          agentId: 'growth-revenue',
+          displayName: 'Growth Revenue Agent',
+          position: { x: 126, y: 180 },
+          severity: 'red',
+          phase: 'waiting'
+        })
+      ],
+      watchEdges: [
+        {
+          fromAgentId: 'app-engineering',
+          toAgentId: 'growth-revenue',
+          watchMode: 'peer',
+          riskLevel: 'red'
+        }
+      ]
+    });
+
+    expect(resolveWatchOverlayCaptionItems).toBeTypeOf('function');
+    expect(resolveWatchOverlayCaptionItems?.(scene)).toEqual([]);
   });
 });
 

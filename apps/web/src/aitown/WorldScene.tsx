@@ -32,6 +32,7 @@ import { resolveViewportClampPadding } from './viewportClampPadding';
 import { resolveSceneAgentStatusBadge } from './agentStatusBadge';
 import {
   resolveWatchOverlayAgentEmphasisById,
+  resolveWatchOverlayCaptionItems,
   resolveWatchOverlaySegments,
   type WatchOverlayAgentEmphasis
 } from './watchOverlay';
@@ -65,6 +66,10 @@ const statusBadgeStyle = new TextStyle({
 });
 
 const WATCH_PARTICIPANT_HIGHLIGHT_COLOR = 0xffd785;
+
+function resolveWatchModeLabel(watchMode: 'lead' | 'peer') {
+  return watchMode === 'lead' ? 'Lead watch' : 'Peer watch';
+}
 
 function createWatchOverlay(scene: AiTownSceneModel) {
   const container = new Container();
@@ -409,6 +414,10 @@ export default function WorldScene({ scene, onSelectAgent }: WorldSceneProps) {
   const [ready, setReady] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loadAttempt, setLoadAttempt] = useState(0);
+  const watchOverlayCaptionItems = resolveWatchOverlayCaptionItems(scene);
+  const showWatchOverlayCaption = ready && !loadError && watchOverlayCaptionItems.length > 0;
+  const selectedAgentLabel =
+    scene.agents.find((agent) => agent.agentId === scene.selectedAgentId)?.displayName ?? 'Selected agent';
 
   useEffect(() => {
     onSelectAgentRef.current = onSelectAgent;
@@ -868,6 +877,32 @@ export default function WorldScene({ scene, onSelectAgent }: WorldSceneProps) {
   return (
     <div className="aitown-world__canvas">
       <div ref={hostRef} className="aitown-world__host" />
+      {showWatchOverlayCaption ? (
+        <section className="aitown-watch-overlay" aria-label="Selected watch links">
+          <p className="aitown-watch-overlay__caption">
+            <span className="aitown-watch-overlay__title">Watch links</span>
+            <span className="aitown-watch-overlay__summary">
+              {selectedAgentLabel} · {watchOverlayCaptionItems.length} shown
+            </span>
+          </p>
+          <ul className="aitown-watch-overlay__items" aria-label="Selected watch link list">
+            {watchOverlayCaptionItems.map((item) => (
+              <li
+                key={`${item.watcherAgentId}:${item.targetAgentId}:${item.watchMode}`}
+                className={`aitown-watch-overlay__item severity-${item.riskLevel}`}
+              >
+                <span className="aitown-watch-overlay__mode">{resolveWatchModeLabel(item.watchMode)}</span>
+                <span className="aitown-watch-overlay__route">
+                  {item.watcherLabel}
+                  {' -> '}
+                  {item.targetLabel}
+                </span>
+                <span className="aitown-watch-overlay__risk">{item.riskLevel} risk</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
       {loadError ? (
         <div className="aitown-world__placeholder aitown-world__placeholder--error" role="alert">
           <strong>World renderer failed to load.</strong>

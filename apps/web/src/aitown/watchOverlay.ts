@@ -13,6 +13,15 @@ export interface SceneWatchOverlaySegment {
   riskLevel: SceneWatchEdge['riskLevel'];
 }
 
+export interface SceneWatchOverlayCaptionItem {
+  watcherAgentId: string;
+  targetAgentId: string;
+  watcherLabel: string;
+  targetLabel: string;
+  watchMode: SceneWatchEdge['watchMode'];
+  riskLevel: SceneWatchEdge['riskLevel'];
+}
+
 export type WatchOverlayAgentEmphasis = 'selected' | 'watch-participant';
 
 export function resolveWatchOverlayAgentEmphasisById(
@@ -119,4 +128,30 @@ export function resolveWatchOverlaySegments(
   }
 
   return segments;
+}
+
+export function resolveWatchOverlayCaptionItems(
+  scene: Pick<AiTownSceneModel, 'agents' | 'selectedAgentId' | 'watchEdges'>
+): SceneWatchOverlayCaptionItem[] {
+  const labelByAgentId = new Map(scene.agents.map((agent) => [agent.agentId, agent.displayName]));
+
+  return resolveWatchOverlaySegments(scene).flatMap((segment) => {
+    const watcherLabel = labelByAgentId.get(segment.fromAgentId);
+    const targetLabel = labelByAgentId.get(segment.toAgentId);
+
+    if (!watcherLabel || !targetLabel) {
+      return [];
+    }
+
+    return [
+      {
+        watcherAgentId: segment.fromAgentId,
+        targetAgentId: segment.toAgentId,
+        watcherLabel,
+        targetLabel,
+        watchMode: segment.watchMode,
+        riskLevel: segment.riskLevel
+      }
+    ];
+  });
 }

@@ -5,7 +5,8 @@ const rightSelectors = [
   '.aitown-shell__stats',
   '.aitown-panel__toolbar',
   '.aitown-panel__topline > span:last-child',
-  '.aitown-hub-sheet'
+  '.aitown-hub-sheet',
+  '.aitown-watch-overlay'
 ];
 
 export function resolveViewportClampPadding(host: HTMLDivElement): ViewportClampPadding {

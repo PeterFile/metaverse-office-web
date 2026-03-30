@@ -4566,6 +4566,75 @@ afterEach(() => {
     });
   });
 
+  it('preserves the active selected correlation when opening a workflow peer-watch target pivot', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === workflowUrl) {
+          return jsonResponse({
+            ...workflowFixture,
+            detail: {
+              ...workflowFixture.detail,
+              open_peer_watch_alerts: [
+                {
+                  ...workflowFixture.detail.open_peer_watch_alerts[0],
+                  alert_id: 'alert-target-pivot',
+                  target_agent_id: 'growth-revenue',
+                  summary: 'Workflow target stays actionable'
+                }
+              ]
+            }
+          } satisfies AgentWorkflow);
+        }
+
+        return resolveTestFetchResponse(url);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent from active queue' }));
+
+    const workflowSection = within(details).getByRole('heading', { name: 'Workflow' }).closest('section');
+    const incidentSection = within(details).getByRole('heading', { name: 'Incident Feed' }).closest('section');
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    expect(workflowSection).not.toBeNull();
+    expect(incidentSection).not.toBeNull();
+    expect(correlationSection).not.toBeNull();
+
+    await user.click(within(incidentSection!).getByRole('button', { name: 'Open incident correlation corr-app-secondary' }));
+    await waitFor(() => {
+      expect(within(correlationSection!).getByText('corr-app-secondary')).toBeVisible();
+    });
+
+    await user.click(
+      within(workflowSection!).getByRole('button', {
+        name: 'Select workflow peer-watch target from alert alert-target-pivot growth-revenue'
+      })
+    );
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+      expect(within(details).queryByRole('heading', { name: 'Current Operation' })).not.toBeInTheDocument();
+      expect(within(correlationSection!).getByText('corr-app-secondary')).toBeVisible();
+      expect(within(correlationSection!).getByText('Counts · 1 incidents · 0 interactions · 1 events')).toBeVisible();
+      expect(within(correlationSection!).queryByText('corr-app-review')).not.toBeInTheDocument();
+    });
+
+    await act(async () => {
+      expect(globalThis.fetch).toHaveBeenCalledWith(growthRevenueWorkflowUrl, expect.anything());
+      expect(globalThis.fetch).toHaveBeenCalledWith(secondaryCorrelationUrl, expect.anything());
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        growthRevenueSelectedSecondaryCorrelationMemoryArtifactsUrl,
+        expect.anything()
+      );
+    });
+  });
+
   it('keeps current and unknown workflow peer-watch observers as plain text', async () => {
     vi.stubGlobal(
       'fetch',
@@ -4631,6 +4700,73 @@ afterEach(() => {
     expect(
       within(unknownRecord!).queryByRole('button', {
         name: 'Select workflow peer-watch observer from alert alert-observer-unknown ghost-agent'
+      })
+    ).not.toBeInTheDocument();
+  });
+
+  it('keeps current and unknown workflow peer-watch targets as plain text', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === workflowUrl) {
+          return jsonResponse({
+            ...workflowFixture,
+            detail: {
+              ...workflowFixture.detail,
+              open_peer_watch_alerts: [
+                {
+                  ...workflowFixture.detail.open_peer_watch_alerts[0],
+                  alert_id: 'alert-target-current',
+                  target_agent_id: 'app-engineering',
+                  summary: 'Current target stays plain text'
+                },
+                {
+                  ...workflowFixture.detail.open_peer_watch_alerts[0],
+                  alert_id: 'alert-target-unknown',
+                  target_agent_id: 'ghost-agent',
+                  summary: 'Unknown target stays plain text'
+                }
+              ]
+            }
+          } satisfies AgentWorkflow);
+        }
+
+        return resolveTestFetchResponse(url);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
+
+    const workflowSection = within(details).getByRole('heading', { name: 'Workflow' }).closest('section');
+    expect(workflowSection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+      expect(within(workflowSection!).getByText('Current target stays plain text')).toBeVisible();
+      expect(within(workflowSection!).getByText('Unknown target stays plain text')).toBeVisible();
+    });
+
+    const currentRecord = within(workflowSection!).getByText('Current target stays plain text').closest('li');
+    const unknownRecord = within(workflowSection!).getByText('Unknown target stays plain text').closest('li');
+    expect(currentRecord).not.toBeNull();
+    expect(unknownRecord).not.toBeNull();
+
+    expect(currentRecord).toHaveTextContent('Target · app-engineering');
+    expect(
+      within(currentRecord!).queryByRole('button', {
+        name: 'Select workflow peer-watch target from alert alert-target-current app-engineering'
+      })
+    ).not.toBeInTheDocument();
+    expect(unknownRecord).toHaveTextContent('Target · ghost-agent');
+    expect(
+      within(unknownRecord!).queryByRole('button', {
+        name: 'Select workflow peer-watch target from alert alert-target-unknown ghost-agent'
       })
     ).not.toBeInTheDocument();
   });

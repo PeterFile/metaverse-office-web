@@ -73,6 +73,25 @@ function resolveMemoryArtifactResourceKey(
   return `memory-artifacts:${selectedAgentId ?? 'crew-overview'}:${selectedCorrelationId ?? '__all__'}`;
 }
 
+function resolveDirectOperationSelection(agentId: string | null, correlationId: string | null) {
+  if (!agentId || correlationId !== null) {
+    return null;
+  }
+
+  return { agentId };
+}
+
+function resolveOperationSnapshotSeed(
+  agentId: string | null,
+  operations: { items: OfficeOperation[] } | null
+) {
+  if (!agentId) {
+    return null;
+  }
+
+  return operations?.items.find((operation) => operation.agent_id === agentId) ?? null;
+}
+
 function resolveSharedMemoryCorrelationId(
   selectedAgentId: string | null,
   selectedCorrelationId: string | null,
@@ -587,25 +606,60 @@ function AppInner() {
     [overviewResource.data, setSelectedAgentId]
   );
 
-  const handleSceneSelectAgent = useCallback(
-    (agentId: string | null) => {
-      selectAgent(agentId, null);
-      if (agentId) {
-        setHubOpen(true);
-      }
+  const selectAgentWithSnapshot = useCallback(
+    (
+      agentId: string | null,
+      correlationId: string | null,
+      operationSelection: OperationSelection | null = null,
+      correlationMode: 'auto' | 'manual' | 'preserved' = correlationId === null ? 'auto' : 'manual',
+      correlationWasExplicit = correlationMode === 'manual',
+      operationSnapshot: OfficeOperation | null = null
+    ) => {
+      setSelectedOperationSnapshot(operationSnapshot);
+      selectAgent(
+        agentId,
+        correlationId,
+        operationSelection,
+        correlationMode,
+        correlationWasExplicit
+      );
     },
     [selectAgent]
   );
 
+  const handleSceneSelectAgent = useCallback(
+    (agentId: string | null) => {
+      const operationSelection = resolveDirectOperationSelection(agentId, null);
+      selectAgentWithSnapshot(
+        agentId,
+        null,
+        operationSelection,
+        'auto',
+        false,
+        resolveOperationSnapshotSeed(agentId, operationsResource.data)
+      );
+      if (agentId) {
+        setHubOpen(true);
+      }
+    },
+    [operationsResource.data, selectAgentWithSnapshot]
+  );
+
   const handleSelectOperation = useCallback(
     (operation: OfficeOperation) => {
-      setSelectedOperationSnapshot(operation);
-      selectAgent(operation.agent_id, operation.correlation_id, {
-        agentId: operation.agent_id
-      }, 'auto');
+      selectAgentWithSnapshot(
+        operation.agent_id,
+        operation.correlation_id,
+        {
+          agentId: operation.agent_id
+        },
+        'auto',
+        false,
+        operation
+      );
       setHubOpen(true);
     },
-    [selectAgent]
+    [selectAgentWithSnapshot]
   );
 
   const rendererFallback = (
@@ -745,13 +799,24 @@ function AppInner() {
               memoryArtifacts={memoryArtifactsResource.data}
               memoryArtifactsError={memoryArtifactsResource.error}
               memoryArtifactsState={memoryArtifactsResource.state}
+              onInspectAgent={(agentId) =>
+                selectAgentWithSnapshot(
+                  agentId,
+                  null,
+                  resolveDirectOperationSelection(agentId, null),
+                  'auto',
+                  false,
+                  resolveOperationSnapshotSeed(agentId, operationsResource.data)
+                )
+              }
               onSelectAgent={(agentId, correlationId = null) =>
-                selectAgent(
+                selectAgentWithSnapshot(
                   agentId,
                   correlationId,
                   null,
                   correlationId === null ? 'auto' : 'preserved',
-                  correlationId !== null && correlationId === selectedCorrelationId && selectedCorrelationWasExplicit
+                  correlationId !== null && correlationId === selectedCorrelationId && selectedCorrelationWasExplicit,
+                  null
                 )
               }
               onSelectCorrelation={handleSelectCorrelation}

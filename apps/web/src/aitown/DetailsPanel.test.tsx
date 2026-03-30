@@ -473,6 +473,7 @@ function buildProps(overrides: Partial<DetailsPanelProps> = {}): DetailsPanelPro
     workflowError: null,
     workflowState: 'ready',
     world: buildWorld(),
+    onInspectAgent: vi.fn(),
     onSelectAgent: vi.fn(),
     onSelectCorrelation: vi.fn(),
     onSelectOperation: vi.fn(),

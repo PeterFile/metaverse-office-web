@@ -5810,6 +5810,113 @@ afterEach(() => {
     });
   });
 
+  it('falls back to a workflow interaction correlation when no correlation is selected and keeps current or unknown participants as plain text', async () => {
+    const workflowWithoutSelectedCorrelation = {
+      ...workflowFixture,
+      detail: {
+        ...workflowFixture.detail,
+        open_peer_watch_alerts: [],
+        recent_interactions: [
+          {
+            ...workflowFixture.detail.recent_interactions[0],
+            participant_agent_ids: ['app-engineering', 'team-lead', 'ghost-agent']
+          }
+        ]
+      },
+      correlation_ids: []
+    } satisfies AgentWorkflow;
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === '/office/overview') {
+          return new Response(JSON.stringify(overviewFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === incidentsUrl) {
+          return new Response(JSON.stringify(incidentFeedFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === timelineUrl) {
+          return new Response(JSON.stringify(timelineFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === workflowUrl) {
+          return new Response(JSON.stringify(workflowWithoutSelectedCorrelation), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        return resolveTestFetchResponse(url);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
+
+    const workflowSection = within(details).getByRole('heading', { name: 'Workflow' }).closest('section');
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    expect(workflowSection).not.toBeNull();
+    expect(correlationSection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+      expect(within(correlationSection!).getByText('No correlation selected.')).toBeVisible();
+    });
+
+    const workflowInteractionRecord = within(workflowSection!)
+      .getByText('Lead reviewed the missing workflow evidence thread')
+      .closest('li');
+    expect(workflowInteractionRecord).not.toBeNull();
+    expect(workflowInteractionRecord).toHaveTextContent(
+      /Participants · app-engineering\s*,\s*team-lead\s*,\s*ghost-agent/
+    );
+    expect(
+      within(workflowInteractionRecord!).queryByRole('button', {
+        name: 'Select workflow interaction participant from interaction interaction-workflow-1 app-engineering'
+      })
+    ).not.toBeInTheDocument();
+    expect(
+      within(workflowInteractionRecord!).queryByRole('button', {
+        name: 'Select workflow interaction participant from interaction interaction-workflow-1 ghost-agent'
+      })
+    ).not.toBeInTheDocument();
+    expect(
+      within(workflowInteractionRecord!).queryByRole('button', {
+        name: 'Select correlation interaction participant agent team-lead'
+      })
+    ).not.toBeInTheDocument();
+
+    await user.click(
+      within(workflowInteractionRecord!).getByRole('button', {
+        name: 'Select workflow interaction participant from interaction interaction-workflow-1 team-lead'
+      })
+    );
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'Team Lead' })).toBeVisible();
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+      expect(within(correlationSection!).queryByText('No correlation selected.')).not.toBeInTheDocument();
+    });
+
+    await act(async () => {
+      expect(globalThis.fetch).toHaveBeenCalledWith(teamLeadWorkflowUrl, expect.anything());
+      expect(globalThis.fetch).toHaveBeenCalledWith(correlationUrl, expect.anything());
+      expect(globalThis.fetch).toHaveBeenCalledWith(teamLeadSelectedCorrelationMemoryArtifactsUrl, expect.anything());
+    });
+  });
+
   it('does not preserve a carried crew-overview incident correlation when later pivoting through workflow counterparties', async () => {
     const user = userEvent.setup();
     render(<App />);

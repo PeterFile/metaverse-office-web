@@ -6,6 +6,10 @@ import App, { resolveOverviewRefreshWarning, resolveSelectedAgent } from './App'
 import type { AgentWorkflow, OfficeAgent } from './types';
 
 const operationsUrl = '/office/operations?limit=4';
+const allOperationsUrl = '/office/operations';
+const blockedOperationsUrl = '/office/operations?limit=4&state=blocked';
+const planningOperationsUrl = '/office/operations?limit=4&state=planning';
+const reviewingOperationsUrl = '/office/operations?limit=4&state=reviewing';
 const selectedOperationUrl = '/office/operations?agent_id=app-engineering';
 const teamLeadSelectedOperationUrl = '/office/operations?agent_id=team-lead';
 const growthRevenueSelectedOperationUrl = '/office/operations?agent_id=growth-revenue';
@@ -253,6 +257,96 @@ const teamLeadOperationFixture = {
     }
   },
   items: [operationsFixture.items[1]]
+};
+
+const blockedOperationsFixture = {
+  generated_at: '2026-03-16T09:00:00.000Z',
+  summary: {
+    item_count: 1,
+    blocked_count: 1,
+    reboot_recommended_count: 1,
+    state_buckets: {
+      blocked: 1
+    },
+    severity_buckets: {
+      normal: 0,
+      yellow: 0,
+      orange: 1,
+      red: 0
+    }
+  },
+  items: [operationsFixture.items[0]]
+};
+
+const planningOperationsFixture = {
+  generated_at: '2026-03-16T09:00:00.000Z',
+  summary: {
+    item_count: 1,
+    blocked_count: 0,
+    reboot_recommended_count: 0,
+    state_buckets: {
+      planning: 1
+    },
+    severity_buckets: {
+      normal: 0,
+      yellow: 1,
+      orange: 0,
+      red: 0
+    }
+  },
+  items: [
+    {
+      agent_id: 'growth-revenue',
+      display_name: 'Growth Revenue Agent',
+      kind: 'employee',
+      current_state: 'planning',
+      active_task: 'Review launch copy',
+      current_blocker: '',
+      current_location: 'meeting-zone',
+      effective_severity: 'yellow',
+      reported_severity: 'yellow',
+      derived_staleness: {
+        severity: 'yellow',
+        stale_for_minutes: 9,
+        last_meaningful_output_at: '2026-03-16T08:51:00.000Z'
+      },
+      reboot_recommended: false,
+      last_event_at: '2026-03-16T08:52:00.000Z',
+      last_heartbeat_at: '2026-03-16T08:59:00.000Z',
+      last_meaningful_output_at: '2026-03-16T08:51:00.000Z',
+      correlation_id: 'corr-app-secondary',
+      latest_event: {
+        event_id: 'evt-growth-planning-1',
+        event_type: 'agent_noted',
+        ts: '2026-03-16T08:52:00.000Z',
+        summary: 'Growth queued launch copy review',
+        source_kind: 'workspace_snapshot',
+        evidence_refs: ['/tmp/launch-note.md'],
+        counterparty_agent_ids: []
+      }
+    }
+  ]
+};
+
+const allOperationsFixture = {
+  generated_at: '2026-03-16T09:00:00.000Z',
+  summary: {
+    item_count: 3,
+    blocked_count: 1,
+    reboot_recommended_count: 1,
+    state_buckets: {
+      blocked: 1,
+      planning: 1,
+      reviewing: 1
+    },
+    severity_buckets: {
+      normal: 1,
+      yellow: 1,
+      orange: 1,
+      red: 0
+    }
+  },
+  items: [...operationsFixture.items, planningOperationsFixture.items[0]]
 };
 
 const emptyOperationsFixture = {
@@ -956,6 +1050,10 @@ function resolveDefaultFetchResponse(url: string) {
     return jsonResponse(overviewFixture);
   }
 
+  if (url === allOperationsUrl) {
+    return jsonResponse(allOperationsFixture);
+  }
+
   if (url === operationsUrl || url === selectedOperationUrl) {
     return jsonResponse(operationsFixture);
   }
@@ -1234,12 +1332,13 @@ afterEach(() => {
     expect(closeButton).toHaveFocus();
   });
 
-  it('loads the active operations queue only when Hub opens in Crew Overview and requests the limited slice', async () => {
+  it('loads the active operations queue only when Hub opens in Crew Overview and also refreshes full state buckets', async () => {
     const user = userEvent.setup();
     render(<App />);
 
     await screen.findByRole('button', { name: 'Open Hub' });
     expect(globalThis.fetch).not.toHaveBeenCalledWith(operationsUrl, expect.anything());
+    expect(globalThis.fetch).not.toHaveBeenCalledWith(allOperationsUrl, expect.anything());
 
     const details = await openHub(user);
 
@@ -1249,6 +1348,7 @@ afterEach(() => {
 
     await act(async () => {
       expect(globalThis.fetch).toHaveBeenCalledWith(operationsUrl, expect.anything());
+      expect(globalThis.fetch).toHaveBeenCalledWith(allOperationsUrl, expect.anything());
     });
 
     await user.click(within(details).getByRole('button', { name: 'Inspect Team Lead' }));
@@ -2750,6 +2850,387 @@ afterEach(() => {
     });
   });
 
+  it('keeps the current operation path intact when selecting a filtered active queue item', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === '/office/overview') {
+          return new Response(JSON.stringify(overviewFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === operationsUrl) {
+          return new Response(JSON.stringify(operationsFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === blockedOperationsUrl) {
+          return new Response(JSON.stringify(blockedOperationsFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === selectedOperationUrl) {
+          return new Response(JSON.stringify(directSelectionOperationFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === incidentsUrl) {
+          return new Response(JSON.stringify(incidentFeedFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === workflowUrl) {
+          return new Response(JSON.stringify(workflowFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        return resolveTestFetchResponse(url);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    const queueSection = within(details).getByRole('heading', { name: 'Active Queue' }).closest('section');
+    expect(queueSection).not.toBeNull();
+
+    await user.selectOptions(
+      within(queueSection!).getByRole('combobox', { name: 'Filter active queue by state' }),
+      'blocked'
+    );
+
+    const filteredQueueButton = await within(queueSection!).findByRole('button', {
+      name: 'Inspect App Engineering Agent from active queue'
+    });
+    expect(
+      within(queueSection!).queryByRole('button', { name: 'Inspect Team Lead from active queue' })
+    ).not.toBeInTheDocument();
+
+    await user.click(filteredQueueButton);
+
+    expect(await within(details).findByRole('heading', { name: 'Current Operation' })).toBeVisible();
+    expect(within(details).getByText('working · Load current operation snapshot')).toBeVisible();
+
+    const requestedUrls = vi
+      .mocked(globalThis.fetch)
+      .mock
+      .calls.map(([input]) => (typeof input === 'string' ? input : input.toString()));
+
+    expect(requestedUrls).toContain(blockedOperationsUrl);
+    expect(requestedUrls).toContain(selectedOperationUrl);
+    expect(requestedUrls).not.toContain('/office/operations?state=blocked&agent_id=app-engineering');
+  });
+
+  it('keeps direct roster inspection seeded from the unfiltered operations contract while a crew-overview state filter is active', async () => {
+    let resolveTeamLeadOperationRequest: ((response: Response) => void) | null = null;
+    const teamLeadOperationRequest = new Promise<Response>((resolve) => {
+      resolveTeamLeadOperationRequest = resolve;
+    });
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === '/office/overview') {
+          return jsonResponse(overviewFixture);
+        }
+
+        if (url === operationsUrl) {
+          return jsonResponse(operationsFixture);
+        }
+
+        if (url === allOperationsUrl) {
+          return jsonResponse(allOperationsFixture);
+        }
+
+        if (url === blockedOperationsUrl) {
+          return jsonResponse(blockedOperationsFixture);
+        }
+
+        if (url === teamLeadSelectedOperationUrl) {
+          return teamLeadOperationRequest;
+        }
+
+        return resolveTestFetchResponse(url);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    const queueSection = within(details).getByRole('heading', { name: 'Active Queue' }).closest('section');
+    expect(queueSection).not.toBeNull();
+
+    await user.selectOptions(
+      within(queueSection!).getByRole('combobox', { name: 'Filter active queue by state' }),
+      'blocked'
+    );
+
+    expect(
+      await within(queueSection!).findByRole('button', { name: 'Inspect App Engineering Agent from active queue' })
+    ).toBeVisible();
+    expect(
+      within(queueSection!).queryByRole('button', { name: 'Inspect Team Lead from active queue' })
+    ).not.toBeInTheDocument();
+
+    await user.click(within(details).getByRole('button', { name: 'Inspect Team Lead' }));
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'Team Lead' })).toBeVisible();
+      expect(within(details).getByRole('heading', { name: 'Current Operation' })).toBeVisible();
+      expect(within(details).getByText('reviewing · Coordinate rollout')).toBeVisible();
+    });
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(teamLeadSelectedOperationUrl, expect.anything());
+
+    await act(async () => {
+      resolveTeamLeadOperationRequest?.(jsonResponse(teamLeadOperationFixture));
+    });
+  });
+
+  it('keeps top-slice-missing crew-overview states selectable in the active queue filter', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === '/office/overview') {
+          return new Response(JSON.stringify(overviewFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === operationsUrl) {
+          return new Response(JSON.stringify(operationsFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === planningOperationsUrl) {
+          return new Response(JSON.stringify(planningOperationsFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === incidentsUrl) {
+          return new Response(JSON.stringify(incidentFeedFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === timelineUrl) {
+          return new Response(JSON.stringify(timelineFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        return resolveTestFetchResponse(url);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    const queueSection = within(details).getByRole('heading', { name: 'Active Queue' }).closest('section');
+    expect(queueSection).not.toBeNull();
+
+    const stateFilter = within(queueSection!).getByRole('combobox', {
+      name: 'Filter active queue by state'
+    });
+
+    expect(within(stateFilter).getByRole('option', { name: 'All states (3)' })).toBeVisible();
+    expect(within(stateFilter).getByRole('option', { name: 'Planning (1)' })).toBeVisible();
+
+    await user.selectOptions(stateFilter, 'planning');
+
+    expect(
+      await within(queueSection!).findByRole('button', { name: 'Inspect Growth Revenue Agent from active queue' })
+    ).toBeVisible();
+    expect(
+      within(queueSection!).queryByRole('button', { name: 'Inspect App Engineering Agent from active queue' })
+    ).not.toBeInTheDocument();
+
+    const requestedUrls = vi
+      .mocked(globalThis.fetch)
+      .mock
+      .calls.map(([input]) => (typeof input === 'string' ? input : input.toString()));
+
+    expect(requestedUrls).toContain(planningOperationsUrl);
+  });
+
+  it('falls back to the currently loaded queue summary while full state buckets are still loading', async () => {
+    let resolveAllOperations: ((response: Response) => void) | null = null;
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === '/office/overview') {
+          return Promise.resolve(
+            new Response(JSON.stringify(overviewFixture), {
+              headers: { 'content-type': 'application/json' }
+            })
+          );
+        }
+
+        if (url === operationsUrl) {
+          return Promise.resolve(
+            new Response(JSON.stringify(operationsFixture), {
+              headers: { 'content-type': 'application/json' }
+            })
+          );
+        }
+
+        if (url === allOperationsUrl) {
+          return new Promise<Response>((resolve) => {
+            resolveAllOperations = resolve;
+          });
+        }
+
+        return Promise.resolve(resolveTestFetchResponse(url));
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    const queueSection = within(details).getByRole('heading', { name: 'Active Queue' }).closest('section');
+    expect(queueSection).not.toBeNull();
+
+    const stateFilter = within(queueSection!).getByRole('combobox', {
+      name: 'Filter active queue by state'
+    });
+
+    await waitFor(() => {
+      expect(within(stateFilter).getByRole('option', { name: 'All states (2)' })).toBeVisible();
+      expect(within(stateFilter).getByRole('option', { name: 'Blocked (1)' })).toBeVisible();
+      expect(within(stateFilter).getByRole('option', { name: 'Reviewing (1)' })).toBeVisible();
+    });
+
+    expect(resolveAllOperations).not.toBeNull();
+    resolveAllOperations!(
+      new Response(JSON.stringify(allOperationsFixture), {
+        headers: { 'content-type': 'application/json' }
+      })
+    );
+
+    await waitFor(() => {
+      expect(within(stateFilter).getByRole('option', { name: 'All states (3)' })).toBeVisible();
+      expect(within(stateFilter).getByRole('option', { name: 'Blocked (1)' })).toBeVisible();
+      expect(within(stateFilter).getByRole('option', { name: 'Planning (1)' })).toBeVisible();
+      expect(within(stateFilter).getByRole('option', { name: 'Reviewing (1)' })).toBeVisible();
+    });
+  });
+
+  it('falls back to the visible queue summary when the full active-queue bucket read fails', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === allOperationsUrl) {
+          return new Response(
+            JSON.stringify({ error: 'internal_error', details: 'state bucket refresh failed' }),
+            {
+              status: 500,
+              headers: { 'content-type': 'application/json' }
+            }
+          );
+        }
+
+        return resolveTestFetchResponse(url);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    const queueSection = within(details).getByRole('heading', { name: 'Active Queue' }).closest('section');
+    expect(queueSection).not.toBeNull();
+
+    expect(
+      await within(queueSection!).findByRole('button', { name: 'Inspect App Engineering Agent from active queue' })
+    ).toBeVisible();
+    expect(within(queueSection!).queryByText(/active queue state buckets/i)).not.toBeInTheDocument();
+
+    const stateFilter = within(queueSection!).getByRole('combobox', {
+      name: 'Filter active queue by state'
+    });
+
+    expect(within(stateFilter).getByRole('option', { name: 'All states (2)' })).toBeVisible();
+    expect(within(stateFilter).getByRole('option', { name: 'Blocked (1)' })).toBeVisible();
+    expect(within(stateFilter).getByRole('option', { name: 'Reviewing (1)' })).toBeVisible();
+  });
+
+  it('shows a degraded bucket warning while keeping the last full active-queue state buckets after a later refresh fails', async () => {
+    (window as typeof window & { __AITOWN_POLL_INTERVAL_MS__?: number }).__AITOWN_POLL_INTERVAL_MS__ = 10;
+
+    let allOperationsRequests = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === allOperationsUrl) {
+          allOperationsRequests += 1;
+
+          if (allOperationsRequests === 1) {
+            return new Response(JSON.stringify(allOperationsFixture), {
+              headers: { 'content-type': 'application/json' }
+            });
+          }
+
+          return new Response(
+            JSON.stringify({ error: 'internal_error', details: 'state bucket refresh failed' }),
+            {
+              status: 500,
+              headers: { 'content-type': 'application/json' }
+            }
+          );
+        }
+
+        return resolveTestFetchResponse(url);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    const queueSection = within(details).getByRole('heading', { name: 'Active Queue' }).closest('section');
+    expect(queueSection).not.toBeNull();
+
+    const stateFilter = within(queueSection!).getByRole('combobox', {
+      name: 'Filter active queue by state'
+    });
+
+    expect(await within(stateFilter).findByRole('option', { name: 'Planning (1)' })).toBeVisible();
+
+    await waitFor(() => {
+      expect(allOperationsRequests).toBeGreaterThan(1);
+      expect(
+        within(queueSection!).getByText('Showing last active queue state buckets. state bucket refresh failed')
+      ).toBeVisible();
+      expect(within(stateFilter).getByRole('option', { name: 'All states (3)' })).toBeVisible();
+      expect(within(stateFilter).getByRole('option', { name: 'Planning (1)' })).toBeVisible();
+    });
+  });
+
   it('keeps queue-derived operation context visible after drilling into a selected agent', async () => {
     const user = userEvent.setup();
     render(<App />);
@@ -3680,6 +4161,120 @@ afterEach(() => {
     expect(await within(details).findByText('blocked · Workflow evidence is still incomplete')).toBeVisible();
   });
 
+  it('filters the crew active queue by state and keeps filtered loading, empty, and error states explicit', async () => {
+    let resolveBlockedOperations: ((response: Response) => void) | null = null;
+    let blockedOperationsRequests = 0;
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === '/office/overview') {
+          return Promise.resolve(
+            new Response(JSON.stringify(overviewFixture), {
+              headers: { 'content-type': 'application/json' }
+            })
+          );
+        }
+
+        if (url === operationsUrl) {
+          return Promise.resolve(
+            new Response(JSON.stringify(operationsFixture), {
+              headers: { 'content-type': 'application/json' }
+            })
+          );
+        }
+
+        if (url === blockedOperationsUrl) {
+          blockedOperationsRequests += 1;
+
+          if (blockedOperationsRequests === 1) {
+            return new Promise<Response>((resolve) => {
+              resolveBlockedOperations = resolve;
+            });
+          }
+
+          return Promise.resolve(
+            new Response(JSON.stringify({ error: 'internal_error', details: 'blocked queue refresh failed' }), {
+              status: 500,
+              headers: { 'content-type': 'application/json' }
+            })
+          );
+        }
+
+        if (url === reviewingOperationsUrl) {
+          return Promise.resolve(
+            new Response(JSON.stringify(emptyOperationsFixture), {
+              headers: { 'content-type': 'application/json' }
+            })
+          );
+        }
+
+        if (url === incidentsUrl) {
+          return Promise.resolve(
+            new Response(JSON.stringify(incidentFeedFixture), {
+              headers: { 'content-type': 'application/json' }
+            })
+          );
+        }
+
+        if (url === timelineUrl) {
+          return Promise.resolve(
+            new Response(JSON.stringify(timelineFixture), {
+              headers: { 'content-type': 'application/json' }
+            })
+          );
+        }
+
+        return Promise.resolve(resolveTestFetchResponse(url));
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    const queueSection = within(details).getByRole('heading', { name: 'Active Queue' }).closest('section');
+    expect(queueSection).not.toBeNull();
+
+    const stateFilter = within(queueSection!).getByRole('combobox', {
+      name: 'Filter active queue by state'
+    });
+
+    expect(within(stateFilter).getByRole('option', { name: 'All states (3)' })).toBeVisible();
+    expect(within(stateFilter).getByRole('option', { name: 'Blocked (1)' })).toBeVisible();
+    expect(within(stateFilter).getByRole('option', { name: 'Planning (1)' })).toBeVisible();
+    expect(within(stateFilter).getByRole('option', { name: 'Reviewing (1)' })).toBeVisible();
+
+    await user.selectOptions(stateFilter, 'blocked');
+    expect(await within(queueSection!).findByText('Loading active queue for Blocked state...')).toBeVisible();
+
+    expect(resolveBlockedOperations).not.toBeNull();
+    resolveBlockedOperations!(
+      new Response(JSON.stringify(blockedOperationsFixture), {
+        headers: { 'content-type': 'application/json' }
+      })
+    );
+
+    await waitFor(() => {
+      expect(within(queueSection!).getByRole('button', { name: 'Inspect App Engineering Agent from active queue' })).toBeVisible();
+      expect(
+        within(queueSection!).queryByRole('button', { name: 'Inspect Team Lead from active queue' })
+      ).not.toBeInTheDocument();
+    });
+
+    await user.selectOptions(stateFilter, 'reviewing');
+    expect(await within(queueSection!).findByText('No active queue items for Reviewing state.')).toBeVisible();
+
+    await user.selectOptions(stateFilter, 'blocked');
+    expect(
+      await within(queueSection!).findByText(
+        'Unable to load active queue for Blocked state. blocked queue refresh failed'
+      )
+    ).toBeVisible();
+  });
+
   it('shows operations queue failures explicitly instead of pretending empty', async () => {
     vi.stubGlobal(
       'fetch',
@@ -3719,7 +4314,7 @@ afterEach(() => {
     render(<App />);
 
     const details = await openHub(user);
-    expect(await within(details).findByText('operations refresh failed')).toBeVisible();
+    expect(await within(details).findByText('Unable to load active queue. operations refresh failed')).toBeVisible();
     expect(within(details).queryByText('No active operations queue.')).not.toBeInTheDocument();
   });
 
@@ -6684,7 +7279,7 @@ afterEach(() => {
     const details = await openHub(user);
     expect(await within(details).findByText('blocked · Workflow evidence is still incomplete')).toBeVisible();
 
-    expect(await within(details).findByText('operations refresh failed')).toBeVisible();
+    expect(await within(details).findByText('Showing last active queue snapshot. operations refresh failed')).toBeVisible();
     expect(within(details).getByText('blocked · Workflow evidence is still incomplete')).toBeVisible();
     expect(operationsRequests).toBeGreaterThan(1);
   });

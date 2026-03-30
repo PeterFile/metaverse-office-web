@@ -494,8 +494,8 @@ function selectLatestTimelineEvent(timeline: WorkflowTimelineEvent[]) {
   return timeline.length > 0 ? timeline[timeline.length - 1] : null;
 }
 
-function renderTimestamp(value: string | null, fallback: string) {
-  return value ?? fallback;
+function renderTimestamp(value: string | null | undefined, fallback: string) {
+  return findFirstNonEmptyString([value]) ?? fallback;
 }
 
 function renderOperationBlocker(blocker: string) {
@@ -504,6 +504,18 @@ function renderOperationBlocker(blocker: string) {
 
 function renderOperationStaleness(operation: OfficeOperation) {
   return `${SEVERITY_LABELS[operation.derived_staleness.severity]} · ${operation.derived_staleness.stale_for_minutes ?? 0}m`;
+}
+
+function renderActiveQueueRunContextPreview(operation: OfficeOperation) {
+  return [
+    `Event · ${findFirstNonEmptyString([operation.latest_event?.summary]) ?? 'No latest event yet'}`,
+    `Source · ${findFirstNonEmptyString([operation.latest_event?.source_kind]) ?? 'No latest event source'}`,
+    `Freshness · ${renderTimestamp(operation.last_event_at, 'No last event timestamp')}`,
+    `Heartbeat · ${renderTimestamp(operation.last_heartbeat_at, 'No heartbeat yet')}`,
+    `Output · ${renderTimestamp(operation.last_meaningful_output_at, 'No last output timestamp')}`,
+    `Staleness · ${renderOperationStaleness(operation)}`,
+    `Reboot · ${operation.reboot_recommended ? 'Recommended' : 'No'}`
+  ].join(' · ');
 }
 
 function renderDisplayState(value: string) {
@@ -1839,29 +1851,38 @@ export function DetailsPanel({
                 {renderActiveQueueWarningLabel(selectedOperationsState, operationsError)}
               </li>
             ) : null}
-            {(operations?.items ?? []).slice(0, 4).map((operation) => (
-              <li key={operation.agent_id} className="aitown-queue-record">
-                <button
-                  type="button"
-                  className={`aitown-roster__button severity-${operation.effective_severity}`}
-                  aria-label={`Inspect ${operation.display_name} from active queue`}
-                  onClick={() => onSelectOperation(operation)}
-                >
-                  <strong>{operation.display_name}</strong>
-                  <span>{`${operation.current_state} · ${operation.current_blocker || operation.active_task}`}</span>
-                </button>
-                <span className="aitown-queue-record__meta">
-                  Correlation ·{' '}
-                  {renderCorrelationButton({
-                    correlationId: operation.correlation_id,
-                    label: operation.correlation_id ?? 'No correlation id',
-                    buttonLabel: 'Open active queue correlation',
-                    activeCorrelationId: selectedCorrelationId,
-                    onSelectCorrelation
-                  })}
-                </span>
-              </li>
-            ))}
+            {(operations?.items ?? []).slice(0, 4).map((operation) => {
+              const activeQueueStatusId = `aitown-active-queue-status-${operation.agent_id}`;
+              const activeQueuePreviewId = `aitown-active-queue-preview-${operation.agent_id}`;
+
+              return (
+                <li key={operation.agent_id} className="aitown-queue-record">
+                  <button
+                    type="button"
+                    className={`aitown-roster__button aitown-queue-record__button severity-${operation.effective_severity}`}
+                    aria-label={`Inspect ${operation.display_name} from active queue`}
+                    aria-describedby={`${activeQueueStatusId} ${activeQueuePreviewId}`}
+                    onClick={() => onSelectOperation(operation)}
+                  >
+                    <strong>{operation.display_name}</strong>
+                    <span id={activeQueueStatusId} className="aitown-queue-record__status">{`${operation.current_state} · ${operation.current_blocker || operation.active_task}`}</span>
+                    <span id={activeQueuePreviewId} className="aitown-queue-record__preview">
+                      {renderActiveQueueRunContextPreview(operation)}
+                    </span>
+                  </button>
+                  <span className="aitown-queue-record__meta">
+                    Correlation ·{' '}
+                    {renderCorrelationButton({
+                      correlationId: operation.correlation_id,
+                      label: operation.correlation_id ?? 'No correlation id',
+                      buttonLabel: 'Open active queue correlation',
+                      activeCorrelationId: selectedCorrelationId,
+                      onSelectCorrelation
+                    })}
+                  </span>
+                </li>
+              );
+            })}
             {operationsState === 'ready' && !operationsError && !operations?.items.length ? (
               <li className="aitown-record">{renderActiveQueueEmptyLabel(selectedOperationsState)}</li>
             ) : null}

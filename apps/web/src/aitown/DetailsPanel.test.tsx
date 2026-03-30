@@ -651,6 +651,171 @@ describe('DetailsPanel accountability signals', () => {
     expect(onSelectOperation).not.toHaveBeenCalled();
   });
 
+  it('renders one compact run-context preview line per active-queue row with explicit null fallbacks', () => {
+    const operations: OfficeOperations = {
+      generated_at: '2026-03-16T09:00:00.000Z',
+      summary: {
+        item_count: 2,
+        blocked_count: 1,
+        reboot_recommended_count: 1,
+        state_buckets: {
+          blocked: 1,
+          reviewing: 1
+        },
+        severity_buckets: {
+          normal: 1,
+          yellow: 0,
+          orange: 1,
+          red: 0
+        }
+      },
+      items: [
+        buildSelectedOperation(),
+        {
+          ...buildSelectedOperation(),
+          agent_id: 'team-lead',
+          display_name: 'Team Lead',
+          kind: 'lead',
+          current_state: 'reviewing',
+          active_task: 'Coordinate rollout',
+          current_blocker: '',
+          current_location: 'lead-desk',
+          reported_severity: 'normal',
+          effective_severity: 'normal',
+          derived_staleness: {
+            severity: 'normal',
+            stale_for_ms: 60000,
+            stale_for_minutes: 1,
+            last_meaningful_output_at: '2026-03-16T08:59:00.000Z'
+          },
+          reboot_recommended: false,
+          last_event_at: null,
+          last_heartbeat_at: null,
+          last_meaningful_output_at: null,
+          correlation_id: null,
+          latest_event: null
+        }
+      ]
+    };
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          operations,
+          selectedAgent: null,
+          selectedCorrelationId: null,
+          selectedOperation: null,
+          workflow: null
+        })}
+      />
+    );
+
+    const section = screen.getByRole('heading', { name: 'Active Queue' }).closest('section');
+    expect(section).not.toBeNull();
+
+    const appButton = within(section!).getByRole('button', { name: 'Inspect App Engineering Agent from active queue' });
+    const teamLeadButton = within(section!).getByRole('button', { name: 'Inspect Team Lead from active queue' });
+    const appRecord = appButton.closest('li');
+    const teamLeadRecord = teamLeadButton.closest('li');
+    expect(appRecord).not.toBeNull();
+    expect(teamLeadRecord).not.toBeNull();
+
+    expect(appButton).toHaveAttribute(
+      'aria-describedby',
+      'aitown-active-queue-status-app-engineering aitown-active-queue-preview-app-engineering'
+    );
+    expect(teamLeadButton).toHaveAttribute(
+      'aria-describedby',
+      'aitown-active-queue-status-team-lead aitown-active-queue-preview-team-lead'
+    );
+    expect(document.getElementById('aitown-active-queue-status-app-engineering')).toHaveTextContent(
+      'blocked · Waiting on review sign-off'
+    );
+    expect(document.getElementById('aitown-active-queue-preview-app-engineering')).toHaveTextContent(
+      'Event · Followed up on missing workflow evidence · Source · controller_event · Freshness · 2026-03-16T08:58:30.000Z · Heartbeat · 2026-03-16T08:59:30.000Z · Output · 2026-03-16T08:58:00.000Z · Staleness · Yellow · 5m · Reboot · Recommended'
+    );
+    expect(document.getElementById('aitown-active-queue-status-team-lead')).toHaveTextContent(
+      'reviewing · Coordinate rollout'
+    );
+    expect(document.getElementById('aitown-active-queue-preview-team-lead')).toHaveTextContent(
+      'Event · No latest event yet · Source · No latest event source · Freshness · No last event timestamp · Heartbeat · No heartbeat yet · Output · No last output timestamp · Staleness · Normal · 1m · Reboot · No'
+    );
+  });
+
+  it('treats empty-string active-queue event fields as fallbacks and wires the preview into aria-describedby', () => {
+    const operations: OfficeOperations = {
+      generated_at: '2026-03-16T09:00:00.000Z',
+      summary: {
+        item_count: 1,
+        blocked_count: 0,
+        reboot_recommended_count: 0,
+        state_buckets: {
+          reviewing: 1
+        },
+        severity_buckets: {
+          normal: 1,
+          yellow: 0,
+          orange: 0,
+          red: 0
+        }
+      },
+      items: [
+        {
+          ...buildSelectedOperation(),
+          agent_id: 'team-lead',
+          display_name: 'Team Lead',
+          kind: 'lead',
+          current_state: 'reviewing',
+          active_task: 'Coordinate rollout',
+          current_blocker: '',
+          current_location: 'lead-desk',
+          reported_severity: 'normal',
+          effective_severity: 'normal',
+          derived_staleness: {
+            severity: 'normal',
+            stale_for_ms: 0,
+            stale_for_minutes: 0,
+            last_meaningful_output_at: ''
+          },
+          reboot_recommended: false,
+          last_event_at: '',
+          last_heartbeat_at: '',
+          last_meaningful_output_at: '',
+          correlation_id: null,
+          latest_event: {
+            ...buildSelectedOperation().latest_event!,
+            summary: '',
+            source_kind: ''
+          }
+        }
+      ]
+    };
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          operations,
+          selectedAgent: null,
+          selectedCorrelationId: null,
+          selectedOperation: null,
+          workflow: null
+        })}
+      />
+    );
+
+    const button = screen.getByRole('button', { name: 'Inspect Team Lead from active queue' });
+    expect(button).toHaveAttribute(
+      'aria-describedby',
+      'aitown-active-queue-status-team-lead aitown-active-queue-preview-team-lead'
+    );
+    expect(document.getElementById('aitown-active-queue-status-team-lead')).toHaveTextContent(
+      'reviewing · Coordinate rollout'
+    );
+    expect(document.getElementById('aitown-active-queue-preview-team-lead')).toHaveTextContent(
+      'Event · No latest event yet · Source · No latest event source · Freshness · No last event timestamp · Heartbeat · No heartbeat yet · Output · No last output timestamp · Staleness · Normal · 0m · Reboot · No'
+    );
+  });
+
   it('renders active-queue state options from the provided crew-overview buckets while filtered', async () => {
     const user = userEvent.setup();
     const onSelectOperationsState = vi.fn();

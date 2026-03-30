@@ -3229,6 +3229,85 @@ describe('DetailsPanel accountability signals', () => {
     ).not.toBeInTheDocument();
   });
 
+  it('renders a full-match watch-graph alignment status for crew-overview collector supervision rows', () => {
+    render(
+      <DetailsPanel
+        {...buildProps({
+          selectedAgent: null,
+          selectedCorrelationId: null,
+          selectedOperation: null,
+          workflow: null
+        })}
+      />
+    );
+
+    const collectorSupervisionSection = screen.getByRole('heading', { name: 'Collector Supervision' }).closest('section');
+    expect(collectorSupervisionSection).not.toBeNull();
+
+    const collectorRecord = within(collectorSupervisionSection!).getByText('App Engineering Agent').closest('li');
+    expect(collectorRecord).not.toBeNull();
+    expect(collectorRecord!).toHaveTextContent('Watch graph alignment · Full match');
+  });
+
+  it('renders a target-mismatch watch-graph alignment status when the live watch target differs', () => {
+    const world: WorldState = {
+      ...buildWorld(),
+      watch_edges: [
+        {
+          from_agent_id: 'team-lead',
+          to_agent_id: 'app-engineering',
+          watch_mode: 'lead',
+          risk_level: 'yellow'
+        },
+        {
+          from_agent_id: 'app-engineering',
+          to_agent_id: 'team-lead',
+          watch_mode: 'peer',
+          risk_level: 'yellow'
+        }
+      ]
+    };
+
+    render(<DetailsPanel {...buildProps({ world })} />);
+
+    const collectorObservationSection = screen.getByRole('heading', { name: 'Collector Observation' }).closest('section');
+    expect(collectorObservationSection).not.toBeNull();
+    expect(within(collectorObservationSection!).getByText('Watch graph alignment · Target mismatch')).toBeVisible();
+  });
+
+  it('renders a watcher-mismatch watch-graph alignment status when live watchers differ', () => {
+    const world: WorldState = {
+      ...buildWorld(),
+      watch_edges: [
+        {
+          from_agent_id: 'app-engineering',
+          to_agent_id: 'growth-revenue',
+          watch_mode: 'peer',
+          risk_level: 'red'
+        }
+      ]
+    };
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          selectedAgent: null,
+          selectedCorrelationId: null,
+          selectedOperation: null,
+          workflow: null,
+          world
+        })}
+      />
+    );
+
+    const collectorSupervisionSection = screen.getByRole('heading', { name: 'Collector Supervision' }).closest('section');
+    expect(collectorSupervisionSection).not.toBeNull();
+
+    const collectorRecord = within(collectorSupervisionSection!).getByText('App Engineering Agent').closest('li');
+    expect(collectorRecord).not.toBeNull();
+    expect(collectorRecord!).toHaveTextContent('Watch graph alignment · Watcher mismatch');
+  });
+
   it('renders crew-overview office-grid home agents as pivots when navigable, preserves the active correlation, and keeps unassigned or unknown homes as plain text', async () => {
     const user = userEvent.setup();
     const onSelectAgent = vi.fn();

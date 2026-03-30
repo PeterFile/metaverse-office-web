@@ -1345,6 +1345,41 @@ function compareCollectorItems(left: CollectorItem, right: CollectorItem) {
   );
 }
 
+function sortAgentIds(agentIds: string[]) {
+  return [...new Set(agentIds)].sort((left, right) => left.localeCompare(right));
+}
+
+function matchAgentIds(left: string[], right: string[]) {
+  return left.length === right.length && left.every((agentId, index) => agentId === right[index]);
+}
+
+function resolveCollectorWatchGraphAlignment(item: CollectorItem, world: WorldState) {
+  const collectorWatchTargets = sortAgentIds(item.supervision.watch_target ? [item.supervision.watch_target] : []);
+  const liveWatchTargets = sortAgentIds(
+    world.watch_edges
+      .filter((edge) => edge.from_agent_id === item.agent_id)
+      .map((edge) => edge.to_agent_id)
+  );
+  const collectorWatchers = sortAgentIds(item.supervision.watched_by);
+  const liveWatchers = sortAgentIds(
+    world.watch_edges
+      .filter((edge) => edge.to_agent_id === item.agent_id)
+      .map((edge) => edge.from_agent_id)
+  );
+  const targetMatches = matchAgentIds(collectorWatchTargets, liveWatchTargets);
+  const watcherMatches = matchAgentIds(collectorWatchers, liveWatchers);
+
+  if (targetMatches && watcherMatches) {
+    return 'Full match';
+  }
+
+  if (!targetMatches && !watcherMatches) {
+    return 'Target + watcher mismatch';
+  }
+
+  return targetMatches ? 'Watcher mismatch' : 'Target mismatch';
+}
+
 function renderZoneOccupants({
   zoneLabel,
   occupants,
@@ -1568,6 +1603,7 @@ export function DetailsPanel({
               const collectorEvidenceRefs = resolveCollectorEvidenceRefs(item);
               const collectorLabel = agentNameById.get(item.agent_id) ?? item.agent_id;
               const canNavigateToCollectorAgent = navigableAgentIds.has(item.agent_id);
+              const watchGraphAlignment = resolveCollectorWatchGraphAlignment(item, world);
 
               return (
                 <li key={item.agent_id} className={`aitown-record severity-${resolveCollectorSeverity(item)}`}>
@@ -1609,6 +1645,7 @@ export function DetailsPanel({
                       onSelectAgent
                     })}
                   </span>
+                  <span>{`Watch graph alignment · ${watchGraphAlignment}`}</span>
                   <span>
                     Evidence ·{' '}
                     {renderSharedMemoryEvidenceRefs({
@@ -2015,6 +2052,9 @@ export function DetailsPanel({
   const selectedCollectorItem =
     collectorSnapshot?.items.find((item) => item.agent_id === selectedAgent.agent_id) ?? null;
   const selectedCollectorEvidenceRefs = selectedCollectorItem ? resolveCollectorEvidenceRefs(selectedCollectorItem) : [];
+  const selectedCollectorWatchGraphAlignment = selectedCollectorItem
+    ? resolveCollectorWatchGraphAlignment(selectedCollectorItem, world)
+    : null;
   const outboundWatchers = world.watch_edges.filter((edge) => edge.from_agent_id === selectedAgent.agent_id);
   const selectedOperationCorrelationId = currentOperationIsStale ? null : selectedOperation?.correlation_id ?? null;
   const accountabilityCorrelationId =
@@ -2197,6 +2237,7 @@ export function DetailsPanel({
                   onSelectAgent
                 })}
               </span>
+              <span>{`Watch graph alignment · ${selectedCollectorWatchGraphAlignment}`}</span>
               <span>{`Workspace observations · ${selectedCollectorItem.workspace_observations.length}`}</span>
               <span>{`Tmux observations · ${selectedCollectorItem.tmux_observations.length}`}</span>
               <span>{`Workspace root · ${selectedCollectorItem.workspace_root}`}</span>

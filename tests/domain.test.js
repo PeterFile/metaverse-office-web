@@ -158,6 +158,57 @@ test('event validation rejects invalid state and actor combinations', () => {
   assert.match(invalidActor.errors.join(' '), /self-scoped/i);
 });
 
+test('event validation allows team lead to dispatch cross-agent task events', () => {
+  const result = validateEventPayload(
+    {
+      event_id: 'evt_task_dispatch',
+      ts: '2026-03-09T18:01:00.000Z',
+      agent_id: 'app-engineering',
+      agent_role: 'app-engineering',
+      event_type: 'agent_received_task',
+      current_state: 'planning',
+      active_task: 'Investigate controller queue drift',
+      summary: 'Team lead dispatched a controller follow-up task',
+      severity: 'normal',
+      correlation_id: 'phase1-task-dispatch',
+      counterparty_agent_ids: ['team-lead'],
+      evidence_refs: [],
+      source_kind: 'controller_event',
+      metadata: {}
+    },
+    { actorId: 'team-lead' }
+  );
+
+  assert.equal(result.ok, true);
+  assert.equal(result.value.actor_id, 'team-lead');
+  assert.equal(result.value.location, 'desk-app-engineering');
+});
+
+test('event validation still rejects employee cross-agent task dispatch', () => {
+  const result = validateEventPayload(
+    {
+      event_id: 'evt_employee_task_dispatch',
+      ts: '2026-03-09T18:01:30.000Z',
+      agent_id: 'app-engineering',
+      agent_role: 'app-engineering',
+      event_type: 'agent_received_task',
+      current_state: 'planning',
+      active_task: 'Investigate controller queue drift',
+      summary: 'Market intel tried to dispatch app engineering work',
+      severity: 'normal',
+      correlation_id: 'phase1-task-dispatch',
+      counterparty_agent_ids: ['team-lead'],
+      evidence_refs: [],
+      source_kind: 'controller_event',
+      metadata: {}
+    },
+    { actorId: 'market-intel' }
+  );
+
+  assert.equal(result.ok, false);
+  assert.match(result.errors.join(' '), /self-scoped/i);
+});
+
 test('event validation allows peer watch alerts from non-blocked work states', () => {
   const result = validateEventPayload(
     {

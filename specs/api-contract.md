@@ -29,9 +29,10 @@
 ## Prototype write control
 - all write requests must send `x-actor-id: <agent_id>`
 - employee agents may emit only self-scoped events and heartbeats for their own `agent_id`
-- the team lead/controller may emit cross-agent supervision, handoff, reboot, review, and meeting events
+- the team lead/controller may emit cross-agent `agent_received_task` dispatch plus supervision, handoff, reboot, review, and meeting events
 - `POST /collectors/controller-snapshot` is controller-only and must send `x-actor-id: team-lead`
 - event location is system-derived from event/state mapping; callers must not control office placement
+- `agent_received_task` remains queryable through the existing read models but does not advance `last_meaningful_output_at`; staleness still derives from real agent output/heartbeat evidence
 
 ## Collector snapshot semantics
 - `GET /collectors/controller-snapshot` is read-only and returns `{ "item": null }` until a snapshot has been collected

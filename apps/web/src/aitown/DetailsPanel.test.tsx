@@ -1414,6 +1414,69 @@ describe('DetailsPanel accountability signals', () => {
     expect(onSelectAgent).toHaveBeenNthCalledWith(2, 'growth-revenue', 'corr-app-secondary');
   });
 
+  it('renders selected-agent workflow recent-event subject-agent pivots for navigable rows, keeps unknown subjects as plain text, and preserves the active correlation', async () => {
+    const user = userEvent.setup();
+    const onSelectAgent = vi.fn();
+    const baseEvent = buildWorkflow().detail.recent_events[0];
+    const workflow: AgentWorkflow = {
+      ...buildWorkflow(),
+      detail: {
+        ...buildWorkflow().detail,
+        recent_events: [
+          {
+            ...baseEvent,
+            event_id: 'evt-workflow-subject-1',
+            agent_id: 'growth-revenue',
+            summary: 'Navigable workflow recent-event subject stays actionable'
+          },
+          {
+            ...baseEvent,
+            event_id: 'evt-workflow-subject-2',
+            agent_id: 'ghost-agent',
+            summary: 'Unknown workflow recent-event subject stays plain text'
+          }
+        ]
+      }
+    };
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          onSelectAgent,
+          selectedCorrelationId: 'corr-app-secondary',
+          workflow
+        })}
+      />
+    );
+
+    const section = screen.getByRole('heading', { name: 'Workflow' }).closest('section');
+    expect(section).not.toBeNull();
+
+    const navigableRecord = within(section!).getByText('Navigable workflow recent-event subject stays actionable').closest('li');
+    const unknownRecord = within(section!).getByText('Unknown workflow recent-event subject stays plain text').closest('li');
+    expect(navigableRecord).not.toBeNull();
+    expect(unknownRecord).not.toBeNull();
+
+    expect(
+      within(navigableRecord!).getByRole('button', {
+        name: 'Select workflow recent event subject agent from event evt-workflow-subject-1 growth-revenue'
+      })
+    ).toBeVisible();
+    expect(
+      within(unknownRecord!).queryByRole('button', {
+        name: 'Select workflow recent event subject agent from event evt-workflow-subject-2 ghost-agent'
+      })
+    ).not.toBeInTheDocument();
+
+    await user.click(
+      within(navigableRecord!).getByRole('button', {
+        name: 'Select workflow recent event subject agent from event evt-workflow-subject-1 growth-revenue'
+      })
+    );
+
+    expect(onSelectAgent).toHaveBeenCalledWith('growth-revenue', 'corr-app-secondary');
+  });
+
   it('renders read-only observability metadata for correlation and replay timeline events', () => {
     render(
       <DetailsPanel
@@ -2259,6 +2322,77 @@ describe('DetailsPanel accountability signals', () => {
     );
 
     expect(onSelectAgent).toHaveBeenCalledWith('team-lead', 'corr-app-review');
+  });
+
+  it('falls back to each correlation timeline row correlation for subject-agent pivots and keeps current or unknown subjects as plain text', async () => {
+    const user = userEvent.setup();
+    const onSelectAgent = vi.fn();
+    const baseTimelineEvent = buildCorrelation().timeline[0];
+    const correlation: CorrelationDrilldown = {
+      ...buildSecondaryCorrelation(),
+      event_count: 3,
+      timeline: [
+        {
+          ...baseTimelineEvent,
+          event_id: 'evt-correlation-subject-1',
+          agent_id: 'growth-revenue',
+          correlation_id: 'corr-app-secondary',
+          summary: 'Navigable correlation timeline subject falls back to its row correlation'
+        },
+        {
+          ...baseTimelineEvent,
+          event_id: 'evt-correlation-subject-2',
+          agent_id: 'app-engineering',
+          correlation_id: 'corr-app-secondary',
+          summary: 'Current correlation timeline subject stays plain text'
+        },
+        {
+          ...baseTimelineEvent,
+          event_id: 'evt-correlation-subject-3',
+          agent_id: 'ghost-agent',
+          correlation_id: 'corr-app-secondary',
+          summary: 'Unknown correlation timeline subject stays plain text'
+        }
+      ]
+    };
+
+    render(<DetailsPanel {...buildProps({ correlation, onSelectAgent, selectedCorrelationId: null })} />);
+
+    const section = screen.getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    expect(section).not.toBeNull();
+
+    const navigableRecord = within(section!)
+      .getByText('Navigable correlation timeline subject falls back to its row correlation')
+      .closest('li');
+    const currentRecord = within(section!).getByText('Current correlation timeline subject stays plain text').closest('li');
+    const unknownRecord = within(section!).getByText('Unknown correlation timeline subject stays plain text').closest('li');
+    expect(navigableRecord).not.toBeNull();
+    expect(currentRecord).not.toBeNull();
+    expect(unknownRecord).not.toBeNull();
+
+    expect(
+      within(navigableRecord!).getByRole('button', {
+        name: 'Select correlation timeline subject agent from event evt-correlation-subject-1 growth-revenue'
+      })
+    ).toBeVisible();
+    expect(
+      within(currentRecord!).queryByRole('button', {
+        name: 'Select correlation timeline subject agent from event evt-correlation-subject-2 app-engineering'
+      })
+    ).not.toBeInTheDocument();
+    expect(
+      within(unknownRecord!).queryByRole('button', {
+        name: 'Select correlation timeline subject agent from event evt-correlation-subject-3 ghost-agent'
+      })
+    ).not.toBeInTheDocument();
+
+    await user.click(
+      within(navigableRecord!).getByRole('button', {
+        name: 'Select correlation timeline subject agent from event evt-correlation-subject-1 growth-revenue'
+      })
+    );
+
+    expect(onSelectAgent).toHaveBeenCalledWith('growth-revenue', 'corr-app-secondary');
   });
 
   it('renders correlation interaction participants as pivots only for navigable non-current agents', async () => {

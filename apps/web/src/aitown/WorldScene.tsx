@@ -30,7 +30,11 @@ import {
 } from './viewport';
 import { resolveViewportClampPadding } from './viewportClampPadding';
 import { resolveSceneAgentStatusBadge } from './agentStatusBadge';
-import { resolveWatchOverlayAgentIds, resolveWatchOverlaySegments } from './watchOverlay';
+import {
+  resolveWatchOverlayAgentEmphasisById,
+  resolveWatchOverlaySegments,
+  type WatchOverlayAgentEmphasis
+} from './watchOverlay';
 
 const SEVERITY_COLORS = {
   normal: 0x8ed16f,
@@ -59,6 +63,8 @@ const statusBadgeStyle = new TextStyle({
   fill: 0xf9f5d7,
   stroke: { color: 0x20162a, width: 3, join: 'round' }
 });
+
+const WATCH_PARTICIPANT_HIGHLIGHT_COLOR = 0xffd785;
 
 function createWatchOverlay(scene: AiTownSceneModel) {
   const container = new Container();
@@ -307,7 +313,12 @@ function createAgentStatusBadge(agent: SceneAgent) {
   return container;
 }
 
-function createAgentSprite(agent: SceneAgent, onSelect: (agentId: string | null) => void, characterTextures: Record<string, Texture[]>) {
+function createAgentSprite(
+  agent: SceneAgent,
+  emphasis: WatchOverlayAgentEmphasis | 'none',
+  onSelect: (agentId: string | null) => void,
+  characterTextures: Record<string, Texture[]>
+) {
   const container = new Container();
   container.position.set(agent.position.x, agent.position.y);
   container.eventMode = 'static';
@@ -315,20 +326,33 @@ function createAgentSprite(agent: SceneAgent, onSelect: (agentId: string | null)
   container.zIndex = agent.position.y;
 
   const severityColor = SEVERITY_COLORS[agent.severity];
+  const emphasized = emphasis !== 'none';
+  const selected = emphasis === 'selected' || agent.selected;
+  const auraRadiusX = selected ? 16 : emphasized ? 14 : 13;
+  const auraRadiusY = selected ? 9 : emphasized ? 8 : 7;
 
   const shadow = new Graphics();
   shadow.ellipse(0, 8, 10, 5).fill({ color: 0x000000, alpha: 0.25 });
 
   const aura = new Graphics();
-  aura.ellipse(0, 8, agent.selected ? 16 : 13, agent.selected ? 9 : 7).fill({
+  aura.ellipse(0, 8, auraRadiusX, auraRadiusY).fill({
     color: severityColor,
-    alpha: agent.selected ? 0.24 : 0.1
+    alpha: selected ? 0.24 : emphasized ? 0.16 : 0.1
   });
-  aura.ellipse(0, 8, agent.selected ? 16 : 13, agent.selected ? 9 : 7).stroke({
+  aura.ellipse(0, 8, auraRadiusX, auraRadiusY).stroke({
     color: severityColor,
-    width: agent.selected ? 2 : 1,
+    width: selected ? 2 : emphasized ? 1.5 : 1,
     alpha: 0.9
   });
+
+  const emphasisRing = new Graphics();
+  if (emphasized) {
+    emphasisRing.ellipse(0, 8, selected ? 18 : 15.5, selected ? 10.5 : 8.5).stroke({
+      color: WATCH_PARTICIPANT_HIGHLIGHT_COLOR,
+      width: selected ? 2 : 1.5,
+      alpha: selected ? 0.82 : 0.56
+    });
+  }
 
   const character = new AnimatedSprite(characterTextures[agent.facing] ?? characterTextures.down);
   character.anchor.set(0.5, 1);
@@ -357,7 +381,7 @@ function createAgentSprite(agent: SceneAgent, onSelect: (agentId: string | null)
     onSelect(agent.selected ? null : agent.agentId);
   });
 
-  container.addChild(shadow, aura, character, statusDot, nameLabel);
+  container.addChild(shadow, aura, emphasisRing, character, statusDot, nameLabel);
   if (statusBadge) {
     container.addChild(statusBadge);
   }
@@ -784,7 +808,11 @@ export default function WorldScene({ scene, onSelectAgent }: WorldSceneProps) {
       watchLayer.removeChildren().forEach((child) => child.destroy({ children: true }));
       agentLayer.removeChildren().forEach((child) => child.destroy({ children: true }));
 
-      const selectedSet = resolveWatchOverlayAgentIds(scene.selectedAgentId, scene.watchEdges);
+      const emphasisByAgentId = resolveWatchOverlayAgentEmphasisById(
+        scene.selectedAgentId,
+        scene.watchEdges
+      );
+      const selectedSet = new Set(emphasisByAgentId.keys());
 
       for (const zone of scene.zones) {
         zoneLayer.addChild(createZoneLabel(zone, selectedSet, scene.map.tileDim));
@@ -795,6 +823,7 @@ export default function WorldScene({ scene, onSelectAgent }: WorldSceneProps) {
       for (const agent of scene.agents) {
         const agentSprite = createAgentSprite(
           agent,
+          emphasisByAgentId.get(agent.agentId) ?? 'none',
           (agentId) => {
             if (suppressSceneTapRef.current) {
               suppressSceneTapRef.current = false;

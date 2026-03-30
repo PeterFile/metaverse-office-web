@@ -36,6 +36,9 @@ type DetailsPanelProps = {
   operations: OfficeOperations | null;
   operationsError: string | null;
   operationsState: LoadState;
+  operationsStateBuckets: Record<string, number>;
+  operationsStateBucketsError: string | null;
+  operationsStateBucketsState: LoadState;
   overviewZones: OfficeZone[] | null;
   preserveWorkflowCounterpartyCorrelation: boolean;
   memoryArtifacts: MemoryArtifactIndex | null;
@@ -43,6 +46,7 @@ type DetailsPanelProps = {
   memoryArtifactsState: LoadState;
   selectedAgent: OfficeAgent | null;
   selectedCorrelationId: string | null;
+  selectedOperationsState: string | null;
   selectedOperation: OfficeOperation | null;
   timelineReplay: TimelineReplayResponse | null;
   timelineReplayError: string | null;
@@ -54,6 +58,7 @@ type DetailsPanelProps = {
   onSelectAgent: (agentId: string | null, correlationId?: string | null) => void;
   onInspectAgent: (agentId: string | null) => void;
   onSelectCorrelation: (correlationId: string | null) => void;
+  onSelectOperationsState: (state: string | null) => void;
   onSelectOperation: (operation: OfficeOperation) => void;
 };
 
@@ -506,6 +511,60 @@ function renderDisplayState(value: string) {
     .split('_')
     .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
     .join(' ');
+}
+
+function renderActiveQueueLoadingLabel(selectedOperationsState: string | null) {
+  if (!selectedOperationsState) {
+    return 'Loading operations queue...';
+  }
+
+  return `Loading active queue for ${renderDisplayState(selectedOperationsState)} state...`;
+}
+
+function renderActiveQueueErrorLabel(selectedOperationsState: string | null, operationsError: string) {
+  if (!selectedOperationsState) {
+    return `Unable to load active queue. ${operationsError}`;
+  }
+
+  return `Unable to load active queue for ${renderDisplayState(selectedOperationsState)} state. ${operationsError}`;
+}
+
+function renderActiveQueueWarningLabel(selectedOperationsState: string | null, operationsError: string) {
+  if (!selectedOperationsState) {
+    return `Showing last active queue snapshot. ${operationsError}`;
+  }
+
+  return `Showing last active queue snapshot for ${renderDisplayState(selectedOperationsState)} state. ${operationsError}`;
+}
+
+function renderActiveQueueEmptyLabel(selectedOperationsState: string | null) {
+  if (!selectedOperationsState) {
+    return 'No active operations queue.';
+  }
+
+  return `No active queue items for ${renderDisplayState(selectedOperationsState)} state.`;
+}
+
+function renderActiveQueueAllStatesLabel({
+  activeQueueStateCount
+}: {
+  activeQueueStateCount: number;
+}) {
+  return `All states (${activeQueueStateCount})`;
+}
+
+function renderActiveQueueStateOptionLabel({
+  count,
+  state
+}: {
+  count: number;
+  state: string;
+}) {
+  return `${renderDisplayState(state)} (${count})`;
+}
+
+function renderActiveQueueStateBucketsStatusLabel(error: string) {
+  return `Showing last active queue state buckets. ${error}`;
 }
 
 function selectLatestWorkspaceObservation(workspaceObservations: CollectorWorkspaceObservation[]) {
@@ -1352,6 +1411,9 @@ export function DetailsPanel({
   operations,
   operationsError,
   operationsState,
+  operationsStateBuckets,
+  operationsStateBucketsError,
+  operationsStateBucketsState,
   overviewZones,
   preserveWorkflowCounterpartyCorrelation,
   memoryArtifacts,
@@ -1359,6 +1421,7 @@ export function DetailsPanel({
   memoryArtifactsState,
   selectedAgent,
   selectedCorrelationId,
+  selectedOperationsState,
   selectedOperation,
   timelineReplay,
   timelineReplayError,
@@ -1370,6 +1433,7 @@ export function DetailsPanel({
   onSelectAgent,
   onInspectAgent,
   onSelectCorrelation,
+  onSelectOperationsState,
   onSelectOperation
 }: DetailsPanelProps) {
   const agents = [...world.agents.values()]
@@ -1417,6 +1481,26 @@ export function DetailsPanel({
       severitySummary: summarizeZoneSeverity(occupants.map((occupant) => occupant.severity))
     };
   });
+  const activeQueueStateBuckets = new Map(
+    Object.entries(
+      operationsStateBucketsState === 'ready'
+        ? operationsStateBuckets
+        : (operations?.summary.state_buckets ?? {})
+    )
+  );
+
+  if (selectedOperationsState && !activeQueueStateBuckets.has(selectedOperationsState)) {
+    activeQueueStateBuckets.set(selectedOperationsState, 0);
+  }
+
+  const activeQueueStateOptions = [...activeQueueStateBuckets.entries()].filter(
+    ([state, count]) => count > 0 || state === selectedOperationsState
+  );
+  const activeQueueStateCount = activeQueueStateOptions.reduce((total, [, count]) => total + count, 0);
+  const activeQueueStateBucketsStatus =
+    operationsStateBucketsState === 'ready' && operationsStateBucketsError
+      ? renderActiveQueueStateBucketsStatusLabel(operationsStateBucketsError)
+      : null;
   const collectorWarning =
     collectorSnapshotError && collectorSnapshot
       ? `Showing last collector snapshot. ${collectorSnapshotError}`
@@ -1680,11 +1764,44 @@ export function DetailsPanel({
 
         <section className="aitown-details__section">
           <h3>Active Queue</h3>
+          {activeQueueStateBucketsStatus ? <p role="status">{activeQueueStateBucketsStatus}</p> : null}
+          <div>
+            <label htmlFor="aitown-active-queue-state-filter">State filter</label>{' '}
+            <select
+              id="aitown-active-queue-state-filter"
+              aria-label="Filter active queue by state"
+              value={selectedOperationsState ?? ''}
+              onChange={(event) => onSelectOperationsState(event.target.value || null)}
+            >
+              <option value="">
+                {renderActiveQueueAllStatesLabel({
+                  activeQueueStateCount
+                })}
+              </option>
+              {activeQueueStateOptions.map(([state, count]) => (
+                <option key={state} value={state}>
+                  {renderActiveQueueStateOptionLabel({
+                    count,
+                    state
+                  })}
+                </option>
+              ))}
+            </select>
+          </div>
           <ul className="aitown-records">
             {operationsState === 'loading' && !operations ? (
-              <li className="aitown-record">Loading operations queue...</li>
+              <li className="aitown-record">{renderActiveQueueLoadingLabel(selectedOperationsState)}</li>
             ) : null}
-            {operationsError ? <li className="aitown-record">{operationsError}</li> : null}
+            {operationsError && !operations ? (
+              <li className="aitown-record">
+                {renderActiveQueueErrorLabel(selectedOperationsState, operationsError)}
+              </li>
+            ) : null}
+            {operationsError && operations ? (
+              <li className="aitown-record">
+                {renderActiveQueueWarningLabel(selectedOperationsState, operationsError)}
+              </li>
+            ) : null}
             {(operations?.items ?? []).slice(0, 4).map((operation) => (
               <li key={operation.agent_id} className="aitown-queue-record">
                 <button
@@ -1709,7 +1826,7 @@ export function DetailsPanel({
               </li>
             ))}
             {operationsState === 'ready' && !operationsError && !operations?.items.length ? (
-              <li className="aitown-record">No active operations queue.</li>
+              <li className="aitown-record">{renderActiveQueueEmptyLabel(selectedOperationsState)}</li>
             ) : null}
           </ul>
         </section>

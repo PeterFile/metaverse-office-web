@@ -458,6 +458,11 @@ function buildProps(overrides: Partial<DetailsPanelProps> = {}): DetailsPanelPro
     operations: buildOperations(),
     operationsError: null,
     operationsState: 'ready',
+    operationsStateBuckets: {
+      blocked: 1
+    },
+    operationsStateBucketsError: null,
+    operationsStateBucketsState: 'ready',
     overviewZones: null,
     preserveWorkflowCounterpartyCorrelation: false,
     memoryArtifacts: buildMemoryArtifacts(),
@@ -465,6 +470,7 @@ function buildProps(overrides: Partial<DetailsPanelProps> = {}): DetailsPanelPro
     memoryArtifactsState: 'ready',
     selectedAgent: buildSelectedAgent(),
     selectedCorrelationId: 'corr-app-review',
+    selectedOperationsState: null,
     selectedOperation: buildSelectedOperation(),
     timelineReplay: null,
     timelineReplayError: null,
@@ -476,6 +482,7 @@ function buildProps(overrides: Partial<DetailsPanelProps> = {}): DetailsPanelPro
     onInspectAgent: vi.fn(),
     onSelectAgent: vi.fn(),
     onSelectCorrelation: vi.fn(),
+    onSelectOperationsState: vi.fn(),
     onSelectOperation: vi.fn(),
     ...overrides
   };
@@ -642,6 +649,131 @@ describe('DetailsPanel accountability signals', () => {
 
     expect(onSelectCorrelation).toHaveBeenCalledWith('corr-app-review');
     expect(onSelectOperation).not.toHaveBeenCalled();
+  });
+
+  it('renders active-queue state options from the provided crew-overview buckets while filtered', async () => {
+    const user = userEvent.setup();
+    const onSelectOperationsState = vi.fn();
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          onSelectOperationsState,
+          operationsStateBuckets: {
+            blocked: 1,
+            waiting: 1
+          },
+          selectedAgent: null,
+          selectedCorrelationId: null,
+          selectedOperationsState: 'blocked',
+          selectedOperation: null,
+          workflow: null
+        })}
+      />
+    );
+
+    const section = screen.getByRole('heading', { name: 'Active Queue' }).closest('section');
+    expect(section).not.toBeNull();
+
+    const stateFilter = within(section!).getByRole('combobox', {
+      name: 'Filter active queue by state'
+    });
+
+    expect(within(stateFilter).getByRole('option', { name: 'All states (2)' })).toBeVisible();
+    expect(within(stateFilter).getByRole('option', { name: 'Blocked (1)' })).toBeVisible();
+    expect(within(stateFilter).getByRole('option', { name: 'Waiting (1)' })).toBeVisible();
+
+    await user.selectOptions(stateFilter, 'waiting');
+
+    expect(onSelectOperationsState).toHaveBeenCalledWith('waiting');
+  });
+
+  it('keeps the selected active-queue state option visible when its count drops to zero', () => {
+    render(
+      <DetailsPanel
+        {...buildProps({
+          operations: {
+            ...buildOperations(),
+            summary: {
+              ...buildOperations().summary,
+              item_count: 0,
+              blocked_count: 0,
+              reboot_recommended_count: 0,
+              state_buckets: {}
+            },
+            items: []
+          },
+          operationsStateBuckets: {
+            waiting: 1
+          },
+          selectedAgent: null,
+          selectedCorrelationId: null,
+          selectedOperationsState: 'blocked',
+          selectedOperation: null,
+          workflow: null
+        })}
+      />
+    );
+
+    const section = screen.getByRole('heading', { name: 'Active Queue' }).closest('section');
+    expect(section).not.toBeNull();
+
+    const stateFilter = within(section!).getByRole('combobox', {
+      name: 'Filter active queue by state'
+    });
+
+    expect(within(stateFilter).getByRole('option', { name: 'Blocked (0)' })).toBeVisible();
+    expect(stateFilter).toHaveValue('blocked');
+  });
+
+  it('falls back to the current active-queue summary when separate bucket data is unavailable', () => {
+    render(
+      <DetailsPanel
+        {...buildProps({
+          operationsStateBuckets: {},
+          operationsStateBucketsState: 'loading',
+          selectedAgent: null,
+          selectedCorrelationId: null,
+          selectedOperation: null,
+          workflow: null
+        })}
+      />
+    );
+
+    const section = screen.getByRole('heading', { name: 'Active Queue' }).closest('section');
+    expect(section).not.toBeNull();
+
+    const stateFilter = within(section!).getByRole('combobox', {
+      name: 'Filter active queue by state'
+    });
+
+    expect(within(stateFilter).getByRole('option', { name: 'All states (1)' })).toBeVisible();
+    expect(within(stateFilter).getByRole('option', { name: 'Blocked (1)' })).toBeVisible();
+  });
+
+  it('treats a loaded empty state-bucket snapshot as authoritative instead of falling back to the visible queue summary', () => {
+    render(
+      <DetailsPanel
+        {...buildProps({
+          operationsStateBuckets: {},
+          operationsStateBucketsState: 'ready',
+          selectedAgent: null,
+          selectedCorrelationId: null,
+          selectedOperation: null,
+          workflow: null
+        })}
+      />
+    );
+
+    const section = screen.getByRole('heading', { name: 'Active Queue' }).closest('section');
+    expect(section).not.toBeNull();
+
+    const stateFilter = within(section!).getByRole('combobox', {
+      name: 'Filter active queue by state'
+    });
+
+    expect(within(stateFilter).getByRole('option', { name: 'All states (0)' })).toBeVisible();
+    expect(within(stateFilter).queryByRole('option', { name: 'Blocked (1)' })).not.toBeInTheDocument();
   });
 
   it('renders crew-overview incident feed actors as pivots and carries the clicked incident correlation', async () => {

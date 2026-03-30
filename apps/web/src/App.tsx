@@ -148,6 +148,7 @@ function AppInner() {
   const [hubOpen, setHubOpen] = useState(false);
   const [selectedCorrelationId, setSelectedCorrelationId] = useState<string | null>(null);
   const [selectedCorrelationWasExplicit, setSelectedCorrelationWasExplicit] = useState(false);
+  const [selectedOperationsState, setSelectedOperationsState] = useState<string | null>(null);
   const [selectedOperationSelection, setSelectedOperationSelection] = useState<OperationSelection | null>(null);
   const [selectedOperationSnapshot, setSelectedOperationSnapshot] = useState<OfficeOperation | null>(null);
   const [invalidSelectedOperationCorrelationId, setInvalidSelectedOperationCorrelationId] = useState<string | null>(null);
@@ -197,12 +198,18 @@ function AppInner() {
     load: (signal) =>
       fetchOfficeOperations({
         limit: selectedOperationSelection ? undefined : 4,
+        state: selectedOperationSelection ? undefined : selectedOperationsState ?? undefined,
         agentId: selectedOperationSelection?.agentId,
         signal
       }),
     resourceKey: selectedOperationSelection
       ? `office-operations:${selectedOperationSelection.agentId}`
-      : 'office-operations'
+      : `office-operations:${selectedOperationsState ?? '__all__'}`
+  });
+  const crewOverviewStateBucketsResource = usePolledResource({
+    enabled: hubOpen && selectedAgentId === null && selectedOperationSelection === null,
+    load: (signal) => fetchOfficeOperations({ signal }),
+    resourceKey: 'office-operations-state-buckets'
   });
 
   const selectedAgentStillVisibleInOverview = useMemo(
@@ -385,6 +392,18 @@ function AppInner() {
       ? null
       : selectedOperationForCorrelationSelection;
   }, [invalidSelectedOperationCorrelationId, selectedOperationForCorrelationSelection]);
+
+  const crewOverviewOperationStateBuckets = useMemo(
+    () => crewOverviewStateBucketsResource.data?.summary.state_buckets ?? {},
+    [crewOverviewStateBucketsResource.data]
+  );
+  const crewOverviewOperationSeedData = useMemo(
+    () =>
+      selectedOperationsState !== null
+        ? crewOverviewStateBucketsResource.data ?? operationsResource.data
+        : operationsResource.data,
+    [crewOverviewStateBucketsResource.data, operationsResource.data, selectedOperationsState]
+  );
 
   useEffect(() => {
     if (liveSelectedOperation) {
@@ -636,13 +655,13 @@ function AppInner() {
         operationSelection,
         'auto',
         false,
-        resolveOperationSnapshotSeed(agentId, operationsResource.data)
+        resolveOperationSnapshotSeed(agentId, crewOverviewOperationSeedData)
       );
       if (agentId) {
         setHubOpen(true);
       }
     },
-    [operationsResource.data, selectAgentWithSnapshot]
+    [crewOverviewOperationSeedData, selectAgentWithSnapshot]
   );
 
   const handleSelectOperation = useCallback(
@@ -784,10 +803,14 @@ function AppInner() {
               operations={operationsResource.data}
               operationsError={operationsResource.error}
               operationsState={operationsResource.state}
+              operationsStateBuckets={crewOverviewOperationStateBuckets}
+              operationsStateBucketsError={crewOverviewStateBucketsResource.error}
+              operationsStateBucketsState={crewOverviewStateBucketsResource.state}
               overviewZones={overviewResource.data?.zones ?? null}
               preserveWorkflowCounterpartyCorrelation={preserveWorkflowCounterpartyCorrelation}
               selectedAgent={selectedAgent}
               selectedCorrelationId={selectedCorrelationId}
+              selectedOperationsState={selectedOperationsState}
               selectedOperation={selectedOperation}
               timelineReplay={crewTimelineResource.data}
               timelineReplayError={crewTimelineResource.error}
@@ -806,7 +829,7 @@ function AppInner() {
                   resolveDirectOperationSelection(agentId, null),
                   'auto',
                   false,
-                  resolveOperationSnapshotSeed(agentId, operationsResource.data)
+                  resolveOperationSnapshotSeed(agentId, crewOverviewOperationSeedData)
                 )
               }
               onSelectAgent={(agentId, correlationId = null) =>
@@ -820,6 +843,7 @@ function AppInner() {
                 )
               }
               onSelectCorrelation={handleSelectCorrelation}
+              onSelectOperationsState={setSelectedOperationsState}
               onSelectOperation={handleSelectOperation}
             />
           </div>

@@ -30,6 +30,7 @@ import {
 } from './viewport';
 import { resolveViewportClampPadding } from './viewportClampPadding';
 import { resolveSceneAgentStatusBadge } from './agentStatusBadge';
+import { resolveWatchOverlayAgentIds, resolveWatchOverlaySegments } from './watchOverlay';
 
 const SEVERITY_COLORS = {
   normal: 0x8ed16f,
@@ -58,6 +59,89 @@ const statusBadgeStyle = new TextStyle({
   fill: 0xf9f5d7,
   stroke: { color: 0x20162a, width: 3, join: 'round' }
 });
+
+function createWatchOverlay(scene: AiTownSceneModel) {
+  const container = new Container();
+  container.eventMode = 'none';
+
+  for (const segment of resolveWatchOverlaySegments(scene)) {
+    const { start, end } = segment;
+    const deltaX = end.x - start.x;
+    const deltaY = end.y - start.y;
+    const distance = Math.hypot(deltaX, deltaY);
+    const unitX = deltaX / distance;
+    const unitY = deltaY / distance;
+    const perpendicularX = -unitY;
+    const perpendicularY = unitX;
+    const lineWidth = segment.watchMode === 'lead' ? 3 : 2;
+    const color = SEVERITY_COLORS[segment.riskLevel];
+    const alpha = segment.watchMode === 'lead' ? 0.9 : 0.72;
+    const arrowSize = Math.min(segment.watchMode === 'lead' ? 8 : 6, Math.max(4, distance / 2));
+    const arrowBack = {
+      x: end.x - unitX * arrowSize,
+      y: end.y - unitY * arrowSize
+    };
+    const arrowSpread = arrowSize * 0.6;
+
+    const path = new Graphics();
+    path.moveTo(start.x, start.y);
+    path.lineTo(end.x, end.y);
+    path.stroke({
+      color: 0x20162a,
+      width: lineWidth + 3,
+      alpha: 0.32
+    });
+    path.moveTo(start.x, start.y);
+    path.lineTo(end.x, end.y);
+    path.stroke({
+      color,
+      width: lineWidth,
+      alpha
+    });
+    path.moveTo(end.x, end.y);
+    path.lineTo(
+      arrowBack.x + perpendicularX * arrowSpread,
+      arrowBack.y + perpendicularY * arrowSpread
+    );
+    path.stroke({
+      color,
+      width: lineWidth,
+      alpha
+    });
+    path.moveTo(end.x, end.y);
+    path.lineTo(
+      arrowBack.x - perpendicularX * arrowSpread,
+      arrowBack.y - perpendicularY * arrowSpread
+    );
+    path.stroke({
+      color,
+      width: lineWidth,
+      alpha
+    });
+
+    const endpoints = new Graphics();
+    endpoints.circle(start.x, start.y, segment.watchMode === 'lead' ? 3 : 2.5).fill({
+      color,
+      alpha: 0.82
+    });
+    endpoints.circle(end.x, end.y, segment.watchMode === 'lead' ? 4 : 3).fill({
+      color,
+      alpha: 1
+    });
+    endpoints.circle(end.x, end.y, segment.watchMode === 'lead' ? 6 : 5).stroke({
+      color,
+      width: 1,
+      alpha: 0.58
+    });
+
+    const edgeContainer = new Container();
+    edgeContainer.eventMode = 'none';
+    edgeContainer.addChild(path, endpoints);
+    container.addChild(edgeContainer);
+  }
+
+  return container;
+}
 
 function buildTileTextures(
   texture: Texture,
@@ -291,6 +375,7 @@ export default function WorldScene({ scene, onSelectAgent }: WorldSceneProps) {
   const appRef = useRef<Application | null>(null);
   const viewportRef = useRef<Viewport | null>(null);
   const zoneLayerRef = useRef<Container | null>(null);
+  const watchLayerRef = useRef<Container | null>(null);
   const agentLayerRef = useRef<Container | null>(null);
   const onSelectAgentRef = useRef(onSelectAgent);
   const lastCenteredAgentRef = useRef<{ agentId: string; x: number; y: number } | null>(null);
@@ -593,10 +678,12 @@ export default function WorldScene({ scene, onSelectAgent }: WorldSceneProps) {
       });
 
       const zoneLayer = new Container();
+      const watchLayer = new Container();
       const agentLayer = new Container();
+      watchLayer.eventMode = 'none';
       agentLayer.sortableChildren = true;
 
-      viewport.addChild(mapContainer, zoneLayer, agentLayer);
+      viewport.addChild(mapContainer, zoneLayer, watchLayer, agentLayer);
       app.stage.addChild(viewport);
 
       const viewportInspector = createViewportInspector({
@@ -610,6 +697,7 @@ export default function WorldScene({ scene, onSelectAgent }: WorldSceneProps) {
 
       viewportRef.current = viewport;
       zoneLayerRef.current = zoneLayer;
+      watchLayerRef.current = watchLayer;
       agentLayerRef.current = agentLayer;
       viewportInspectorRef.current = viewportInspector;
       (window as typeof window & { __AITOWN_VIEWPORT__?: ViewportInspector }).__AITOWN_VIEWPORT__ = viewportInspector;
@@ -657,6 +745,7 @@ export default function WorldScene({ scene, onSelectAgent }: WorldSceneProps) {
       clearActivePointerDrag();
       activeTouchPointerIds.clear();
       zoneLayerRef.current = null;
+      watchLayerRef.current = null;
       agentLayerRef.current = null;
       viewportRef.current = null;
       viewportInspectorRef.current = null;
@@ -683,23 +772,25 @@ export default function WorldScene({ scene, onSelectAgent }: WorldSceneProps) {
     void (async () => {
       const assets = await loadAiTownAssets();
       const zoneLayer = zoneLayerRef.current;
+      const watchLayer = watchLayerRef.current;
       const agentLayer = agentLayerRef.current;
       const viewport = viewportRef.current;
 
-      if (!zoneLayer || !agentLayer || !viewport) {
+      if (!zoneLayer || !watchLayer || !agentLayer || !viewport) {
         return;
       }
 
       zoneLayer.removeChildren().forEach((child) => child.destroy({ children: true }));
+      watchLayer.removeChildren().forEach((child) => child.destroy({ children: true }));
       agentLayer.removeChildren().forEach((child) => child.destroy({ children: true }));
 
-      const selectedSet = new Set(
-        scene.selectedAgentId ? [scene.selectedAgentId] : []
-      );
+      const selectedSet = resolveWatchOverlayAgentIds(scene.selectedAgentId, scene.watchEdges);
 
       for (const zone of scene.zones) {
         zoneLayer.addChild(createZoneLabel(zone, selectedSet, scene.map.tileDim));
       }
+
+      watchLayer.addChild(createWatchOverlay(scene));
 
       for (const agent of scene.agents) {
         const agentSprite = createAgentSprite(

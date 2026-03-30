@@ -3274,6 +3274,198 @@ describe('DetailsPanel accountability signals', () => {
     ).not.toBeInTheDocument();
   });
 
+  it('renders compact collector provenance previews in both collector cards from the latest loaded snapshot data', () => {
+    const baseCollectorSnapshot = buildCollectorSnapshot();
+    const baseCollectorItem = baseCollectorSnapshot.items[0];
+    const collectorSnapshot: CollectorSnapshot = {
+      ...baseCollectorSnapshot,
+      items: [
+        {
+          ...baseCollectorItem,
+          workspace_observations: [
+            {
+              path: '/workspace/app-engineering',
+              file_name: 'app-engineering',
+              kind: 'workspace_root',
+              last_modified_at: '2026-03-16T08:59:00.000Z'
+            },
+            {
+              path: '/workspace/app-engineering/docs/notes.md',
+              file_name: 'notes.md',
+              kind: 'workspace_file',
+              last_modified_at: '2026-03-16T08:53:00.000Z'
+            },
+            {
+              path: '/workspace/app-engineering/src/collector-preview.ts',
+              file_name: 'collector-preview.ts',
+              kind: 'workspace_file',
+              last_modified_at: '2026-03-16T08:58:45.000Z'
+            }
+          ],
+          tmux_observations: [
+            {
+              session_name: 'app-engineering',
+              window_index: '1',
+              pane_index: '0',
+              pane_id: '%10',
+              pane_title: 'editor',
+              pane_current_command: 'vim',
+              pane_active: false,
+              pane_dead: false,
+              pane_activity_at: '2026-03-16T08:54:00.000Z'
+            },
+            {
+              session_name: 'app-engineering',
+              window_index: '2',
+              pane_index: '1',
+              pane_id: '%11',
+              pane_title: 'tests',
+              pane_current_command: 'pnpm test',
+              pane_active: true,
+              pane_dead: false,
+              pane_activity_at: '2026-03-16T08:58:30.000Z'
+            }
+          ]
+        }
+      ]
+    };
+
+    const { unmount } = render(
+      <DetailsPanel
+        {...buildProps({
+          collectorSnapshot,
+          selectedAgent: null,
+          selectedCorrelationId: null,
+          selectedOperation: null,
+          workflow: null,
+          correlation: null
+        })}
+      />
+    );
+
+    const collectorSupervisionSection = screen.getByRole('heading', { name: 'Collector Supervision' }).closest('section');
+    expect(collectorSupervisionSection).not.toBeNull();
+    expect(within(collectorSupervisionSection!).getByText('Confidence · High')).toBeVisible();
+    expect(
+      within(collectorSupervisionSection!).getByText('Last output · 2026-03-16T08:58:00.000Z')
+    ).toBeVisible();
+    expect(
+      within(collectorSupervisionSection!).getByText('Last file write · 2026-03-16T08:57:00.000Z')
+    ).toBeVisible();
+    expect(
+      within(collectorSupervisionSection!).getByText(
+        'Workspace preview · collector-preview.ts · 2026-03-16T08:58:45.000Z'
+      )
+    ).toBeVisible();
+    expect(
+      within(collectorSupervisionSection!).getByText('Tmux preview · pnpm test · 2026-03-16T08:58:30.000Z')
+    ).toBeVisible();
+
+    unmount();
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          collectorSnapshot
+        })}
+      />
+    );
+
+    const collectorObservationSection = screen.getByRole('heading', { name: 'Collector Observation' }).closest('section');
+    expect(collectorObservationSection).not.toBeNull();
+    expect(within(collectorObservationSection!).getByText('Confidence · High')).toBeVisible();
+    expect(
+      within(collectorObservationSection!).getByText('Last output · 2026-03-16T08:58:00.000Z')
+    ).toBeVisible();
+    expect(
+      within(collectorObservationSection!).getByText('Last file write · 2026-03-16T08:57:00.000Z')
+    ).toBeVisible();
+    expect(
+      within(collectorObservationSection!).getByText(
+        'Workspace preview · collector-preview.ts · 2026-03-16T08:58:45.000Z'
+      )
+    ).toBeVisible();
+    expect(
+      within(collectorObservationSection!).getByText('Tmux preview · pnpm test · 2026-03-16T08:58:30.000Z')
+    ).toBeVisible();
+  });
+
+  it('renders explicit none fallbacks in collector provenance previews when freshness evidence is missing', () => {
+    const baseCollectorSnapshot = buildCollectorSnapshot();
+    const baseCollectorItem = baseCollectorSnapshot.items[0];
+    const collectorSnapshot: CollectorSnapshot = {
+      ...baseCollectorSnapshot,
+      items: [
+        {
+          ...baseCollectorItem,
+          workspace_observations: [
+            {
+              path: '/workspace/app-engineering',
+              file_name: 'app-engineering',
+              kind: 'workspace_root',
+              last_modified_at: '2026-03-16T08:59:00.000Z'
+            }
+          ],
+          tmux_observations: [
+            {
+              session_name: 'app-engineering',
+              window_index: '2',
+              pane_index: '1',
+              pane_id: '%11',
+              pane_title: 'tests',
+              pane_current_command: 'pnpm test',
+              pane_active: true,
+              pane_dead: false,
+              pane_activity_at: null
+            }
+          ],
+          heartbeat: {
+            ...baseCollectorItem.heartbeat,
+            last_meaningful_output_at: null,
+            last_file_write_at: null
+          }
+        }
+      ]
+    };
+
+    const { unmount } = render(
+      <DetailsPanel
+        {...buildProps({
+          collectorSnapshot,
+          selectedAgent: null,
+          selectedCorrelationId: null,
+          selectedOperation: null,
+          workflow: null,
+          correlation: null
+        })}
+      />
+    );
+
+    const collectorSupervisionSection = screen.getByRole('heading', { name: 'Collector Supervision' }).closest('section');
+    expect(collectorSupervisionSection).not.toBeNull();
+    expect(within(collectorSupervisionSection!).getByText('Last output · None')).toBeVisible();
+    expect(within(collectorSupervisionSection!).getByText('Last file write · None')).toBeVisible();
+    expect(within(collectorSupervisionSection!).getByText('Workspace preview · None')).toBeVisible();
+    expect(within(collectorSupervisionSection!).getByText('Tmux preview · None')).toBeVisible();
+
+    unmount();
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          collectorSnapshot
+        })}
+      />
+    );
+
+    const collectorObservationSection = screen.getByRole('heading', { name: 'Collector Observation' }).closest('section');
+    expect(collectorObservationSection).not.toBeNull();
+    expect(within(collectorObservationSection!).getByText('Last output · None')).toBeVisible();
+    expect(within(collectorObservationSection!).getByText('Last file write · None')).toBeVisible();
+    expect(within(collectorObservationSection!).getByText('Workspace preview · None')).toBeVisible();
+    expect(within(collectorObservationSection!).getByText('Tmux preview · None')).toBeVisible();
+  });
+
   it('jumps from matching top-level correlation evidence refs to shared memory in crew overview while leaving non-matching refs as plain text', async () => {
     const user = userEvent.setup();
     const onSelectAgent = vi.fn();

@@ -264,12 +264,17 @@ export async function fetchIncidents(
 }
 
 export async function fetchTimeline(
-  options: { limit?: number; window?: string; signal?: AbortSignal } = {}
+  options: { limit?: number; window?: string; correlationId?: string; signal?: AbortSignal } = {}
 ): Promise<TimelineReplayResponse> {
   const params = new URLSearchParams({
     limit: String(options.limit ?? DEFAULT_WORKFLOW_LIMIT),
     window: options.window ?? DEFAULT_WORKFLOW_WINDOW
   });
+
+  if (options.correlationId) {
+    params.set('correlation_id', options.correlationId);
+  }
+
   const response = await fetch(resolveApiUrl(`/timeline?${params.toString()}`), {
     signal: options.signal
   });

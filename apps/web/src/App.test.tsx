@@ -69,6 +69,8 @@ const growthRevenueSelectedOperationUrl = '/office/operations?agent_id=growth-re
 const incidentsUrl = '/incidents?limit=10&window=60m';
 const selectedAgentIncidentsUrl = '/agents/app-engineering/incidents?limit=10&window=60m';
 const timelineUrl = '/timeline?limit=4&window=60m';
+const reviewScopedTimelineUrl = '/timeline?limit=4&window=60m&correlation_id=corr-app-review';
+const secondaryScopedTimelineUrl = '/timeline?limit=4&window=60m&correlation_id=corr-app-secondary';
 const workflowUrl = '/agents/app-engineering/workflow?limit=10&window=60m';
 const teamLeadWorkflowUrl = '/agents/team-lead/workflow?limit=10&window=60m';
 const teamLeadIncidentsUrl = '/agents/team-lead/incidents?limit=10&window=60m';
@@ -486,6 +488,30 @@ const timelineFixture = {
       counterparty_agent_ids: [],
       evidence_refs: ['/tmp/launch-note.md'],
       source_kind: 'workspace_snapshot'
+    }
+  ]
+};
+
+const reviewScopedTimelineFixture = {
+  items: [timelineFixture.items[0]]
+};
+
+const secondaryScopedTimelineFixture = {
+  items: [
+    {
+      event_id: 'evt-timeline-secondary-1',
+      ts: '2026-03-16T08:52:00.000Z',
+      agent_id: 'growth-revenue',
+      actor_id: 'team-lead',
+      event_type: 'handoff_completed',
+      severity: 'yellow',
+      current_state: 'reviewing',
+      location: 'meeting-zone',
+      summary: 'Replay captured the secondary review handoff',
+      correlation_id: 'corr-app-secondary',
+      counterparty_agent_ids: ['growth-revenue'],
+      evidence_refs: ['/tmp/secondary-evidence.md'],
+      source_kind: 'controller_event'
     }
   ]
 };
@@ -1130,6 +1156,14 @@ function resolveDefaultFetchResponse(url: string) {
     return jsonResponse(timelineFixture);
   }
 
+  if (url === reviewScopedTimelineUrl) {
+    return jsonResponse(reviewScopedTimelineFixture);
+  }
+
+  if (url === secondaryScopedTimelineUrl) {
+    return jsonResponse(secondaryScopedTimelineFixture);
+  }
+
   if (url === workflowUrl) {
     return jsonResponse(workflowFixture);
   }
@@ -1237,6 +1271,18 @@ describe('App', () => {
 
         if (url === timelineUrl) {
           return new Response(JSON.stringify(timelineFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === reviewScopedTimelineUrl) {
+          return new Response(JSON.stringify(reviewScopedTimelineFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === secondaryScopedTimelineUrl) {
+          return new Response(JSON.stringify(secondaryScopedTimelineFixture), {
             headers: { 'content-type': 'application/json' }
           });
         }
@@ -2745,6 +2791,47 @@ afterEach(() => {
     expect(within(overviewCorrelationIncidentRecord!).getByText('Severity · Orange')).toBeVisible();
   });
 
+  it('refetches timeline replay with a manually selected crew-overview correlation and labels scoped empty replay state', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === secondaryScopedTimelineUrl) {
+          return new Response(JSON.stringify({ items: [] }), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        return resolveTestFetchResponse(url);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    const incidentSection = within(details).getByRole('heading', { name: 'Incident Feed' }).closest('section');
+    const replaySection = (await within(details).findByRole('heading', { name: 'Timeline Replay' })).closest('section');
+    expect(incidentSection).not.toBeNull();
+    expect(replaySection).not.toBeNull();
+
+    expect(await within(replaySection!).findByText('Replay captured missing workflow evidence')).toBeVisible();
+    expect(globalThis.fetch).toHaveBeenCalledWith(timelineUrl, expect.anything());
+
+    await user.click(
+      within(incidentSection!).getByRole('button', { name: 'Open incident correlation corr-app-secondary' })
+    );
+
+    await waitFor(() => {
+      expect(within(replaySection!).getByText('Scoped replay · corr-app-secondary')).toBeVisible();
+      expect(within(replaySection!).getByText('No replay events for corr-app-secondary.')).toBeVisible();
+      expect(within(replaySection!).queryByText('Replay captured missing workflow evidence')).not.toBeInTheDocument();
+    });
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(secondaryScopedTimelineUrl, expect.anything());
+  });
+
   it('pivots from timeline replay actors while carrying replay correlation context', async () => {
     const user = userEvent.setup();
     render(<App />);
@@ -2874,6 +2961,57 @@ afterEach(() => {
     expect(await within(details).findByText('timeline refresh failed')).toBeVisible();
     expect(within(details).getByText('Replay captured missing workflow evidence')).toBeVisible();
     expect(timelineRequests).toBeGreaterThan(1);
+  });
+
+  it('keeps the last scoped replay visible when a later scoped replay poll fails', async () => {
+    (window as typeof window & { __AITOWN_POLL_INTERVAL_MS__?: number }).__AITOWN_POLL_INTERVAL_MS__ = 10;
+
+    let scopedReplayRequests = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === reviewScopedTimelineUrl) {
+          scopedReplayRequests += 1;
+          if (scopedReplayRequests === 1) {
+            return new Response(JSON.stringify(reviewScopedTimelineFixture), {
+              headers: { 'content-type': 'application/json' }
+            });
+          }
+
+          return new Response(JSON.stringify({ error: 'internal_error', details: 'scoped replay refresh failed' }), {
+            status: 500,
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        return resolveTestFetchResponse(url);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    const incidentSection = within(details).getByRole('heading', { name: 'Incident Feed' }).closest('section');
+    const replaySection = (await within(details).findByRole('heading', { name: 'Timeline Replay' })).closest('section');
+    expect(incidentSection).not.toBeNull();
+    expect(replaySection).not.toBeNull();
+
+    await user.click(
+      within(incidentSection!).getByRole('button', {
+        name: 'Open incident correlation corr-app-review, currently selected'
+      })
+    );
+
+    await waitFor(() => {
+      expect(within(replaySection!).getByText('Scoped replay · corr-app-review')).toBeVisible();
+      expect(within(replaySection!).getByText('Replay captured missing workflow evidence')).toBeVisible();
+      expect(within(replaySection!).getByText('Scoped replay unavailable. scoped replay refresh failed')).toBeVisible();
+    });
+
+    expect(scopedReplayRequests).toBeGreaterThan(1);
   });
 
   it('shows a canonical office grid in crew overview and pivots from a zone occupant', async () => {

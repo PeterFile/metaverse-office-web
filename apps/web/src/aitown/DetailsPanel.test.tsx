@@ -4417,6 +4417,146 @@ describe('DetailsPanel accountability signals', () => {
     expect(within(collectorObservationSection!).getByText('Tmux preview · None')).toBeVisible();
   });
 
+  it('renders matching collector workspace previews as shared-memory jumps while keeping non-matching previews as plain text', async () => {
+    const user = userEvent.setup();
+    const onSelectAgent = vi.fn();
+    const onSelectCorrelation = vi.fn();
+    const baseCollectorSnapshot = buildCollectorSnapshot();
+    const baseCollectorItem = baseCollectorSnapshot.items[0];
+    const collectorSnapshot: CollectorSnapshot = {
+      ...baseCollectorSnapshot,
+      items: [
+        {
+          ...baseCollectorItem,
+          workspace_observations: [
+            {
+              path: '/workspace/app-engineering/src/non-matching.ts',
+              file_name: 'non-matching.ts',
+              kind: 'workspace_file',
+              last_modified_at: '2026-03-16T08:53:00.000Z'
+            },
+            {
+              path: '/workspace/app-engineering/src/collector-preview.ts',
+              file_name: 'collector-preview.ts',
+              kind: 'workspace_file',
+              last_modified_at: '2026-03-16T08:58:45.000Z'
+            }
+          ]
+        }
+      ]
+    };
+    const memoryArtifacts: MemoryArtifactIndex = {
+      generated_at: '2026-03-16T09:00:00.000Z',
+      items: [
+        ...buildMemoryArtifacts().items,
+        {
+          artifact_ref: '/workspace/app-engineering/src/collector-preview.ts',
+          artifact_kind: 'workspace_file',
+          file_name: 'collector-preview.ts',
+          first_seen_at: '2026-03-16T08:54:00.000Z',
+          last_seen_at: '2026-03-16T08:58:45.000Z',
+          mention_count: 2,
+          agent_ids: ['app-engineering'],
+          correlation_ids: ['corr-app-review'],
+          source_kinds: ['collector_snapshot'],
+          latest_summary: 'Collector preview workspace artifact',
+          latest_event_type: 'collector_snapshot_written',
+          collector_last_modified_at: '2026-03-16T08:58:45.000Z'
+        }
+      ]
+    };
+
+    const { unmount } = render(
+      <DetailsPanel
+        {...buildProps({
+          collectorSnapshot,
+          memoryArtifacts,
+          selectedAgent: null,
+          selectedCorrelationId: null,
+          selectedOperation: null,
+          workflow: null,
+          correlation: null,
+          onSelectAgent,
+          onSelectCorrelation
+        })}
+      />
+    );
+
+    const collectorSupervisionSection = screen.getByRole('heading', { name: 'Collector Supervision' }).closest('section');
+    const sharedMemorySection = screen.getByRole('heading', { name: 'Shared Memory' }).closest('section');
+    expect(collectorSupervisionSection).not.toBeNull();
+    expect(sharedMemorySection).not.toBeNull();
+
+    const crewOverviewArtifactRecord = within(sharedMemorySection!).getByText(
+      'Ref · /workspace/app-engineering/src/collector-preview.ts'
+    ).closest('li');
+    expect(crewOverviewArtifactRecord).not.toBeNull();
+    expect(
+      within(collectorSupervisionSection!).getByRole('button', {
+        name: 'Jump to shared memory artifact /workspace/app-engineering/src/collector-preview.ts collector-preview.ts · 2026-03-16T08:58:45.000Z'
+      })
+    ).toHaveTextContent('collector-preview.ts · 2026-03-16T08:58:45.000Z');
+    expect(collectorSupervisionSection).toHaveTextContent(
+      'Workspace preview · collector-preview.ts · 2026-03-16T08:58:45.000Z'
+    );
+    expect(
+      within(collectorSupervisionSection!).queryByRole('button', {
+        name: 'Jump to shared memory artifact /workspace/app-engineering/src/non-matching.ts'
+      })
+    ).not.toBeInTheDocument();
+
+    await user.click(
+      within(collectorSupervisionSection!).getByRole('button', {
+        name: 'Jump to shared memory artifact /workspace/app-engineering/src/collector-preview.ts collector-preview.ts · 2026-03-16T08:58:45.000Z'
+      })
+    );
+
+    expect(document.activeElement).toBe(crewOverviewArtifactRecord);
+
+    unmount();
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          collectorSnapshot,
+          memoryArtifacts,
+          onSelectAgent,
+          onSelectCorrelation
+        })}
+      />
+    );
+
+    const collectorObservationSection = screen.getByRole('heading', { name: 'Collector Observation' }).closest('section');
+    const selectedArtifactRecord = within(screen.getByRole('heading', { name: 'Shared Memory' }).closest('section')!).getByText(
+      'Ref · /workspace/app-engineering/src/collector-preview.ts'
+    ).closest('li');
+    expect(collectorObservationSection).not.toBeNull();
+    expect(selectedArtifactRecord).not.toBeNull();
+    expect(
+      within(collectorObservationSection!).getByRole('button', {
+        name: 'Jump to shared memory artifact /workspace/app-engineering/src/collector-preview.ts collector-preview.ts · 2026-03-16T08:58:45.000Z'
+      })
+    ).toHaveTextContent('collector-preview.ts · 2026-03-16T08:58:45.000Z');
+    expect(collectorObservationSection).toHaveTextContent(
+      'Workspace preview · collector-preview.ts · 2026-03-16T08:58:45.000Z'
+    );
+    expect(
+      within(collectorObservationSection!).queryByRole('button', {
+        name: 'Jump to shared memory artifact /workspace/app-engineering/src/non-matching.ts'
+      })
+    ).not.toBeInTheDocument();
+
+    await user.click(
+      within(collectorObservationSection!).getByRole('button', {
+        name: 'Jump to shared memory artifact /workspace/app-engineering/src/collector-preview.ts collector-preview.ts · 2026-03-16T08:58:45.000Z'
+      })
+    );
+
+    expect(document.activeElement).toBe(selectedArtifactRecord);
+    expect(onSelectAgent).not.toHaveBeenCalled();
+    expect(onSelectCorrelation).not.toHaveBeenCalled();
+  });
+
   it('jumps from matching top-level correlation evidence refs to shared memory in crew overview while leaving non-matching refs as plain text', async () => {
     const user = userEvent.setup();
     const onSelectAgent = vi.fn();

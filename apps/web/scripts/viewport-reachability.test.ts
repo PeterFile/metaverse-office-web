@@ -46,6 +46,29 @@ describe('resolveViewportEdgeDragDelta', () => {
     });
   });
 
+  it('computes a single overshooting horizontal drag toward the right clamp edge', () => {
+    expect(
+      resolveViewportEdgeDragDelta(
+        {
+          scale: 0.5,
+          left: 652,
+          top: 480,
+          right: 1800,
+          bottom: 1308,
+          worldWidth: 2048,
+          worldHeight: 1536,
+          clampPadding: {
+            right: 64
+          }
+        },
+        'right'
+      )
+    ).toEqual({
+      deltaX: -284,
+      deltaY: 0
+    });
+  });
+
   it('stops asking for drag movement once the edge is already within tolerance', () => {
     expect(
       resolveViewportEdgeDragDelta(

@@ -724,6 +724,15 @@ function isViewportAtTopLeftEdge(
   return state.left >= -0.5 && state.left <= 0.5 && state.top <= -(topAllowance - 0.5);
 }
 
+function isViewportAtRightEdge(
+  state: NonNullable<Awaited<ReturnType<typeof waitForViewportSettle>>>
+) {
+  const scale = state.scale ?? 1;
+  const rightAllowance = (state.clampPadding?.right ?? 0) / scale;
+
+  return state.right >= state.worldWidth + rightAllowance - 0.5;
+}
+
 function isViewportAtLeftEdge(
   state: NonNullable<Awaited<ReturnType<typeof waitForViewportSettle>>>
 ) {
@@ -732,7 +741,7 @@ function isViewportAtLeftEdge(
 
 async function dragViewportToEdge(
   page: Page,
-  edge: 'bottom-right' | 'top-left',
+  edge: 'bottom-right' | 'right' | 'top-left',
   options: {
     attempts?: number;
     horizontalOnly?: boolean;
@@ -744,6 +753,8 @@ async function dragViewportToEdge(
   const isSatisfied =
     edge === 'bottom-right'
       ? isViewportAtBottomRightEdge
+      : edge === 'right'
+        ? isViewportAtRightEdge
       : horizontalOnly
         ? isViewportAtLeftEdge
         : isViewportAtTopLeftEdge;
@@ -811,10 +822,25 @@ function expectViewportAtLeftClampEdge(
   expect(Math.abs(state.top - expectedTop)).toBeLessThanOrEqual(0.5);
 }
 
+function expectViewportAtRightClampEdge(
+  state: NonNullable<Awaited<ReturnType<typeof waitForViewportSettle>>>,
+  expectedScale: number,
+  expectedTop: number
+) {
+  expectViewportBoundsWithinClampBudget(state);
+  expect(state.scale).not.toBeNull();
+  expect(state.scale).toBeCloseTo(expectedScale, 4);
+
+  const scale = state.scale ?? 1;
+  const rightAllowance = (state.clampPadding?.right ?? 0) / scale;
+  expect(state.right).toBeGreaterThanOrEqual(state.worldWidth + rightAllowance - 0.5);
+  expect(Math.abs(state.top - expectedTop)).toBeLessThanOrEqual(0.5);
+}
+
 async function expectDefaultViewportKeepsDirectEdgeReachability(
   page: Page,
   options: {
-    initialEdge?: 'bottom-right' | 'top-left';
+    initialEdge?: 'bottom-right' | 'right' | 'top-left';
     initialHorizontalOnly?: boolean;
     verifyReturnToTopLeft?: boolean;
   } = {}
@@ -839,6 +865,19 @@ async function expectDefaultViewportKeepsDirectEdgeReachability(
     } else {
       expectViewportAtTopLeftClampEdge(topLeft, initialScale);
     }
+    return;
+  }
+
+  if (initialEdge === 'right') {
+    const right = await dragViewportToEdge(page, 'right');
+    expectViewportAtRightClampEdge(right, initialScale, initial.top);
+
+    if (!verifyReturnToTopLeft) {
+      return;
+    }
+
+    const topLeft = await dragViewportToEdge(page, 'top-left');
+    expectViewportAtTopLeftClampEdge(topLeft, initialScale);
     return;
   }
 
@@ -3186,6 +3225,21 @@ test.describe('operator shell smoke', () => {
       await expectDefaultViewportKeepsDirectEdgeReachability(page, {
         initialEdge: 'top-left',
         initialHorizontalOnly: true,
+        verifyReturnToTopLeft: false
+      });
+    });
+  }
+
+  for (const shell of SHELLS) {
+    test(`keeps the default initial viewport directly reachable to the right clamp edge via horizontal drag on fresh load on the ${shell.name} shell`, async ({ page }) => {
+      if (shell.name === 'landscape') {
+        test.slow();
+      }
+
+      await page.setViewportSize(shell.viewport);
+      await page.goto('/');
+      await expectDefaultViewportKeepsDirectEdgeReachability(page, {
+        initialEdge: 'right',
         verifyReturnToTopLeft: false
       });
     });

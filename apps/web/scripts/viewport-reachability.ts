@@ -12,7 +12,7 @@ export type ViewportReachabilityState = {
   };
 };
 
-export type ViewportReachabilityEdge = 'bottom-right' | 'top-left';
+export type ViewportReachabilityEdge = 'bottom-right' | 'right' | 'top-left';
 
 const EDGE_TOLERANCE_WORLD_UNITS = 0.5;
 const DEFAULT_SCREEN_OVERSHOOT_PX = 96;
@@ -42,9 +42,18 @@ export function resolveViewportEdgeDragDelta(
   const rightAllowance = (state.clampPadding?.right ?? 0) / scale;
   const topAllowance = (state.clampPadding?.top ?? 0) / scale;
 
-  if (edge === 'bottom-right') {
+  if (edge !== 'top-left') {
+    const deltaX = resolveScreenDelta(state.worldWidth + rightAllowance - state.right, scale, -1, screenOvershootPx);
+
+    if (edge === 'right') {
+      return {
+        deltaX,
+        deltaY: 0
+      };
+    }
+
     return {
-      deltaX: resolveScreenDelta(state.worldWidth + rightAllowance - state.right, scale, -1, screenOvershootPx),
+      deltaX,
       deltaY: resolveScreenDelta(state.worldHeight - state.bottom, scale, -1, screenOvershootPx)
     };
   }

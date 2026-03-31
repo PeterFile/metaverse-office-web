@@ -1881,6 +1881,18 @@ export function DetailsPanel({
                     })}
                   </span>
                   <span className="aitown-queue-record__meta">
+                    Counterparties ·{' '}
+                    {renderAgentPivotList({
+                      agentIds: operation.latest_event?.counterparty_agent_ids ?? [],
+                      currentAgentId: operation.agent_id,
+                      navigableAgentIds,
+                      emptyLabel: 'No counterparties',
+                      ariaLabelPrefix: `Select active queue counterparty agent from operation ${operation.agent_id}`,
+                      correlationId: selectedCorrelationId ?? operation.correlation_id,
+                      onSelectAgent
+                    })}
+                  </span>
+                  <span className="aitown-queue-record__meta">
                     Evidence ·{' '}
                     {renderSharedMemoryEvidenceRefs({
                       evidenceRefs: operation.latest_event?.evidence_refs ?? [],

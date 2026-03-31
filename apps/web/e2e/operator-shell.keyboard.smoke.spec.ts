@@ -13,7 +13,16 @@ async function readViewportState(page: Page) {
   return page.evaluate(() => window.__AITOWN_VIEWPORT__?.read() ?? null);
 }
 
-async function focusHubControlWithTab(page: Page, locator: Locator, accessibleName: string, maxTabs = 96) {
+async function focusHubControlWithTab(
+  page: Page,
+  locator: Locator,
+  accessibleName: string,
+  options: {
+    maxTabs?: number;
+    reverse?: boolean;
+  } = {}
+) {
+  const { maxTabs = 128, reverse = false } = options;
   await expect(locator).toBeVisible();
 
   for (let step = 0; step < maxTabs; step += 1) {
@@ -21,10 +30,12 @@ async function focusHubControlWithTab(page: Page, locator: Locator, accessibleNa
       return;
     }
 
-    await page.keyboard.press('Tab');
+    await page.keyboard.press(reverse ? 'Shift+Tab' : 'Tab');
   }
 
-  throw new Error(`could not focus ${accessibleName} with Tab within ${maxTabs} steps`);
+  throw new Error(
+    `could not focus ${accessibleName} with ${reverse ? 'Shift+Tab' : 'Tab'} within ${maxTabs} steps`
+  );
 }
 
 function expectViewportBoundsWithinClampBudget(
@@ -1059,6 +1070,79 @@ test.describe('operator shell smoke', () => {
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toHaveCount(0);
   });
 
+  test('keeps the active crew-overview correlation when opening an active-queue counterparty pivot via keyboard traversal', async ({
+    page
+  }) => {
+    await page.route('**/office/operations?limit=4', async (route) => {
+      const response = await route.fetch();
+      const operations = (await response.json()) as {
+        items: Array<{
+          agent_id: string;
+          correlation_id: string | null;
+        }>;
+      };
+
+      await route.fulfill({
+        response,
+        json: {
+          ...operations,
+          items: operations.items.map((item) =>
+            item.agent_id === 'growth-revenue'
+              ? {
+                  ...item,
+                  correlation_id: 'corr-revenue-secondary'
+                }
+              : item
+          )
+        }
+      });
+    });
+
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Hub' }).click();
+
+    const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
+    const clearButton = detailsPanel.getByRole('button', { name: 'Clear' });
+    const correlationSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Correlation Drilldown' })
+    });
+    const replaySection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Timeline Replay' })
+    });
+    const replayRecord = replaySection.locator('li').filter({
+      has: page.getByText('Lead started reviewing the growth handoff notes', { exact: true })
+    });
+    const replayCorrelationButton = replayRecord.getByRole('button', {
+      name: 'Open replay correlation corr-growth-lead-review'
+    });
+    const activeQueueCounterpartyButton = detailsPanel.getByRole('button', {
+      name: 'Select active queue counterparty agent from operation growth-revenue app-engineering'
+    });
+
+    await expect(detailsPanel.getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
+    await focusHubControlWithTab(page, replayCorrelationButton, 'Open replay correlation corr-growth-lead-review');
+    await expect(replayCorrelationButton).toBeFocused();
+    await page.keyboard.press('Enter');
+
+    await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toBeVisible();
+    await expect(correlationSection.getByText('Counts · 0 incidents · 1 interactions · 2 events')).toBeVisible();
+    await focusHubControlWithTab(
+      page,
+      activeQueueCounterpartyButton,
+      'Select active queue counterparty agent from operation growth-revenue app-engineering',
+      { reverse: true }
+    );
+    await expect(activeQueueCounterpartyButton).toBeFocused();
+    await page.keyboard.press('Enter');
+
+    await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+    await expect(clearButton).toBeFocused();
+    await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
+    await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toBeVisible();
+    await expect(correlationSection.getByText('Counts · 0 incidents · 1 interactions · 2 events')).toBeVisible();
+    await expect(correlationSection.getByText('corr-revenue-secondary', { exact: true })).toHaveCount(0);
+  });
+
   test('opens a current-operation counterparty pivot from the selected-agent Hub via keyboard traversal', async ({ page }) => {
     await page.goto('/');
     await page.getByRole('button', { name: 'Open Hub' }).click();
@@ -1470,7 +1554,8 @@ test.describe('operator shell smoke', () => {
     await focusHubControlWithTab(
       page,
       replayActorButton,
-      'Select replay actor from event evt_growth_review_started team-lead'
+      'Select replay actor from event evt_growth_review_started team-lead',
+      { reverse: true }
     );
     await expect(replayActorButton).toBeFocused();
     await page.keyboard.press('Enter');
@@ -1518,7 +1603,8 @@ test.describe('operator shell smoke', () => {
     await focusHubControlWithTab(
       page,
       replayCounterpartyButton,
-      'Select replay counterparty from event evt_growth_review_started team-lead'
+      'Select replay counterparty from event evt_growth_review_started team-lead',
+      { reverse: true }
     );
     await expect(replayCounterpartyButton).toBeFocused();
     await page.keyboard.press('Enter');

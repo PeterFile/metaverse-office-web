@@ -217,6 +217,51 @@ describe('read-only frontend/backend contract smoke', () => {
     expectCorrelationContract(correlation);
   });
 
+  it('passes timeline correlation_id replay filters through to the real backend and preserves seeded replay semantics', async () => {
+    harness = await createHarness(() => '2026-03-09T19:00:00.000Z');
+    await seedContractSlice(harness.store);
+
+    const nativeFetch = globalThis.fetch.bind(globalThis);
+    const requests: RequestContract[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+        requests.push(getRequestContract(input, harness!.baseUrl, init));
+        return nativeFetch(input, init);
+      })
+    );
+
+    const api = await loadApi(harness.baseUrl);
+    const timeline = await api.fetchTimeline({ correlationId: 'corr-contract' });
+
+    expect(requests).toEqual([
+      {
+        method: 'GET',
+        origin: harness.baseUrl,
+        pathname: '/timeline',
+        query: [
+          ['correlation_id', 'corr-contract'],
+          ['limit', '10'],
+          ['window', '60m']
+        ]
+      }
+    ]);
+    expect(timeline.items.map((event) => event.event_id)).toEqual([
+      'evt_contract_review_started',
+      'evt_contract_review_completed',
+      'evt_contract_peer_watch',
+      'evt_contract_handoff_completed'
+    ]);
+    expect(timeline.items).toHaveLength(4);
+    expect(timeline.items.every((event) => event.correlation_id === 'corr-contract')).toBe(true);
+    expect(timeline.items[2]).toMatchObject({
+      event_type: 'peer_watch_alert_raised',
+      severity: 'orange',
+      counterparty_agent_ids: ['protocol-engineering'],
+      evidence_refs: ['/tmp/contract-peer-watch.md']
+    });
+  });
+
   it('passes office-operations agent_id filters through to the real backend without widening the request surface', async () => {
     harness = await createHarness(() => '2026-03-09T19:00:00.000Z');
     await seedContractSlice(harness.store);

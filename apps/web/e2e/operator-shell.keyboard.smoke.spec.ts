@@ -754,12 +754,30 @@ async function dragViewportToEdge(
   );
 }
 
+function expectViewportAtTopLeftClampEdge(
+  state: NonNullable<Awaited<ReturnType<typeof waitForViewportSettle>>>,
+  expectedScale: number
+) {
+  expectViewportBoundsWithinClampBudget(state);
+  expect(state.scale).not.toBeNull();
+  expect(state.scale).toBeCloseTo(expectedScale, 4);
+
+  expect(state.left).toBeGreaterThanOrEqual(-0.5);
+  expect(state.left).toBeLessThanOrEqual(0.5);
+
+  const scale = state.scale ?? 1;
+  const topAllowance = (state.clampPadding?.top ?? 0) / scale;
+  expect(state.top).toBeLessThanOrEqual(-(topAllowance - 0.5));
+}
+
 async function expectDefaultViewportKeepsDirectEdgeReachability(
   page: Page,
   options: {
+    initialEdge?: 'bottom-right' | 'top-left';
     verifyReturnToTopLeft?: boolean;
   } = {}
 ) {
+  const initialEdge = options.initialEdge ?? 'bottom-right';
   const verifyReturnToTopLeft = options.verifyReturnToTopLeft ?? true;
 
   await expect(page.locator('.aitown-world__host canvas')).toBeVisible();
@@ -770,6 +788,12 @@ async function expectDefaultViewportKeepsDirectEdgeReachability(
   expect(initial!.scale).not.toBeNull();
   expectViewportBoundsWithinClampBudget(initial!);
   const initialScale = initial!.scale!;
+
+  if (initialEdge === 'top-left') {
+    const topLeft = await dragViewportToEdge(page, 'top-left');
+    expectViewportAtTopLeftClampEdge(topLeft, initialScale);
+    return;
+  }
 
   const bottomRight = await dragViewportToEdge(page, 'bottom-right');
   expectViewportBoundsWithinClampBudget(bottomRight);
@@ -787,16 +811,7 @@ async function expectDefaultViewportKeepsDirectEdgeReachability(
   }
 
   const topLeft = await dragViewportToEdge(page, 'top-left');
-  expectViewportBoundsWithinClampBudget(topLeft);
-  expect(topLeft.scale).not.toBeNull();
-  expect(topLeft.scale).toBeCloseTo(initialScale, 4);
-
-  expect(topLeft.left).toBeGreaterThanOrEqual(-0.5);
-  expect(topLeft.left).toBeLessThanOrEqual(0.5);
-
-  const topLeftScale = topLeft.scale ?? 1;
-  const topLeftTopAllowance = (topLeft.clampPadding?.top ?? 0) / topLeftScale;
-  expect(topLeft.top).toBeLessThanOrEqual(-(topLeftTopAllowance - 0.5));
+  expectViewportAtTopLeftClampEdge(topLeft, initialScale);
 }
 
 const SHELLS = [
@@ -2980,6 +2995,21 @@ test.describe('operator shell smoke', () => {
       await page.setViewportSize(shell.viewport);
       await page.goto('/');
       await expectMinimumZoomKeepsTwoAxisPanRoom(page);
+    });
+  }
+
+  for (const shell of SHELLS) {
+    test(`keeps the default initial viewport directly reachable to the top-left clamp edge without zooming first on the ${shell.name} shell`, async ({ page }) => {
+      if (shell.name === 'landscape') {
+        test.slow();
+      }
+
+      await page.setViewportSize(shell.viewport);
+      await page.goto('/');
+      await expectDefaultViewportKeepsDirectEdgeReachability(page, {
+        initialEdge: 'top-left',
+        verifyReturnToTopLeft: false
+      });
     });
   }
 

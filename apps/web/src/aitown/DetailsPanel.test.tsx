@@ -853,6 +853,146 @@ describe('DetailsPanel accountability signals', () => {
     expect(onSelectOperationsState).toHaveBeenCalledWith('waiting');
   });
 
+  it('jumps from matching active-queue evidence refs to shared memory while leaving non-matching refs as plain text and showing explicit fallbacks', async () => {
+    const user = userEvent.setup();
+    const onSelectAgent = vi.fn();
+    const onSelectCorrelation = vi.fn();
+    const onSelectOperation = vi.fn();
+    const operations: OfficeOperations = {
+      generated_at: '2026-03-16T09:00:00.000Z',
+      summary: {
+        item_count: 2,
+        blocked_count: 1,
+        reboot_recommended_count: 1,
+        state_buckets: {
+          blocked: 1,
+          reviewing: 1
+        },
+        severity_buckets: {
+          normal: 1,
+          yellow: 0,
+          orange: 1,
+          red: 0
+        }
+      },
+      items: [
+        {
+          ...buildSelectedOperation(),
+          latest_event: {
+            ...buildSelectedOperation().latest_event!,
+            evidence_refs: ['/evidence/review.md', '/evidence/missing.md']
+          }
+        },
+        {
+          ...buildSelectedOperation(),
+          agent_id: 'team-lead',
+          display_name: 'Team Lead',
+          kind: 'lead',
+          current_state: 'reviewing',
+          active_task: 'Coordinate rollout',
+          current_blocker: '',
+          current_location: 'lead-desk',
+          reported_severity: 'normal',
+          effective_severity: 'normal',
+          derived_staleness: {
+            severity: 'normal',
+            stale_for_ms: 60000,
+            stale_for_minutes: 1,
+            last_meaningful_output_at: '2026-03-16T08:59:00.000Z'
+          },
+          reboot_recommended: false,
+          last_event_at: null,
+          last_heartbeat_at: null,
+          last_meaningful_output_at: null,
+          correlation_id: null,
+          latest_event: {
+            ...buildSelectedOperation().latest_event!,
+            summary: 'Queue item with no linked evidence refs',
+            evidence_refs: []
+          }
+        }
+      ]
+    };
+    const memoryArtifacts: MemoryArtifactIndex = {
+      generated_at: '2026-03-16T09:00:00.000Z',
+      items: [
+        ...buildMemoryArtifacts().items,
+        {
+          artifact_ref: '/evidence/review.md',
+          artifact_kind: 'evidence_ref',
+          file_name: 'review.md',
+          first_seen_at: '2026-03-16T08:42:00.000Z',
+          last_seen_at: '2026-03-16T08:58:00.000Z',
+          mention_count: 2,
+          agent_ids: ['app-engineering', 'team-lead'],
+          correlation_ids: ['corr-app-review'],
+          source_kinds: ['controller_event'],
+          latest_summary: 'Active queue evidence anchor',
+          latest_event_type: 'agent_noted',
+          collector_last_modified_at: '2026-03-16T08:58:00.000Z'
+        }
+      ]
+    };
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          memoryArtifacts,
+          onSelectAgent,
+          onSelectCorrelation,
+          onSelectOperation,
+          operations,
+          selectedAgent: null,
+          selectedCorrelationId: 'corr-app-review',
+          selectedOperation: null,
+          workflow: null
+        })}
+      />
+    );
+
+    const queueSection = screen.getByRole('heading', { name: 'Active Queue' }).closest('section');
+    const sharedMemorySection = screen.getByRole('heading', { name: 'Shared Memory' }).closest('section');
+    expect(queueSection).not.toBeNull();
+    expect(sharedMemorySection).not.toBeNull();
+
+    const appRecord = within(queueSection!)
+      .getByRole('button', { name: 'Inspect App Engineering Agent from active queue' })
+      .closest('li');
+    const teamLeadRecord = within(queueSection!)
+      .getByRole('button', { name: 'Inspect Team Lead from active queue' })
+      .closest('li');
+    const artifactRecord = within(sharedMemorySection!).getByText('Ref · /evidence/review.md').closest('li');
+    expect(appRecord).not.toBeNull();
+    expect(teamLeadRecord).not.toBeNull();
+    expect(artifactRecord).not.toBeNull();
+
+    expect(appRecord!).toHaveTextContent(
+      'Evidence · /evidence/review.md, /evidence/missing.md'
+    );
+    expect(teamLeadRecord!).toHaveTextContent('Evidence · No evidence refs');
+    expect(
+      within(appRecord!).getByRole('button', {
+        name: 'Jump to shared memory artifact /evidence/review.md'
+      })
+    ).toHaveTextContent('/evidence/review.md');
+    expect(
+      within(appRecord!).queryByRole('button', {
+        name: 'Jump to shared memory artifact /evidence/missing.md'
+      })
+    ).not.toBeInTheDocument();
+
+    await user.click(
+      within(appRecord!).getByRole('button', {
+        name: 'Jump to shared memory artifact /evidence/review.md'
+      })
+    );
+
+    expect(document.activeElement).toBe(artifactRecord);
+    expect(onSelectAgent).not.toHaveBeenCalled();
+    expect(onSelectCorrelation).not.toHaveBeenCalled();
+    expect(onSelectOperation).not.toHaveBeenCalled();
+  });
+
   it('keeps the selected active-queue state option visible when its count drops to zero', () => {
     render(
       <DetailsPanel

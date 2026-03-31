@@ -2985,6 +2985,10 @@ afterEach(() => {
     const queueSection = within(details).getByRole('heading', { name: 'Active Queue' }).closest('section');
     expect(queueSection).not.toBeNull();
 
+    expect(
+      within(queueSection!).getByText('Evidence · No evidence refs')
+    ).toBeVisible();
+
     await user.selectOptions(
       within(queueSection!).getByRole('combobox', { name: 'Filter active queue by state' }),
       'blocked'
@@ -3467,6 +3471,119 @@ afterEach(() => {
     ).toBeVisible();
     expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
     expect(vi.mocked(globalThis.fetch).mock.calls).toHaveLength(fetchCallCountBeforeJump);
+    expect(globalThis.fetch).not.toHaveBeenCalledWith(teamLeadWorkflowUrl, expect.anything());
+    expect(globalThis.fetch).not.toHaveBeenCalledWith(teamLeadSelectedCorrelationMemoryArtifactsUrl, expect.anything());
+  });
+
+  it('jumps from active-queue evidence refs to shared memory without changing the queue filter, selected agent, current-operation context, or correlation', async () => {
+    const activeQueueEvidenceJumpFixture = {
+      ...operationsFixture,
+      items: [
+        {
+          ...operationsFixture.items[0],
+          latest_event: operationsFixture.items[0].latest_event
+            ? {
+                ...operationsFixture.items[0].latest_event,
+                evidence_refs: ['/tmp/evidence.md', '/tmp/missing.md']
+              }
+            : null
+        },
+        {
+          ...operationsFixture.items[1],
+          latest_event: operationsFixture.items[1].latest_event
+            ? {
+                ...operationsFixture.items[1].latest_event,
+                evidence_refs: []
+              }
+            : {
+                event_id: 'evt-team-lead',
+                event_type: 'agent_noted',
+                ts: '2026-03-16T08:59:10.000Z',
+                summary: 'No linked evidence refs',
+                source_kind: 'controller_event',
+                evidence_refs: [],
+                counterparty_agent_ids: []
+              }
+        }
+      ]
+    };
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === operationsUrl || url === blockedOperationsUrl || url === selectedOperationUrl) {
+          return jsonResponse(activeQueueEvidenceJumpFixture);
+        }
+
+        return resolveTestFetchResponse(url);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    const queueSection = within(details).getByRole('heading', { name: 'Active Queue' }).closest('section');
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    const memorySection = within(details).getByRole('heading', { name: 'Shared Memory' }).closest('section');
+    expect(queueSection).not.toBeNull();
+    expect(correlationSection).not.toBeNull();
+    expect(memorySection).not.toBeNull();
+
+    expect(within(queueSection!).getByText('Evidence · No evidence refs')).toBeVisible();
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
+      expect(within(details).queryByRole('heading', { name: 'App Engineering Agent' })).not.toBeInTheDocument();
+      expect(within(details).queryByRole('heading', { name: 'Current Operation' })).not.toBeInTheDocument();
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+      expect(within(memorySection!).getByText('Ref · /tmp/evidence.md')).toBeVisible();
+    });
+
+    await user.selectOptions(
+      within(queueSection!).getByRole('combobox', { name: 'Filter active queue by state' }),
+      'blocked'
+    );
+
+    const queueRecord = await within(queueSection!)
+      .findByRole('button', { name: 'Inspect App Engineering Agent from active queue' })
+      .then((button) => button.closest('li'));
+    expect(queueRecord).not.toBeNull();
+    expect(queueRecord!).toHaveTextContent('Evidence · /tmp/evidence.md, /tmp/missing.md');
+    const artifactRecord = within(memorySection!).getByText('Ref · /tmp/evidence.md').closest('li');
+    expect(artifactRecord).not.toBeNull();
+    expect(
+      within(queueRecord!).getByRole('button', {
+        name: 'Jump to shared memory artifact /tmp/evidence.md'
+      })
+    ).toBeVisible();
+    expect(
+      within(queueRecord!).queryByRole('button', {
+        name: 'Jump to shared memory artifact /tmp/missing.md'
+      })
+    ).not.toBeInTheDocument();
+
+    const fetchCallCountBeforeJump = vi.mocked(globalThis.fetch).mock.calls.length;
+
+    await user.click(
+      within(queueRecord!).getByRole('button', {
+        name: 'Jump to shared memory artifact /tmp/evidence.md'
+      })
+    );
+
+    expect(document.activeElement).toBe(artifactRecord);
+    expect(within(details).getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
+    expect(within(details).queryByRole('heading', { name: 'App Engineering Agent' })).not.toBeInTheDocument();
+    expect(within(details).queryByRole('heading', { name: 'Current Operation' })).not.toBeInTheDocument();
+    expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+    expect(
+      within(queueSection!).getByRole('combobox', { name: 'Filter active queue by state' })
+    ).toHaveValue('blocked');
+    expect(vi.mocked(globalThis.fetch).mock.calls).toHaveLength(fetchCallCountBeforeJump);
+    expect(globalThis.fetch).not.toHaveBeenCalledWith(workflowUrl, expect.anything());
+    expect(globalThis.fetch).not.toHaveBeenCalledWith(selectedOperationUrl, expect.anything());
     expect(globalThis.fetch).not.toHaveBeenCalledWith(teamLeadWorkflowUrl, expect.anything());
     expect(globalThis.fetch).not.toHaveBeenCalledWith(teamLeadSelectedCorrelationMemoryArtifactsUrl, expect.anything());
   });

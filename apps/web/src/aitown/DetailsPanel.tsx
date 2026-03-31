@@ -1880,6 +1880,14 @@ export function DetailsPanel({
                       onSelectCorrelation
                     })}
                   </span>
+                  <span className="aitown-queue-record__meta">
+                    Evidence ·{' '}
+                    {renderSharedMemoryEvidenceRefs({
+                      evidenceRefs: operation.latest_event?.evidence_refs ?? [],
+                      sharedMemoryArtifactRefs,
+                      onJump: focusSharedMemoryArtifact
+                    })}
+                  </span>
                 </li>
               );
             })}

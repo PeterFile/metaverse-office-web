@@ -724,19 +724,36 @@ function isViewportAtTopLeftEdge(
   return state.left >= -0.5 && state.left <= 0.5 && state.top <= -(topAllowance - 0.5);
 }
 
+function isViewportAtLeftEdge(
+  state: NonNullable<Awaited<ReturnType<typeof waitForViewportSettle>>>
+) {
+  return state.left >= -0.5 && state.left <= 0.5;
+}
+
 async function dragViewportToEdge(
   page: Page,
   edge: 'bottom-right' | 'top-left',
-  attempts = 2
+  options: {
+    attempts?: number;
+    horizontalOnly?: boolean;
+  } = {}
 ) {
+  const attempts = options.attempts ?? 2;
+  const horizontalOnly = options.horizontalOnly ?? false;
   const states: Array<NonNullable<Awaited<ReturnType<typeof waitForViewportSettle>>>> = [];
-  const isSatisfied = edge === 'bottom-right' ? isViewportAtBottomRightEdge : isViewportAtTopLeftEdge;
+  const isSatisfied =
+    edge === 'bottom-right'
+      ? isViewportAtBottomRightEdge
+      : horizontalOnly
+        ? isViewportAtLeftEdge
+        : isViewportAtTopLeftEdge;
 
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     const before = await readViewportState(page);
     expect(before).not.toBeNull();
 
-    const { deltaX, deltaY } = resolveViewportEdgeDragDelta(before!, edge);
+    const { deltaX, deltaY: resolvedDeltaY } = resolveViewportEdgeDragDelta(before!, edge);
+    const deltaY = horizontalOnly && edge === 'top-left' ? 0 : resolvedDeltaY;
     if (deltaX === 0 && deltaY === 0) {
       return before!;
     }
@@ -781,28 +798,47 @@ function expectViewportAtTopLeftClampEdge(
   expect(state.top).toBeLessThanOrEqual(-(topAllowance - 0.5));
 }
 
+function expectViewportAtLeftClampEdge(
+  state: NonNullable<Awaited<ReturnType<typeof waitForViewportSettle>>>,
+  expectedScale: number,
+  expectedTop: number
+) {
+  expectViewportBoundsWithinClampBudget(state);
+  expect(state.scale).not.toBeNull();
+  expect(state.scale).toBeCloseTo(expectedScale, 4);
+  expect(state.left).toBeGreaterThanOrEqual(-0.5);
+  expect(state.left).toBeLessThanOrEqual(0.5);
+  expect(Math.abs(state.top - expectedTop)).toBeLessThanOrEqual(0.5);
+}
+
 async function expectDefaultViewportKeepsDirectEdgeReachability(
   page: Page,
   options: {
     initialEdge?: 'bottom-right' | 'top-left';
+    initialHorizontalOnly?: boolean;
     verifyReturnToTopLeft?: boolean;
   } = {}
 ) {
   const initialEdge = options.initialEdge ?? 'bottom-right';
+  const initialHorizontalOnly = options.initialHorizontalOnly ?? false;
   const verifyReturnToTopLeft = options.verifyReturnToTopLeft ?? true;
 
   await expect(page.locator('.aitown-world__host canvas')).toBeVisible();
   await page.waitForFunction(() => Boolean(window.__AITOWN_VIEWPORT__));
 
-  const initial = await readViewportState(page);
+  const initial = await waitForViewportSettle(page);
   expect(initial).not.toBeNull();
-  expect(initial!.scale).not.toBeNull();
-  expectViewportBoundsWithinClampBudget(initial!);
-  const initialScale = initial!.scale!;
+  expect(initial.scale).not.toBeNull();
+  expectViewportBoundsWithinClampBudget(initial);
+  const initialScale = initial.scale!;
 
   if (initialEdge === 'top-left') {
-    const topLeft = await dragViewportToEdge(page, 'top-left');
-    expectViewportAtTopLeftClampEdge(topLeft, initialScale);
+    const topLeft = await dragViewportToEdge(page, 'top-left', { horizontalOnly: initialHorizontalOnly });
+    if (initialHorizontalOnly) {
+      expectViewportAtLeftClampEdge(topLeft, initialScale, initial.top);
+    } else {
+      expectViewportAtTopLeftClampEdge(topLeft, initialScale);
+    }
     return;
   }
 
@@ -3094,6 +3130,22 @@ test.describe('operator shell smoke', () => {
       await page.goto('/');
       await expectDefaultViewportKeepsDirectEdgeReachability(page, {
         initialEdge: 'top-left',
+        verifyReturnToTopLeft: false
+      });
+    });
+  }
+
+  for (const shell of SHELLS) {
+    test(`keeps the default initial viewport directly reachable to the left clamp edge via horizontal drag on fresh load on the ${shell.name} shell`, async ({ page }) => {
+      if (shell.name === 'landscape') {
+        test.slow();
+      }
+
+      await page.setViewportSize(shell.viewport);
+      await page.goto('/');
+      await expectDefaultViewportKeepsDirectEdgeReachability(page, {
+        initialEdge: 'top-left',
+        initialHorizontalOnly: true,
         verifyReturnToTopLeft: false
       });
     });

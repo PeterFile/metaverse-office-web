@@ -1218,6 +1218,91 @@ test.describe('operator shell smoke', () => {
     await expect(correlationSection.getByText('corr-revenue-secondary', { exact: true })).toHaveCount(0);
   });
 
+  test('keeps the active crew-overview correlation when opening an active-queue actor pivot via keyboard traversal', async ({
+    page
+  }) => {
+    const requestedUrls: string[] = [];
+    page.on('request', (request) => {
+      try {
+        const url = new URL(request.url());
+        requestedUrls.push(`${url.pathname}${url.search}`);
+      } catch {
+        requestedUrls.push(request.url());
+      }
+    });
+
+    await page.route('**/office/operations?limit=4', async (route) => {
+      const response = await route.fetch();
+      const operations = (await response.json()) as {
+        items: Array<{
+          agent_id: string;
+          correlation_id: string | null;
+        }>;
+      };
+
+      await route.fulfill({
+        response,
+        json: {
+          ...operations,
+          items: operations.items.map((item) =>
+            item.agent_id === 'growth-revenue'
+              ? {
+                  ...item,
+                  correlation_id: 'corr-revenue-secondary'
+                }
+              : item
+          )
+        }
+      });
+    });
+
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Hub' }).click();
+
+    const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
+    const clearButton = detailsPanel.getByRole('button', { name: 'Clear' });
+    const correlationSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Correlation Drilldown' })
+    });
+    const replaySection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Timeline Replay' })
+    });
+    const replayRecord = replaySection.locator('li').filter({
+      has: page.getByText('Lead started reviewing the growth handoff notes', { exact: true })
+    });
+    const replayCorrelationButton = replayRecord.getByRole('button', {
+      name: 'Open replay correlation corr-growth-lead-review'
+    });
+    const activeQueueActorButton = detailsPanel.getByRole('button', {
+      name: 'Select active queue actor from operation growth-revenue team-lead'
+    });
+
+    await expect(detailsPanel.getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
+    await focusHubControlWithTab(page, replayCorrelationButton, 'Open replay correlation corr-growth-lead-review');
+    await expect(replayCorrelationButton).toBeFocused();
+    await page.keyboard.press('Enter');
+
+    await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toBeVisible();
+    await expect(correlationSection.getByText('Counts · 0 incidents · 1 interactions · 2 events')).toBeVisible();
+    await focusHubControlWithTab(
+      page,
+      activeQueueActorButton,
+      'Select active queue actor from operation growth-revenue team-lead',
+      { reverse: true }
+    );
+    await expect(activeQueueActorButton).toBeFocused();
+    await page.keyboard.press('Enter');
+
+    await expect(detailsPanel.getByRole('heading', { name: 'Team Lead' })).toBeVisible();
+    await expect(clearButton).toBeFocused();
+    await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
+    await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toBeVisible();
+    await expect(correlationSection.getByText('Counts · 0 incidents · 1 interactions · 2 events')).toBeVisible();
+    await expect(correlationSection.getByText('corr-revenue-secondary', { exact: true })).toHaveCount(0);
+    expect(requestedUrls).not.toContain('/office/operations?agent_id=team-lead');
+    expect(requestedUrls).not.toContain('/correlations/corr-revenue-secondary?limit=10&window=60m');
+  });
+
   test('opens a current-operation counterparty pivot from the selected-agent Hub via keyboard traversal', async ({ page }) => {
     await page.goto('/');
     await page.getByRole('button', { name: 'Open Hub' }).click();

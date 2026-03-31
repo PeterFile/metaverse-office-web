@@ -144,6 +144,7 @@ export interface OperationsSummary {
 
 export interface OfficeOperationLatestEvent {
   event_id: string;
+  actor_id: string;
   event_type: string;
   ts: string;
   summary: string;

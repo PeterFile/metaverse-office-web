@@ -691,6 +691,7 @@ function createOfficeOperationItem({ agent, latestEvent, now }) {
     latest_event: latestEvent
       ? {
           event_id: latestEvent.event_id,
+          actor_id: latestEvent.actor_id,
           event_type: latestEvent.event_type,
           ts: latestEvent.ts,
           summary: latestEvent.summary,

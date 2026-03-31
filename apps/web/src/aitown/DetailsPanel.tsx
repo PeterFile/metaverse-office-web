@@ -1854,6 +1854,12 @@ export function DetailsPanel({
             {(operations?.items ?? []).slice(0, 4).map((operation) => {
               const activeQueueStatusId = `aitown-active-queue-status-${operation.agent_id}`;
               const activeQueuePreviewId = `aitown-active-queue-preview-${operation.agent_id}`;
+              const latestEventActorId = operation.latest_event?.actor_id ?? null;
+              const canNavigateToLatestEventActor = Boolean(
+                latestEventActorId &&
+                  latestEventActorId !== operation.agent_id &&
+                  navigableAgentIds.has(latestEventActorId)
+              );
 
               return (
                 <li key={operation.agent_id} className="aitown-queue-record">
@@ -1879,6 +1885,17 @@ export function DetailsPanel({
                       activeCorrelationId: selectedCorrelationId,
                       onSelectCorrelation
                     })}
+                  </span>
+                  <span className="aitown-queue-record__meta">
+                    Actor ·{' '}
+                    {canNavigateToLatestEventActor && latestEventActorId
+                      ? renderAgentPivotButton({
+                          agentId: latestEventActorId,
+                          ariaLabel: `Select active queue actor from operation ${operation.agent_id} ${latestEventActorId}`,
+                          correlationId: selectedCorrelationId,
+                          onSelectAgent
+                        })
+                      : (latestEventActorId ?? 'No actor')}
                   </span>
                   <span className="aitown-queue-record__meta">
                     Counterparties ·{' '}

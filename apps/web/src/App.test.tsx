@@ -232,6 +232,7 @@ const operationsFixture = {
       correlation_id: 'corr-app-review',
       latest_event: {
         event_id: 'evt-1',
+        actor_id: 'team-lead',
         event_type: 'peer_watch_alert_raised',
         ts: '2026-03-16T08:50:00.000Z',
         summary: 'Workflow evidence is still incomplete',
@@ -282,6 +283,7 @@ const directSelectionOperationFixture = {
       reboot_recommended: false,
       latest_event: {
         event_id: 'evt-direct-selection-1',
+        actor_id: 'app-engineering',
         event_type: 'agent_received_task',
         ts: '2026-03-16T08:56:00.000Z',
         summary: 'Controller assigned the direct-selection snapshot task',
@@ -370,6 +372,7 @@ const planningOperationsFixture = {
       correlation_id: 'corr-app-secondary',
       latest_event: {
         event_id: 'evt-growth-planning-1',
+        actor_id: 'growth-revenue',
         event_type: 'agent_noted',
         ts: '2026-03-16T08:52:00.000Z',
         summary: 'Growth queued launch copy review',
@@ -1734,6 +1737,133 @@ afterEach(() => {
     await user.click(
       within(queueSection!).getByRole('button', {
         name: 'Select active queue counterparty agent from operation app-engineering team-lead'
+      })
+    );
+
+    await waitFor(() => {
+      const activeCorrelationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+      expect(activeCorrelationSection).not.toBeNull();
+      expect(within(details).getByRole('heading', { name: 'Team Lead' })).toBeVisible();
+      expect(within(details).queryByRole('heading', { name: 'Current Operation' })).not.toBeInTheDocument();
+      expect(within(activeCorrelationSection!).getByText('corr-app-review')).toBeVisible();
+      expect(within(activeCorrelationSection!).queryByText('corr-app-secondary')).not.toBeInTheDocument();
+    });
+
+    await act(async () => {
+      expect(globalThis.fetch).toHaveBeenCalledWith(teamLeadWorkflowUrl, expect.anything());
+      expect(globalThis.fetch).toHaveBeenCalledWith(correlationUrl, expect.anything());
+      expect(globalThis.fetch).not.toHaveBeenCalledWith(secondaryCorrelationUrl, expect.anything());
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        teamLeadSelectedCorrelationMemoryArtifactsUrl,
+        expect.anything()
+      );
+      expect(globalThis.fetch).not.toHaveBeenCalledWith(teamLeadSelectedOperationUrl, expect.anything());
+      expect(globalThis.fetch).not.toHaveBeenCalledWith(selectedOperationUrl, expect.anything());
+    });
+  });
+
+  it('keeps the active-queue actor on the crew-overview agent-only path when no crew-overview correlation is selected', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === incidentsUrl) {
+          return jsonResponse({
+            items: []
+          });
+        }
+
+        return resolveTestFetchResponse(url);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    const queueSection = within(details).getByRole('heading', { name: 'Active Queue' }).closest('section');
+    const getCorrelationSection = () =>
+      within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    expect(queueSection).not.toBeNull();
+    expect(getCorrelationSection()).not.toBeNull();
+
+    await waitFor(() => {
+      const correlationSection = getCorrelationSection();
+      expect(correlationSection).not.toBeNull();
+      expect(within(details).getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
+      expect(within(correlationSection!).getByText('No correlation selected.')).toBeVisible();
+      expect(within(correlationSection!).queryByText('corr-app-review')).not.toBeInTheDocument();
+    });
+
+    const actorPivot = within(queueSection!).getByRole('button', {
+      name: 'Select active queue actor from operation app-engineering team-lead'
+    });
+    actorPivot.focus();
+    expect(actorPivot).toHaveFocus();
+
+    await user.keyboard('{Enter}');
+
+    await waitFor(() => {
+      const correlationSection = getCorrelationSection();
+      expect(correlationSection).not.toBeNull();
+      expect(within(details).getByRole('heading', { name: 'Team Lead' })).toBeVisible();
+      expect(within(details).queryByRole('heading', { name: 'Current Operation' })).not.toBeInTheDocument();
+      expect(within(correlationSection!).getByText('No correlation selected.')).toBeVisible();
+      expect(within(correlationSection!).queryByText('corr-app-review')).not.toBeInTheDocument();
+      expect(within(correlationSection!).queryByText('corr-app-secondary')).not.toBeInTheDocument();
+    });
+
+    await act(async () => {
+      expect(globalThis.fetch).toHaveBeenCalledWith(teamLeadWorkflowUrl, expect.anything());
+      expect(globalThis.fetch).toHaveBeenCalledWith(teamLeadMemoryArtifactsUrl, expect.anything());
+      expect(globalThis.fetch).not.toHaveBeenCalledWith(correlationUrl, expect.anything());
+      expect(globalThis.fetch).not.toHaveBeenCalledWith(secondaryCorrelationUrl, expect.anything());
+      expect(globalThis.fetch).not.toHaveBeenCalledWith(teamLeadSelectedCorrelationMemoryArtifactsUrl, expect.anything());
+      expect(globalThis.fetch).not.toHaveBeenCalledWith(
+        teamLeadSelectedSecondaryCorrelationMemoryArtifactsUrl,
+        expect.anything()
+      );
+      expect(globalThis.fetch).not.toHaveBeenCalledWith(teamLeadSelectedOperationUrl, expect.anything());
+      expect(globalThis.fetch).not.toHaveBeenCalledWith(selectedOperationUrl, expect.anything());
+    });
+  });
+
+  it('preserves the active crew-overview correlation when pivoting through an active-queue actor without selecting the current-operation path', async () => {
+    const operationsWithSecondaryCorrelation = {
+      ...operationsFixture,
+      items: [
+        {
+          ...operationsFixture.items[0],
+          correlation_id: 'corr-app-secondary'
+        },
+        operationsFixture.items[1]
+      ]
+    };
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === operationsUrl) {
+          return jsonResponse(operationsWithSecondaryCorrelation);
+        }
+
+        return resolveTestFetchResponse(url);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    const queueSection = within(details).getByRole('heading', { name: 'Active Queue' }).closest('section');
+    expect(queueSection).not.toBeNull();
+
+    await user.click(
+      within(queueSection!).getByRole('button', {
+        name: 'Select active queue actor from operation app-engineering team-lead'
       })
     );
 

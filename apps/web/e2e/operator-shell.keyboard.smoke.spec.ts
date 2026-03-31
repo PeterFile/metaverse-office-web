@@ -1518,6 +1518,128 @@ test.describe('operator shell smoke', () => {
     await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toHaveCount(0);
   });
 
+  test('keeps the active crew-overview correlation when opening a collector supervision watcher pivot via keyboard traversal', async ({
+    page
+  }) => {
+    const requestedUrls: string[] = [];
+    page.on('request', (request) => {
+      try {
+        const url = new URL(request.url());
+        requestedUrls.push(`${url.pathname}${url.search}`);
+      } catch {
+        requestedUrls.push(request.url());
+      }
+    });
+
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Hub' }).click();
+
+    const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
+    const clearButton = detailsPanel.getByRole('button', { name: 'Clear' });
+    const collectorSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Collector Supervision' })
+    });
+    const correlationSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Correlation Drilldown' })
+    });
+    const watcherButton = collectorSection.getByRole('button', {
+      name: 'Select collector supervision watcher from collector app-engineering team-lead'
+    });
+
+    await expect(detailsPanel.getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
+    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
+    await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
+    await focusHubControlWithTab(
+      page,
+      watcherButton,
+      'Select collector supervision watcher from collector app-engineering team-lead'
+    );
+    await expect(watcherButton).toBeFocused();
+    await page.keyboard.press('Enter');
+
+    await expect(detailsPanel.getByRole('heading', { name: 'Team Lead' })).toBeVisible();
+    await expect(clearButton).toBeFocused();
+    await expect(detailsPanel.getByRole('heading', { name: 'Workflow' })).toBeVisible();
+    await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
+    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
+    await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
+    await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toHaveCount(0);
+    expect(requestedUrls).toContain('/memory/artifacts?limit=4&window=60m&agent_id=team-lead&correlation_id=corr-revenue-handoff');
+    expect(requestedUrls).not.toContain('/memory/artifacts?limit=4&window=60m&agent_id=team-lead');
+    expect(requestedUrls).not.toContain('/correlations/corr-growth-lead-review?limit=10&window=60m');
+  });
+
+  test('keeps the collector supervision watcher pivot on the existing no-correlation path when no active crew-overview correlation is selected', async ({
+    page
+  }) => {
+    const requestedUrls: string[] = [];
+    page.on('request', (request) => {
+      try {
+        const url = new URL(request.url());
+        requestedUrls.push(`${url.pathname}${url.search}`);
+      } catch {
+        requestedUrls.push(request.url());
+      }
+    });
+
+    await page.route('**/incidents?limit=10&window=60m', async (route) => {
+      const response = await route.fetch();
+      const incidents = (await response.json()) as {
+        items: Array<{
+          correlation_id: string | null;
+        }>;
+      };
+
+      await route.fulfill({
+        response,
+        json: {
+          ...incidents,
+          items: incidents.items.map((incident) => ({
+            ...incident,
+            correlation_id: null
+          }))
+        }
+      });
+    });
+
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Hub' }).click();
+
+    const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
+    const clearButton = detailsPanel.getByRole('button', { name: 'Clear' });
+    const collectorSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Collector Supervision' })
+    });
+    const correlationSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Correlation Drilldown' })
+    });
+    const watcherButton = collectorSection.getByRole('button', {
+      name: 'Select collector supervision watcher from collector app-engineering team-lead'
+    });
+
+    await expect(detailsPanel.getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
+    await expect(correlationSection.getByText('No correlation selected.')).toBeVisible();
+    await focusHubControlWithTab(
+      page,
+      watcherButton,
+      'Select collector supervision watcher from collector app-engineering team-lead'
+    );
+    await expect(watcherButton).toBeFocused();
+    await page.keyboard.press('Enter');
+
+    await expect(detailsPanel.getByRole('heading', { name: 'Team Lead' })).toBeVisible();
+    await expect(clearButton).toBeFocused();
+    await expect(detailsPanel.getByRole('heading', { name: 'Workflow' })).toBeVisible();
+    await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
+    await expect(correlationSection.getByText('No correlation selected.')).toBeVisible();
+    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toHaveCount(0);
+    expect(requestedUrls).toContain('/memory/artifacts?limit=4&window=60m&agent_id=team-lead');
+    expect(requestedUrls).not.toContain(
+      '/memory/artifacts?limit=4&window=60m&agent_id=team-lead&correlation_id=corr-revenue-handoff'
+    );
+    expect(requestedUrls).not.toContain('/correlations/corr-revenue-handoff?limit=10&window=60m');
+  });
+
   test('carries the crew-overview incident correlation into a selected-agent pivot via keyboard traversal', async ({ page }) => {
     await page.goto('/');
     await page.getByRole('button', { name: 'Open Hub' }).click();

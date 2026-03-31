@@ -413,20 +413,50 @@ function renderSharedMemoryEvidenceRefs({
   return evidenceRefs.map((evidenceRef, index) => (
     <span key={`${evidenceRef}-${index}`}>
       {index > 0 ? ', ' : null}
-      {sharedMemoryArtifactRefs.has(evidenceRef) ? (
-        <button
-          type="button"
-          className="aitown-link-button"
-          aria-label={`${jumpAriaLabelPrefix} ${evidenceRef}`}
-          onClick={() => onJump(evidenceRef)}
-        >
-          {evidenceRef}
-        </button>
-      ) : (
-        <span>{evidenceRef}</span>
-      )}
+      {renderSharedMemoryArtifactJump({
+        artifactRef: evidenceRef,
+        label: evidenceRef,
+        sharedMemoryArtifactRefs,
+        onJump,
+        jumpAriaLabelPrefix
+      })}
     </span>
   ));
+}
+
+function renderSharedMemoryArtifactJump({
+  artifactRef,
+  label,
+  sharedMemoryArtifactRefs,
+  onJump,
+  jumpAriaLabelPrefix = 'Jump to shared memory artifact',
+  ariaLabelSuffix = null
+}: {
+  artifactRef: string;
+  label: string;
+  sharedMemoryArtifactRefs: ReadonlySet<string>;
+  onJump: (artifactRef: string) => void;
+  jumpAriaLabelPrefix?: string;
+  ariaLabelSuffix?: string | null;
+}) {
+  if (!sharedMemoryArtifactRefs.has(artifactRef)) {
+    return label;
+  }
+
+  const ariaLabel = ariaLabelSuffix
+    ? `${jumpAriaLabelPrefix} ${artifactRef} ${ariaLabelSuffix}`
+    : `${jumpAriaLabelPrefix} ${artifactRef}`;
+
+  return (
+    <button
+      type="button"
+      className="aitown-link-button"
+      aria-label={ariaLabel}
+      onClick={() => onJump(artifactRef)}
+    >
+      {label}
+    </button>
+  );
 }
 
 function renderCounterparties(counterpartyAgentIds: string[]) {
@@ -618,9 +648,18 @@ function renderTmuxObservationPreview(observation: CollectorTmuxObservation) {
   return observation.pane_activity_at ? `${previewLabel} · ${observation.pane_activity_at}` : previewLabel;
 }
 
-function renderCollectorProvenancePreview(item: CollectorItem) {
+function renderCollectorProvenancePreview({
+  item,
+  sharedMemoryArtifactRefs,
+  onJump
+}: {
+  item: CollectorItem;
+  sharedMemoryArtifactRefs: ReadonlySet<string>;
+  onJump: (artifactRef: string) => void;
+}) {
   const latestWorkspaceObservation = selectLatestWorkspaceObservation(item.workspace_observations);
   const latestTmuxObservation = selectLatestTmuxObservation(item.tmux_observations);
+  const workspacePreviewLabel = latestWorkspaceObservation ? renderWorkspaceObservationPreview(latestWorkspaceObservation) : 'None';
 
   return (
     <>
@@ -628,7 +667,16 @@ function renderCollectorProvenancePreview(item: CollectorItem) {
       <span>{`Last output · ${item.heartbeat.last_meaningful_output_at ?? 'None'}`}</span>
       <span>{`Last file write · ${item.heartbeat.last_file_write_at ?? 'None'}`}</span>
       <span>
-        {`Workspace preview · ${latestWorkspaceObservation ? renderWorkspaceObservationPreview(latestWorkspaceObservation) : 'None'}`}
+        Workspace preview ·{' '}
+        {latestWorkspaceObservation
+          ? renderSharedMemoryArtifactJump({
+              artifactRef: latestWorkspaceObservation.path,
+              label: workspacePreviewLabel,
+              sharedMemoryArtifactRefs,
+              onJump,
+              ariaLabelSuffix: workspacePreviewLabel
+            })
+          : 'None'}
       </span>
       <span>{`Tmux preview · ${latestTmuxObservation ? renderTmuxObservationPreview(latestTmuxObservation) : 'None'}`}</span>
     </>
@@ -1633,7 +1681,11 @@ export function DetailsPanel({
                   <span>{`Collector state · ${item.heartbeat.current_state}`}</span>
                   <span>{`Needs attention · ${item.supervision.needs_attention ? 'Yes' : 'No'}`}</span>
                   <span>{`Reboot flag · ${item.heartbeat.reboot_recommended ? 'Recommended' : 'No'}`}</span>
-                  {renderCollectorProvenancePreview(item)}
+                  {renderCollectorProvenancePreview({
+                    item,
+                    sharedMemoryArtifactRefs,
+                    onJump: focusSharedMemoryArtifact
+                  })}
                   <span>
                     Watch target ·{' '}
                     {renderCollectorWatchTarget({
@@ -2272,7 +2324,11 @@ export function DetailsPanel({
               <span>{`Current blocker · ${renderOperationBlocker(selectedCollectorItem.heartbeat.current_blocker)}`}</span>
               <span>{`Attention flag · ${selectedCollectorItem.supervision.needs_attention ? 'Needs attention' : 'No'}`}</span>
               <span>{`Reboot flag · ${selectedCollectorItem.heartbeat.reboot_recommended ? 'Recommended' : 'No'}`}</span>
-              {renderCollectorProvenancePreview(selectedCollectorItem)}
+              {renderCollectorProvenancePreview({
+                item: selectedCollectorItem,
+                sharedMemoryArtifactRefs,
+                onJump: focusSharedMemoryArtifact
+              })}
               <span>
                 Watch target ·{' '}
                 {renderCollectorWatchTarget({

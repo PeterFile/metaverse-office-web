@@ -103,6 +103,30 @@ describe('resolveViewportClampPadding', () => {
     });
   });
 
+  it('ignores the full-width mobile selected-watch overlay so bottom captions do not create right clamp padding', () => {
+    document.body.innerHTML = `
+      <main class="aitown-shell">
+        <section class="aitown-panel aitown-panel--game">
+          <div class="aitown-world__host" id="host"></div>
+          <section class="aitown-watch-overlay" id="overlay" aria-label="Selected watch links"></section>
+        </section>
+      </main>
+    `;
+
+    const host = document.getElementById('host') as HTMLDivElement;
+    const overlay = document.getElementById('overlay') as HTMLDivElement;
+
+    host.getBoundingClientRect = () =>
+      ({ left: 0, top: 0, right: 390, bottom: 844, width: 390, height: 844 } as DOMRect);
+    overlay.getBoundingClientRect = () =>
+      ({ left: 10, top: 632, right: 380, bottom: 834, width: 370, height: 202 } as DOMRect);
+
+    expect(resolveViewportClampPadding(host)).toEqual({
+      top: 0,
+      right: 0
+    });
+  });
+
   it('does not reserve default left or bottom travel even if the status legend spans the bottom edge', () => {
     document.body.innerHTML = `
       <main class="aitown-shell">

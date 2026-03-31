@@ -651,6 +651,113 @@ describe('DetailsPanel accountability signals', () => {
     expect(onSelectOperation).not.toHaveBeenCalled();
   });
 
+  it('renders active-queue counterparties as pivots only for navigable non-self agents and shows explicit empty fallbacks', async () => {
+    const user = userEvent.setup();
+    const onSelectAgent = vi.fn();
+    const operations: OfficeOperations = {
+      generated_at: '2026-03-16T09:00:00.000Z',
+      summary: {
+        item_count: 2,
+        blocked_count: 1,
+        reboot_recommended_count: 1,
+        state_buckets: {
+          blocked: 1,
+          reviewing: 1
+        },
+        severity_buckets: {
+          normal: 1,
+          yellow: 0,
+          orange: 1,
+          red: 0
+        }
+      },
+      items: [
+        {
+          ...buildSelectedOperation(),
+          latest_event: {
+            ...buildSelectedOperation().latest_event!,
+            counterparty_agent_ids: ['app-engineering', 'growth-revenue', 'ghost-agent']
+          }
+        },
+        {
+          ...buildSelectedOperation(),
+          agent_id: 'team-lead',
+          display_name: 'Team Lead',
+          kind: 'lead',
+          current_state: 'reviewing',
+          active_task: 'Coordinate rollout',
+          current_blocker: '',
+          current_location: 'lead-desk',
+          reported_severity: 'normal',
+          effective_severity: 'normal',
+          derived_staleness: {
+            severity: 'normal',
+            stale_for_ms: 60000,
+            stale_for_minutes: 1,
+            last_meaningful_output_at: '2026-03-16T08:59:00.000Z'
+          },
+          reboot_recommended: false,
+          last_event_at: null,
+          last_heartbeat_at: null,
+          last_meaningful_output_at: null,
+          correlation_id: null,
+          latest_event: null
+        }
+      ]
+    };
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          onSelectAgent,
+          operations,
+          selectedAgent: null,
+          selectedCorrelationId: null,
+          selectedOperation: null,
+          workflow: null
+        })}
+      />
+    );
+
+    const section = screen.getByRole('heading', { name: 'Active Queue' }).closest('section');
+    expect(section).not.toBeNull();
+
+    const appRecord = within(section!)
+      .getByRole('button', { name: 'Inspect App Engineering Agent from active queue' })
+      .closest('li');
+    const teamLeadRecord = within(section!)
+      .getByRole('button', { name: 'Inspect Team Lead from active queue' })
+      .closest('li');
+    expect(appRecord).not.toBeNull();
+    expect(teamLeadRecord).not.toBeNull();
+
+    expect(appRecord).toHaveTextContent('Counterparties · app-engineering, growth-revenue, ghost-agent');
+    expect(
+      within(appRecord!).queryByRole('button', {
+        name: 'Select active queue counterparty agent from operation app-engineering app-engineering'
+      })
+    ).not.toBeInTheDocument();
+    expect(
+      within(appRecord!).getByRole('button', {
+        name: 'Select active queue counterparty agent from operation app-engineering growth-revenue'
+      })
+    ).toBeVisible();
+    expect(
+      within(appRecord!).queryByRole('button', {
+        name: 'Select active queue counterparty agent from operation app-engineering ghost-agent'
+      })
+    ).not.toBeInTheDocument();
+    expect(teamLeadRecord).toHaveTextContent('Counterparties · No counterparties');
+
+    await user.click(
+      within(appRecord!).getByRole('button', {
+        name: 'Select active queue counterparty agent from operation app-engineering growth-revenue'
+      })
+    );
+
+    expect(onSelectAgent).toHaveBeenCalledWith('growth-revenue', 'corr-app-review');
+  });
+
   it('renders one compact run-context preview line per active-queue row with explicit null fallbacks', () => {
     const operations: OfficeOperations = {
       generated_at: '2026-03-16T09:00:00.000Z',

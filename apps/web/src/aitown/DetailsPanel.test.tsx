@@ -181,6 +181,7 @@ function buildSelectedOperation(): OfficeOperation {
     correlation_id: 'corr-app-review',
     latest_event: {
       event_id: 'evt-1',
+      actor_id: 'team-lead',
       event_type: 'agent_noted',
       ts: '2026-03-16T08:58:30.000Z',
       summary: 'Followed up on missing workflow evidence',
@@ -776,6 +777,174 @@ describe('DetailsPanel accountability signals', () => {
     });
     counterpartyPivotWithoutActiveCorrelation.focus();
     expect(counterpartyPivotWithoutActiveCorrelation).toHaveFocus();
+
+    await user.keyboard('{Enter}');
+
+    expect(onSelectAgent).toHaveBeenNthCalledWith(2, 'growth-revenue', null);
+  });
+
+  it('renders active-queue actors as pivots only for navigable non-current agents, preserves an active crew-overview correlation, and otherwise keeps the agent-only path', async () => {
+    const user = userEvent.setup();
+    const onSelectAgent = vi.fn();
+    const operations: OfficeOperations = {
+      generated_at: '2026-03-16T09:00:00.000Z',
+      summary: {
+        item_count: 3,
+        blocked_count: 1,
+        reboot_recommended_count: 1,
+        state_buckets: {
+          blocked: 1,
+          reviewing: 1,
+          waiting: 1
+        },
+        severity_buckets: {
+          normal: 1,
+          yellow: 0,
+          orange: 1,
+          red: 1
+        }
+      },
+      items: [
+        {
+          ...buildSelectedOperation(),
+          latest_event: {
+            ...buildSelectedOperation().latest_event!,
+            actor_id: 'growth-revenue'
+          }
+        },
+        {
+          ...buildSelectedOperation(),
+          agent_id: 'team-lead',
+          display_name: 'Team Lead',
+          kind: 'lead',
+          current_state: 'reviewing',
+          active_task: 'Coordinate rollout',
+          current_blocker: '',
+          current_location: 'lead-desk',
+          reported_severity: 'normal',
+          effective_severity: 'normal',
+          derived_staleness: {
+            severity: 'normal',
+            stale_for_ms: 60000,
+            stale_for_minutes: 1,
+            last_meaningful_output_at: '2026-03-16T08:59:00.000Z'
+          },
+          reboot_recommended: false,
+          last_event_at: '2026-03-16T08:59:10.000Z',
+          last_heartbeat_at: null,
+          last_meaningful_output_at: null,
+          correlation_id: 'corr-team-lead',
+          latest_event: {
+            ...buildSelectedOperation().latest_event!,
+            actor_id: 'team-lead',
+            summary: 'Team lead recorded the current review state'
+          }
+        },
+        {
+          ...buildSelectedOperation(),
+          agent_id: 'growth-revenue',
+          display_name: 'Growth Revenue Agent',
+          current_state: 'waiting',
+          active_task: 'Review launch copy',
+          current_blocker: '',
+          current_location: 'growth-desk',
+          reported_severity: 'red',
+          effective_severity: 'red',
+          derived_staleness: {
+            severity: 'red',
+            stale_for_ms: 900000,
+            stale_for_minutes: 15,
+            last_meaningful_output_at: '2026-03-16T08:45:00.000Z'
+          },
+          reboot_recommended: false,
+          last_event_at: '2026-03-16T08:56:00.000Z',
+          last_heartbeat_at: null,
+          last_meaningful_output_at: '2026-03-16T08:45:00.000Z',
+          correlation_id: 'corr-growth-ghost',
+          latest_event: {
+            ...buildSelectedOperation().latest_event!,
+            actor_id: 'ghost-agent',
+            summary: 'Unknown actor left a launch review note'
+          }
+        }
+      ]
+    };
+
+    const { rerender } = render(
+      <DetailsPanel
+        {...buildProps({
+          onSelectAgent,
+          operations,
+          selectedAgent: null,
+          selectedCorrelationId: 'corr-app-secondary',
+          selectedOperation: null,
+          workflow: null
+        })}
+      />
+    );
+
+    const section = screen.getByRole('heading', { name: 'Active Queue' }).closest('section');
+    expect(section).not.toBeNull();
+
+    const appRecord = within(section!)
+      .getByRole('button', { name: 'Inspect App Engineering Agent from active queue' })
+      .closest('li');
+    const teamLeadRecord = within(section!)
+      .getByRole('button', { name: 'Inspect Team Lead from active queue' })
+      .closest('li');
+    const growthRecord = within(section!)
+      .getByRole('button', { name: 'Inspect Growth Revenue Agent from active queue' })
+      .closest('li');
+    expect(appRecord).not.toBeNull();
+    expect(teamLeadRecord).not.toBeNull();
+    expect(growthRecord).not.toBeNull();
+
+    expect(appRecord).toHaveTextContent('Actor · growth-revenue');
+    expect(teamLeadRecord).toHaveTextContent('Actor · team-lead');
+    expect(growthRecord).toHaveTextContent('Actor · ghost-agent');
+    expect(
+      within(appRecord!).getByRole('button', {
+        name: 'Select active queue actor from operation app-engineering growth-revenue'
+      })
+    ).toBeVisible();
+    expect(
+      within(teamLeadRecord!).queryByRole('button', {
+        name: 'Select active queue actor from operation team-lead team-lead'
+      })
+    ).not.toBeInTheDocument();
+    expect(
+      within(growthRecord!).queryByRole('button', {
+        name: 'Select active queue actor from operation growth-revenue ghost-agent'
+      })
+    ).not.toBeInTheDocument();
+
+    const actorPivot = within(appRecord!).getByRole('button', {
+      name: 'Select active queue actor from operation app-engineering growth-revenue'
+    });
+    await user.click(actorPivot);
+
+    expect(onSelectAgent).toHaveBeenNthCalledWith(1, 'growth-revenue', 'corr-app-secondary');
+
+    rerender(
+      <DetailsPanel
+        {...buildProps({
+          onSelectAgent,
+          operations,
+          selectedAgent: null,
+          selectedCorrelationId: null,
+          selectedOperation: null,
+          workflow: null
+        })}
+      />
+    );
+
+    const actorPivotWithoutActiveCorrelation = within(
+      screen.getByRole('heading', { name: 'Active Queue' }).closest('section')!
+    ).getByRole('button', {
+      name: 'Select active queue actor from operation app-engineering growth-revenue'
+    });
+    actorPivotWithoutActiveCorrelation.focus();
+    expect(actorPivotWithoutActiveCorrelation).toHaveFocus();
 
     await user.keyboard('{Enter}');
 

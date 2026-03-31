@@ -260,6 +260,7 @@ test('GET /office/operations exposes the active queue with agent_id, state, and 
     correlation_id: 'corr-ops-alert',
     latest_event: {
       event_id: 'evt_ops_blocked',
+      actor_id: 'team-lead',
       event_type: 'peer_watch_alert_raised',
       ts: '2026-03-09T18:04:30.000Z',
       summary: 'Peer watch found a severe regression',

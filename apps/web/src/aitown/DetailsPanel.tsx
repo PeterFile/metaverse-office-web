@@ -2020,11 +2020,24 @@ export function DetailsPanel({
 
         <section className="aitown-details__section">
           <h3>Timeline Replay</h3>
+          {preserveWorkflowCounterpartyCorrelation && selectedCorrelationId ? (
+            <span>{`Scoped replay · ${selectedCorrelationId}`}</span>
+          ) : null}
           <ul className="aitown-records">
             {timelineReplayState === 'loading' && !timelineReplay ? (
-              <li className="aitown-record">Loading timeline replay...</li>
+              <li className="aitown-record">
+                {preserveWorkflowCounterpartyCorrelation && selectedCorrelationId
+                  ? 'Loading scoped timeline replay...'
+                  : 'Loading timeline replay...'}
+              </li>
             ) : null}
-            {timelineReplayError ? <li className="aitown-record">{timelineReplayError}</li> : null}
+            {timelineReplayError ? (
+              <li className="aitown-record">
+                {preserveWorkflowCounterpartyCorrelation && selectedCorrelationId
+                  ? `Scoped replay unavailable. ${timelineReplayError}`
+                  : timelineReplayError}
+              </li>
+            ) : null}
             {(timelineReplay?.items ?? []).map((event) =>
               renderReplayTimelineEvent({
                 event,
@@ -2038,7 +2051,11 @@ export function DetailsPanel({
               })
             )}
             {timelineReplayState === 'ready' && !timelineReplayError && !timelineReplay?.items.length ? (
-              <li className="aitown-record">No recent replay events.</li>
+              <li className="aitown-record">
+                {preserveWorkflowCounterpartyCorrelation && selectedCorrelationId
+                  ? `No replay events for ${selectedCorrelationId}.`
+                  : 'No recent replay events.'}
+              </li>
             ) : null}
           </ul>
         </section>

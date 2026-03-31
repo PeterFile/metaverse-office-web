@@ -108,6 +108,18 @@ function resolveSharedMemoryCorrelationId(
   return selectedCorrelationWasExplicit ? selectedCorrelationId : null;
 }
 
+function resolveCrewReplayCorrelationId(
+  selectedAgentId: string | null,
+  selectedCorrelationId: string | null,
+  selectedCorrelationWasExplicit: boolean
+) {
+  if (selectedAgentId !== null || !selectedCorrelationWasExplicit) {
+    return null;
+  }
+
+  return selectedCorrelationId;
+}
+
 function selectDefaultCorrelationId({
   incidentFeed,
   selectedOperation,
@@ -175,15 +187,21 @@ function AppInner() {
       }),
     resourceKey: 'incident-feed'
   });
+  const crewReplayCorrelationId = resolveCrewReplayCorrelationId(
+    selectedAgentId,
+    selectedCorrelationId,
+    selectedCorrelationWasExplicit
+  );
   const crewTimelineResource = usePolledResource({
     enabled: hubOpen && selectedAgentId === null,
     load: (signal) =>
       fetchTimeline({
         limit: CREW_TIMELINE_LIMIT,
         window: DEFAULT_WORKFLOW_WINDOW,
+        correlationId: crewReplayCorrelationId ?? undefined,
         signal
       }),
-    resourceKey: 'timeline-replay'
+    resourceKey: `timeline-replay:${crewReplayCorrelationId ?? '__all__'}`
   });
   const collectorSnapshotResource = usePolledResource({
     enabled: hubOpen,

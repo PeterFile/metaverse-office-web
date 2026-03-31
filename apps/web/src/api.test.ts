@@ -10,6 +10,7 @@ import {
   fetchOfficeOperations,
   fetchOfficeOverview,
   fetchPeerWatchAlerts,
+  fetchTimeline,
   resolveApiUrl
 } from './api';
 
@@ -113,6 +114,35 @@ describe('fetchOfficeOperations', () => {
 
     expect(globalThis.fetch).toHaveBeenCalledWith(
       '/office/operations?limit=1&state=blocked&agent_id=app-engineering',
+      expect.objectContaining({ signal: undefined })
+    );
+  });
+});
+
+describe('fetchTimeline', () => {
+  it('passes limit, window, and correlation_id filters through to the backend query string', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            items: []
+          }),
+          {
+            headers: JSON_HEADERS
+          }
+        )
+      )
+    );
+
+    await fetchTimeline({
+      limit: 4,
+      window: '30m',
+      correlationId: 'corr-app-review'
+    });
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/timeline?limit=4&window=30m&correlation_id=corr-app-review',
       expect.objectContaining({ signal: undefined })
     );
   });

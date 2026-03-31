@@ -1632,6 +1632,73 @@ afterEach(() => {
     });
   });
 
+  it('keeps the active-queue counterparty on the crew-overview agent-only path when no crew-overview correlation is selected', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === incidentsUrl) {
+          return jsonResponse({
+            items: []
+          });
+        }
+
+        return resolveTestFetchResponse(url);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    const queueSection = within(details).getByRole('heading', { name: 'Active Queue' }).closest('section');
+    const getCorrelationSection = () =>
+      within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    expect(queueSection).not.toBeNull();
+    expect(getCorrelationSection()).not.toBeNull();
+
+    await waitFor(() => {
+      const correlationSection = getCorrelationSection();
+      expect(correlationSection).not.toBeNull();
+      expect(within(details).getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
+      expect(within(correlationSection!).getByText('No correlation selected.')).toBeVisible();
+      expect(within(correlationSection!).queryByText('corr-app-review')).not.toBeInTheDocument();
+    });
+
+    const counterpartyPivot = within(queueSection!).getByRole('button', {
+      name: 'Select active queue counterparty agent from operation app-engineering team-lead'
+    });
+    counterpartyPivot.focus();
+    expect(counterpartyPivot).toHaveFocus();
+
+    await user.keyboard('{Enter}');
+
+    await waitFor(() => {
+      const correlationSection = getCorrelationSection();
+      expect(correlationSection).not.toBeNull();
+      expect(within(details).getByRole('heading', { name: 'Team Lead' })).toBeVisible();
+      expect(within(details).queryByRole('heading', { name: 'Current Operation' })).not.toBeInTheDocument();
+      expect(within(correlationSection!).getByText('No correlation selected.')).toBeVisible();
+      expect(within(correlationSection!).queryByText('corr-app-review')).not.toBeInTheDocument();
+      expect(within(correlationSection!).queryByText('corr-app-secondary')).not.toBeInTheDocument();
+    });
+
+    await act(async () => {
+      expect(globalThis.fetch).toHaveBeenCalledWith(teamLeadWorkflowUrl, expect.anything());
+      expect(globalThis.fetch).toHaveBeenCalledWith(teamLeadMemoryArtifactsUrl, expect.anything());
+      expect(globalThis.fetch).not.toHaveBeenCalledWith(correlationUrl, expect.anything());
+      expect(globalThis.fetch).not.toHaveBeenCalledWith(secondaryCorrelationUrl, expect.anything());
+      expect(globalThis.fetch).not.toHaveBeenCalledWith(teamLeadSelectedCorrelationMemoryArtifactsUrl, expect.anything());
+      expect(globalThis.fetch).not.toHaveBeenCalledWith(
+        teamLeadSelectedSecondaryCorrelationMemoryArtifactsUrl,
+        expect.anything()
+      );
+      expect(globalThis.fetch).not.toHaveBeenCalledWith(teamLeadSelectedOperationUrl, expect.anything());
+      expect(globalThis.fetch).not.toHaveBeenCalledWith(selectedOperationUrl, expect.anything());
+    });
+  });
+
   it('preserves the active crew-overview correlation when pivoting through an active-queue counterparty without selecting the current-operation path', async () => {
     const operationsWithSecondaryCorrelation = {
       ...operationsFixture,

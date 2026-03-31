@@ -651,7 +651,7 @@ describe('DetailsPanel accountability signals', () => {
     expect(onSelectOperation).not.toHaveBeenCalled();
   });
 
-  it('renders active-queue counterparties as pivots only for navigable non-self agents and shows explicit empty fallbacks', async () => {
+  it('renders active-queue counterparties as pivots only for navigable non-self agents, preserves an active crew-overview correlation, and otherwise keeps the agent-only path', async () => {
     const user = userEvent.setup();
     const onSelectAgent = vi.fn();
     const operations: OfficeOperations = {
@@ -706,13 +706,13 @@ describe('DetailsPanel accountability signals', () => {
       ]
     };
 
-    render(
+    const { rerender } = render(
       <DetailsPanel
         {...buildProps({
           onSelectAgent,
           operations,
           selectedAgent: null,
-          selectedCorrelationId: null,
+          selectedCorrelationId: 'corr-app-secondary',
           selectedOperation: null,
           workflow: null
         })}
@@ -749,13 +749,37 @@ describe('DetailsPanel accountability signals', () => {
     ).not.toBeInTheDocument();
     expect(teamLeadRecord).toHaveTextContent('Counterparties · No counterparties');
 
-    await user.click(
-      within(appRecord!).getByRole('button', {
-        name: 'Select active queue counterparty agent from operation app-engineering growth-revenue'
-      })
+    const counterpartyPivot = within(appRecord!).getByRole('button', {
+      name: 'Select active queue counterparty agent from operation app-engineering growth-revenue'
+    });
+    await user.click(counterpartyPivot);
+
+    expect(onSelectAgent).toHaveBeenNthCalledWith(1, 'growth-revenue', 'corr-app-secondary');
+
+    rerender(
+      <DetailsPanel
+        {...buildProps({
+          onSelectAgent,
+          operations,
+          selectedAgent: null,
+          selectedCorrelationId: null,
+          selectedOperation: null,
+          workflow: null
+        })}
+      />
     );
 
-    expect(onSelectAgent).toHaveBeenCalledWith('growth-revenue', 'corr-app-review');
+    const counterpartyPivotWithoutActiveCorrelation = within(
+      screen.getByRole('heading', { name: 'Active Queue' }).closest('section')!
+    ).getByRole('button', {
+      name: 'Select active queue counterparty agent from operation app-engineering growth-revenue'
+    });
+    counterpartyPivotWithoutActiveCorrelation.focus();
+    expect(counterpartyPivotWithoutActiveCorrelation).toHaveFocus();
+
+    await user.keyboard('{Enter}');
+
+    expect(onSelectAgent).toHaveBeenNthCalledWith(2, 'growth-revenue', null);
   });
 
   it('renders one compact run-context preview line per active-queue row with explicit null fallbacks', () => {

@@ -1888,7 +1888,7 @@ export function DetailsPanel({
                       navigableAgentIds,
                       emptyLabel: 'No counterparties',
                       ariaLabelPrefix: `Select active queue counterparty agent from operation ${operation.agent_id}`,
-                      correlationId: selectedCorrelationId ?? operation.correlation_id,
+                      correlationId: selectedCorrelationId,
                       onSelectAgent
                     })}
                   </span>

@@ -55,12 +55,22 @@ type DetailsPanelProps = {
   workflowError: string | null;
   workflowState: LoadState;
   world: WorldState;
-  onSelectAgent: (agentId: string | null, correlationId?: string | null) => void;
+  onSelectAgent: SelectAgentHandler;
   onInspectAgent: (agentId: string | null) => void;
   onSelectCorrelation: (correlationId: string | null) => void;
   onSelectOperationsState: (state: string | null) => void;
   onSelectOperation: (operation: OfficeOperation) => void;
 };
+
+type SelectAgentOptions = {
+  preserveNullCorrelation?: boolean;
+};
+
+type SelectAgentHandler = (
+  agentId: string | null,
+  correlationId?: string | null,
+  options?: SelectAgentOptions
+) => void;
 
 const SEVERITY_LABELS = {
   normal: 'Normal',
@@ -118,20 +128,26 @@ function renderAgentPivotButton({
   label = agentId,
   ariaLabel,
   correlationId,
+  preserveNullCorrelation = false,
   onSelectAgent
 }: {
   agentId: string;
   label?: string;
   ariaLabel: string;
   correlationId?: string | null;
-  onSelectAgent: (agentId: string | null, correlationId?: string | null) => void;
+  preserveNullCorrelation?: boolean;
+  onSelectAgent: SelectAgentHandler;
 }) {
   return (
     <button
       type="button"
       className="aitown-link-button"
       aria-label={ariaLabel}
-      onClick={() => onSelectAgent(agentId, correlationId)}
+      onClick={() =>
+        preserveNullCorrelation
+          ? onSelectAgent(agentId, correlationId, { preserveNullCorrelation: true })
+          : onSelectAgent(agentId, correlationId)
+      }
     >
       {label}
     </button>
@@ -194,6 +210,7 @@ function renderAgentPivotList({
   emptyLabel,
   ariaLabelPrefix,
   correlationId,
+  preserveNullCorrelation = false,
   onSelectAgent
 }: {
   agentIds: string[];
@@ -202,7 +219,8 @@ function renderAgentPivotList({
   emptyLabel: string;
   ariaLabelPrefix: string;
   correlationId?: string | null;
-  onSelectAgent: (agentId: string | null, correlationId?: string | null) => void;
+  preserveNullCorrelation?: boolean;
+  onSelectAgent: SelectAgentHandler;
 }) {
   if (agentIds.length === 0) {
     return emptyLabel;
@@ -219,6 +237,7 @@ function renderAgentPivotList({
             agentId,
             ariaLabel: `${ariaLabelPrefix} ${agentId}`,
             correlationId,
+            preserveNullCorrelation,
             onSelectAgent
           })
         ) : (
@@ -242,7 +261,7 @@ function renderResponsibilityAgent({
   currentAgentId: string;
   navigableAgentIds: Set<string>;
   correlationId?: string | null;
-  onSelectAgent: (agentId: string | null, correlationId?: string | null) => void;
+  onSelectAgent: SelectAgentHandler;
 }) {
   if (agentId === currentAgentId || !navigableAgentIds.has(agentId)) {
     return label;
@@ -276,7 +295,7 @@ function renderWatchTopologyAgent({
   toAgentId: string;
   navigableAgentIds: Set<string>;
   correlationId: string | null;
-  onSelectAgent: (agentId: string | null, correlationId?: string | null) => void;
+  onSelectAgent: SelectAgentHandler;
 }) {
   if (!navigableAgentIds.has(agentId)) {
     return label;
@@ -308,7 +327,7 @@ function renderResponsibilityChain({
   agentNameById: Map<string, string>;
   navigableAgentIds: Set<string>;
   correlationId?: string | null;
-  onSelectAgent: (agentId: string | null, correlationId?: string | null) => void;
+  onSelectAgent: SelectAgentHandler;
 }) {
   const chainItems = [
     ...inboundWatchers.map((edge) => ({
@@ -373,7 +392,7 @@ function renderCollectorWatchTarget({
   navigableAgentIds: Set<string>;
   ariaLabelPrefix?: string;
   correlationId: string | null;
-  onSelectAgent: (agentId: string | null, correlationId?: string | null) => void;
+  onSelectAgent: SelectAgentHandler;
 }) {
   if (!watchTarget) {
     return 'No watch target';
@@ -878,7 +897,7 @@ function renderReplayTimelineEvent({
   currentAgentId: string | null;
   navigableAgentIds: Set<string>;
   sharedMemoryArtifactRefs: ReadonlySet<string>;
-  onSelectAgent: (agentId: string | null, correlationId?: string | null) => void;
+  onSelectAgent: SelectAgentHandler;
   onSelectCorrelation: (correlationId: string | null) => void;
 }) {
   const canNavigateToAgent = event.agent_id !== currentAgentId && navigableAgentIds.has(event.agent_id);
@@ -990,7 +1009,7 @@ function renderWorkflowStatusRecord({
   sourceKind: string;
   currentAgentId: string | null;
   navigableAgentIds: Set<string>;
-  onSelectAgent: (agentId: string | null, correlationId?: string | null) => void;
+  onSelectAgent: SelectAgentHandler;
   onSelectCorrelation: (correlationId: string | null) => void;
 }) {
   const preservedCorrelationId = activeCorrelationId ?? correlationId;
@@ -1064,7 +1083,7 @@ function renderWorkflowPeerWatchAlert({
   activeCorrelationId: string | null;
   currentAgentId: string | null;
   navigableAgentIds: Set<string>;
-  onSelectAgent: (agentId: string | null, correlationId?: string | null) => void;
+  onSelectAgent: SelectAgentHandler;
   onSelectCorrelation: (correlationId: string | null) => void;
 }) {
   const preservedCorrelationId = activeCorrelationId ?? alert.correlation_id;
@@ -1146,7 +1165,7 @@ function renderSharedMemoryArtifact({
   activeCorrelationId: string | null;
   currentAgentId: string | null;
   navigableAgentIds: Set<string>;
-  onSelectAgent: (agentId: string | null, correlationId?: string | null) => void;
+  onSelectAgent: SelectAgentHandler;
   onSelectCorrelation: (correlationId: string | null) => void;
 }) {
   const artifactCorrelationId = findFirstNonEmptyString(artifact.correlation_ids);
@@ -1213,7 +1232,7 @@ function renderSharedMemorySection({
   activeCorrelationId: string | null;
   currentAgentId: string | null;
   navigableAgentIds: Set<string>;
-  onSelectAgent: (agentId: string | null, correlationId?: string | null) => void;
+  onSelectAgent: SelectAgentHandler;
   onSelectCorrelation: (correlationId: string | null) => void;
 }) {
   const sharedMemoryWarning =
@@ -1272,7 +1291,7 @@ function renderIncidentRecord({
   navigableAgentIds: Set<string>;
   sharedMemoryArtifactRefs: ReadonlySet<string>;
   enableSharedMemoryEvidenceJump?: boolean;
-  onSelectAgent: (agentId: string | null, correlationId?: string | null) => void;
+  onSelectAgent: SelectAgentHandler;
   onSelectCorrelation: (correlationId: string | null) => void;
   includeAgentPivot: boolean;
   includeActorPivot?: boolean;
@@ -1453,7 +1472,7 @@ function renderZoneOccupants({
   currentAgentId: string | null;
   navigableAgentIds: Set<string>;
   correlationId?: string | null;
-  onSelectAgent: (agentId: string | null, correlationId?: string | null) => void;
+  onSelectAgent: SelectAgentHandler;
 }) {
   if (occupants.length === 0) {
     return 'Empty';
@@ -1706,6 +1725,10 @@ export function DetailsPanel({
                       emptyLabel: 'No watchers',
                       ariaLabelPrefix: `Select collector supervision watcher from collector ${item.agent_id}`,
                       correlationId: selectedCorrelationId,
+                      preserveNullCorrelation:
+                        selectedAgent === null &&
+                        selectedCorrelationId === null &&
+                        (incidentFeedState === 'ready' || incidentFeedState === 'error'),
                       onSelectAgent
                     })}
                   </span>

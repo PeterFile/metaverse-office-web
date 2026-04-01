@@ -847,12 +847,16 @@ function AppInner() {
                   resolveOperationSnapshotSeed(agentId, crewOverviewOperationSeedData)
                 )
               }
-              onSelectAgent={(agentId, correlationId) =>
+              onSelectAgent={(agentId, correlationId, options) =>
                 selectAgentWithSnapshot(
                   agentId,
                   correlationId ?? null,
                   null,
-                  correlationId === undefined ? 'auto' : 'preserved',
+                  correlationId !== undefined && correlationId !== null
+                    ? 'preserved'
+                    : options?.preserveNullCorrelation && correlationId === null
+                      ? 'preserved'
+                      : 'auto',
                   correlationId !== null && correlationId !== undefined && correlationId === selectedCorrelationId && selectedCorrelationWasExplicit,
                   null
                 )

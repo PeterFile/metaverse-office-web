@@ -117,7 +117,7 @@ function renderAgentPivotButton({
   agentId,
   label = agentId,
   ariaLabel,
-  correlationId = null,
+  correlationId,
   onSelectAgent
 }: {
   agentId: string;

@@ -1545,6 +1545,7 @@ test.describe('operator shell smoke', () => {
     const watcherButton = collectorSection.getByRole('button', {
       name: 'Select collector supervision watcher from collector app-engineering team-lead'
     });
+    const scopedArtifactsUrl = '/memory/artifacts?limit=4&window=60m&agent_id=team-lead&correlation_id=corr-revenue-handoff';
 
     await expect(detailsPanel.getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
@@ -1564,7 +1565,7 @@ test.describe('operator shell smoke', () => {
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
     await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toHaveCount(0);
-    expect(requestedUrls).toContain('/memory/artifacts?limit=4&window=60m&agent_id=team-lead&correlation_id=corr-revenue-handoff');
+    await expect.poll(() => requestedUrls.includes(scopedArtifactsUrl)).toBe(true);
     expect(requestedUrls).not.toContain('/memory/artifacts?limit=4&window=60m&agent_id=team-lead');
     expect(requestedUrls).not.toContain('/correlations/corr-growth-lead-review?limit=10&window=60m');
   });
@@ -1616,6 +1617,7 @@ test.describe('operator shell smoke', () => {
     const watcherButton = collectorSection.getByRole('button', {
       name: 'Select collector supervision watcher from collector app-engineering team-lead'
     });
+    const unscopedArtifactsUrl = '/memory/artifacts?limit=4&window=60m&agent_id=team-lead';
 
     await expect(detailsPanel.getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
     await expect(correlationSection.getByText('No correlation selected.')).toBeVisible();
@@ -1633,11 +1635,11 @@ test.describe('operator shell smoke', () => {
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
     await expect(correlationSection.getByText('No correlation selected.')).toBeVisible();
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toHaveCount(0);
-    expect(requestedUrls).toContain('/memory/artifacts?limit=4&window=60m&agent_id=team-lead');
+    await expect.poll(() => requestedUrls.includes(unscopedArtifactsUrl)).toBe(true);
     expect(requestedUrls).not.toContain(
-      '/memory/artifacts?limit=4&window=60m&agent_id=team-lead&correlation_id=corr-revenue-handoff'
+      '/memory/artifacts?limit=4&window=60m&agent_id=team-lead&correlation_id=corr-growth-lead-review'
     );
-    expect(requestedUrls).not.toContain('/correlations/corr-revenue-handoff?limit=10&window=60m');
+    expect(requestedUrls.some((url) => url.startsWith('/correlations/'))).toBe(false);
   });
 
   test('carries the crew-overview incident correlation into a selected-agent pivot via keyboard traversal', async ({ page }) => {

@@ -1642,6 +1642,67 @@ test.describe('operator shell smoke', () => {
     expect(requestedUrls.some((url) => url.startsWith('/correlations/'))).toBe(false);
   });
 
+  test('keeps collector watcher pivots on auto-correlation when the crew-overview incident feed errors', async ({ page }) => {
+    const requestedUrls: string[] = [];
+    page.on('request', (request) => {
+      try {
+        const url = new URL(request.url());
+        requestedUrls.push(`${url.pathname}${url.search}`);
+      } catch {
+        requestedUrls.push(request.url());
+      }
+    });
+
+    await page.route('**/incidents?limit=10&window=60m', async (route) => {
+      await route.fulfill({
+        status: 500,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: 'internal_error', details: 'incident refresh failed' })
+      });
+    });
+
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Hub' }).click();
+
+    const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
+    const clearButton = detailsPanel.getByRole('button', { name: 'Clear' });
+    const collectorSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Collector Supervision' })
+    });
+    const correlationSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Correlation Drilldown' })
+    });
+    const watcherButton = collectorSection.getByRole('button', {
+      name: 'Select collector supervision watcher from collector app-engineering team-lead'
+    });
+    const teamLeadCorrelationUrl = '/correlations/corr-growth-lead-review?limit=10&window=60m';
+    const teamLeadScopedArtifactsUrl =
+      '/memory/artifacts?limit=4&window=60m&agent_id=team-lead&correlation_id=corr-growth-lead-review';
+
+    await expect(detailsPanel.getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
+    await expect(detailsPanel.getByText('incident refresh failed')).toBeVisible();
+    await expect(correlationSection.getByText('No correlation selected.')).toBeVisible();
+    expect(requestedUrls).not.toContain(teamLeadCorrelationUrl);
+    expect(requestedUrls).not.toContain(teamLeadScopedArtifactsUrl);
+    await focusHubControlWithTab(
+      page,
+      watcherButton,
+      'Select collector supervision watcher from collector app-engineering team-lead'
+    );
+    await expect(watcherButton).toBeFocused();
+    await page.keyboard.press('Enter');
+
+    await expect(detailsPanel.getByRole('heading', { name: 'Team Lead' })).toBeVisible();
+    await expect(clearButton).toBeFocused();
+    await expect(detailsPanel.getByRole('heading', { name: 'Workflow' })).toBeVisible();
+    await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
+    await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toBeVisible();
+    await expect(correlationSection.getByText('Counts · 0 incidents · 1 interactions · 2 events')).toBeVisible();
+    await expect(correlationSection.getByText('No correlation selected.')).toHaveCount(0);
+    await expect.poll(() => requestedUrls.includes(teamLeadCorrelationUrl)).toBe(true);
+    await expect.poll(() => requestedUrls.includes(teamLeadScopedArtifactsUrl)).toBe(true);
+  });
+
   test('carries the crew-overview incident correlation into a selected-agent pivot via keyboard traversal', async ({ page }) => {
     await page.goto('/');
     await page.getByRole('button', { name: 'Open Hub' }).click();

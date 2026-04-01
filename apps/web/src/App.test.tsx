@@ -2470,6 +2470,270 @@ afterEach(() => {
     });
   });
 
+  it('keeps collector supervision watcher pivots on auto-correlation while crew-overview correlation is still loading', async () => {
+    const growthRevenueReviewCorrelationUrl = '/correlations/corr-growth-lead-review?limit=10&window=60m';
+    const growthRevenueSelectedGrowthLeadReviewMemoryArtifactsUrl =
+      '/memory/artifacts?limit=4&window=60m&agent_id=growth-revenue&correlation_id=corr-growth-lead-review';
+    const growthRevenueReviewCorrelationFixture = {
+      ...correlationFixture,
+      correlation_id: 'corr-growth-lead-review',
+      participant_agent_ids: ['growth-revenue', 'team-lead'],
+      incidents: correlationFixture.incidents.map((incident) => ({
+        ...incident,
+        incident_id: 'inc-growth-review',
+        agent_id: 'growth-revenue',
+        correlation_id: 'corr-growth-lead-review'
+      })),
+      interactions: correlationFixture.interactions.map((interaction) => ({
+        ...interaction,
+        interaction_id: 'interaction-growth-review',
+        correlation_id: 'corr-growth-lead-review',
+        participant_agent_ids: ['growth-revenue', 'team-lead']
+      })),
+      timeline: correlationFixture.timeline.map((event, index) => ({
+        ...event,
+        event_id: `evt-growth-review-${index}`,
+        agent_id: 'growth-revenue',
+        correlation_id: 'corr-growth-lead-review'
+      }))
+    };
+    let releaseIncidentFeed!: (response: Response) => void;
+    let delayCrewOverviewIncidentFeed = true;
+    const delayedIncidentFeed = new Promise<Response>((resolve) => {
+      releaseIncidentFeed = resolve;
+    });
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === incidentsUrl && delayCrewOverviewIncidentFeed) {
+          delayCrewOverviewIncidentFeed = false;
+          return delayedIncidentFeed;
+        }
+
+        if (url === growthRevenueReviewCorrelationUrl) {
+          return jsonResponse(growthRevenueReviewCorrelationFixture);
+        }
+
+        if (url === growthRevenueSelectedGrowthLeadReviewMemoryArtifactsUrl) {
+          return jsonResponse(growthRevenueMemoryArtifactsFixture);
+        }
+
+        return resolveTestFetchResponse(url);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    const collectorSection = within(details).getByRole('heading', { name: 'Collector Supervision' }).closest('section');
+    expect(collectorSection).not.toBeNull();
+
+    const appEngineeringCollectorRecord = within(collectorSection!).getByText('App Engineering Agent').closest('li');
+    expect(appEngineeringCollectorRecord).not.toBeNull();
+
+    await waitFor(() => {
+      expect(
+        within(appEngineeringCollectorRecord!).getByRole('button', {
+          name: 'Select collector supervision watcher from collector app-engineering growth-revenue'
+        })
+      ).toBeVisible();
+    });
+
+    await user.click(
+      within(appEngineeringCollectorRecord!).getByRole('button', {
+        name: 'Select collector supervision watcher from collector app-engineering growth-revenue'
+      })
+    );
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+      const nextCorrelationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+      expect(nextCorrelationSection).not.toBeNull();
+      expect(within(nextCorrelationSection!).getByText('corr-growth-lead-review')).toBeVisible();
+      expect(within(nextCorrelationSection!).queryByText('No correlation selected.')).not.toBeInTheDocument();
+    });
+
+    await act(async () => {
+      releaseIncidentFeed(jsonResponse(incidentFeedFixture));
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      expect(globalThis.fetch).toHaveBeenCalledWith(growthRevenueWorkflowUrl, expect.anything());
+      expect(globalThis.fetch).toHaveBeenCalledWith(growthRevenueReviewCorrelationUrl, expect.anything());
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        growthRevenueSelectedGrowthLeadReviewMemoryArtifactsUrl,
+        expect.anything()
+      );
+    });
+  });
+
+  it('keeps collector supervision watcher pivots on auto-correlation when the crew-overview incident feed errors', async () => {
+    const growthRevenueReviewCorrelationUrl = '/correlations/corr-growth-lead-review?limit=10&window=60m';
+    const growthRevenueSelectedGrowthLeadReviewMemoryArtifactsUrl =
+      '/memory/artifacts?limit=4&window=60m&agent_id=growth-revenue&correlation_id=corr-growth-lead-review';
+    const growthRevenueReviewCorrelationFixture = {
+      ...correlationFixture,
+      correlation_id: 'corr-growth-lead-review',
+      participant_agent_ids: ['growth-revenue', 'team-lead'],
+      incidents: correlationFixture.incidents.map((incident) => ({
+        ...incident,
+        incident_id: 'inc-growth-review',
+        agent_id: 'growth-revenue',
+        correlation_id: 'corr-growth-lead-review'
+      })),
+      interactions: correlationFixture.interactions.map((interaction) => ({
+        ...interaction,
+        interaction_id: 'interaction-growth-review',
+        correlation_id: 'corr-growth-lead-review',
+        participant_agent_ids: ['growth-revenue', 'team-lead']
+      })),
+      timeline: correlationFixture.timeline.map((event, index) => ({
+        ...event,
+        event_id: `evt-growth-review-${index}`,
+        agent_id: 'growth-revenue',
+        correlation_id: 'corr-growth-lead-review'
+      }))
+    };
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === incidentsUrl) {
+          return new Response(JSON.stringify({ error: 'internal_error', details: 'incident refresh failed' }), {
+            status: 500,
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === growthRevenueReviewCorrelationUrl) {
+          return jsonResponse(growthRevenueReviewCorrelationFixture);
+        }
+
+        if (url === growthRevenueSelectedGrowthLeadReviewMemoryArtifactsUrl) {
+          return jsonResponse(growthRevenueMemoryArtifactsFixture);
+        }
+
+        return resolveTestFetchResponse(url);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    const collectorSection = within(details).getByRole('heading', { name: 'Collector Supervision' }).closest('section');
+    expect(collectorSection).not.toBeNull();
+    expect(await within(details).findByText('incident refresh failed')).toBeVisible();
+
+    const appEngineeringCollectorRecord = within(collectorSection!).getByText('App Engineering Agent').closest('li');
+    expect(appEngineeringCollectorRecord).not.toBeNull();
+
+    await waitFor(() => {
+      expect(
+        within(appEngineeringCollectorRecord!).getByRole('button', {
+          name: 'Select collector supervision watcher from collector app-engineering growth-revenue'
+        })
+      ).toBeVisible();
+    });
+
+    await user.click(
+      within(appEngineeringCollectorRecord!).getByRole('button', {
+        name: 'Select collector supervision watcher from collector app-engineering growth-revenue'
+      })
+    );
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+      const nextCorrelationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+      expect(nextCorrelationSection).not.toBeNull();
+      expect(within(nextCorrelationSection!).getByText('corr-growth-lead-review')).toBeVisible();
+      expect(within(nextCorrelationSection!).queryByText('No correlation selected.')).not.toBeInTheDocument();
+    });
+
+    await act(async () => {
+      expect(globalThis.fetch).toHaveBeenCalledWith(growthRevenueWorkflowUrl, expect.anything());
+      expect(globalThis.fetch).toHaveBeenCalledWith(growthRevenueReviewCorrelationUrl, expect.anything());
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        growthRevenueSelectedGrowthLeadReviewMemoryArtifactsUrl,
+        expect.anything()
+      );
+    });
+  });
+
+  it('keeps crew-overview collector supervision watcher pivots on the existing no-correlation path when no active correlation is selected', async () => {
+    const crewOverviewWithoutCorrelationIncidentFeedFixture = {
+      items: incidentFeedFixture.items.map((incident) => ({
+        ...incident,
+        correlation_id: null
+      }))
+    };
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === incidentsUrl) {
+          return jsonResponse(crewOverviewWithoutCorrelationIncidentFeedFixture);
+        }
+
+        return resolveTestFetchResponse(url);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    const collectorSection = within(details).getByRole('heading', { name: 'Collector Supervision' }).closest('section');
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    expect(collectorSection).not.toBeNull();
+    expect(correlationSection).not.toBeNull();
+
+    const appEngineeringCollectorRecord = within(collectorSection!).getByText('App Engineering Agent').closest('li');
+    expect(appEngineeringCollectorRecord).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(correlationSection!).getByText('No correlation selected.')).toBeVisible();
+      expect(
+        within(appEngineeringCollectorRecord!).getByRole('button', {
+          name: 'Select collector supervision watcher from collector app-engineering team-lead'
+        })
+      ).toBeVisible();
+    });
+
+    await user.click(
+      within(appEngineeringCollectorRecord!).getByRole('button', {
+        name: 'Select collector supervision watcher from collector app-engineering team-lead'
+      })
+    );
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'Team Lead' })).toBeVisible();
+      expect(within(details).queryByRole('heading', { name: 'Current Operation' })).not.toBeInTheDocument();
+      const nextCorrelationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+      expect(nextCorrelationSection).not.toBeNull();
+      expect(within(nextCorrelationSection!).getByText('No correlation selected.')).toBeVisible();
+      expect(within(nextCorrelationSection!).queryByText('corr-app-review')).not.toBeInTheDocument();
+      expect(within(nextCorrelationSection!).queryByText('corr-growth-lead-review')).not.toBeInTheDocument();
+    });
+
+    await act(async () => {
+      expect(globalThis.fetch).toHaveBeenCalledWith(teamLeadWorkflowUrl, expect.anything());
+      expect(globalThis.fetch).toHaveBeenCalledWith(teamLeadMemoryArtifactsUrl, expect.anything());
+    });
+
+    expect(globalThis.fetch).not.toHaveBeenCalledWith(correlationUrl, expect.anything());
+    expect(globalThis.fetch).not.toHaveBeenCalledWith(teamLeadSelectedCorrelationMemoryArtifactsUrl, expect.anything());
+  });
+
   it('keeps crew-overview collector supervision watch-target pivots on the existing no-correlation path when no active correlation is selected', async () => {
     const crewOverviewWithoutCorrelationIncidentFeedFixture = {
       items: incidentFeedFixture.items.map((incident) => ({

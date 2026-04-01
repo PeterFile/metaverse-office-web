@@ -3416,7 +3416,9 @@ describe('DetailsPanel accountability signals', () => {
       })
     );
 
-    expect(onSelectAgent).toHaveBeenLastCalledWith('team-lead', null);
+    expect(onSelectAgent).toHaveBeenLastCalledWith('team-lead', null, {
+      preserveNullCorrelation: true
+    });
   });
 
   it('renders crew-overview collector supervision watch targets as pivots for navigable non-row agents and preserves the active correlation, otherwise keeps no-correlation behavior', async () => {

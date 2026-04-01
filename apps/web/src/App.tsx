@@ -469,10 +469,7 @@ function AppInner() {
       return;
     }
 
-    if (
-      (correlationSelectionModeRef.current === 'manual' || correlationSelectionModeRef.current === 'preserved') &&
-      selectedCorrelationId !== null
-    ) {
+    if (correlationSelectionModeRef.current !== 'auto') {
       return;
     }
 
@@ -850,13 +847,17 @@ function AppInner() {
                   resolveOperationSnapshotSeed(agentId, crewOverviewOperationSeedData)
                 )
               }
-              onSelectAgent={(agentId, correlationId = null) =>
+              onSelectAgent={(agentId, correlationId, options) =>
                 selectAgentWithSnapshot(
                   agentId,
-                  correlationId,
+                  correlationId ?? null,
                   null,
-                  correlationId === null ? 'auto' : 'preserved',
-                  correlationId !== null && correlationId === selectedCorrelationId && selectedCorrelationWasExplicit,
+                  correlationId !== undefined && correlationId !== null
+                    ? 'preserved'
+                    : options?.preserveNullCorrelation && correlationId === null
+                      ? 'preserved'
+                      : 'auto',
+                  correlationId !== null && correlationId !== undefined && correlationId === selectedCorrelationId && selectedCorrelationWasExplicit,
                   null
                 )
               }

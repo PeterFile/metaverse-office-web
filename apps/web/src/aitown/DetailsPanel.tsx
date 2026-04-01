@@ -1728,7 +1728,7 @@ export function DetailsPanel({
                       preserveNullCorrelation:
                         selectedAgent === null &&
                         selectedCorrelationId === null &&
-                        (incidentFeedState === 'ready' || incidentFeedState === 'error'),
+                        incidentFeedState === 'ready',
                       onSelectAgent
                     })}
                   </span>

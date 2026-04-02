@@ -143,6 +143,76 @@ describe('resolveWatchOverlaySegments', () => {
     expect(visibleDistance).toBeGreaterThanOrEqual(10);
   });
 
+  it('skips overlapping and effectively zero-length endpoints without poisoning valid overlay segments', () => {
+    const scene = makeScene({
+      agents: [
+        makeAgent({
+          agentId: 'app-engineering',
+          selected: true,
+          position: { x: 120.4, y: 180.2 }
+        }),
+        makeAgent({
+          agentId: 'overlap-endpoint',
+          displayName: 'Overlap Endpoint',
+          position: { x: 120.4, y: 180.2 },
+          severity: 'yellow',
+          phase: 'waiting'
+        }),
+        makeAgent({
+          agentId: 'near-zero-endpoint',
+          displayName: 'Near Zero Endpoint',
+          position: { x: 120.400001, y: 180.2 },
+          severity: 'yellow',
+          phase: 'waiting'
+        }),
+        makeAgent({
+          agentId: 'growth-revenue',
+          displayName: 'Growth Revenue Agent',
+          position: { x: 145.6, y: 180.2 },
+          severity: 'red',
+          phase: 'waiting'
+        })
+      ],
+      watchEdges: [
+        {
+          fromAgentId: 'app-engineering',
+          toAgentId: 'overlap-endpoint',
+          watchMode: 'peer',
+          riskLevel: 'yellow'
+        },
+        {
+          fromAgentId: 'app-engineering',
+          toAgentId: 'near-zero-endpoint',
+          watchMode: 'peer',
+          riskLevel: 'yellow'
+        },
+        {
+          fromAgentId: 'app-engineering',
+          toAgentId: 'growth-revenue',
+          watchMode: 'peer',
+          riskLevel: 'red'
+        }
+      ]
+    });
+
+    const segments = resolveWatchOverlaySegments(scene);
+
+    expect(segments).toHaveLength(1);
+    expect(segments[0]).toMatchObject({
+      fromAgentId: 'app-engineering',
+      toAgentId: 'growth-revenue',
+      watchMode: 'peer',
+      riskLevel: 'red'
+    });
+
+    for (const segment of segments) {
+      expect(Number.isFinite(segment.start.x)).toBe(true);
+      expect(Number.isFinite(segment.start.y)).toBe(true);
+      expect(Number.isFinite(segment.end.x)).toBe(true);
+      expect(Number.isFinite(segment.end.y)).toBe(true);
+    }
+  });
+
   it('skips endpoints that are too close to render a readable segment', () => {
     const scene = makeScene({
       agents: [

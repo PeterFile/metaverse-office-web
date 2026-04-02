@@ -1342,6 +1342,139 @@ test.describe('operator shell smoke', () => {
     await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
   });
 
+  test('opens a selected-agent current-operation correlation drilldown via keyboard traversal', async ({ page }) => {
+    const requestedUrls: string[] = [];
+    page.on('request', (request) => {
+      try {
+        const url = new URL(request.url());
+        requestedUrls.push(`${url.pathname}${url.search}`);
+      } catch {
+        requestedUrls.push(request.url());
+      }
+    });
+
+    await page.route('**/office/operations**', async (route) => {
+      const url = new URL(route.request().url());
+      if (
+        url.pathname !== '/office/operations' ||
+        url.searchParams.get('agent_id') !== 'growth-revenue' ||
+        url.searchParams.has('limit') ||
+        url.searchParams.has('state')
+      ) {
+        await route.continue();
+        return;
+      }
+
+      const response = await route.fetch();
+      const operations = (await response.json()) as {
+        items: Array<{
+          agent_id: string;
+          correlation_id: string | null;
+        }>;
+      };
+
+      await route.fulfill({
+        response,
+        json: {
+          ...operations,
+          items: operations.items.map((item) =>
+            item.agent_id === 'growth-revenue'
+              ? {
+                  ...item,
+                  correlation_id: 'corr-growth-lead-review'
+                }
+              : item
+          )
+        }
+      });
+    });
+
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Hub' }).click();
+
+    const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
+    const clearButton = detailsPanel.getByRole('button', { name: 'Clear' });
+    const inspectButton = detailsPanel.getByRole('button', {
+      name: 'Inspect Growth Revenue Agent',
+      exact: true
+    });
+
+    await focusHubControlWithTab(page, inspectButton, 'Inspect Growth Revenue Agent');
+    await expect(inspectButton).toBeFocused();
+    await page.keyboard.press('Enter');
+
+    const operationSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Current Operation' })
+    });
+    const workflowSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Workflow' })
+    });
+    const correlationSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Correlation Drilldown' })
+    });
+    const workflowCorrelationButton = workflowSection.getByRole('button', {
+      name: 'Open workflow correlation corr-revenue-handoff'
+    });
+    const operationCorrelationButton = operationSection.getByRole('button', {
+      name: 'Open operation correlation corr-growth-lead-review'
+    });
+    const selectedCorrelationUrl = '/correlations/corr-growth-lead-review?limit=10&window=60m';
+    const scopedArtifactsUrl =
+      '/memory/artifacts?limit=4&window=60m&agent_id=growth-revenue&correlation_id=corr-growth-lead-review';
+
+    await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+    await expect(clearButton).toBeFocused();
+    await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toBeVisible();
+    await expect(operationSection.getByText('planning · Prepare handoff notes')).toBeVisible();
+    await expect(workflowCorrelationButton).toBeVisible();
+    await expect(operationCorrelationButton).toBeVisible();
+    await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toBeVisible();
+    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toHaveCount(0);
+    await focusHubControlWithTab(page, workflowCorrelationButton, 'Open workflow correlation corr-revenue-handoff');
+    await expect(workflowCorrelationButton).toBeFocused();
+    await page.keyboard.press('Enter');
+
+    await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+    await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toBeVisible();
+    await expect(operationSection.getByText('planning · Prepare handoff notes')).toBeVisible();
+    await expect(operationCorrelationButton).toBeVisible();
+    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
+    await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toHaveCount(0);
+    await focusHubControlWithTab(
+      page,
+      operationCorrelationButton,
+      'Open operation correlation corr-growth-lead-review'
+    );
+    await expect(operationCorrelationButton).toBeFocused();
+
+    const requestCountBeforeCorrelationOpen = requestedUrls.length;
+
+    await page.keyboard.press('Enter');
+
+    await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+    await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toBeVisible();
+    await expect(operationSection.getByText('planning · Prepare handoff notes')).toBeVisible();
+    await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toBeVisible();
+    await expect(correlationSection.getByText('Counts · 0 incidents · 1 interactions · 2 events')).toBeVisible();
+    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toHaveCount(0);
+
+    const getPostCorrelationSelectionRequests = () => requestedUrls.slice(requestCountBeforeCorrelationOpen);
+
+    await expect.poll(() => getPostCorrelationSelectionRequests().includes(selectedCorrelationUrl)).toBe(true);
+    await expect.poll(() => getPostCorrelationSelectionRequests().includes(scopedArtifactsUrl)).toBe(true);
+
+    const unexpectedPostCorrelationSelectionRequests = getPostCorrelationSelectionRequests().filter((url) =>
+      [
+        '/office/operations?agent_id=team-lead',
+        '/agents/team-lead/workflow?limit=10&window=60m',
+        '/office/operations?agent_id=app-engineering',
+        '/agents/app-engineering/workflow?limit=10&window=60m',
+        '/memory/artifacts?limit=4&window=60m&agent_id=team-lead&correlation_id=corr-growth-lead-review'
+      ].includes(url)
+    );
+    expect(unexpectedPostCorrelationSelectionRequests).toHaveLength(0);
+  });
+
   test('keeps the active selected-agent correlation when opening a current-operation actor pivot via keyboard traversal', async ({
     page
   }) => {

@@ -1795,6 +1795,57 @@ test.describe('operator shell smoke', () => {
     await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
   });
 
+  test('keeps the active crew-overview correlation when opening a watch topology target endpoint pivot via keyboard traversal', async ({
+    page
+  }) => {
+    const requestedUrls: string[] = [];
+    page.on('request', (request) => {
+      try {
+        const url = new URL(request.url());
+        requestedUrls.push(`${url.pathname}${url.search}`);
+      } catch {
+        requestedUrls.push(request.url());
+      }
+    });
+
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Hub' }).click();
+
+    const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
+    const clearButton = detailsPanel.getByRole('button', { name: 'Clear' });
+    const correlationSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Correlation Drilldown' })
+    });
+    const topologyPivotButton = detailsPanel.getByRole('button', {
+      name: 'Select watch topology target agent from lead edge team-lead app-engineering'
+    });
+    const scopedArtifactsUrl =
+      '/memory/artifacts?limit=4&window=60m&agent_id=app-engineering&correlation_id=corr-revenue-handoff';
+
+    await expect(detailsPanel.getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
+    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
+    await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
+    await focusHubControlWithTab(
+      page,
+      topologyPivotButton,
+      'Select watch topology target agent from lead edge team-lead app-engineering'
+    );
+    await expect(topologyPivotButton).toBeFocused();
+    await page.keyboard.press('Enter');
+
+    await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+    await expect(clearButton).toBeFocused();
+    await expect(detailsPanel.getByRole('heading', { name: 'Workflow' })).toBeVisible();
+    await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
+    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
+    await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
+    await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toHaveCount(0);
+    await expect.poll(() => requestedUrls.includes('/agents/app-engineering/workflow?limit=10&window=60m')).toBe(true);
+    await expect.poll(() => requestedUrls.includes(scopedArtifactsUrl)).toBe(true);
+    expect(requestedUrls).not.toContain('/memory/artifacts?limit=4&window=60m&agent_id=app-engineering');
+    expect(requestedUrls).not.toContain('/agents/app-engineering/incidents?limit=10&window=60m');
+  });
+
   test('opens an incident correlation drilldown from the selected-agent Hub via keyboard traversal', async ({ page }) => {
     await page.goto('/');
     await page.getByRole('button', { name: 'Open Hub' }).click();

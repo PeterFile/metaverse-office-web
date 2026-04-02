@@ -2649,6 +2649,138 @@ describe('DetailsPanel accountability signals', () => {
     expect(onSelectCorrelation).not.toHaveBeenCalled();
   });
 
+  it('renders a live current-operation actor pivot for navigable non-current actors and preserves the active correlation', async () => {
+    const user = userEvent.setup();
+    const onSelectAgent = vi.fn();
+    const selectedOperation: OfficeOperation = {
+      ...buildSelectedOperation(),
+      latest_event: {
+        ...buildSelectedOperation().latest_event!,
+        event_id: 'evt-current-operation-actor',
+        actor_id: 'team-lead',
+        summary: 'Current operation actor pivot keeps the clicked correlation'
+      }
+    };
+
+    const { rerender } = render(
+      <DetailsPanel
+        {...buildProps({
+          onSelectAgent,
+          selectedCorrelationId: 'corr-app-secondary',
+          selectedOperation
+        })}
+      />
+    );
+
+    let operationSection = screen.getByRole('heading', { name: 'Current Operation' }).closest('section');
+    expect(operationSection).not.toBeNull();
+    expect(operationSection).toHaveTextContent('Actor · team-lead');
+
+    let actorPivot = within(operationSection!).getByRole('button', {
+      name: 'Select current operation actor from event evt-current-operation-actor team-lead'
+    });
+    expect(actorPivot).toBeVisible();
+
+    await user.click(actorPivot);
+
+    expect(onSelectAgent).toHaveBeenCalledWith('team-lead', 'corr-app-secondary');
+
+    onSelectAgent.mockClear();
+    rerender(
+      <DetailsPanel
+        {...buildProps({
+          onSelectAgent,
+          selectedCorrelationId: null,
+          selectedOperation
+        })}
+      />
+    );
+
+    operationSection = screen.getByRole('heading', { name: 'Current Operation' }).closest('section');
+    expect(operationSection).not.toBeNull();
+    actorPivot = within(operationSection!).getByRole('button', {
+      name: 'Select current operation actor from event evt-current-operation-actor team-lead'
+    });
+    await user.click(actorPivot);
+
+    expect(onSelectAgent).toHaveBeenCalledWith('team-lead', 'corr-app-review');
+  });
+
+  it('keeps stale, missing, current, and unknown current-operation actors on the plain-text path', () => {
+    const { rerender } = render(
+      <DetailsPanel
+        {...buildProps({
+          operationsError: 'selected operation refresh failed'
+        })}
+      />
+    );
+
+    let operationSection = screen.getByRole('heading', { name: 'Current Operation' }).closest('section');
+    expect(operationSection).not.toBeNull();
+    expect(operationSection).toHaveTextContent('Actor · team-lead');
+    expect(
+      within(operationSection!).queryByRole('button', {
+        name: 'Select current operation actor from event evt-1 team-lead'
+      })
+    ).not.toBeInTheDocument();
+
+    rerender(
+      <DetailsPanel
+        {...buildProps({
+          selectedOperation: {
+            ...buildSelectedOperation(),
+            latest_event: null
+          }
+        })}
+      />
+    );
+
+    operationSection = screen.getByRole('heading', { name: 'Current Operation' }).closest('section');
+    expect(operationSection).not.toBeNull();
+    expect(operationSection).toHaveTextContent('Actor · No actor');
+    expect(within(operationSection!).queryByRole('button', { name: /Select current operation actor/ })).not.toBeInTheDocument();
+
+    rerender(
+      <DetailsPanel
+        {...buildProps({
+          selectedOperation: {
+            ...buildSelectedOperation(),
+            latest_event: {
+              ...buildSelectedOperation().latest_event!,
+              actor_id: 'app-engineering',
+              summary: 'Current-operation self actor stays plain text'
+            }
+          }
+        })}
+      />
+    );
+
+    operationSection = screen.getByRole('heading', { name: 'Current Operation' }).closest('section');
+    expect(operationSection).not.toBeNull();
+    expect(operationSection).toHaveTextContent('Actor · app-engineering');
+    expect(within(operationSection!).queryByRole('button', { name: /Select current operation actor/ })).not.toBeInTheDocument();
+
+    rerender(
+      <DetailsPanel
+        {...buildProps({
+          selectedOperation: {
+            ...buildSelectedOperation(),
+            latest_event: {
+              ...buildSelectedOperation().latest_event!,
+              actor_id: 'ghost-agent',
+              summary: 'Current-operation unknown actor stays plain text'
+            }
+          }
+        })}
+      />
+    );
+
+    operationSection = screen.getByRole('heading', { name: 'Current Operation' }).closest('section');
+    expect(operationSection).not.toBeNull();
+    expect(operationSection).toHaveTextContent('Actor · ghost-agent');
+    expect(within(operationSection!).queryByRole('button', { name: /Select current operation actor/ })).not.toBeInTheDocument();
+  });
+
   it('shows a selected agent responsibility chain with current evidence, sources, and correlation context', () => {
     render(<DetailsPanel {...buildProps()} />);
 

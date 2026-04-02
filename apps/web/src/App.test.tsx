@@ -4049,6 +4049,58 @@ afterEach(() => {
     });
   });
 
+  it('preserves the clicked selected-agent workflow correlation when opening a current-operation actor pivot', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent from active queue' }));
+
+    const workflowSection = within(details).getByRole('heading', { name: 'Workflow' }).closest('section');
+    const operationSection = within(details).getByRole('heading', { name: 'Current Operation' }).closest('section');
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    expect(workflowSection).not.toBeNull();
+    expect(operationSection).not.toBeNull();
+    expect(correlationSection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+    });
+
+    await user.click(within(workflowSection!).getByRole('button', { name: 'Open workflow correlation corr-app-secondary' }));
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'Current Operation' })).toBeVisible();
+      expect(within(correlationSection!).getByText('corr-app-secondary')).toBeVisible();
+      expect(within(correlationSection!).queryByText('corr-app-review')).not.toBeInTheDocument();
+    });
+
+    await user.click(
+      within(operationSection!).getByRole('button', {
+        name: 'Select current operation actor from event evt-1 team-lead'
+      })
+    );
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'Team Lead' })).toBeVisible();
+      expect(within(details).queryByRole('heading', { name: 'Current Operation' })).not.toBeInTheDocument();
+      expect(within(correlationSection!).getByText('corr-app-secondary')).toBeVisible();
+      expect(within(correlationSection!).queryByText('corr-app-review')).not.toBeInTheDocument();
+    });
+
+    await act(async () => {
+      expect(globalThis.fetch).toHaveBeenCalledWith(secondaryCorrelationUrl, expect.anything());
+      expect(globalThis.fetch).toHaveBeenCalledWith(teamLeadWorkflowUrl, expect.anything());
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        teamLeadSelectedSecondaryCorrelationMemoryArtifactsUrl,
+        expect.anything()
+      );
+      expect(globalThis.fetch).not.toHaveBeenCalledWith(teamLeadSelectedCorrelationMemoryArtifactsUrl, expect.anything());
+      expect(globalThis.fetch).not.toHaveBeenCalledWith(teamLeadSelectedOperationUrl, expect.anything());
+    });
+  });
+
   it('jumps from current-operation evidence refs to shared memory without changing the selected agent, queue-derived operation context, or correlation', async () => {
     const currentOperationEvidenceJumpFixture = {
       ...operationsFixture,

@@ -2207,6 +2207,14 @@ export function DetailsPanel({
     : null;
   const outboundWatchers = world.watch_edges.filter((edge) => edge.from_agent_id === selectedAgent.agent_id);
   const selectedOperationCorrelationId = currentOperationIsStale ? null : selectedOperation?.correlation_id ?? null;
+  const selectedOperationLatestEventActorId = selectedOperation?.latest_event?.actor_id ?? null;
+  const selectedOperationActorPivotCorrelationId = selectedCorrelationId ?? selectedOperationCorrelationId;
+  const canNavigateToSelectedOperationLatestEventActor = Boolean(
+    !currentOperationIsStale &&
+      selectedOperationLatestEventActorId &&
+      selectedOperationLatestEventActorId !== selectedAgent.agent_id &&
+      navigableAgentIds.has(selectedOperationLatestEventActorId)
+  );
   const accountabilityCorrelationId =
     selectedCorrelationId ?? selectedOperationCorrelationId ?? correlation?.correlation_id ?? workflow?.correlation_ids[0] ?? null;
   const alignedWorkflowAlerts = (workflow?.detail.open_peer_watch_alerts ?? []).filter((alert) =>
@@ -2427,6 +2435,17 @@ export function DetailsPanel({
               <span>{`${selectedOperation.current_state} · ${selectedOperation.current_blocker || selectedOperation.active_task}`}</span>
               <span>{`Location · ${selectedOperation.current_location}`}</span>
               <span>{`Latest event · ${selectedOperation.latest_event?.summary ?? 'No latest event yet'}`}</span>
+              <span>
+                Actor ·{' '}
+                {canNavigateToSelectedOperationLatestEventActor && selectedOperation.latest_event
+                  ? renderAgentPivotButton({
+                      agentId: selectedOperation.latest_event.actor_id,
+                      ariaLabel: `Select current operation actor from event ${selectedOperation.latest_event.event_id} ${selectedOperation.latest_event.actor_id}`,
+                      correlationId: selectedOperationActorPivotCorrelationId,
+                      onSelectAgent
+                    })
+                  : (selectedOperationLatestEventActorId ?? 'No actor')}
+              </span>
               {selectedOperation.correlation_id && !currentOperationIsStale
                 ? renderCorrelationButton({
                     correlationId: selectedOperation.correlation_id,

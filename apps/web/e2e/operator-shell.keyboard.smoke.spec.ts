@@ -1342,6 +1342,67 @@ test.describe('operator shell smoke', () => {
     await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
   });
 
+  test('keeps the active selected-agent correlation when opening a current-operation actor pivot via keyboard traversal', async ({
+    page
+  }) => {
+    const requestedUrls: string[] = [];
+    page.on('request', (request) => {
+      try {
+        const url = new URL(request.url());
+        requestedUrls.push(`${url.pathname}${url.search}`);
+      } catch {
+        requestedUrls.push(request.url());
+      }
+    });
+
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Hub' }).click();
+
+    const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
+    const clearButton = detailsPanel.getByRole('button', { name: 'Clear' });
+    const queueButton = detailsPanel.getByRole('button', {
+      name: 'Inspect Growth Revenue Agent from active queue'
+    });
+
+    await focusHubControlWithTab(page, queueButton, 'Inspect Growth Revenue Agent from active queue');
+    await expect(queueButton).toBeFocused();
+    await page.keyboard.press('Enter');
+
+    const operationSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Current Operation' })
+    });
+    const correlationSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Correlation Drilldown' })
+    });
+    const operationActorButton = operationSection.getByRole('button', {
+      name: 'Select current operation actor from event evt_revenue_handoff_completed team-lead'
+    });
+    const scopedArtifactsUrl = '/memory/artifacts?limit=4&window=60m&agent_id=team-lead&correlation_id=corr-revenue-handoff';
+
+    await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+    await expect(clearButton).toBeFocused();
+    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
+    await expect(operationActorButton).toBeVisible();
+    await focusHubControlWithTab(
+      page,
+      operationActorButton,
+      'Select current operation actor from event evt_revenue_handoff_completed team-lead'
+    );
+    await expect(operationActorButton).toBeFocused();
+    await page.keyboard.press('Enter');
+
+    await expect(detailsPanel.getByRole('heading', { name: 'Team Lead' })).toBeVisible();
+    await expect(clearButton).toBeFocused();
+    await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
+    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
+    await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
+    await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toHaveCount(0);
+    await expect.poll(() => requestedUrls.includes(scopedArtifactsUrl)).toBe(true);
+    expect(requestedUrls).not.toContain('/office/operations?agent_id=team-lead');
+    expect(requestedUrls).not.toContain('/memory/artifacts?limit=4&window=60m&agent_id=team-lead');
+    expect(requestedUrls).not.toContain('/correlations/corr-growth-lead-review?limit=10&window=60m');
+  });
+
   test('jumps from crew-overview active-queue evidence refs into the shared-memory record via keyboard traversal', async ({
     page
   }) => {

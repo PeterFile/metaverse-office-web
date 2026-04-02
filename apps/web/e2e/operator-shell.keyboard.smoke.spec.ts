@@ -1403,6 +1403,78 @@ test.describe('operator shell smoke', () => {
     expect(requestedUrls).not.toContain('/correlations/corr-growth-lead-review?limit=10&window=60m');
   });
 
+  test('keeps the selected-agent current operation evidence jump focused on shared memory without changing selection via keyboard traversal', async ({
+    page
+  }) => {
+    const requestedUrls: string[] = [];
+    page.on('request', (request) => {
+      try {
+        const url = new URL(request.url());
+        requestedUrls.push(`${url.pathname}${url.search}`);
+      } catch {
+        requestedUrls.push(request.url());
+      }
+    });
+
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Hub' }).click();
+
+    const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
+    const queueButton = detailsPanel.getByRole('button', {
+      name: 'Inspect Growth Revenue Agent from active queue'
+    });
+
+    await focusHubControlWithTab(page, queueButton, 'Inspect Growth Revenue Agent from active queue');
+    await expect(queueButton).toBeFocused();
+    await page.keyboard.press('Enter');
+
+    const operationSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Current Operation' })
+    });
+    const correlationSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Correlation Drilldown' })
+    });
+    const evidenceJumpButton = operationSection.getByRole('button', {
+      name: 'Jump to shared memory artifact /tmp/revenue-handoff.md'
+    });
+    const focusedSharedMemoryRecord = detailsPanel.locator('li[data-shared-memory-target]:focus');
+
+    await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+    await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toBeVisible();
+    await expect(operationSection.getByText('planning · Prepare handoff notes')).toBeVisible();
+    await expect(operationSection.getByText('Evidence · /tmp/revenue-handoff.md')).toBeVisible();
+    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
+    await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
+    await expect(evidenceJumpButton).toBeVisible();
+    await expect(focusedSharedMemoryRecord).toHaveCount(0);
+    await focusHubControlWithTab(page, evidenceJumpButton, 'Jump to shared memory artifact /tmp/revenue-handoff.md');
+    await expect(evidenceJumpButton).toBeFocused();
+
+    const requestCountBeforeJump = requestedUrls.length;
+
+    await page.keyboard.press('Enter');
+
+    await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+    await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toBeVisible();
+    await expect(operationSection.getByText('planning · Prepare handoff notes')).toBeVisible();
+    await expect(operationSection.getByText('Evidence · /tmp/revenue-handoff.md')).toBeVisible();
+    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
+    await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
+    await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toHaveCount(0);
+    await expect(focusedSharedMemoryRecord).toHaveCount(1);
+    await expect(focusedSharedMemoryRecord).toContainText('Ref · /tmp/revenue-handoff.md');
+
+    await page.waitForTimeout(150);
+
+    expect(requestedUrls).toHaveLength(requestCountBeforeJump);
+    expect(requestedUrls).not.toContain('/office/operations?agent_id=team-lead');
+    expect(requestedUrls).not.toContain('/agents/team-lead/workflow?limit=10&window=60m');
+    expect(requestedUrls).not.toContain(
+      '/memory/artifacts?limit=4&window=60m&agent_id=team-lead&correlation_id=corr-revenue-handoff'
+    );
+    expect(requestedUrls).not.toContain('/correlations/corr-growth-lead-review?limit=10&window=60m');
+  });
+
   test('jumps from crew-overview active-queue evidence refs into the shared-memory record via keyboard traversal', async ({
     page
   }) => {

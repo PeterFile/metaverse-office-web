@@ -4897,6 +4897,10 @@ afterEach(() => {
       expect(within(details).getByText('Showing last operation snapshot. operations refresh failed')).toBeVisible();
       expect(within(details).getByText('blocked · Workflow evidence is still incomplete')).toBeVisible();
       expect(within(details).getByText('Latest event · Stale queue snapshot should not win')).toBeVisible();
+      expect(within(details).getByText('Counterparties · team-lead')).toBeVisible();
+      expect(
+        within(details).queryByRole('button', { name: 'Select operation counterparty agent team-lead' })
+      ).not.toBeInTheDocument();
       expect(within(auditSignalsSection!).getByText('What · Agent attached workflow evidence for lead review')).toBeVisible();
       expect(within(auditSignalsSection!).queryByText('What · Stale queue snapshot should not win')).not.toBeInTheDocument();
       expect(auditSignalsSection!).toHaveTextContent(
@@ -5042,6 +5046,10 @@ afterEach(() => {
       expect(operationsRequests).toBeGreaterThan(1);
       expect(within(details).getByText('Showing last operation snapshot. Operation is no longer in the active queue.')).toBeVisible();
       expect(within(details).getByText('blocked · Workflow evidence is still incomplete')).toBeVisible();
+      expect(within(details).getByText('Counterparties · team-lead')).toBeVisible();
+      expect(
+        within(details).queryByRole('button', { name: 'Select operation counterparty agent team-lead' })
+      ).not.toBeInTheDocument();
     });
   });
 

@@ -2781,6 +2781,64 @@ describe('DetailsPanel accountability signals', () => {
     expect(within(operationSection!).queryByRole('button', { name: /Select current operation actor/ })).not.toBeInTheDocument();
   });
 
+  it('keeps stale current-operation counterparties on the plain-text path for refresh errors and missing queue entries', () => {
+    const { rerender } = render(
+      <DetailsPanel
+        {...buildProps({
+          operationsError: 'selected operation refresh failed'
+        })}
+      />
+    );
+
+    let operationSection = screen.getByRole('heading', { name: 'Current Operation' }).closest('section');
+    expect(operationSection).not.toBeNull();
+    expect(operationSection!).toHaveTextContent('Counterparties · growth-revenue');
+    expect(
+      within(operationSection!).queryByRole('button', {
+        name: 'Select operation counterparty agent growth-revenue'
+      })
+    ).not.toBeInTheDocument();
+
+    rerender(
+      <DetailsPanel
+        {...buildProps({
+          operationsState: 'ready',
+          operations: buildOperations(),
+          selectedOperation: buildSelectedOperation()
+        })}
+      />
+    );
+
+    operationSection = screen.getByRole('heading', { name: 'Current Operation' }).closest('section');
+    expect(operationSection).not.toBeNull();
+    expect(
+      within(operationSection!).getByRole('button', {
+        name: 'Select operation counterparty agent growth-revenue'
+      })
+    ).toBeVisible();
+
+    rerender(
+      <DetailsPanel
+        {...buildProps({
+          operationsState: 'ready',
+          operations: {
+            ...buildOperations(),
+            items: []
+          }
+        })}
+      />
+    );
+
+    operationSection = screen.getByRole('heading', { name: 'Current Operation' }).closest('section');
+    expect(operationSection).not.toBeNull();
+    expect(operationSection!).toHaveTextContent('Counterparties · growth-revenue');
+    expect(
+      within(operationSection!).queryByRole('button', {
+        name: 'Select operation counterparty agent growth-revenue'
+      })
+    ).not.toBeInTheDocument();
+  });
+
   it('shows a selected agent responsibility chain with current evidence, sources, and correlation context', () => {
     render(<DetailsPanel {...buildProps()} />);
 

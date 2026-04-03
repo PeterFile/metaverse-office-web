@@ -2458,15 +2458,17 @@ export function DetailsPanel({
                 : null}
               <span>
                 {'Counterparties · '}
-                {renderAgentPivotList({
-                  agentIds: selectedOperation.latest_event?.counterparty_agent_ids ?? [],
-                  currentAgentId: selectedAgent.agent_id,
-                  navigableAgentIds,
-                  emptyLabel: 'No counterparties',
-                  ariaLabelPrefix: 'Select operation counterparty agent',
-                  correlationId: selectedOperationCounterpartyPivotCorrelationId,
-                  onSelectAgent
-                })}
+                {currentOperationIsStale
+                  ? renderCounterparties(selectedOperation.latest_event?.counterparty_agent_ids ?? [])
+                  : renderAgentPivotList({
+                      agentIds: selectedOperation.latest_event?.counterparty_agent_ids ?? [],
+                      currentAgentId: selectedAgent.agent_id,
+                      navigableAgentIds,
+                      emptyLabel: 'No counterparties',
+                      ariaLabelPrefix: 'Select operation counterparty agent',
+                      correlationId: selectedOperationCounterpartyPivotCorrelationId,
+                      onSelectAgent
+                    })}
               </span>
               <span>
                 Evidence ·{' '}

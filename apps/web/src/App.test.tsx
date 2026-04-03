@@ -4101,6 +4101,61 @@ afterEach(() => {
     });
   });
 
+  it('preserves the switched selected-agent workflow correlation when opening a current-operation counterparty pivot', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent from active queue' }));
+
+    const workflowSection = within(details).getByRole('heading', { name: 'Workflow' }).closest('section');
+    const operationSection = within(details).getByRole('heading', { name: 'Current Operation' }).closest('section');
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    const memorySection = within(details).getByRole('heading', { name: 'Shared Memory' }).closest('section');
+    expect(workflowSection).not.toBeNull();
+    expect(operationSection).not.toBeNull();
+    expect(correlationSection).not.toBeNull();
+    expect(memorySection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+      expect(within(details).getByRole('heading', { name: 'Current Operation' })).toBeVisible();
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+    });
+
+    await user.click(within(workflowSection!).getByRole('button', { name: 'Open workflow correlation corr-app-secondary' }));
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'Current Operation' })).toBeVisible();
+      expect(within(correlationSection!).getByText('corr-app-secondary')).toBeVisible();
+      expect(within(correlationSection!).queryByText('corr-app-review')).not.toBeInTheDocument();
+    });
+
+    const fetchCallCountBeforePivot = vi.mocked(globalThis.fetch).mock.calls.length;
+
+    await user.click(within(operationSection!).getByRole('button', { name: 'Select operation counterparty agent team-lead' }));
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'Team Lead' })).toBeVisible();
+      expect(within(details).queryByRole('heading', { name: 'Current Operation' })).not.toBeInTheDocument();
+      expect(within(correlationSection!).getByText('corr-app-secondary')).toBeVisible();
+      expect(within(correlationSection!).queryByText('corr-app-review')).not.toBeInTheDocument();
+      expect(within(memorySection!).getByText('Team lead preserved the carried secondary workflow correlation')).toBeVisible();
+    });
+
+    const newFetchUrlsAfterPivot = vi
+      .mocked(globalThis.fetch)
+      .mock.calls.slice(fetchCallCountBeforePivot)
+      .map(([input]) => (typeof input === 'string' ? input : input.toString()));
+
+    expect(newFetchUrlsAfterPivot).toContain(teamLeadWorkflowUrl);
+    expect(newFetchUrlsAfterPivot).toContain(teamLeadSelectedSecondaryCorrelationMemoryArtifactsUrl);
+    expect(newFetchUrlsAfterPivot).not.toContain(correlationUrl);
+    expect(newFetchUrlsAfterPivot).not.toContain(teamLeadSelectedCorrelationMemoryArtifactsUrl);
+    expect(newFetchUrlsAfterPivot).not.toContain(teamLeadMemoryArtifactsUrl);
+    expect(newFetchUrlsAfterPivot).not.toContain(teamLeadSelectedOperationUrl);
+  });
+
   it('switches the Current Operation correlation button back to the selected operation correlation without changing the selected agent', async () => {
     const growthRevenueReviewCorrelationUrl = '/correlations/corr-growth-lead-review?limit=10&window=60m';
     const revenueHandoffCorrelationUrl = '/correlations/corr-revenue-handoff?limit=10&window=60m';

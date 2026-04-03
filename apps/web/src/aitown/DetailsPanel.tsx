@@ -2209,6 +2209,7 @@ export function DetailsPanel({
   const selectedOperationCorrelationId = currentOperationIsStale ? null : selectedOperation?.correlation_id ?? null;
   const selectedOperationLatestEventActorId = selectedOperation?.latest_event?.actor_id ?? null;
   const selectedOperationActorPivotCorrelationId = selectedCorrelationId ?? selectedOperationCorrelationId;
+  const selectedOperationCounterpartyPivotCorrelationId = selectedCorrelationId ?? selectedOperationCorrelationId;
   const canNavigateToSelectedOperationLatestEventActor = Boolean(
     !currentOperationIsStale &&
       selectedOperationLatestEventActorId &&
@@ -2463,7 +2464,7 @@ export function DetailsPanel({
                   navigableAgentIds,
                   emptyLabel: 'No counterparties',
                   ariaLabelPrefix: 'Select operation counterparty agent',
-                  correlationId: currentOperationIsStale ? null : selectedOperation.correlation_id,
+                  correlationId: selectedOperationCounterpartyPivotCorrelationId,
                   onSelectAgent
                 })}
               </span>

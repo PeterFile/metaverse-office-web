@@ -5351,6 +5351,51 @@ describe('DetailsPanel accountability signals', () => {
 });
 
 describe('DetailsPanel workflow peer-watch alerts', () => {
+  it('passes the preserved correlation to workflow counterparties only when explicit workflow-correlation preservation is enabled', async () => {
+    const user = userEvent.setup();
+    const onSelectAgent = vi.fn();
+
+    const { rerender } = render(
+      <DetailsPanel
+        {...buildProps({
+          onSelectAgent,
+          preserveWorkflowCounterpartyCorrelation: false,
+          selectedCorrelationId: 'corr-app-secondary'
+        })}
+      />
+    );
+
+    const workflowSection = screen.getByRole('heading', { name: 'Workflow' }).closest('section');
+    expect(workflowSection).not.toBeNull();
+
+    const workflowCounterpartyPivot = within(workflowSection!).getByRole('button', {
+      name: 'Select workflow counterparty agent team-lead'
+    });
+    expect(workflowCounterpartyPivot).toBeVisible();
+
+    await user.click(workflowCounterpartyPivot);
+
+    expect(onSelectAgent).toHaveBeenNthCalledWith(1, 'team-lead', null);
+
+    rerender(
+      <DetailsPanel
+        {...buildProps({
+          onSelectAgent,
+          preserveWorkflowCounterpartyCorrelation: true,
+          selectedCorrelationId: 'corr-app-secondary'
+        })}
+      />
+    );
+
+    await user.click(
+      within(screen.getByRole('heading', { name: 'Workflow' }).closest('section')!).getByRole('button', {
+        name: 'Select workflow counterparty agent team-lead'
+      })
+    );
+
+    expect(onSelectAgent).toHaveBeenNthCalledWith(2, 'team-lead', 'corr-app-secondary');
+  });
+
   it('renders a navigable workflow peer-watch target pivot with row-local context and preserves the active correlation', async () => {
     const user = userEvent.setup();
     const onSelectAgent = vi.fn();

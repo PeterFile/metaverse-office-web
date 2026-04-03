@@ -2381,6 +2381,55 @@ describe('DetailsPanel accountability signals', () => {
     expect(onSelectAgent).toHaveBeenCalledWith('team-lead', 'corr-app-secondary');
   });
 
+  it('preserves the active correlation when a replay agent pivot is clicked', async () => {
+    const user = userEvent.setup();
+    const onSelectAgent = vi.fn();
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          onSelectAgent,
+          selectedAgent: null,
+          selectedOperation: null,
+          selectedCorrelationId: 'corr-app-secondary',
+          timelineReplay: {
+            items: [
+              {
+                event_id: 'evt-replay-agent-1',
+                ts: '2026-03-16T08:59:00.000Z',
+                agent_id: 'growth-revenue',
+                actor_id: 'team-lead',
+                event_type: 'peer_watch_alert_raised',
+                severity: 'orange',
+                current_state: 'planning',
+                location: 'growth-desk',
+                summary: 'Replay agent pivot keeps the active correlation',
+                correlation_id: 'corr-app-review',
+                counterparty_agent_ids: ['team-lead'],
+                evidence_refs: ['/evidence/replay.md'],
+                source_kind: 'controller_event'
+              }
+            ]
+          }
+        })}
+      />
+    );
+
+    const section = screen.getByRole('heading', { name: 'Timeline Replay' }).closest('section');
+    expect(section).not.toBeNull();
+
+    const record = within(section!).getByText('Replay agent pivot keeps the active correlation').closest('li');
+    expect(record).not.toBeNull();
+
+    await user.click(
+      within(record!).getByRole('button', {
+        name: 'Select replay agent growth-revenue from event evt-replay-agent-1'
+      })
+    );
+
+    expect(onSelectAgent).toHaveBeenCalledWith('growth-revenue', 'corr-app-secondary');
+  });
+
   it('renders replay counterparties as pivots only for navigable non-current agents, uses event-specific labels, and preserves the active correlation', async () => {
     const user = userEvent.setup();
     const onSelectAgent = vi.fn();

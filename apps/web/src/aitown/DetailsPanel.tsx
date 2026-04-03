@@ -964,7 +964,7 @@ function renderReplayTimelineEvent({
               agentId: event.agent_id,
               label: agentLabel,
               ariaLabel: `Select replay agent ${event.agent_id} from event ${event.event_id}`,
-              correlationId: event.correlation_id,
+              correlationId: preservedCorrelationId,
               onSelectAgent
             })
           : agentLabel}

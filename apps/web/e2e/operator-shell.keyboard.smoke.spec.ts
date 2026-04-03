@@ -4329,6 +4329,82 @@ test.describe('operator shell smoke', () => {
     expectViewportAtLeftClampEdge(left, initialScale, initialTop);
   });
 
+  test('clears landscape selected-watch overlay clamp padding after clearing the overlay through the UI', async ({
+    page
+  }) => {
+    const landscapeShell = SHELLS.find((shell) => shell.name === 'landscape');
+    expect(landscapeShell).toBeDefined();
+    const overlayDominanceMarginPx = 48;
+    const widenedWatchOverlayWidthPx = 560;
+
+    await page.setViewportSize(landscapeShell!.viewport);
+    await page.goto('/');
+    await page.addStyleTag({
+      content: `
+        .aitown-watch-overlay {
+          width: ${widenedWatchOverlayWidthPx}px !important;
+          max-width: none !important;
+        }
+      `
+    });
+    await expect(page.locator('.aitown-world__host canvas')).toBeVisible();
+    await page.waitForFunction(() => Boolean(window.__AITOWN_VIEWPORT__));
+
+    const readRightClampPadding = async () => (await readViewportState(page))?.clampPadding?.right ?? null;
+    const baseline = await waitForViewportSettle(page);
+    const baselineScale = baseline.scale ?? 1;
+    const baselineTop = baseline.clampPadding?.top ?? 0;
+    const baselineRight = baseline.clampPadding?.right ?? 0;
+
+    await page.getByRole('button', { name: 'Open Hub' }).click();
+
+    const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
+    const inspectButton = detailsPanel.getByRole('button', {
+      name: 'Inspect Growth Revenue Agent',
+      exact: true
+    });
+    await expect(inspectButton).toBeVisible();
+    await inspectButton.click();
+    await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+    await page.getByRole('button', { name: 'Close Hub' }).click();
+    await expect(page.getByRole('complementary', { name: 'Agent details' })).toHaveCount(0);
+
+    const watchOverlay = page.getByRole('region', { name: 'Selected watch links' });
+    await expect(watchOverlay).toBeVisible();
+    await expect(page.getByRole('list', { name: 'Selected watch link list' })).toBeVisible();
+
+    await expect
+      .poll(async () =>
+        watchOverlay.evaluate((element) => element.getBoundingClientRect().width)
+      )
+      .toBeGreaterThan(baselineRight + overlayDominanceMarginPx);
+
+    await expect
+      .poll(readRightClampPadding)
+      .toBeGreaterThan(baselineRight + overlayDominanceMarginPx);
+
+    const overlayVisible = await waitForViewportSettle(page);
+    const overlayWidth = await watchOverlay.evaluate((element) => element.getBoundingClientRect().width);
+    expect(overlayVisible.clampPadding?.top ?? 0).toBe(baselineTop);
+    expect(overlayWidth).toBeGreaterThan(baselineRight + overlayDominanceMarginPx);
+    expect(overlayVisible.clampPadding?.right ?? 0).toBeGreaterThan(baselineRight + overlayDominanceMarginPx);
+
+    await page.getByRole('button', { name: 'Clear Selection' }).click();
+    await expect(watchOverlay).toHaveCount(0);
+
+    await expect
+      .poll(readRightClampPadding)
+      .toBeCloseTo(baselineRight, 4);
+
+    const cleared = await waitForViewportSettle(page);
+    expect(cleared.clampPadding?.top ?? 0).toBe(baselineTop);
+    expect(cleared.clampPadding?.right ?? 0).toBeCloseTo(baselineRight, 4);
+
+    const clearedRightEdge = await dragViewportToEdge(page, 'right');
+    expect(clearedRightEdge.scale).toBeCloseTo(baselineScale, 4);
+    expect(isViewportAtRightEdge(clearedRightEdge)).toBe(true);
+  });
+
   test('keeps selected-agent hub overlay clamp padding active at the top-right viewport boundary after resetting from a zoomed-in view', async ({ page }) => {
     await page.goto('/');
     await zoomViewportInWithMouseWheel(page);

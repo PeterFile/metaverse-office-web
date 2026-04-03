@@ -1,8 +1,9 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { AiTownAssets } from './assetLoader';
 import type { AiTownSceneModel, SceneAgent } from './types';
+import type { ViewportInspector } from './viewport';
 
 const { MockDisplayObject, appInitMock, appDestroyMock } = vi.hoisted(() => {
   class MockDisplayObject {
@@ -279,6 +280,31 @@ class MockResizeObserver {
   unobserve() {}
 }
 
+function readViewportInspector() {
+  return (window as typeof window & { __AITOWN_VIEWPORT__?: ViewportInspector }).__AITOWN_VIEWPORT__;
+}
+
+function installViewportInspectorTracker() {
+  const assignedValues: Array<ViewportInspector | undefined> = [];
+  let currentValue: ViewportInspector | undefined;
+
+  Object.defineProperty(window, '__AITOWN_VIEWPORT__', {
+    configurable: true,
+    get: () => currentValue,
+    set: (value: ViewportInspector | undefined) => {
+      currentValue = value;
+      assignedValues.push(value);
+    }
+  });
+
+  return {
+    assignedValues,
+    restore() {
+      delete (window as typeof window & { __AITOWN_VIEWPORT__?: ViewportInspector }).__AITOWN_VIEWPORT__;
+    }
+  };
+}
+
 function makeAssets(): AiTownAssets {
   const textureFrame = { source: {} };
   const characterAnimations = Object.fromEntries(
@@ -305,6 +331,7 @@ beforeEach(() => {
   appInitMock.mockReset().mockRejectedValue(new Error('renderer_init_failed'));
   appDestroyMock.mockClear();
   vi.mocked(loadAiTownAssets).mockReset();
+  delete (window as typeof window & { __AITOWN_VIEWPORT__?: ViewportInspector }).__AITOWN_VIEWPORT__;
 });
 
 function makeAgent(overrides: Partial<SceneAgent> = {}): SceneAgent {
@@ -408,5 +435,100 @@ describe('WorldScene watch overlay caption gating', () => {
     expect(within(watchLinkItem).getByText(/Team Lead\s*->\s*App Engineering Agent/)).toBeVisible();
     expect(within(watchLinkItem).getByText('orange risk')).toBeVisible();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('recovers from renderer_init_failed through Retry renderer and registers the viewport inspector after retry cleanup', async () => {
+    const tracker = installViewportInspectorTracker();
+    appInitMock
+      .mockReset()
+      .mockRejectedValueOnce(new Error('renderer_init_failed'))
+      .mockResolvedValue(undefined);
+    vi.mocked(loadAiTownAssets).mockResolvedValue(makeAssets());
+
+    const { unmount } = render(<WorldScene scene={makeScene()} onSelectAgent={vi.fn()} />);
+
+    try {
+      await waitFor(() => {
+        expect(screen.getByRole('alert')).toHaveTextContent('renderer_init_failed');
+      });
+      expect(readViewportInspector()).toBeUndefined();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Retry renderer' }));
+
+      const region = await screen.findByRole('region', { name: 'Selected watch links' });
+
+      expect(region).toBeVisible();
+      expect(readViewportInspector()).toBeDefined();
+      expect(readViewportInspector()?.read().worldWidth).toBe(768);
+      expect(appInitMock).toHaveBeenCalledTimes(2);
+
+      const cleanupAssignmentIndex = tracker.assignedValues.findIndex((value) => value === undefined);
+      const registrationAssignmentIndex = tracker.assignedValues.findIndex((value) => value !== undefined);
+
+      expect(cleanupAssignmentIndex).toBeGreaterThanOrEqual(0);
+      expect(registrationAssignmentIndex).toBeGreaterThan(cleanupAssignmentIndex);
+    } finally {
+      unmount();
+      tracker.restore();
+    }
+  });
+
+  it('recovers from asset_load_failed through Retry renderer and registers the viewport inspector after retry cleanup', async () => {
+    const tracker = installViewportInspectorTracker();
+    appInitMock.mockReset().mockResolvedValue(undefined);
+    vi.mocked(loadAiTownAssets)
+      .mockRejectedValueOnce(new Error('asset_load_failed'))
+      .mockResolvedValue(makeAssets());
+
+    const { unmount } = render(<WorldScene scene={makeScene()} onSelectAgent={vi.fn()} />);
+
+    try {
+      await waitFor(() => {
+        expect(screen.getByRole('alert')).toHaveTextContent('asset_load_failed');
+      });
+      expect(readViewportInspector()).toBeUndefined();
+      expect(appDestroyMock).toHaveBeenCalledTimes(1);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Retry renderer' }));
+
+      const region = await screen.findByRole('region', { name: 'Selected watch links' });
+
+      expect(region).toBeVisible();
+      expect(readViewportInspector()).toBeDefined();
+      expect(readViewportInspector()?.read().worldWidth).toBe(768);
+
+      const cleanupAssignmentIndex = tracker.assignedValues.findIndex((value) => value === undefined);
+      const registrationAssignmentIndex = tracker.assignedValues.findIndex((value) => value !== undefined);
+
+      expect(cleanupAssignmentIndex).toBeGreaterThanOrEqual(0);
+      expect(registrationAssignmentIndex).toBeGreaterThan(cleanupAssignmentIndex);
+    } finally {
+      unmount();
+      tracker.restore();
+    }
+  });
+
+  it('registers the global viewport inspector on successful mount and clears it on unmount', async () => {
+    const tracker = installViewportInspectorTracker();
+    appInitMock.mockReset().mockResolvedValue(undefined);
+    vi.mocked(loadAiTownAssets).mockResolvedValue(makeAssets());
+
+    const { unmount } = render(<WorldScene scene={makeScene()} onSelectAgent={vi.fn()} />);
+
+    try {
+      await waitFor(() => {
+        expect(readViewportInspector()).toBeDefined();
+      });
+
+      expect(readViewportInspector()?.read().worldWidth).toBe(768);
+
+      unmount();
+
+      expect(readViewportInspector()).toBeUndefined();
+      expect(tracker.assignedValues.at(-1)).toBeUndefined();
+      expect(appDestroyMock).toHaveBeenCalled();
+    } finally {
+      tracker.restore();
+    }
   });
 });

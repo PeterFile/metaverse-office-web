@@ -4101,6 +4101,282 @@ afterEach(() => {
     });
   });
 
+  it('switches the Current Operation correlation button back to the selected operation correlation without changing the selected agent', async () => {
+    const growthRevenueReviewCorrelationUrl = '/correlations/corr-growth-lead-review?limit=10&window=60m';
+    const revenueHandoffCorrelationUrl = '/correlations/corr-revenue-handoff?limit=10&window=60m';
+    const growthRevenueSelectedGrowthLeadReviewMemoryArtifactsUrl =
+      '/memory/artifacts?limit=4&window=60m&agent_id=growth-revenue&correlation_id=corr-growth-lead-review';
+    const growthRevenueSelectedRevenueHandoffMemoryArtifactsUrl =
+      '/memory/artifacts?limit=4&window=60m&agent_id=growth-revenue&correlation_id=corr-revenue-handoff';
+    const growthRevenueSelectedOperationFixture = {
+      generated_at: '2026-03-16T09:00:00.000Z',
+      summary: {
+        item_count: 1,
+        blocked_count: 0,
+        reboot_recommended_count: 0,
+        state_buckets: {
+          planning: 1
+        },
+        severity_buckets: {
+          normal: 0,
+          yellow: 1,
+          orange: 0,
+          red: 0
+        }
+      },
+      items: [
+        {
+          ...planningOperationsFixture.items[0],
+          active_task: 'Prepare handoff notes',
+          correlation_id: 'corr-growth-lead-review',
+          latest_event: {
+            event_id: 'evt-growth-handoff-plan',
+            actor_id: 'team-lead',
+            event_type: 'handoff_prepared',
+            ts: '2026-03-16T08:56:00.000Z',
+            summary: 'Prepared handoff notes',
+            source_kind: 'workspace_snapshot',
+            evidence_refs: ['/tmp/growth-handoff.md'],
+            counterparty_agent_ids: ['team-lead']
+          }
+        }
+      ]
+    };
+    const growthRevenueWorkflowCorrelationFixture = {
+      ...growthRevenueWorkflowFixture,
+      correlation_ids: ['corr-growth-lead-review', 'corr-revenue-handoff']
+    } satisfies AgentWorkflow;
+    const growthRevenueReviewCorrelationFixture = {
+      ...correlationFixture,
+      correlation_id: 'corr-growth-lead-review',
+      participant_agent_ids: ['growth-revenue', 'team-lead'],
+      first_ts: '2026-03-16T08:55:00.000Z',
+      last_ts: '2026-03-16T08:58:00.000Z',
+      incident_count: 0,
+      interaction_count: 1,
+      event_count: 2,
+      incidents: [],
+      interactions: [
+        {
+          ...correlationFixture.interactions[0],
+          interaction_id: 'interaction-growth-review',
+          correlation_id: 'corr-growth-lead-review',
+          participant_agent_ids: ['growth-revenue', 'team-lead'],
+          summary: 'Growth synced with lead on the handoff review'
+        }
+      ],
+      timeline: [
+        {
+          ...correlationFixture.timeline[0],
+          event_id: 'evt-growth-review-1',
+          agent_id: 'growth-revenue',
+          actor_id: 'growth-revenue',
+          event_type: 'agent_noted',
+          current_state: 'planning',
+          summary: 'Prepared handoff notes',
+          correlation_id: 'corr-growth-lead-review',
+          counterparty_agent_ids: [],
+          evidence_refs: ['/tmp/growth-handoff.md'],
+          source_kind: 'workspace_snapshot'
+        },
+        {
+          ...correlationFixture.timeline[0],
+          event_id: 'evt-growth-review-2',
+          agent_id: 'growth-revenue',
+          actor_id: 'team-lead',
+          event_type: 'handoff_prepared',
+          current_state: 'planning',
+          summary: 'Lead reviewed the planned revenue handoff',
+          correlation_id: 'corr-growth-lead-review',
+          counterparty_agent_ids: ['team-lead'],
+          evidence_refs: ['/tmp/growth-handoff.md'],
+          source_kind: 'controller_event'
+        }
+      ]
+    };
+    const revenueHandoffCorrelationFixture = {
+      ...secondaryCorrelationFixture,
+      correlation_id: 'corr-revenue-handoff',
+      participant_agent_ids: ['growth-revenue', 'team-lead'],
+      evidence_refs: ['/tmp/revenue-handoff.md'],
+      incidents: [
+        {
+          ...secondaryCorrelationFixture.incidents[0],
+          incident_id: 'inc-revenue-handoff',
+          agent_id: 'growth-revenue',
+          actor_id: 'team-lead',
+          summary: 'Revenue handoff cleared for launch',
+          correlation_id: 'corr-revenue-handoff',
+          evidence_refs: ['/tmp/revenue-handoff.md'],
+          counterparty_agent_ids: ['team-lead']
+        }
+      ],
+      timeline: [
+        {
+          ...secondaryCorrelationFixture.timeline[0],
+          event_id: 'evt-revenue-handoff',
+          agent_id: 'growth-revenue',
+          actor_id: 'team-lead',
+          summary: 'Revenue handoff cleared for launch',
+          correlation_id: 'corr-revenue-handoff',
+          counterparty_agent_ids: ['team-lead'],
+          evidence_refs: ['/tmp/revenue-handoff.md']
+        }
+      ]
+    };
+    const growthRevenueSelectedGrowthLeadReviewMemoryArtifactsFixture = {
+      generated_at: '2026-03-16T09:00:00.000Z',
+      items: [
+        {
+          artifact_ref: '/tmp/growth-handoff.md',
+          artifact_kind: 'workspace_file',
+          file_name: 'growth-handoff.md',
+          first_seen_at: '2026-03-16T08:55:00.000Z',
+          last_seen_at: '2026-03-16T08:58:00.000Z',
+          mention_count: 2,
+          agent_ids: ['growth-revenue', 'team-lead'],
+          correlation_ids: ['corr-growth-lead-review'],
+          source_kinds: ['workspace_snapshot', 'controller_event'],
+          latest_summary: 'Growth revenue stayed scoped to the current operation handoff review',
+          latest_event_type: 'handoff_prepared',
+          collector_last_modified_at: '2026-03-16T08:58:00.000Z'
+        }
+      ]
+    };
+    const growthRevenueSelectedRevenueHandoffMemoryArtifactsFixture = {
+      generated_at: '2026-03-16T09:00:00.000Z',
+      items: [
+        {
+          artifact_ref: '/tmp/revenue-handoff.md',
+          artifact_kind: 'workspace_file',
+          file_name: 'revenue-handoff.md',
+          first_seen_at: '2026-03-16T08:57:00.000Z',
+          last_seen_at: '2026-03-16T08:57:00.000Z',
+          mention_count: 1,
+          agent_ids: ['growth-revenue', 'team-lead'],
+          correlation_ids: ['corr-revenue-handoff'],
+          source_kinds: ['controller_event'],
+          latest_summary: 'Growth revenue briefly switched to the workflow-selected handoff correlation',
+          latest_event_type: 'handoff_completed',
+          collector_last_modified_at: null
+        }
+      ]
+    };
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === growthRevenueSelectedOperationUrl) {
+          return jsonResponse(growthRevenueSelectedOperationFixture);
+        }
+
+        if (url === growthRevenueWorkflowUrl) {
+          return jsonResponse(growthRevenueWorkflowCorrelationFixture);
+        }
+
+        if (url === growthRevenueReviewCorrelationUrl) {
+          return jsonResponse(growthRevenueReviewCorrelationFixture);
+        }
+
+        if (url === revenueHandoffCorrelationUrl) {
+          return jsonResponse(revenueHandoffCorrelationFixture);
+        }
+
+        if (url === growthRevenueSelectedGrowthLeadReviewMemoryArtifactsUrl) {
+          return jsonResponse(growthRevenueSelectedGrowthLeadReviewMemoryArtifactsFixture);
+        }
+
+        if (url === growthRevenueSelectedRevenueHandoffMemoryArtifactsUrl) {
+          return jsonResponse(growthRevenueSelectedRevenueHandoffMemoryArtifactsFixture);
+        }
+
+        return resolveTestFetchResponse(url);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect Growth Revenue Agent' }));
+
+    const operationSection = (await within(details).findByRole('heading', { name: 'Current Operation' })).closest('section');
+    const workflowSection = (await within(details).findByRole('heading', { name: 'Workflow' })).closest('section');
+    const correlationSection = (await within(details).findByRole('heading', { name: 'Correlation Drilldown' })).closest(
+      'section'
+    );
+    expect(operationSection).not.toBeNull();
+    expect(workflowSection).not.toBeNull();
+    expect(correlationSection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+      expect(within(details).getByRole('heading', { name: 'Current Operation' })).toBeVisible();
+      expect(within(operationSection!).getByText('planning · Prepare handoff notes')).toBeVisible();
+      expect(
+        within(operationSection!).getByRole('button', { name: /Open operation correlation corr-growth-lead-review/ })
+      ).toBeVisible();
+      expect(
+        within(workflowSection!).getByRole('button', { name: 'Open workflow correlation corr-revenue-handoff' })
+      ).toBeVisible();
+      expect(within(correlationSection!).getByText('corr-growth-lead-review')).toBeVisible();
+      expect(within(correlationSection!).queryByText('corr-revenue-handoff')).not.toBeInTheDocument();
+    });
+
+    await user.click(
+      within(workflowSection!).getByRole('button', { name: 'Open workflow correlation corr-revenue-handoff' })
+    );
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+      expect(within(details).getByRole('heading', { name: 'Current Operation' })).toBeVisible();
+      expect(within(operationSection!).getByText('planning · Prepare handoff notes')).toBeVisible();
+      expect(
+        within(operationSection!).getByRole('button', { name: /Open operation correlation corr-growth-lead-review/ })
+      ).toBeVisible();
+      expect(within(correlationSection!).getByText('corr-revenue-handoff')).toBeVisible();
+      expect(within(correlationSection!).queryByText('corr-growth-lead-review')).not.toBeInTheDocument();
+    });
+
+    const requestCountBeforeOperationCorrelationOpen = vi.mocked(globalThis.fetch).mock.calls.length;
+
+    await user.click(
+      within(operationSection!).getByRole('button', { name: 'Open operation correlation corr-growth-lead-review' })
+    );
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+      expect(within(details).getByRole('heading', { name: 'Current Operation' })).toBeVisible();
+      expect(within(operationSection!).getByText('planning · Prepare handoff notes')).toBeVisible();
+      expect(within(correlationSection!).getByText('corr-growth-lead-review')).toBeVisible();
+      expect(within(correlationSection!).queryByText('corr-revenue-handoff')).not.toBeInTheDocument();
+    });
+
+    const postOperationCorrelationSelectionRequests = vi
+      .mocked(globalThis.fetch)
+      .mock.calls.slice(requestCountBeforeOperationCorrelationOpen)
+      .map(([input]) => (typeof input === 'string' ? input : input.toString()));
+
+    expect(postOperationCorrelationSelectionRequests).toContain(growthRevenueReviewCorrelationUrl);
+    expect(postOperationCorrelationSelectionRequests).toContain(
+      growthRevenueSelectedGrowthLeadReviewMemoryArtifactsUrl
+    );
+    expect(postOperationCorrelationSelectionRequests).not.toContain(revenueHandoffCorrelationUrl);
+    expect(postOperationCorrelationSelectionRequests).not.toContain(
+      growthRevenueSelectedRevenueHandoffMemoryArtifactsUrl
+    );
+    expect(postOperationCorrelationSelectionRequests).not.toContain(growthRevenueMemoryArtifactsUrl);
+    expect(postOperationCorrelationSelectionRequests).not.toContain(growthRevenueSelectedOperationUrl);
+    expect(postOperationCorrelationSelectionRequests).not.toContain(growthRevenueWorkflowUrl);
+    expect(postOperationCorrelationSelectionRequests).not.toContain(teamLeadSelectedOperationUrl);
+    expect(postOperationCorrelationSelectionRequests).not.toContain(teamLeadWorkflowUrl);
+    expect(postOperationCorrelationSelectionRequests).not.toContain(selectedOperationUrl);
+    expect(postOperationCorrelationSelectionRequests).not.toContain(workflowUrl);
+    expect(postOperationCorrelationSelectionRequests).not.toContain(teamLeadSelectedCorrelationMemoryArtifactsUrl);
+  });
+
   it('jumps from current-operation evidence refs to shared memory without changing the selected agent, queue-derived operation context, or correlation', async () => {
     const currentOperationEvidenceJumpFixture = {
       ...operationsFixture,

@@ -1806,6 +1806,151 @@ test.describe('operator shell smoke', () => {
     await expect(focusedSharedMemoryRecord).toContainText('Ref · /tmp/revenue-handoff.md');
   });
 
+  test('keeps the active accountability correlation and request scope when opening an audit-signal responsibility chain pivot via keyboard traversal', async ({
+    page
+  }) => {
+    const requestedUrls: string[] = [];
+    const forbiddenRequests: string[] = [];
+    const directOperationUrl = '/office/operations?agent_id=team-lead';
+    const unscopedArtifactsUrl = '/memory/artifacts?limit=4&window=60m&agent_id=team-lead';
+    const fallbackCorrelationUrl = '/correlations/corr-growth-lead-review?limit=10&window=60m';
+    let trackForbiddenRequests = false;
+
+    page.on('request', (request) => {
+      try {
+        const url = new URL(request.url());
+        requestedUrls.push(`${url.pathname}${url.search}`);
+      } catch {
+        requestedUrls.push(request.url());
+      }
+    });
+
+    await page.route(`**${directOperationUrl}`, async (route) => {
+      if (trackForbiddenRequests) {
+        forbiddenRequests.push(directOperationUrl);
+      }
+      await route.continue();
+    });
+    await page.route(`**${unscopedArtifactsUrl}`, async (route) => {
+      if (trackForbiddenRequests) {
+        forbiddenRequests.push(unscopedArtifactsUrl);
+      }
+      await route.continue();
+    });
+    await page.route(`**${fallbackCorrelationUrl}`, async (route) => {
+      if (trackForbiddenRequests) {
+        forbiddenRequests.push(fallbackCorrelationUrl);
+      }
+      await route.continue();
+    });
+
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Hub' }).click();
+
+    const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
+    const clearButton = detailsPanel.getByRole('button', { name: 'Clear' });
+    const inspectButton = detailsPanel.getByRole('button', {
+      name: 'Inspect App Engineering Agent',
+      exact: true
+    });
+
+    await focusHubControlWithTab(page, inspectButton, 'Inspect App Engineering Agent');
+    await expect(inspectButton).toBeFocused();
+    await page.keyboard.press('Enter');
+
+    const auditSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Audit Signals' })
+    });
+    const correlationSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Correlation Drilldown' })
+    });
+    const responsibilityChainButton = auditSection.getByRole('button', {
+      name: 'Select responsibility chain agent team-lead'
+    });
+    const accountabilityCorrelationId = 'collector-snapshot:2026-03-10T23:59:40.000Z';
+    const workflowUrl = '/agents/team-lead/workflow?limit=10&window=60m';
+    const scopedArtifactsUrl = `/memory/artifacts?limit=4&window=60m&agent_id=team-lead&correlation_id=${encodeURIComponent(
+      accountabilityCorrelationId
+    )}`;
+
+    await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+    await expect(clearButton).toBeFocused();
+    await expect(
+      auditSection.getByRole('button', {
+        name: `Open accountability correlation ${accountabilityCorrelationId}, currently selected`
+      })
+    ).toBeVisible();
+    await expect(correlationSection.getByText(accountabilityCorrelationId, { exact: true })).toBeVisible();
+    await expect(responsibilityChainButton).toBeVisible();
+    await focusHubControlWithTab(
+      page,
+      responsibilityChainButton,
+      'Select responsibility chain agent team-lead'
+    );
+    await expect(responsibilityChainButton).toBeFocused();
+
+    trackForbiddenRequests = true;
+    const requestCountBeforePivot = requestedUrls.length;
+    const workflowResponse = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'GET' && response.status() === 200 && response.url().includes(workflowUrl)
+    );
+    const scopedArtifactsResponse = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'GET' &&
+        response.status() === 200 &&
+        response.url().includes(scopedArtifactsUrl)
+    );
+
+    await page.keyboard.press('Enter');
+    await workflowResponse;
+    await scopedArtifactsResponse;
+
+    await expect(detailsPanel.getByRole('heading', { name: 'Team Lead' })).toBeVisible();
+    await expect(clearButton).toBeFocused();
+    await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
+    await expect(correlationSection.getByText(accountabilityCorrelationId, { exact: true })).toBeVisible();
+    await expect(correlationSection.getByText('Counts · 0 incidents · 0 interactions · 1 events')).toBeVisible();
+    await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toHaveCount(0);
+
+    const requestSettleSamples: Array<{ requestedCount: number; forbiddenCount: number }> = [];
+    const isRequestStreamStable = (
+      previous: { requestedCount: number; forbiddenCount: number },
+      current: { requestedCount: number; forbiddenCount: number }
+    ) => previous.requestedCount === current.requestedCount && previous.forbiddenCount === current.forbiddenCount;
+
+    for (let sample = 0; sample < 6; sample += 1) {
+      requestSettleSamples.push({
+        requestedCount: requestedUrls.length,
+        forbiddenCount: forbiddenRequests.length
+      });
+
+      if (findStableSample(requestSettleSamples, isRequestStreamStable)) {
+        break;
+      }
+
+      if (sample < 5) {
+        await page.waitForTimeout(100);
+      }
+    }
+
+    requireStableSample(
+      requestSettleSamples,
+      isRequestStreamStable,
+      'post-pivot request stream did not settle',
+      (sample) => sample
+    );
+
+    const pivotRequestedUrls = requestedUrls.slice(requestCountBeforePivot);
+
+    expect(pivotRequestedUrls).toContain(workflowUrl);
+    expect(pivotRequestedUrls).toContain(scopedArtifactsUrl);
+    expect(pivotRequestedUrls).not.toContain(directOperationUrl);
+    expect(pivotRequestedUrls).not.toContain(unscopedArtifactsUrl);
+    expect(pivotRequestedUrls).not.toContain(fallbackCorrelationUrl);
+    expect(forbiddenRequests).toEqual([]);
+  });
+
   test('jumps from collector observation evidence refs into the shared-memory record via keyboard traversal', async ({ page }) => {
     await page.goto('/');
     await page.getByRole('button', { name: 'Open Hub' }).click();

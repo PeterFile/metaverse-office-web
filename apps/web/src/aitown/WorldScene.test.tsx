@@ -572,16 +572,17 @@ describe('WorldScene watch overlay caption gating', () => {
     }
   });
 
-  it('routes live watch-overlay clamp padding into the viewport inspector and clears it when the overlay disappears', async () => {
+  it('routes live watch-overlay clamp padding into the viewport inspector on DOM mutation alone and clears it when the overlay disappears', async () => {
     appInitMock.mockReset().mockResolvedValue(undefined);
     vi.mocked(loadAiTownAssets).mockResolvedValue(makeAssets());
 
     const onSelectAgent = vi.fn();
     const overlayScene = makeScene();
+    const sceneWithoutOverlay = { ...overlayScene, selectedAgentId: null };
     const { container, rerender } = render(
       <main className="aitown-shell">
         <section className="aitown-panel aitown-panel--game">
-          <WorldScene scene={overlayScene} onSelectAgent={onSelectAgent} />
+          <WorldScene scene={sceneWithoutOverlay} onSelectAgent={onSelectAgent} />
         </section>
       </main>
     );
@@ -590,11 +591,26 @@ describe('WorldScene watch overlay caption gating', () => {
     expect(host).toBeInstanceOf(HTMLDivElement);
     setElementRect(host as HTMLDivElement, { left: 0, top: 0, width: 1000, height: 800 });
 
-    const overlay = await screen.findByRole('region', { name: 'Selected watch links' });
-    setElementRect(overlay, { left: 700, top: 560, width: 300, height: 240 });
-    await act(async () => {
-      MockResizeObserver.triggerAll();
+    await waitFor(() => {
+      expect(readViewportInspector()).toBeDefined();
+      expect(screen.queryByRole('region', { name: 'Selected watch links' })).not.toBeInTheDocument();
+      expect(readViewportInspector()?.read().clampPadding).toEqual({
+        top: 0,
+        right: 0
+      });
     });
+
+    rerender(
+      <main className="aitown-shell">
+        <section className="aitown-panel aitown-panel--game">
+          <WorldScene scene={overlayScene} onSelectAgent={onSelectAgent} />
+        </section>
+      </main>
+    );
+
+    const overlay = container.querySelector('.aitown-watch-overlay');
+    expect(overlay).toBeInstanceOf(HTMLElement);
+    setElementRect(overlay as HTMLElement, { left: 700, top: 560, width: 300, height: 240 });
 
     await waitFor(() => {
       expect(readViewportInspector()).toBeDefined();
@@ -605,13 +621,10 @@ describe('WorldScene watch overlay caption gating', () => {
     rerender(
       <main className="aitown-shell">
         <section className="aitown-panel aitown-panel--game">
-          <WorldScene scene={{ ...overlayScene, selectedAgentId: null }} onSelectAgent={onSelectAgent} />
+          <WorldScene scene={sceneWithoutOverlay} onSelectAgent={onSelectAgent} />
         </section>
       </main>
     );
-    await act(async () => {
-      MockResizeObserver.triggerAll();
-    });
 
     await waitFor(() => {
       expect(screen.queryByRole('region', { name: 'Selected watch links' })).not.toBeInTheDocument();

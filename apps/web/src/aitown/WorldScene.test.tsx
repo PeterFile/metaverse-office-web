@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { AiTownAssets } from './assetLoader';
@@ -273,11 +273,50 @@ import WorldScene from './WorldScene';
 const characterKeys = ['f1', 'f2', 'f3', 'f4', 'f5', 'f6', 'f7', 'f8'] as const;
 
 class MockResizeObserver {
+  static instances: MockResizeObserver[] = [];
+
+  constructor(private readonly callback: ResizeObserverCallback) {
+    MockResizeObserver.instances.push(this);
+  }
+
   observe() {}
 
   disconnect() {}
 
   unobserve() {}
+
+  trigger() {
+    this.callback([], this as unknown as ResizeObserver);
+  }
+
+  static triggerAll() {
+    for (const instance of MockResizeObserver.instances) {
+      instance.trigger();
+    }
+  }
+}
+
+function setElementRect(
+  element: HTMLElement,
+  { left, top, width, height }: { left: number; top: number; width: number; height: number }
+) {
+  Object.defineProperty(element, 'clientWidth', {
+    configurable: true,
+    value: width
+  });
+  Object.defineProperty(element, 'clientHeight', {
+    configurable: true,
+    value: height
+  });
+  element.getBoundingClientRect = () =>
+    ({
+      left,
+      top,
+      right: left + width,
+      bottom: top + height,
+      width,
+      height
+    }) as DOMRect;
 }
 
 function readViewportInspector() {
@@ -327,6 +366,7 @@ function makeAssets(): AiTownAssets {
 }
 
 beforeEach(() => {
+  MockResizeObserver.instances = [];
   vi.stubGlobal('ResizeObserver', MockResizeObserver);
   appInitMock.mockReset().mockRejectedValue(new Error('renderer_init_failed'));
   appDestroyMock.mockClear();
@@ -530,5 +570,56 @@ describe('WorldScene watch overlay caption gating', () => {
     } finally {
       tracker.restore();
     }
+  });
+
+  it('routes live watch-overlay clamp padding into the viewport inspector and clears it when the overlay disappears', async () => {
+    appInitMock.mockReset().mockResolvedValue(undefined);
+    vi.mocked(loadAiTownAssets).mockResolvedValue(makeAssets());
+
+    const onSelectAgent = vi.fn();
+    const overlayScene = makeScene();
+    const { container, rerender } = render(
+      <main className="aitown-shell">
+        <section className="aitown-panel aitown-panel--game">
+          <WorldScene scene={overlayScene} onSelectAgent={onSelectAgent} />
+        </section>
+      </main>
+    );
+
+    const host = container.querySelector('.aitown-world__host');
+    expect(host).toBeInstanceOf(HTMLDivElement);
+    setElementRect(host as HTMLDivElement, { left: 0, top: 0, width: 1000, height: 800 });
+
+    const overlay = await screen.findByRole('region', { name: 'Selected watch links' });
+    setElementRect(overlay, { left: 700, top: 560, width: 300, height: 240 });
+    await act(async () => {
+      MockResizeObserver.triggerAll();
+    });
+
+    await waitFor(() => {
+      expect(readViewportInspector()).toBeDefined();
+      expect(readViewportInspector()?.read().clampPadding.top).toBe(0);
+      expect((readViewportInspector()?.read().clampPadding.right ?? 0)).toBeGreaterThan(0);
+    });
+
+    rerender(
+      <main className="aitown-shell">
+        <section className="aitown-panel aitown-panel--game">
+          <WorldScene scene={{ ...overlayScene, selectedAgentId: null }} onSelectAgent={onSelectAgent} />
+        </section>
+      </main>
+    );
+    await act(async () => {
+      MockResizeObserver.triggerAll();
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByRole('region', { name: 'Selected watch links' })).not.toBeInTheDocument();
+      expect(readViewportInspector()).toBeDefined();
+      expect(readViewportInspector()?.read().clampPadding).toEqual({
+        top: 0,
+        right: 0
+      });
+    });
   });
 });

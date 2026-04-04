@@ -12,6 +12,7 @@ import type {
   OfficeOperation,
   OfficeOperations,
   OfficeZone,
+  PeerWatchAlertsResponse,
   TimelineReplayResponse,
   WorkflowIncident,
   WorkflowInteraction,
@@ -44,6 +45,9 @@ type DetailsPanelProps = {
   memoryArtifacts: MemoryArtifactIndex | null;
   memoryArtifactsError: string | null;
   memoryArtifactsState: LoadState;
+  selectedAgentSupervisionHistory: PeerWatchAlertsResponse | null;
+  selectedAgentSupervisionHistoryError: string | null;
+  selectedAgentSupervisionHistoryState: LoadState;
   selectedAgent: OfficeAgent | null;
   selectedCorrelationId: string | null;
   selectedOperationsState: string | null;
@@ -1153,6 +1157,77 @@ function renderWorkflowPeerWatchAlert({
   );
 }
 
+function renderSelectedAgentSupervisionAlert({
+  alert,
+  sharedMemoryArtifactRefs,
+  activeCorrelationId,
+  currentAgentId,
+  navigableAgentIds,
+  onSelectAgent,
+  onSelectCorrelation
+}: {
+  alert: WorkflowPeerWatchAlert;
+  sharedMemoryArtifactRefs: ReadonlySet<string>;
+  activeCorrelationId: string | null;
+  currentAgentId: string | null;
+  navigableAgentIds: Set<string>;
+  onSelectAgent: SelectAgentHandler;
+  onSelectCorrelation: (correlationId: string | null) => void;
+}) {
+  const preservedCorrelationId = activeCorrelationId ?? alert.correlation_id;
+  const canNavigateToObserver =
+    alert.observer_agent_id !== currentAgentId && navigableAgentIds.has(alert.observer_agent_id);
+
+  return (
+    <li key={alert.alert_id} className={`aitown-record severity-${alert.severity}`}>
+      <strong>{alert.summary}</strong>
+      {renderCorrelationButton({
+        correlationId: alert.correlation_id,
+        label: alert.correlation_id ?? 'No correlation id',
+        buttonLabel: 'Open supervision history correlation',
+        activeCorrelationId,
+        onSelectCorrelation
+      })}
+      <span>{`At · ${renderTimestamp(alert.ts, 'No alert timestamp')}`}</span>
+      <span>{`Severity · ${alert.severity}`}</span>
+      <span>{`Status · ${alert.status}`}</span>
+      <span>
+        Observer ·{' '}
+        {canNavigateToObserver
+          ? renderAgentPivotButton({
+              agentId: alert.observer_agent_id,
+              ariaLabel: `Select supervision history observer from alert ${alert.alert_id} ${alert.observer_agent_id}`,
+              correlationId: preservedCorrelationId,
+              onSelectAgent
+            })
+          : alert.observer_agent_id}
+      </span>
+      <span>
+        Watchers ·{' '}
+        {renderAgentPivotList({
+          agentIds: alert.watcher_agent_ids,
+          currentAgentId,
+          navigableAgentIds,
+          emptyLabel: 'No watchers',
+          ariaLabelPrefix: `Select supervision history watcher from alert ${alert.alert_id}`,
+          correlationId: preservedCorrelationId,
+          onSelectAgent
+        })}
+      </span>
+      <span>
+        Evidence ·{' '}
+        {renderSharedMemoryEvidenceRefs({
+          evidenceRefs: alert.evidence_refs,
+          sharedMemoryArtifactRefs,
+          onJump: focusSharedMemoryArtifact
+        })}
+      </span>
+      <span>{`Evidence count · ${alert.evidence_count}`}</span>
+      <span>{`Source · ${alert.source_kind}`}</span>
+    </li>
+  );
+}
+
 function renderSharedMemoryArtifact({
   artifact,
   activeCorrelationId,
@@ -1533,6 +1608,9 @@ export function DetailsPanel({
   memoryArtifacts,
   memoryArtifactsError,
   memoryArtifactsState,
+  selectedAgentSupervisionHistory,
+  selectedAgentSupervisionHistoryError,
+  selectedAgentSupervisionHistoryState,
   selectedAgent,
   selectedCorrelationId,
   selectedOperationsState,
@@ -1618,6 +1696,10 @@ export function DetailsPanel({
   const collectorWarning =
     collectorSnapshotError && collectorSnapshot
       ? `Showing last collector snapshot. ${collectorSnapshotError}`
+      : null;
+  const supervisionHistoryWarning =
+    selectedAgentSupervisionHistoryError && selectedAgentSupervisionHistory
+      ? `Showing last supervision history. ${selectedAgentSupervisionHistoryError}`
       : null;
   const collectorSignalItems = (collectorSnapshot?.items ?? [])
     .filter(
@@ -2421,6 +2503,34 @@ export function DetailsPanel({
           ) : null}
           {collectorSnapshot && !selectedCollectorItem ? (
             <li className="aitown-record">No collector observation context for this agent in latest snapshot.</li>
+          ) : null}
+        </ul>
+      </section>
+
+      <section className="aitown-details__section">
+        <h3>Supervision History</h3>
+        {supervisionHistoryWarning ? <p role="status">{supervisionHistoryWarning}</p> : null}
+        <ul className="aitown-records">
+          {selectedAgentSupervisionHistoryState === 'loading' && !selectedAgentSupervisionHistory ? (
+            <li className="aitown-record">Loading supervision history...</li>
+          ) : null}
+          {selectedAgentSupervisionHistoryError && !selectedAgentSupervisionHistory ? (
+            <li className="aitown-record">{`Unable to load supervision history. ${selectedAgentSupervisionHistoryError}`}</li>
+          ) : null}
+          {(selectedAgentSupervisionHistory?.items ?? []).map((alert) =>
+            renderSelectedAgentSupervisionAlert({
+              alert,
+              sharedMemoryArtifactRefs,
+              activeCorrelationId: selectedCorrelationId,
+              currentAgentId: selectedAgent.agent_id,
+              navigableAgentIds,
+              onSelectAgent,
+              onSelectCorrelation
+            })
+          )}
+          {selectedAgentSupervisionHistoryState === 'ready' &&
+          (selectedAgentSupervisionHistory?.items.length ?? 0) === 0 ? (
+            <li className="aitown-record">No recent supervision history.</li>
           ) : null}
         </ul>
       </section>

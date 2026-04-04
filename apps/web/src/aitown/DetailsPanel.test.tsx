@@ -469,6 +469,11 @@ function buildProps(overrides: Partial<DetailsPanelProps> = {}): DetailsPanelPro
     memoryArtifacts: buildMemoryArtifacts(),
     memoryArtifactsError: null,
     memoryArtifactsState: 'ready',
+    selectedAgentSupervisionHistory: {
+      items: []
+    },
+    selectedAgentSupervisionHistoryError: null,
+    selectedAgentSupervisionHistoryState: 'ready',
     selectedAgent: buildSelectedAgent(),
     selectedCorrelationId: 'corr-app-review',
     selectedOperationsState: null,
@@ -6579,6 +6584,182 @@ describe('DetailsPanel workflow peer-watch alerts', () => {
     expect(document.activeElement).toBe(artifactRecord);
     expect(onSelectAgent).not.toHaveBeenCalled();
     expect(onSelectCorrelation).not.toHaveBeenCalled();
+  });
+
+  it('renders selected-agent supervision history entries with explicit severity, status, pivots, and evidence metadata', async () => {
+    const user = userEvent.setup();
+    const onSelectAgent = vi.fn();
+    const onSelectCorrelation = vi.fn();
+    const memoryArtifacts: MemoryArtifactIndex = {
+      generated_at: '2026-03-16T09:00:00.000Z',
+      items: [
+        ...buildMemoryArtifacts().items,
+        {
+          artifact_ref: '/evidence/review.md',
+          artifact_kind: 'evidence_ref',
+          file_name: 'review.md',
+          first_seen_at: '2026-03-16T08:49:00.000Z',
+          last_seen_at: '2026-03-16T08:55:00.000Z',
+          mention_count: 2,
+          agent_ids: ['app-engineering', 'team-lead'],
+          correlation_ids: ['corr-app-review'],
+          source_kinds: ['controller_event'],
+          latest_summary: 'Selected-agent supervision history evidence anchor',
+          latest_event_type: 'peer_watch_alert_raised',
+          collector_last_modified_at: '2026-03-16T08:55:00.000Z'
+        }
+      ]
+    };
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          memoryArtifacts,
+          onSelectAgent,
+          onSelectCorrelation,
+          selectedAgentSupervisionHistory: {
+            items: [
+              {
+                alert_id: 'alert-history-1',
+                ts: '2026-03-16T08:55:00.000Z',
+                agent_id: 'app-engineering',
+                target_agent_id: 'app-engineering',
+                actor_id: 'team-lead',
+                observer_agent_id: 'team-lead',
+                watcher_agent_ids: ['growth-revenue', 'team-lead'],
+                severity: 'orange',
+                status: 'resolved',
+                current_state: 'blocked',
+                active_task: 'Fix workflow issue',
+                summary: 'Peer watch recovered after evidence review',
+                evidence_refs: ['/evidence/review.md', '/evidence/missing.md'],
+                evidence_count: 2,
+                correlation_id: 'corr-app-review',
+                source_kind: 'controller_event',
+                metadata: {
+                  resolution: 'review_complete'
+                }
+              }
+            ]
+          }
+        })}
+      />
+    );
+
+    const supervisionSection = screen.getByRole('heading', { name: 'Supervision History' }).closest('section');
+    const sharedMemorySection = screen.getByRole('heading', { name: 'Shared Memory' }).closest('section');
+    expect(supervisionSection).not.toBeNull();
+    expect(sharedMemorySection).not.toBeNull();
+
+    const alertRecord = within(supervisionSection!).getByText('Peer watch recovered after evidence review').closest('li');
+    const artifactRecord = within(sharedMemorySection!).getByText('Ref · /evidence/review.md').closest('li');
+    expect(alertRecord).not.toBeNull();
+    expect(artifactRecord).not.toBeNull();
+
+    expect(
+      within(alertRecord!).getByRole('button', {
+        name: 'Open supervision history correlation corr-app-review, currently selected'
+      })
+    ).toBeVisible();
+    expect(within(alertRecord!).getByText('At · 2026-03-16T08:55:00.000Z')).toBeVisible();
+    expect(within(alertRecord!).getByText('Severity · orange')).toBeVisible();
+    expect(within(alertRecord!).getByText('Status · resolved')).toBeVisible();
+    expect(
+      within(alertRecord!).getByRole('button', {
+        name: 'Select supervision history observer from alert alert-history-1 team-lead'
+      })
+    ).toBeVisible();
+    expect(alertRecord).toHaveTextContent('Watchers · growth-revenue, team-lead');
+    expect(
+      within(alertRecord!).getByRole('button', {
+        name: 'Select supervision history watcher from alert alert-history-1 growth-revenue'
+      })
+    ).toBeVisible();
+    expect(
+      within(alertRecord!).getByRole('button', {
+        name: 'Select supervision history watcher from alert alert-history-1 team-lead'
+      })
+    ).toBeVisible();
+    expect(
+      within(alertRecord!).getByRole('button', {
+        name: 'Jump to shared memory artifact /evidence/review.md'
+      })
+    ).toHaveTextContent('/evidence/review.md');
+    expect(alertRecord).toHaveTextContent('Evidence · /evidence/review.md, /evidence/missing.md');
+    expect(
+      within(alertRecord!).queryByRole('button', {
+        name: 'Jump to shared memory artifact /evidence/missing.md'
+      })
+    ).not.toBeInTheDocument();
+    expect(within(alertRecord!).getByText('Evidence count · 2')).toBeVisible();
+    expect(within(alertRecord!).getByText('Source · controller_event')).toBeVisible();
+
+    await user.click(
+      within(alertRecord!).getByRole('button', {
+        name: 'Jump to shared memory artifact /evidence/review.md'
+      })
+    );
+
+    expect(document.activeElement).toBe(artifactRecord);
+    expect(onSelectAgent).not.toHaveBeenCalled();
+    expect(onSelectCorrelation).not.toHaveBeenCalled();
+  });
+
+  it('renders selected-agent supervision history loading, empty, error, and degraded states explicitly', () => {
+    const { rerender } = render(
+      <DetailsPanel
+        {...buildProps({
+          selectedAgentSupervisionHistory: null,
+          selectedAgentSupervisionHistoryError: null,
+          selectedAgentSupervisionHistoryState: 'loading'
+        })}
+      />
+    );
+
+    const supervisionSection = screen.getByRole('heading', { name: 'Supervision History' }).closest('section');
+    expect(supervisionSection).not.toBeNull();
+    expect(within(supervisionSection!).getByText('Loading supervision history...')).toBeVisible();
+
+    rerender(
+      <DetailsPanel
+        {...buildProps({
+          selectedAgentSupervisionHistory: { items: [] },
+          selectedAgentSupervisionHistoryError: null,
+          selectedAgentSupervisionHistoryState: 'ready'
+        })}
+      />
+    );
+
+    expect(within(supervisionSection!).getByText('No recent supervision history.')).toBeVisible();
+
+    rerender(
+      <DetailsPanel
+        {...buildProps({
+          selectedAgentSupervisionHistory: null,
+          selectedAgentSupervisionHistoryError: 'peer-watch refresh failed',
+          selectedAgentSupervisionHistoryState: 'error'
+        })}
+      />
+    );
+
+    expect(
+      within(supervisionSection!).getByText('Unable to load supervision history. peer-watch refresh failed')
+    ).toBeVisible();
+
+    rerender(
+      <DetailsPanel
+        {...buildProps({
+          selectedAgentSupervisionHistory: { items: [] },
+          selectedAgentSupervisionHistoryError: 'peer-watch refresh failed',
+          selectedAgentSupervisionHistoryState: 'ready'
+        })}
+      />
+    );
+
+    expect(
+      within(supervisionSection!).getByText('Showing last supervision history. peer-watch refresh failed')
+    ).toBeVisible();
+    expect(within(supervisionSection!).getByText('No recent supervision history.')).toBeVisible();
   });
 });
 

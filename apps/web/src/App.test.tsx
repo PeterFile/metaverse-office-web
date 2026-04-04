@@ -75,6 +75,9 @@ const workflowUrl = '/agents/app-engineering/workflow?limit=10&window=60m';
 const teamLeadWorkflowUrl = '/agents/team-lead/workflow?limit=10&window=60m';
 const teamLeadIncidentsUrl = '/agents/team-lead/incidents?limit=10&window=60m';
 const growthRevenueWorkflowUrl = '/agents/growth-revenue/workflow?limit=10&window=60m';
+const appEngineeringSupervisionHistoryUrl = '/peer-watch/alerts?target_agent_id=app-engineering&limit=4';
+const teamLeadSupervisionHistoryUrl = '/peer-watch/alerts?target_agent_id=team-lead&limit=4';
+const growthRevenueSupervisionHistoryUrl = '/peer-watch/alerts?target_agent_id=growth-revenue&limit=4';
 const correlationUrl = '/correlations/corr-app-review?limit=10&window=60m';
 const secondaryCorrelationUrl = '/correlations/corr-app-secondary?limit=10&window=60m';
 const memoryArtifactsUrl = '/memory/artifacts?limit=4&window=60m';
@@ -679,6 +682,36 @@ const growthRevenueWorkflowFixture = {
   timeline: []
 } satisfies AgentWorkflow;
 
+const appEngineeringSupervisionHistoryFixture = {
+  items: [
+    {
+      alert_id: 'alert-history-1',
+      ts: '2026-03-16T08:47:00.000Z',
+      agent_id: 'app-engineering',
+      target_agent_id: 'app-engineering',
+      actor_id: 'team-lead',
+      observer_agent_id: 'team-lead',
+      watcher_agent_ids: ['growth-revenue'],
+      severity: 'orange',
+      status: 'resolved',
+      current_state: 'blocked',
+      active_task: 'Fix workflow issue',
+      summary: 'Peer watch recovered after evidence review',
+      evidence_refs: ['/tmp/evidence.md', '/tmp/peer-watch.md'],
+      evidence_count: 2,
+      correlation_id: 'corr-app-review',
+      source_kind: 'controller_event',
+      metadata: {
+        resolution: 'review_complete'
+      }
+    }
+  ]
+};
+
+const emptySupervisionHistoryFixture = {
+  items: []
+};
+
 const correlationFixture = {
   correlation_id: 'corr-app-review',
   participant_agent_ids: ['app-engineering', 'team-lead'],
@@ -1174,6 +1207,14 @@ function resolveDefaultFetchResponse(url: string) {
 
   if (url === growthRevenueWorkflowUrl) {
     return jsonResponse(growthRevenueWorkflowFixture);
+  }
+
+  if (url === appEngineeringSupervisionHistoryUrl) {
+    return jsonResponse(appEngineeringSupervisionHistoryFixture);
+  }
+
+  if (url === teamLeadSupervisionHistoryUrl || url === growthRevenueSupervisionHistoryUrl) {
+    return jsonResponse(emptySupervisionHistoryFixture);
   }
 
   if (url === correlationUrl) {
@@ -6567,6 +6608,45 @@ afterEach(() => {
     expect(vi.mocked(globalThis.fetch).mock.calls).toHaveLength(fetchCallCountBeforeJump);
     expect(globalThis.fetch).not.toHaveBeenCalledWith(teamLeadWorkflowUrl, expect.anything());
     expect(globalThis.fetch).not.toHaveBeenCalledWith(teamLeadSelectedCorrelationMemoryArtifactsUrl, expect.anything());
+  });
+
+  it('loads selected-agent supervision history from peer-watch alerts with a scoped target-agent read', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
+
+    const supervisionSection = within(details).getByRole('heading', { name: 'Supervision History' }).closest('section');
+    expect(supervisionSection).not.toBeNull();
+
+    expect(await within(supervisionSection!).findByText('Peer watch recovered after evidence review')).toBeVisible();
+    expect(within(supervisionSection!).getByText('Severity · orange')).toBeVisible();
+    expect(within(supervisionSection!).getByText('Status · resolved')).toBeVisible();
+    expect(
+      within(supervisionSection!).getByText(
+        (_content, element) => element?.tagName === 'SPAN' && element.textContent === 'Observer · team-lead'
+      )
+    ).toBeVisible();
+    expect(
+      within(supervisionSection!).getByText(
+        (_content, element) => element?.tagName === 'SPAN' && element.textContent === 'Watchers · growth-revenue'
+      )
+    ).toBeVisible();
+    expect(
+      within(supervisionSection!).getByRole('button', {
+        name: 'Open supervision history correlation corr-app-review, currently selected'
+      })
+    ).toBeVisible();
+    expect(within(supervisionSection!).getByText('Evidence count · 2')).toBeVisible();
+    expect(within(supervisionSection!).getByText('Source · controller_event')).toBeVisible();
+
+    const peerWatchRequests = vi
+      .mocked(globalThis.fetch)
+      .mock.calls.map(([input]) => (typeof input === 'string' ? input : input.toString()))
+      .filter((url) => url.startsWith('/peer-watch/alerts'));
+
+    expect(peerWatchRequests).toEqual([appEngineeringSupervisionHistoryUrl]);
   });
 
   it('preserves the active selected correlation when opening a workflow peer-watch observer pivot', async () => {

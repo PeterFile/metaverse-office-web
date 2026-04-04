@@ -3540,6 +3540,192 @@ test.describe('operator shell smoke', () => {
     await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toHaveCount(0);
   });
 
+  test('switches the active correlation from a workflow status correlation button without changing the selected agent via keyboard traversal', async ({
+    page
+  }) => {
+    const requestedUrls: string[] = [];
+    const forbiddenRequests: string[] = [];
+    const selectedCorrelationUrl = '/correlations/corr-growth-lead-review?limit=10&window=60m';
+    const staleCorrelationUrl = '/correlations/corr-revenue-handoff?limit=10&window=60m';
+    const scopedArtifactsUrl =
+      '/memory/artifacts?limit=4&window=60m&agent_id=growth-revenue&correlation_id=corr-growth-lead-review';
+    const staleScopedArtifactsUrl =
+      '/memory/artifacts?limit=4&window=60m&agent_id=growth-revenue&correlation_id=corr-revenue-handoff';
+    const unscopedArtifactsUrl = '/memory/artifacts?limit=4&window=60m&agent_id=growth-revenue';
+    let trackForbiddenRequests = false;
+
+    page.on('request', (request) => {
+      try {
+        const url = new URL(request.url());
+        requestedUrls.push(`${url.pathname}${url.search}`);
+      } catch {
+        requestedUrls.push(request.url());
+      }
+    });
+
+    await page.route(`**${staleCorrelationUrl}`, async (route) => {
+      if (trackForbiddenRequests) {
+        forbiddenRequests.push(staleCorrelationUrl);
+      }
+      await route.continue();
+    });
+    await page.route(`**${staleScopedArtifactsUrl}`, async (route) => {
+      if (trackForbiddenRequests) {
+        forbiddenRequests.push(staleScopedArtifactsUrl);
+      }
+      await route.continue();
+    });
+    await page.route(`**${unscopedArtifactsUrl}`, async (route) => {
+      if (trackForbiddenRequests) {
+        forbiddenRequests.push(unscopedArtifactsUrl);
+      }
+      await route.continue();
+    });
+    await page.route('**/agents/growth-revenue/workflow?limit=10&window=60m', async (route) => {
+      const response = await route.fetch();
+      const workflow = (await response.json()) as {
+        detail: {
+          recent_handoffs?: Array<{
+            handoff_id: string;
+            correlation_id: string | null;
+          }>;
+        };
+      };
+      let matchedHandoff = false;
+      const recentHandoffs = (workflow.detail.recent_handoffs ?? []).map((handoff) => {
+        if (handoff.handoff_id !== 'evt_revenue_handoff_completed') {
+          return handoff;
+        }
+
+        matchedHandoff = true;
+        return {
+          ...handoff,
+          correlation_id: 'corr-growth-lead-review'
+        };
+      });
+
+      if (!matchedHandoff) {
+        throw new Error('browser smoke fixture must expose a workflow handoff status record for growth-revenue');
+      }
+
+      await route.fulfill({
+        response,
+        json: {
+          ...workflow,
+          detail: {
+            ...workflow.detail,
+            recent_handoffs: recentHandoffs
+          }
+        }
+      });
+    });
+
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Hub' }).click();
+
+    const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
+    const inspectButton = detailsPanel.getByRole('button', {
+      name: 'Inspect Growth Revenue Agent',
+      exact: true
+    });
+
+    await focusHubControlWithTab(page, inspectButton, 'Inspect Growth Revenue Agent');
+    await expect(inspectButton).toBeFocused();
+    await page.keyboard.press('Enter');
+
+    const operationSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Current Operation' })
+    });
+    const workflowSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Workflow' })
+    });
+    const correlationSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Correlation Drilldown' })
+    });
+    const workflowStatusCorrelationButton = workflowSection.getByRole('button', {
+      name: 'Open workflow status correlation corr-growth-lead-review'
+    });
+    const selectedWorkflowStatusCorrelationButton = workflowSection.getByRole('button', {
+      name: 'Open workflow status correlation corr-growth-lead-review, currently selected'
+    });
+
+    await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+    await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toBeVisible();
+    await expect(operationSection.getByText('planning · Prepare handoff notes')).toBeVisible();
+    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
+    await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toHaveCount(0);
+    await focusHubControlWithTab(
+      page,
+      workflowStatusCorrelationButton,
+      'Open workflow status correlation corr-growth-lead-review'
+    );
+    await expect(workflowStatusCorrelationButton).toBeFocused();
+
+    trackForbiddenRequests = true;
+    const requestCountBeforeCorrelationOpen = requestedUrls.length;
+    const selectedCorrelationResponse = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'GET' &&
+        response.status() === 200 &&
+        response.url().includes(selectedCorrelationUrl)
+    );
+    const scopedArtifactsResponse = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'GET' &&
+        response.status() === 200 &&
+        response.url().includes(scopedArtifactsUrl)
+    );
+
+    await page.keyboard.press('Enter');
+    await selectedCorrelationResponse;
+    await scopedArtifactsResponse;
+
+    await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+    await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toBeVisible();
+    await expect(operationSection.getByText('planning · Prepare handoff notes')).toBeVisible();
+    await expect(selectedWorkflowStatusCorrelationButton).toBeVisible();
+    await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toBeVisible();
+    await expect(correlationSection.getByText('Counts · 0 incidents · 1 interactions · 2 events')).toBeVisible();
+    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toHaveCount(0);
+
+    const requestSettleSamples: Array<{ requestedCount: number; forbiddenCount: number }> = [];
+    const isRequestStreamStable = (
+      previous: { requestedCount: number; forbiddenCount: number },
+      current: { requestedCount: number; forbiddenCount: number }
+    ) => previous.requestedCount === current.requestedCount && previous.forbiddenCount === current.forbiddenCount;
+
+    for (let sample = 0; sample < 6; sample += 1) {
+      requestSettleSamples.push({
+        requestedCount: requestedUrls.length,
+        forbiddenCount: forbiddenRequests.length
+      });
+
+      if (findStableSample(requestSettleSamples, isRequestStreamStable)) {
+        break;
+      }
+
+      if (sample < 5) {
+        await page.waitForTimeout(100);
+      }
+    }
+
+    requireStableSample(
+      requestSettleSamples,
+      isRequestStreamStable,
+      'post-correlation request stream did not settle',
+      (sample) => sample
+    );
+
+    const postCorrelationSelectionRequests = requestedUrls.slice(requestCountBeforeCorrelationOpen);
+
+    expect(postCorrelationSelectionRequests).toContain(selectedCorrelationUrl);
+    expect(postCorrelationSelectionRequests).toContain(scopedArtifactsUrl);
+    expect(postCorrelationSelectionRequests).not.toContain(staleCorrelationUrl);
+    expect(postCorrelationSelectionRequests).not.toContain(staleScopedArtifactsUrl);
+    expect(postCorrelationSelectionRequests).not.toContain(unscopedArtifactsUrl);
+    expect(forbiddenRequests).toEqual([]);
+  });
+
   test('keeps the active workflow correlation when opening a workflow status actor pivot via keyboard traversal', async ({
     page
   }) => {

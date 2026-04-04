@@ -2664,6 +2664,144 @@ test.describe('operator shell smoke', () => {
     await expect(correlationSection.getByText('Counts · 0 incidents · 1 interactions · 2 events')).toBeVisible();
   });
 
+  test('keeps the active replay correlation when opening a replay agent pivot via keyboard traversal', async ({ page }) => {
+    const requestedUrls: string[] = [];
+    const forbiddenRequests: string[] = [];
+    const directOperationUrl = '/office/operations?agent_id=growth-revenue';
+    const unscopedArtifactsUrl = '/memory/artifacts?limit=4&window=60m&agent_id=growth-revenue';
+    const fallbackCorrelationUrl = '/correlations/corr-revenue-handoff?limit=10&window=60m';
+    let trackForbiddenRequests = false;
+
+    page.on('request', (request) => {
+      try {
+        const url = new URL(request.url());
+        requestedUrls.push(`${url.pathname}${url.search}`);
+      } catch {
+        requestedUrls.push(request.url());
+      }
+    });
+
+    await page.route(`**${directOperationUrl}`, async (route) => {
+      if (trackForbiddenRequests) {
+        forbiddenRequests.push(directOperationUrl);
+      }
+      await route.continue();
+    });
+    await page.route(`**${unscopedArtifactsUrl}`, async (route) => {
+      if (trackForbiddenRequests) {
+        forbiddenRequests.push(unscopedArtifactsUrl);
+      }
+      await route.continue();
+    });
+    await page.route(`**${fallbackCorrelationUrl}`, async (route) => {
+      if (trackForbiddenRequests) {
+        forbiddenRequests.push(fallbackCorrelationUrl);
+      }
+      await route.continue();
+    });
+
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Hub' }).click();
+
+    const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
+    const clearButton = detailsPanel.getByRole('button', { name: 'Clear' });
+    const replaySection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Timeline Replay' })
+    });
+    const correlationSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Correlation Drilldown' })
+    });
+    const replayRecord = replaySection.locator('li').filter({
+      has: page.getByText('Lead started reviewing the growth handoff notes', { exact: true })
+    });
+    const replayCorrelationButton = replayRecord.getByRole('button', {
+      name: 'Open replay correlation corr-growth-lead-review'
+    });
+    const replayAgentButton = replayRecord.getByRole('button', {
+      name: 'Select replay agent growth-revenue from event evt_growth_review_started'
+    });
+    const workflowUrl = '/agents/growth-revenue/workflow?limit=10&window=60m';
+    const scopedArtifactsUrl =
+      '/memory/artifacts?limit=4&window=60m&agent_id=growth-revenue&correlation_id=corr-growth-lead-review';
+
+    await expect(detailsPanel.getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
+
+    await focusHubControlWithTab(page, replayCorrelationButton, 'Open replay correlation corr-growth-lead-review');
+    await expect(replayCorrelationButton).toBeFocused();
+    await page.keyboard.press('Enter');
+
+    await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toBeVisible();
+    await expect(correlationSection.getByText('Counts · 0 incidents · 1 interactions · 2 events')).toBeVisible();
+    await focusHubControlWithTab(
+      page,
+      replayAgentButton,
+      'Select replay agent growth-revenue from event evt_growth_review_started'
+    );
+    await expect(replayAgentButton).toBeFocused();
+
+    trackForbiddenRequests = true;
+    const requestCountBeforePivot = requestedUrls.length;
+    const workflowResponse = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'GET' && response.status() === 200 && response.url().includes(workflowUrl)
+    );
+    const scopedArtifactsResponse = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'GET' &&
+        response.status() === 200 &&
+        response.url().includes(scopedArtifactsUrl)
+    );
+
+    await page.keyboard.press('Enter');
+    await workflowResponse;
+    await scopedArtifactsResponse;
+
+    await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+    await expect(clearButton).toBeFocused();
+    await expect(detailsPanel.getByRole('heading', { name: 'Workflow' })).toBeVisible();
+    await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
+    await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toBeVisible();
+    await expect(correlationSection.getByText('Counts · 0 incidents · 1 interactions · 2 events')).toBeVisible();
+    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toHaveCount(0);
+
+    const requestSettleSamples: Array<{ requestedCount: number; forbiddenCount: number }> = [];
+    const isRequestStreamStable = (
+      previous: { requestedCount: number; forbiddenCount: number },
+      current: { requestedCount: number; forbiddenCount: number }
+    ) => previous.requestedCount === current.requestedCount && previous.forbiddenCount === current.forbiddenCount;
+
+    for (let sample = 0; sample < 6; sample += 1) {
+      requestSettleSamples.push({
+        requestedCount: requestedUrls.length,
+        forbiddenCount: forbiddenRequests.length
+      });
+
+      if (findStableSample(requestSettleSamples, isRequestStreamStable)) {
+        break;
+      }
+
+      if (sample < 5) {
+        await page.waitForTimeout(100);
+      }
+    }
+
+    requireStableSample(
+      requestSettleSamples,
+      isRequestStreamStable,
+      'post-pivot request stream did not settle',
+      (sample) => sample
+    );
+
+    const pivotRequestedUrls = requestedUrls.slice(requestCountBeforePivot);
+
+    expect(pivotRequestedUrls).toContain(workflowUrl);
+    expect(pivotRequestedUrls).toContain(scopedArtifactsUrl);
+    expect(pivotRequestedUrls).not.toContain(directOperationUrl);
+    expect(pivotRequestedUrls).not.toContain(unscopedArtifactsUrl);
+    expect(pivotRequestedUrls).not.toContain(fallbackCorrelationUrl);
+    expect(forbiddenRequests).toEqual([]);
+  });
+
   test('keeps the active replay correlation when opening a replay actor pivot via keyboard traversal', async ({ page }) => {
     await page.goto('/');
     await page.getByRole('button', { name: 'Open Hub' }).click();

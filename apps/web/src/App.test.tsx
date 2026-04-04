@@ -1244,6 +1244,12 @@ async function openHub(user: ReturnType<typeof userEvent.setup>) {
   return screen.findByRole('complementary', { name: 'Agent details' });
 }
 
+function getFeedStat(): HTMLElement {
+  const feedStat = within(screen.getByLabelText('Office summary')).getByText('Feed').closest('.aitown-shell__stat');
+  expect(feedStat).not.toBeNull();
+  return feedStat as HTMLElement;
+}
+
 describe('App', () => {
   beforeEach(() => {
     vi.stubGlobal(
@@ -8685,6 +8691,28 @@ afterEach(() => {
     expect(within(details).getByText(/reviewing · Normal · review-zone/i)).toBeVisible();
   });
 
+  it('shows incident feed header loading explicitly instead of pretending empty', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === incidentsUrl) {
+          return new Promise<Response>(() => {});
+        }
+
+        return Promise.resolve(resolveTestFetchResponse(url));
+      })
+    );
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(within(getFeedStat()).getByRole('status')).toHaveTextContent('Feed · Loading');
+      expect(within(getFeedStat()).queryByText('0')).not.toBeInTheDocument();
+    });
+  });
+
   it('shows incident feed loading and error states explicitly instead of pretending empty', async () => {
     vi.stubGlobal(
       'fetch',
@@ -8723,9 +8751,134 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
+    await waitFor(() => {
+      expect(within(getFeedStat()).getByRole('status')).toHaveTextContent('Feed · Unavailable · incident refresh failed');
+      expect(within(getFeedStat()).queryByText('0')).not.toBeInTheDocument();
+    });
+
     const details = await openHub(user);
     expect(await within(details).findByText('incident refresh failed')).toBeVisible();
     expect(within(details).queryByText('No active incident feed.')).not.toBeInTheDocument();
+  });
+
+  it('shows feed loading while retrying after an earlier incident refresh failure before any data has loaded', async () => {
+    (window as typeof window & { __AITOWN_POLL_INTERVAL_MS__?: number }).__AITOWN_POLL_INTERVAL_MS__ = 10;
+
+    let incidentRequests = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === incidentsUrl) {
+          incidentRequests += 1;
+
+          if (incidentRequests === 1) {
+            return new Response(JSON.stringify({ error: 'internal_error', details: 'incident refresh failed' }), {
+              status: 500,
+              headers: { 'content-type': 'application/json' }
+            });
+          }
+
+          return new Promise<Response>(() => {});
+        }
+
+        return Promise.resolve(resolveTestFetchResponse(url));
+      })
+    );
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(within(getFeedStat()).getByRole('status')).toHaveTextContent('Feed · Unavailable · incident refresh failed');
+    });
+
+    await waitFor(() => {
+      expect(incidentRequests).toBeGreaterThan(1);
+      expect(within(getFeedStat()).getByRole('status')).toHaveTextContent('Feed · Loading');
+      expect(within(getFeedStat()).queryByText('Feed · Unavailable · incident refresh failed')).not.toBeInTheDocument();
+    });
+  });
+
+  it('shows incident feed loading in the Hub while retrying after an earlier feed failure before any data has loaded', async () => {
+    (window as typeof window & { __AITOWN_POLL_INTERVAL_MS__?: number }).__AITOWN_POLL_INTERVAL_MS__ = 100;
+
+    let incidentRequests = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === incidentsUrl) {
+          incidentRequests += 1;
+
+          if (incidentRequests === 1) {
+            return new Response(JSON.stringify({ error: 'internal_error', details: 'incident refresh failed' }), {
+              status: 500,
+              headers: { 'content-type': 'application/json' }
+            });
+          }
+
+          return new Promise<Response>(() => {});
+        }
+
+        return Promise.resolve(resolveTestFetchResponse(url));
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    await waitFor(() => {
+      expect(within(getFeedStat()).getByRole('status')).toHaveTextContent('Feed · Unavailable · incident refresh failed');
+    });
+
+    const details = await openHub(user);
+
+    await waitFor(() => {
+      expect(incidentRequests).toBeGreaterThan(1);
+      expect(within(details).getByText('Loading incident feed...')).toBeVisible();
+      expect(within(details).queryByText('incident refresh failed')).not.toBeInTheDocument();
+    });
+  });
+
+  it('keeps the last good feed count in the header when incident refresh later fails', async () => {
+    (window as typeof window & { __AITOWN_POLL_INTERVAL_MS__?: number }).__AITOWN_POLL_INTERVAL_MS__ = 10;
+
+    let incidentRequests = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === incidentsUrl) {
+          incidentRequests += 1;
+
+          if (incidentRequests === 1) {
+            return jsonResponse(incidentFeedFixture);
+          }
+
+          return new Response(JSON.stringify({ error: 'internal_error', details: 'incident refresh failed' }), {
+            status: 500,
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        return resolveTestFetchResponse(url);
+      })
+    );
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(within(getFeedStat()).getByText('2')).toBeVisible();
+    });
+
+    await waitFor(() => {
+      expect(incidentRequests).toBeGreaterThan(1);
+      expect(within(getFeedStat()).getByText('2')).toBeVisible();
+      expect(within(getFeedStat()).getByRole('status')).toHaveTextContent('Feed · Refresh failed · incident refresh failed');
+    });
   });
 
   it('keeps the selected details visible when overview briefly drops the selected agent', () => {

@@ -17,7 +17,7 @@ import { DetailsPanel } from './aitown/DetailsPanel';
 import { SceneStatusLegend } from './aitown/SceneStatusLegend';
 import { adaptWorldToScene } from './aitown/sceneAdapter';
 import { WorldProvider, useWorld } from './context/WorldContext';
-import { usePolledResource } from './hooks/usePolledResource';
+import { usePolledResource, type LoadState } from './hooks/usePolledResource';
 import { getHubFocusableElements } from './hubFocus';
 import type { OfficeAgent, OfficeOperation } from './types';
 import { projectWorldState } from './world/projector';
@@ -56,6 +56,42 @@ export function resolveOverviewRefreshWarning(error: string | null, hasOverviewD
   }
 
   return error;
+}
+
+function resolveIncidentFeedHeaderStatus(
+  state: LoadState,
+  error: string | null,
+  incidentFeed: { items: unknown[] } | null
+) {
+  if (incidentFeed) {
+    return {
+      count: incidentFeed.items.length,
+      status: error ? 'Refresh failed' : null,
+      detail: error
+    };
+  }
+
+  if (state === 'loading') {
+    return {
+      count: '--',
+      status: 'Loading',
+      detail: null
+    };
+  }
+
+  if (error) {
+    return {
+      count: '--',
+      status: 'Unavailable',
+      detail: error
+    };
+  }
+
+  return {
+    count: 0,
+    status: null,
+    detail: null
+  };
 }
 
 function resolveCorrelationPollKey(selectedCorrelationId: string | null) {
@@ -705,6 +741,11 @@ function AppInner() {
     overviewResource.error,
     Boolean(overviewResource.data)
   );
+  const incidentFeedHeaderStatus = resolveIncidentFeedHeaderStatus(
+    incidentFeedResource.state,
+    incidentFeedResource.error,
+    incidentFeedResource.data
+  );
   const preserveWorkflowCounterpartyCorrelation =
     selectedCorrelationId !== null && selectedCorrelationWasExplicit;
 
@@ -734,7 +775,14 @@ function AppInner() {
               </div>
               <div className="aitown-shell__stat">
                 <span>Feed</span>
-                <strong>{incidentFeedResource.data?.items.length ?? 0}</strong>
+                <strong>{incidentFeedHeaderStatus.count}</strong>
+                {incidentFeedHeaderStatus.status ? (
+                  <span role="status">
+                    {incidentFeedHeaderStatus.detail
+                      ? `Feed · ${incidentFeedHeaderStatus.status} · ${incidentFeedHeaderStatus.detail}`
+                      : `Feed · ${incidentFeedHeaderStatus.status}`}
+                  </span>
+                ) : null}
               </div>
             </div>
           </header>

@@ -483,6 +483,7 @@ function buildProps(overrides: Partial<DetailsPanelProps> = {}): DetailsPanelPro
     onInspectAgent: vi.fn(),
     onSelectAgent: vi.fn(),
     onSelectCorrelation: vi.fn(),
+    onResetCorrelationOverride: vi.fn(),
     onSelectOperationsState: vi.fn(),
     onSelectOperation: vi.fn(),
     ...overrides
@@ -490,6 +491,59 @@ function buildProps(overrides: Partial<DetailsPanelProps> = {}): DetailsPanelPro
 }
 
 describe('DetailsPanel accountability signals', () => {
+  it('shows a return-to-current-scope action for manual correlation overrides in crew-overview and selected-agent surfaces', async () => {
+    const user = userEvent.setup();
+    const onResetCorrelationOverride = vi.fn();
+
+    const { rerender } = render(
+      <DetailsPanel
+        {...buildProps({
+          onResetCorrelationOverride,
+          preserveWorkflowCounterpartyCorrelation: true,
+          selectedAgent: null,
+          selectedCorrelationId: 'corr-app-secondary',
+          selectedOperation: null,
+          workflow: null
+        })}
+      />
+    );
+
+    let summary = screen.getByRole('complementary', { name: 'Agent details' }).querySelector('.aitown-details__summary');
+    expect(summary).not.toBeNull();
+    expect(summary?.querySelectorAll('p')).toHaveLength(1);
+    expect(summary).toHaveTextContent('Manual correlation override active.');
+
+    let resetAction = screen.getByRole('button', { name: 'Return to current scope' });
+    expect(resetAction).toBeVisible();
+
+    await user.click(resetAction);
+
+    expect(onResetCorrelationOverride).toHaveBeenCalledTimes(1);
+
+    onResetCorrelationOverride.mockClear();
+    rerender(
+      <DetailsPanel
+        {...buildProps({
+          onResetCorrelationOverride,
+          preserveWorkflowCounterpartyCorrelation: true,
+          selectedCorrelationId: 'corr-app-secondary'
+        })}
+      />
+    );
+
+    summary = screen.getByRole('complementary', { name: 'Agent details' }).querySelector('.aitown-details__summary');
+    expect(summary).not.toBeNull();
+    expect(summary?.querySelectorAll('p')).toHaveLength(1);
+    expect(summary).toHaveTextContent('Manual correlation override active.');
+
+    resetAction = screen.getByRole('button', { name: 'Return to current scope' });
+    expect(resetAction).toBeVisible();
+
+    await user.click(resetAction);
+
+    expect(onResetCorrelationOverride).toHaveBeenCalledTimes(1);
+  });
+
   it('renders crew-overview watch topology endpoints as pivots only for navigable agents and preserves the active correlation', async () => {
     const user = userEvent.setup();
     const onSelectAgent = vi.fn();

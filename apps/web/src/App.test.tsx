@@ -7521,6 +7521,88 @@ afterEach(() => {
     });
   });
 
+  it('returns a manual crew-overview correlation to the current default scope without widening replay or shared-memory scope', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    const incidentSection = within(details).getByRole('heading', { name: 'Incident Feed' }).closest('section');
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    expect(incidentSection).not.toBeNull();
+    expect(correlationSection).not.toBeNull();
+
+    await user.click(within(incidentSection!).getByRole('button', { name: 'Open incident correlation corr-app-secondary' }));
+
+    await waitFor(() => {
+      expect(within(correlationSection!).getByText('corr-app-secondary')).toBeVisible();
+      expect(within(details).getByRole('button', { name: 'Return to current scope' })).toBeVisible();
+    });
+
+    const fetchCallCountBeforeReset = vi.mocked(globalThis.fetch).mock.calls.length;
+
+    await user.click(within(details).getByRole('button', { name: 'Return to current scope' }));
+
+    await waitFor(() => {
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+      expect(within(correlationSection!).queryByText('corr-app-secondary')).not.toBeInTheDocument();
+      expect(within(details).queryByRole('button', { name: 'Return to current scope' })).not.toBeInTheDocument();
+    });
+
+    const postResetRequests = vi
+      .mocked(globalThis.fetch)
+      .mock.calls.slice(fetchCallCountBeforeReset)
+      .map(([input]) => (typeof input === 'string' ? input : input.toString()));
+
+    expect(postResetRequests).toContain(timelineUrl);
+    expect(postResetRequests).toContain(memoryArtifactsUrl);
+    expect(postResetRequests).not.toContain(secondaryScopedTimelineUrl);
+    expect(postResetRequests).not.toContain(crewOverviewSelectedCorrelationMemoryArtifactsUrl);
+  });
+
+  it('returns a manual selected-agent correlation to the current default scope without clearing the agent, operation, or hub', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
+
+    const incidentSection = within(details).getByRole('heading', { name: 'Incident Feed' }).closest('section');
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    expect(incidentSection).not.toBeNull();
+    expect(correlationSection).not.toBeNull();
+
+    await user.click(within(incidentSection!).getByRole('button', { name: 'Open incident correlation corr-app-secondary' }));
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+      expect(within(details).getByRole('heading', { name: 'Current Operation' })).toBeVisible();
+      expect(within(correlationSection!).getByText('corr-app-secondary')).toBeVisible();
+      expect(screen.getByRole('button', { name: 'Hide Hub' })).toBeVisible();
+      expect(within(details).getByRole('button', { name: 'Return to current scope' })).toBeVisible();
+    });
+
+    const fetchCallCountBeforeReset = vi.mocked(globalThis.fetch).mock.calls.length;
+
+    await user.click(within(details).getByRole('button', { name: 'Return to current scope' }));
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+      expect(within(details).getByRole('heading', { name: 'Current Operation' })).toBeVisible();
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+      expect(within(correlationSection!).queryByText('corr-app-secondary')).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Hide Hub' })).toBeVisible();
+      expect(within(details).getByRole('button', { name: 'Clear' })).toHaveFocus();
+    });
+
+    const postResetRequests = vi
+      .mocked(globalThis.fetch)
+      .mock.calls.slice(fetchCallCountBeforeReset)
+      .map(([input]) => (typeof input === 'string' ? input : input.toString()));
+
+    expect(postResetRequests).toContain(selectedCorrelationMemoryArtifactsUrl);
+    expect(postResetRequests).not.toContain(appEngineeringMemoryArtifactsUrl);
+  });
+
   it('does not fall back to crew-overview correlations while a selected-agent workflow is still loading', async () => {
     let correlationRequests = 0;
 

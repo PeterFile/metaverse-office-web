@@ -508,6 +508,19 @@ function AppInner() {
     }
   }, []);
 
+  const handleResetCorrelationOverride = useCallback(() => {
+    const nextCorrelationId = selectDefaultCorrelationId({
+      incidentFeed: incidentFeedResource.data,
+      selectedOperation: selectedOperationForAutoCorrelation,
+      workflow: activeWorkflow,
+      selectedAgentId
+    });
+
+    correlationSelectionModeRef.current = 'auto';
+    setSelectedCorrelationId(nextCorrelationId);
+    setSelectedCorrelationWasExplicit(false);
+  }, [activeWorkflow, incidentFeedResource.data, selectedAgentId, selectedOperationForAutoCorrelation]);
+
   const toggleHub = useCallback(() => {
     setHubOpen((open) => !open);
   }, []);
@@ -558,7 +571,7 @@ function AppInner() {
 
     const [firstDetailsFocusable] = getHubFocusableElements(detailsPanel);
     (firstDetailsFocusable ?? dialog).focus();
-  }, [hubOpen, selectedAgentId]);
+  }, [hubOpen, selectedAgentId, selectedCorrelationId, selectedCorrelationWasExplicit]);
 
   useEffect(() => {
     if (!hubOpen || typeof document === 'undefined') {
@@ -862,6 +875,7 @@ function AppInner() {
                 )
               }
               onSelectCorrelation={handleSelectCorrelation}
+              onResetCorrelationOverride={handleResetCorrelationOverride}
               onSelectOperationsState={setSelectedOperationsState}
               onSelectOperation={handleSelectOperation}
             />

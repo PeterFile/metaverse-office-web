@@ -58,6 +58,7 @@ type DetailsPanelProps = {
   onSelectAgent: SelectAgentHandler;
   onInspectAgent: (agentId: string | null) => void;
   onSelectCorrelation: (correlationId: string | null) => void;
+  onResetCorrelationOverride: () => void;
   onSelectOperationsState: (state: string | null) => void;
   onSelectOperation: (operation: OfficeOperation) => void;
 };
@@ -1547,6 +1548,7 @@ export function DetailsPanel({
   onSelectAgent,
   onInspectAgent,
   onSelectCorrelation,
+  onResetCorrelationOverride,
   onSelectOperationsState,
   onSelectOperation
 }: DetailsPanelProps) {
@@ -1631,6 +1633,18 @@ export function DetailsPanel({
     .slice(0, 3);
   const sharedMemoryActiveCorrelationId = selectedCorrelationId;
   const sharedMemoryArtifactRefs = new Set((memoryArtifacts?.items ?? []).map((artifact) => artifact.artifact_ref));
+  const manualCorrelationResetAction =
+    preserveWorkflowCounterpartyCorrelation && selectedCorrelationId ? (
+      <>
+        {' '}
+        <span>
+          Manual correlation override active.{' '}
+          <button type="button" className="aitown-link-button" onClick={onResetCorrelationOverride}>
+            Return to current scope
+          </button>
+        </span>
+      </>
+    ) : null;
 
   if (!selectedAgent) {
     return (
@@ -1645,7 +1659,7 @@ export function DetailsPanel({
         <div className="aitown-details__summary">
           <p>
             {world.summary.total_agents} active agents, {world.summary.blocked_count} blocked, highest
-            severity {SEVERITY_LABELS[world.summary.highest_severity]}.
+            severity {SEVERITY_LABELS[world.summary.highest_severity]}.{manualCorrelationResetAction}
           </p>
         </div>
 
@@ -2331,6 +2345,7 @@ export function DetailsPanel({
       <div className="aitown-details__summary">
         <p>
           {phaseLabel} · {severityLabel} · {location}
+          {manualCorrelationResetAction}
         </p>
       </div>
 

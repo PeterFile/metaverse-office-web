@@ -1192,6 +1192,8 @@ function renderSelectedAgentSupervisionAlert({
       <span>{`At · ${renderTimestamp(alert.ts, 'No alert timestamp')}`}</span>
       <span>{`Severity · ${alert.severity}`}</span>
       <span>{`Status · ${alert.status}`}</span>
+      <span>{`Workflow status · ${alert.current_state}`}</span>
+      <span>{`Task · ${alert.active_task}`}</span>
       <span>
         Observer ·{' '}
         {canNavigateToObserver

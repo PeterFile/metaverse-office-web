@@ -6629,6 +6629,8 @@ afterEach(() => {
     expect(await within(supervisionSection!).findByText('Peer watch recovered after evidence review')).toBeVisible();
     expect(within(supervisionSection!).getByText('Severity · orange')).toBeVisible();
     expect(within(supervisionSection!).getByText('Status · resolved')).toBeVisible();
+    expect(within(supervisionSection!).getByText('Workflow status · blocked')).toBeVisible();
+    expect(within(supervisionSection!).getByText('Task · Fix workflow issue')).toBeVisible();
     expect(
       within(supervisionSection!).getByText(
         (_content, element) => element?.tagName === 'SPAN' && element.textContent === 'Observer · team-lead'

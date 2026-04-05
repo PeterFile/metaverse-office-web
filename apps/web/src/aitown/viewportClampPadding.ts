@@ -8,11 +8,32 @@ const rightSelectors = [
   '.aitown-hub-sheet',
   '.aitown-watch-overlay'
 ];
+const textContributorSelectors = [...new Set(topSelectors)];
 
-export function resolveViewportClampPadding(host: HTMLDivElement): ViewportClampPadding {
+function resolveViewportClampPaddingRoot(host: HTMLDivElement) {
   const panel = host.closest('.aitown-panel--game');
   const shell = host.closest('.aitown-shell');
-  const overlayRoot = shell instanceof HTMLElement ? shell : panel;
+
+  return shell instanceof HTMLElement ? shell : panel;
+}
+
+export function isViewportClampPaddingTextContributor(host: HTMLDivElement, node: Node | null) {
+  const overlayRoot = resolveViewportClampPaddingRoot(host);
+  const element = node instanceof Element ? node : node?.parentElement;
+
+  if (!(overlayRoot instanceof HTMLElement) || !(element instanceof Element) || !overlayRoot.contains(element)) {
+    return false;
+  }
+
+  return textContributorSelectors.some((selector) => {
+    const contributor = element.closest(selector);
+
+    return contributor instanceof Element && overlayRoot.contains(contributor);
+  });
+}
+
+export function resolveViewportClampPadding(host: HTMLDivElement): ViewportClampPadding {
+  const overlayRoot = resolveViewportClampPaddingRoot(host);
 
   if (!(overlayRoot instanceof HTMLElement)) {
     return {};

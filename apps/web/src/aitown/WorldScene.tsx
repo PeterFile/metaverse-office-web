@@ -28,7 +28,7 @@ import {
   type ViewportInputCapabilities,
   type ViewportInspector
 } from './viewport';
-import { resolveViewportClampPadding } from './viewportClampPadding';
+import { isViewportClampPaddingTextContributor, resolveViewportClampPadding } from './viewportClampPadding';
 import { resolveSceneAgentStatusBadge } from './agentStatusBadge';
 import {
   resolveWatchOverlayAgentEmphasisById,
@@ -745,8 +745,17 @@ export default function WorldScene({ scene, onSelectAgent }: WorldSceneProps) {
       resizeObserver.observe(host);
 
       if (typeof MutationObserver !== 'undefined') {
-        overlayObserver = new MutationObserver(() => {
+        overlayObserver = new MutationObserver((mutations) => {
           if (!viewportRef.current) {
+            return;
+          }
+
+          const shouldSyncClampPadding = mutations.some(
+            (mutation) =>
+              mutation.type !== 'characterData' || isViewportClampPaddingTextContributor(host, mutation.target)
+          );
+
+          if (!shouldSyncClampPadding) {
             return;
           }
 
@@ -755,6 +764,7 @@ export default function WorldScene({ scene, onSelectAgent }: WorldSceneProps) {
         overlayObserver.observe(document.body, {
           childList: true,
           subtree: true,
+          characterData: true,
           attributes: true,
           attributeFilter: ['class', 'style']
         });

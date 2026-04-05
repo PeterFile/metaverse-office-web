@@ -2100,7 +2100,9 @@ export function DetailsPanel({
             {incidentFeedState === 'loading' && !incidentFeed ? (
               <li className="aitown-record">Loading incident feed...</li>
             ) : null}
-            {incidentFeedError ? <li className="aitown-record">{incidentFeedError}</li> : null}
+            {incidentFeedError && incidentFeedState !== 'loading' ? (
+              <li className="aitown-record">{incidentFeedError}</li>
+            ) : null}
             {(incidentFeed?.items ?? []).slice(0, 4).map((incident) =>
               renderIncidentRecord({
                 incident,
@@ -2816,7 +2818,9 @@ export function DetailsPanel({
           {incidentFeedState === 'loading' && !incidentFeed ? (
             <li className="aitown-record">Loading incident feed...</li>
           ) : null}
-          {incidentFeedError ? <li className="aitown-record">{incidentFeedError}</li> : null}
+          {incidentFeedError && incidentFeedState !== 'loading' ? (
+            <li className="aitown-record">{incidentFeedError}</li>
+          ) : null}
           {relatedIncidents.map((incident) =>
             renderIncidentRecord({
               incident,

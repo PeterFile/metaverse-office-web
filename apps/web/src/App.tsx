@@ -11,6 +11,7 @@ import {
   fetchMemoryArtifacts,
   fetchOfficeOperations,
   fetchOfficeOverview,
+  fetchPeerWatchAlerts,
   fetchTimeline
 } from './api';
 import { DetailsPanel } from './aitown/DetailsPanel';
@@ -30,6 +31,7 @@ type OperationSelection = {
 
 const CREW_TIMELINE_LIMIT = 4;
 const MEMORY_ARTIFACT_LIMIT = 4;
+const SELECTED_AGENT_SUPERVISION_HISTORY_LIMIT = 4;
 
 function isJsdomEnvironment() {
   return typeof navigator !== 'undefined' && /jsdom/i.test(navigator.userAgent);
@@ -255,6 +257,16 @@ function AppInner() {
       }
     },
     resourceKey: selectedAgentId
+  });
+  const selectedAgentSupervisionHistoryResource = usePolledResource({
+    enabled: hubOpen && selectedAgentId !== null,
+    load: (signal) =>
+      fetchPeerWatchAlerts({
+        targetAgentId: selectedAgentId!,
+        limit: SELECTED_AGENT_SUPERVISION_HISTORY_LIMIT,
+        signal
+      }),
+    resourceKey: selectedAgentId ? `selected-agent-supervision-history:${selectedAgentId}` : null
   });
 
   const activeWorkflow =
@@ -837,6 +849,9 @@ function AppInner() {
               memoryArtifacts={memoryArtifactsResource.data}
               memoryArtifactsError={memoryArtifactsResource.error}
               memoryArtifactsState={memoryArtifactsResource.state}
+              selectedAgentSupervisionHistory={selectedAgentSupervisionHistoryResource.data}
+              selectedAgentSupervisionHistoryError={selectedAgentSupervisionHistoryResource.error}
+              selectedAgentSupervisionHistoryState={selectedAgentSupervisionHistoryResource.state}
               onInspectAgent={(agentId) =>
                 selectAgentWithSnapshot(
                   agentId,

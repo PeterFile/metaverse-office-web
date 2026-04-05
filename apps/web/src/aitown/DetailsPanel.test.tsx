@@ -6718,6 +6718,8 @@ describe('DetailsPanel workflow peer-watch alerts', () => {
     expect(within(alertRecord!).getByText('At · 2026-03-16T08:55:00.000Z')).toBeVisible();
     expect(within(alertRecord!).getByText('Severity · orange')).toBeVisible();
     expect(within(alertRecord!).getByText('Status · resolved')).toBeVisible();
+    expect(within(alertRecord!).getByText('Workflow status · blocked')).toBeVisible();
+    expect(within(alertRecord!).getByText('Task · Fix workflow issue')).toBeVisible();
     expect(
       within(alertRecord!).getByRole('button', {
         name: 'Select supervision history observer from alert alert-history-1 team-lead'

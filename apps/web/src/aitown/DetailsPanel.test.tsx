@@ -465,6 +465,7 @@ function buildProps(overrides: Partial<DetailsPanelProps> = {}): DetailsPanelPro
     operationsStateBucketsError: null,
     operationsStateBucketsState: 'ready',
     overviewZones: null,
+    manualCorrelationOverrideActive: false,
     preserveWorkflowCounterpartyCorrelation: false,
     memoryArtifacts: buildMemoryArtifacts(),
     memoryArtifactsError: null,
@@ -504,6 +505,7 @@ describe('DetailsPanel accountability signals', () => {
       <DetailsPanel
         {...buildProps({
           onResetCorrelationOverride,
+          manualCorrelationOverrideActive: true,
           preserveWorkflowCounterpartyCorrelation: true,
           selectedAgent: null,
           selectedCorrelationId: 'corr-app-secondary',
@@ -530,6 +532,7 @@ describe('DetailsPanel accountability signals', () => {
       <DetailsPanel
         {...buildProps({
           onResetCorrelationOverride,
+          manualCorrelationOverrideActive: true,
           preserveWorkflowCounterpartyCorrelation: true,
           selectedCorrelationId: 'corr-app-secondary'
         })}

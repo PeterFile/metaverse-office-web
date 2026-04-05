@@ -198,6 +198,7 @@ function AppInner() {
   const [hubOpen, setHubOpen] = useState(false);
   const [selectedCorrelationId, setSelectedCorrelationId] = useState<string | null>(null);
   const [selectedCorrelationWasExplicit, setSelectedCorrelationWasExplicit] = useState(false);
+  const [selectedCorrelationCarryForward, setSelectedCorrelationCarryForward] = useState(false);
   const [selectedOperationsState, setSelectedOperationsState] = useState<string | null>(null);
   const [selectedOperationSelection, setSelectedOperationSelection] = useState<OperationSelection | null>(null);
   const [selectedOperationSnapshot, setSelectedOperationSnapshot] = useState<OfficeOperation | null>(null);
@@ -343,6 +344,7 @@ function AppInner() {
         correlationSelectionModeRef.current = 'auto';
         setSelectedCorrelationId(null);
         setSelectedCorrelationWasExplicit(false);
+        setSelectedCorrelationCarryForward(false);
       }
     },
     resourceKey: resolveCorrelationPollKey(selectedCorrelationId)
@@ -458,6 +460,16 @@ function AppInner() {
       ? null
       : selectedOperationForCorrelationSelection;
   }, [invalidSelectedOperationCorrelationId, selectedOperationForCorrelationSelection]);
+  const defaultCorrelationId = useMemo(
+    () =>
+      selectDefaultCorrelationId({
+        incidentFeed: incidentFeedResource.data,
+        selectedOperation: selectedOperationForAutoCorrelation,
+        workflow: activeWorkflow,
+        selectedAgentId
+      }),
+    [activeWorkflow, incidentFeedResource.data, selectedAgentId, selectedOperationForAutoCorrelation]
+  );
 
   const crewOverviewOperationStateBuckets = useMemo(
     () => crewOverviewStateBucketsResource.data?.summary.state_buckets ?? {},
@@ -509,6 +521,7 @@ function AppInner() {
       correlationSelectionModeRef.current = 'auto';
       setSelectedCorrelationId(null);
       setSelectedCorrelationWasExplicit(false);
+      setSelectedCorrelationCarryForward(false);
     }
   }, [correlationSelectionContext, hubOpen]);
 
@@ -521,53 +534,53 @@ function AppInner() {
       return;
     }
 
-    const nextCorrelationId = selectDefaultCorrelationId({
-      incidentFeed: incidentFeedResource.data,
-      selectedOperation: selectedOperationForAutoCorrelation,
-      workflow: activeWorkflow,
-      selectedAgentId
-    });
-
-    if (nextCorrelationId !== selectedCorrelationId) {
-      setSelectedCorrelationId(nextCorrelationId);
+    if (defaultCorrelationId !== selectedCorrelationId || selectedCorrelationWasExplicit) {
+      setSelectedCorrelationId(defaultCorrelationId);
       setSelectedCorrelationWasExplicit(false);
+      setSelectedCorrelationCarryForward(false);
     }
   }, [
-    activeWorkflow,
+    defaultCorrelationId,
     hubOpen,
-    incidentFeedResource.data,
-    selectedAgentId,
     selectedCorrelationId,
-    selectedOperation,
-    selectedOperationForAutoCorrelation
+    selectedCorrelationWasExplicit
   ]);
 
   const closeHub = useCallback(() => {
     setHubOpen(false);
   }, []);
 
-  const handleSelectCorrelation = useCallback((correlationId: string | null) => {
-    const isExplicitSelection = correlationId !== null;
-    correlationSelectionModeRef.current = isExplicitSelection ? 'manual' : 'auto';
-    setSelectedCorrelationId(correlationId);
-    setSelectedCorrelationWasExplicit(isExplicitSelection);
-    if (correlationId) {
-      setHubOpen(true);
-    }
-  }, []);
+  const handleSelectCorrelation = useCallback(
+    (
+      correlationId: string | null,
+      options?: {
+        preserveAutoOnDefaultReselect?: boolean;
+      }
+    ) => {
+      const keepAutoSelection =
+        Boolean(options?.preserveAutoOnDefaultReselect) &&
+        correlationSelectionModeRef.current === 'auto' &&
+        correlationId !== null &&
+        correlationId === selectedCorrelationId &&
+        correlationId === defaultCorrelationId;
+      const isExplicitSelection = correlationId !== null && !keepAutoSelection;
+      correlationSelectionModeRef.current = isExplicitSelection ? 'manual' : 'auto';
+      setSelectedCorrelationId(correlationId);
+      setSelectedCorrelationWasExplicit(isExplicitSelection);
+      setSelectedCorrelationCarryForward(correlationId !== null && !keepAutoSelection);
+      if (correlationId) {
+        setHubOpen(true);
+      }
+    },
+    [defaultCorrelationId, selectedCorrelationId]
+  );
 
   const handleResetCorrelationOverride = useCallback(() => {
-    const nextCorrelationId = selectDefaultCorrelationId({
-      incidentFeed: incidentFeedResource.data,
-      selectedOperation: selectedOperationForAutoCorrelation,
-      workflow: activeWorkflow,
-      selectedAgentId
-    });
-
     correlationSelectionModeRef.current = 'auto';
-    setSelectedCorrelationId(nextCorrelationId);
+    setSelectedCorrelationId(defaultCorrelationId);
     setSelectedCorrelationWasExplicit(false);
-  }, [activeWorkflow, incidentFeedResource.data, selectedAgentId, selectedOperationForAutoCorrelation]);
+    setSelectedCorrelationCarryForward(false);
+  }, [defaultCorrelationId]);
 
   const toggleHub = useCallback(() => {
     setHubOpen((open) => !open);
@@ -680,7 +693,8 @@ function AppInner() {
       correlationId: string | null,
       operationSelection: OperationSelection | null = null,
       correlationMode: 'auto' | 'manual' | 'preserved' = correlationId === null ? 'auto' : 'manual',
-      correlationWasExplicit = correlationMode === 'manual'
+      correlationWasExplicit = correlationMode === 'manual',
+      correlationCarryForward = correlationId !== null && correlationWasExplicit
     ) => {
       if (!agentId) {
         lastSelectedAgentRef.current = null;
@@ -695,6 +709,7 @@ function AppInner() {
       correlationSelectionModeRef.current = correlationMode;
       setSelectedCorrelationId(correlationId);
       setSelectedCorrelationWasExplicit(correlationId !== null && correlationWasExplicit);
+      setSelectedCorrelationCarryForward(correlationId !== null && correlationCarryForward);
       setSelectedOperationSelection(operationSelection);
       setSelectedAgentId(agentId);
     },
@@ -708,6 +723,7 @@ function AppInner() {
       operationSelection: OperationSelection | null = null,
       correlationMode: 'auto' | 'manual' | 'preserved' = correlationId === null ? 'auto' : 'manual',
       correlationWasExplicit = correlationMode === 'manual',
+      correlationCarryForward = correlationId !== null && correlationWasExplicit,
       operationSnapshot: OfficeOperation | null = null
     ) => {
       setSelectedOperationSnapshot(operationSnapshot);
@@ -716,7 +732,8 @@ function AppInner() {
         correlationId,
         operationSelection,
         correlationMode,
-        correlationWasExplicit
+        correlationWasExplicit,
+        correlationCarryForward
       );
     },
     [selectAgent]
@@ -730,6 +747,7 @@ function AppInner() {
         null,
         operationSelection,
         'auto',
+        false,
         false,
         resolveOperationSnapshotSeed(agentId, crewOverviewOperationSeedData)
       );
@@ -749,6 +767,7 @@ function AppInner() {
           agentId: operation.agent_id
         },
         'auto',
+        false,
         false,
         operation
       );
@@ -771,8 +790,8 @@ function AppInner() {
     incidentFeedResource.error,
     incidentFeedResource.data
   );
-  const preserveWorkflowCounterpartyCorrelation =
-    selectedCorrelationId !== null && selectedCorrelationWasExplicit;
+  const manualCorrelationOverrideActive = selectedCorrelationId !== null && selectedCorrelationWasExplicit;
+  const preserveWorkflowCounterpartyCorrelation = selectedCorrelationId !== null && selectedCorrelationCarryForward;
 
   return (
     <main className="aitown-shell game-background">
@@ -895,6 +914,7 @@ function AppInner() {
               operationsStateBucketsError={crewOverviewStateBucketsResource.error}
               operationsStateBucketsState={crewOverviewStateBucketsResource.state}
               overviewZones={overviewResource.data?.zones ?? null}
+              manualCorrelationOverrideActive={manualCorrelationOverrideActive}
               preserveWorkflowCounterpartyCorrelation={preserveWorkflowCounterpartyCorrelation}
               selectedAgent={selectedAgent}
               selectedCorrelationId={selectedCorrelationId}
@@ -920,6 +940,7 @@ function AppInner() {
                   resolveDirectOperationSelection(agentId, null),
                   'auto',
                   false,
+                  false,
                   resolveOperationSnapshotSeed(agentId, crewOverviewOperationSeedData)
                 )
               }
@@ -934,6 +955,7 @@ function AppInner() {
                       ? 'preserved'
                       : 'auto',
                   correlationId !== null && correlationId !== undefined && correlationId === selectedCorrelationId && selectedCorrelationWasExplicit,
+                  correlationId !== null && correlationId !== undefined && correlationId === selectedCorrelationId && selectedCorrelationCarryForward,
                   null
                 )
               }

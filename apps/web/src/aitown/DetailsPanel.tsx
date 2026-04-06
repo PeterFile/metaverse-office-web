@@ -1199,6 +1199,7 @@ function renderSelectedAgentSupervisionAlert({
         label: alert.correlation_id ?? 'No correlation id',
         buttonLabel: 'Open supervision history correlation',
         activeCorrelationId,
+        preserveAutoOnDefaultReselect: true,
         onSelectCorrelation
       })}
       <span>{`At · ${renderTimestamp(alert.ts, 'No alert timestamp')}`}</span>

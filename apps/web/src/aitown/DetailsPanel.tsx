@@ -41,6 +41,7 @@ type DetailsPanelProps = {
   operationsStateBucketsError: string | null;
   operationsStateBucketsState: LoadState;
   overviewZones: OfficeZone[] | null;
+  manualCorrelationOverrideActive: boolean;
   preserveWorkflowCounterpartyCorrelation: boolean;
   memoryArtifacts: MemoryArtifactIndex | null;
   memoryArtifactsError: string | null;
@@ -61,7 +62,7 @@ type DetailsPanelProps = {
   world: WorldState;
   onSelectAgent: SelectAgentHandler;
   onInspectAgent: (agentId: string | null) => void;
-  onSelectCorrelation: (correlationId: string | null) => void;
+  onSelectCorrelation: SelectCorrelationHandler;
   onResetCorrelationOverride: () => void;
   onSelectOperationsState: (state: string | null) => void;
   onSelectOperation: (operation: OfficeOperation) => void;
@@ -75,6 +76,11 @@ type SelectAgentHandler = (
   agentId: string | null,
   correlationId?: string | null,
   options?: SelectAgentOptions
+) => void;
+
+type SelectCorrelationHandler = (
+  correlationId: string | null,
+  options?: { preserveAutoOnDefaultReselect?: boolean }
 ) => void;
 
 const SEVERITY_LABELS = {
@@ -102,13 +108,15 @@ function renderCorrelationButton({
   label,
   buttonLabel,
   activeCorrelationId,
+  preserveAutoOnDefaultReselect = false,
   onSelectCorrelation
 }: {
   correlationId: string | null;
   label: string;
   buttonLabel: string;
   activeCorrelationId: string | null;
-  onSelectCorrelation: (correlationId: string | null) => void;
+  preserveAutoOnDefaultReselect?: boolean;
+  onSelectCorrelation: SelectCorrelationHandler;
 }) {
   if (!correlationId) {
     return <span>{label}</span>;
@@ -121,7 +129,11 @@ function renderCorrelationButton({
       type="button"
       className={`aitown-link-button${isActive ? ' is-active' : ''}`}
       aria-label={`${buttonLabel} ${correlationId}${isActive ? ', currently selected' : ''}`}
-      onClick={() => onSelectCorrelation(correlationId)}
+      onClick={() =>
+        preserveAutoOnDefaultReselect
+          ? onSelectCorrelation(correlationId, { preserveAutoOnDefaultReselect: true })
+          : onSelectCorrelation(correlationId)
+      }
     >
       {label}
     </button>
@@ -510,7 +522,7 @@ function renderCorrelationPivotList({
   activeCorrelationId: string | null;
   emptyLabel: string;
   buttonLabel: string;
-  onSelectCorrelation: (correlationId: string | null) => void;
+  onSelectCorrelation: SelectCorrelationHandler;
 }) {
   const uniqueCorrelationIds = dedupeNonEmptyStrings(correlationIds);
 
@@ -903,7 +915,7 @@ function renderReplayTimelineEvent({
   navigableAgentIds: Set<string>;
   sharedMemoryArtifactRefs: ReadonlySet<string>;
   onSelectAgent: SelectAgentHandler;
-  onSelectCorrelation: (correlationId: string | null) => void;
+  onSelectCorrelation: SelectCorrelationHandler;
 }) {
   const canNavigateToAgent = event.agent_id !== currentAgentId && navigableAgentIds.has(event.agent_id);
   const preservedCorrelationId = activeCorrelationId ?? event.correlation_id;
@@ -1015,7 +1027,7 @@ function renderWorkflowStatusRecord({
   currentAgentId: string | null;
   navigableAgentIds: Set<string>;
   onSelectAgent: SelectAgentHandler;
-  onSelectCorrelation: (correlationId: string | null) => void;
+  onSelectCorrelation: SelectCorrelationHandler;
 }) {
   const preservedCorrelationId = activeCorrelationId ?? correlationId;
   const canNavigateToActor = actorId !== currentAgentId && navigableAgentIds.has(actorId);
@@ -1089,7 +1101,7 @@ function renderWorkflowPeerWatchAlert({
   currentAgentId: string | null;
   navigableAgentIds: Set<string>;
   onSelectAgent: SelectAgentHandler;
-  onSelectCorrelation: (correlationId: string | null) => void;
+  onSelectCorrelation: SelectCorrelationHandler;
 }) {
   const preservedCorrelationId = activeCorrelationId ?? alert.correlation_id;
   const canNavigateToTarget = alert.target_agent_id !== currentAgentId && navigableAgentIds.has(alert.target_agent_id);
@@ -1173,7 +1185,7 @@ function renderSelectedAgentSupervisionAlert({
   currentAgentId: string | null;
   navigableAgentIds: Set<string>;
   onSelectAgent: SelectAgentHandler;
-  onSelectCorrelation: (correlationId: string | null) => void;
+  onSelectCorrelation: SelectCorrelationHandler;
 }) {
   const preservedCorrelationId = activeCorrelationId ?? alert.correlation_id;
   const canNavigateToObserver =
@@ -1244,7 +1256,7 @@ function renderSharedMemoryArtifact({
   currentAgentId: string | null;
   navigableAgentIds: Set<string>;
   onSelectAgent: SelectAgentHandler;
-  onSelectCorrelation: (correlationId: string | null) => void;
+  onSelectCorrelation: SelectCorrelationHandler;
 }) {
   const artifactCorrelationId = findFirstNonEmptyString(artifact.correlation_ids);
   const preservedCorrelationId = activeCorrelationId ?? artifactCorrelationId;
@@ -1311,7 +1323,7 @@ function renderSharedMemorySection({
   currentAgentId: string | null;
   navigableAgentIds: Set<string>;
   onSelectAgent: SelectAgentHandler;
-  onSelectCorrelation: (correlationId: string | null) => void;
+  onSelectCorrelation: SelectCorrelationHandler;
 }) {
   const sharedMemoryWarning =
     memoryArtifactsError && memoryArtifacts
@@ -1370,7 +1382,7 @@ function renderIncidentRecord({
   sharedMemoryArtifactRefs: ReadonlySet<string>;
   enableSharedMemoryEvidenceJump?: boolean;
   onSelectAgent: SelectAgentHandler;
-  onSelectCorrelation: (correlationId: string | null) => void;
+  onSelectCorrelation: SelectCorrelationHandler;
   includeAgentPivot: boolean;
   includeActorPivot?: boolean;
   actorPivotAriaLabelPrefix?: string;
@@ -1400,6 +1412,7 @@ function renderIncidentRecord({
             label: incident.correlation_id ?? 'No correlation id',
             buttonLabel: 'Open incident correlation',
             activeCorrelationId,
+            preserveAutoOnDefaultReselect: true,
             onSelectCorrelation
           })
         : null}
@@ -1607,6 +1620,7 @@ export function DetailsPanel({
   operationsStateBucketsError,
   operationsStateBucketsState,
   overviewZones,
+  manualCorrelationOverrideActive,
   preserveWorkflowCounterpartyCorrelation,
   memoryArtifacts,
   memoryArtifactsError,
@@ -1718,7 +1732,7 @@ export function DetailsPanel({
   const sharedMemoryActiveCorrelationId = selectedCorrelationId;
   const sharedMemoryArtifactRefs = new Set((memoryArtifacts?.items ?? []).map((artifact) => artifact.artifact_ref));
   const manualCorrelationResetAction =
-    preserveWorkflowCounterpartyCorrelation && selectedCorrelationId ? (
+    manualCorrelationOverrideActive && selectedCorrelationId ? (
       <>
         {' '}
         <span>
@@ -2143,20 +2157,20 @@ export function DetailsPanel({
 
         <section className="aitown-details__section">
           <h3>Timeline Replay</h3>
-          {preserveWorkflowCounterpartyCorrelation && selectedCorrelationId ? (
+          {manualCorrelationOverrideActive && selectedCorrelationId ? (
             <span>{`Scoped replay · ${selectedCorrelationId}`}</span>
           ) : null}
           <ul className="aitown-records">
             {timelineReplayState === 'loading' && !timelineReplay ? (
               <li className="aitown-record">
-                {preserveWorkflowCounterpartyCorrelation && selectedCorrelationId
+                {manualCorrelationOverrideActive && selectedCorrelationId
                   ? 'Loading scoped timeline replay...'
                   : 'Loading timeline replay...'}
               </li>
             ) : null}
             {timelineReplayError ? (
               <li className="aitown-record">
-                {preserveWorkflowCounterpartyCorrelation && selectedCorrelationId
+                {manualCorrelationOverrideActive && selectedCorrelationId
                   ? `Scoped replay unavailable. ${timelineReplayError}`
                   : timelineReplayError}
               </li>
@@ -2175,7 +2189,7 @@ export function DetailsPanel({
             )}
             {timelineReplayState === 'ready' && !timelineReplayError && !timelineReplay?.items.length ? (
               <li className="aitown-record">
-                {preserveWorkflowCounterpartyCorrelation && selectedCorrelationId
+                {manualCorrelationOverrideActive && selectedCorrelationId
                   ? `No replay events for ${selectedCorrelationId}.`
                   : 'No recent replay events.'}
               </li>
@@ -2582,6 +2596,7 @@ export function DetailsPanel({
                     label: selectedOperation.correlation_id,
                     buttonLabel: 'Open operation correlation',
                     activeCorrelationId: selectedCorrelationId,
+                    preserveAutoOnDefaultReselect: true,
                     onSelectCorrelation
                   })
                 : null}

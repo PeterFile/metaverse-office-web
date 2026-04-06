@@ -3274,7 +3274,7 @@ afterEach(() => {
     expect(timelineRequests).toBeGreaterThan(1);
   });
 
-  it('keeps the last scoped replay visible when a later scoped replay poll fails', async () => {
+  it('keeps the last explicitly scoped replay visible when a later scoped replay poll fails', async () => {
     (window as typeof window & { __AITOWN_POLL_INTERVAL_MS__?: number }).__AITOWN_POLL_INTERVAL_MS__ = 10;
 
     let scopedReplayRequests = 0;
@@ -3283,10 +3283,10 @@ afterEach(() => {
       vi.fn(async (input: RequestInfo | URL) => {
         const url = typeof input === 'string' ? input : input.toString();
 
-        if (url === reviewScopedTimelineUrl) {
+        if (url === secondaryScopedTimelineUrl) {
           scopedReplayRequests += 1;
           if (scopedReplayRequests === 1) {
-            return new Response(JSON.stringify(reviewScopedTimelineFixture), {
+            return new Response(JSON.stringify(secondaryScopedTimelineFixture), {
               headers: { 'content-type': 'application/json' }
             });
           }
@@ -3312,17 +3312,53 @@ afterEach(() => {
 
     await user.click(
       within(incidentSection!).getByRole('button', {
+        name: 'Open incident correlation corr-app-secondary'
+      })
+    );
+
+    await waitFor(() => {
+      expect(within(replaySection!).getByText('Scoped replay · corr-app-secondary')).toBeVisible();
+      expect(within(replaySection!).getByText('Replay captured the secondary review handoff')).toBeVisible();
+      expect(within(replaySection!).getByText('Scoped replay unavailable. scoped replay refresh failed')).toBeVisible();
+    });
+
+    expect(scopedReplayRequests).toBeGreaterThan(1);
+  });
+
+  it('keeps crew-overview auto correlation mode when re-selecting the current default correlation', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    const incidentSection = within(details).getByRole('heading', { name: 'Incident Feed' }).closest('section');
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    const replaySection = (await within(details).findByRole('heading', { name: 'Timeline Replay' })).closest('section');
+    expect(incidentSection).not.toBeNull();
+    expect(correlationSection).not.toBeNull();
+    expect(replaySection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+      expect(within(replaySection!).getByText('Replay captured missing workflow evidence')).toBeVisible();
+      expect(within(details).queryByRole('button', { name: 'Return to current scope' })).not.toBeInTheDocument();
+    });
+
+    const fetchCallCountBeforeReselect = vi.mocked(globalThis.fetch).mock.calls.length;
+
+    await user.click(
+      within(incidentSection!).getByRole('button', {
         name: 'Open incident correlation corr-app-review, currently selected'
       })
     );
 
     await waitFor(() => {
-      expect(within(replaySection!).getByText('Scoped replay · corr-app-review')).toBeVisible();
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
       expect(within(replaySection!).getByText('Replay captured missing workflow evidence')).toBeVisible();
-      expect(within(replaySection!).getByText('Scoped replay unavailable. scoped replay refresh failed')).toBeVisible();
+      expect(within(replaySection!).queryByText('Scoped replay · corr-app-review')).not.toBeInTheDocument();
+      expect(within(details).queryByRole('button', { name: 'Return to current scope' })).not.toBeInTheDocument();
     });
 
-    expect(scopedReplayRequests).toBeGreaterThan(1);
+    expect(vi.mocked(globalThis.fetch).mock.calls).toHaveLength(fetchCallCountBeforeReselect);
   });
 
   it('shows a canonical office grid in crew overview and pivots from a zone occupant', async () => {
@@ -6049,7 +6085,7 @@ afterEach(() => {
     });
   });
 
-  it('preserves an explicitly reopened accountability correlation when pivoting through workflow counterparties', async () => {
+  it('preserves an explicitly reopened default correlation when pivoting through workflow counterparties', async () => {
     const user = userEvent.setup();
     render(<App />);
 
@@ -6057,30 +6093,57 @@ afterEach(() => {
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent from active queue' }));
 
     const workflowSection = within(details).getByRole('heading', { name: 'Workflow' }).closest('section');
-    const auditSection = within(details).getByRole('heading', { name: 'Audit Signals' }).closest('section');
+    const incidentSection = within(details).getByRole('heading', { name: 'Incident Feed' }).closest('section');
     const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
     expect(workflowSection).not.toBeNull();
-    expect(auditSection).not.toBeNull();
+    expect(incidentSection).not.toBeNull();
     expect(correlationSection).not.toBeNull();
 
     await waitFor(() => {
       expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
       expect(
-        within(auditSection!).getByRole('button', {
-          name: 'Open accountability correlation corr-app-review, currently selected'
+        within(incidentSection!).getByRole('button', {
+          name: 'Open incident correlation corr-app-secondary'
+        })
+      ).toBeVisible();
+      expect(
+        within(workflowSection!).getByRole('button', {
+          name: 'Open workflow status correlation corr-app-review, currently selected'
         })
       ).toBeVisible();
     });
 
     await user.click(
-      within(auditSection!).getByRole('button', {
-        name: 'Open accountability correlation corr-app-review, currently selected'
+      within(incidentSection!).getByRole('button', {
+        name: 'Open incident correlation corr-app-secondary'
+      })
+    );
+
+    await waitFor(() => {
+      expect(within(correlationSection!).getByText('corr-app-secondary')).toBeVisible();
+      expect(
+        within(workflowSection!).getByRole('button', {
+          name: 'Open workflow status correlation corr-app-review'
+        })
+      ).toBeVisible();
+      expect(within(details).getByRole('button', { name: 'Return to current scope' })).toBeVisible();
+    });
+
+    await user.click(
+      within(workflowSection!).getByRole('button', {
+        name: 'Open workflow status correlation corr-app-review'
       })
     );
 
     await waitFor(() => {
       expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
       expect(within(correlationSection!).getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
+      expect(
+        within(workflowSection!).getByRole('button', {
+          name: 'Open workflow status correlation corr-app-review, currently selected'
+        })
+      ).toBeVisible();
+      expect(within(details).getByRole('button', { name: 'Return to current scope' })).toBeVisible();
     });
 
     await user.click(within(workflowSection!).getByRole('button', { name: 'Select workflow counterparty agent team-lead' }));
@@ -7689,6 +7752,119 @@ afterEach(() => {
 
     expect(postResetRequests).toContain(selectedCorrelationMemoryArtifactsUrl);
     expect(postResetRequests).not.toContain(appEngineeringMemoryArtifactsUrl);
+  });
+
+  it('keeps selected-agent auto correlation mode when re-selecting the current default correlation', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
+
+    const operationSection = (await within(details).findByRole('heading', { name: 'Current Operation' })).closest(
+      'section'
+    );
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    expect(operationSection).not.toBeNull();
+    expect(correlationSection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+      expect(
+        within(operationSection!).getByRole('button', {
+          name: 'Open operation correlation corr-app-review, currently selected'
+        })
+      ).toBeVisible();
+      expect(within(details).queryByRole('button', { name: 'Return to current scope' })).not.toBeInTheDocument();
+    });
+
+    const fetchCallCountBeforeReselect = vi.mocked(globalThis.fetch).mock.calls.length;
+
+    await user.click(
+      within(operationSection!).getByRole('button', {
+        name: 'Open operation correlation corr-app-review, currently selected'
+      })
+    );
+
+    await waitFor(() => {
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+      expect(within(details).queryByRole('button', { name: 'Return to current scope' })).not.toBeInTheDocument();
+    });
+
+    expect(vi.mocked(globalThis.fetch).mock.calls).toHaveLength(fetchCallCountBeforeReselect);
+  });
+
+  it('keeps a manually reopened default correlation manual when re-selecting it from workflow status', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent from active queue' }));
+
+    const workflowSection = within(details).getByRole('heading', { name: 'Workflow' }).closest('section');
+    const incidentSection = within(details).getByRole('heading', { name: 'Incident Feed' }).closest('section');
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    expect(workflowSection).not.toBeNull();
+    expect(incidentSection).not.toBeNull();
+    expect(correlationSection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+      expect(
+        within(incidentSection!).getByRole('button', {
+          name: 'Open incident correlation corr-app-secondary'
+        })
+      ).toBeVisible();
+      expect(
+        within(workflowSection!).getByRole('button', {
+          name: 'Open workflow status correlation corr-app-review, currently selected'
+        })
+      ).toBeVisible();
+      expect(within(details).queryByRole('button', { name: 'Return to current scope' })).not.toBeInTheDocument();
+    });
+
+    await user.click(
+      within(incidentSection!).getByRole('button', {
+        name: 'Open incident correlation corr-app-secondary'
+      })
+    );
+
+    await waitFor(() => {
+      expect(within(correlationSection!).getByText('corr-app-secondary')).toBeVisible();
+      expect(
+        within(workflowSection!).getByRole('button', {
+          name: 'Open workflow status correlation corr-app-review'
+        })
+      ).toBeVisible();
+      expect(within(details).getByRole('button', { name: 'Return to current scope' })).toBeVisible();
+    });
+
+    await user.click(
+      within(workflowSection!).getByRole('button', {
+        name: 'Open workflow status correlation corr-app-review'
+      })
+    );
+
+    await waitFor(() => {
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+      expect(
+        within(workflowSection!).getByRole('button', {
+          name: 'Open workflow status correlation corr-app-review, currently selected'
+        })
+      ).toBeVisible();
+      expect(within(details).getByRole('button', { name: 'Return to current scope' })).toBeVisible();
+    });
+
+    await user.click(
+      within(workflowSection!).getByRole('button', {
+        name: 'Open workflow status correlation corr-app-review, currently selected'
+      })
+    );
+
+    await waitFor(() => {
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+      expect(within(details).getByRole('button', { name: 'Return to current scope' })).toBeVisible();
+    });
   });
 
   it('does not fall back to crew-overview correlations while a selected-agent workflow is still loading', async () => {

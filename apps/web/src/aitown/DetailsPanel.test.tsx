@@ -6796,6 +6796,55 @@ describe('DetailsPanel workflow peer-watch alerts', () => {
     expect(onSelectCorrelation).not.toHaveBeenCalled();
   });
 
+  it('preserves auto correlation mode when re-selecting the active selected-agent supervision history correlation', async () => {
+    const user = userEvent.setup();
+    const onSelectCorrelation = vi.fn();
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          onSelectCorrelation,
+          selectedAgentSupervisionHistory: {
+            items: [
+              {
+                alert_id: 'alert-history-1',
+                ts: '2026-03-16T08:55:00.000Z',
+                agent_id: 'app-engineering',
+                target_agent_id: 'app-engineering',
+                actor_id: 'team-lead',
+                observer_agent_id: 'team-lead',
+                watcher_agent_ids: ['growth-revenue'],
+                severity: 'orange',
+                status: 'resolved',
+                current_state: 'blocked',
+                active_task: 'Fix workflow issue',
+                summary: 'Peer watch recovered after evidence review',
+                evidence_refs: ['/evidence/review.md'],
+                evidence_count: 1,
+                correlation_id: 'corr-app-review',
+                source_kind: 'controller_event',
+                metadata: {}
+              }
+            ]
+          }
+        })}
+      />
+    );
+
+    const supervisionSection = screen.getByRole('heading', { name: 'Supervision History' }).closest('section');
+    expect(supervisionSection).not.toBeNull();
+
+    await user.click(
+      within(supervisionSection!).getByRole('button', {
+        name: 'Open supervision history correlation corr-app-review, currently selected'
+      })
+    );
+
+    expect(onSelectCorrelation).toHaveBeenCalledWith('corr-app-review', {
+      preserveAutoOnDefaultReselect: true
+    });
+  });
+
   it('renders selected-agent supervision history loading, empty, error, and degraded states explicitly', () => {
     const { rerender } = render(
       <DetailsPanel

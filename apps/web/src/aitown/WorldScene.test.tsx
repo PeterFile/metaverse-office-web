@@ -319,6 +319,52 @@ function setElementRect(
     }) as DOMRect;
 }
 
+function setResponsiveShellChromeRects({
+  host,
+  toolbar,
+  stats
+}: {
+  host: HTMLDivElement;
+  toolbar: HTMLElement;
+  stats: HTMLElement;
+}) {
+  setElementRect(host, { left: 0, top: 0, width: 1000, height: 800 });
+  toolbar.getBoundingClientRect = () => {
+    const expanded = (toolbar.textContent ?? '').includes('Expanded');
+    const height = expanded ? 96 : 56;
+
+    return {
+      left: 0,
+      top: 0,
+      right: 1000,
+      bottom: height,
+      width: 1000,
+      height
+    } as DOMRect;
+  };
+  stats.getBoundingClientRect = () => {
+    const expanded = (stats.textContent ?? '').includes('Expanded');
+    const width = expanded ? 320 : 180;
+
+    return {
+      left: 1000 - width,
+      top: 80,
+      right: 1000,
+      bottom: 220,
+      width,
+      height: 140
+    } as DOMRect;
+  };
+}
+
+function getOnlyTextNode(element: HTMLElement) {
+  const textNode = element.firstChild;
+
+  expect(textNode).toBeInstanceOf(Text);
+
+  return textNode as Text;
+}
+
 function readViewportInspector() {
   return (window as typeof window & { __AITOWN_VIEWPORT__?: ViewportInspector }).__AITOWN_VIEWPORT__;
 }
@@ -632,6 +678,336 @@ describe('WorldScene watch overlay caption gating', () => {
       expect(readViewportInspector()?.read().clampPadding).toEqual({
         top: 0,
         right: 0
+      });
+    });
+  });
+
+  it('does not resync clamp padding for non-contributor text mutations under document.body', async () => {
+    appInitMock.mockReset().mockResolvedValue(undefined);
+    vi.mocked(loadAiTownAssets).mockResolvedValue(makeAssets());
+
+    const { container } = render(
+      <>
+        <div className="test-noise">Noise</div>
+        <main className="aitown-shell">
+          <section className="aitown-panel aitown-panel--game">
+            <div className="aitown-panel__toolbar">Toolbar</div>
+            <div className="aitown-shell__stats">Stats</div>
+            <WorldScene scene={makeScene()} onSelectAgent={vi.fn()} />
+          </section>
+        </main>
+      </>
+    );
+
+    const host = container.querySelector('.aitown-world__host');
+    const toolbar = container.querySelector('.aitown-panel__toolbar');
+    const stats = container.querySelector('.aitown-shell__stats');
+    const noise = container.querySelector('.test-noise');
+
+    expect(host).toBeInstanceOf(HTMLDivElement);
+    expect(toolbar).toBeInstanceOf(HTMLElement);
+    expect(stats).toBeInstanceOf(HTMLElement);
+    expect(noise).toBeInstanceOf(HTMLElement);
+
+    Object.defineProperty(host as HTMLDivElement, 'clientWidth', {
+      configurable: true,
+      value: 1000
+    });
+    Object.defineProperty(host as HTMLDivElement, 'clientHeight', {
+      configurable: true,
+      value: 800
+    });
+
+    const hostRect = vi.fn(
+      () =>
+        ({
+          left: 0,
+          top: 0,
+          right: 1000,
+          bottom: 800,
+          width: 1000,
+          height: 800
+        }) as DOMRect
+    );
+    const toolbarRect = vi.fn(
+      () =>
+        ({
+          left: 0,
+          top: 0,
+          right: 1000,
+          bottom: 56,
+          width: 1000,
+          height: 56
+        }) as DOMRect
+    );
+    const statsRect = vi.fn(
+      () =>
+        ({
+          left: 820,
+          top: 80,
+          right: 1000,
+          bottom: 220,
+          width: 180,
+          height: 140
+        }) as DOMRect
+    );
+
+    (host as HTMLDivElement).getBoundingClientRect = hostRect;
+    (toolbar as HTMLElement).getBoundingClientRect = toolbarRect;
+    (stats as HTMLElement).getBoundingClientRect = statsRect;
+
+    await waitFor(() => {
+      expect(readViewportInspector()?.read().clampPadding).toEqual({
+        top: 56,
+        right: 180
+      });
+    });
+
+    hostRect.mockClear();
+    toolbarRect.mockClear();
+    statsRect.mockClear();
+
+    act(() => {
+      getOnlyTextNode(noise as HTMLElement).data = 'Expanded unrelated copy';
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(hostRect).not.toHaveBeenCalled();
+    expect(toolbarRect).not.toHaveBeenCalled();
+    expect(statsRect).not.toHaveBeenCalled();
+    expect(readViewportInspector()?.read().clampPadding).toEqual({
+      top: 56,
+      right: 180
+    });
+  });
+
+  it('does not resync clamp padding for fixed-width overlay text mutations inside the shell', async () => {
+    appInitMock.mockReset().mockResolvedValue(undefined);
+    vi.mocked(loadAiTownAssets).mockResolvedValue(makeAssets());
+
+    const { container } = render(
+      <main className="aitown-shell">
+        <section className="aitown-panel aitown-panel--game">
+          <div className="aitown-panel__toolbar">Toolbar</div>
+          <div className="aitown-shell__stats">Stats</div>
+          <WorldScene scene={makeScene()} onSelectAgent={vi.fn()} />
+        </section>
+        <aside className="aitown-hub-sheet">Hub summary</aside>
+        <section className="aitown-watch-overlay">Watch links</section>
+      </main>
+    );
+
+    const host = container.querySelector('.aitown-world__host');
+    const toolbar = container.querySelector('.aitown-panel__toolbar');
+    const stats = container.querySelector('.aitown-shell__stats');
+    const hubSheet = container.querySelector('.aitown-hub-sheet');
+    const watchOverlay = container.querySelector('.aitown-watch-overlay');
+
+    expect(host).toBeInstanceOf(HTMLDivElement);
+    expect(toolbar).toBeInstanceOf(HTMLElement);
+    expect(stats).toBeInstanceOf(HTMLElement);
+    expect(hubSheet).toBeInstanceOf(HTMLElement);
+    expect(watchOverlay).toBeInstanceOf(HTMLElement);
+
+    Object.defineProperty(host as HTMLDivElement, 'clientWidth', {
+      configurable: true,
+      value: 1000
+    });
+    Object.defineProperty(host as HTMLDivElement, 'clientHeight', {
+      configurable: true,
+      value: 800
+    });
+
+    const hostRect = vi.fn(
+      () =>
+        ({
+          left: 0,
+          top: 0,
+          right: 1000,
+          bottom: 800,
+          width: 1000,
+          height: 800
+        }) as DOMRect
+    );
+    const toolbarRect = vi.fn(
+      () =>
+        ({
+          left: 0,
+          top: 0,
+          right: 1000,
+          bottom: 56,
+          width: 1000,
+          height: 56
+        }) as DOMRect
+    );
+    const statsRect = vi.fn(
+      () =>
+        ({
+          left: 820,
+          top: 80,
+          right: 1000,
+          bottom: 220,
+          width: 180,
+          height: 140
+        }) as DOMRect
+    );
+    const hubSheetRect = vi.fn(
+      () =>
+        ({
+          left: 680,
+          top: 0,
+          right: 1000,
+          bottom: 800,
+          width: 320,
+          height: 800
+        }) as DOMRect
+    );
+    const watchOverlayRect = vi.fn(
+      () =>
+        ({
+          left: 700,
+          top: 560,
+          right: 1000,
+          bottom: 760,
+          width: 300,
+          height: 200
+        }) as DOMRect
+    );
+
+    (host as HTMLDivElement).getBoundingClientRect = hostRect;
+    (toolbar as HTMLElement).getBoundingClientRect = toolbarRect;
+    (stats as HTMLElement).getBoundingClientRect = statsRect;
+    (hubSheet as HTMLElement).getBoundingClientRect = hubSheetRect;
+    (watchOverlay as HTMLElement).getBoundingClientRect = watchOverlayRect;
+
+    await waitFor(() => {
+      expect(readViewportInspector()?.read().clampPadding).toEqual({
+        top: 56,
+        right: 320
+      });
+    });
+
+    hostRect.mockClear();
+    toolbarRect.mockClear();
+    statsRect.mockClear();
+    hubSheetRect.mockClear();
+    watchOverlayRect.mockClear();
+
+    act(() => {
+      getOnlyTextNode(hubSheet as HTMLElement).data = 'Expanded hub copy that keeps the same fixed width';
+      getOnlyTextNode(watchOverlay as HTMLElement).data = 'Expanded watch overlay copy that keeps the same fixed width';
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(hostRect).not.toHaveBeenCalled();
+    expect(toolbarRect).not.toHaveBeenCalled();
+    expect(statsRect).not.toHaveBeenCalled();
+    expect(hubSheetRect).not.toHaveBeenCalled();
+    expect(watchOverlayRect).not.toHaveBeenCalled();
+    expect(readViewportInspector()?.read().clampPadding).toEqual({
+      top: 56,
+      right: 320
+    });
+  });
+
+  it('resyncs clamp padding when mounted shell chrome text expands existing padding contributors', async () => {
+    appInitMock.mockReset().mockResolvedValue(undefined);
+    vi.mocked(loadAiTownAssets).mockResolvedValue(makeAssets());
+
+    const { container } = render(
+      <main className="aitown-shell">
+        <section className="aitown-panel aitown-panel--game">
+          <div className="aitown-panel__toolbar">Toolbar</div>
+          <div className="aitown-shell__stats">Stats</div>
+          <WorldScene scene={makeScene()} onSelectAgent={vi.fn()} />
+        </section>
+      </main>
+    );
+
+    const host = container.querySelector('.aitown-world__host');
+    const toolbar = container.querySelector('.aitown-panel__toolbar');
+    const stats = container.querySelector('.aitown-shell__stats');
+
+    expect(host).toBeInstanceOf(HTMLDivElement);
+    expect(toolbar).toBeInstanceOf(HTMLElement);
+    expect(stats).toBeInstanceOf(HTMLElement);
+
+    setResponsiveShellChromeRects({
+      host: host as HTMLDivElement,
+      toolbar: toolbar as HTMLElement,
+      stats: stats as HTMLElement
+    });
+
+    await waitFor(() => {
+      expect(readViewportInspector()?.read().clampPadding).toEqual({
+        top: 56,
+        right: 180
+      });
+    });
+
+    act(() => {
+      getOnlyTextNode(toolbar as HTMLElement).data = 'Expanded toolbar copy';
+      getOnlyTextNode(stats as HTMLElement).data = 'Expanded stats copy';
+    });
+
+    await waitFor(() => {
+      expect(readViewportInspector()?.read().clampPadding).toEqual({
+        top: 96,
+        right: 320
+      });
+    });
+  });
+
+  it('resyncs clamp padding when mounted shell chrome text contracts existing padding contributors', async () => {
+    appInitMock.mockReset().mockResolvedValue(undefined);
+    vi.mocked(loadAiTownAssets).mockResolvedValue(makeAssets());
+
+    const { container } = render(
+      <main className="aitown-shell">
+        <section className="aitown-panel aitown-panel--game">
+          <div className="aitown-panel__toolbar">Expanded toolbar copy</div>
+          <div className="aitown-shell__stats">Expanded stats copy</div>
+          <WorldScene scene={makeScene()} onSelectAgent={vi.fn()} />
+        </section>
+      </main>
+    );
+
+    const host = container.querySelector('.aitown-world__host');
+    const toolbar = container.querySelector('.aitown-panel__toolbar');
+    const stats = container.querySelector('.aitown-shell__stats');
+
+    expect(host).toBeInstanceOf(HTMLDivElement);
+    expect(toolbar).toBeInstanceOf(HTMLElement);
+    expect(stats).toBeInstanceOf(HTMLElement);
+
+    setResponsiveShellChromeRects({
+      host: host as HTMLDivElement,
+      toolbar: toolbar as HTMLElement,
+      stats: stats as HTMLElement
+    });
+
+    await waitFor(() => {
+      expect(readViewportInspector()?.read().clampPadding).toEqual({
+        top: 96,
+        right: 320
+      });
+    });
+
+    act(() => {
+      getOnlyTextNode(toolbar as HTMLElement).data = 'Toolbar';
+      getOnlyTextNode(stats as HTMLElement).data = 'Stats';
+    });
+
+    await waitFor(() => {
+      expect(readViewportInspector()?.read().clampPadding).toEqual({
+        top: 56,
+        right: 180
       });
     });
   });

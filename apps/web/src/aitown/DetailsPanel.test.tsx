@@ -710,8 +710,40 @@ describe('DetailsPanel accountability signals', () => {
 
     await user.click(activeQueueCorrelationButton);
 
-    expect(onSelectCorrelation).toHaveBeenCalledWith('corr-app-review');
+    expect(onSelectCorrelation).toHaveBeenCalledWith('corr-app-review', {
+      preserveAutoOnDefaultReselect: true
+    });
     expect(onSelectOperation).not.toHaveBeenCalled();
+  });
+
+  it('preserves auto mode when re-selecting the already-active default correlation from active queue', async () => {
+    const user = userEvent.setup();
+    const onSelectCorrelation = vi.fn();
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          onSelectCorrelation,
+          selectedAgent: null,
+          selectedCorrelationId: 'corr-app-review',
+          selectedOperation: null,
+          workflow: null
+        })}
+      />
+    );
+
+    const section = screen.getByRole('heading', { name: 'Active Queue' }).closest('section');
+    expect(section).not.toBeNull();
+
+    const activeQueueCorrelationButton = within(section!).getByRole('button', {
+      name: 'Open active queue correlation corr-app-review, currently selected'
+    });
+
+    await user.click(activeQueueCorrelationButton);
+
+    expect(onSelectCorrelation).toHaveBeenCalledWith('corr-app-review', {
+      preserveAutoOnDefaultReselect: true
+    });
   });
 
   it('renders active-queue counterparties as pivots only for navigable non-self agents, preserves an active crew-overview correlation, and otherwise keeps the agent-only path', async () => {

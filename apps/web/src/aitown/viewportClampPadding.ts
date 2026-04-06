@@ -8,7 +8,23 @@ const rightSelectors = [
   '.aitown-hub-sheet',
   '.aitown-watch-overlay'
 ];
+const clampContributorSelectors = [...new Set([...topSelectors, ...rightSelectors])];
+const subtreeMutationContributorSelectors = [
+  '.aitown-shell__brand',
+  '.aitown-shell__stats',
+  '.aitown-panel__topline',
+  '.aitown-panel__toolbar'
+];
+const fixedWidthContributorSelectors = ['.aitown-hub-sheet', '.aitown-watch-overlay'];
 const textContributorSelectors = [...new Set(topSelectors)];
+const clampContributorRootClasses = new Set([
+  'aitown-shell__brand',
+  'aitown-shell__stats',
+  'aitown-panel__topline',
+  'aitown-panel__toolbar',
+  'aitown-hub-sheet',
+  'aitown-watch-overlay'
+]);
 
 function resolveViewportClampPaddingRoot(host: HTMLDivElement) {
   const panel = host.closest('.aitown-panel--game');
@@ -30,6 +46,89 @@ export function isViewportClampPaddingTextContributor(host: HTMLDivElement, node
 
     return contributor instanceof Element && overlayRoot.contains(contributor);
   });
+}
+
+function containsViewportClampPaddingContributor(node: Node | null) {
+  if (!(node instanceof Element)) {
+    return false;
+  }
+
+  return clampContributorSelectors.some((selector) => node.matches(selector) || node.querySelector(selector));
+}
+
+function isWithinViewportClampPaddingRoot(overlayRoot: HTMLElement, node: Node | null) {
+  const element = node instanceof Element ? node : node?.parentElement;
+
+  return element instanceof Element && overlayRoot.contains(element);
+}
+
+function touchesViewportClampPaddingSubtreeContributor(overlayRoot: HTMLElement, node: Node | null) {
+  const element = node instanceof Element ? node : node?.parentElement;
+
+  if (!(element instanceof Element) || !overlayRoot.contains(element)) {
+    return false;
+  }
+
+  return subtreeMutationContributorSelectors.some((selector) => {
+    const contributor = element.closest(selector);
+
+    return contributor instanceof Element && overlayRoot.contains(contributor);
+  });
+}
+
+function isFixedWidthViewportClampContributorRoot(overlayRoot: HTMLElement, node: Node | null) {
+  const element = node instanceof Element ? node : node?.parentElement;
+
+  if (!(element instanceof Element) || !overlayRoot.contains(element)) {
+    return false;
+  }
+
+  return fixedWidthContributorSelectors.some((selector) => element.matches(selector));
+}
+
+function mutationTargetHadClampContributorRootClass(overlayRoot: HTMLElement, mutation: MutationRecord) {
+  if (mutation.type !== 'attributes' || mutation.attributeName !== 'class') {
+    return false;
+  }
+
+  const element = mutation.target instanceof Element ? mutation.target : mutation.target?.parentElement;
+
+  if (!(element instanceof Element) || !overlayRoot.contains(element) || !mutation.oldValue) {
+    return false;
+  }
+
+  return mutation.oldValue.split(/\s+/).some((className) => clampContributorRootClasses.has(className));
+}
+
+export function isViewportClampPaddingMutationContributor(host: HTMLDivElement, mutation: MutationRecord) {
+  const overlayRoot = resolveViewportClampPaddingRoot(host);
+
+  if (!(overlayRoot instanceof HTMLElement)) {
+    return false;
+  }
+
+  if (mutation.type === 'characterData') {
+    return isViewportClampPaddingTextContributor(host, mutation.target);
+  }
+
+  if (mutation.type === 'attributes') {
+    return (
+      touchesViewportClampPaddingSubtreeContributor(overlayRoot, mutation.target)
+      || isFixedWidthViewportClampContributorRoot(overlayRoot, mutation.target)
+      || mutationTargetHadClampContributorRootClass(overlayRoot, mutation)
+    );
+  }
+
+  if (mutation.type !== 'childList' || !isWithinViewportClampPaddingRoot(overlayRoot, mutation.target)) {
+    return false;
+  }
+
+  if (touchesViewportClampPaddingSubtreeContributor(overlayRoot, mutation.target)) {
+    return true;
+  }
+
+  return Array.from(mutation.addedNodes).some(containsViewportClampPaddingContributor)
+    || Array.from(mutation.removedNodes).some(containsViewportClampPaddingContributor);
 }
 
 export function resolveViewportClampPadding(host: HTMLDivElement): ViewportClampPadding {

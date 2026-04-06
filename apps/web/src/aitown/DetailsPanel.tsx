@@ -2070,6 +2070,7 @@ export function DetailsPanel({
                       label: operation.correlation_id ?? 'No correlation id',
                       buttonLabel: 'Open active queue correlation',
                       activeCorrelationId: selectedCorrelationId,
+                      preserveAutoOnDefaultReselect: true,
                       onSelectCorrelation
                     })}
                   </span>

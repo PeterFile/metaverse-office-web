@@ -7754,6 +7754,123 @@ afterEach(() => {
     expect(postResetRequests).not.toContain(appEngineeringMemoryArtifactsUrl);
   });
 
+  it('keeps crew-overview auto correlation mode when re-selecting the current default correlation from active queue', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    const queueSection = within(details).getByRole('heading', { name: 'Active Queue' }).closest('section');
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    const replaySection = within(details).getByRole('heading', { name: 'Timeline Replay' }).closest('section');
+    expect(queueSection).not.toBeNull();
+    expect(correlationSection).not.toBeNull();
+    expect(replaySection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+      expect(
+        within(queueSection!).getByRole('button', {
+          name: 'Open active queue correlation corr-app-review, currently selected'
+        })
+      ).toBeVisible();
+      expect(within(details).queryByRole('button', { name: 'Return to current scope' })).not.toBeInTheDocument();
+      expect(within(replaySection!).queryByText('Scoped replay · corr-app-review')).not.toBeInTheDocument();
+    });
+
+    const fetchCallCountBeforeReselect = vi.mocked(globalThis.fetch).mock.calls.length;
+
+    await user.click(
+      within(queueSection!).getByRole('button', {
+        name: 'Open active queue correlation corr-app-review, currently selected'
+      })
+    );
+
+    await waitFor(() => {
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+      expect(within(details).queryByRole('button', { name: 'Return to current scope' })).not.toBeInTheDocument();
+      expect(within(replaySection!).queryByText('Scoped replay · corr-app-review')).not.toBeInTheDocument();
+    });
+
+    const postReselectRequests = vi
+      .mocked(globalThis.fetch)
+      .mock.calls.slice(fetchCallCountBeforeReselect)
+      .map(([input]) => (typeof input === 'string' ? input : input.toString()));
+
+    expect(vi.mocked(globalThis.fetch).mock.calls).toHaveLength(fetchCallCountBeforeReselect);
+    expect(postReselectRequests).not.toContain(reviewScopedTimelineUrl);
+    expect(postReselectRequests).not.toContain(crewOverviewSelectedCorrelationMemoryArtifactsUrl);
+  });
+
+  it('keeps a different crew-overview active-queue correlation explicit and manual', async () => {
+    const operationsWithSecondaryCorrelation = {
+      ...operationsFixture,
+      items: [
+        {
+          ...operationsFixture.items[0],
+          correlation_id: 'corr-app-secondary'
+        },
+        operationsFixture.items[1]
+      ]
+    };
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === operationsUrl) {
+          return jsonResponse(operationsWithSecondaryCorrelation);
+        }
+
+        return resolveTestFetchResponse(url);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    const queueSection = within(details).getByRole('heading', { name: 'Active Queue' }).closest('section');
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    const replaySection = within(details).getByRole('heading', { name: 'Timeline Replay' }).closest('section');
+    expect(queueSection).not.toBeNull();
+    expect(correlationSection).not.toBeNull();
+    expect(replaySection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+      expect(
+        within(queueSection!).getByRole('button', {
+          name: 'Open active queue correlation corr-app-secondary'
+        })
+      ).toBeVisible();
+      expect(within(details).queryByRole('button', { name: 'Return to current scope' })).not.toBeInTheDocument();
+    });
+
+    const fetchCallCountBeforeSelection = vi.mocked(globalThis.fetch).mock.calls.length;
+
+    await user.click(
+      within(queueSection!).getByRole('button', {
+        name: 'Open active queue correlation corr-app-secondary'
+      })
+    );
+
+    await waitFor(() => {
+      expect(within(correlationSection!).getByText('corr-app-secondary')).toBeVisible();
+      expect(within(correlationSection!).queryByText('corr-app-review')).not.toBeInTheDocument();
+      expect(within(details).getByRole('button', { name: 'Return to current scope' })).toBeVisible();
+      expect(within(replaySection!).getByText('Scoped replay · corr-app-secondary')).toBeVisible();
+    });
+
+    const postSelectionRequests = vi
+      .mocked(globalThis.fetch)
+      .mock.calls.slice(fetchCallCountBeforeSelection)
+      .map(([input]) => (typeof input === 'string' ? input : input.toString()));
+
+    expect(postSelectionRequests).toContain(secondaryScopedTimelineUrl);
+    expect(postSelectionRequests).toContain(crewOverviewSelectedCorrelationMemoryArtifactsUrl);
+  });
+
   it('keeps selected-agent auto correlation mode when re-selecting the current default correlation', async () => {
     const user = userEvent.setup();
     render(<App />);

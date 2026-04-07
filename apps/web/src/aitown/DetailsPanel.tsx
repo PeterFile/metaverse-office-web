@@ -1188,6 +1188,7 @@ function renderSelectedAgentSupervisionAlert({
   onSelectCorrelation: SelectCorrelationHandler;
 }) {
   const preservedCorrelationId = activeCorrelationId ?? alert.correlation_id;
+  const canNavigateToActor = alert.actor_id !== currentAgentId && navigableAgentIds.has(alert.actor_id);
   const canNavigateToObserver =
     alert.observer_agent_id !== currentAgentId && navigableAgentIds.has(alert.observer_agent_id);
 
@@ -1207,6 +1208,17 @@ function renderSelectedAgentSupervisionAlert({
       <span>{`Status · ${alert.status}`}</span>
       <span>{`Workflow status · ${alert.current_state}`}</span>
       <span>{`Task · ${alert.active_task}`}</span>
+      <span>
+        Actor ·{' '}
+        {canNavigateToActor
+          ? renderAgentPivotButton({
+              agentId: alert.actor_id,
+              ariaLabel: `Select supervision history actor from alert ${alert.alert_id} ${alert.actor_id}`,
+              correlationId: preservedCorrelationId,
+              onSelectAgent
+            })
+          : alert.actor_id}
+      </span>
       <span>
         Observer ·{' '}
         {canNavigateToObserver

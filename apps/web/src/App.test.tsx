@@ -7754,7 +7754,42 @@ afterEach(() => {
     expect(postResetRequests).not.toContain(appEngineeringMemoryArtifactsUrl);
   });
 
-  it('keeps crew-overview auto correlation mode when re-selecting the current default correlation from active queue', async () => {
+  it(
+    'keeps crew-overview auto correlation mode when re-selecting the current default correlation from active queue after a later refresh',
+    async () => {
+      (window as typeof window & { __AITOWN_POLL_INTERVAL_MS__?: number }).__AITOWN_POLL_INTERVAL_MS__ = 10;
+
+    let unscopedTimelineRequests = 0;
+    let scopedTimelineRequests = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === '/office/overview') {
+          return new Response(JSON.stringify(overviewFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === timelineUrl) {
+          unscopedTimelineRequests += 1;
+          return new Response(JSON.stringify(timelineFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === reviewScopedTimelineUrl) {
+          scopedTimelineRequests += 1;
+          return new Response(JSON.stringify(reviewScopedTimelineFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        return resolveTestFetchResponse(url);
+      })
+    );
+
     const user = userEvent.setup();
     render(<App />);
 
@@ -7777,6 +7812,8 @@ afterEach(() => {
       expect(within(replaySection!).queryByText('Scoped replay · corr-app-review')).not.toBeInTheDocument();
     });
 
+    const unscopedTimelineRequestsBeforeReselect = unscopedTimelineRequests;
+    const scopedTimelineRequestsBeforeReselect = scopedTimelineRequests;
     const fetchCallCountBeforeReselect = vi.mocked(globalThis.fetch).mock.calls.length;
 
     await user.click(
@@ -7791,15 +7828,26 @@ afterEach(() => {
       expect(within(replaySection!).queryByText('Scoped replay · corr-app-review')).not.toBeInTheDocument();
     });
 
+    await waitFor(() => {
+      expect(unscopedTimelineRequests).toBeGreaterThan(unscopedTimelineRequestsBeforeReselect);
+    });
+
     const postReselectRequests = vi
       .mocked(globalThis.fetch)
       .mock.calls.slice(fetchCallCountBeforeReselect)
       .map(([input]) => (typeof input === 'string' ? input : input.toString()));
 
-    expect(vi.mocked(globalThis.fetch).mock.calls).toHaveLength(fetchCallCountBeforeReselect);
+    expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+    expect(within(details).queryByRole('button', { name: 'Return to current scope' })).not.toBeInTheDocument();
+    expect(within(replaySection!).queryByText('Scoped replay · corr-app-review')).not.toBeInTheDocument();
+    expect(scopedTimelineRequests).toBe(scopedTimelineRequestsBeforeReselect);
+    expect(vi.mocked(globalThis.fetch).mock.calls.length).toBeGreaterThan(fetchCallCountBeforeReselect);
+    expect(postReselectRequests).toContain(timelineUrl);
     expect(postReselectRequests).not.toContain(reviewScopedTimelineUrl);
     expect(postReselectRequests).not.toContain(crewOverviewSelectedCorrelationMemoryArtifactsUrl);
-  });
+    },
+    10000
+  );
 
   it('keeps a different crew-overview active-queue correlation explicit and manual', async () => {
     const operationsWithSecondaryCorrelation = {

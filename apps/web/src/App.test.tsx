@@ -6720,6 +6720,84 @@ afterEach(() => {
     expect(peerWatchRequests).toEqual([appEngineeringSupervisionHistoryUrl]);
   });
 
+  it('preserves the active selected correlation when opening a supervision history actor pivot', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === appEngineeringSupervisionHistoryUrl) {
+          return jsonResponse({
+            items: [
+              {
+                ...appEngineeringSupervisionHistoryFixture.items[0],
+                alert_id: 'alert-history-actor-pivot',
+                actor_id: 'growth-revenue',
+                observer_agent_id: 'team-lead',
+                watcher_agent_ids: ['team-lead'],
+                summary: 'Supervision history actor keeps the active correlation'
+              }
+            ]
+          });
+        }
+
+        return resolveTestFetchResponse(url);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
+
+    const incidentSection = within(details).getByRole('heading', { name: 'Incident Feed' }).closest('section');
+    const supervisionSection = within(details).getByRole('heading', { name: 'Supervision History' }).closest('section');
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    expect(incidentSection).not.toBeNull();
+    expect(supervisionSection).not.toBeNull();
+    expect(correlationSection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+      expect(within(supervisionSection!).getByText('Supervision history actor keeps the active correlation')).toBeVisible();
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+    });
+
+    await user.click(
+      within(incidentSection!).getByRole('button', {
+        name: 'Open incident correlation corr-app-secondary'
+      })
+    );
+
+    await waitFor(() => {
+      expect(within(correlationSection!).getByText('corr-app-secondary')).toBeVisible();
+    });
+
+    await user.click(
+      within(supervisionSection!).getByRole('button', {
+        name: 'Select supervision history actor from alert alert-history-actor-pivot growth-revenue'
+      })
+    );
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+      expect(within(details).queryByRole('heading', { name: 'Current Operation' })).not.toBeInTheDocument();
+      expect(within(correlationSection!).getByText('corr-app-secondary')).toBeVisible();
+      expect(within(correlationSection!).getByText('Counts · 1 incidents · 0 interactions · 1 events')).toBeVisible();
+      expect(within(correlationSection!).queryByText('corr-app-review')).not.toBeInTheDocument();
+    });
+
+    await act(async () => {
+      expect(globalThis.fetch).toHaveBeenCalledWith(growthRevenueWorkflowUrl, expect.anything());
+      expect(globalThis.fetch).toHaveBeenCalledWith(secondaryCorrelationUrl, expect.anything());
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        growthRevenueSelectedSecondaryCorrelationMemoryArtifactsUrl,
+        expect.anything()
+      );
+    });
+  });
+
   it('preserves the active selected correlation when opening a workflow peer-watch observer pivot', async () => {
     const user = userEvent.setup();
     render(<App />);

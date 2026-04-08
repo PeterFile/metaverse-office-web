@@ -9,7 +9,8 @@ import type {
   MemoryArtifactIndex,
   OfficeAgent,
   OfficeOperation,
-  OfficeOperations
+  OfficeOperations,
+  PeerWatchAlertsResponse
 } from '../types';
 import type { WorldState } from '../world/types';
 
@@ -6794,6 +6795,139 @@ describe('DetailsPanel workflow peer-watch alerts', () => {
     expect(document.activeElement).toBe(artifactRecord);
     expect(onSelectAgent).not.toHaveBeenCalled();
     expect(onSelectCorrelation).not.toHaveBeenCalled();
+  });
+
+  it('renders selected-agent supervision history actors as pivots only for navigable non-current agents and preserves the active correlation first', async () => {
+    const user = userEvent.setup();
+    const onSelectAgent = vi.fn();
+    const selectedAgentSupervisionHistory = {
+      items: [
+        {
+          alert_id: 'alert-history-actor-pivot',
+          ts: '2026-03-16T08:55:00.000Z',
+          agent_id: 'app-engineering',
+          target_agent_id: 'app-engineering',
+          actor_id: 'growth-revenue',
+          observer_agent_id: 'team-lead',
+          watcher_agent_ids: [],
+          severity: 'orange',
+          status: 'resolved',
+          current_state: 'blocked',
+          active_task: 'Navigable actor keeps the selected correlation',
+          summary: 'Navigable supervision-history actor stays actionable',
+          evidence_refs: [],
+          evidence_count: 0,
+          correlation_id: 'corr-app-review',
+          source_kind: 'controller_event',
+          metadata: {}
+        },
+        {
+          alert_id: 'alert-history-actor-current',
+          ts: '2026-03-16T08:54:00.000Z',
+          agent_id: 'app-engineering',
+          target_agent_id: 'app-engineering',
+          actor_id: 'app-engineering',
+          observer_agent_id: 'team-lead',
+          watcher_agent_ids: [],
+          severity: 'yellow',
+          status: 'open',
+          current_state: 'blocked',
+          active_task: 'Current actor stays plain text',
+          summary: 'Current supervision-history actor stays plain text',
+          evidence_refs: [],
+          evidence_count: 0,
+          correlation_id: 'corr-app-review',
+          source_kind: 'controller_event',
+          metadata: {}
+        },
+        {
+          alert_id: 'alert-history-actor-unknown',
+          ts: '2026-03-16T08:53:00.000Z',
+          agent_id: 'app-engineering',
+          target_agent_id: 'app-engineering',
+          actor_id: 'ghost-agent',
+          observer_agent_id: 'team-lead',
+          watcher_agent_ids: [],
+          severity: 'yellow',
+          status: 'open',
+          current_state: 'blocked',
+          active_task: 'Unknown actor stays plain text',
+          summary: 'Unknown supervision-history actor stays plain text',
+          evidence_refs: [],
+          evidence_count: 0,
+          correlation_id: 'corr-app-ghost',
+          source_kind: 'controller_event',
+          metadata: {}
+        }
+      ]
+    } satisfies PeerWatchAlertsResponse;
+
+    const { rerender } = render(
+      <DetailsPanel
+        {...buildProps({
+          onSelectAgent,
+          selectedCorrelationId: 'corr-app-secondary',
+          selectedAgentSupervisionHistory
+        })}
+      />
+    );
+
+    const supervisionSection = screen.getByRole('heading', { name: 'Supervision History' }).closest('section');
+    expect(supervisionSection).not.toBeNull();
+
+    const navigableRecord = within(supervisionSection!)
+      .getByText('Navigable supervision-history actor stays actionable')
+      .closest('li');
+    const currentRecord = within(supervisionSection!).getByText('Current supervision-history actor stays plain text').closest('li');
+    const unknownRecord = within(supervisionSection!).getByText('Unknown supervision-history actor stays plain text').closest('li');
+    expect(navigableRecord).not.toBeNull();
+    expect(currentRecord).not.toBeNull();
+    expect(unknownRecord).not.toBeNull();
+
+    expect(navigableRecord).toHaveTextContent('Actor · growth-revenue');
+    expect(currentRecord).toHaveTextContent('Actor · app-engineering');
+    expect(unknownRecord).toHaveTextContent('Actor · ghost-agent');
+    expect(
+      within(navigableRecord!).getByRole('button', {
+        name: 'Select supervision history actor from alert alert-history-actor-pivot growth-revenue'
+      })
+    ).toBeVisible();
+    expect(
+      within(currentRecord!).queryByRole('button', {
+        name: 'Select supervision history actor from alert alert-history-actor-current app-engineering'
+      })
+    ).not.toBeInTheDocument();
+    expect(
+      within(unknownRecord!).queryByRole('button', {
+        name: 'Select supervision history actor from alert alert-history-actor-unknown ghost-agent'
+      })
+    ).not.toBeInTheDocument();
+
+    await user.click(
+      within(navigableRecord!).getByRole('button', {
+        name: 'Select supervision history actor from alert alert-history-actor-pivot growth-revenue'
+      })
+    );
+
+    expect(onSelectAgent).toHaveBeenNthCalledWith(1, 'growth-revenue', 'corr-app-secondary');
+
+    rerender(
+      <DetailsPanel
+        {...buildProps({
+          onSelectAgent,
+          selectedCorrelationId: null,
+          selectedAgentSupervisionHistory
+        })}
+      />
+    );
+
+    await user.click(
+      within(screen.getByRole('heading', { name: 'Supervision History' }).closest('section')!).getByRole('button', {
+        name: 'Select supervision history actor from alert alert-history-actor-pivot growth-revenue'
+      })
+    );
+
+    expect(onSelectAgent).toHaveBeenNthCalledWith(2, 'growth-revenue', 'corr-app-review');
   });
 
   it('preserves auto correlation mode when re-selecting the active selected-agent supervision history correlation', async () => {

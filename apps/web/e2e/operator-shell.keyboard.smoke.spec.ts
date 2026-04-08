@@ -4653,6 +4653,98 @@ test.describe('operator shell smoke', () => {
     expectViewportAtLeftClampEdge(left, initialScale, initialTop);
   });
 
+  test('keeps portrait selected-watch clamp gating stable across fixed-width overlay churn and unrelated shell noise', async ({
+    page
+  }) => {
+    const portraitShell = SHELLS.find((shell) => shell.name === 'portrait');
+    expect(portraitShell).toBeDefined();
+
+    await page.setViewportSize(portraitShell!.viewport);
+    await page.goto('/');
+    await expect(page.locator('.aitown-world__host canvas')).toBeVisible();
+    await page.waitForFunction(() => Boolean(window.__AITOWN_VIEWPORT__));
+
+    await page.getByRole('button', { name: 'Open Hub' }).click();
+
+    const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
+    await detailsPanel.getByRole('button', { name: 'Inspect Growth Revenue Agent', exact: true }).click();
+    await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+    await page.getByRole('button', { name: 'Close Hub' }).click();
+    await expect(page.getByRole('complementary', { name: 'Agent details' })).toHaveCount(0);
+
+    const watchOverlay = page.getByRole('region', { name: 'Selected watch links' });
+    await expect(watchOverlay).toBeVisible();
+    await expect(page.getByRole('list', { name: 'Selected watch link list' })).toBeVisible();
+
+    const baseline = await waitForViewportSettle(page);
+    const baselineScale = baseline.scale ?? 1;
+    const baselineTop = baseline.top;
+    const baselineClampPadding = {
+      top: baseline.clampPadding?.top ?? 0,
+      right: baseline.clampPadding?.right ?? 0
+    };
+
+    expect(baselineClampPadding.right).toBe(0);
+
+    await page.evaluate(() => {
+      const watchOverlay = document.querySelector('.aitown-watch-overlay');
+      const watchTitle = document.querySelector('.aitown-watch-overlay__title');
+      const watchSummary = document.querySelector('.aitown-watch-overlay__summary');
+      const shell = document.querySelector('.aitown-shell');
+
+      if (!(watchOverlay instanceof HTMLElement)) {
+        throw new Error('missing selected-watch overlay');
+      }
+
+      if (!(watchTitle instanceof HTMLElement) || !(watchSummary instanceof HTMLElement)) {
+        throw new Error('missing selected-watch overlay copy');
+      }
+
+      if (!(shell instanceof HTMLElement)) {
+        throw new Error('missing shell root');
+      }
+
+      watchTitle.textContent = 'Portrait watch links still pinned';
+      watchSummary.textContent = 'Fixed-width overlay churn should not create portrait clamp padding.';
+
+      const overlayNoise = document.createElement('div');
+      overlayNoise.className = 'aitown-watch-overlay__smoke-noise';
+      overlayNoise.textContent = 'Overlay churn';
+      watchOverlay.appendChild(overlayNoise);
+      overlayNoise.classList.add('aitown-watch-overlay__smoke-noise--active');
+      overlayNoise.style.color = 'rgb(241, 221, 176)';
+
+      const shellNoise = document.createElement('div');
+      shellNoise.className = 'aitown-shell__smoke-noise';
+      shellNoise.textContent = 'Unrelated shell noise';
+      shell.appendChild(shellNoise);
+      shellNoise.classList.add('aitown-shell__smoke-noise--active');
+      shellNoise.style.opacity = '0.99';
+      shellNoise.remove();
+    });
+
+    const churned = await waitForViewportSettle(page);
+    expect(churned.scale).toBeCloseTo(baselineScale, 4);
+    expect(Math.abs(churned.x - baseline.x)).toBeLessThanOrEqual(0.5);
+    expect(Math.abs(churned.y - baseline.y)).toBeLessThanOrEqual(0.5);
+    expect(churned.clampPadding?.top ?? 0).toBe(baselineClampPadding.top);
+    expect(churned.clampPadding?.right ?? 0).toBe(0);
+
+    const right = await dragViewportToEdge(page, 'right');
+    expect(right.clampPadding?.top ?? 0).toBe(baselineClampPadding.top);
+    expect(right.clampPadding?.right ?? 0).toBe(0);
+    expectViewportBoundsWithinClampBudget(right);
+    expect(right.scale).toBeCloseTo(baselineScale, 4);
+    expect(right.right).toBeGreaterThanOrEqual(right.worldWidth - 0.5);
+    expect(right.right).toBeLessThanOrEqual(right.worldWidth + 0.5);
+    expect(Math.abs(right.top - baselineTop)).toBeLessThanOrEqual(0.5);
+
+    const left = await dragViewportToEdge(page, 'top-left', { horizontalOnly: true });
+    expect(left.clampPadding?.top ?? 0).toBe(baselineClampPadding.top);
+    expect(left.clampPadding?.right ?? 0).toBe(0);
+    expectViewportAtLeftClampEdge(left, baselineScale, baselineTop);
+  });
+
   test('clears landscape selected-watch overlay clamp padding after clearing the overlay through the UI', async ({
     page
   }) => {

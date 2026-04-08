@@ -667,6 +667,72 @@ async function dragViewportFromCenter(page: Page, deltaX: number, deltaY: number
   await page.mouse.up();
 }
 
+async function dragViewportThroughHostPointerEvents(page: Page, deltaX: number, deltaY: number) {
+  await page.evaluate(
+    ({ deltaX: rawDeltaX, deltaY: rawDeltaY }) => {
+      const host = document.querySelector('.aitown-world__host');
+      if (!(host instanceof HTMLElement)) {
+        throw new Error('missing world host');
+      }
+
+      const pointerId = 1;
+      const rect = host.getBoundingClientRect();
+      const startX = rect.left + rect.width * 0.5;
+      const startY = rect.top + rect.height * 0.5;
+      const steps = 16;
+      const originalSetPointerCapture = host.setPointerCapture.bind(host);
+      const originalReleasePointerCapture = host.releasePointerCapture.bind(host);
+      const originalHasPointerCapture = host.hasPointerCapture.bind(host);
+      const capturedPointerIds = new Set<number>();
+
+      host.setPointerCapture = (capturedPointerId: number) => {
+        capturedPointerIds.add(capturedPointerId);
+      };
+      host.releasePointerCapture = (capturedPointerId: number) => {
+        capturedPointerIds.delete(capturedPointerId);
+      };
+      host.hasPointerCapture = (capturedPointerId: number) => capturedPointerIds.has(capturedPointerId);
+
+      const dispatch = (type: string, clientX: number, clientY: number, buttons: number) => {
+        host.dispatchEvent(
+          new PointerEvent(type, {
+            bubbles: true,
+            cancelable: true,
+            composed: true,
+            pointerId,
+            pointerType: 'mouse',
+            isPrimary: true,
+            button: 0,
+            buttons,
+            clientX,
+            clientY
+          })
+        );
+      };
+
+      try {
+        dispatch('pointerdown', startX, startY, 1);
+
+        for (let step = 1; step <= steps; step += 1) {
+          dispatch(
+            'pointermove',
+            startX + (rawDeltaX * step) / steps,
+            startY + (rawDeltaY * step) / steps,
+            1
+          );
+        }
+
+        dispatch('pointerup', startX + rawDeltaX, startY + rawDeltaY, 0);
+      } finally {
+        host.setPointerCapture = originalSetPointerCapture;
+        host.releasePointerCapture = originalReleasePointerCapture;
+        host.hasPointerCapture = originalHasPointerCapture;
+      }
+    },
+    { deltaX, deltaY }
+  );
+}
+
 async function waitForViewportSettle(page: Page, samples = 8, sampleDelayMs = 50) {
   const states: Array<NonNullable<Awaited<ReturnType<typeof readViewportState>>>> = [];
   const isViewportStable = (
@@ -745,19 +811,21 @@ async function dragViewportToEdge(
   options: {
     attempts?: number;
     horizontalOnly?: boolean;
+    driver?: 'mouse' | 'synthetic-host-pointer';
   } = {}
 ) {
   const attempts = options.attempts ?? 2;
   const horizontalOnly = options.horizontalOnly ?? false;
+  const driver = options.driver ?? 'mouse';
   const states: Array<NonNullable<Awaited<ReturnType<typeof waitForViewportSettle>>>> = [];
   const isSatisfied =
     edge === 'bottom-right'
       ? isViewportAtBottomRightEdge
       : edge === 'right'
         ? isViewportAtRightEdge
-      : horizontalOnly
-        ? isViewportAtLeftEdge
-        : isViewportAtTopLeftEdge;
+        : horizontalOnly
+          ? isViewportAtLeftEdge
+          : isViewportAtTopLeftEdge;
 
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     const before = await readViewportState(page);
@@ -769,7 +837,11 @@ async function dragViewportToEdge(
       return before!;
     }
 
-    await dragViewportFromCenter(page, deltaX, deltaY);
+    if (driver === 'synthetic-host-pointer') {
+      await dragViewportThroughHostPointerEvents(page, deltaX, deltaY);
+    } else {
+      await dragViewportFromCenter(page, deltaX, deltaY);
+    }
     const currentState = await waitForViewportSettle(page);
     states.push(currentState);
 
@@ -5770,6 +5842,61 @@ test.describe('operator shell smoke', () => {
     expectViewportAtRightClampEdge(right, baselineScale, baselineTop);
 
     const left = await dragViewportToEdge(page, 'top-left', { horizontalOnly: true });
+    expect(left.clampPadding?.top ?? 0).toBe(baselineClampPadding.top);
+    expect(left.clampPadding?.right ?? 0).toBe(baselineClampPadding.right);
+    expectViewportAtLeftClampEdge(left, baselineScale, baselineTop);
+  });
+
+  test('keeps landscape selected-agent Hub default-zoom horizontal reachability with the Hub sheet open', async ({ page }) => {
+    test.slow();
+
+    const landscapeShell = SHELLS.find((shell) => shell.name === 'landscape');
+    expect(landscapeShell).toBeDefined();
+
+    await page.setViewportSize(landscapeShell!.viewport);
+    await page.goto('/');
+    await expect(page.locator('.aitown-world__host canvas')).toBeVisible();
+    await page.waitForFunction(() => Boolean(window.__AITOWN_VIEWPORT__));
+
+    const dialog = page.getByRole('dialog', { name: 'Hub' });
+    const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
+    const selectedAgentHeading = detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' });
+
+    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await expect(dialog).toBeVisible();
+
+    const inspectButton = detailsPanel.getByRole('button', {
+      name: 'Inspect Growth Revenue Agent',
+      exact: true
+    });
+    await expect(inspectButton).toBeVisible();
+    await inspectButton.click();
+    await expect(selectedAgentHeading).toBeVisible();
+
+    const baseline = await waitForViewportSettle(page);
+    const baselineScale = baseline.scale ?? 1;
+    const baselineTop = baseline.top;
+    const baselineClampPadding = {
+      top: baseline.clampPadding?.top ?? 0,
+      right: baseline.clampPadding?.right ?? 0
+    };
+
+    expect(baselineClampPadding.right).toBeGreaterThan(0);
+    expectViewportBoundsWithinClampBudget(baseline);
+
+    const right = await dragViewportToEdge(page, 'right', { driver: 'synthetic-host-pointer' });
+    await expect(dialog).toBeVisible();
+    await expect(selectedAgentHeading).toBeVisible();
+    expect(right.clampPadding?.top ?? 0).toBe(baselineClampPadding.top);
+    expect(right.clampPadding?.right ?? 0).toBe(baselineClampPadding.right);
+    expectViewportAtRightClampEdge(right, baselineScale, baselineTop);
+
+    const left = await dragViewportToEdge(page, 'top-left', {
+      horizontalOnly: true,
+      driver: 'synthetic-host-pointer'
+    });
+    await expect(dialog).toBeVisible();
+    await expect(selectedAgentHeading).toBeVisible();
     expect(left.clampPadding?.top ?? 0).toBe(baselineClampPadding.top);
     expect(left.clampPadding?.right ?? 0).toBe(baselineClampPadding.right);
     expectViewportAtLeftClampEdge(left, baselineScale, baselineTop);

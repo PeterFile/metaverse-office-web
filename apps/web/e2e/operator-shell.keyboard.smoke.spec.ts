@@ -1145,6 +1145,94 @@ test.describe('operator shell smoke', () => {
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toHaveCount(0);
   });
 
+  test('keeps crew-overview auto correlation mode when re-selecting the current default active-queue correlation via keyboard traversal', async ({
+    page
+  }) => {
+    const requestedUrls: string[] = [];
+    page.on('request', (request) => {
+      try {
+        const url = new URL(request.url());
+        requestedUrls.push(`${url.pathname}${url.search}`);
+      } catch {
+        requestedUrls.push(request.url());
+      }
+    });
+
+    await page.route('**/office/operations?limit=4', async (route) => {
+      const response = await route.fetch();
+      const operations = (await response.json()) as {
+        items: Array<{
+          agent_id: string;
+          correlation_id: string | null;
+        }>;
+      };
+
+      await route.fulfill({
+        response,
+        json: {
+          ...operations,
+          items: operations.items.map((item) =>
+            item.agent_id === 'growth-revenue'
+              ? {
+                  ...item,
+                  correlation_id: 'corr-revenue-handoff'
+                }
+              : item
+          )
+        }
+      });
+    });
+
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Hub' }).click();
+
+    const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
+    const correlationSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Correlation Drilldown' })
+    });
+    const replaySection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Timeline Replay' })
+    });
+    const selectedActiveQueueCorrelationButton = detailsPanel.getByRole('button', {
+      name: 'Open active queue correlation corr-revenue-handoff, currently selected'
+    });
+    const scopedTimelineUrl = '/timeline?limit=4&window=60m&correlation_id=corr-revenue-handoff';
+    const scopedArtifactsUrl = '/memory/artifacts?limit=4&window=60m&correlation_id=corr-revenue-handoff';
+
+    await expect(detailsPanel.getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
+    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
+    await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
+    await expect(selectedActiveQueueCorrelationButton).toBeVisible();
+    await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
+    await expect(detailsPanel.getByRole('button', { name: 'Clear' })).toHaveCount(0);
+    await expect(detailsPanel.getByRole('button', { name: 'Return to current scope' })).toHaveCount(0);
+    await expect(replaySection.getByText('Scoped replay · corr-revenue-handoff')).toHaveCount(0);
+    await focusHubControlWithTab(
+      page,
+      selectedActiveQueueCorrelationButton,
+      'Open active queue correlation corr-revenue-handoff, currently selected'
+    );
+    await expect(selectedActiveQueueCorrelationButton).toBeFocused();
+
+    const requestCountBeforeReselect = requestedUrls.length;
+    await page.keyboard.press('Enter');
+
+    await expect(detailsPanel.getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
+    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
+    await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
+    await expect(selectedActiveQueueCorrelationButton).toBeVisible();
+    await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
+    await expect(detailsPanel.getByRole('button', { name: 'Clear' })).toHaveCount(0);
+    await expect(detailsPanel.getByRole('button', { name: 'Return to current scope' })).toHaveCount(0);
+    await expect(replaySection.getByText('Scoped replay · corr-revenue-handoff')).toHaveCount(0);
+
+    await page.waitForTimeout(150);
+
+    const postReselectRequests = requestedUrls.slice(requestCountBeforeReselect);
+    expect(postReselectRequests).not.toContain(scopedTimelineUrl);
+    expect(postReselectRequests).not.toContain(scopedArtifactsUrl);
+  });
+
   test('keeps a different active-queue correlation explicit and manual via keyboard traversal', async ({ page }) => {
     const requestedUrls: string[] = [];
     page.on('request', (request) => {

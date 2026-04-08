@@ -4382,6 +4382,111 @@ test.describe('operator shell smoke', () => {
     await expect(correlationSection.getByText('No correlation selected.')).toHaveCount(0);
   });
 
+  test('keeps selected-agent auto correlation mode when re-selecting the current default correlation from supervision history via keyboard traversal', async ({
+    page
+  }) => {
+    const requestedUrls: string[] = [];
+    page.on('request', (request) => {
+      try {
+        const url = new URL(request.url());
+        requestedUrls.push(`${url.pathname}${url.search}`);
+      } catch {
+        requestedUrls.push(request.url());
+      }
+    });
+
+    const accountabilityCorrelationId = 'collector-snapshot:2026-03-10T23:59:40.000Z';
+    await page.route('**/peer-watch/alerts?target_agent_id=app-engineering&limit=4', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          items: [
+            {
+              alert_id: 'alert-browser-supervision-history-auto-reselect',
+              ts: '2026-03-10T23:00:00.000Z',
+              agent_id: 'app-engineering',
+              target_agent_id: 'app-engineering',
+              actor_id: 'team-lead',
+              observer_agent_id: 'team-lead',
+              watcher_agent_ids: ['team-lead'],
+              severity: 'orange',
+              status: 'open',
+              current_state: 'blocked',
+              active_task: 'Revenue handoff still needs app confirmation',
+              summary: 'Supervision history default correlation stays auto',
+              evidence_refs: ['/tmp/revenue-handoff.md'],
+              evidence_count: 1,
+              correlation_id: accountabilityCorrelationId,
+              source_kind: 'controller_event',
+              metadata: {}
+            }
+          ]
+        })
+      });
+    });
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Hub' }).click();
+
+    const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
+    const inspectButton = detailsPanel.getByRole('button', {
+      name: 'Inspect App Engineering Agent',
+      exact: true
+    });
+
+    await focusHubControlWithTab(page, inspectButton, 'Inspect App Engineering Agent');
+    await expect(inspectButton).toBeFocused();
+    await page.keyboard.press('Enter');
+
+    const supervisionSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Supervision History' })
+    });
+    const correlationSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Correlation Drilldown' })
+    });
+    const memorySection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Shared Memory' })
+    });
+    const selectedSupervisionCorrelationButton = supervisionSection.getByRole('button', {
+      name: `Open supervision history correlation ${accountabilityCorrelationId}, currently selected`
+    });
+    const selectedSharedMemoryCorrelationButton = memorySection.getByRole('button', {
+      name: `Open shared memory correlation ${accountabilityCorrelationId}, currently selected`
+    });
+
+    await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+    await expect(supervisionSection.getByText('Supervision history default correlation stays auto')).toBeVisible();
+    await expect(selectedSupervisionCorrelationButton).toBeVisible();
+    await expect(correlationSection.getByText(accountabilityCorrelationId, { exact: true })).toBeVisible();
+    await expect(detailsPanel.getByRole('heading', { name: 'Timeline Replay' })).toHaveCount(0);
+    await expect(detailsPanel.getByText(`Scoped replay · ${accountabilityCorrelationId}`)).toHaveCount(0);
+    await expect(memorySection.getByText('Collector observed workspace write to revenue-handoff.md')).toBeVisible();
+    await expect(selectedSharedMemoryCorrelationButton).toBeVisible();
+    await expect(detailsPanel.getByRole('button', { name: 'Return to current scope' })).toHaveCount(0);
+    await focusHubControlWithTab(
+      page,
+      selectedSupervisionCorrelationButton,
+      `Open supervision history correlation ${accountabilityCorrelationId}, currently selected`
+    );
+    await expect(selectedSupervisionCorrelationButton).toBeFocused();
+
+    const requestCountBeforeReselect = requestedUrls.length;
+    await page.keyboard.press('Enter');
+
+    await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+    await expect(selectedSupervisionCorrelationButton).toBeVisible();
+    await expect(correlationSection.getByText(accountabilityCorrelationId, { exact: true })).toBeVisible();
+    await expect(detailsPanel.getByRole('heading', { name: 'Timeline Replay' })).toHaveCount(0);
+    await expect(detailsPanel.getByText(`Scoped replay · ${accountabilityCorrelationId}`)).toHaveCount(0);
+    await expect(memorySection.getByText('Collector observed workspace write to revenue-handoff.md')).toBeVisible();
+    await expect(selectedSharedMemoryCorrelationButton).toBeVisible();
+    await expect(detailsPanel.getByRole('button', { name: 'Return to current scope' })).toHaveCount(0);
+
+    await page.waitForTimeout(150);
+
+    expect(requestedUrls).toHaveLength(requestCountBeforeReselect);
+  });
+
   test('keeps the active selected correlation when opening a supervision history actor pivot via keyboard traversal', async ({
     page
   }) => {

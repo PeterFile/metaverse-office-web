@@ -5143,6 +5143,103 @@ test.describe('operator shell smoke', () => {
     expectViewportAtLeftClampEdge(left, baselineScale, baselineTop);
   });
 
+  test('keeps portrait selected-watch clamp padding reset and drag reachability stable after clearing and reselecting through the UI', async ({
+    page
+  }) => {
+    test.slow();
+
+    const portraitShell = SHELLS.find((shell) => shell.name === 'portrait');
+    expect(portraitShell).toBeDefined();
+
+    await page.setViewportSize(portraitShell!.viewport);
+    await page.goto('/');
+    await expect(page.locator('.aitown-world__host canvas')).toBeVisible();
+    await page.waitForFunction(() => Boolean(window.__AITOWN_VIEWPORT__));
+
+    const readRightClampPadding = async () => (await readViewportState(page))?.clampPadding?.right ?? null;
+    const baseline = await waitForViewportSettle(page);
+    const baselineScale = baseline.scale ?? 1;
+    const baselineClampPadding = {
+      top: baseline.clampPadding?.top ?? 0,
+      right: baseline.clampPadding?.right ?? 0
+    };
+
+    expect(baselineClampPadding.right).toBe(0);
+
+    const selectWatchOverlay = async () => {
+      await page.getByRole('button', { name: 'Open Hub' }).click();
+
+      const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
+      const inspectButton = detailsPanel.getByRole('button', {
+        name: 'Inspect Growth Revenue Agent',
+        exact: true
+      });
+      await expect(inspectButton).toBeVisible();
+      await inspectButton.click();
+      await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+      await page.getByRole('button', { name: 'Close Hub' }).click();
+      await expect(detailsPanel).toHaveCount(0);
+
+      const watchOverlay = page.getByRole('region', { name: 'Selected watch links' });
+      await expect(watchOverlay).toBeVisible();
+      await expect(page.getByRole('list', { name: 'Selected watch link list' })).toBeVisible();
+      await expect.poll(readRightClampPadding).toBe(0);
+
+      return watchOverlay;
+    };
+
+    const expectZeroRightClampPaddingKeepsHorizontalDragReachability = async () => {
+      const settled = await waitForViewportSettle(page);
+      const settledTop = settled.top;
+
+      expect(settled.scale).toBeCloseTo(baselineScale, 4);
+      expect(settled.clampPadding?.top ?? 0).toBe(baselineClampPadding.top);
+      expect(settled.clampPadding?.right ?? 0).toBe(0);
+
+      const right = await dragViewportToEdge(page, 'right');
+      expect(right.clampPadding?.top ?? 0).toBe(baselineClampPadding.top);
+      expect(right.clampPadding?.right ?? 0).toBe(0);
+      expectViewportBoundsWithinClampBudget(right);
+      expect(right.scale).toBeCloseTo(baselineScale, 4);
+      expect(right.right).toBeGreaterThanOrEqual(right.worldWidth - 0.5);
+      expect(right.right).toBeLessThanOrEqual(right.worldWidth + 0.5);
+      expect(Math.abs(right.top - settledTop)).toBeLessThanOrEqual(0.5);
+
+      const left = await dragViewportToEdge(page, 'top-left', { horizontalOnly: true });
+      expect(left.clampPadding?.top ?? 0).toBe(baselineClampPadding.top);
+      expect(left.clampPadding?.right ?? 0).toBe(0);
+      expectViewportAtLeftClampEdge(left, baselineScale, settledTop);
+
+      return settled;
+    };
+
+    const firstWatchOverlay = await selectWatchOverlay();
+    const firstSelected = await expectZeroRightClampPaddingKeepsHorizontalDragReachability();
+
+    await page.getByRole('button', { name: 'Clear Selection' }).click();
+    await expect(firstWatchOverlay).toHaveCount(0);
+
+    await expect
+      .poll(readRightClampPadding)
+      .toBeCloseTo(baselineClampPadding.right, 4);
+
+    const cleared = await waitForViewportSettle(page);
+    expect(cleared.clampPadding?.top ?? 0).toBe(baselineClampPadding.top);
+    expect(cleared.clampPadding?.right ?? 0).toBeCloseTo(baselineClampPadding.right, 4);
+
+    await expectZeroRightClampPaddingKeepsHorizontalDragReachability();
+
+    await selectWatchOverlay();
+    const reselected = await waitForViewportSettle(page);
+    expect(reselected.scale).toBeCloseTo(firstSelected.scale ?? baselineScale, 4);
+    expect(Math.abs(reselected.x - firstSelected.x)).toBeLessThanOrEqual(0.5);
+    expect(Math.abs(reselected.y - firstSelected.y)).toBeLessThanOrEqual(0.5);
+    expect(reselected.clampPadding?.top ?? 0).toBe(firstSelected.clampPadding?.top ?? baselineClampPadding.top);
+    expect(reselected.clampPadding?.right ?? 0).toBe(0);
+
+    await expectZeroRightClampPaddingKeepsHorizontalDragReachability();
+  });
+
   test('clears landscape selected-watch overlay clamp padding after clearing the overlay through the UI', async ({
     page
   }) => {

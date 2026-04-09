@@ -2525,6 +2525,54 @@ describe('DetailsPanel accountability signals', () => {
     expect(onSelectAgent).toHaveBeenCalledWith('growth-revenue', 'corr-app-secondary');
   });
 
+  it('preserves auto mode when re-selecting the already-active default replay correlation', async () => {
+    const user = userEvent.setup();
+    const onSelectCorrelation = vi.fn();
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          onSelectCorrelation,
+          selectedAgent: null,
+          selectedOperation: null,
+          timelineReplay: {
+            items: [
+              {
+                event_id: 'evt-replay-default-correlation-1',
+                ts: '2026-03-16T08:59:00.000Z',
+                agent_id: 'app-engineering',
+                actor_id: 'team-lead',
+                event_type: 'peer_watch_alert_raised',
+                severity: 'orange',
+                current_state: 'blocked',
+                location: 'delivery-desk',
+                summary: 'Replay correlation re-select keeps auto mode',
+                correlation_id: 'corr-app-review',
+                counterparty_agent_ids: ['team-lead'],
+                evidence_refs: ['/evidence/replay.md'],
+                source_kind: 'controller_event'
+              }
+            ]
+          },
+          workflow: null
+        })}
+      />
+    );
+
+    const section = screen.getByRole('heading', { name: 'Timeline Replay' }).closest('section');
+    expect(section).not.toBeNull();
+
+    await user.click(
+      within(section!).getByRole('button', {
+        name: 'Open replay correlation corr-app-review, currently selected'
+      })
+    );
+
+    expect(onSelectCorrelation).toHaveBeenCalledWith('corr-app-review', {
+      preserveAutoOnDefaultReselect: true
+    });
+  });
+
   it('renders replay counterparties as pivots only for navigable non-current agents, uses event-specific labels, and preserves the active correlation', async () => {
     const user = userEvent.setup();
     const onSelectAgent = vi.fn();

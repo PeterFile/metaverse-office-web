@@ -3236,6 +3236,65 @@ test.describe('operator shell smoke', () => {
     await expect(correlationSection.getByText('Counts · 0 incidents · 1 interactions · 2 events')).toBeVisible();
   });
 
+  test('keeps crew-overview replay default correlation reselect on the auto path via keyboard traversal', async ({
+    page
+  }) => {
+    const requestedUrls: string[] = [];
+    page.on('request', (request) => {
+      try {
+        const url = new URL(request.url());
+        requestedUrls.push(`${url.pathname}${url.search}`);
+      } catch {
+        requestedUrls.push(request.url());
+      }
+    });
+
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Hub' }).click();
+
+    const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
+    const correlationSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Correlation Drilldown' })
+    });
+    const replaySection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Timeline Replay' })
+    });
+    const selectedReplayCorrelationButton = replaySection.getByRole('button', {
+      name: 'Open replay correlation corr-revenue-handoff, currently selected'
+    });
+    const scopedTimelineUrl = '/timeline?limit=4&window=60m&correlation_id=corr-revenue-handoff';
+    const scopedArtifactsUrl = '/memory/artifacts?limit=4&window=60m&correlation_id=corr-revenue-handoff';
+
+    await expect(detailsPanel.getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
+    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
+    await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
+    await expect(selectedReplayCorrelationButton).toBeVisible();
+    await expect(detailsPanel.getByRole('button', { name: 'Return to current scope' })).toHaveCount(0);
+    await expect(replaySection.getByText('Scoped replay · corr-revenue-handoff')).toHaveCount(0);
+    await focusHubControlWithTab(
+      page,
+      selectedReplayCorrelationButton,
+      'Open replay correlation corr-revenue-handoff, currently selected'
+    );
+    await expect(selectedReplayCorrelationButton).toBeFocused();
+
+    const requestCountBeforeReselect = requestedUrls.length;
+    await page.keyboard.press('Enter');
+
+    await expect(detailsPanel.getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
+    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
+    await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
+    await expect(selectedReplayCorrelationButton).toBeVisible();
+    await expect(detailsPanel.getByRole('button', { name: 'Return to current scope' })).toHaveCount(0);
+    await expect(replaySection.getByText('Scoped replay · corr-revenue-handoff')).toHaveCount(0);
+
+    await page.waitForTimeout(150);
+
+    const postReselectRequests = requestedUrls.slice(requestCountBeforeReselect);
+    expect(postReselectRequests).not.toContain(scopedTimelineUrl);
+    expect(postReselectRequests).not.toContain(scopedArtifactsUrl);
+  });
+
   test('keeps the active replay correlation when opening a replay counterparty pivot via keyboard traversal', async ({
     page
   }) => {

@@ -4996,6 +4996,184 @@ test.describe('operator shell smoke', () => {
     expect(forbiddenRequests).toEqual([]);
   });
 
+  test('keeps the active selected correlation and scoped reads when opening a supervision history watcher pivot via keyboard traversal', async ({
+    page
+  }) => {
+    const requestedUrls: string[] = [];
+    const forbiddenRequests: string[] = [];
+    const directOperationUrl = '/office/operations?agent_id=growth-revenue';
+    const supervisionHistoryUrl = '/peer-watch/alerts?target_agent_id=growth-revenue&limit=4';
+    const unscopedArtifactsUrl = '/memory/artifacts?limit=4&window=60m&agent_id=growth-revenue';
+    const fallbackCorrelationUrl = '/correlations/corr-growth-lead-review?limit=10&window=60m';
+    let trackForbiddenRequests = false;
+
+    page.on('request', (request) => {
+      try {
+        const url = new URL(request.url());
+        requestedUrls.push(`${url.pathname}${url.search}`);
+      } catch {
+        requestedUrls.push(request.url());
+      }
+    });
+
+    await page.route(`**${directOperationUrl}`, async (route) => {
+      if (trackForbiddenRequests) {
+        forbiddenRequests.push(directOperationUrl);
+      }
+      await route.continue();
+    });
+
+    await page.route(`**${unscopedArtifactsUrl}`, async (route) => {
+      if (trackForbiddenRequests) {
+        forbiddenRequests.push(unscopedArtifactsUrl);
+      }
+      await route.continue();
+    });
+
+    await page.route(`**${fallbackCorrelationUrl}`, async (route) => {
+      if (trackForbiddenRequests) {
+        forbiddenRequests.push(fallbackCorrelationUrl);
+      }
+      await route.continue();
+    });
+
+    await page.route('**/peer-watch/alerts?target_agent_id=app-engineering&limit=4', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          items: [
+            {
+              alert_id: 'alert-browser-supervision-history-watcher',
+              ts: '2026-03-10T23:00:00.000Z',
+              agent_id: 'app-engineering',
+              target_agent_id: 'app-engineering',
+              actor_id: 'team-lead',
+              observer_agent_id: 'team-lead',
+              watcher_agent_ids: ['growth-revenue'],
+              severity: 'orange',
+              status: 'open',
+              current_state: 'blocked',
+              active_task: 'Revenue handoff still needs app confirmation',
+              summary: 'Supervision history watcher keeps the active correlation',
+              evidence_refs: ['/tmp/revenue-handoff.md'],
+              evidence_count: 1,
+              correlation_id: 'corr-app-review',
+              source_kind: 'controller_event',
+              metadata: {}
+            }
+          ]
+        })
+      });
+    });
+
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Hub' }).click();
+
+    const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
+    const clearButton = detailsPanel.getByRole('button', { name: 'Clear' });
+    const inspectButton = detailsPanel.getByRole('button', {
+      name: 'Inspect App Engineering Agent',
+      exact: true
+    });
+
+    await focusHubControlWithTab(page, inspectButton, 'Inspect App Engineering Agent');
+    await expect(inspectButton).toBeFocused();
+    await page.keyboard.press('Enter');
+
+    const supervisionSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Supervision History' })
+    });
+    const correlationSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Correlation Drilldown' })
+    });
+    const accountabilityCorrelationId = 'collector-snapshot:2026-03-10T23:59:40.000Z';
+    const supervisionWatcherButton = supervisionSection.getByRole('button', {
+      name: 'Select supervision history watcher from alert alert-browser-supervision-history-watcher growth-revenue'
+    });
+    const workflowUrl = '/agents/growth-revenue/workflow?limit=10&window=60m';
+    const scopedArtifactsUrl = `/memory/artifacts?limit=4&window=60m&agent_id=growth-revenue&correlation_id=${encodeURIComponent(
+      accountabilityCorrelationId
+    )}`;
+
+    await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+    await expect(clearButton).toBeFocused();
+    await expect(supervisionSection.getByText('Supervision history watcher keeps the active correlation')).toBeVisible();
+    await expect(correlationSection.getByText(accountabilityCorrelationId, { exact: true })).toBeVisible();
+    await expect(supervisionWatcherButton).toBeVisible();
+    await focusHubControlWithTab(
+      page,
+      supervisionWatcherButton,
+      'Select supervision history watcher from alert alert-browser-supervision-history-watcher growth-revenue'
+    );
+    await expect(supervisionWatcherButton).toBeFocused();
+
+    trackForbiddenRequests = true;
+    const requestCountBeforePivot = requestedUrls.length;
+    const workflowResponse = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'GET' && response.status() === 200 && response.url().includes(workflowUrl)
+    );
+    const supervisionHistoryResponse = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'GET' && response.status() === 200 && response.url().includes(supervisionHistoryUrl)
+    );
+    const scopedArtifactsResponse = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'GET' && response.status() === 200 && response.url().includes(scopedArtifactsUrl)
+    );
+
+    await page.keyboard.press('Enter');
+    await workflowResponse;
+    await supervisionHistoryResponse;
+    await scopedArtifactsResponse;
+
+    await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+    await expect(clearButton).toBeFocused();
+    await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
+    await expect(correlationSection.getByText(accountabilityCorrelationId, { exact: true })).toBeVisible();
+    await expect(correlationSection.getByText('Counts · 0 incidents · 0 interactions · 1 events')).toBeVisible();
+    await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toHaveCount(0);
+
+    const requestSettleSamples: Array<{ requestedCount: number; forbiddenCount: number }> = [];
+    const isRequestStreamStable = (
+      previous: { requestedCount: number; forbiddenCount: number },
+      current: { requestedCount: number; forbiddenCount: number }
+    ) => previous.requestedCount === current.requestedCount && previous.forbiddenCount === current.forbiddenCount;
+
+    for (let sample = 0; sample < 6; sample += 1) {
+      requestSettleSamples.push({
+        requestedCount: requestedUrls.length,
+        forbiddenCount: forbiddenRequests.length
+      });
+
+      if (findStableSample(requestSettleSamples, isRequestStreamStable)) {
+        break;
+      }
+
+      if (sample < 5) {
+        await page.waitForTimeout(100);
+      }
+    }
+
+    requireStableSample(
+      requestSettleSamples,
+      isRequestStreamStable,
+      'post-pivot request stream did not settle',
+      (sample) => sample
+    );
+
+    const pivotRequestedUrls = requestedUrls.slice(requestCountBeforePivot);
+
+    expect(pivotRequestedUrls).toContain(workflowUrl);
+    expect(pivotRequestedUrls).toContain(supervisionHistoryUrl);
+    expect(pivotRequestedUrls).toContain(scopedArtifactsUrl);
+    expect(pivotRequestedUrls).not.toContain(directOperationUrl);
+    expect(pivotRequestedUrls).not.toContain(unscopedArtifactsUrl);
+    expect(pivotRequestedUrls).not.toContain(fallbackCorrelationUrl);
+    expect(forbiddenRequests).toEqual([]);
+  });
+
   test('opens a correlation participant pivot from the selected-agent Hub via keyboard traversal', async ({ page }) => {
     await page.goto('/');
     await page.getByRole('button', { name: 'Open Hub' }).click();

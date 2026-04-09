@@ -6767,6 +6767,64 @@ afterEach(() => {
     expect(peerWatchRequests).toEqual([appEngineeringSupervisionHistoryUrl]);
   });
 
+  it('jumps from selected-agent supervision history evidence refs to shared memory without changing the selected agent or correlation', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
+
+    const supervisionSection = within(details).getByRole('heading', { name: 'Supervision History' }).closest('section');
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    const memorySection = within(details).getByRole('heading', { name: 'Shared Memory' }).closest('section');
+    expect(supervisionSection).not.toBeNull();
+    expect(correlationSection).not.toBeNull();
+    expect(memorySection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+      expect(within(supervisionSection!).getByText('Peer watch recovered after evidence review')).toBeVisible();
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+      expect(within(memorySection!).getByText('Ref · /tmp/evidence.md')).toBeVisible();
+    });
+
+    const alertRecord = within(supervisionSection!).getByText('Peer watch recovered after evidence review').closest('li');
+    const artifactRecord = within(memorySection!).getByText('Ref · /tmp/evidence.md').closest('li');
+    expect(alertRecord).not.toBeNull();
+    expect(artifactRecord).not.toBeNull();
+    expect(alertRecord).toHaveTextContent('Evidence · /tmp/evidence.md, /tmp/peer-watch.md');
+    expect(
+      within(alertRecord!).getByRole('button', {
+        name: 'Jump to shared memory artifact /tmp/evidence.md'
+      })
+    ).toBeVisible();
+    expect(
+      within(alertRecord!).queryByRole('button', {
+        name: 'Jump to shared memory artifact /tmp/peer-watch.md'
+      })
+    ).not.toBeInTheDocument();
+
+    const fetchCallCountBeforeJump = vi.mocked(globalThis.fetch).mock.calls.length;
+
+    await user.click(
+      within(alertRecord!).getByRole('button', {
+        name: 'Jump to shared memory artifact /tmp/evidence.md'
+      })
+    );
+
+    expect(document.activeElement).toBe(artifactRecord);
+    expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+    expect(
+      within(supervisionSection!).getByRole('button', {
+        name: 'Open supervision history correlation corr-app-review, currently selected'
+      })
+    ).toBeVisible();
+    expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+    expect(vi.mocked(globalThis.fetch).mock.calls).toHaveLength(fetchCallCountBeforeJump);
+    expect(globalThis.fetch).not.toHaveBeenCalledWith(teamLeadWorkflowUrl, expect.anything());
+    expect(globalThis.fetch).not.toHaveBeenCalledWith(teamLeadSelectedCorrelationMemoryArtifactsUrl, expect.anything());
+  });
+
   it('preserves the active selected correlation when opening a supervision history actor pivot', async () => {
     vi.stubGlobal(
       'fetch',

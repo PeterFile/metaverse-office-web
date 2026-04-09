@@ -9,6 +9,7 @@ import {
   isViewportMouseWheelGesture,
   moveViewportCornerAfterScreenDrag,
   resolveViewportCornerAfterScreenDrag,
+  resolveViewportSafeAreaCenterBias,
   resolveViewportEntryCenter,
   resolveViewportClampOptions,
   resolveViewportInspectionState,
@@ -235,6 +236,20 @@ describe('viewport coverage and panning bounds', () => {
     expect(clampOptions.right).toBe(2048 + 240);
     expect(clampOptions.top).toBe(-140);
     expect(clampOptions.bottom).toBe(1536);
+  });
+
+  it('converts clamp padding into a world-space center bias for the unobscured viewport lane', () => {
+    expect(
+      resolveViewportSafeAreaCenterBias(2, {
+        left: 80,
+        right: 240,
+        top: 120,
+        bottom: 40
+      })
+    ).toEqual({
+      x: 40,
+      y: -20
+    });
   });
 });
 

@@ -314,6 +314,22 @@ export function resolveViewportEntryCenter(
   };
 }
 
+export function resolveViewportSafeAreaCenterBias(
+  scale: number,
+  clampPadding: ViewportClampPadding = {}
+): ViewportCenter {
+  const currentScale = Math.max(scale, FLOAT_EPSILON);
+  const leftPadding = Math.max(0, clampPadding.left ?? 0);
+  const rightPadding = Math.max(0, clampPadding.right ?? 0);
+  const topPadding = Math.max(0, clampPadding.top ?? 0);
+  const bottomPadding = Math.max(0, clampPadding.bottom ?? 0);
+
+  return {
+    x: (rightPadding - leftPadding) / (currentScale * 2),
+    y: (bottomPadding - topPadding) / (currentScale * 2)
+  };
+}
+
 export function resolveViewportPanBounds(
   sceneWidth: number,
   sceneHeight: number,

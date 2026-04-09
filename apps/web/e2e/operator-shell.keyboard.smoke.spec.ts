@@ -6139,6 +6139,61 @@ test.describe('operator shell smoke', () => {
     expectViewportAtLeftClampEdge(left, baselineScale, baselineTop);
   });
 
+  test('keeps portrait selected-agent Hub default-zoom horizontal reachability with the Hub sheet open', async ({ page }) => {
+    test.slow();
+
+    const portraitShell = SHELLS.find((shell) => shell.name === 'portrait');
+    expect(portraitShell).toBeDefined();
+
+    await page.setViewportSize(portraitShell!.viewport);
+    await page.goto('/');
+    await expect(page.locator('.aitown-world__host canvas')).toBeVisible();
+    await page.waitForFunction(() => Boolean(window.__AITOWN_VIEWPORT__));
+
+    const dialog = page.getByRole('dialog', { name: 'Hub' });
+    const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
+    const selectedAgentHeading = detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' });
+
+    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await expect(dialog).toBeVisible();
+
+    const inspectButton = detailsPanel.getByRole('button', {
+      name: 'Inspect Growth Revenue Agent',
+      exact: true
+    });
+    await expect(inspectButton).toBeVisible();
+    await inspectButton.click();
+    await expect(selectedAgentHeading).toBeVisible();
+
+    const baseline = await waitForViewportSettle(page);
+    const baselineScale = baseline.scale ?? 1;
+    const baselineTop = baseline.top;
+    const baselineClampPadding = {
+      top: baseline.clampPadding?.top ?? 0,
+      right: baseline.clampPadding?.right ?? 0
+    };
+
+    expect(baselineClampPadding.right).toBeGreaterThan(0);
+    expectViewportBoundsWithinClampBudget(baseline);
+
+    const right = await dragViewportToEdge(page, 'right', { driver: 'synthetic-host-pointer' });
+    await expect(dialog).toBeVisible();
+    await expect(selectedAgentHeading).toBeVisible();
+    expect(right.clampPadding?.top ?? 0).toBe(baselineClampPadding.top);
+    expect(right.clampPadding?.right ?? 0).toBe(baselineClampPadding.right);
+    expectViewportAtRightClampEdge(right, baselineScale, baselineTop);
+
+    const left = await dragViewportToEdge(page, 'top-left', {
+      horizontalOnly: true,
+      driver: 'synthetic-host-pointer'
+    });
+    await expect(dialog).toBeVisible();
+    await expect(selectedAgentHeading).toBeVisible();
+    expect(left.clampPadding?.top ?? 0).toBe(baselineClampPadding.top);
+    expect(left.clampPadding?.right ?? 0).toBe(baselineClampPadding.right);
+    expectViewportAtLeftClampEdge(left, baselineScale, baselineTop);
+  });
+
   test('keeps selected-agent hub overlay clamp padding active at the top-right viewport boundary after resetting from a zoomed-in view', async ({ page }) => {
     await page.goto('/');
     await zoomViewportInWithMouseWheel(page);

@@ -369,6 +369,17 @@ function readViewportInspector() {
   return (window as typeof window & { __AITOWN_VIEWPORT__?: ViewportInspector }).__AITOWN_VIEWPORT__;
 }
 
+function readViewportCenter() {
+  const inspection = readViewportInspector()?.read();
+
+  expect(inspection).toBeDefined();
+
+  return {
+    x: ((inspection?.left ?? 0) + (inspection?.right ?? 0)) / 2,
+    y: ((inspection?.top ?? 0) + (inspection?.bottom ?? 0)) / 2
+  };
+}
+
 function installViewportInspectorTracker() {
   const assignedValues: Array<ViewportInspector | undefined> = [];
   let currentValue: ViewportInspector | undefined;
@@ -488,6 +499,24 @@ function makeScene(): AiTownSceneModel {
     pixelWidth: 768,
     pixelHeight: 512
   };
+}
+
+function makeWideSelectedAgentScene() {
+  const scene = makeScene();
+
+  return {
+    ...scene,
+    pixelWidth: 3000,
+    pixelHeight: 1600,
+    agents: scene.agents.map((agent) =>
+      agent.agentId === scene.selectedAgentId
+        ? {
+            ...agent,
+            position: { x: 1500, y: 800 }
+          }
+        : agent
+    )
+  } satisfies AiTownSceneModel;
 }
 
 describe('WorldScene watch overlay caption gating', () => {
@@ -680,6 +709,278 @@ describe('WorldScene watch overlay caption gating', () => {
         right: 0
       });
     });
+  });
+
+  it('biases selected-agent recenter into the unobscured lane when clamp padding is already active', async () => {
+    appInitMock.mockReset().mockResolvedValue(undefined);
+    vi.mocked(loadAiTownAssets).mockResolvedValue(makeAssets());
+
+    const scene = {
+      ...makeWideSelectedAgentScene(),
+      watchEdges: []
+    };
+    const selectedAgent = scene.agents.find((agent) => agent.agentId === scene.selectedAgentId);
+    const { container } = render(
+      <main className="aitown-shell">
+        <section className="aitown-panel aitown-panel--game">
+          <div className="aitown-shell__stats">Stats</div>
+          <WorldScene scene={scene} onSelectAgent={vi.fn()} />
+        </section>
+      </main>
+    );
+
+    expect(selectedAgent).toBeDefined();
+
+    const host = container.querySelector('.aitown-world__host');
+    const stats = container.querySelector('.aitown-shell__stats');
+
+    expect(host).toBeInstanceOf(HTMLDivElement);
+    expect(stats).toBeInstanceOf(HTMLElement);
+
+    setElementRect(host as HTMLDivElement, { left: 0, top: 0, width: 1000, height: 800 });
+    setElementRect(stats as HTMLElement, { left: 760, top: 80, width: 240, height: 140 });
+
+    await waitFor(() => {
+      expect(readViewportInspector()?.read().clampPadding).toEqual({
+        top: 0,
+        right: 240
+      });
+    });
+
+    const inspection = readViewportInspector()?.read();
+    const center = readViewportCenter();
+    const expectedBiasX = (inspection?.clampPadding.right ?? 0) / ((inspection?.scale ?? 1) * 2);
+
+    expect(center.x).toBeCloseTo((selectedAgent?.position.x ?? 0) + expectedBiasX, 4);
+    expect(center.y).toBeCloseTo(selectedAgent?.position.y ?? 0, 4);
+  });
+
+  it('re-applies selected-agent safe-area recenter when clamp padding changes for the same selection', async () => {
+    appInitMock.mockReset().mockResolvedValue(undefined);
+    vi.mocked(loadAiTownAssets).mockResolvedValue(makeAssets());
+
+    const sceneWithoutOverlay = {
+      ...makeWideSelectedAgentScene(),
+      watchEdges: []
+    };
+    const overlayScene = {
+      ...sceneWithoutOverlay,
+      watchEdges: makeScene().watchEdges
+    };
+    const selectedAgent = sceneWithoutOverlay.agents.find(
+      (agent) => agent.agentId === sceneWithoutOverlay.selectedAgentId
+    );
+    const { container, rerender } = render(
+      <main className="aitown-shell">
+        <section className="aitown-panel aitown-panel--game">
+          <WorldScene scene={sceneWithoutOverlay} onSelectAgent={vi.fn()} />
+        </section>
+      </main>
+    );
+
+    expect(selectedAgent).toBeDefined();
+
+    const host = container.querySelector('.aitown-world__host');
+
+    expect(host).toBeInstanceOf(HTMLDivElement);
+
+    setElementRect(host as HTMLDivElement, { left: 0, top: 0, width: 1000, height: 800 });
+
+    await waitFor(() => {
+      expect(readViewportInspector()?.read().clampPadding).toEqual({
+        top: 0,
+        right: 0
+      });
+    });
+
+    await waitFor(() => {
+      expect(readViewportCenter().x).toBeCloseTo(selectedAgent?.position.x ?? 0, 4);
+    });
+
+    rerender(
+      <main className="aitown-shell">
+        <section className="aitown-panel aitown-panel--game">
+          <WorldScene scene={overlayScene} onSelectAgent={vi.fn()} />
+        </section>
+      </main>
+    );
+
+    const overlay = container.querySelector('.aitown-watch-overlay');
+    expect(overlay).toBeInstanceOf(HTMLElement);
+    setElementRect(overlay as HTMLElement, { left: 700, top: 560, width: 300, height: 240 });
+
+    await waitFor(() => {
+      expect(readViewportInspector()?.read().clampPadding).toEqual({
+        top: 0,
+        right: 300
+      });
+    });
+
+    const inspection = readViewportInspector()?.read();
+    const center = readViewportCenter();
+    const expectedBiasX = (inspection?.clampPadding.right ?? 0) / ((inspection?.scale ?? 1) * 2);
+
+    expect(center.x).toBeCloseTo((selectedAgent?.position.x ?? 0) + expectedBiasX, 4);
+    expect(center.y).toBeCloseTo(selectedAgent?.position.y ?? 0, 4);
+  });
+
+  it('preserves a manual dragged view when clamp padding changes for the same selected agent', async () => {
+    appInitMock.mockReset().mockResolvedValue(undefined);
+    vi.mocked(loadAiTownAssets).mockResolvedValue(makeAssets());
+
+    const scene = {
+      ...makeWideSelectedAgentScene(),
+      watchEdges: []
+    };
+    const selectedAgent = scene.agents.find((agent) => agent.agentId === scene.selectedAgentId);
+    const { container, rerender } = render(
+      <main className="aitown-shell">
+        <section className="aitown-panel aitown-panel--game">
+          <div className="aitown-shell__stats">Stats</div>
+          <WorldScene scene={scene} onSelectAgent={vi.fn()} />
+        </section>
+      </main>
+    );
+
+    expect(selectedAgent).toBeDefined();
+
+    const host = container.querySelector('.aitown-world__host');
+    const stats = container.querySelector('.aitown-shell__stats');
+    expect(host).toBeInstanceOf(HTMLDivElement);
+    expect(stats).toBeInstanceOf(HTMLElement);
+    (host as HTMLDivElement).setPointerCapture = vi.fn();
+    (host as HTMLDivElement).releasePointerCapture = vi.fn();
+    (host as HTMLDivElement).hasPointerCapture = vi.fn(() => true);
+    setElementRect(host as HTMLDivElement, { left: 0, top: 0, width: 1000, height: 800 });
+    setElementRect(stats as HTMLElement, { left: 1000, top: 80, width: 0, height: 140 });
+
+    await waitFor(() => {
+      expect(readViewportInspector()?.read().clampPadding).toEqual({
+        top: 0,
+        right: 0
+      });
+    });
+
+    const initialCenter = readViewportCenter();
+    fireEvent.pointerDown(host as HTMLDivElement, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      button: 0,
+      buttons: 1,
+      clientX: 500,
+      clientY: 320
+    });
+    fireEvent.pointerMove(host as HTMLDivElement, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      buttons: 1,
+      clientX: 430,
+      clientY: 320
+    });
+    fireEvent.pointerUp(host as HTMLDivElement, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      button: 0,
+      clientX: 430,
+      clientY: 320
+    });
+
+    const manualCenter = readViewportCenter();
+    expect(manualCenter.x).not.toBeCloseTo(initialCenter.x, 4);
+
+    rerender(
+      <main className="aitown-shell">
+        <section className="aitown-panel aitown-panel--game">
+          <div className="aitown-shell__stats">Stats</div>
+          <WorldScene scene={{ ...scene }} onSelectAgent={vi.fn()} />
+        </section>
+      </main>
+    );
+
+    await waitFor(() => {
+      expect(readViewportCenter().x).toBeCloseTo(manualCenter.x, 4);
+    });
+
+    setElementRect(stats as HTMLElement, { left: 760, top: 80, width: 240, height: 140 });
+    act(() => {
+      (stats as HTMLElement).textContent = 'Expanded stats panel';
+    });
+
+    await waitFor(() => {
+      expect(readViewportInspector()?.read().clampPadding).toEqual({
+        top: 0,
+        right: 240
+      });
+    });
+
+    const inspection = readViewportInspector()?.read();
+    const centerAfterPaddingChange = readViewportCenter();
+    const expectedFollowCenterX = (selectedAgent?.position.x ?? 0) + (inspection?.clampPadding.right ?? 0) / ((inspection?.scale ?? 1) * 2);
+
+    expect(centerAfterPaddingChange.x).toBeCloseTo(manualCenter.x, 4);
+    expect(centerAfterPaddingChange.x).not.toBeCloseTo(expectedFollowCenterX, 4);
+  });
+
+  it('recomputes selected-agent safe-area recenter when scale changes without a clamp-padding delta', async () => {
+    appInitMock.mockReset().mockResolvedValue(undefined);
+    vi.mocked(loadAiTownAssets).mockResolvedValue(makeAssets());
+
+    const scene = {
+      ...makeWideSelectedAgentScene(),
+      watchEdges: []
+    };
+    const selectedAgent = scene.agents.find((agent) => agent.agentId === scene.selectedAgentId);
+    const { container } = render(
+      <main className="aitown-shell">
+        <section className="aitown-panel aitown-panel--game">
+          <div className="aitown-shell__stats">Stats</div>
+          <WorldScene scene={scene} onSelectAgent={vi.fn()} />
+        </section>
+      </main>
+    );
+
+    expect(selectedAgent).toBeDefined();
+
+    const host = container.querySelector('.aitown-world__host');
+    const stats = container.querySelector('.aitown-shell__stats');
+
+    expect(host).toBeInstanceOf(HTMLDivElement);
+    expect(stats).toBeInstanceOf(HTMLElement);
+
+    setElementRect(host as HTMLDivElement, { left: 0, top: 0, width: 1000, height: 600 });
+    setElementRect(stats as HTMLElement, { left: 760, top: 80, width: 240, height: 140 });
+
+    await waitFor(() => {
+      expect(readViewportInspector()?.read().clampPadding).toEqual({
+        top: 0,
+        right: 240
+      });
+    });
+
+    const initialInspection = readViewportInspector()?.read();
+    const initialScale = initialInspection?.scale ?? 1;
+
+    setElementRect(host as HTMLDivElement, { left: 0, top: 0, width: 1000, height: 800 });
+    setElementRect(stats as HTMLElement, { left: 760, top: 80, width: 240, height: 140 });
+    act(() => {
+      MockResizeObserver.triggerAll();
+    });
+
+    await waitFor(() => {
+      const inspection = readViewportInspector()?.read();
+      expect(inspection?.clampPadding).toEqual({
+        top: 0,
+        right: 240
+      });
+      expect(inspection?.scale).not.toBeCloseTo(initialScale, 4);
+    });
+
+    const resizedInspection = readViewportInspector()?.read();
+    const center = readViewportCenter();
+    const expectedBiasX = (resizedInspection?.clampPadding.right ?? 0) / ((resizedInspection?.scale ?? 1) * 2);
+
+    expect(center.x).toBeCloseTo((selectedAgent?.position.x ?? 0) + expectedBiasX, 4);
+    expect(center.y).toBeCloseTo(selectedAgent?.position.y ?? 0, 4);
   });
 
   it('does not resync clamp padding for non-contributor text mutations under document.body', async () => {

@@ -21,6 +21,7 @@ import {
   moveViewportCornerAfterScreenDrag,
   resolveViewportClampOptions,
   resolveViewportEntryCenter,
+  resolveViewportSafeAreaCenterBias,
   resolveViewportScaleBounds,
   resolveViewportWheelGestureDisposition,
   shouldBlockViewportPointerInput,
@@ -399,6 +400,12 @@ type WorldSceneProps = {
   onSelectAgent: (agentId: string | null) => void;
 };
 
+type CenteredAgentState = {
+  agentId: string;
+  x: number;
+  y: number;
+};
+
 export default function WorldScene({ scene, onSelectAgent }: WorldSceneProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<Application | null>(null);
@@ -407,7 +414,10 @@ export default function WorldScene({ scene, onSelectAgent }: WorldSceneProps) {
   const watchLayerRef = useRef<Container | null>(null);
   const agentLayerRef = useRef<Container | null>(null);
   const onSelectAgentRef = useRef(onSelectAgent);
-  const lastCenteredAgentRef = useRef<{ agentId: string; x: number; y: number } | null>(null);
+  const lastCenteredAgentRef = useRef<CenteredAgentState | null>(null);
+  const selectedAgentRef = useRef<CenteredAgentState | null>(null);
+  const selectedAgentFollowRef = useRef(false);
+  const suppressSelectedAgentFollowResetRef = useRef(false);
   const suppressSceneTapRef = useRef(false);
   const clampPaddingRef = useRef<{ top: number; right: number }>({ top: 0, right: 0 });
   const viewportInspectorRef = useRef<ViewportInspector | null>(null);
@@ -416,8 +426,46 @@ export default function WorldScene({ scene, onSelectAgent }: WorldSceneProps) {
   const [loadAttempt, setLoadAttempt] = useState(0);
   const watchOverlayCaptionItems = resolveWatchOverlayCaptionItems(scene);
   const showWatchOverlayCaption = ready && !loadError && watchOverlayCaptionItems.length > 0;
-  const selectedAgentLabel =
-    scene.agents.find((agent) => agent.agentId === scene.selectedAgentId)?.displayName ?? 'Selected agent';
+  const selectedSceneAgent = scene.agents.find((agent) => agent.agentId === scene.selectedAgentId);
+  selectedAgentRef.current = selectedSceneAgent
+    ? {
+        agentId: selectedSceneAgent.agentId,
+        x: selectedSceneAgent.position.x,
+        y: selectedSceneAgent.position.y
+      }
+    : null;
+  const selectedAgentLabel = selectedSceneAgent?.displayName ?? 'Selected agent';
+
+  const moveViewportCenterIntoSafeArea = (viewport: Viewport, x: number, y: number) => {
+    const safeAreaCenterBias = resolveViewportSafeAreaCenterBias(
+      viewport.scale.x,
+      clampPaddingRef.current
+    );
+
+    viewport.moveCenter(x + safeAreaCenterBias.x, y + safeAreaCenterBias.y);
+  };
+
+  const rememberSelectedAgentState = (selectedAgent: CenteredAgentState) => {
+    lastCenteredAgentRef.current = {
+      agentId: selectedAgent.agentId,
+      x: selectedAgent.x,
+      y: selectedAgent.y
+    };
+  };
+
+  const stopSelectedAgentFollowState = () => {
+    selectedAgentFollowRef.current = false;
+  };
+
+  const clearSelectedAgentFollowState = () => {
+    selectedAgentFollowRef.current = false;
+    lastCenteredAgentRef.current = null;
+  };
+
+  const markSelectedAgentFollowState = (selectedAgent: CenteredAgentState) => {
+    selectedAgentFollowRef.current = true;
+    rememberSelectedAgentState(selectedAgent);
+  };
 
   useEffect(() => {
     onSelectAgentRef.current = onSelectAgent;
@@ -634,6 +682,7 @@ export default function WorldScene({ scene, onSelectAgent }: WorldSceneProps) {
           return;
         }
 
+        stopSelectedAgentFollowState();
         pointerDragged = true;
         event.preventDefault();
       };
@@ -673,19 +722,48 @@ export default function WorldScene({ scene, onSelectAgent }: WorldSceneProps) {
         const previousScale = viewport.scale.x || nextBaseScale;
 
         viewport.resize(hostWidth, hostHeight, scene.pixelWidth, scene.pixelHeight);
-        const { minScale, maxScale } = syncViewportConstraints(hostWidth, hostHeight, capabilities);
+        const { minScale, maxScale } = syncViewportConstraints(
+          hostWidth,
+          hostHeight,
+          capabilities
+        );
         const targetScale = preserveView ? Math.min(maxScale, Math.max(minScale, previousScale)) : nextBaseScale;
+        const lastCenteredAgent = lastCenteredAgentRef.current;
+        const selectedAgent = selectedAgentRef.current;
+        const shouldRecenterSelectedAgent =
+          preserveView &&
+          selectedAgentFollowRef.current &&
+          !!lastCenteredAgent &&
+          !!selectedAgent &&
+          lastCenteredAgent.agentId === selectedAgent.agentId &&
+          lastCenteredAgent.x === selectedAgent.x &&
+          lastCenteredAgent.y === selectedAgent.y;
+
+        suppressSelectedAgentFollowResetRef.current = true;
         viewport.setZoom(Math.min(maxScale, Math.max(minScale, targetScale)), true);
+        suppressSelectedAgentFollowResetRef.current = false;
+        if (shouldRecenterSelectedAgent && selectedAgent) {
+          moveViewportCenterIntoSafeArea(viewport, selectedAgent.x, selectedAgent.y);
+          markSelectedAgentFollowState(selectedAgent);
+          return;
+        }
+
         viewport.moveCenter(previousCenter.x, previousCenter.y);
       };
 
       viewportZoomHandler = () => {
+        if (!suppressSelectedAgentFollowResetRef.current) {
+          stopSelectedAgentFollowState();
+        }
+
         const capabilities = resolveViewportInputCapabilities();
         const minScale = currentBaseScale;
         const targetScale = Math.min(currentMaxScale, Math.max(minScale, viewport.scale.x));
 
         if (Math.abs(targetScale - viewport.scale.x) > 0.0001) {
+          suppressSelectedAgentFollowResetRef.current = true;
           viewport.setZoom(targetScale, true);
+          suppressSelectedAgentFollowResetRef.current = false;
           syncViewportConstraints(viewport.screenWidth, viewport.screenHeight, capabilities);
           return;
         }
@@ -793,7 +871,7 @@ export default function WorldScene({ scene, onSelectAgent }: WorldSceneProps) {
       viewportRef.current = null;
       viewportInspectorRef.current = null;
       (window as typeof window & { __AITOWN_VIEWPORT__?: ViewportInspector }).__AITOWN_VIEWPORT__ = undefined;
-      lastCenteredAgentRef.current = null;
+      clearSelectedAgentFollowState();
       setReady(false);
 
       if (appRef.current) {
@@ -859,27 +937,21 @@ export default function WorldScene({ scene, onSelectAgent }: WorldSceneProps) {
 
       agentLayer.sortChildren();
 
-      const selectedAgent = scene.agents.find((agent) => agent.agentId === scene.selectedAgentId);
+      const selectedAgent = selectedAgentRef.current;
       const lastCenteredAgent = lastCenteredAgentRef.current;
-      if (
-        selectedAgent &&
-        (
-          !lastCenteredAgent ||
-          lastCenteredAgent.agentId !== selectedAgent.agentId ||
-          lastCenteredAgent.x !== selectedAgent.position.x ||
-          lastCenteredAgent.y !== selectedAgent.position.y
-        )
-      ) {
-        viewport.moveCenter(selectedAgent.position.x, selectedAgent.position.y);
-        lastCenteredAgentRef.current = {
-          agentId: selectedAgent.agentId,
-          x: selectedAgent.position.x,
-          y: selectedAgent.position.y
-        };
+      const selectedAgentChanged =
+        !!selectedAgent && (!lastCenteredAgent || lastCenteredAgent.agentId !== selectedAgent.agentId);
+      const selectedAgentMoved =
+        !!selectedAgent && (!lastCenteredAgent || lastCenteredAgent.x !== selectedAgent.x || lastCenteredAgent.y !== selectedAgent.y);
+      if (selectedAgent && (selectedAgentChanged || (selectedAgentFollowRef.current && selectedAgentMoved))) {
+        moveViewportCenterIntoSafeArea(viewport, selectedAgent.x, selectedAgent.y);
+        markSelectedAgentFollowState(selectedAgent);
+      } else if (selectedAgent) {
+        rememberSelectedAgentState(selectedAgent);
       }
 
       if (!selectedAgent) {
-        lastCenteredAgentRef.current = null;
+        clearSelectedAgentFollowState();
       }
     })();
   }, [ready, scene]);

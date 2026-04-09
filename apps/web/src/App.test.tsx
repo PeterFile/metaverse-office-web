@@ -3143,6 +3143,53 @@ afterEach(() => {
     expect(globalThis.fetch).toHaveBeenCalledWith(secondaryScopedTimelineUrl, expect.anything());
   });
 
+  it('keeps crew-overview auto correlation mode when re-selecting the current default correlation from timeline replay', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    const replaySection = (await within(details).findByRole('heading', { name: 'Timeline Replay' })).closest('section');
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    expect(replaySection).not.toBeNull();
+    expect(correlationSection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+      expect(within(replaySection!).getByText('Replay captured missing workflow evidence')).toBeVisible();
+      expect(
+        within(replaySection!).getByRole('button', {
+          name: 'Open replay correlation corr-app-review, currently selected'
+        })
+      ).toBeVisible();
+      expect(within(details).queryByRole('button', { name: 'Return to current scope' })).not.toBeInTheDocument();
+      expect(within(replaySection!).queryByText('Scoped replay · corr-app-review')).not.toBeInTheDocument();
+    });
+
+    const fetchCallCountBeforeReselect = vi.mocked(globalThis.fetch).mock.calls.length;
+
+    await user.click(
+      within(replaySection!).getByRole('button', {
+        name: 'Open replay correlation corr-app-review, currently selected'
+      })
+    );
+
+    await waitFor(() => {
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+      expect(within(replaySection!).getByText('Replay captured missing workflow evidence')).toBeVisible();
+      expect(within(details).queryByRole('button', { name: 'Return to current scope' })).not.toBeInTheDocument();
+      expect(within(replaySection!).queryByText('Scoped replay · corr-app-review')).not.toBeInTheDocument();
+    });
+
+    const postReselectRequests = vi
+      .mocked(globalThis.fetch)
+      .mock.calls.slice(fetchCallCountBeforeReselect)
+      .map(([input]) => (typeof input === 'string' ? input : input.toString()));
+
+    expect(postReselectRequests).toEqual([]);
+    expect(postReselectRequests).not.toContain(reviewScopedTimelineUrl);
+    expect(postReselectRequests).not.toContain(crewOverviewSelectedCorrelationMemoryArtifactsUrl);
+  });
+
   it('pivots from timeline replay actors while carrying replay correlation context', async () => {
     const user = userEvent.setup();
     render(<App />);

@@ -970,6 +970,7 @@ function renderReplayTimelineEvent({
             label: event.correlation_id,
             buttonLabel: 'Open replay correlation',
             activeCorrelationId,
+            preserveAutoOnDefaultReselect: true,
             onSelectCorrelation
           })}
         </span>

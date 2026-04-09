@@ -3295,6 +3295,86 @@ test.describe('operator shell smoke', () => {
     expect(postReselectRequests).not.toContain(scopedArtifactsUrl);
   });
 
+  test('keeps the crew-overview replay evidence jump focused on shared memory without changing selection or the active replay correlation via keyboard traversal', async ({
+    page
+  }) => {
+    const requestedUrls: string[] = [];
+    page.on('request', (request) => {
+      try {
+        const url = new URL(request.url());
+        requestedUrls.push(`${url.pathname}${url.search}`);
+      } catch {
+        requestedUrls.push(request.url());
+      }
+    });
+
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Hub' }).click();
+
+    const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
+    const correlationSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Correlation Drilldown' })
+    });
+    const replaySection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Timeline Replay' })
+    });
+    const memorySection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Shared Memory' })
+    });
+    const replayRecord = replaySection.locator('li').filter({
+      has: page.getByText('Lead completed the revenue handoff', { exact: true })
+    });
+    const selectedReplayCorrelationButton = replayRecord.getByRole('button', {
+      name: 'Open replay correlation corr-revenue-handoff, currently selected'
+    });
+    const selectedSharedMemoryCorrelationButton = memorySection.getByRole('button', {
+      name: 'Open shared memory correlation corr-revenue-handoff, currently selected'
+    });
+    const evidenceJumpButton = replayRecord.getByRole('button', {
+      name: 'Jump to shared memory artifact /tmp/revenue-handoff.md'
+    });
+    const focusedSharedMemoryRecord = detailsPanel.locator('li[data-shared-memory-target]:focus');
+
+    await expect(detailsPanel.getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
+    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
+    await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
+    await expect(selectedReplayCorrelationButton).toBeVisible();
+    await expect(selectedSharedMemoryCorrelationButton).toBeVisible();
+    await expect(memorySection.getByText('Ref · /tmp/revenue-handoff.md')).toBeVisible();
+    await expect(detailsPanel.getByRole('button', { name: 'Clear' })).toHaveCount(0);
+    await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
+    await expect(detailsPanel.getByRole('button', { name: 'Return to current scope' })).toHaveCount(0);
+    await expect(replaySection.getByText('Scoped replay · corr-revenue-handoff')).toHaveCount(0);
+    await expect(evidenceJumpButton).toBeVisible();
+    await expect(focusedSharedMemoryRecord).toHaveCount(0);
+    await focusHubControlWithTab(page, evidenceJumpButton, 'Jump to shared memory artifact /tmp/revenue-handoff.md');
+    await expect(evidenceJumpButton).toBeFocused();
+
+    const requestCountBeforeJump = requestedUrls.length;
+    await page.keyboard.press('Enter');
+
+    await expect(detailsPanel.getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
+    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
+    await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
+    await expect(selectedReplayCorrelationButton).toBeVisible();
+    await expect(selectedSharedMemoryCorrelationButton).toBeVisible();
+    await expect(detailsPanel.getByRole('button', { name: 'Clear' })).toHaveCount(0);
+    await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
+    await expect(detailsPanel.getByRole('button', { name: 'Return to current scope' })).toHaveCount(0);
+    await expect(replaySection.getByText('Scoped replay · corr-revenue-handoff')).toHaveCount(0);
+    await expect(focusedSharedMemoryRecord).toHaveCount(1);
+    await expect(focusedSharedMemoryRecord).toContainText('Ref · /tmp/revenue-handoff.md');
+
+    await page.waitForTimeout(150);
+
+    const postJumpRequests = requestedUrls.slice(requestCountBeforeJump);
+    expect(postJumpRequests).toEqual([]);
+    expect(postJumpRequests).not.toContain('/office/operations?agent_id=growth-revenue');
+    expect(postJumpRequests).not.toContain('/agents/growth-revenue/workflow?limit=10&window=60m');
+    expect(postJumpRequests).not.toContain('/timeline?limit=4&window=60m&correlation_id=corr-revenue-handoff');
+    expect(postJumpRequests).not.toContain('/memory/artifacts?limit=4&window=60m&correlation_id=corr-revenue-handoff');
+  });
+
   test('keeps the active replay correlation when opening a replay counterparty pivot via keyboard traversal', async ({
     page
   }) => {

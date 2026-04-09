@@ -3190,6 +3190,77 @@ afterEach(() => {
     expect(postReselectRequests).not.toContain(crewOverviewSelectedCorrelationMemoryArtifactsUrl);
   });
 
+  it('jumps from timeline replay evidence refs to shared memory without changing crew-overview selection or the active replay correlation', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    const replaySection = (await within(details).findByRole('heading', { name: 'Timeline Replay' })).closest('section');
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    const memorySection = within(details).getByRole('heading', { name: 'Shared Memory' }).closest('section');
+    expect(replaySection).not.toBeNull();
+    expect(correlationSection).not.toBeNull();
+    expect(memorySection).not.toBeNull();
+
+    const selectedReplayCorrelationButton = await within(replaySection!).findByRole('button', {
+      name: 'Open replay correlation corr-app-review, currently selected'
+    });
+    const selectedSharedMemoryCorrelationButton = await within(memorySection!).findByRole('button', {
+      name: 'Open shared memory correlation corr-app-review, currently selected'
+    });
+    const artifactRecord = await within(memorySection!)
+      .findByText('Ref · /tmp/evidence.md')
+      .then((record) => record.closest('li'));
+    const replayRecord = selectedReplayCorrelationButton.closest('li');
+    expect(artifactRecord).not.toBeNull();
+    expect(replayRecord).not.toBeNull();
+
+    expect(within(details).getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
+    expect(within(details).queryByRole('button', { name: 'Clear' })).not.toBeInTheDocument();
+    expect(within(details).queryByRole('heading', { name: 'Current Operation' })).not.toBeInTheDocument();
+    expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+    expect(within(replaySection!).queryByText('Scoped replay · corr-app-review')).not.toBeInTheDocument();
+    expect(within(details).queryByRole('button', { name: 'Return to current scope' })).not.toBeInTheDocument();
+    expect(selectedReplayCorrelationButton).toBeVisible();
+    expect(selectedSharedMemoryCorrelationButton).toBeVisible();
+    expect(
+      within(replayRecord!).getByRole('button', {
+        name: 'Jump to shared memory artifact /tmp/evidence.md'
+      })
+    ).toBeVisible();
+
+    const fetchCallCountBeforeJump = vi.mocked(globalThis.fetch).mock.calls.length;
+
+    await user.click(
+      within(replayRecord!).getByRole('button', {
+        name: 'Jump to shared memory artifact /tmp/evidence.md'
+      })
+    );
+
+    await waitFor(() => {
+      expect(document.activeElement).toBe(artifactRecord);
+      expect(within(details).getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
+      expect(within(details).queryByRole('button', { name: 'Clear' })).not.toBeInTheDocument();
+      expect(within(details).queryByRole('heading', { name: 'Current Operation' })).not.toBeInTheDocument();
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+      expect(within(replaySection!).queryByText('Scoped replay · corr-app-review')).not.toBeInTheDocument();
+      expect(within(details).queryByRole('button', { name: 'Return to current scope' })).not.toBeInTheDocument();
+      expect(selectedReplayCorrelationButton).toBeVisible();
+      expect(selectedSharedMemoryCorrelationButton).toBeVisible();
+    });
+
+    const postJumpRequests = vi
+      .mocked(globalThis.fetch)
+      .mock.calls.slice(fetchCallCountBeforeJump)
+      .map(([input]) => (typeof input === 'string' ? input : input.toString()));
+
+    expect(postJumpRequests).toEqual([]);
+    expect(postJumpRequests).not.toContain(selectedOperationUrl);
+    expect(postJumpRequests).not.toContain(workflowUrl);
+    expect(postJumpRequests).not.toContain(reviewScopedTimelineUrl);
+    expect(postJumpRequests).not.toContain(crewOverviewSelectedCorrelationMemoryArtifactsUrl);
+  });
+
   it('pivots from timeline replay actors while carrying replay correlation context', async () => {
     const user = userEvent.setup();
     render(<App />);

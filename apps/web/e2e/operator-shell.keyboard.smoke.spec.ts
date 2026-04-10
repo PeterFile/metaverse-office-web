@@ -4481,6 +4481,77 @@ test.describe('operator shell smoke', () => {
     await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toHaveCount(0);
   });
 
+  test('keeps the selected-agent workflow recent-event evidence jump focused on shared memory without changing selection or active correlation via keyboard traversal', async ({
+    page
+  }) => {
+    const requestedUrls: string[] = [];
+    page.on('request', (request) => {
+      try {
+        const url = new URL(request.url());
+        requestedUrls.push(`${url.pathname}${url.search}`);
+      } catch {
+        requestedUrls.push(request.url());
+      }
+    });
+
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Hub' }).click();
+
+    const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
+    const inspectButton = detailsPanel.getByRole('button', {
+      name: 'Inspect Growth Revenue Agent',
+      exact: true
+    });
+
+    await focusHubControlWithTab(page, inspectButton, 'Inspect Growth Revenue Agent');
+    await expect(inspectButton).toBeFocused();
+    await page.keyboard.press('Enter');
+
+    const workflowSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Workflow' })
+    });
+    const correlationSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Correlation Drilldown' })
+    });
+    const recentEventActorButton = workflowSection.getByRole('button', {
+      name: 'Select workflow recent event actor from event evt_revenue_handoff_completed team-lead'
+    });
+    const recentEventRecord = recentEventActorButton.locator('xpath=ancestor::li[contains(@class,"aitown-record")][1]');
+    const evidenceJumpButton = recentEventRecord.getByRole('button', {
+      name: 'Jump to shared memory artifact /tmp/revenue-handoff.md'
+    });
+    const focusedSharedMemoryRecord = detailsPanel.locator('li[data-shared-memory-target]:focus');
+
+    await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+    await expect(detailsPanel.getByRole('heading', { name: 'Workflow' })).toBeVisible();
+    await expect(recentEventRecord.getByText('Lead completed the revenue handoff', { exact: true })).toBeVisible();
+    await expect(recentEventRecord.getByText('Evidence · /tmp/revenue-handoff.md')).toBeVisible();
+    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
+    await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toHaveCount(0);
+    await expect(evidenceJumpButton).toBeVisible();
+    await expect(focusedSharedMemoryRecord).toHaveCount(0);
+    await focusHubControlWithTab(page, evidenceJumpButton, 'Jump to shared memory artifact /tmp/revenue-handoff.md');
+    await expect(evidenceJumpButton).toBeFocused();
+
+    const requestCountBeforeJump = requestedUrls.length;
+
+    await page.keyboard.press('Enter');
+
+    await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+    await expect(detailsPanel.getByRole('heading', { name: 'Workflow' })).toBeVisible();
+    await expect(recentEventRecord.getByText('Lead completed the revenue handoff', { exact: true })).toBeVisible();
+    await expect(recentEventRecord.getByText('Evidence · /tmp/revenue-handoff.md')).toBeVisible();
+    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
+    await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toHaveCount(0);
+    await expect(focusedSharedMemoryRecord).toHaveCount(1);
+    await expect(focusedSharedMemoryRecord).toContainText('Ref · /tmp/revenue-handoff.md');
+
+    await page.waitForTimeout(150);
+
+    const postJumpRequests = requestedUrls.slice(requestCountBeforeJump);
+    expect(postJumpRequests).toEqual([]);
+  });
+
   test('keeps the active workflow correlation when opening a workflow peer-watch observer pivot via keyboard traversal', async ({
     page
   }) => {

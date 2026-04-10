@@ -32,9 +32,21 @@ type OperationSelection = {
 const CREW_TIMELINE_LIMIT = 4;
 const MEMORY_ARTIFACT_LIMIT = 4;
 const SELECTED_AGENT_SUPERVISION_HISTORY_LIMIT = 4;
+const RESET_VIEW_SHORTCUT_KEY = 'r';
+const RESET_VIEW_SHORTCUT_ARIA = 'R';
 
 function isJsdomEnvironment() {
   return typeof navigator !== 'undefined' && /jsdom/i.test(navigator.userAgent);
+}
+
+function isEditableShortcutTarget(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+
+  return Boolean(
+    target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])')
+  );
 }
 
 export function resolveSelectedAgent(
@@ -665,6 +677,34 @@ function AppInner() {
   }, [hubOpen, selectedAgentId, selectedCorrelationId, selectedCorrelationWasExplicit]);
 
   useEffect(() => {
+    if (typeof document === 'undefined') {
+      return;
+    }
+
+    const handleResetViewShortcut = (event: KeyboardEvent) => {
+      if (
+        event.defaultPrevented ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.altKey ||
+        event.key.toLowerCase() !== RESET_VIEW_SHORTCUT_KEY ||
+        isEditableShortcutTarget(event.target)
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      handleResetView();
+    };
+
+    document.addEventListener('keydown', handleResetViewShortcut);
+    return () => {
+      document.removeEventListener('keydown', handleResetViewShortcut);
+    };
+  }, [handleResetView]);
+
+  useEffect(() => {
     if (!hubOpen || typeof document === 'undefined') {
       return;
     }
@@ -880,7 +920,12 @@ function AppInner() {
               {hubOpen ? 'Hide Hub' : 'Open Hub'}
             </button>
             {!hubOpen ? (
-              <button type="button" className="aitown-button" onClick={handleResetView}>
+              <button
+                type="button"
+                className="aitown-button"
+                aria-keyshortcuts={RESET_VIEW_SHORTCUT_ARIA}
+                onClick={handleResetView}
+              >
                 Reset view
               </button>
             ) : null}
@@ -933,7 +978,12 @@ function AppInner() {
             <div className="aitown-hub-sheet__header">
               <span id="aitown-hub-title" className="aitown-hub-sheet__title">Hub</span>
               <div className="aitown-hub-sheet__actions">
-                <button type="button" className="aitown-button" onClick={handleResetView}>
+                <button
+                  type="button"
+                  className="aitown-button"
+                  aria-keyshortcuts={RESET_VIEW_SHORTCUT_ARIA}
+                  onClick={handleResetView}
+                >
                   Reset view
                 </button>
                 <button ref={hubCloseButtonRef} type="button" className="aitown-button" onClick={closeHub}>

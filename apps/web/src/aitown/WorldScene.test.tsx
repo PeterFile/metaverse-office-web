@@ -992,6 +992,90 @@ describe('WorldScene watch overlay caption gating', () => {
     expect(center.y).toBeCloseTo(selectedAgent?.position.y ?? 0, 4);
   });
 
+  it('follows the same selected agent into the current safe-area lane when it moves under active right clamp padding', async () => {
+    appInitMock.mockReset().mockResolvedValue(undefined);
+    vi.mocked(loadAiTownAssets).mockResolvedValue(makeAssets());
+
+    const scene = {
+      ...makeWideSelectedAgentScene(),
+      watchEdges: []
+    };
+    const movedScene = {
+      ...scene,
+      agents: scene.agents.map((agent) =>
+        agent.agentId === scene.selectedAgentId
+          ? {
+              ...agent,
+              position: {
+                x: agent.position.x + 180,
+                y: agent.position.y + 60
+              }
+            }
+          : agent
+      )
+    } satisfies AiTownSceneModel;
+    const movedSelectedAgent = movedScene.agents.find(
+      (agent) => agent.agentId === movedScene.selectedAgentId
+    );
+    const { container, rerender } = render(
+      <main className="aitown-shell">
+        <section className="aitown-panel aitown-panel--game">
+          <div className="aitown-shell__stats">Stats</div>
+          <WorldScene scene={scene} onSelectAgent={vi.fn()} />
+        </section>
+      </main>
+    );
+
+    expect(movedSelectedAgent).toBeDefined();
+
+    const host = container.querySelector('.aitown-world__host');
+    const stats = container.querySelector('.aitown-shell__stats');
+
+    expect(host).toBeInstanceOf(HTMLDivElement);
+    expect(stats).toBeInstanceOf(HTMLElement);
+
+    setElementRect(host as HTMLDivElement, { left: 0, top: 0, width: 1000, height: 800 });
+    setElementRect(stats as HTMLElement, { left: 760, top: 80, width: 240, height: 140 });
+
+    await waitFor(() => {
+      expect(readViewportInspector()?.read().clampPadding).toEqual({
+        top: 0,
+        right: 240
+      });
+    });
+
+    rerender(
+      <main className="aitown-shell">
+        <section className="aitown-panel aitown-panel--game">
+          <div className="aitown-shell__stats">Stats</div>
+          <WorldScene scene={movedScene} onSelectAgent={vi.fn()} />
+        </section>
+      </main>
+    );
+
+    const movedHost = container.querySelector('.aitown-world__host');
+    const movedStats = container.querySelector('.aitown-shell__stats');
+
+    expect(movedHost).toBeInstanceOf(HTMLDivElement);
+    expect(movedStats).toBeInstanceOf(HTMLElement);
+
+    setElementRect(movedHost as HTMLDivElement, { left: 0, top: 0, width: 1000, height: 800 });
+    setElementRect(movedStats as HTMLElement, { left: 760, top: 80, width: 240, height: 140 });
+
+    await waitFor(() => {
+      const inspection = readViewportInspector()?.read();
+      const center = readViewportCenter();
+      const expectedBiasX = (inspection?.clampPadding.right ?? 0) / ((inspection?.scale ?? 1) * 2);
+
+      expect(inspection?.clampPadding).toEqual({
+        top: 0,
+        right: 240
+      });
+      expect(center.x).toBeCloseTo((movedSelectedAgent?.position.x ?? 0) + expectedBiasX, 4);
+      expect(center.y).toBeCloseTo(movedSelectedAgent?.position.y ?? 0, 4);
+    });
+  });
+
   it('restores the fresh-load entry view when resetViewSignal changes without a selected agent', async () => {
     appInitMock.mockReset().mockResolvedValue(undefined);
     vi.mocked(loadAiTownAssets).mockResolvedValue(makeAssets());

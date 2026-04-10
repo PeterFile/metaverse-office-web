@@ -4082,6 +4082,68 @@ test.describe('operator shell smoke', () => {
     await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toHaveCount(0);
   });
 
+  test('keeps selected-agent auto correlation mode when re-selecting the current default correlation from workflow status via keyboard traversal', async ({
+    page
+  }) => {
+    const requestedUrls: string[] = [];
+    page.on('request', (request) => {
+      try {
+        const url = new URL(request.url());
+        requestedUrls.push(`${url.pathname}${url.search}`);
+      } catch {
+        requestedUrls.push(request.url());
+      }
+    });
+
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Hub' }).click();
+
+    const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
+    const inspectButton = detailsPanel.getByRole('button', {
+      name: 'Inspect Growth Revenue Agent',
+      exact: true
+    });
+
+    await focusHubControlWithTab(page, inspectButton, 'Inspect Growth Revenue Agent');
+    await expect(inspectButton).toBeFocused();
+    await page.keyboard.press('Enter');
+
+    const workflowSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Workflow' })
+    });
+    const correlationSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Correlation Drilldown' })
+    });
+    const selectedWorkflowStatusCorrelationButton = workflowSection.getByRole('button', {
+      name: 'Open workflow status correlation corr-revenue-handoff, currently selected'
+    });
+
+    await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+    await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toBeVisible();
+    await expect(selectedWorkflowStatusCorrelationButton).toBeVisible();
+    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
+    await expect(detailsPanel.getByRole('button', { name: 'Return to current scope' })).toHaveCount(0);
+    await focusHubControlWithTab(
+      page,
+      selectedWorkflowStatusCorrelationButton,
+      'Open workflow status correlation corr-revenue-handoff, currently selected'
+    );
+    await expect(selectedWorkflowStatusCorrelationButton).toBeFocused();
+
+    const requestCountBeforeReselect = requestedUrls.length;
+    await page.keyboard.press('Enter');
+
+    await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+    await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toBeVisible();
+    await expect(selectedWorkflowStatusCorrelationButton).toBeVisible();
+    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
+    await expect(detailsPanel.getByRole('button', { name: 'Return to current scope' })).toHaveCount(0);
+
+    await page.waitForTimeout(150);
+
+    expect(requestedUrls).toHaveLength(requestCountBeforeReselect);
+  });
+
   test('switches the active correlation from a workflow status correlation button without changing the selected agent via keyboard traversal', async ({
     page
   }) => {

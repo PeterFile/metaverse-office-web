@@ -1081,6 +1081,7 @@ function renderWorkflowStatusRecord({
           label: correlationId ?? 'No correlation id',
           buttonLabel: 'Open workflow status correlation',
           activeCorrelationId,
+          preserveAutoOnDefaultReselect: true,
           onSelectCorrelation
         })}
       </span>

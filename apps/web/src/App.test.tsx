@@ -1438,6 +1438,32 @@ afterEach(() => {
     expect(items[0]).toHaveTextContent('orange');
   });
 
+  it('keeps the selected-agent hub context while resetting the world view', async () => {
+    const user = userEvent.setup();
+
+    setNavigatorUserAgent('VitestBrowser');
+    render(<App />);
+
+    await user.click(await screen.findByRole('button', { name: 'Select scene agent app-engineering' }));
+
+    const details = await screen.findByRole('complementary', { name: 'Agent details' });
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+
+    expect(correlationSection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Reset view' }));
+
+    expect(screen.getByRole('button', { name: 'Hide Hub' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Clear Selection' })).toBeVisible();
+    expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+    expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+  });
+
   it('uses a full-screen scene with a dismissible hub overlay', async () => {
     const user = userEvent.setup();
     render(<App />);
@@ -1494,18 +1520,23 @@ afterEach(() => {
     const dialog = await screen.findByRole('dialog', { name: 'Hub' });
     const closeButton = within(dialog).getByRole('button', { name: 'Close Hub' });
     const dialogButtons = within(dialog).getAllByRole('button');
+    const firstDialogButton = dialogButtons.at(0);
     const lastDialogButton = dialogButtons.at(-1);
 
+    expect(firstDialogButton).toBeDefined();
     expect(lastDialogButton).toBeDefined();
     await waitFor(() => {
       expect(closeButton).toHaveFocus();
     });
 
     await user.tab({ shift: true });
+    expect(firstDialogButton).toHaveFocus();
+
+    await user.tab({ shift: true });
     expect(lastDialogButton).toHaveFocus();
 
     await user.tab();
-    expect(closeButton).toHaveFocus();
+    expect(firstDialogButton).toHaveFocus();
   });
 
   it('loads the active operations queue only when Hub opens in Crew Overview and also refreshes full state buckets', async () => {

@@ -398,6 +398,7 @@ function createAgentSprite(
 type WorldSceneProps = {
   scene: AiTownSceneModel;
   onSelectAgent: (agentId: string | null) => void;
+  resetViewSignal?: number;
 };
 
 type CenteredAgentState = {
@@ -406,7 +407,7 @@ type CenteredAgentState = {
   y: number;
 };
 
-export default function WorldScene({ scene, onSelectAgent }: WorldSceneProps) {
+export default function WorldScene({ scene, onSelectAgent, resetViewSignal = 0 }: WorldSceneProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<Application | null>(null);
   const viewportRef = useRef<Viewport | null>(null);
@@ -421,6 +422,8 @@ export default function WorldScene({ scene, onSelectAgent }: WorldSceneProps) {
   const suppressSceneTapRef = useRef(false);
   const clampPaddingRef = useRef<{ top: number; right: number }>({ top: 0, right: 0 });
   const viewportInspectorRef = useRef<ViewportInspector | null>(null);
+  const resetViewportToContextDefaultRef = useRef<(() => void) | null>(null);
+  const appliedResetViewSignalRef = useRef(resetViewSignal);
   const [ready, setReady] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loadAttempt, setLoadAttempt] = useState(0);
@@ -751,6 +754,48 @@ export default function WorldScene({ scene, onSelectAgent }: WorldSceneProps) {
         viewport.moveCenter(previousCenter.x, previousCenter.y);
       };
 
+      const resetViewportToContextDefault = () => {
+        const hostWidth = Math.max(host.clientWidth, 1);
+        const hostHeight = Math.max(host.clientHeight, 1);
+        const capabilities = resolveViewportInputCapabilities();
+        const { baseScale: nextBaseScale } = resolveViewportScaleBounds(
+          hostWidth,
+          hostHeight,
+          scene.pixelWidth,
+          scene.pixelHeight,
+          DEFAULT_MAX_VIEWPORT_SCALE,
+          capabilities
+        );
+        const entryCenter = resolveViewportEntryCenter(
+          hostWidth,
+          hostHeight,
+          scene.pixelWidth,
+          scene.pixelHeight,
+          capabilities
+        );
+        const selectedAgent = selectedAgentRef.current;
+
+        viewport.resize(hostWidth, hostHeight, scene.pixelWidth, scene.pixelHeight);
+        const { minScale, maxScale } = syncViewportConstraints(
+          hostWidth,
+          hostHeight,
+          capabilities
+        );
+
+        suppressSelectedAgentFollowResetRef.current = true;
+        viewport.setZoom(Math.min(maxScale, Math.max(minScale, nextBaseScale)), true);
+        suppressSelectedAgentFollowResetRef.current = false;
+
+        if (selectedAgent) {
+          moveViewportCenterIntoSafeArea(viewport, selectedAgent.x, selectedAgent.y);
+          markSelectedAgentFollowState(selectedAgent);
+          return;
+        }
+
+        viewport.moveCenter(entryCenter.x, entryCenter.y);
+        clearSelectedAgentFollowState();
+      };
+
       viewportZoomHandler = () => {
         if (!suppressSelectedAgentFollowResetRef.current) {
           stopSelectedAgentFollowState();
@@ -811,6 +856,7 @@ export default function WorldScene({ scene, onSelectAgent }: WorldSceneProps) {
       watchLayerRef.current = watchLayer;
       agentLayerRef.current = agentLayer;
       viewportInspectorRef.current = viewportInspector;
+      resetViewportToContextDefaultRef.current = resetViewportToContextDefault;
       (window as typeof window & { __AITOWN_VIEWPORT__?: ViewportInspector }).__AITOWN_VIEWPORT__ = viewportInspector;
       host.addEventListener('pointerdown', handleHostPointerDown);
       host.addEventListener('pointermove', handleHostPointerMove);
@@ -870,6 +916,7 @@ export default function WorldScene({ scene, onSelectAgent }: WorldSceneProps) {
       agentLayerRef.current = null;
       viewportRef.current = null;
       viewportInspectorRef.current = null;
+      resetViewportToContextDefaultRef.current = null;
       (window as typeof window & { __AITOWN_VIEWPORT__?: ViewportInspector }).__AITOWN_VIEWPORT__ = undefined;
       clearSelectedAgentFollowState();
       setReady(false);
@@ -884,6 +931,19 @@ export default function WorldScene({ scene, onSelectAgent }: WorldSceneProps) {
       }
     };
   }, [loadAttempt, scene.pixelHeight, scene.pixelWidth]);
+
+  useEffect(() => {
+    if (!ready) {
+      return;
+    }
+
+    if (resetViewSignal === appliedResetViewSignalRef.current) {
+      return;
+    }
+
+    appliedResetViewSignalRef.current = resetViewSignal;
+    resetViewportToContextDefaultRef.current?.();
+  }, [ready, resetViewSignal]);
 
   useEffect(() => {
     if (!ready) {

@@ -6010,6 +6010,134 @@ test.describe('operator shell smoke', () => {
     expectViewportAtLeftClampEdge(left, initialScale, initialTop);
   });
 
+  test('restores the fresh-load viewport pose without opening the Hub when the Reset view shortcut is pressed', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.locator('.aitown-world__host canvas')).toBeVisible();
+    await page.waitForFunction(() => Boolean(window.__AITOWN_VIEWPORT__));
+
+    const resetViewButton = page.getByRole('button', { name: 'Reset view' });
+    await expect(resetViewButton).toHaveAttribute('aria-keyshortcuts', 'R');
+    await expect(page.getByRole('button', { name: 'Open Hub' })).toBeVisible();
+
+    const baselinePose = await readViewportPose(page);
+    expect(baselinePose).not.toBeNull();
+
+    await zoomViewportOutToMinimum(page);
+    await forceViewportAgainstTopRightClamp(page);
+
+    await expect
+      .poll(async () => {
+        const currentPose = await readViewportPose(page);
+        if (!baselinePose || !currentPose) {
+          return false;
+        }
+
+        return (
+          Math.abs(currentPose.x - baselinePose.x) >= 60 ||
+          Math.abs(currentPose.y - baselinePose.y) >= 60 ||
+          Math.abs(currentPose.scale - baselinePose.scale) >= 0.05
+        );
+      })
+      .toBe(true);
+
+    await page.keyboard.press('r');
+
+    await expect(page.getByRole('button', { name: 'Open Hub' })).toBeVisible();
+    await expect(page.getByRole('dialog', { name: 'Hub' })).toHaveCount(0);
+
+    await expect
+      .poll(async () => {
+        const currentPose = await readViewportPose(page);
+        if (!baselinePose || !currentPose) {
+          return false;
+        }
+
+        return (
+          Math.abs(currentPose.x - baselinePose.x) <= 1 &&
+          Math.abs(currentPose.y - baselinePose.y) <= 1 &&
+          Math.abs(currentPose.scale - baselinePose.scale) <= 0.01
+        );
+      }, {
+        timeout: POLL_DRIVEN_ASSERTION_TIMEOUT_MS
+      })
+      .toBe(true);
+
+    expectViewportBoundsWithinClampBudget(await waitForViewportSettle(page));
+  });
+
+  test('restores the selected-agent default viewport pose without clearing hub context when the Reset view shortcut is pressed', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.locator('.aitown-world__host canvas')).toBeVisible();
+    await page.waitForFunction(() => Boolean(window.__AITOWN_VIEWPORT__));
+
+    await page.getByRole('button', { name: 'Open Hub' }).click();
+
+    const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
+    const correlationSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Correlation Drilldown' })
+    });
+
+    await detailsPanel.getByRole('button', { name: 'Inspect App Engineering Agent', exact: true }).click();
+    await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+    const correlationIdPattern = /(?:corr-[A-Za-z0-9:_-]+|collector-snapshot:\d{4}-\d{2}-\d{2}T[0-9:.]+Z)/;
+    await expect
+      .poll(async () => {
+        const text = await correlationSection.textContent();
+        return text?.match(correlationIdPattern)?.[0] ?? null;
+      })
+      .not.toBeNull();
+    const baselineCorrelationId = ((await correlationSection.textContent()) ?? '').match(correlationIdPattern)?.[0] ?? null;
+    expect(baselineCorrelationId).not.toBeNull();
+
+    const baselinePose = await readViewportPose(page);
+    expect(baselinePose).not.toBeNull();
+
+    await zoomViewportOutToMinimum(page);
+    await forceViewportAgainstTopRightClamp(page);
+
+    await expect
+      .poll(async () => {
+        const currentPose = await readViewportPose(page);
+        if (!baselinePose || !currentPose) {
+          return false;
+        }
+
+        return (
+          Math.abs(currentPose.x - baselinePose.x) >= 60 ||
+          Math.abs(currentPose.y - baselinePose.y) >= 60 ||
+          Math.abs(currentPose.scale - baselinePose.scale) >= 0.05
+        );
+      })
+      .toBe(true);
+
+    await expect(page.getByRole('button', { name: 'Reset view' })).toHaveAttribute('aria-keyshortcuts', 'R');
+    await page.keyboard.press('r');
+
+    await expect(page.getByRole('button', { name: 'Hide Hub' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Clear Selection' })).toBeVisible();
+    await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+    await expect(correlationSection.getByText(baselineCorrelationId!, { exact: true })).toBeVisible();
+
+    await expect
+      .poll(async () => {
+        const currentPose = await readViewportPose(page);
+        if (!baselinePose || !currentPose) {
+          return false;
+        }
+
+        return (
+          Math.abs(currentPose.x - baselinePose.x) <= 1 &&
+          Math.abs(currentPose.y - baselinePose.y) <= 1 &&
+          Math.abs(currentPose.scale - baselinePose.scale) <= 0.01
+        );
+      }, {
+        timeout: POLL_DRIVEN_ASSERTION_TIMEOUT_MS
+      })
+      .toBe(true);
+
+    expectViewportBoundsWithinClampBudget(await waitForViewportSettle(page));
+  });
+
   test('restores the selected-agent default viewport pose without clearing hub context when Reset view is pressed', async ({ page }) => {
     await page.goto('/');
     await expect(page.locator('.aitown-world__host canvas')).toBeVisible();

@@ -5,7 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('./aitown/WorldScene', () => ({
   default: function MockWorldScene({
     scene,
-    onSelectAgent
+    onSelectAgent,
+    resetViewSignal = 0
   }: {
     scene: {
       selectedAgentId: string | null;
@@ -21,11 +22,13 @@ vi.mock('./aitown/WorldScene', () => ({
       }>;
     };
     onSelectAgent: (agentId: string | null) => void;
+    resetViewSignal?: number;
   }) {
     const labelByAgentId = new Map(scene.agents.map((agent) => [agent.agentId, agent.displayName]));
 
     return (
       <div data-testid="mock-world-scene">
+        <output data-testid="mock-reset-view-signal">{resetViewSignal}</output>
         <button type="button" onClick={() => onSelectAgent('app-engineering')}>
           Select scene agent app-engineering
         </button>
@@ -1462,6 +1465,79 @@ afterEach(() => {
     expect(screen.getByRole('button', { name: 'Clear Selection' })).toBeVisible();
     expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
     expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+  });
+
+  it('exposes reset-view shortcut metadata and triggers the reset path with or without the Hub open', async () => {
+    const user = userEvent.setup();
+
+    setNavigatorUserAgent('VitestBrowser');
+    render(<App />);
+
+    const resetSignal = screen.getByTestId('mock-reset-view-signal');
+    const toolbarResetButton = await screen.findByRole('button', { name: 'Reset view' });
+
+    expect(toolbarResetButton).toHaveAttribute('aria-keyshortcuts', 'R');
+    expect(resetSignal).toHaveTextContent('0');
+
+    await user.keyboard('r');
+    expect(resetSignal).toHaveTextContent('1');
+
+    await user.click(screen.getByRole('button', { name: 'Open Hub' }));
+
+    const hubResetButton = await screen.findByRole('button', { name: 'Reset view' });
+    expect(hubResetButton).toHaveAttribute('aria-keyshortcuts', 'R');
+
+    await user.keyboard('r');
+    expect(resetSignal).toHaveTextContent('2');
+    expect(screen.getByRole('dialog', { name: 'Hub' })).toBeVisible();
+  });
+
+  it('keeps selected-agent hub context while using the reset-view keyboard shortcut', async () => {
+    const user = userEvent.setup();
+
+    setNavigatorUserAgent('VitestBrowser');
+    render(<App />);
+
+    await user.click(await screen.findByRole('button', { name: 'Select scene agent app-engineering' }));
+
+    const details = await screen.findByRole('complementary', { name: 'Agent details' });
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+
+    expect(correlationSection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+    });
+
+    await user.keyboard('r');
+
+    expect(screen.getByTestId('mock-reset-view-signal')).toHaveTextContent('1');
+    expect(screen.getByRole('button', { name: 'Hide Hub' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Clear Selection' })).toBeVisible();
+    expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+    expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+  });
+
+  it('ignores the reset-view keyboard shortcut while focus is inside editable controls', async () => {
+    const user = userEvent.setup();
+
+    setNavigatorUserAgent('VitestBrowser');
+    render(<App />);
+
+    await user.click(await screen.findByRole('button', { name: 'Open Hub' }));
+
+    const details = await screen.findByRole('complementary', { name: 'Agent details' });
+    const stateFilter = within(details).getByRole('combobox', { name: 'Filter active queue by state' });
+    const resetSignal = screen.getByTestId('mock-reset-view-signal');
+
+    stateFilter.focus();
+    expect(stateFilter).toHaveFocus();
+
+    await user.keyboard('r');
+
+    expect(resetSignal).toHaveTextContent('0');
+    expect(screen.getByRole('dialog', { name: 'Hub' })).toBeVisible();
   });
 
   it('uses a full-screen scene with a dismissible hub overlay', async () => {

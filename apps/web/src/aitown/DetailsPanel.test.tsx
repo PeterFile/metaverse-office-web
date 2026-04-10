@@ -6465,7 +6465,60 @@ describe('DetailsPanel workflow peer-watch alerts', () => {
     expect(onSelectAgent).toHaveBeenNthCalledWith(2, 'growth-revenue', 'corr-app-review');
 
     await user.click(handoffPivot);
-    expect(onSelectCorrelation).toHaveBeenCalledWith('corr-app-secondary');
+    expect(onSelectCorrelation).toHaveBeenCalledWith('corr-app-secondary', {
+      preserveAutoOnDefaultReselect: true
+    });
+  });
+
+  it('preserves auto correlation mode when re-selecting the active selected-agent workflow-status correlation', async () => {
+    const user = userEvent.setup();
+    const onSelectCorrelation = vi.fn();
+    const workflow: AgentWorkflow = {
+      ...buildWorkflow(),
+      detail: {
+        ...buildWorkflow().detail,
+        recent_handoffs: [],
+        recent_reboots: [
+          {
+            reboot_id: 'reboot-auto-reselect',
+            ts: '2026-03-16T08:40:00.000Z',
+            agent_id: 'app-engineering',
+            actor_id: 'team-lead',
+            phase: 'reboot_recommended',
+            status: 'requested',
+            severity: 'yellow',
+            summary: 'Workflow status default correlation stays auto',
+            counterparty_agent_ids: ['team-lead'],
+            evidence_refs: [],
+            correlation_id: 'corr-app-review',
+            source_kind: 'controller_event'
+          }
+        ]
+      }
+    };
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          onSelectCorrelation,
+          selectedCorrelationId: 'corr-app-review',
+          workflow
+        })}
+      />
+    );
+
+    const workflowSection = screen.getByRole('heading', { name: 'Workflow' }).closest('section');
+    expect(workflowSection).not.toBeNull();
+
+    await user.click(
+      within(workflowSection!).getByRole('button', {
+        name: 'Open workflow status correlation corr-app-review, currently selected'
+      })
+    );
+
+    expect(onSelectCorrelation).toHaveBeenCalledWith('corr-app-review', {
+      preserveAutoOnDefaultReselect: true
+    });
   });
 
   it('falls back to each workflow status record correlation when no correlation is currently selected and a workflow status counterparty is clicked', async () => {

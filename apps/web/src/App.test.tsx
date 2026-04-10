@@ -8658,6 +8658,44 @@ afterEach(() => {
     expect(vi.mocked(globalThis.fetch).mock.calls).toHaveLength(fetchCallCountBeforeReselect);
   });
 
+  it('keeps selected-agent auto correlation mode when re-selecting the current default correlation from workflow status', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent from active queue' }));
+
+    const workflowSection = within(details).getByRole('heading', { name: 'Workflow' }).closest('section');
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    expect(workflowSection).not.toBeNull();
+    expect(correlationSection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+      expect(
+        within(workflowSection!).getByRole('button', {
+          name: 'Open workflow status correlation corr-app-review, currently selected'
+        })
+      ).toBeVisible();
+      expect(within(details).queryByRole('button', { name: 'Return to current scope' })).not.toBeInTheDocument();
+    });
+
+    const fetchCallCountBeforeReselect = vi.mocked(globalThis.fetch).mock.calls.length;
+
+    await user.click(
+      within(workflowSection!).getByRole('button', {
+        name: 'Open workflow status correlation corr-app-review, currently selected'
+      })
+    );
+
+    await waitFor(() => {
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+      expect(within(details).queryByRole('button', { name: 'Return to current scope' })).not.toBeInTheDocument();
+    });
+
+    expect(vi.mocked(globalThis.fetch).mock.calls).toHaveLength(fetchCallCountBeforeReselect);
+  });
+
   it('keeps a manually reopened default correlation manual when re-selecting it from workflow status', async () => {
     const user = userEvent.setup();
     render(<App />);

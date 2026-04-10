@@ -146,6 +146,21 @@ function resolveSharedMemoryCorrelationId(
   return selectedCorrelationWasExplicit ? selectedCorrelationId : null;
 }
 
+function resolveSharedMemoryRequestScopeLabel(
+  selectedAgentId: string | null,
+  sharedMemoryCorrelationId: string | null
+) {
+  if (selectedAgentId) {
+    return sharedMemoryCorrelationId
+      ? `${selectedAgentId} · ${sharedMemoryCorrelationId}`
+      : selectedAgentId;
+  }
+
+  return sharedMemoryCorrelationId
+    ? `Crew overview · ${sharedMemoryCorrelationId}`
+    : 'Crew overview';
+}
+
 function resolveCrewReplayCorrelationId(
   selectedAgentId: string | null,
   selectedCorrelationId: string | null,
@@ -312,6 +327,10 @@ function AppInner() {
     selectedAgentId,
     selectedCorrelationId,
     selectedCorrelationWasExplicit
+  );
+  const sharedMemoryRequestScopeLabel = resolveSharedMemoryRequestScopeLabel(
+    selectedAgentId,
+    sharedMemoryCorrelationId
   );
 
   const memoryArtifactsResource = usePolledResource({
@@ -930,6 +949,7 @@ function AppInner() {
               memoryArtifacts={memoryArtifactsResource.data}
               memoryArtifactsError={memoryArtifactsResource.error}
               memoryArtifactsState={memoryArtifactsResource.state}
+              sharedMemoryRequestScopeLabel={sharedMemoryRequestScopeLabel}
               selectedAgentSupervisionHistory={selectedAgentSupervisionHistoryResource.data}
               selectedAgentSupervisionHistoryError={selectedAgentSupervisionHistoryResource.error}
               selectedAgentSupervisionHistoryState={selectedAgentSupervisionHistoryResource.state}

@@ -1351,6 +1351,9 @@ test.describe('operator shell smoke', () => {
     const replaySection = detailsPanel.locator('section').filter({
       has: page.getByRole('heading', { name: 'Timeline Replay' })
     });
+    const memorySection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Shared Memory' })
+    });
     const activeQueueCorrelationButton = detailsPanel.getByRole('button', {
       name: 'Open active queue correlation corr-growth-lead-review'
     });
@@ -1442,6 +1445,9 @@ test.describe('operator shell smoke', () => {
     const replaySection = detailsPanel.locator('section').filter({
       has: page.getByRole('heading', { name: 'Timeline Replay' })
     });
+    const memorySection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Shared Memory' })
+    });
     const activeQueueCorrelationButton = detailsPanel.getByRole('button', {
       name: 'Open active queue correlation corr-growth-lead-review'
     });
@@ -1456,6 +1462,7 @@ test.describe('operator shell smoke', () => {
 
     await expect(detailsPanel.getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
+    await expect(memorySection.getByText('Request scope · Crew overview')).toBeVisible();
     await expect(returnToCurrentScopeButton).toHaveCount(0);
     await focusHubControlWithTab(
       page,
@@ -1484,6 +1491,7 @@ test.describe('operator shell smoke', () => {
     await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('Counts · 0 incidents · 1 interactions · 2 events')).toBeVisible();
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toHaveCount(0);
+    await expect(memorySection.getByText('Request scope · Crew overview · corr-growth-lead-review')).toBeVisible();
     await expect(returnToCurrentScopeButton).toBeVisible();
     await expect(selectedActiveQueueCorrelationButton).toBeVisible();
     await expect(replaySection.getByText('Scoped replay · corr-growth-lead-review')).toBeVisible();
@@ -1516,6 +1524,8 @@ test.describe('operator shell smoke', () => {
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
     await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toHaveCount(0);
+    await expect(memorySection.getByText('Request scope · Crew overview')).toBeVisible();
+    await expect(memorySection.getByText('Request scope · Crew overview · corr-growth-lead-review')).toHaveCount(0);
     await expect(returnToCurrentScopeButton).toHaveCount(0);
     await expect(selectedActiveQueueCorrelationButton).toHaveCount(0);
     await expect(activeQueueCorrelationButton).toBeVisible();

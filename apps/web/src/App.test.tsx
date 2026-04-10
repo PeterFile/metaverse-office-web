@@ -7218,6 +7218,73 @@ afterEach(() => {
     expect(newFetchUrlsAfterPivot).not.toContain(growthRevenueFallbackCorrelationUrl);
   });
 
+  it('keeps current and unknown selected-agent supervision history observers as plain text', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === appEngineeringSupervisionHistoryUrl) {
+          return jsonResponse({
+            items: [
+              {
+                ...appEngineeringSupervisionHistoryFixture.items[0],
+                alert_id: 'alert-history-observer-current',
+                observer_agent_id: 'app-engineering',
+                summary: 'Current supervision-history observer stays plain text'
+              },
+              {
+                ...appEngineeringSupervisionHistoryFixture.items[0],
+                alert_id: 'alert-history-observer-unknown',
+                observer_agent_id: 'ghost-agent',
+                summary: 'Unknown supervision-history observer stays plain text'
+              }
+            ]
+          });
+        }
+
+        return resolveTestFetchResponse(url);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
+
+    const supervisionSection = within(details).getByRole('heading', { name: 'Supervision History' }).closest('section');
+    expect(supervisionSection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+      expect(within(supervisionSection!).getByText('Current supervision-history observer stays plain text')).toBeVisible();
+      expect(within(supervisionSection!).getByText('Unknown supervision-history observer stays plain text')).toBeVisible();
+    });
+
+    const currentRecord = within(supervisionSection!)
+      .getByText('Current supervision-history observer stays plain text')
+      .closest('li');
+    const unknownRecord = within(supervisionSection!)
+      .getByText('Unknown supervision-history observer stays plain text')
+      .closest('li');
+    expect(currentRecord).not.toBeNull();
+    expect(unknownRecord).not.toBeNull();
+
+    expect(currentRecord).toHaveTextContent('Observer · app-engineering');
+    expect(
+      within(currentRecord!).queryByRole('button', {
+        name: 'Select supervision history observer from alert alert-history-observer-current app-engineering'
+      })
+    ).not.toBeInTheDocument();
+    expect(unknownRecord).toHaveTextContent('Observer · ghost-agent');
+    expect(
+      within(unknownRecord!).queryByRole('button', {
+        name: 'Select supervision history observer from alert alert-history-observer-unknown ghost-agent'
+      })
+    ).not.toBeInTheDocument();
+  });
+
   it('preserves the active selected correlation and scoped reads when opening a selected-agent supervision history watcher pivot', async () => {
     const growthRevenueFallbackCorrelationUrl = '/correlations/corr-growth-lead-review?limit=10&window=60m';
 

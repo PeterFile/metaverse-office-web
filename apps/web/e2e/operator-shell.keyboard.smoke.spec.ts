@@ -4772,6 +4772,134 @@ test.describe('operator shell smoke', () => {
     await expect(correlationSection.getByText('No correlation selected.')).toHaveCount(0);
   });
 
+  test('keeps the selected-agent workflow peer-watch alert evidence jump focused on shared memory without changing selection or active correlation via keyboard traversal', async ({
+    page
+  }) => {
+    const requestedUrls: string[] = [];
+    page.on('request', (request) => {
+      try {
+        const url = new URL(request.url());
+        requestedUrls.push(`${url.pathname}${url.search}`);
+      } catch {
+        requestedUrls.push(request.url());
+      }
+    });
+
+    const workflowCorrelationId = 'collector-snapshot:2026-03-10T23:59:40.000Z';
+    await page.route('**/agents/app-engineering/workflow?limit=10&window=60m', async (route) => {
+      const response = await route.fetch();
+      const workflow = (await response.json()) as {
+        detail: {
+          active_task: string;
+          open_peer_watch_alerts?: unknown[];
+        };
+      };
+
+      await route.fulfill({
+        response,
+        json: {
+          ...workflow,
+          detail: {
+            ...workflow.detail,
+            open_peer_watch_alerts: [
+              {
+                alert_id: 'alert-browser-peer-watch-evidence-jump',
+                ts: '2026-03-10T23:00:00.000Z',
+                agent_id: 'app-engineering',
+                target_agent_id: 'app-engineering',
+                actor_id: 'team-lead',
+                observer_agent_id: 'team-lead',
+                watcher_agent_ids: ['growth-revenue'],
+                severity: 'orange',
+                status: 'open',
+                current_state: 'blocked',
+                active_task: workflow.detail.active_task,
+                summary: 'Workflow peer-watch evidence jump stays in shared memory',
+                evidence_refs: ['/tmp/revenue-handoff.md', '/tmp/missing.md'],
+                evidence_count: 1,
+                correlation_id: workflowCorrelationId,
+                source_kind: 'controller_event',
+                metadata: {}
+              },
+              ...(workflow.detail.open_peer_watch_alerts ?? [])
+            ]
+          }
+        }
+      });
+    });
+
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Hub' }).click();
+
+    const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
+    const inspectButton = detailsPanel.getByRole('button', {
+      name: 'Inspect App Engineering Agent',
+      exact: true
+    });
+
+    await focusHubControlWithTab(page, inspectButton, 'Inspect App Engineering Agent');
+    await expect(inspectButton).toBeFocused();
+    await page.keyboard.press('Enter');
+
+    const workflowSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Workflow' })
+    });
+    const correlationSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Correlation Drilldown' })
+    });
+    const memorySection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Shared Memory' })
+    });
+    const alertRecord = workflowSection
+      .getByText('Workflow peer-watch evidence jump stays in shared memory')
+      .locator('xpath=ancestor::li[contains(@class,"aitown-record")][1]');
+    const evidenceJumpButton = alertRecord.getByRole('button', {
+      name: 'Jump to shared memory artifact /tmp/revenue-handoff.md'
+    });
+    const focusedSharedMemoryRecord = detailsPanel.locator('li[data-shared-memory-target]:focus');
+
+    await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+    const baselineCorrelationIdPattern = /(?:corr-[A-Za-z0-9:_-]+|collector-snapshot:\d{4}-\d{2}-\d{2}T[0-9:.]+Z)/;
+    await expect
+      .poll(async () => {
+        const text = await correlationSection.textContent();
+        return text?.match(baselineCorrelationIdPattern)?.[0] ?? null;
+      })
+      .not.toBeNull();
+    const baselineCorrelationId = ((await correlationSection.textContent()) ?? '').match(baselineCorrelationIdPattern)?.[0] ?? null;
+    expect(baselineCorrelationId).not.toBeNull();
+
+    await expect(alertRecord.getByText('Workflow peer-watch evidence jump stays in shared memory')).toBeVisible();
+    await expect(alertRecord.getByText('Evidence · /tmp/revenue-handoff.md, /tmp/missing.md')).toBeVisible();
+    await expect(alertRecord.getByText('Watchers · growth-revenue')).toBeVisible();
+    await expect(
+      alertRecord.getByRole('button', {
+        name: 'Jump to shared memory artifact /tmp/missing.md'
+      })
+    ).toHaveCount(0);
+    await expect(memorySection.getByText('Collector observed workspace write to revenue-handoff.md')).toBeVisible();
+    await expect(detailsPanel.getByRole('button', { name: 'Return to current scope' })).toHaveCount(0);
+    await expect(focusedSharedMemoryRecord).toHaveCount(0);
+    await focusHubControlWithTab(page, evidenceJumpButton, 'Jump to shared memory artifact /tmp/revenue-handoff.md');
+    await expect(evidenceJumpButton).toBeFocused();
+
+    const requestCountBeforeJump = requestedUrls.length;
+
+    await page.keyboard.press('Enter');
+
+    await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+    await expect(correlationSection.getByText(baselineCorrelationId!, { exact: true })).toBeVisible();
+    await expect(alertRecord.getByText('Workflow peer-watch evidence jump stays in shared memory')).toBeVisible();
+    await expect(detailsPanel.getByRole('button', { name: 'Return to current scope' })).toHaveCount(0);
+    await expect(focusedSharedMemoryRecord).toHaveCount(1);
+    await expect(focusedSharedMemoryRecord).toContainText('Ref · /tmp/revenue-handoff.md');
+
+    await page.waitForTimeout(150);
+
+    const postJumpRequests = requestedUrls.slice(requestCountBeforeJump);
+    expect(postJumpRequests).toEqual([]);
+  });
+
   test('keeps selected-agent auto correlation mode when re-selecting the current default correlation from supervision history via keyboard traversal', async ({
     page
   }) => {

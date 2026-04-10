@@ -471,6 +471,7 @@ function buildProps(overrides: Partial<DetailsPanelProps> = {}): DetailsPanelPro
     memoryArtifacts: buildMemoryArtifacts(),
     memoryArtifactsError: null,
     memoryArtifactsState: 'ready',
+    sharedMemoryRequestScopeLabel: 'app-engineering · corr-app-review',
     selectedAgentSupervisionHistory: {
       items: []
     },

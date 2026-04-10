@@ -2039,6 +2039,7 @@ afterEach(() => {
     expect(memorySection).not.toBeNull();
 
     expect(await within(memorySection!).findByText('Team lead review notes stayed local to the agent context')).toBeVisible();
+    expect(within(memorySection!).getByText('Request scope · team-lead')).toBeVisible();
     expect(memorySection).toHaveTextContent('Agents · team-lead');
     expect(within(memorySection!).getByText('Correlations · No correlation ids')).toBeVisible();
     expect(within(memorySection!).getByText('Latest event type · agent_noted')).toBeVisible();
@@ -2072,6 +2073,7 @@ afterEach(() => {
     expect(memorySection).not.toBeNull();
 
     expect(await within(memorySection!).findByText('Correlation-scoped evidence trail for the missing workflow review')).toBeVisible();
+    expect(within(memorySection!).getByText('Request scope · app-engineering · corr-app-review')).toBeVisible();
     expect(
       within(memorySection!).getByRole('button', {
         name: 'Open shared memory correlation corr-app-review, currently selected'
@@ -8111,14 +8113,19 @@ afterEach(() => {
     const details = await openHub(user);
     const incidentSection = within(details).getByRole('heading', { name: 'Incident Feed' }).closest('section');
     const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    const memorySection = within(details).getByRole('heading', { name: 'Shared Memory' }).closest('section');
     expect(incidentSection).not.toBeNull();
     expect(correlationSection).not.toBeNull();
+    expect(memorySection).not.toBeNull();
+
+    expect(within(memorySection!).getByText('Request scope · Crew overview')).toBeVisible();
 
     await user.click(within(incidentSection!).getByRole('button', { name: 'Open incident correlation corr-app-secondary' }));
 
     await waitFor(() => {
       expect(within(correlationSection!).getByText('corr-app-secondary')).toBeVisible();
       expect(within(details).getByRole('button', { name: 'Return to current scope' })).toBeVisible();
+      expect(within(memorySection!).getByText('Request scope · Crew overview · corr-app-secondary')).toBeVisible();
     });
 
     const fetchCallCountBeforeReset = vi.mocked(globalThis.fetch).mock.calls.length;
@@ -8129,6 +8136,8 @@ afterEach(() => {
       expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
       expect(within(correlationSection!).queryByText('corr-app-secondary')).not.toBeInTheDocument();
       expect(within(details).queryByRole('button', { name: 'Return to current scope' })).not.toBeInTheDocument();
+      expect(within(memorySection!).getByText('Request scope · Crew overview')).toBeVisible();
+      expect(within(memorySection!).queryByText('Request scope · Crew overview · corr-app-secondary')).not.toBeInTheDocument();
     });
 
     const postResetRequests = vi

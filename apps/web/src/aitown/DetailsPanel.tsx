@@ -46,6 +46,7 @@ type DetailsPanelProps = {
   memoryArtifacts: MemoryArtifactIndex | null;
   memoryArtifactsError: string | null;
   memoryArtifactsState: LoadState;
+  sharedMemoryRequestScopeLabel: string;
   selectedAgentSupervisionHistory: PeerWatchAlertsResponse | null;
   selectedAgentSupervisionHistoryError: string | null;
   selectedAgentSupervisionHistoryState: LoadState;
@@ -1324,6 +1325,7 @@ function renderSharedMemorySection({
   memoryArtifacts,
   memoryArtifactsError,
   memoryArtifactsState,
+  sharedMemoryRequestScopeLabel,
   activeCorrelationId,
   currentAgentId,
   navigableAgentIds,
@@ -1333,6 +1335,7 @@ function renderSharedMemorySection({
   memoryArtifacts: MemoryArtifactIndex | null;
   memoryArtifactsError: string | null;
   memoryArtifactsState: LoadState;
+  sharedMemoryRequestScopeLabel: string;
   activeCorrelationId: string | null;
   currentAgentId: string | null;
   navigableAgentIds: Set<string>;
@@ -1347,6 +1350,7 @@ function renderSharedMemorySection({
   return (
     <section className="aitown-details__section">
       <h3>Shared Memory</h3>
+      <span>{`Request scope · ${sharedMemoryRequestScopeLabel}`}</span>
       {sharedMemoryWarning ? <p role="status">{sharedMemoryWarning}</p> : null}
       <ul className="aitown-records">
         {memoryArtifactsState === 'loading' && !memoryArtifacts ? (
@@ -1639,6 +1643,7 @@ export function DetailsPanel({
   memoryArtifacts,
   memoryArtifactsError,
   memoryArtifactsState,
+  sharedMemoryRequestScopeLabel,
   selectedAgentSupervisionHistory,
   selectedAgentSupervisionHistoryError,
   selectedAgentSupervisionHistoryState,
@@ -2132,6 +2137,7 @@ export function DetailsPanel({
           memoryArtifacts,
           memoryArtifactsError,
           memoryArtifactsState,
+          sharedMemoryRequestScopeLabel,
           activeCorrelationId: sharedMemoryActiveCorrelationId,
           currentAgentId: null,
           navigableAgentIds,
@@ -2852,6 +2858,7 @@ export function DetailsPanel({
         memoryArtifacts,
         memoryArtifactsError,
         memoryArtifactsState,
+        sharedMemoryRequestScopeLabel,
         activeCorrelationId: sharedMemoryActiveCorrelationId,
         currentAgentId: selectedAgent.agent_id,
         navigableAgentIds,

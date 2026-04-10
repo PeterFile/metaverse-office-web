@@ -161,6 +161,10 @@ function resolveSharedMemoryRequestScopeLabel(
     : 'Crew overview';
 }
 
+function resolveSelectedAgentSupervisionHistoryRequestScopeLabel(selectedAgentId: string | null) {
+  return selectedAgentId ? `Target agent · ${selectedAgentId}` : 'Target agent';
+}
+
 function resolveCrewReplayCorrelationId(
   selectedAgentId: string | null,
   selectedCorrelationId: string | null,
@@ -332,6 +336,8 @@ function AppInner() {
     selectedAgentId,
     sharedMemoryCorrelationId
   );
+  const selectedAgentSupervisionHistoryRequestScopeLabel =
+    resolveSelectedAgentSupervisionHistoryRequestScopeLabel(selectedAgentId);
 
   const memoryArtifactsResource = usePolledResource({
     enabled: hubOpen,
@@ -950,6 +956,9 @@ function AppInner() {
               memoryArtifactsError={memoryArtifactsResource.error}
               memoryArtifactsState={memoryArtifactsResource.state}
               sharedMemoryRequestScopeLabel={sharedMemoryRequestScopeLabel}
+              selectedAgentSupervisionHistoryRequestScopeLabel={
+                selectedAgentSupervisionHistoryRequestScopeLabel
+              }
               selectedAgentSupervisionHistory={selectedAgentSupervisionHistoryResource.data}
               selectedAgentSupervisionHistoryError={selectedAgentSupervisionHistoryResource.error}
               selectedAgentSupervisionHistoryState={selectedAgentSupervisionHistoryResource.state}

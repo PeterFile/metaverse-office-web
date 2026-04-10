@@ -6840,6 +6840,52 @@ afterEach(() => {
     expect(peerWatchRequests).toEqual([appEngineeringSupervisionHistoryUrl]);
   });
 
+  it('keeps supervision history request scope target-agent scoped across manual correlation overrides and agent pivots', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
+
+    const incidentSection = within(details).getByRole('heading', { name: 'Incident Feed' }).closest('section');
+    const supervisionSection = within(details).getByRole('heading', { name: 'Supervision History' }).closest('section');
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    expect(incidentSection).not.toBeNull();
+    expect(supervisionSection).not.toBeNull();
+    expect(correlationSection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+      expect(within(supervisionSection!).getByText('Peer watch recovered after evidence review')).toBeVisible();
+    });
+
+    expect(within(supervisionSection!).getByText('Request scope · Target agent · app-engineering')).toBeVisible();
+
+    await user.click(
+      within(incidentSection!).getByRole('button', {
+        name: 'Open incident correlation corr-app-secondary'
+      })
+    );
+
+    await waitFor(() => {
+      expect(within(correlationSection!).getByText('corr-app-secondary')).toBeVisible();
+      expect(within(details).getByRole('button', { name: 'Return to current scope' })).toBeVisible();
+    });
+
+    expect(within(supervisionSection!).getByText('Request scope · Target agent · app-engineering')).toBeVisible();
+
+    await user.click(
+      within(supervisionSection!).getByRole('button', {
+        name: 'Select supervision history watcher from alert alert-history-1 growth-revenue'
+      })
+    );
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+      expect(within(supervisionSection!).getByText('Request scope · Target agent · growth-revenue')).toBeVisible();
+    });
+  });
+
   it('jumps from selected-agent supervision history evidence refs to shared memory without changing the selected agent or correlation', async () => {
     const user = userEvent.setup();
     render(<App />);

@@ -472,6 +472,7 @@ function buildProps(overrides: Partial<DetailsPanelProps> = {}): DetailsPanelPro
     memoryArtifactsError: null,
     memoryArtifactsState: 'ready',
     sharedMemoryRequestScopeLabel: 'app-engineering · corr-app-review',
+    selectedAgentSupervisionHistoryRequestScopeLabel: 'Target agent · app-engineering',
     selectedAgentSupervisionHistory: {
       items: []
     },
@@ -7026,6 +7027,48 @@ describe('DetailsPanel workflow peer-watch alerts', () => {
     expect(onSelectCorrelation).toHaveBeenCalledWith('corr-app-review', {
       preserveAutoOnDefaultReselect: true
     });
+  });
+
+  it('shows a target-agent request scope line for selected-agent supervision history even during manual correlation overrides', () => {
+    render(
+      <DetailsPanel
+        {...buildProps({
+          manualCorrelationOverrideActive: true,
+          selectedCorrelationId: 'corr-app-secondary',
+          sharedMemoryRequestScopeLabel: 'app-engineering · corr-app-secondary',
+          selectedAgentSupervisionHistory: {
+            items: [
+              {
+                alert_id: 'alert-history-scope',
+                ts: '2026-03-16T08:55:00.000Z',
+                agent_id: 'app-engineering',
+                target_agent_id: 'app-engineering',
+                actor_id: 'team-lead',
+                observer_agent_id: 'team-lead',
+                watcher_agent_ids: ['growth-revenue'],
+                severity: 'orange',
+                status: 'resolved',
+                current_state: 'blocked',
+                active_task: 'Fix workflow issue',
+                summary: 'Selected-agent history keeps target-agent request scope',
+                evidence_refs: [],
+                evidence_count: 0,
+                correlation_id: 'corr-app-review',
+                source_kind: 'controller_event',
+                metadata: {}
+              }
+            ]
+          }
+        })}
+      />
+    );
+
+    const supervisionSection = screen.getByRole('heading', { name: 'Supervision History' }).closest('section');
+    expect(supervisionSection).not.toBeNull();
+    expect(within(supervisionSection!).getByText('Request scope · Target agent · app-engineering')).toBeVisible();
+    expect(
+      within(supervisionSection!).queryByText('Request scope · app-engineering · corr-app-secondary')
+    ).not.toBeInTheDocument();
   });
 
   it('renders selected-agent supervision history loading, empty, error, and degraded states explicitly', () => {

@@ -47,6 +47,7 @@ type DetailsPanelProps = {
   memoryArtifactsError: string | null;
   memoryArtifactsState: LoadState;
   sharedMemoryRequestScopeLabel: string;
+  selectedAgentSupervisionHistoryRequestScopeLabel: string;
   selectedAgentSupervisionHistory: PeerWatchAlertsResponse | null;
   selectedAgentSupervisionHistoryError: string | null;
   selectedAgentSupervisionHistoryState: LoadState;
@@ -1644,6 +1645,7 @@ export function DetailsPanel({
   memoryArtifactsError,
   memoryArtifactsState,
   sharedMemoryRequestScopeLabel,
+  selectedAgentSupervisionHistoryRequestScopeLabel,
   selectedAgentSupervisionHistory,
   selectedAgentSupervisionHistoryError,
   selectedAgentSupervisionHistoryState,
@@ -2564,6 +2566,7 @@ export function DetailsPanel({
       <section className="aitown-details__section">
         <h3>Supervision History</h3>
         {supervisionHistoryWarning ? <p role="status">{supervisionHistoryWarning}</p> : null}
+        <p>{`Request scope · ${selectedAgentSupervisionHistoryRequestScopeLabel}`}</p>
         <ul className="aitown-records">
           {selectedAgentSupervisionHistoryState === 'loading' && !selectedAgentSupervisionHistory ? (
             <li className="aitown-record">Loading supervision history...</li>

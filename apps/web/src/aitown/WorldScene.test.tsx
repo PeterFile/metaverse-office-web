@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { type ComponentType } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { AiTownAssets } from './assetLoader';
@@ -269,6 +270,14 @@ vi.mock('./assetLoader', () => ({
 
 import { loadAiTownAssets } from './assetLoader';
 import WorldScene from './WorldScene';
+
+type ResettableWorldSceneProps = {
+  scene: AiTownSceneModel;
+  onSelectAgent: (agentId: string | null) => void;
+  resetViewSignal?: number;
+};
+
+const ResettableWorldScene = WorldScene as unknown as ComponentType<ResettableWorldSceneProps>;
 
 const characterKeys = ['f1', 'f2', 'f3', 'f4', 'f5', 'f6', 'f7', 'f8'] as const;
 
@@ -981,6 +990,177 @@ describe('WorldScene watch overlay caption gating', () => {
 
     expect(center.x).toBeCloseTo((selectedAgent?.position.x ?? 0) + expectedBiasX, 4);
     expect(center.y).toBeCloseTo(selectedAgent?.position.y ?? 0, 4);
+  });
+
+  it('restores the fresh-load entry view when resetViewSignal changes without a selected agent', async () => {
+    appInitMock.mockReset().mockResolvedValue(undefined);
+    vi.mocked(loadAiTownAssets).mockResolvedValue(makeAssets());
+
+    const baseScene = makeWideSelectedAgentScene();
+    const scene = {
+      ...baseScene,
+      watchEdges: [],
+      selectedAgentId: null,
+      agents: baseScene.agents.map((agent) => ({
+        ...agent,
+        selected: false
+      }))
+    } satisfies AiTownSceneModel;
+    const onSelectAgent = vi.fn();
+    const { container, rerender } = render(
+      <main className="aitown-shell">
+        <section className="aitown-panel aitown-panel--game">
+          <ResettableWorldScene scene={scene} onSelectAgent={onSelectAgent} resetViewSignal={0} />
+        </section>
+      </main>
+    );
+
+    const host = container.querySelector('.aitown-world__host');
+
+    expect(host).toBeInstanceOf(HTMLDivElement);
+
+    (host as HTMLDivElement).setPointerCapture = vi.fn();
+    (host as HTMLDivElement).releasePointerCapture = vi.fn();
+    (host as HTMLDivElement).hasPointerCapture = vi.fn(() => true);
+    setElementRect(host as HTMLDivElement, { left: 0, top: 0, width: 1000, height: 800 });
+
+    await waitFor(() => {
+      expect(readViewportCenter().x).toBeCloseTo(scene.pixelWidth / 2, 4);
+      expect(readViewportCenter().y).toBeCloseTo(scene.pixelHeight / 2, 4);
+    });
+
+    fireEvent.pointerDown(host as HTMLDivElement, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      button: 0,
+      buttons: 1,
+      clientX: 500,
+      clientY: 320
+    });
+    fireEvent.pointerMove(host as HTMLDivElement, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      buttons: 1,
+      clientX: 380,
+      clientY: 260
+    });
+    fireEvent.pointerUp(host as HTMLDivElement, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      button: 0,
+      clientX: 380,
+      clientY: 260
+    });
+
+    const manualCenter = readViewportCenter();
+    expect(manualCenter.x).not.toBeCloseTo(scene.pixelWidth / 2, 4);
+    expect(manualCenter.y).not.toBeCloseTo(scene.pixelHeight / 2, 4);
+
+    rerender(
+      <main className="aitown-shell">
+        <section className="aitown-panel aitown-panel--game">
+          <ResettableWorldScene scene={scene} onSelectAgent={onSelectAgent} resetViewSignal={1} />
+        </section>
+      </main>
+    );
+
+    await waitFor(() => {
+      expect(readViewportCenter().x).toBeCloseTo(scene.pixelWidth / 2, 4);
+      expect(readViewportCenter().y).toBeCloseTo(scene.pixelHeight / 2, 4);
+    });
+
+    expect(onSelectAgent).not.toHaveBeenCalled();
+  });
+
+  it('restores the selected-agent safe-area default when resetViewSignal changes', async () => {
+    appInitMock.mockReset().mockResolvedValue(undefined);
+    vi.mocked(loadAiTownAssets).mockResolvedValue(makeAssets());
+
+    const scene = {
+      ...makeWideSelectedAgentScene(),
+      watchEdges: []
+    };
+    const selectedAgent = scene.agents.find((agent) => agent.agentId === scene.selectedAgentId);
+    const onSelectAgent = vi.fn();
+    const { container, rerender } = render(
+      <main className="aitown-shell">
+        <section className="aitown-panel aitown-panel--game">
+          <div className="aitown-shell__stats">Stats</div>
+          <ResettableWorldScene scene={scene} onSelectAgent={onSelectAgent} resetViewSignal={0} />
+        </section>
+      </main>
+    );
+
+    expect(selectedAgent).toBeDefined();
+
+    const host = container.querySelector('.aitown-world__host');
+    const stats = container.querySelector('.aitown-shell__stats');
+
+    expect(host).toBeInstanceOf(HTMLDivElement);
+    expect(stats).toBeInstanceOf(HTMLElement);
+
+    (host as HTMLDivElement).setPointerCapture = vi.fn();
+    (host as HTMLDivElement).releasePointerCapture = vi.fn();
+    (host as HTMLDivElement).hasPointerCapture = vi.fn(() => true);
+    setElementRect(host as HTMLDivElement, { left: 0, top: 0, width: 1000, height: 800 });
+    setElementRect(stats as HTMLElement, { left: 760, top: 80, width: 240, height: 140 });
+
+    await waitFor(() => {
+      expect(readViewportInspector()?.read().clampPadding).toEqual({
+        top: 0,
+        right: 240
+      });
+    });
+
+    fireEvent.pointerDown(host as HTMLDivElement, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      button: 0,
+      buttons: 1,
+      clientX: 500,
+      clientY: 320
+    });
+    fireEvent.pointerMove(host as HTMLDivElement, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      buttons: 1,
+      clientX: 380,
+      clientY: 320
+    });
+    fireEvent.pointerUp(host as HTMLDivElement, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      button: 0,
+      clientX: 380,
+      clientY: 320
+    });
+
+    const manualCenter = readViewportCenter();
+    const inspectionBeforeReset = readViewportInspector()?.read();
+    const expectedDefaultCenterX =
+      (selectedAgent?.position.x ?? 0) +
+      (inspectionBeforeReset?.clampPadding.right ?? 0) / ((inspectionBeforeReset?.scale ?? 1) * 2);
+    expect(manualCenter.x).not.toBeCloseTo(expectedDefaultCenterX, 4);
+
+    rerender(
+      <main className="aitown-shell">
+        <section className="aitown-panel aitown-panel--game">
+          <div className="aitown-shell__stats">Stats</div>
+          <ResettableWorldScene scene={scene} onSelectAgent={onSelectAgent} resetViewSignal={1} />
+        </section>
+      </main>
+    );
+
+    await waitFor(() => {
+      const inspection = readViewportInspector()?.read();
+      const center = readViewportCenter();
+      const expectedBiasX = (inspection?.clampPadding.right ?? 0) / ((inspection?.scale ?? 1) * 2);
+
+      expect(center.x).toBeCloseTo((selectedAgent?.position.x ?? 0) + expectedBiasX, 4);
+      expect(center.y).toBeCloseTo(selectedAgent?.position.y ?? 0, 4);
+    });
+
+    expect(onSelectAgent).not.toHaveBeenCalled();
   });
 
   it('does not resync clamp padding for non-contributor text mutations under document.body', async () => {

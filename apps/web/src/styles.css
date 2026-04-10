@@ -719,6 +719,12 @@ button {
   text-transform: uppercase;
 }
 
+.aitown-hub-sheet__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .aitown-hub-sheet .aitown-panel--details {
   min-height: calc(100dvh - 96px);
 }

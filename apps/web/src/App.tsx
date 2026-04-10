@@ -215,6 +215,7 @@ function selectDefaultCorrelationId({
 function AppInner() {
   const { selectedAgentId, setSelectedAgentId, setWorld } = useWorld();
   const [hubOpen, setHubOpen] = useState(false);
+  const [resetViewSignal, setResetViewSignal] = useState(0);
   const [selectedCorrelationId, setSelectedCorrelationId] = useState<string | null>(null);
   const [selectedCorrelationWasExplicit, setSelectedCorrelationWasExplicit] = useState(false);
   const [selectedCorrelationCarryForward, setSelectedCorrelationCarryForward] = useState(false);
@@ -607,6 +608,10 @@ function AppInner() {
     setSelectedCorrelationCarryForward(false);
   }, [defaultCorrelationId]);
 
+  const handleResetView = useCallback(() => {
+    setResetViewSignal((signal) => signal + 1);
+  }, []);
+
   const toggleHub = useCallback(() => {
     setHubOpen((open) => !open);
   }, []);
@@ -874,6 +879,11 @@ function AppInner() {
             >
               {hubOpen ? 'Hide Hub' : 'Open Hub'}
             </button>
+            {!hubOpen ? (
+              <button type="button" className="aitown-button" onClick={handleResetView}>
+                Reset view
+              </button>
+            ) : null}
             {selectedAgent ? (
               <button type="button" className="aitown-button" onClick={() => selectAgent(null, null)}>
                 Clear Selection
@@ -898,7 +908,11 @@ function AppInner() {
             rendererFallback
           ) : (
             <Suspense fallback={rendererFallback}>
-              <LazyWorldScene scene={scene} onSelectAgent={handleSceneSelectAgent} />
+              <LazyWorldScene
+                scene={scene}
+                onSelectAgent={handleSceneSelectAgent}
+                resetViewSignal={resetViewSignal}
+              />
             </Suspense>
           )}
         </section>
@@ -918,9 +932,14 @@ function AppInner() {
           >
             <div className="aitown-hub-sheet__header">
               <span id="aitown-hub-title" className="aitown-hub-sheet__title">Hub</span>
-              <button ref={hubCloseButtonRef} type="button" className="aitown-button" onClick={closeHub}>
-                Close Hub
-              </button>
+              <div className="aitown-hub-sheet__actions">
+                <button type="button" className="aitown-button" onClick={handleResetView}>
+                  Reset view
+                </button>
+                <button ref={hubCloseButtonRef} type="button" className="aitown-button" onClick={closeHub}>
+                  Close Hub
+                </button>
+              </div>
             </div>
             <DetailsPanel
               collectorSnapshot={collectorSnapshotResource.data}

@@ -566,6 +566,7 @@ async function zoomViewportInWithMouseWheel(page: Page, deltaY = -160) {
     .toBeGreaterThan(beforeScale! + 0.01);
 }
 
+
 async function forceViewportAgainstTopRightClamp(page: Page) {
   await page.waitForFunction(() => Boolean(window.__AITOWN_VIEWPORT__));
   await page.evaluate(() => {
@@ -1112,17 +1113,22 @@ test.describe('operator shell smoke', () => {
 
     const dialog = page.getByRole('dialog', { name: 'Hub' });
     const closeButton = dialog.getByRole('button', { name: 'Close Hub' });
+    const firstDialogButton = dialog.getByRole('button').first();
     const lastDialogButton = dialog.getByRole('button').last();
 
     await expect(dialog).toBeVisible();
     await expect(closeButton).toBeFocused();
+    await expect(firstDialogButton).toBeVisible();
     await expect(lastDialogButton).toBeVisible();
+
+    await page.keyboard.press('Shift+Tab');
+    await expect(firstDialogButton).toBeFocused();
 
     await page.keyboard.press('Shift+Tab');
     await expect(lastDialogButton).toBeFocused();
 
     await page.keyboard.press('Tab');
-    await expect(closeButton).toBeFocused();
+    await expect(firstDialogButton).toBeFocused();
   });
 
   test('opens agent detail and correlation drilldown from the crew-overview active queue via keyboard traversal', async ({ page }) => {
@@ -6002,6 +6008,78 @@ test.describe('operator shell smoke', () => {
     const left = await dragViewportToEdge(page, 'top-left', { horizontalOnly: true });
     expect(left.clampPadding?.right ?? 0).toBe(0);
     expectViewportAtLeftClampEdge(left, initialScale, initialTop);
+  });
+
+  test('restores the selected-agent default viewport pose without clearing hub context when Reset view is pressed', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.locator('.aitown-world__host canvas')).toBeVisible();
+    await page.waitForFunction(() => Boolean(window.__AITOWN_VIEWPORT__));
+
+    await page.getByRole('button', { name: 'Open Hub' }).click();
+
+    const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
+    const correlationSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Correlation Drilldown' })
+    });
+
+    await detailsPanel.getByRole('button', { name: 'Inspect App Engineering Agent', exact: true }).click();
+    await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+    const correlationIdPattern = /(?:corr-[A-Za-z0-9:_-]+|collector-snapshot:\d{4}-\d{2}-\d{2}T[0-9:.]+Z)/;
+    await expect
+      .poll(async () => {
+        const text = await correlationSection.textContent();
+        return text?.match(correlationIdPattern)?.[0] ?? null;
+      })
+      .not.toBeNull();
+    const baselineCorrelationId = ((await correlationSection.textContent()) ?? '').match(correlationIdPattern)?.[0] ?? null;
+    expect(baselineCorrelationId).not.toBeNull();
+
+    const baselinePose = await readViewportPose(page);
+    expect(baselinePose).not.toBeNull();
+
+    await zoomViewportOutToMinimum(page);
+    await forceViewportAgainstTopRightClamp(page);
+
+    await expect
+      .poll(async () => {
+        const currentPose = await readViewportPose(page);
+        if (!baselinePose || !currentPose) {
+          return false;
+        }
+
+        return (
+          Math.abs(currentPose.x - baselinePose.x) >= 60 ||
+          Math.abs(currentPose.y - baselinePose.y) >= 60 ||
+          Math.abs(currentPose.scale - baselinePose.scale) >= 0.05
+        );
+      })
+      .toBe(true);
+
+    await page.getByRole('button', { name: 'Reset view' }).click();
+
+    await expect(page.getByRole('button', { name: 'Hide Hub' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Clear Selection' })).toBeVisible();
+    await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+    await expect(correlationSection.getByText(baselineCorrelationId!, { exact: true })).toBeVisible();
+
+    await expect
+      .poll(async () => {
+        const currentPose = await readViewportPose(page);
+        if (!baselinePose || !currentPose) {
+          return false;
+        }
+
+        return (
+          Math.abs(currentPose.x - baselinePose.x) <= 1 &&
+          Math.abs(currentPose.y - baselinePose.y) <= 1 &&
+          Math.abs(currentPose.scale - baselinePose.scale) <= 0.01
+        );
+      }, {
+        timeout: POLL_DRIVEN_ASSERTION_TIMEOUT_MS
+      })
+      .toBe(true);
+
+    expectViewportBoundsWithinClampBudget(await waitForViewportSettle(page));
   });
 
   test('keeps portrait selected-watch clamp gating stable across fixed-width overlay churn and unrelated shell noise', async ({

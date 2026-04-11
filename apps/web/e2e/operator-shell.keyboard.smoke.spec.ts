@@ -6105,6 +6105,59 @@ test.describe('operator shell smoke', () => {
     }
   });
 
+  test('routes selected-agent supervision history reads through the managed Vite proxy', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.getByRole('heading', { name: 'Metaverse Office' })).toBeVisible();
+
+    const frontendOrigin = new URL(page.url()).origin;
+    const inspectableBackendOrigin = resolveInspectableBrowserSmokeBackendOrigin();
+    const expectedBrowserRequest = '/peer-watch/alerts?target_agent_id=app-engineering&limit=4';
+    const browserRequests = new Set<string>();
+    const handleRequest = (request: Request) => {
+      const url = new URL(request.url());
+      if (request.method() !== 'GET' || url.origin !== frontendOrigin) {
+        return;
+      }
+
+      if (`${url.pathname}${url.search}` === expectedBrowserRequest) {
+        browserRequests.add(expectedBrowserRequest);
+      }
+    };
+
+    page.on('request', handleRequest);
+    await page.getByRole('button', { name: 'Open Hub' }).click();
+
+    try {
+      const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
+      await expect(detailsPanel).toBeVisible();
+
+      await detailsPanel.getByRole('button', { name: 'Inspect App Engineering Agent', exact: true }).click();
+
+      await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+      await expect(detailsPanel.getByText('Request scope · Target agent · app-engineering')).toBeVisible();
+
+      await expect.poll(() => browserRequests.has(expectedBrowserRequest)).toBe(true);
+
+      if (!inspectableBackendOrigin) {
+        return;
+      }
+
+      await expect
+        .poll(async () => {
+          const requests = await readBrowserSmokeRequestLog(inspectableBackendOrigin);
+          return requests.some(
+            (entry) =>
+              entry.method === 'GET' &&
+              entry.origin === null &&
+              entry.pathname === '/peer-watch/alerts'
+          );
+        })
+        .toBe(true);
+    } finally {
+      page.off('request', handleRequest);
+    }
+  });
+
   test('blocks loopback browser writes against the read-only smoke backend above the helper layer', async ({ page }) => {
     await page.goto('/');
     await expect(page.getByRole('heading', { name: 'Metaverse Office' })).toBeVisible();

@@ -31,6 +31,10 @@ export default defineConfig(({ mode }) => {
           target: proxyTarget,
           changeOrigin: true
         },
+        '/peer-watch': {
+          target: proxyTarget,
+          changeOrigin: true
+        },
         '/correlations': {
           target: proxyTarget,
           changeOrigin: true

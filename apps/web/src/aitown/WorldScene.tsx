@@ -846,6 +846,7 @@ export default function WorldScene({ scene, onSelectAgent, resetViewSignal = 0 }
         viewport,
         getClampPadding: () => clampPaddingRef.current,
         getScaleBounds: () => ({ minScale: currentBaseScale, maxScale: currentMaxScale }),
+        getSelectedAgent: () => selectedAgentRef.current,
         afterZoom: () => {
           viewportZoomHandler?.();
         }

@@ -5949,6 +5949,137 @@ test.describe('operator shell smoke', () => {
     expect(forbiddenRequests).toEqual([]);
   });
 
+  test('keeps current and unknown selected-agent supervision history actors as plain text via keyboard smoke', async ({
+    page
+  }) => {
+    const requestedUrls: string[] = [];
+    page.on('request', (request) => {
+      try {
+        const url = new URL(request.url());
+        requestedUrls.push(`${url.pathname}${url.search}`);
+      } catch {
+        requestedUrls.push(request.url());
+      }
+    });
+
+    await page.route('**/peer-watch/alerts?target_agent_id=app-engineering&limit=4', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          items: [
+            {
+              alert_id: 'alert-browser-supervision-history-actor-current',
+              ts: '2026-03-10T23:00:00.000Z',
+              agent_id: 'app-engineering',
+              target_agent_id: 'app-engineering',
+              actor_id: 'app-engineering',
+              observer_agent_id: 'team-lead',
+              watcher_agent_ids: ['team-lead'],
+              severity: 'orange',
+              status: 'open',
+              current_state: 'blocked',
+              active_task: 'Revenue handoff still needs app confirmation',
+              summary: 'Current supervision-history actor stays plain text',
+              evidence_refs: ['/tmp/revenue-handoff.md'],
+              evidence_count: 1,
+              correlation_id: 'corr-app-review',
+              source_kind: 'controller_event',
+              metadata: {}
+            },
+            {
+              alert_id: 'alert-browser-supervision-history-actor-unknown',
+              ts: '2026-03-10T23:05:00.000Z',
+              agent_id: 'app-engineering',
+              target_agent_id: 'app-engineering',
+              actor_id: 'ghost-agent',
+              observer_agent_id: 'team-lead',
+              watcher_agent_ids: ['team-lead'],
+              severity: 'orange',
+              status: 'open',
+              current_state: 'blocked',
+              active_task: 'Revenue handoff still needs app confirmation',
+              summary: 'Unknown supervision-history actor stays plain text',
+              evidence_refs: ['/tmp/revenue-handoff.md'],
+              evidence_count: 1,
+              correlation_id: 'corr-app-review',
+              source_kind: 'controller_event',
+              metadata: {}
+            }
+          ]
+        })
+      });
+    });
+
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Hub' }).click();
+
+    const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
+    const inspectButton = detailsPanel.getByRole('button', {
+      name: 'Inspect App Engineering Agent',
+      exact: true
+    });
+
+    await focusHubControlWithTab(page, inspectButton, 'Inspect App Engineering Agent');
+    await expect(inspectButton).toBeFocused();
+    await page.keyboard.press('Enter');
+
+    const supervisionSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Supervision History' })
+    });
+    const currentRecord = supervisionSection.locator('li').filter({
+      has: page.getByText('Current supervision-history actor stays plain text', { exact: true })
+    });
+    const unknownRecord = supervisionSection.locator('li').filter({
+      has: page.getByText('Unknown supervision-history actor stays plain text', { exact: true })
+    });
+    const currentActorButton = currentRecord.getByRole('button', {
+      name: 'Select supervision history actor from alert alert-browser-supervision-history-actor-current app-engineering'
+    });
+    const unknownActorButton = unknownRecord.getByRole('button', {
+      name: 'Select supervision history actor from alert alert-browser-supervision-history-actor-unknown ghost-agent'
+    });
+
+    await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+    await expect(supervisionSection.getByText('Current supervision-history actor stays plain text')).toBeVisible();
+    await expect(supervisionSection.getByText('Unknown supervision-history actor stays plain text')).toBeVisible();
+    await expect(currentRecord).toContainText('Actor · app-engineering');
+    await expect(unknownRecord).toContainText('Actor · ghost-agent');
+    await expect(currentActorButton).toHaveCount(0);
+    await expect(unknownActorButton).toHaveCount(0);
+
+    const requestSettleSamples: number[] = [];
+    const isRequestStreamStable = (previousCount: number, currentCount: number) => previousCount === currentCount;
+
+    for (let sample = 0; sample < 6; sample += 1) {
+      requestSettleSamples.push(requestedUrls.length);
+
+      if (findStableSample(requestSettleSamples, isRequestStreamStable)) {
+        break;
+      }
+
+      if (sample < 5) {
+        await page.waitForTimeout(100);
+      }
+    }
+
+    requireStableSample(
+      requestSettleSamples,
+      isRequestStreamStable,
+      'plain-text supervision-history actor request stream did not settle',
+      (sample) => sample
+    );
+
+    const requestCountAfterSettle = requestedUrls.length;
+
+    await page.waitForTimeout(150);
+
+    expect(requestedUrls).toHaveLength(requestCountAfterSettle);
+    expect(requestedUrls).not.toContain('/agents/ghost-agent/workflow?limit=10&window=60m');
+    expect(requestedUrls).not.toContain('/peer-watch/alerts?target_agent_id=ghost-agent&limit=4');
+    expect(requestedUrls).not.toContain('/memory/artifacts?limit=4&window=60m&agent_id=ghost-agent');
+  });
+
   test('keeps current and unknown selected-agent supervision history observers as plain text via keyboard smoke', async ({
     page
   }) => {

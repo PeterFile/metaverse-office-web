@@ -7849,6 +7849,180 @@ test.describe('operator shell smoke', () => {
     expectViewportBoundsWithinClampBudget(refreshedViewport);
   });
 
+  test('keeps manual-drag selected-agent override active across overview refresh under active right clamp padding', async ({
+    page
+  }) => {
+    test.slow();
+    await installFastPollInterval(page);
+
+    let overviewRequests = 0;
+    let movedOverviewResponses = 0;
+    let refreshReady = false;
+    let refreshedAgentLocation: string | null = null;
+
+    await page.route('**/office/overview', async (route) => {
+      overviewRequests += 1;
+      if (overviewRequests === 1 || !refreshReady) {
+        await route.continue();
+        return;
+      }
+
+      const response = await route.fetch();
+      const overview = (await response.json()) as {
+        zones: Array<{ zone_id: string }>;
+        agents: Array<{ agent_id: string; current_location: string }>;
+      };
+      const selectedAgent = overview.agents.find((agent) => agent.agent_id === 'growth-revenue');
+
+      if (!selectedAgent) {
+        throw new Error('browser smoke fixture must expose growth-revenue in /office/overview');
+      }
+
+      refreshedAgentLocation ??=
+        (selectedAgent.current_location !== 'rest-zone' &&
+        overview.zones.some((zone) => zone.zone_id === 'rest-zone')
+          ? 'rest-zone'
+          : overview.zones.find((zone) => zone.zone_id !== selectedAgent.current_location)?.zone_id) ?? null;
+
+      if (!refreshedAgentLocation) {
+        throw new Error('browser smoke fixture must expose an alternate zone for growth-revenue');
+      }
+
+      if (selectedAgent.current_location === refreshedAgentLocation) {
+        await route.fulfill({ response, json: overview });
+        return;
+      }
+
+      movedOverviewResponses += 1;
+      await route.fulfill({
+        response,
+        json: {
+          ...overview,
+          agents: overview.agents.map((agent) =>
+            agent.agent_id === 'growth-revenue'
+              ? {
+                  ...agent,
+                  current_location: refreshedAgentLocation!
+                }
+              : agent
+          )
+        }
+      });
+    });
+
+    const landscapeShell = SHELLS.find((shell) => shell.name === 'landscape');
+    expect(landscapeShell).toBeDefined();
+
+    await page.setViewportSize(landscapeShell!.viewport);
+    await page.goto('/');
+    await expect(page.locator('.aitown-world__host canvas')).toBeVisible();
+    await page.waitForFunction(() => Boolean(window.__AITOWN_VIEWPORT__));
+
+    await page.getByRole('button', { name: 'Open Hub' }).click();
+
+    const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
+    const selectedAgentHeading = detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' });
+    const workflowResponsePromise = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'GET' &&
+        response.status() === 200 &&
+        response.url().includes('/agents/growth-revenue/workflow?limit=10&window=60m')
+    );
+
+    await detailsPanel.getByRole('button', { name: 'Inspect Growth Revenue Agent', exact: true }).click();
+    await expect(selectedAgentHeading).toBeVisible();
+    await workflowResponsePromise;
+
+    const initialViewport = await waitForViewportLayoutSettle(page);
+    const initialSelectedAgent = initialViewport.selectedAgent;
+    expect(initialSelectedAgent).not.toBeNull();
+
+    const initialRightPadding = initialViewport.clampPadding?.right ?? 0;
+    const initialProjection = resolveWorldPointScreenProjection(initialViewport, {
+      x: initialSelectedAgent!.x,
+      y: initialSelectedAgent!.y
+    });
+    const initialSafeAreaTarget = resolveViewportSafeAreaTarget(initialViewport);
+
+    expect(initialRightPadding).toBeGreaterThan(0);
+    expect(initialSelectedAgent!.agentId).toBe('growth-revenue');
+    expect(Math.abs(initialProjection.x - initialSafeAreaTarget.x)).toBeLessThanOrEqual(0.5);
+    expect(Math.abs(initialProjection.y - initialSafeAreaTarget.y)).toBeLessThanOrEqual(0.5);
+    expectViewportBoundsWithinClampBudget(initialViewport);
+
+    const initialScale = initialViewport.scale ?? 1;
+    const initialRightAllowance = initialRightPadding / initialScale;
+    const dragToRightEdge = initialViewport.right < initialViewport.worldWidth + initialRightAllowance - 1;
+    const manuallyDraggedViewport = dragToRightEdge
+      ? await dragViewportToEdge(page, 'right', { driver: 'synthetic-host-pointer' })
+      : await dragViewportToEdge(page, 'top-left', {
+          horizontalOnly: true,
+          driver: 'synthetic-host-pointer'
+        });
+    const manualViewportShift = Math.hypot(
+      manuallyDraggedViewport.x - initialViewport.x,
+      manuallyDraggedViewport.y - initialViewport.y
+    );
+
+    await expect(selectedAgentHeading).toBeVisible();
+
+    expect(manuallyDraggedViewport.selectedAgent?.agentId).toBe('growth-revenue');
+    expect(manualViewportShift).toBeGreaterThan(1);
+    expect(manuallyDraggedViewport.clampPadding?.right ?? 0).toBeCloseTo(initialRightPadding, 4);
+    if (dragToRightEdge) {
+      expectViewportAtRightClampEdge(manuallyDraggedViewport, initialScale, initialViewport.top);
+    } else {
+      expectViewportAtLeftClampEdge(manuallyDraggedViewport, initialScale, initialViewport.top);
+    }
+
+    refreshReady = true;
+
+    await page.waitForFunction(
+      ({ agentId, x, y }) => {
+        const selectedAgent = window.__AITOWN_VIEWPORT__?.read()?.selectedAgent;
+        if (!selectedAgent || selectedAgent.agentId !== agentId) {
+          return false;
+        }
+
+        return Math.abs(selectedAgent.x - x) > 0.5 || Math.abs(selectedAgent.y - y) > 0.5;
+      },
+      {
+        agentId: initialSelectedAgent!.agentId,
+        x: initialSelectedAgent!.x,
+        y: initialSelectedAgent!.y
+      },
+      { timeout: POLL_DRIVEN_ASSERTION_TIMEOUT_MS }
+    );
+
+    const refreshedViewport = await waitForViewportLayoutSettle(page);
+    const refreshedSelectedAgent = refreshedViewport.selectedAgent;
+    expect(refreshedSelectedAgent).not.toBeNull();
+
+    const worldShift = Math.hypot(
+      refreshedSelectedAgent!.x - initialSelectedAgent!.x,
+      refreshedSelectedAgent!.y - initialSelectedAgent!.y
+    );
+    const refreshedViewportDrift = Math.hypot(
+      refreshedViewport.x - manuallyDraggedViewport.x,
+      refreshedViewport.y - manuallyDraggedViewport.y
+    );
+
+    expect(overviewRequests).toBeGreaterThanOrEqual(2);
+    expect(movedOverviewResponses).toBeGreaterThan(0);
+    expect(refreshedAgentLocation).not.toBeNull();
+    expect(refreshedSelectedAgent!.agentId).toBe('growth-revenue');
+    expect(worldShift).toBeGreaterThan(1);
+    expect(refreshedViewport.clampPadding?.right ?? 0).toBeGreaterThan(0);
+    expect(refreshedViewport.clampPadding?.right ?? 0).toBeCloseTo(initialRightPadding, 4);
+    expect(refreshedViewportDrift).toBeLessThanOrEqual(1);
+    if (dragToRightEdge) {
+      expectViewportAtRightClampEdge(refreshedViewport, initialScale, manuallyDraggedViewport.top);
+    } else {
+      expectViewportAtLeftClampEdge(refreshedViewport, initialScale, manuallyDraggedViewport.top);
+    }
+    expectViewportBoundsWithinClampBudget(refreshedViewport);
+  });
+
   test('re-centers the portrait viewport under active right clamp padding after inspecting a selected agent through the Hub', async ({
     page
   }) => {

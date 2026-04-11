@@ -4719,6 +4719,185 @@ test.describe('operator shell smoke', () => {
     await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toHaveCount(0);
   });
 
+  test('keeps the active workflow correlation and scoped reads when opening a workflow recent-event counterparty pivot via keyboard traversal', async ({
+    page
+  }) => {
+    const requestedUrls: string[] = [];
+    const forbiddenRequests: string[] = [];
+    const directOperationUrl = '/office/operations?agent_id=app-engineering';
+    const unscopedArtifactsUrl = '/memory/artifacts?limit=4&window=60m&agent_id=app-engineering';
+    const fallbackCorrelationUrl = '/correlations/corr-app-review?limit=10&window=60m';
+    let trackForbiddenRequests = false;
+
+    page.on('request', (request) => {
+      try {
+        const url = new URL(request.url());
+        requestedUrls.push(`${url.pathname}${url.search}`);
+      } catch {
+        requestedUrls.push(request.url());
+      }
+    });
+
+    await page.route('**/agents/growth-revenue/workflow?limit=10&window=60m', async (route) => {
+      const response = await route.fetch();
+      const workflow = (await response.json()) as {
+        detail: {
+          recent_events: Array<{
+            event_id: string;
+            agent_id: string;
+            actor_id: string;
+            summary: string;
+            counterparty_agent_ids?: string[];
+          }>;
+        };
+      };
+
+      const [firstEvent, ...remainingEvents] = workflow.detail.recent_events;
+      if (!firstEvent) {
+        throw new Error('expected a workflow recent event for the counterparty keyboard smoke');
+      }
+
+      await route.fulfill({
+        response,
+        json: {
+          ...workflow,
+          detail: {
+            ...workflow.detail,
+            recent_events: [
+              {
+                ...firstEvent,
+                event_id: 'evt_browser_workflow_recent_counterparty',
+                agent_id: 'growth-revenue',
+                actor_id: 'team-lead',
+                summary: 'Workflow recent event counterparty pivot keeps the active correlation',
+                counterparty_agent_ids: ['app-engineering', 'growth-revenue', 'ghost-agent']
+              },
+              ...remainingEvents
+            ]
+          }
+        }
+      });
+    });
+
+    await page.route(`**${directOperationUrl}`, async (route) => {
+      if (trackForbiddenRequests) {
+        forbiddenRequests.push(directOperationUrl);
+      }
+      await route.continue();
+    });
+    await page.route(`**${unscopedArtifactsUrl}`, async (route) => {
+      if (trackForbiddenRequests) {
+        forbiddenRequests.push(unscopedArtifactsUrl);
+      }
+      await route.continue();
+    });
+    await page.route(`**${fallbackCorrelationUrl}`, async (route) => {
+      if (trackForbiddenRequests) {
+        forbiddenRequests.push(fallbackCorrelationUrl);
+      }
+      await route.continue();
+    });
+
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Hub' }).click();
+
+    const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
+    const clearButton = detailsPanel.getByRole('button', { name: 'Clear' });
+    const inspectButton = detailsPanel.getByRole('button', {
+      name: 'Inspect Growth Revenue Agent',
+      exact: true
+    });
+
+    await focusHubControlWithTab(page, inspectButton, 'Inspect Growth Revenue Agent');
+    await expect(inspectButton).toBeFocused();
+    await page.keyboard.press('Enter');
+
+    const workflowSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Workflow' })
+    });
+    const correlationSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Correlation Drilldown' })
+    });
+    const workflowRecentEventCounterpartyButton = workflowSection.getByRole('button', {
+      name: 'Select workflow recent event counterparty from event evt_browser_workflow_recent_counterparty app-engineering'
+    });
+    const workflowUrl = '/agents/app-engineering/workflow?limit=10&window=60m';
+    const scopedArtifactsUrl =
+      '/memory/artifacts?limit=4&window=60m&agent_id=app-engineering&correlation_id=corr-revenue-handoff';
+
+    await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+    await expect(clearButton).toBeFocused();
+    await expect(workflowSection.getByText('Workflow recent event counterparty pivot keeps the active correlation')).toBeVisible();
+    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
+    await focusHubControlWithTab(
+      page,
+      workflowRecentEventCounterpartyButton,
+      'Select workflow recent event counterparty from event evt_browser_workflow_recent_counterparty app-engineering'
+    );
+    await expect(workflowRecentEventCounterpartyButton).toBeFocused();
+
+    trackForbiddenRequests = true;
+    const requestCountBeforePivot = requestedUrls.length;
+    const workflowResponse = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'GET' && response.status() === 200 && response.url().includes(workflowUrl)
+    );
+    const scopedArtifactsResponse = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'GET' &&
+        response.status() === 200 &&
+        response.url().includes(scopedArtifactsUrl)
+    );
+
+    await page.keyboard.press('Enter');
+    await workflowResponse;
+    await scopedArtifactsResponse;
+
+    await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+    await expect(clearButton).toBeFocused();
+    await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
+    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
+    await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
+    await expect(correlationSection.getByText('corr-app-review', { exact: true })).toHaveCount(0);
+
+    const requestSettleSamples: Array<{ requestedCount: number; forbiddenCount: number }> = [];
+    const isRequestStreamStable = (
+      previous: { requestedCount: number; forbiddenCount: number },
+      current: { requestedCount: number; forbiddenCount: number }
+    ) => previous.requestedCount === current.requestedCount && previous.forbiddenCount === current.forbiddenCount;
+
+    for (let sample = 0; sample < 6; sample += 1) {
+      requestSettleSamples.push({
+        requestedCount: requestedUrls.length,
+        forbiddenCount: forbiddenRequests.length
+      });
+
+      if (findStableSample(requestSettleSamples, isRequestStreamStable)) {
+        break;
+      }
+
+      if (sample < 5) {
+        await page.waitForTimeout(100);
+      }
+    }
+
+    requireStableSample(
+      requestSettleSamples,
+      isRequestStreamStable,
+      'post-pivot request stream did not settle',
+      (sample) => sample
+    );
+
+    const pivotRequestedUrls = requestedUrls.slice(requestCountBeforePivot);
+
+    expect(pivotRequestedUrls).toContain(workflowUrl);
+    expect(pivotRequestedUrls).toContain(scopedArtifactsUrl);
+    expect(pivotRequestedUrls).not.toContain(directOperationUrl);
+    expect(pivotRequestedUrls).not.toContain(unscopedArtifactsUrl);
+    expect(pivotRequestedUrls).not.toContain(fallbackCorrelationUrl);
+    expect(forbiddenRequests).toEqual([]);
+  });
+
   test('keeps the active workflow correlation when opening a workflow recent-event subject-agent pivot via keyboard traversal', async ({
     page
   }) => {

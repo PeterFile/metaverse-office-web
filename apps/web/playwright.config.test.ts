@@ -34,6 +34,7 @@ describe('browser smoke Playwright config', () => {
     expect(viteConfigSource).toContain("'/timeline': {");
     expect(viteConfigSource).toContain("'/collectors': {");
     expect(viteConfigSource).toContain("'/memory': {");
+    expect(viteConfigSource).toContain("'/peer-watch': {");
     expect(viteConfigSource).toContain('preview: proxy ? { proxy } : undefined');
   });
 

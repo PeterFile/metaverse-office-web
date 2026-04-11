@@ -499,6 +499,7 @@ describe('viewport inspection surface', () => {
       screenWorldWidth: 1024,
       screenWorldHeight: 768,
       clampPadding: { top: 80, right: 120 },
+      selectedAgent: null,
       minScale: 0.9,
       maxScale: 2.2
     });
@@ -539,8 +540,75 @@ describe('viewport inspection surface', () => {
     expect(inspector.read()).toMatchObject({
       scale: 1.25,
       clampPadding: { top: 80, right: 120 },
+      selectedAgent: null,
       minScale: 0.9,
       maxScale: 2.2
+    });
+  });
+
+  it('surfaces the tracked selected-agent position through the inspection state', () => {
+    const inspector = createViewportInspector({
+      viewport: {
+        x: 128,
+        y: 256,
+        left: 12,
+        top: 24,
+        right: 1036,
+        bottom: 792,
+        screenWidth: 1024,
+        screenHeight: 768,
+        worldWidth: 2048,
+        worldHeight: 1536,
+        screenWorldWidth: 1024,
+        screenWorldHeight: 768,
+        scale: { x: 1.25 },
+        setZoom: vi.fn(),
+        moveCenter: vi.fn()
+      },
+      getSelectedAgent: () => ({ agentId: 'growth-revenue', x: 656, y: 464 })
+    });
+
+    expect(inspector.read().selectedAgent).toEqual({
+      agentId: 'growth-revenue',
+      x: 656,
+      y: 464
+    });
+  });
+
+  it('keeps selected-agent inspection output snapshot-only instead of exposing the live tracked object', () => {
+    const trackedSelectedAgent = { agentId: 'growth-revenue', x: 656, y: 464 };
+    const inspector = createViewportInspector({
+      viewport: {
+        x: 128,
+        y: 256,
+        left: 12,
+        top: 24,
+        right: 1036,
+        bottom: 792,
+        screenWidth: 1024,
+        screenHeight: 768,
+        worldWidth: 2048,
+        worldHeight: 1536,
+        screenWorldWidth: 1024,
+        screenWorldHeight: 768,
+        scale: { x: 1.25 },
+        setZoom: vi.fn(),
+        moveCenter: vi.fn()
+      },
+      getSelectedAgent: () => trackedSelectedAgent
+    });
+
+    const firstRead = inspector.read();
+    expect(firstRead.selectedAgent).toEqual(trackedSelectedAgent);
+    expect(firstRead.selectedAgent).not.toBe(trackedSelectedAgent);
+
+    firstRead.selectedAgent!.x = -1;
+
+    expect(trackedSelectedAgent.x).toBe(656);
+    expect(inspector.read().selectedAgent).toEqual({
+      agentId: 'growth-revenue',
+      x: 656,
+      y: 464
     });
   });
 

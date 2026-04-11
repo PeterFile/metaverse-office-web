@@ -99,6 +99,12 @@ export type ViewportInspectable = {
   moveCenter: (x: number, y: number) => unknown;
 };
 
+export type ViewportInspectionSelectedAgent = {
+  agentId: string;
+  x: number;
+  y: number;
+};
+
 export type ViewportInspectionState = {
   x: number;
   y: number;
@@ -114,6 +120,7 @@ export type ViewportInspectionState = {
   screenWorldWidth: number;
   screenWorldHeight: number;
   clampPadding: { top: number; right: number };
+  selectedAgent: ViewportInspectionSelectedAgent | null;
   minScale: number;
   maxScale: number;
 };
@@ -216,7 +223,8 @@ export function moveViewportCornerAfterScreenDrag(
 export function resolveViewportInspectionState(
   viewport: ViewportInspectable,
   clampPadding: ViewportClampPadding = {},
-  scaleBounds?: Partial<ViewportInspectionScaleBounds>
+  scaleBounds?: Partial<ViewportInspectionScaleBounds>,
+  selectedAgent: ViewportInspectionSelectedAgent | null = null
 ): ViewportInspectionState {
   return {
     x: viewport.x,
@@ -236,6 +244,13 @@ export function resolveViewportInspectionState(
       top: clampPadding.top ?? 0,
       right: clampPadding.right ?? 0
     },
+    selectedAgent: selectedAgent
+      ? {
+          agentId: selectedAgent.agentId,
+          x: selectedAgent.x,
+          y: selectedAgent.y
+        }
+      : null,
     minScale: scaleBounds?.minScale ?? viewport.scale.x,
     maxScale: scaleBounds?.maxScale ?? viewport.scale.x
   };
@@ -245,15 +260,17 @@ export function createViewportInspector({
   viewport,
   getClampPadding,
   getScaleBounds,
+  getSelectedAgent,
   afterZoom
 }: {
   viewport: ViewportInspectable;
   getClampPadding?: () => ViewportClampPadding;
   getScaleBounds?: () => ViewportInspectionScaleBounds;
+  getSelectedAgent?: () => ViewportInspectionSelectedAgent | null;
   afterZoom?: () => void;
 }): ViewportInspector {
   const read = () =>
-    resolveViewportInspectionState(viewport, getClampPadding?.(), getScaleBounds?.());
+    resolveViewportInspectionState(viewport, getClampPadding?.(), getScaleBounds?.(), getSelectedAgent?.() ?? null);
 
   return {
     read,

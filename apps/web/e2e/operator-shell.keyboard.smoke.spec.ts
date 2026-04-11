@@ -7107,6 +7107,59 @@ test.describe('operator shell smoke', () => {
     expectViewportBoundsWithinClampBudget(selectedAgentViewport);
   });
 
+  test('re-centers the portrait viewport under active right clamp padding after inspecting a selected agent through the Hub', async ({
+    page
+  }) => {
+    const portraitShell = SHELLS.find((shell) => shell.name === 'portrait');
+    expect(portraitShell).toBeDefined();
+
+    await page.setViewportSize(portraitShell!.viewport);
+    await page.goto('/');
+    await expect(page.locator('.aitown-world__host canvas')).toBeVisible();
+    await page.waitForFunction(() => Boolean(window.__AITOWN_VIEWPORT__));
+
+    await page.getByRole('button', { name: 'Open Hub' }).click();
+
+    const baselineViewport = await waitForViewportLayoutSettle(page);
+    const baselineRightPadding = baselineViewport.clampPadding?.right ?? 0;
+    const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
+    const workflowResponsePromise = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'GET' &&
+        response.status() === 200 &&
+        response.url().includes('/agents/growth-revenue/workflow?limit=10&window=60m')
+    );
+
+    await detailsPanel.getByRole('button', { name: 'Inspect Growth Revenue Agent', exact: true }).click();
+    await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+    await workflowResponsePromise;
+
+    const selectedAgentViewport = await waitForViewportLayoutSettle(page);
+    const selectedRightPadding = selectedAgentViewport.clampPadding?.right ?? 0;
+    const viewportShift = Math.hypot(
+      selectedAgentViewport.x - baselineViewport.x,
+      selectedAgentViewport.y - baselineViewport.y
+    );
+    const selectedAgent = selectedAgentViewport.selectedAgent;
+
+    expect(selectedAgent).not.toBeNull();
+
+    const selectedAgentProjection = resolveWorldPointScreenProjection(selectedAgentViewport, {
+      x: selectedAgent!.x,
+      y: selectedAgent!.y
+    });
+    const safeAreaTarget = resolveViewportSafeAreaTarget(selectedAgentViewport);
+
+    expect(baselineRightPadding).toBeGreaterThan(0);
+    expect(selectedRightPadding).toBeGreaterThan(0);
+    expect(selectedRightPadding).toBeCloseTo(baselineRightPadding, 4);
+    expect(selectedAgent!.agentId).toBe('growth-revenue');
+    expect(viewportShift).toBeGreaterThan(1);
+    expect(Math.abs(selectedAgentProjection.x - safeAreaTarget.x)).toBeLessThanOrEqual(0.5);
+    expect(Math.abs(selectedAgentProjection.y - safeAreaTarget.y)).toBeLessThanOrEqual(0.5);
+    expectViewportBoundsWithinClampBudget(selectedAgentViewport);
+  });
+
   test('keeps selected-agent hub overlay clamp padding active at the top-right viewport boundary after resetting from a zoomed-in view', async ({ page }) => {
     await page.goto('/');
     await zoomViewportInWithMouseWheel(page);

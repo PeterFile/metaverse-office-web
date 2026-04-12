@@ -1144,6 +1144,22 @@ test.describe('operator shell smoke', () => {
     await expect(page.getByRole('button', { name: 'Open Hub' })).toBeVisible();
   });
 
+  test('renders the scene status legend for the canvas badge markers on the default shell', async ({ page }) => {
+    await page.goto('/');
+
+    const worldRegion = page.getByRole('region', { name: 'Office world' });
+    const legend = worldRegion.getByRole('list', { name: 'Scene status legend' });
+    const items = legend.getByRole('listitem');
+
+    await expect(worldRegion).toBeVisible();
+    await expect(worldRegion.getByText('Badge legend')).toBeVisible();
+    await expect(legend).toBeVisible();
+    await expect(items).toHaveCount(3);
+    await expect(legend).toContainText('#');
+    await expect(legend).toContainText('!');
+    await expect(legend).toContainText('R');
+  });
+
   test('surfaces live focus agents on the world shell before Hub opens and lets operators inspect them directly', async ({
     page
   }) => {

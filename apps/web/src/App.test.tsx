@@ -1563,6 +1563,24 @@ afterEach(() => {
     expect(screen.getByRole('button', { name: 'Open Hub' })).toBeVisible();
   });
 
+  it('surfaces live focus agents on the world shell before Hub opens and lets operators inspect them directly', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    expect(await screen.findByText('Live Focus')).toBeVisible();
+    expect(screen.getByText(/agents need attention right now\./)).toBeVisible();
+    expect(screen.queryByRole('dialog', { name: 'Hub' })).not.toBeInTheDocument();
+
+    const liveFocusButton = screen.getByRole('button', { name: 'Inspect live focus agent App Engineering Agent' });
+    expect(liveFocusButton).toBeVisible();
+
+    await user.click(liveFocusButton);
+
+    const details = await screen.findByRole('complementary', { name: 'Agent details' });
+    expect(screen.getByRole('dialog', { name: 'Hub' })).toBeVisible();
+    expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+  });
+
   it('treats Hub as a dialog, closes on Escape, and restores focus to the trigger', async () => {
     const user = userEvent.setup();
     render(<App />);

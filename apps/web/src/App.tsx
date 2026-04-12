@@ -22,6 +22,8 @@ import { usePolledResource, type LoadState } from './hooks/usePolledResource';
 import { getHubFocusableElements } from './hubFocus';
 import type { OfficeAgent, OfficeOperation } from './types';
 import { projectWorldState } from './world/projector';
+import { PHASE_LABELS, selectAttentionQueue, selectAgentZoneLabel } from './world/selectors';
+import type { WorldAgent, WorldState } from './world/types';
 
 const LazyWorldScene = lazy(() => import('./aitown/WorldScene'));
 
@@ -62,6 +64,23 @@ export function resolveSelectedAgent(
     overviewAgents?.find((agent) => agent.agent_id === selectedAgentId) ??
     (lastSelectedAgent?.agent_id === selectedAgentId ? lastSelectedAgent : null)
   );
+}
+
+function resolveLiveFocusSummaryLabel(attentionCount: number) {
+  if (attentionCount === 0) {
+    return 'No agents currently need attention.';
+  }
+
+  return attentionCount === 1
+    ? '1 agent needs attention right now.'
+    : `${attentionCount} agents need attention right now.`;
+}
+
+function resolveLiveFocusAgentMeta(agent: WorldAgent, world: WorldState) {
+  const phaseLabel = PHASE_LABELS[agent.phase] ?? agent.phase;
+  const zoneLabel = selectAgentZoneLabel(agent, world.zones);
+
+  return `${phaseLabel} · ${zoneLabel}`;
 }
 
 export function resolveOverviewRefreshWarning(error: string | null, hasOverviewData: boolean) {
@@ -411,6 +430,7 @@ function AppInner() {
     () => adaptWorldToScene(projectedWorld, selectedAgentId),
     [projectedWorld, selectedAgentId]
   );
+  const liveFocusAgents = useMemo(() => selectAttentionQueue(projectedWorld), [projectedWorld]);
 
   const selectedAgent = resolveSelectedAgent(
     selectedAgentId,
@@ -901,9 +921,34 @@ function AppInner() {
             </div>
           </header>
           <div className="aitown-panel__topline">
-            <span>Drag to pan. Wheel to zoom. Tap or click an agent to inspect.</span>
             <span>
-              {overviewResource.data?.generated_at ? `Snapshot ${overviewResource.data.generated_at}` : 'Synchronizing'}
+              <strong className="aitown-panel__topline-title">Live Focus</strong>
+              <span className="aitown-panel__topline-copy">{resolveLiveFocusSummaryLabel(liveFocusAgents.length)}</span>
+              {liveFocusAgents.length > 0 ? (
+                <span className="aitown-panel__focus-chips" aria-label="Live focus agents">
+                  {liveFocusAgents.slice(0, 3).map((agent) => (
+                    <button
+                      key={agent.agent_id}
+                      type="button"
+                      className={`aitown-focus-chip severity-${agent.severity}${selectedAgentId === agent.agent_id ? ' is-active' : ''}`}
+                      aria-label={`Inspect live focus agent ${agent.display_name}`}
+                      onClick={() => handleSceneSelectAgent(agent.agent_id)}
+                    >
+                      <strong>{agent.display_name}</strong>
+                      <span>{resolveLiveFocusAgentMeta(agent, projectedWorld)}</span>
+                    </button>
+                  ))}
+                </span>
+              ) : (
+                <span className="aitown-panel__topline-copy">Drag to pan. Wheel to zoom. Tap or click an agent to inspect.</span>
+              )}
+            </span>
+            <span>
+              <strong className="aitown-panel__topline-title">Viewport</strong>
+              <span className="aitown-panel__topline-copy">Drag to pan. Wheel to zoom. Tap or click an agent to inspect.</span>
+              <span className="aitown-panel__topline-copy">
+                {overviewResource.data?.generated_at ? `Snapshot ${overviewResource.data.generated_at}` : 'Synchronizing'}
+              </span>
             </span>
           </div>
 

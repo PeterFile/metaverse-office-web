@@ -785,6 +785,7 @@ export default function WorldScene({ scene, onSelectAgent, resetViewSignal = 0 }
         suppressSelectedAgentFollowResetRef.current = true;
         viewport.setZoom(Math.min(maxScale, Math.max(minScale, nextBaseScale)), true);
         suppressSelectedAgentFollowResetRef.current = false;
+        syncViewportConstraints(hostWidth, hostHeight, capabilities);
 
         if (selectedAgent) {
           moveViewportCenterIntoSafeArea(viewport, selectedAgent.x, selectedAgent.y);

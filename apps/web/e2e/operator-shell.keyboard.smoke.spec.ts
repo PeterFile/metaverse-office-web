@@ -3612,6 +3612,246 @@ test.describe('operator shell smoke', () => {
     await expect(correlationSection.getByText('Counts · 0 incidents · 1 interactions · 2 events')).toBeVisible();
   });
 
+  test('falls back to the replay event correlation when opening a replay counterparty pivot via keyboard traversal', async ({
+    page
+  }) => {
+    const requestedUrls: string[] = [];
+    const forbiddenRequests: string[] = [];
+    const fallbackCorrelationId = 'corr-browser-replay-counterparty-fallback';
+    const fallbackCorrelationUrl = `/correlations/${fallbackCorrelationId}?limit=10&window=60m`;
+    const fallbackArtifactsUrl = `/memory/artifacts?limit=4&window=60m&agent_id=team-lead&correlation_id=${fallbackCorrelationId}`;
+    const staleCorrelationUrl = '/correlations/corr-growth-lead-review?limit=10&window=60m';
+    const staleArtifactsUrl = '/memory/artifacts?limit=4&window=60m&agent_id=team-lead&correlation_id=corr-growth-lead-review';
+    const teamLeadWorkflowUrl = '/agents/team-lead/workflow?limit=10&window=60m';
+    let trackForbiddenRequests = false;
+
+    page.on('request', (request) => {
+      try {
+        const url = new URL(request.url());
+        requestedUrls.push(`${url.pathname}${url.search}`);
+      } catch {
+        requestedUrls.push(request.url());
+      }
+    });
+
+    await page.route(`**${staleCorrelationUrl}`, async (route) => {
+      if (trackForbiddenRequests) {
+        forbiddenRequests.push(staleCorrelationUrl);
+      }
+      await route.continue();
+    });
+    await page.route(`**${staleArtifactsUrl}`, async (route) => {
+      if (trackForbiddenRequests) {
+        forbiddenRequests.push(staleArtifactsUrl);
+      }
+      await route.continue();
+    });
+
+    await page.route('**/incidents?limit=10&window=60m', async (route) => {
+      const response = await route.fetch();
+      const incidents = (await response.json()) as { items: Array<Record<string, unknown>> };
+
+      await route.fulfill({
+        response,
+        json: {
+          ...incidents,
+          items: incidents.items.map((incident) => ({
+            ...incident,
+            correlation_id: null
+          }))
+        }
+      });
+    });
+
+    await page.route('**/timeline?limit=4&window=60m', async (route) => {
+      const response = await route.fetch();
+      const timeline = (await response.json()) as { items: Array<Record<string, unknown>> };
+      const seedEvent = timeline.items[0] ?? {};
+
+      await route.fulfill({
+        response,
+        json: {
+          ...timeline,
+          items: [
+            {
+              ...seedEvent,
+              event_id: 'evt_browser_replay_counterparty_fallback',
+              ts: '2026-03-16T09:03:00.000Z',
+              agent_id: 'growth-revenue',
+              actor_id: 'growth-revenue',
+              event_type: 'agent_noted',
+              severity: 'yellow',
+              current_state: 'reviewing',
+              location: 'meeting-zone',
+              summary: 'Replay counterparty fallback uses the replay event correlation',
+              correlation_id: fallbackCorrelationId,
+              counterparty_agent_ids: ['team-lead'],
+              evidence_refs: ['/tmp/replay-fallback.md'],
+              source_kind: 'controller_event'
+            },
+            ...timeline.items
+          ]
+        }
+      });
+    });
+
+    await page.route(`**/correlations/${fallbackCorrelationId}?limit=10&window=60m`, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        json: {
+          correlation_id: fallbackCorrelationId,
+          participant_agent_ids: ['growth-revenue', 'team-lead'],
+          evidence_refs: ['/tmp/replay-fallback.md'],
+          first_ts: '2026-03-16T09:03:00.000Z',
+          last_ts: '2026-03-16T09:03:00.000Z',
+          incident_count: 0,
+          interaction_count: 0,
+          event_count: 1,
+          incidents: [],
+          interactions: [],
+          timeline: [
+            {
+              event_id: 'evt_browser_replay_counterparty_fallback',
+              ts: '2026-03-16T09:03:00.000Z',
+              agent_id: 'growth-revenue',
+              actor_id: 'growth-revenue',
+              event_type: 'agent_noted',
+              severity: 'yellow',
+              current_state: 'reviewing',
+              location: 'meeting-zone',
+              summary: 'Replay counterparty fallback uses the replay event correlation',
+              correlation_id: fallbackCorrelationId,
+              counterparty_agent_ids: ['team-lead'],
+              evidence_refs: ['/tmp/replay-fallback.md'],
+              source_kind: 'controller_event'
+            }
+          ]
+        }
+      });
+    });
+
+    await page.route(`**/memory/artifacts?limit=4&window=60m&agent_id=team-lead&correlation_id=${fallbackCorrelationId}`, async (
+      route
+    ) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        json: {
+          generated_at: '2026-03-16T09:03:00.000Z',
+          items: [
+            {
+              artifact_ref: '/tmp/replay-fallback.md',
+              artifact_kind: 'evidence_ref',
+              file_name: 'replay-fallback.md',
+              first_seen_at: '2026-03-16T09:03:00.000Z',
+              last_seen_at: '2026-03-16T09:03:00.000Z',
+              mention_count: 1,
+              agent_ids: ['growth-revenue', 'team-lead'],
+              correlation_ids: [fallbackCorrelationId],
+              source_kinds: ['controller_event'],
+              latest_summary: 'Replay fallback preserved the replay event correlation on pivot',
+              latest_event_type: 'agent_noted',
+              collector_last_modified_at: null
+            }
+          ]
+        }
+      });
+    });
+
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Hub' }).click();
+
+    const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
+    const clearButton = detailsPanel.getByRole('button', { name: 'Clear' });
+    const replaySection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Timeline Replay' })
+    });
+    const correlationSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Correlation Drilldown' })
+    });
+    const replayRecord = replaySection.locator('li').filter({
+      has: page.getByText('Replay counterparty fallback uses the replay event correlation', { exact: true })
+    });
+    const replayCounterpartyButton = replayRecord.getByRole('button', {
+      name: 'Select replay counterparty from event evt_browser_replay_counterparty_fallback team-lead'
+    });
+
+    await expect(detailsPanel.getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
+    await expect(correlationSection.getByText('No correlation selected.')).toBeVisible();
+    await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toHaveCount(0);
+    await focusHubControlWithTab(
+      page,
+      replayCounterpartyButton,
+      'Select replay counterparty from event evt_browser_replay_counterparty_fallback team-lead'
+    );
+    await expect(replayCounterpartyButton).toBeFocused();
+
+    trackForbiddenRequests = true;
+    const requestCountBeforePivot = requestedUrls.length;
+    const workflowResponse = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'GET' && response.status() === 200 && response.url().includes(teamLeadWorkflowUrl)
+    );
+    const correlationResponse = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'GET' && response.status() === 200 && response.url().includes(fallbackCorrelationUrl)
+    );
+    const artifactsResponse = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'GET' && response.status() === 200 && response.url().includes(fallbackArtifactsUrl)
+    );
+
+    await page.keyboard.press('Enter');
+    await workflowResponse;
+    await correlationResponse;
+    await artifactsResponse;
+
+    await expect(detailsPanel.getByRole('heading', { name: 'Team Lead' })).toBeVisible();
+    await expect(clearButton).toBeFocused();
+    await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
+    await expect(correlationSection.getByText(fallbackCorrelationId, { exact: true })).toBeVisible();
+    await expect(correlationSection.getByText('Counts · 0 incidents · 0 interactions · 1 events')).toBeVisible();
+    await expect(correlationSection.getByText('No correlation selected.')).toHaveCount(0);
+    await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toHaveCount(0);
+
+    const requestSettleSamples: Array<{ requestedCount: number; forbiddenCount: number }> = [];
+    const isRequestStreamStable = (
+      previous: { requestedCount: number; forbiddenCount: number },
+      current: { requestedCount: number; forbiddenCount: number }
+    ) => previous.requestedCount === current.requestedCount && previous.forbiddenCount === current.forbiddenCount;
+
+    for (let sample = 0; sample < 6; sample += 1) {
+      requestSettleSamples.push({
+        requestedCount: requestedUrls.length,
+        forbiddenCount: forbiddenRequests.length
+      });
+
+      if (findStableSample(requestSettleSamples, isRequestStreamStable)) {
+        break;
+      }
+
+      if (sample < 5) {
+        await page.waitForTimeout(100);
+      }
+    }
+
+    requireStableSample(
+      requestSettleSamples,
+      isRequestStreamStable,
+      'post-pivot replay fallback request stream did not settle',
+      (sample) => sample
+    );
+
+    const pivotRequestedUrls = requestedUrls.slice(requestCountBeforePivot);
+    expect(pivotRequestedUrls).toContain(teamLeadWorkflowUrl);
+    expect(pivotRequestedUrls).toContain(fallbackCorrelationUrl);
+    expect(pivotRequestedUrls).toContain(fallbackArtifactsUrl);
+    expect(pivotRequestedUrls).not.toContain(staleCorrelationUrl);
+    expect(pivotRequestedUrls).not.toContain(staleArtifactsUrl);
+    expect(forbiddenRequests).toEqual([]);
+  });
+
   test('keeps the clicked selected-agent incident correlation when opening an incident counterparty pivot via keyboard traversal', async ({ page }) => {
     await page.goto('/');
     await page.getByRole('button', { name: 'Open Hub' }).click();

@@ -6577,6 +6577,150 @@ test.describe('operator shell smoke', () => {
     expect(postJumpRequests).toEqual([]);
   });
 
+  test('shows the selected-agent supervision history loading state explicitly while the first selected-agent read is pending', async ({
+    page
+  }) => {
+    let releaseSupervisionHistory: (() => void) | null = null;
+    const selectedSupervisionHistoryRequests: string[] = [];
+    const selectedSupervisionHistoryPath = '/peer-watch/alerts?target_agent_id=app-engineering&limit=4';
+
+    await page.route('**/peer-watch/alerts**', async (route) => {
+      const url = new URL(route.request().url());
+      if (
+        url.pathname !== '/peer-watch/alerts' ||
+        url.searchParams.get('target_agent_id') !== 'app-engineering' ||
+        url.searchParams.get('limit') !== '4'
+      ) {
+        await route.continue();
+        return;
+      }
+
+      selectedSupervisionHistoryRequests.push(`${url.pathname}${url.search}`);
+      await new Promise<void>((resolve) => {
+        releaseSupervisionHistory = resolve;
+      });
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          items: [
+            {
+              alert_id: 'alert-browser-supervision-history-loading',
+              ts: '2026-03-10T23:00:00.000Z',
+              agent_id: 'app-engineering',
+              target_agent_id: 'app-engineering',
+              actor_id: 'team-lead',
+              observer_agent_id: 'team-lead',
+              watcher_agent_ids: ['team-lead'],
+              severity: 'orange',
+              status: 'open',
+              current_state: 'blocked',
+              active_task: 'Revenue handoff still needs app confirmation',
+              summary: 'Selected-agent supervision history loading stays explicit',
+              evidence_refs: ['/tmp/revenue-handoff.md'],
+              evidence_count: 1,
+              correlation_id: 'collector-snapshot:2026-03-10T23:59:40.000Z',
+              source_kind: 'controller_event',
+              metadata: {}
+            }
+          ]
+        })
+      });
+    });
+
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Hub' }).click();
+
+    const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
+    const inspectButton = detailsPanel.getByRole('button', {
+      name: 'Inspect App Engineering Agent',
+      exact: true
+    });
+
+    await focusHubControlWithTab(page, inspectButton, 'Inspect App Engineering Agent');
+    await expect(inspectButton).toBeFocused();
+    await page.keyboard.press('Enter');
+
+    const supervisionSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Supervision History' })
+    });
+
+    await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+    await expect(supervisionSection.getByText('Loading supervision history...')).toBeVisible();
+    await expect(supervisionSection.getByText('No recent supervision history.')).toHaveCount(0);
+    await expect(supervisionSection.getByText(/Unable to load supervision history\./)).toHaveCount(0);
+    await expect
+      .poll(
+        () =>
+          selectedSupervisionHistoryRequests.filter((request) => request === selectedSupervisionHistoryPath).length
+      )
+      .toBe(1);
+
+    expect(releaseSupervisionHistory).not.toBeNull();
+    releaseSupervisionHistory!();
+
+    await expect(
+      supervisionSection.getByText('Selected-agent supervision history loading stays explicit')
+    ).toBeVisible();
+  });
+
+  test('shows the selected-agent supervision history failures explicitly instead of pretending empty', async ({ page }) => {
+    const selectedSupervisionHistoryRequests: string[] = [];
+    const selectedSupervisionHistoryPath = '/peer-watch/alerts?target_agent_id=app-engineering&limit=4';
+
+    await page.route('**/peer-watch/alerts**', async (route) => {
+      const url = new URL(route.request().url());
+      if (
+        url.pathname !== '/peer-watch/alerts' ||
+        url.searchParams.get('target_agent_id') !== 'app-engineering' ||
+        url.searchParams.get('limit') !== '4'
+      ) {
+        await route.continue();
+        return;
+      }
+
+      selectedSupervisionHistoryRequests.push(`${url.pathname}${url.search}`);
+      await route.fulfill({
+        status: 500,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          error: 'internal_error',
+          details: 'peer-watch refresh failed'
+        })
+      });
+    });
+
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Hub' }).click();
+
+    const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
+    const inspectButton = detailsPanel.getByRole('button', {
+      name: 'Inspect App Engineering Agent',
+      exact: true
+    });
+
+    await focusHubControlWithTab(page, inspectButton, 'Inspect App Engineering Agent');
+    await expect(inspectButton).toBeFocused();
+    await page.keyboard.press('Enter');
+
+    const supervisionSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Supervision History' })
+    });
+
+    await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+    await expect(
+      supervisionSection.getByText('Unable to load supervision history. peer-watch refresh failed')
+    ).toBeVisible();
+    await expect(supervisionSection.getByText('No recent supervision history.')).toHaveCount(0);
+    await expect(supervisionSection.getByText('Loading supervision history...')).toHaveCount(0);
+    await expect
+      .poll(
+        () =>
+          selectedSupervisionHistoryRequests.filter((request) => request === selectedSupervisionHistoryPath).length
+      )
+      .toBe(1);
+  });
+
   test('keeps selected-agent auto correlation mode when re-selecting the current default correlation from supervision history via keyboard traversal', async ({
     page
   }) => {

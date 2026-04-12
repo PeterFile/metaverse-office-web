@@ -33,6 +33,36 @@ describe('resolveViewportClampPadding', () => {
     });
   });
 
+  it('uses the split topline right card for right clamp padding without reserving a top gutter', () => {
+    document.body.innerHTML = `
+      <main class="aitown-shell">
+        <section class="aitown-panel aitown-panel--game">
+          <div class="aitown-panel__topline">
+            <span id="live-focus">Live focus</span>
+            <span id="viewport">Viewport</span>
+          </div>
+          <div class="aitown-world__host" id="host"></div>
+        </section>
+      </main>
+    `;
+
+    const host = document.getElementById('host') as HTMLDivElement;
+    const liveFocus = document.getElementById('live-focus') as HTMLSpanElement;
+    const viewport = document.getElementById('viewport') as HTMLSpanElement;
+
+    host.getBoundingClientRect = () =>
+      ({ left: 0, top: 0, right: 1000, bottom: 800, width: 1000, height: 800 } as DOMRect);
+    liveFocus.getBoundingClientRect = () =>
+      ({ left: 0, top: 148, right: 320, bottom: 292, width: 320, height: 144 } as DOMRect);
+    viewport.getBoundingClientRect = () =>
+      ({ left: 720, top: 148, right: 1000, bottom: 324, width: 280, height: 176 } as DOMRect);
+
+    expect(resolveViewportClampPadding(host)).toEqual({
+      top: 0,
+      right: 280
+    });
+  });
+
   it('includes the hub sheet when it overlays the world from the shell root', () => {
     document.body.innerHTML = `
       <main class="aitown-shell">

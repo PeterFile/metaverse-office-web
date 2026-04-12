@@ -212,7 +212,11 @@ button {
 }
 
 .aitown-panel__topline > span {
-  max-width: min(44ch, 45%);
+  align-self: flex-start;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: min(52ch, 48%);
   padding: 8px 12px;
   border-style: solid;
   border-width: 14px;
@@ -221,6 +225,69 @@ button {
   border-image-slice: 12.5%;
   background: rgba(39, 24, 33, 0.82);
   backdrop-filter: blur(8px);
+}
+
+.aitown-panel__topline-title {
+  color: #f5cf79;
+  font-size: 0.74rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.aitown-panel__topline-copy {
+  color: #f0e3c1;
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.aitown-panel__focus-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.aitown-focus-chip {
+  pointer-events: auto;
+  display: flex;
+  flex: 1 1 150px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  min-width: 0;
+  border-style: solid;
+  border-width: 12px;
+  border-image-source: url('/ai-town/assets/ui/box.svg');
+  border-image-repeat: stretch;
+  border-image-slice: 12.5%;
+  background: rgba(63, 41, 52, 0.92);
+  padding: 4px 10px 7px;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.aitown-focus-chip:hover {
+  filter: brightness(1.08);
+}
+
+.aitown-focus-chip:focus-visible {
+  outline: 2px solid #f7d57b;
+  outline-offset: 2px;
+}
+
+.aitown-focus-chip.is-active {
+  background: rgba(88, 53, 43, 0.96);
+}
+
+.aitown-focus-chip strong {
+  color: #fff7df;
+  font-size: 0.76rem;
+}
+
+.aitown-focus-chip span {
+  color: #dccca4;
+  font-size: 0.72rem;
+  line-height: 1.35;
 }
 
 .aitown-panel__toolbar {

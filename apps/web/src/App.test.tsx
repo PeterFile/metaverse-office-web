@@ -9186,6 +9186,101 @@ afterEach(() => {
     });
   });
 
+  it('falls back to the workflow-status record correlation and keeps scoped reads when no workflow correlation is selected', async () => {
+    const workflowWithoutSelectedCorrelation = {
+      ...workflowFixture,
+      correlation_ids: [],
+      detail: {
+        ...workflowFixture.detail,
+        open_peer_watch_alerts: []
+      }
+    } satisfies AgentWorkflow;
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === '/office/overview') {
+          return new Response(JSON.stringify(overviewFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === selectedOperationUrl) {
+          return new Response(JSON.stringify(emptyOperationsFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === incidentsUrl) {
+          return new Response(JSON.stringify(incidentFeedFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === timelineUrl) {
+          return new Response(JSON.stringify(timelineFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === workflowUrl) {
+          return new Response(JSON.stringify(workflowWithoutSelectedCorrelation), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        return resolveTestFetchResponse(url);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
+
+    const workflowSection = within(details).getByRole('heading', { name: 'Workflow' }).closest('section');
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    expect(workflowSection).not.toBeNull();
+    expect(correlationSection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+      expect(within(correlationSection!).getByText('No correlation selected.')).toBeVisible();
+      expect(within(correlationSection!).queryByText('corr-app-secondary')).not.toBeInTheDocument();
+    });
+
+    const fetchCallCountBeforePivot = vi.mocked(globalThis.fetch).mock.calls.length;
+
+    await user.click(
+      within(workflowSection!).getByRole('button', {
+        name: 'Select workflow status counterparty from handoff handoff-1 growth-revenue'
+      })
+    );
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+      expect(within(details).queryByRole('heading', { name: 'Current Operation' })).not.toBeInTheDocument();
+      expect(within(correlationSection!).getByText('corr-app-secondary')).toBeVisible();
+      expect(within(correlationSection!).getByText('Counts · 1 incidents · 0 interactions · 1 events')).toBeVisible();
+      expect(within(correlationSection!).queryByText('No correlation selected.')).not.toBeInTheDocument();
+    });
+
+    const newFetchUrlsAfterPivot = vi
+      .mocked(globalThis.fetch)
+      .mock.calls.slice(fetchCallCountBeforePivot)
+      .map(([input]) => (typeof input === 'string' ? input : input.toString()));
+
+    expect(newFetchUrlsAfterPivot).toContain(growthRevenueWorkflowUrl);
+    expect(newFetchUrlsAfterPivot).toContain(secondaryCorrelationUrl);
+    expect(newFetchUrlsAfterPivot).toContain(growthRevenueSelectedSecondaryCorrelationMemoryArtifactsUrl);
+    expect(newFetchUrlsAfterPivot).not.toContain(growthRevenueSelectedOperationUrl);
+    expect(newFetchUrlsAfterPivot).not.toContain(growthRevenueMemoryArtifactsUrl);
+    expect(newFetchUrlsAfterPivot).not.toContain(growthRevenueSelectedReviewCorrelationMemoryArtifactsUrl);
+  });
+
   it('keeps the current-operation correlation when the workflow has none and keeps current or unknown counterparties as plain text', async () => {
     const workflowWithoutSelectedCorrelation = {
       ...workflowFixture,

@@ -4745,6 +4745,323 @@ test.describe('operator shell smoke', () => {
     await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toHaveCount(0);
   });
 
+  test('falls back to the workflow-status counterparty record correlation and keeps scoped reads via keyboard traversal', async ({
+    page
+  }) => {
+    const requestedUrls: string[] = [];
+    const forbiddenRequests: string[] = [];
+    const directOperationUrl = '/office/operations?agent_id=app-engineering';
+    const selectedCorrelationUrl =
+      '/correlations/corr-browser-workflow-status-counterparty-fallback?limit=10&window=60m';
+    const staleCorrelationUrl = '/correlations/corr-revenue-handoff?limit=10&window=60m';
+    const scopedArtifactsUrl =
+      '/memory/artifacts?limit=4&window=60m&agent_id=app-engineering&correlation_id=corr-browser-workflow-status-counterparty-fallback';
+    const staleScopedArtifactsUrl =
+      '/memory/artifacts?limit=4&window=60m&agent_id=app-engineering&correlation_id=corr-revenue-handoff';
+    const unscopedArtifactsUrl = '/memory/artifacts?limit=4&window=60m&agent_id=app-engineering';
+    let trackForbiddenRequests = false;
+
+    page.on('request', (request) => {
+      try {
+        const url = new URL(request.url());
+        requestedUrls.push(`${url.pathname}${url.search}`);
+      } catch {
+        requestedUrls.push(request.url());
+      }
+    });
+
+    await page.route('**/office/operations?agent_id=growth-revenue', async (route) => {
+      const response = await route.fetch();
+      const operations = (await response.json()) as {
+        items?: unknown[];
+      };
+
+      await route.fulfill({
+        response,
+        json: {
+          ...operations,
+          items: []
+        }
+      });
+    });
+
+    await page.route('**/agents/growth-revenue/workflow?limit=10&window=60m', async (route) => {
+      const response = await route.fetch();
+      const workflow = (await response.json()) as {
+        correlation_ids?: string[];
+        detail: {
+          open_peer_watch_alerts?: unknown[];
+          recent_handoffs?: Array<{
+            handoff_id: string;
+            agent_id: string;
+            actor_id: string;
+            summary: string;
+            correlation_id?: string | null;
+            counterparty_agent_ids?: string[];
+          }>;
+        };
+      };
+
+      const recentHandoffs = (workflow.detail.recent_handoffs ?? []).map((handoff) =>
+        handoff.handoff_id === 'evt_revenue_handoff_completed'
+          ? {
+              ...handoff,
+              agent_id: 'growth-revenue',
+              actor_id: 'team-lead',
+              correlation_id: 'corr-browser-workflow-status-counterparty-fallback',
+              summary: 'Workflow status counterparty fallback uses the record correlation',
+              counterparty_agent_ids: ['app-engineering', 'growth-revenue', 'ghost-agent']
+            }
+          : handoff
+      );
+
+      if (
+        !recentHandoffs.some((handoff) => handoff.handoff_id === 'evt_revenue_handoff_completed')
+      ) {
+        throw new Error('expected a workflow status handoff for the counterparty fallback keyboard smoke');
+      }
+
+      await route.fulfill({
+        response,
+        json: {
+          ...workflow,
+          correlation_ids: [],
+          detail: {
+            ...workflow.detail,
+            open_peer_watch_alerts: [],
+            recent_handoffs: recentHandoffs
+          }
+        }
+      });
+    });
+
+    await page.route(`**${selectedCorrelationUrl}`, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        json: {
+          correlation_id: 'corr-browser-workflow-status-counterparty-fallback',
+          participant_agent_ids: ['app-engineering', 'team-lead'],
+          evidence_refs: ['/tmp/evidence.md', '/tmp/revenue-handoff.md'],
+          first_ts: '2026-03-16T08:49:00.000Z',
+          last_ts: '2026-03-16T08:50:00.000Z',
+          incident_count: 1,
+          interaction_count: 1,
+          event_count: 1,
+          incidents: [
+            {
+              incident_id: 'inc-browser-workflow-status-counterparty-fallback',
+              kind: 'peer_watch',
+              ts: '2026-03-16T08:50:00.000Z',
+              agent_id: 'app-engineering',
+              actor_id: 'team-lead',
+              status: 'open',
+              severity: 'orange',
+              summary: 'Lead is still waiting on workflow evidence',
+              correlation_id: 'corr-browser-workflow-status-counterparty-fallback',
+              evidence_refs: ['/tmp/evidence.md'],
+              counterparty_agent_ids: ['team-lead'],
+              source_kind: 'controller_event'
+            }
+          ],
+          interactions: [
+            {
+              interaction_id: 'interaction-browser-workflow-status-counterparty-fallback',
+              interaction_type: 'peer_watch',
+              correlation_id: 'corr-browser-workflow-status-counterparty-fallback',
+              started_at: '2026-03-16T08:49:00.000Z',
+              ended_at: '2026-03-16T08:58:00.000Z',
+              participant_agent_ids: ['app-engineering', 'team-lead'],
+              trigger_event_id: 'evt_revenue_handoff_completed',
+              before_state: 'coding',
+              after_state: 'blocked',
+              severity: 'orange',
+              evidence_refs: ['/tmp/evidence.md'],
+              summary: 'Workflow status counterparty fallback uses the record correlation',
+              related_event_ids: ['evt_revenue_handoff_completed']
+            }
+          ],
+          timeline: [
+            {
+              event_id: 'evt_browser_workflow_status_counterparty_fallback',
+              ts: '2026-03-16T08:50:00.000Z',
+              agent_id: 'growth-revenue',
+              actor_id: 'team-lead',
+              event_type: 'workflow_state_changed',
+              severity: 'orange',
+              current_state: 'blocked',
+              location: 'meeting-zone',
+              summary: 'Workflow status counterparty fallback uses the record correlation',
+              correlation_id: 'corr-browser-workflow-status-counterparty-fallback',
+              counterparty_agent_ids: ['app-engineering'],
+              evidence_refs: ['/tmp/evidence.md'],
+              source_kind: 'controller_event'
+            }
+          ]
+        }
+      });
+    });
+
+    await page.route(`**${scopedArtifactsUrl}`, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        json: {
+          generated_at: '2026-03-16T09:00:00.000Z',
+          items: [
+            {
+              artifact_ref: '/tmp/evidence.md',
+              artifact_kind: 'evidence_ref',
+              file_name: 'evidence.md',
+              first_seen_at: '2026-03-16T08:40:00.000Z',
+              last_seen_at: '2026-03-16T08:58:00.000Z',
+              mention_count: 3,
+              agent_ids: ['app-engineering', 'team-lead'],
+              correlation_ids: ['corr-browser-workflow-status-counterparty-fallback'],
+              source_kinds: ['controller_event', 'workspace_snapshot'],
+              latest_summary: 'App engineering preserved the workflow-status fallback correlation',
+              latest_event_type: 'workflow_state_changed',
+              collector_last_modified_at: '2026-03-16T08:58:00.000Z'
+            }
+          ]
+        }
+      });
+    });
+
+    await page.route(`**${directOperationUrl}`, async (route) => {
+      if (trackForbiddenRequests) {
+        forbiddenRequests.push(directOperationUrl);
+      }
+      await route.continue();
+    });
+    await page.route(`**${staleCorrelationUrl}`, async (route) => {
+      if (trackForbiddenRequests) {
+        forbiddenRequests.push(staleCorrelationUrl);
+      }
+      await route.continue();
+    });
+    await page.route(`**${staleScopedArtifactsUrl}`, async (route) => {
+      if (trackForbiddenRequests) {
+        forbiddenRequests.push(staleScopedArtifactsUrl);
+      }
+      await route.continue();
+    });
+    await page.route(`**${unscopedArtifactsUrl}`, async (route) => {
+      if (trackForbiddenRequests) {
+        forbiddenRequests.push(unscopedArtifactsUrl);
+      }
+      await route.continue();
+    });
+
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Hub' }).click();
+
+    const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
+    const clearButton = detailsPanel.getByRole('button', { name: 'Clear' });
+    const inspectButton = detailsPanel.getByRole('button', {
+      name: 'Inspect Growth Revenue Agent',
+      exact: true
+    });
+
+    await focusHubControlWithTab(page, inspectButton, 'Inspect Growth Revenue Agent');
+    await expect(inspectButton).toBeFocused();
+    await page.keyboard.press('Enter');
+
+    const workflowSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Workflow' })
+    });
+    const correlationSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Correlation Drilldown' })
+    });
+    const workflowStatusCounterpartyButton = workflowSection.getByRole('button', {
+      name: 'Select workflow status counterparty from handoff evt_revenue_handoff_completed app-engineering'
+    });
+    const workflowUrl = '/agents/app-engineering/workflow?limit=10&window=60m';
+
+    await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+    await expect(clearButton).toBeFocused();
+    await expect(workflowSection.getByText('Workflow status counterparty fallback uses the record correlation')).toBeVisible();
+    await expect(correlationSection.getByText('No correlation selected.')).toBeVisible();
+    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toHaveCount(0);
+    await focusHubControlWithTab(
+      page,
+      workflowStatusCounterpartyButton,
+      'Select workflow status counterparty from handoff evt_revenue_handoff_completed app-engineering'
+    );
+    await expect(workflowStatusCounterpartyButton).toBeFocused();
+
+    trackForbiddenRequests = true;
+    const requestCountBeforePivot = requestedUrls.length;
+    const workflowResponse = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'GET' && response.status() === 200 && response.url().includes(workflowUrl)
+    );
+    const selectedCorrelationResponse = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'GET' &&
+        response.status() === 200 &&
+        response.url().includes(selectedCorrelationUrl)
+    );
+    const scopedArtifactsResponse = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'GET' &&
+        response.status() === 200 &&
+        response.url().includes(scopedArtifactsUrl)
+    );
+
+    await page.keyboard.press('Enter');
+    await workflowResponse;
+    await selectedCorrelationResponse;
+    await scopedArtifactsResponse;
+
+    await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+    await expect(clearButton).toBeFocused();
+    await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
+    await expect(correlationSection.getByText('corr-browser-workflow-status-counterparty-fallback', { exact: true })).toBeVisible();
+    await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
+    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toHaveCount(0);
+    await expect(correlationSection.getByText('No correlation selected.')).toHaveCount(0);
+
+    const requestSettleSamples: Array<{ requestedCount: number; forbiddenCount: number }> = [];
+    const isRequestStreamStable = (
+      previous: { requestedCount: number; forbiddenCount: number },
+      current: { requestedCount: number; forbiddenCount: number }
+    ) => previous.requestedCount === current.requestedCount && previous.forbiddenCount === current.forbiddenCount;
+
+    for (let sample = 0; sample < 6; sample += 1) {
+      requestSettleSamples.push({
+        requestedCount: requestedUrls.length,
+        forbiddenCount: forbiddenRequests.length
+      });
+
+      if (findStableSample(requestSettleSamples, isRequestStreamStable)) {
+        break;
+      }
+
+      if (sample < 5) {
+        await page.waitForTimeout(100);
+      }
+    }
+
+    requireStableSample(
+      requestSettleSamples,
+      isRequestStreamStable,
+      'post-pivot request stream did not settle',
+      (sample) => sample
+    );
+
+    const pivotRequestedUrls = requestedUrls.slice(requestCountBeforePivot);
+
+    expect(pivotRequestedUrls).toContain(workflowUrl);
+    expect(pivotRequestedUrls).toContain(selectedCorrelationUrl);
+    expect(pivotRequestedUrls).toContain(scopedArtifactsUrl);
+    expect(pivotRequestedUrls).not.toContain(directOperationUrl);
+    expect(pivotRequestedUrls).not.toContain(staleCorrelationUrl);
+    expect(pivotRequestedUrls).not.toContain(staleScopedArtifactsUrl);
+    expect(pivotRequestedUrls).not.toContain(unscopedArtifactsUrl);
+    expect(forbiddenRequests).toEqual([]);
+  });
+
   test('keeps the active workflow correlation when opening a workflow recent-event actor pivot via keyboard traversal', async ({
     page
   }) => {

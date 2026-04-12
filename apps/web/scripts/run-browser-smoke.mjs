@@ -21,7 +21,8 @@ const defaultPlaywrightArgs = [
   'exec',
   'playwright',
   'test',
-  'e2e',
+  'e2e/operator-shell.keyboard.smoke.spec.ts',
+  'e2e/operator-shell.active-queue.smoke.spec.ts',
   '--config',
   'playwright.config.ts'
 ];

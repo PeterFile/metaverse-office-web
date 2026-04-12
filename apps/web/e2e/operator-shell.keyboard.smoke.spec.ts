@@ -588,6 +588,39 @@ async function zoomViewportInWithMouseWheel(page: Page, deltaY = -160) {
     .toBeGreaterThan(beforeScale! + 0.01);
 }
 
+async function zoomViewportInThroughCanvasWheelEvent(page: Page, deltaY = -160) {
+  await expect(page.locator('.aitown-world__host canvas')).toBeVisible();
+  await page.waitForFunction(() => Boolean(window.__AITOWN_VIEWPORT__));
+
+  const beforeScale = await readViewportScale(page);
+  expect(beforeScale).not.toBeNull();
+
+  await page.evaluate((wheelDeltaY) => {
+    const canvas = document.querySelector('.aitown-world__host canvas');
+    if (!(canvas instanceof HTMLCanvasElement)) {
+      throw new Error('missing world canvas');
+    }
+
+    const rect = canvas.getBoundingClientRect();
+    canvas.dispatchEvent(
+      new WheelEvent('wheel', {
+        bubbles: true,
+        cancelable: true,
+        composed: true,
+        deltaY: wheelDeltaY,
+        clientX: rect.left + rect.width * 0.5,
+        clientY: rect.top + rect.height * 0.5
+      })
+    );
+  }, deltaY);
+
+  await expect
+    .poll(async () => await readViewportScale(page), {
+      timeout: POLL_DRIVEN_ASSERTION_TIMEOUT_MS
+    })
+    .toBeGreaterThan(beforeScale! + 0.01);
+}
+
 
 async function forceViewportAgainstTopRightClamp(page: Page) {
   await page.waitForFunction(() => Boolean(window.__AITOWN_VIEWPORT__));
@@ -8017,6 +8050,105 @@ test.describe('operator shell smoke', () => {
       .toBe(true);
 
     expectViewportBoundsWithinClampBudget(await waitForViewportSettle(page));
+  });
+
+  test('keeps selected-agent reset-view horizontal reachability after zoomed-in Hub inspection', async ({ page }) => {
+    const landscapeShell = SHELLS.find((shell) => shell.name === 'landscape');
+    expect(landscapeShell).toBeDefined();
+
+    await page.setViewportSize(landscapeShell!.viewport);
+    await page.goto('/');
+    await expect(page.locator('.aitown-world__host canvas')).toBeVisible();
+    await page.waitForFunction(() => Boolean(window.__AITOWN_VIEWPORT__));
+
+    const dialog = page.getByRole('dialog', { name: 'Hub' });
+    const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
+    const selectedAgentHeading = detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' });
+
+    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await expect(dialog).toBeVisible();
+
+    const inspectButton = detailsPanel.getByRole('button', {
+      name: 'Inspect Growth Revenue Agent',
+      exact: true
+    });
+    await expect(inspectButton).toBeVisible();
+    await inspectButton.click();
+    await expect(selectedAgentHeading).toBeVisible();
+
+    const baseline = await waitForViewportSettle(page);
+    const baselineScale = baseline.scale ?? 1;
+    const baselineTop = baseline.top;
+    const baselineClampPadding = {
+      top: baseline.clampPadding?.top ?? 0,
+      right: baseline.clampPadding?.right ?? 0
+    };
+
+    expect(baselineClampPadding.right).toBeGreaterThan(0);
+    expectViewportBoundsWithinClampBudget(baseline);
+
+    await zoomViewportInThroughCanvasWheelEvent(page);
+    await forceViewportAgainstTopRightClamp(page);
+
+    await expect
+      .poll(async () => {
+        const currentPose = await readViewportPose(page);
+        if (!currentPose) {
+          return false;
+        }
+
+        return (
+          Math.abs(currentPose.x - baseline.x) >= 60 ||
+          Math.abs(currentPose.y - baseline.y) >= 60 ||
+          Math.abs((currentPose.scale ?? 0) - baselineScale) >= 0.05
+        );
+      })
+      .toBe(true);
+
+    await page.getByRole('button', { name: 'Reset view' }).click();
+
+    await expect(dialog).toBeVisible();
+    await expect(selectedAgentHeading).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Clear Selection' })).toBeVisible();
+
+    await expect
+      .poll(async () => {
+        const currentPose = await readViewportPose(page);
+        if (!currentPose) {
+          return false;
+        }
+
+        return (
+          Math.abs(currentPose.x - baseline.x) <= 1 &&
+          Math.abs(currentPose.y - baseline.y) <= 1 &&
+          Math.abs((currentPose.scale ?? 0) - baselineScale) <= 0.01
+        );
+      }, {
+        timeout: POLL_DRIVEN_ASSERTION_TIMEOUT_MS
+      })
+      .toBe(true);
+
+    const resetViewport = await waitForViewportSettle(page);
+    expect(resetViewport.clampPadding?.top ?? 0).toBe(baselineClampPadding.top);
+    expect(resetViewport.clampPadding?.right ?? 0).toBe(baselineClampPadding.right);
+    expectViewportBoundsWithinClampBudget(resetViewport);
+
+    const right = await dragViewportToEdge(page, 'right', { driver: 'synthetic-host-pointer' });
+    await expect(dialog).toBeVisible();
+    await expect(selectedAgentHeading).toBeVisible();
+    expect(right.clampPadding?.top ?? 0).toBe(baselineClampPadding.top);
+    expect(right.clampPadding?.right ?? 0).toBe(baselineClampPadding.right);
+    expectViewportAtRightClampEdge(right, baselineScale, baselineTop);
+
+    const left = await dragViewportToEdge(page, 'top-left', {
+      horizontalOnly: true,
+      driver: 'synthetic-host-pointer'
+    });
+    await expect(dialog).toBeVisible();
+    await expect(selectedAgentHeading).toBeVisible();
+    expect(left.clampPadding?.top ?? 0).toBe(baselineClampPadding.top);
+    expect(left.clampPadding?.right ?? 0).toBe(baselineClampPadding.right);
+    expectViewportAtLeftClampEdge(left, baselineScale, baselineTop);
   });
 
   test('keeps portrait selected-watch clamp gating stable across fixed-width overlay churn and unrelated shell noise', async ({

@@ -1144,6 +1144,28 @@ test.describe('operator shell smoke', () => {
     await expect(page.getByRole('button', { name: 'Open Hub' })).toBeVisible();
   });
 
+  test('surfaces live focus agents on the world shell before Hub opens and lets operators inspect them directly', async ({
+    page
+  }) => {
+    await page.goto('/');
+
+    await expect(page.getByText('Live Focus')).toBeVisible();
+    await expect(page.getByText(/agent needs attention right now\./)).toBeVisible();
+    await expect(page.getByRole('dialog', { name: 'Hub' })).toHaveCount(0);
+    await expect(page.getByRole('complementary', { name: 'Agent details' })).toHaveCount(0);
+
+    const liveFocusButton = page.getByRole('button', {
+      name: 'Inspect live focus agent Growth Revenue Agent'
+    });
+    await expect(liveFocusButton).toBeVisible();
+    await liveFocusButton.click();
+
+    const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
+    await expect(page.getByRole('dialog', { name: 'Hub' })).toBeVisible();
+    await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+    await expect(detailsPanel.getByRole('button', { name: 'Clear' })).toBeVisible();
+  });
+
   test('keeps the last direct-selection Current Operation visible when a roster selection later degrades', async ({
     page
   }) => {

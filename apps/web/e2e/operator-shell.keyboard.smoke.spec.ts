@@ -8169,6 +8169,93 @@ test.describe('operator shell smoke', () => {
     expectViewportBoundsWithinClampBudget(await waitForViewportSettle(page));
   });
 
+  test('ignores the Reset view shortcut while focus stays inside the active-queue state filter', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.locator('.aitown-world__host canvas')).toBeVisible();
+    await page.waitForFunction(() => Boolean(window.__AITOWN_VIEWPORT__));
+
+    await page.getByRole('button', { name: 'Open Hub' }).click();
+
+    const dialog = page.getByRole('dialog', { name: 'Hub' });
+    const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
+    const queueSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Active Queue' })
+    });
+    const stateFilter = queueSection.getByRole('combobox', { name: 'Filter active queue by state' });
+
+    await expect(dialog).toBeVisible();
+    await expect(detailsPanel.getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
+    await expect(stateFilter).toHaveValue('');
+
+    const baselinePose = await readViewportPose(page);
+    expect(baselinePose).not.toBeNull();
+
+    await zoomViewportOutToMinimum(page);
+    await forceViewportAgainstTopRightClamp(page);
+
+    await expect
+      .poll(async () => {
+        const currentPose = await readViewportPose(page);
+        if (!baselinePose || !currentPose) {
+          return false;
+        }
+
+        return (
+          Math.abs(currentPose.x - baselinePose.x) >= 60 ||
+          Math.abs(currentPose.y - baselinePose.y) >= 60 ||
+          Math.abs(currentPose.scale - baselinePose.scale) >= 0.05
+        );
+      })
+      .toBe(true);
+
+    const shiftedPose = await waitForViewportSettle(page);
+
+    await stateFilter.focus();
+    await expect(stateFilter).toBeFocused();
+
+    await page.keyboard.press('r');
+
+    await expect(dialog).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Hide Hub' })).toBeVisible();
+    await expect(stateFilter).toBeFocused();
+
+    await expect
+      .poll(async () => {
+        const currentPose = await readViewportPose(page);
+        if (!currentPose) {
+          return false;
+        }
+
+        return (
+          Math.abs(currentPose.x - shiftedPose.x) <= 1 &&
+          Math.abs(currentPose.y - shiftedPose.y) <= 1 &&
+          Math.abs(currentPose.scale - shiftedPose.scale) <= 0.01
+        );
+      }, {
+        timeout: POLL_DRIVEN_ASSERTION_TIMEOUT_MS
+      })
+      .toBe(true);
+
+    await expect
+      .poll(async () => {
+        const currentPose = await readViewportPose(page);
+        if (!baselinePose || !currentPose) {
+          return false;
+        }
+
+        return (
+          Math.abs(currentPose.x - baselinePose.x) >= 60 ||
+          Math.abs(currentPose.y - baselinePose.y) >= 60 ||
+          Math.abs(currentPose.scale - baselinePose.scale) >= 0.05
+        );
+      }, {
+        timeout: POLL_DRIVEN_ASSERTION_TIMEOUT_MS
+      })
+      .toBe(true);
+
+    expectViewportBoundsWithinClampBudget(await waitForViewportSettle(page));
+  });
+
   test('restores the selected-agent default viewport pose without clearing hub context when the Reset view shortcut is pressed', async ({ page }) => {
     await page.goto('/');
     await expect(page.locator('.aitown-world__host canvas')).toBeVisible();

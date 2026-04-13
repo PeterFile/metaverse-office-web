@@ -26,6 +26,7 @@ import {
   resolveViewportWheelGestureDisposition,
   shouldBlockViewportPointerInput,
   shouldDeferViewportPointerGestureToBrowser,
+  type ViewportClampPadding,
   type ViewportInputCapabilities,
   type ViewportInspector
 } from './viewport';
@@ -420,7 +421,7 @@ export default function WorldScene({ scene, onSelectAgent, resetViewSignal = 0 }
   const selectedAgentFollowRef = useRef(false);
   const suppressSelectedAgentFollowResetRef = useRef(false);
   const suppressSceneTapRef = useRef(false);
-  const clampPaddingRef = useRef<{ top: number; right: number }>({ top: 0, right: 0 });
+  const clampPaddingRef = useRef<ViewportClampPadding>({ left: 0, top: 0, right: 0 });
   const viewportInspectorRef = useRef<ViewportInspector | null>(null);
   const resetViewportToContextDefaultRef = useRef<(() => void) | null>(null);
   const appliedResetViewSignalRef = useRef(resetViewSignal);
@@ -608,12 +609,13 @@ export default function WorldScene({ scene, onSelectAgent, resetViewSignal = 0 }
 
       const syncViewportConstraints = (hostWidth: number, hostHeight: number, capabilities?: ViewportInputCapabilities) => {
         const clampPadding = resolveViewportClampPadding(host);
-        const nextClampPadding = {
+        const nextClampPadding: ViewportClampPadding = {
+          left: clampPadding.left ?? 0,
           top: clampPadding.top ?? 0,
           right: clampPadding.right ?? 0
         };
         clampPaddingRef.current = nextClampPadding;
-        (viewport as Viewport & { clampPadding?: { top: number; right: number } }).clampPadding = nextClampPadding;
+        (viewport as Viewport & { clampPadding?: ViewportClampPadding }).clampPadding = nextClampPadding;
         const { minScale, maxScale } = resolveViewportScaleBounds(
           hostWidth,
           hostHeight,

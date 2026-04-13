@@ -251,6 +251,23 @@ describe('viewport coverage and panning bounds', () => {
       y: -20
     });
   });
+
+  it('keeps left safe-area bias out of pan bounds so fresh-load drags never expose a left gutter', () => {
+    const clampOptions = resolveViewportClampOptions(
+      2048,
+      1536,
+      1000,
+      800,
+      2.0,
+      {
+        left: 320,
+        right: 280
+      }
+    );
+
+    expect(clampOptions.left).toBe(0);
+    expect(clampOptions.right).toBe(2048 + 140);
+  });
 });
 
 describe('resolveViewportScaleBounds', () => {

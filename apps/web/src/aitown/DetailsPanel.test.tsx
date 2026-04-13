@@ -499,6 +499,65 @@ function buildProps(overrides: Partial<DetailsPanelProps> = {}): DetailsPanelPro
   };
 }
 
+describe('DetailsPanel selected-agent workflow lifecycle', () => {
+  it('shows explicit first-load copy while the selected-agent workflow is still loading', () => {
+    render(
+      <DetailsPanel
+        {...buildProps({
+          workflow: null,
+          workflowError: null,
+          workflowState: 'loading'
+        })}
+      />
+    );
+
+    const workflowSection = screen.getByRole('heading', { name: 'Workflow' }).closest('section');
+    expect(workflowSection).not.toBeNull();
+    expect(within(workflowSection!).getByText('Loading workflow...')).toBeVisible();
+    expect(within(workflowSection!).queryByText(/Unable to load workflow\./)).not.toBeInTheDocument();
+    expect(within(workflowSection!).queryByText(/Showing last workflow snapshot\./)).not.toBeInTheDocument();
+  });
+
+  it('shows explicit first-failure copy when the selected-agent workflow request fails before data loads', () => {
+    render(
+      <DetailsPanel
+        {...buildProps({
+          workflow: null,
+          workflowError: 'workflow request failed',
+          workflowState: 'error'
+        })}
+      />
+    );
+
+    const workflowSection = screen.getByRole('heading', { name: 'Workflow' }).closest('section');
+    expect(workflowSection).not.toBeNull();
+    expect(within(workflowSection!).getByText('Unable to load workflow. workflow request failed')).toBeVisible();
+    expect(within(workflowSection!).queryByText(/Loading workflow\.\.\./)).not.toBeInTheDocument();
+    expect(within(workflowSection!).queryByText(/Showing last workflow snapshot\./)).not.toBeInTheDocument();
+  });
+
+  it('shows explicit refresh-failure copy while retaining the last selected-agent workflow snapshot', () => {
+    render(
+      <DetailsPanel
+        {...buildProps({
+          workflowError: 'workflow refresh failed',
+          workflowState: 'ready'
+        })}
+      />
+    );
+
+    const workflowSection = screen.getByRole('heading', { name: 'Workflow' }).closest('section');
+    expect(workflowSection).not.toBeNull();
+    expect(within(workflowSection!).getByText('Showing last workflow snapshot. workflow refresh failed')).toBeVisible();
+    expect(
+      within(workflowSection!).getByText(
+        (_, element) => element?.tagName === 'STRONG' && element.textContent === 'Latest heartbeat'
+      )
+    ).toBeVisible();
+    expect(within(workflowSection!).queryByText(/Unable to load workflow\./)).not.toBeInTheDocument();
+  });
+});
+
 describe('DetailsPanel accountability signals', () => {
   it('shows a return-to-current-scope action for manual correlation overrides in crew-overview and selected-agent surfaces', async () => {
     const user = userEvent.setup();

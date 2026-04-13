@@ -10531,7 +10531,7 @@ afterEach(() => {
     expect(screen.queryByRole('button', { name: 'Clear Selection' })).not.toBeInTheDocument();
   });
 
-  it('keeps selected-agent workflow details pinned when a workflow 404 arrives before overview drops the agent', async () => {
+  it('keeps selected-agent workflow details pinned and shows explicit stale workflow copy when a workflow 404 arrives before overview drops the agent', async () => {
     (window as typeof window & { __AITOWN_POLL_INTERVAL_MS__?: number }).__AITOWN_POLL_INTERVAL_MS__ = 10;
 
     let workflowRequests = 0;
@@ -10583,7 +10583,12 @@ afterEach(() => {
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
     expect(await within(details).findByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
 
-    expect(await within(details).findByText('unknown agent app-engineering')).toBeVisible();
+    const workflowSection = within(details).getByRole('heading', { name: 'Workflow' }).closest('section');
+    expect(workflowSection).not.toBeNull();
+    expect(
+      await within(workflowSection!).findByText('Showing last workflow snapshot. unknown agent app-engineering')
+    ).toBeVisible();
+    expect(within(workflowSection!).getByText((_, element) => element?.tagName === 'STRONG' && element.textContent === 'Latest heartbeat')).toBeVisible();
     expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
     expect(screen.getByRole('button', { name: 'Clear Selection' })).toBeVisible();
   });

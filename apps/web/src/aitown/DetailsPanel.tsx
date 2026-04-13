@@ -647,6 +647,18 @@ function renderActiveQueueStateBucketsStatusLabel(error: string) {
   return `Showing last active queue state buckets. ${error}`;
 }
 
+function renderWorkflowLoadingLabel() {
+  return 'Loading workflow...';
+}
+
+function renderWorkflowErrorLabel(workflowError: string) {
+  return `Unable to load workflow. ${workflowError}`;
+}
+
+function renderWorkflowWarningLabel(workflowError: string) {
+  return `Showing last workflow snapshot. ${workflowError}`;
+}
+
 function selectLatestWorkspaceObservation(workspaceObservations: CollectorWorkspaceObservation[]) {
   return workspaceObservations
     .filter((observation) => observation.kind === 'workspace_file')
@@ -1741,6 +1753,7 @@ export function DetailsPanel({
     selectedAgentSupervisionHistoryError && selectedAgentSupervisionHistory
       ? `Showing last supervision history. ${selectedAgentSupervisionHistoryError}`
       : null;
+  const workflowWarning = workflowError && workflow ? renderWorkflowWarningLabel(workflowError) : null;
   const collectorSignalItems = (collectorSnapshot?.items ?? [])
     .filter(
       (item) =>
@@ -2727,9 +2740,14 @@ export function DetailsPanel({
 
       <section className="aitown-details__section">
         <h3>Workflow</h3>
-        {workflowState === 'loading' && !workflow ? <p>Loading workflow...</p> : null}
-        {workflowError ? <p>{workflowError}</p> : null}
+        {workflowWarning ? <p role="status">{workflowWarning}</p> : null}
         <ul className="aitown-records">
+          {workflowState === 'loading' && !workflow ? (
+            <li className="aitown-record">{renderWorkflowLoadingLabel()}</li>
+          ) : null}
+          {workflowError && !workflow ? (
+            <li className="aitown-record">{renderWorkflowErrorLabel(workflowError)}</li>
+          ) : null}
           {workflow?.detail.latest_heartbeat ? (
             <li className="aitown-record">
               <strong>Latest heartbeat</strong>

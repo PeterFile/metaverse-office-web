@@ -6826,6 +6826,155 @@ test.describe('operator shell smoke', () => {
     expect(requestedUrls).toHaveLength(requestCountBeforeReselect);
   });
 
+  test(
+    'keeps the selected-agent supervision history evidence jump focus-only while a manually reopened default correlation stays explicit via keyboard traversal',
+    async ({ page }) => {
+      const requestedUrls: string[] = [];
+      page.on('request', (request) => {
+        try {
+          const url = new URL(request.url());
+          requestedUrls.push(`${url.pathname}${url.search}`);
+        } catch {
+          requestedUrls.push(request.url());
+        }
+      });
+
+      const accountabilityCorrelationId = 'collector-snapshot:2026-03-10T23:59:40.000Z';
+
+      await page.route('**/peer-watch/alerts?target_agent_id=app-engineering&limit=4', async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            items: [
+              {
+                alert_id: 'alert-browser-supervision-history-manual-evidence-jump',
+                ts: '2026-03-10T23:00:00.000Z',
+                agent_id: 'app-engineering',
+                target_agent_id: 'app-engineering',
+                actor_id: 'team-lead',
+                observer_agent_id: 'team-lead',
+                watcher_agent_ids: ['team-lead'],
+                severity: 'orange',
+                status: 'open',
+                current_state: 'blocked',
+                active_task: 'Revenue handoff still needs app confirmation',
+                summary: 'Supervision history manual evidence jump stays in shared memory',
+                evidence_refs: ['/tmp/revenue-handoff.md'],
+                evidence_count: 1,
+                correlation_id: accountabilityCorrelationId,
+                source_kind: 'controller_event',
+                metadata: {}
+              }
+            ]
+          })
+        });
+      });
+
+      await page.goto('/');
+      await page.getByRole('button', { name: 'Open Hub' }).click();
+
+      const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
+      const inspectButton = detailsPanel.getByRole('button', {
+        name: 'Inspect App Engineering Agent',
+        exact: true
+      });
+
+      await focusHubControlWithTab(page, inspectButton, 'Inspect App Engineering Agent');
+      await expect(inspectButton).toBeFocused();
+      await page.keyboard.press('Enter');
+
+      const supervisionSection = detailsPanel.locator('section').filter({
+        has: page.getByRole('heading', { name: 'Supervision History' })
+      });
+      const workflowSection = detailsPanel.locator('section').filter({
+        has: page.getByRole('heading', { name: 'Workflow' })
+      });
+      const correlationSection = detailsPanel.locator('section').filter({
+        has: page.getByRole('heading', { name: 'Correlation Drilldown' })
+      });
+      const memorySection = detailsPanel.locator('section').filter({
+        has: page.getByRole('heading', { name: 'Shared Memory' })
+      });
+      const workflowCorrelationButton = workflowSection.getByRole('button', {
+        name: 'Open workflow correlation corr-revenue-handoff'
+      });
+      const reopenDefaultSupervisionCorrelationButton = supervisionSection.getByRole('button', {
+        name: `Open supervision history correlation ${accountabilityCorrelationId}`
+      });
+      const selectedSupervisionCorrelationButton = supervisionSection.getByRole('button', {
+        name: `Open supervision history correlation ${accountabilityCorrelationId}, currently selected`
+      });
+      const selectedSharedMemoryCorrelationButton = memorySection.getByRole('button', {
+        name: `Open shared memory correlation ${accountabilityCorrelationId}, currently selected`
+      });
+      const returnToCurrentScopeButton = detailsPanel.getByRole('button', { name: 'Return to current scope' });
+      const evidenceJumpButton = supervisionSection.getByRole('button', {
+        name: 'Jump to shared memory artifact /tmp/revenue-handoff.md'
+      });
+      const focusedSharedMemoryRecord = detailsPanel.locator('li[data-shared-memory-target]:focus');
+
+      await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+      await expect(
+        supervisionSection.getByText('Supervision history manual evidence jump stays in shared memory')
+      ).toBeVisible();
+      await expect(selectedSupervisionCorrelationButton).toBeVisible();
+      await expect(correlationSection.getByText(accountabilityCorrelationId, { exact: true })).toBeVisible();
+      await expect(memorySection.getByText('Collector observed workspace write to revenue-handoff.md')).toBeVisible();
+      await expect(selectedSharedMemoryCorrelationButton).toBeVisible();
+      await expect(returnToCurrentScopeButton).toHaveCount(0);
+
+      await focusHubControlWithTab(page, workflowCorrelationButton, 'Open workflow correlation corr-revenue-handoff');
+      await expect(workflowCorrelationButton).toBeFocused();
+      await page.keyboard.press('Enter');
+
+      await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
+      await expect(correlationSection.getByText(accountabilityCorrelationId, { exact: true })).toHaveCount(0);
+      await expect(returnToCurrentScopeButton).toBeVisible();
+      await expect(reopenDefaultSupervisionCorrelationButton).toBeVisible();
+
+      await focusHubControlWithTab(
+        page,
+        reopenDefaultSupervisionCorrelationButton,
+        `Open supervision history correlation ${accountabilityCorrelationId}`
+      );
+      await expect(reopenDefaultSupervisionCorrelationButton).toBeFocused();
+      await page.keyboard.press('Enter');
+
+      await expect(selectedSupervisionCorrelationButton).toBeVisible();
+      await expect(correlationSection.getByText(accountabilityCorrelationId, { exact: true })).toBeVisible();
+      await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toHaveCount(0);
+      await expect(memorySection.getByText('Collector observed workspace write to revenue-handoff.md')).toBeVisible();
+      await expect(selectedSharedMemoryCorrelationButton).toBeVisible();
+      await expect(returnToCurrentScopeButton).toBeVisible();
+      await expect(evidenceJumpButton).toBeVisible();
+      await expect(focusedSharedMemoryRecord).toHaveCount(0);
+
+      await focusHubControlWithTab(page, evidenceJumpButton, 'Jump to shared memory artifact /tmp/revenue-handoff.md');
+      await expect(evidenceJumpButton).toBeFocused();
+
+      const requestCountBeforeJump = requestedUrls.length;
+      await page.keyboard.press('Enter');
+
+      await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+      await expect(
+        supervisionSection.getByText('Supervision history manual evidence jump stays in shared memory')
+      ).toBeVisible();
+      await expect(selectedSupervisionCorrelationButton).toBeVisible();
+      await expect(correlationSection.getByText(accountabilityCorrelationId, { exact: true })).toBeVisible();
+      await expect(memorySection.getByText('Collector observed workspace write to revenue-handoff.md')).toBeVisible();
+      await expect(selectedSharedMemoryCorrelationButton).toBeVisible();
+      await expect(returnToCurrentScopeButton).toBeVisible();
+      await expect(focusedSharedMemoryRecord).toHaveCount(1);
+      await expect(focusedSharedMemoryRecord).toContainText('Ref · /tmp/revenue-handoff.md');
+
+      await page.waitForTimeout(150);
+
+      const postJumpRequests = requestedUrls.slice(requestCountBeforeJump);
+      expect(postJumpRequests).toEqual([]);
+    }
+  );
+
   test('keeps the selected-agent supervision history evidence jump focused on shared memory without changing selection or active correlation via keyboard traversal', async ({
     page
   }) => {

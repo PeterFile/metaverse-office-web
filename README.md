@@ -96,9 +96,9 @@ pnpm web:test:browser-smoke:dev
 pnpm backend:start
 ```
 
-`pnpm web:test:browser-smoke` runs the Playwright keyboard smoke from the repository root, starts its own hermetic read-only backend seeded under `./.tmp/browser-smoke`, starts its own Vite shell on ephemeral localhost ports, and passes the resolved base URL into Playwright so stale orphaned processes do not block startup.
+`pnpm web:test:browser-smoke` runs the Playwright smoke bundle from the repository root (currently the keyboard smoke plus the active-queue smoke), starts its own hermetic read-only backend seeded under `./.tmp/browser-smoke`, starts its own Vite shell on ephemeral localhost ports, and passes the resolved base URL into Playwright so stale orphaned processes do not block startup.
 
-`pnpm web:test:browser-smoke:dev` runs the same Playwright smoke through the wrapper with `BROWSER_SMOKE_FRONTEND_MODE=dev`, so CI also proves the non-preview Vite path end-to-end instead of only covering that branch in helper tests.
+`pnpm web:test:browser-smoke:dev` runs the same Playwright smoke bundle through the wrapper with `BROWSER_SMOKE_FRONTEND_MODE=dev`, so CI also proves the non-preview Vite path end-to-end instead of only covering that branch in helper tests.
 
 For local UI development, run the backend in one shell and the web shell in another:
 ```bash

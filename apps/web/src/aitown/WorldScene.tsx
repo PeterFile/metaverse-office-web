@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   Application,
   AnimatedSprite,
@@ -419,6 +419,16 @@ export default function WorldScene({ scene, onSelectAgent, resetViewSignal = 0 }
   const lastCenteredAgentRef = useRef<CenteredAgentState | null>(null);
   const selectedAgentRef = useRef<CenteredAgentState | null>(null);
   const selectedAgentFollowRef = useRef(false);
+  const selectedAgentManualReselectRef = useRef(false);
+  const selectedAgentManualReselectEligibleRef = useRef(false);
+  const selectedAgentManualReselectLayoutChangedRef = useRef(false);
+  const selectedAgentManualReselectGeometryRef = useRef<{
+    scale: number;
+    clampPadding: ViewportClampPadding;
+  } | null>(null);
+  const currentSelectedHasWatchOverlayRef = useRef(false);
+  const lastSelectionAgentIdRef = useRef<string | null>(null);
+  const lastSelectionHadWatchOverlayRef = useRef(false);
   const suppressSelectedAgentFollowResetRef = useRef(false);
   const suppressSceneTapRef = useRef(false);
   const clampPaddingRef = useRef<ViewportClampPadding>({ left: 0, top: 0, right: 0 });
@@ -429,6 +439,8 @@ export default function WorldScene({ scene, onSelectAgent, resetViewSignal = 0 }
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loadAttempt, setLoadAttempt] = useState(0);
   const watchOverlayCaptionItems = resolveWatchOverlayCaptionItems(scene);
+  const currentSelectedHasWatchOverlay = watchOverlayCaptionItems.length > 0;
+  currentSelectedHasWatchOverlayRef.current = currentSelectedHasWatchOverlay;
   const showWatchOverlayCaption = ready && !loadError && watchOverlayCaptionItems.length > 0;
   const selectedSceneAgent = scene.agents.find((agent) => agent.agentId === scene.selectedAgentId);
   selectedAgentRef.current = selectedSceneAgent
@@ -463,17 +475,55 @@ export default function WorldScene({ scene, onSelectAgent, resetViewSignal = 0 }
 
   const clearSelectedAgentFollowState = () => {
     selectedAgentFollowRef.current = false;
+    selectedAgentManualReselectRef.current = false;
+    selectedAgentManualReselectEligibleRef.current = false;
+    selectedAgentManualReselectLayoutChangedRef.current = false;
+    selectedAgentManualReselectGeometryRef.current = null;
     lastCenteredAgentRef.current = null;
   };
 
   const markSelectedAgentFollowState = (selectedAgent: CenteredAgentState) => {
     selectedAgentFollowRef.current = true;
+    selectedAgentManualReselectRef.current = false;
+    selectedAgentManualReselectEligibleRef.current = false;
+    selectedAgentManualReselectLayoutChangedRef.current = false;
+    selectedAgentManualReselectGeometryRef.current = null;
     rememberSelectedAgentState(selectedAgent);
   };
 
   useEffect(() => {
     onSelectAgentRef.current = onSelectAgent;
   }, [onSelectAgent]);
+
+  useLayoutEffect(() => {
+    const previousSelectedAgentId = lastSelectionAgentIdRef.current;
+    const currentSelectedAgentId = selectedSceneAgent?.agentId ?? null;
+
+    if (previousSelectedAgentId && currentSelectedAgentId === null) {
+      if (selectedAgentFollowRef.current) {
+        selectedAgentManualReselectRef.current = false;
+        selectedAgentManualReselectEligibleRef.current = false;
+        selectedAgentManualReselectLayoutChangedRef.current = false;
+        selectedAgentManualReselectGeometryRef.current = null;
+      } else if (!selectedAgentManualReselectRef.current && viewportRef.current) {
+        const manualReselectClampPadding = hostRef.current ? resolveViewportClampPadding(hostRef.current) : clampPaddingRef.current;
+        selectedAgentManualReselectRef.current = true;
+        selectedAgentManualReselectEligibleRef.current = lastSelectionHadWatchOverlayRef.current;
+        selectedAgentManualReselectLayoutChangedRef.current = false;
+        selectedAgentManualReselectGeometryRef.current = {
+          scale: viewportRef.current.scale.x,
+          clampPadding: {
+            left: manualReselectClampPadding.left ?? 0,
+            top: manualReselectClampPadding.top ?? 0,
+            right: manualReselectClampPadding.right ?? 0
+          }
+        };
+      }
+    }
+
+    lastSelectionAgentIdRef.current = currentSelectedAgentId;
+    lastSelectionHadWatchOverlayRef.current = currentSelectedHasWatchOverlay;
+  }, [currentSelectedHasWatchOverlay, selectedSceneAgent?.agentId]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -688,6 +738,13 @@ export default function WorldScene({ scene, onSelectAgent, resetViewSignal = 0 }
         }
 
         stopSelectedAgentFollowState();
+        if (selectedAgentManualReselectRef.current) {
+          selectedAgentManualReselectLayoutChangedRef.current = false;
+          selectedAgentManualReselectGeometryRef.current = {
+            scale: viewport.scale.x,
+            clampPadding: { ...clampPaddingRef.current }
+          };
+        }
         pointerDragged = true;
         event.preventDefault();
       };
@@ -743,17 +800,68 @@ export default function WorldScene({ scene, onSelectAgent, resetViewSignal = 0 }
           lastCenteredAgent.agentId === selectedAgent.agentId &&
           lastCenteredAgent.x === selectedAgent.x &&
           lastCenteredAgent.y === selectedAgent.y;
+        const pendingManualReselectGeometry = selectedAgentManualReselectGeometryRef.current;
+        const shouldResolvePendingManualReselect =
+          preserveView &&
+          selectedAgentManualReselectRef.current &&
+          selectedAgentManualReselectEligibleRef.current &&
+          currentSelectedHasWatchOverlayRef.current &&
+          !!lastCenteredAgent &&
+          !!selectedAgent &&
+          lastCenteredAgent.agentId === selectedAgent.agentId &&
+          lastCenteredAgent.x === selectedAgent.x &&
+          lastCenteredAgent.y === selectedAgent.y;
+        const pendingManualReselectAwaitingHubSheetClose =
+          shouldResolvePendingManualReselect && !!host.closest('.aitown-shell')?.querySelector('.aitown-hub-sheet');
+        const pendingManualReselectGeometryChanged =
+          shouldResolvePendingManualReselect &&
+          !pendingManualReselectAwaitingHubSheetClose &&
+          !!pendingManualReselectGeometry &&
+          (pendingManualReselectGeometry.scale !== targetScale ||
+            pendingManualReselectGeometry.clampPadding.left !== clampPaddingRef.current.left ||
+            pendingManualReselectGeometry.clampPadding.top !== clampPaddingRef.current.top ||
+            pendingManualReselectGeometry.clampPadding.right !== clampPaddingRef.current.right);
 
         suppressSelectedAgentFollowResetRef.current = true;
         viewport.setZoom(Math.min(maxScale, Math.max(minScale, targetScale)), true);
         suppressSelectedAgentFollowResetRef.current = false;
-        if (shouldRecenterSelectedAgent && selectedAgent) {
+        if ((shouldRecenterSelectedAgent || pendingManualReselectGeometryChanged) && selectedAgent) {
           moveViewportCenterIntoSafeArea(viewport, selectedAgent.x, selectedAgent.y);
           markSelectedAgentFollowState(selectedAgent);
           return;
         }
 
         viewport.moveCenter(previousCenter.x, previousCenter.y);
+        if (preserveView && !selectedAgent && selectedAgentManualReselectRef.current) {
+          const pendingGeometry = selectedAgentManualReselectGeometryRef.current;
+          const pendingRight = pendingGeometry?.clampPadding.right ?? 0;
+          const currentRight = clampPaddingRef.current.right ?? 0;
+          const hubSheetOpen = !!host.closest('.aitown-shell')?.querySelector('.aitown-hub-sheet');
+          const geometryMatchesPending =
+            !!pendingGeometry &&
+            pendingGeometry.scale === targetScale &&
+            pendingGeometry.clampPadding.left === clampPaddingRef.current.left &&
+            pendingGeometry.clampPadding.top === clampPaddingRef.current.top &&
+            pendingGeometry.clampPadding.right === clampPaddingRef.current.right;
+          const expectedWatchClampDrop =
+            !!pendingGeometry &&
+            selectedAgentManualReselectEligibleRef.current &&
+            pendingRight > 0 &&
+            currentRight === 0 &&
+            pendingGeometry.scale === targetScale &&
+            pendingGeometry.clampPadding.left === clampPaddingRef.current.left &&
+            pendingGeometry.clampPadding.top === clampPaddingRef.current.top;
+          if (geometryMatchesPending || expectedWatchClampDrop) {
+            selectedAgentManualReselectLayoutChangedRef.current = false;
+          } else if (pendingGeometry && !hubSheetOpen) {
+            selectedAgentManualReselectLayoutChangedRef.current = true;
+          }
+        }
+        if (shouldResolvePendingManualReselect && !pendingManualReselectAwaitingHubSheetClose) {
+          selectedAgentManualReselectRef.current = false;
+          selectedAgentManualReselectLayoutChangedRef.current = false;
+          selectedAgentManualReselectGeometryRef.current = null;
+        }
       };
 
       const resetViewportToContextDefault = () => {
@@ -800,7 +908,9 @@ export default function WorldScene({ scene, onSelectAgent, resetViewSignal = 0 }
       };
 
       viewportZoomHandler = () => {
-        if (!suppressSelectedAgentFollowResetRef.current) {
+        const zoomWasUserInitiated = !suppressSelectedAgentFollowResetRef.current;
+
+        if (zoomWasUserInitiated) {
           stopSelectedAgentFollowState();
         }
 
@@ -813,10 +923,24 @@ export default function WorldScene({ scene, onSelectAgent, resetViewSignal = 0 }
           viewport.setZoom(targetScale, true);
           suppressSelectedAgentFollowResetRef.current = false;
           syncViewportConstraints(viewport.screenWidth, viewport.screenHeight, capabilities);
+          if (zoomWasUserInitiated && selectedAgentManualReselectRef.current) {
+            selectedAgentManualReselectLayoutChangedRef.current = false;
+            selectedAgentManualReselectGeometryRef.current = {
+              scale: viewport.scale.x,
+              clampPadding: { ...clampPaddingRef.current }
+            };
+          }
           return;
         }
 
         syncViewportConstraints(viewport.screenWidth, viewport.screenHeight, capabilities);
+        if (zoomWasUserInitiated && selectedAgentManualReselectRef.current) {
+          selectedAgentManualReselectLayoutChangedRef.current = false;
+          selectedAgentManualReselectGeometryRef.current = {
+            scale: viewport.scale.x,
+            clampPadding: { ...clampPaddingRef.current }
+          };
+        }
       };
 
       viewport.wheel({ trackpadPinch: false, wheelZoom: true });
@@ -1007,14 +1131,40 @@ export default function WorldScene({ scene, onSelectAgent, resetViewSignal = 0 }
         !!selectedAgent && (!lastCenteredAgent || lastCenteredAgent.agentId !== selectedAgent.agentId);
       const selectedAgentMoved =
         !!selectedAgent && (!lastCenteredAgent || lastCenteredAgent.x !== selectedAgent.x || lastCenteredAgent.y !== selectedAgent.y);
-      if (selectedAgent && (selectedAgentChanged || (selectedAgentFollowRef.current && selectedAgentMoved))) {
+      const shouldRecenterPendingReselect =
+        !!selectedAgent &&
+        !!lastCenteredAgent &&
+        selectedAgentManualReselectRef.current &&
+        lastCenteredAgent.agentId === selectedAgent.agentId &&
+        (selectedAgentManualReselectLayoutChangedRef.current ||
+          !selectedAgentManualReselectEligibleRef.current ||
+          !currentSelectedHasWatchOverlay ||
+          selectedAgentMoved);
+      if (
+        selectedAgent &&
+        (selectedAgentChanged || (selectedAgentFollowRef.current && selectedAgentMoved) || shouldRecenterPendingReselect)
+      ) {
         moveViewportCenterIntoSafeArea(viewport, selectedAgent.x, selectedAgent.y);
         markSelectedAgentFollowState(selectedAgent);
       } else if (selectedAgent) {
         rememberSelectedAgentState(selectedAgent);
       }
 
-      if (!selectedAgent) {
+      if (
+        selectedAgent &&
+        (selectedAgentManualReselectLayoutChangedRef.current ||
+          !selectedAgentManualReselectRef.current ||
+          !selectedAgentManualReselectEligibleRef.current ||
+          !currentSelectedHasWatchOverlay ||
+          selectedAgentChanged ||
+          selectedAgentMoved)
+      ) {
+        selectedAgentManualReselectRef.current = false;
+        selectedAgentManualReselectLayoutChangedRef.current = false;
+        selectedAgentManualReselectGeometryRef.current = null;
+      }
+
+      if (!selectedAgent && selectedAgentFollowRef.current) {
         clearSelectedAgentFollowState();
       }
     })();

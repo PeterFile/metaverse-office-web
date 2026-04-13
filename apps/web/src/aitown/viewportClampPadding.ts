@@ -1,6 +1,7 @@
 import type { ViewportClampPadding } from './viewport';
 
 const topSelectors = ['.aitown-shell__brand', '.aitown-shell__stats', '.aitown-panel__topline > span', '.aitown-panel__toolbar'];
+const leftSelectors = ['.aitown-panel__topline > span:first-child'];
 const rightSelectors = [
   '.aitown-shell__stats',
   '.aitown-panel__toolbar',
@@ -8,7 +9,7 @@ const rightSelectors = [
   '.aitown-hub-sheet',
   '.aitown-watch-overlay'
 ];
-const clampContributorSelectors = [...new Set([...topSelectors, ...rightSelectors])];
+const clampContributorSelectors = [...new Set([...topSelectors, ...leftSelectors, ...rightSelectors])];
 const subtreeMutationContributorSelectors = [
   '.aitown-shell__brand',
   '.aitown-shell__stats',
@@ -141,7 +142,9 @@ export function resolveViewportClampPadding(host: HTMLDivElement): ViewportClamp
   const hostRect = host.getBoundingClientRect();
   const maxNarrowOverlayWidth = hostRect.width * 0.75;
   const edgeTouchTolerance = 24;
+  const hasHubSheet = overlayRoot.querySelector('.aitown-hub-sheet') !== null;
   let top = 0;
+  let left = 0;
   let right = 0;
 
   for (const selector of topSelectors) {
@@ -161,6 +164,43 @@ export function resolveViewportClampPadding(host: HTMLDivElement): ViewportClamp
 
       top = Math.max(top, Math.min(hostRect.height, Math.max(0, rect.bottom - hostRect.top)));
     }
+  }
+
+  for (const selector of leftSelectors) {
+    if (hasHubSheet) {
+      continue;
+    }
+
+    const element = overlayRoot.querySelector<HTMLElement>(selector);
+
+    if (!element) {
+      continue;
+    }
+
+    const rect = element.getBoundingClientRect();
+    const intersectsHost =
+      rect.right > hostRect.left &&
+      rect.left < hostRect.right &&
+      rect.bottom > hostRect.top &&
+      rect.top < hostRect.bottom;
+    const touchesLeft = rect.left <= hostRect.left + edgeTouchTolerance;
+    const splitToplinePeer = overlayRoot.querySelector<HTMLElement>('.aitown-panel__topline > span:last-child');
+    const sharesSplitToplineRow = (() => {
+      if (!splitToplinePeer || splitToplinePeer === element) {
+        return false;
+      }
+
+      const peerRect = splitToplinePeer.getBoundingClientRect();
+      const verticalOverlap = Math.min(rect.bottom, peerRect.bottom) - Math.max(rect.top, peerRect.top);
+
+      return verticalOverlap > edgeTouchTolerance;
+    })();
+
+    if (!intersectsHost || !touchesLeft || rect.width > maxNarrowOverlayWidth || !sharesSplitToplineRow) {
+      continue;
+    }
+
+    left = Math.max(left, Math.min(hostRect.width, Math.max(0, rect.right - hostRect.left)));
   }
 
   for (const selector of rightSelectors) {
@@ -186,5 +226,11 @@ export function resolveViewportClampPadding(host: HTMLDivElement): ViewportClamp
     right = Math.max(right, Math.min(hostRect.width, Math.max(0, hostRect.right - rect.left)));
   }
 
-  return { right, top };
+  const clampPadding: ViewportClampPadding = { right, top };
+
+  if (left > 0) {
+    clampPadding.left = left;
+  }
+
+  return clampPadding;
 }

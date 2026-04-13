@@ -764,6 +764,56 @@ describe('WorldScene watch overlay caption gating', () => {
     expect(center.y).toBeCloseTo(selectedAgent?.position.y ?? 0, 4);
   });
 
+  it('biases selected-agent recenter into the split-topline safe lane before Hub opens', async () => {
+    appInitMock.mockReset().mockResolvedValue(undefined);
+    vi.mocked(loadAiTownAssets).mockResolvedValue(makeAssets());
+
+    const scene = {
+      ...makeWideSelectedAgentScene(),
+      watchEdges: []
+    };
+    const selectedAgent = scene.agents.find((agent) => agent.agentId === scene.selectedAgentId);
+    const { container } = render(
+      <main className="aitown-shell">
+        <section className="aitown-panel aitown-panel--game">
+          <div className="aitown-panel__topline">
+            <span>Live focus</span>
+            <span>Viewport</span>
+          </div>
+          <WorldScene scene={scene} onSelectAgent={vi.fn()} />
+        </section>
+      </main>
+    );
+
+    expect(selectedAgent).toBeDefined();
+
+    const host = container.querySelector('.aitown-world__host');
+    const liveFocus = container.querySelector('.aitown-panel__topline > span:first-child');
+    const viewport = container.querySelector('.aitown-panel__topline > span:last-child');
+
+    expect(host).toBeInstanceOf(HTMLDivElement);
+    expect(liveFocus).toBeInstanceOf(HTMLElement);
+    expect(viewport).toBeInstanceOf(HTMLElement);
+
+    setElementRect(host as HTMLDivElement, { left: 0, top: 0, width: 1000, height: 800 });
+    setElementRect(liveFocus as HTMLElement, { left: 0, top: 148, width: 320, height: 144 });
+    setElementRect(viewport as HTMLElement, { left: 720, top: 148, width: 280, height: 176 });
+
+    await waitFor(() => {
+      expect(readViewportInspector()?.read().clampPadding).toEqual({
+        top: 0,
+        right: 280
+      });
+    });
+
+    const inspection = readViewportInspector()?.read();
+    const center = readViewportCenter();
+    const expectedBiasX = (280 - 320) / ((inspection?.scale ?? 1) * 2);
+
+    expect(center.x).toBeCloseTo((selectedAgent?.position.x ?? 0) + expectedBiasX, 4);
+    expect(center.y).toBeCloseTo(selectedAgent?.position.y ?? 0, 4);
+  });
+
   it('re-applies selected-agent safe-area recenter when clamp padding changes for the same selection', async () => {
     appInitMock.mockReset().mockResolvedValue(undefined);
     vi.mocked(loadAiTownAssets).mockResolvedValue(makeAssets());
@@ -1219,12 +1269,16 @@ describe('WorldScene watch overlay caption gating', () => {
       clientY: 320
     });
 
-    const manualCenter = readViewportCenter();
     const inspectionBeforeReset = readViewportInspector()?.read();
     const expectedDefaultCenterX =
       (selectedAgent?.position.x ?? 0) +
       (inspectionBeforeReset?.clampPadding.right ?? 0) / ((inspectionBeforeReset?.scale ?? 1) * 2);
-    expect(manualCenter.x).not.toBeCloseTo(expectedDefaultCenterX, 4);
+
+    await waitFor(() => {
+      expect(readViewportCenter().x).not.toBeCloseTo(expectedDefaultCenterX, 4);
+    });
+
+    const manualCenter = readViewportCenter();
 
     rerender(
       <main className="aitown-shell">

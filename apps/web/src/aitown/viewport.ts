@@ -356,13 +356,12 @@ export function resolveViewportPanBounds(
   clampPadding: ViewportClampPadding = {}
 ): ViewportPanBounds {
   const currentScale = Math.max(scale, FLOAT_EPSILON);
-  const leftPadding = Math.max(0, clampPadding.left ?? 0) / currentScale;
   const rightPadding = Math.max(0, clampPadding.right ?? 0) / currentScale;
   const topPadding = Math.max(0, clampPadding.top ?? 0) / currentScale;
   const bottomPadding = Math.max(0, clampPadding.bottom ?? 0) / currentScale;
 
   return {
-    left: leftPadding === 0 ? 0 : -leftPadding,
+    left: 0,
     right: sanitizeDimension(sceneWidth) + rightPadding,
     top: topPadding === 0 ? 0 : -topPadding,
     bottom: sanitizeDimension(sceneHeight) + bottomPadding

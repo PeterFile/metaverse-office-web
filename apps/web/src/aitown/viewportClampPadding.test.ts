@@ -33,7 +33,7 @@ describe('resolveViewportClampPadding', () => {
     });
   });
 
-  it('uses the split topline right card for right clamp padding without reserving a top gutter', () => {
+  it('uses the split topline cards for left and right clamp padding without reserving a top gutter', () => {
     document.body.innerHTML = `
       <main class="aitown-shell">
         <section class="aitown-panel aitown-panel--game">
@@ -58,8 +58,39 @@ describe('resolveViewportClampPadding', () => {
       ({ left: 720, top: 148, right: 1000, bottom: 324, width: 280, height: 176 } as DOMRect);
 
     expect(resolveViewportClampPadding(host)).toEqual({
+      left: 320,
       top: 0,
       right: 280
+    });
+  });
+
+  it('ignores stacked topline cards so narrow pre-Hub layouts do not create fake left clamp padding', () => {
+    document.body.innerHTML = `
+      <main class="aitown-shell">
+        <section class="aitown-panel aitown-panel--game">
+          <div class="aitown-panel__topline">
+            <span id="live-focus">Live focus</span>
+            <span id="viewport">Viewport</span>
+          </div>
+          <div class="aitown-world__host" id="host"></div>
+        </section>
+      </main>
+    `;
+
+    const host = document.getElementById('host') as HTMLDivElement;
+    const liveFocus = document.getElementById('live-focus') as HTMLSpanElement;
+    const viewport = document.getElementById('viewport') as HTMLSpanElement;
+
+    host.getBoundingClientRect = () =>
+      ({ left: 0, top: 0, right: 800, bottom: 800, width: 800, height: 800 } as DOMRect);
+    liveFocus.getBoundingClientRect = () =>
+      ({ left: 0, top: 176, right: 320, bottom: 320, width: 320, height: 144 } as DOMRect);
+    viewport.getBoundingClientRect = () =>
+      ({ left: 0, top: 332, right: 280, bottom: 508, width: 280, height: 176 } as DOMRect);
+
+    expect(resolveViewportClampPadding(host)).toEqual({
+      top: 0,
+      right: 0
     });
   });
 
@@ -78,6 +109,40 @@ describe('resolveViewportClampPadding', () => {
 
     host.getBoundingClientRect = () =>
       ({ left: 0, top: 0, right: 1000, bottom: 800, width: 1000, height: 800 } as DOMRect);
+    hub.getBoundingClientRect = () =>
+      ({ left: 620, top: 0, right: 1000, bottom: 800, width: 380, height: 800 } as DOMRect);
+
+    expect(resolveViewportClampPadding(host)).toEqual({
+      top: 0,
+      right: 380
+    });
+  });
+
+  it('drops split-topline left padding once the Hub sheet is open', () => {
+    document.body.innerHTML = `
+      <main class="aitown-shell">
+        <section class="aitown-panel aitown-panel--game">
+          <div class="aitown-panel__topline">
+            <span id="live-focus">Live focus</span>
+            <span id="viewport">Viewport</span>
+          </div>
+          <div class="aitown-world__host" id="host"></div>
+        </section>
+        <div class="aitown-hub-sheet" id="hub"></div>
+      </main>
+    `;
+
+    const host = document.getElementById('host') as HTMLDivElement;
+    const liveFocus = document.getElementById('live-focus') as HTMLSpanElement;
+    const viewport = document.getElementById('viewport') as HTMLSpanElement;
+    const hub = document.getElementById('hub') as HTMLDivElement;
+
+    host.getBoundingClientRect = () =>
+      ({ left: 0, top: 0, right: 1000, bottom: 800, width: 1000, height: 800 } as DOMRect);
+    liveFocus.getBoundingClientRect = () =>
+      ({ left: 0, top: 148, right: 320, bottom: 292, width: 320, height: 144 } as DOMRect);
+    viewport.getBoundingClientRect = () =>
+      ({ left: 720, top: 148, right: 1000, bottom: 324, width: 280, height: 176 } as DOMRect);
     hub.getBoundingClientRect = () =>
       ({ left: 620, top: 0, right: 1000, bottom: 800, width: 380, height: 800 } as DOMRect);
 

@@ -2765,6 +2765,230 @@ test.describe('operator shell smoke', () => {
     await expect(focusedSharedMemoryRecord).toContainText('Ref · /tmp/revenue-handoff.md');
   });
 
+  test('keeps the selected-agent collector tmux preview jump focused on shared memory without changing selection, correlation, or request scope via keyboard traversal', async ({
+    page
+  }) => {
+    const requestedUrls: string[] = [];
+    const tmuxArtifactRef = 'tmux://5-web3-app-engineering/0.1';
+    const tmuxPreviewLabel = 'pnpm test · 2026-03-10T23:59:10.000Z';
+    const collectorSnapshotPath = '/collectors/controller-snapshot';
+    const scopedArtifactsUrl = '/memory/artifacts?limit=4&window=60m&agent_id=app-engineering&correlation_id=corr-revenue-handoff';
+
+    page.on('request', (request) => {
+      try {
+        const url = new URL(request.url());
+        requestedUrls.push(`${url.pathname}${url.search}`);
+      } catch {
+        requestedUrls.push(request.url());
+      }
+    });
+
+    await page.route(`**${collectorSnapshotPath}`, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          item: {
+            collected_at: '2026-03-10T23:59:40.000Z',
+            actor_id: 'team-lead',
+            summary: {
+              agent_count: 1,
+              heartbeat_count: 1,
+              tmux_observed_count: 1,
+              workspace_observed_count: 1,
+              reboot_recommended_count: 0
+            },
+            items: [
+              {
+                agent_id: 'app-engineering',
+                workspace_root: '/tmp/app-engineering',
+                session_ref: '5-web3-app-engineering',
+                evidence_refs: ['/tmp/revenue-handoff.md'],
+                workspace_observations: [
+                  {
+                    path: '/tmp/revenue-handoff.md',
+                    file_name: 'revenue-handoff.md',
+                    kind: 'workspace_file',
+                    last_modified_at: '2026-03-10T23:39:00.000Z'
+                  }
+                ],
+                tmux_observations: [
+                  {
+                    session_name: '5-web3-app-engineering',
+                    window_index: '0',
+                    pane_index: '1',
+                    pane_id: '%11',
+                    pane_title: 'handoff',
+                    pane_current_command: 'pnpm test',
+                    pane_active: true,
+                    pane_dead: false,
+                    pane_activity_at: '2026-03-10T23:59:10.000Z'
+                  }
+                ],
+                supervision: {
+                  watch_target: 'growth-revenue',
+                  watched_by: ['team-lead'],
+                  needs_attention: false
+                },
+                heartbeat: {
+                  agent_id: 'app-engineering',
+                  actor_id: 'team-lead',
+                  received_at: '2026-03-10T23:59:30.000Z',
+                  current_state: 'blocked',
+                  active_task: 'Confirm the revenue handoff',
+                  current_location: 'delivery-desk',
+                  last_meaningful_output_at: '2026-03-10T23:58:00.000Z',
+                  last_file_write_at: '2026-03-10T23:39:00.000Z',
+                  current_blocker: '',
+                  confidence_level: 'high',
+                  reboot_recommended: false,
+                  evidence_refs: ['/tmp/revenue-handoff.md']
+                }
+              }
+            ]
+          }
+        })
+      });
+    });
+
+    await page.route(`**${scopedArtifactsUrl}`, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          generated_at: '2026-03-10T23:59:45.000Z',
+          items: [
+            {
+              artifact_ref: '/tmp/revenue-handoff.md',
+              artifact_kind: 'workspace_file',
+              file_name: 'revenue-handoff.md',
+              first_seen_at: '2026-03-10T23:39:00.000Z',
+              last_seen_at: '2026-03-10T23:39:00.000Z',
+              mention_count: 1,
+              agent_ids: ['app-engineering', 'growth-revenue'],
+              correlation_ids: ['corr-revenue-handoff'],
+              source_kinds: ['collector_snapshot'],
+              latest_summary: 'Collector observed workspace write to revenue-handoff.md',
+              latest_event_type: 'collector_snapshot_written',
+              collector_last_modified_at: '2026-03-10T23:39:00.000Z'
+            },
+            {
+              artifact_ref: tmuxArtifactRef,
+              artifact_kind: 'tmux_observation',
+              file_name: '5-web3-app-engineering/0.1',
+              first_seen_at: '2026-03-10T23:59:10.000Z',
+              last_seen_at: '2026-03-10T23:59:10.000Z',
+              mention_count: 1,
+              agent_ids: ['app-engineering'],
+              correlation_ids: ['corr-revenue-handoff'],
+              source_kinds: ['collector_snapshot'],
+              latest_summary: 'Collector observed tmux handoff pane for the selected-agent scope',
+              latest_event_type: 'collector_snapshot_written',
+              collector_last_modified_at: '2026-03-10T23:59:10.000Z'
+            }
+          ]
+        })
+      });
+    });
+
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Hub' }).click();
+
+    const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
+    const queueButton = detailsPanel.getByRole('button', {
+      name: 'Inspect Growth Revenue Agent from active queue'
+    });
+
+    await focusHubControlWithTab(page, queueButton, 'Inspect Growth Revenue Agent from active queue');
+    await expect(queueButton).toBeFocused();
+    await page.keyboard.press('Enter');
+
+    const operationSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Current Operation' })
+    });
+    const collectorObservationSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Collector Observation' })
+    });
+    const correlationSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Correlation Drilldown' })
+    });
+    const memorySection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Shared Memory' })
+    });
+    const operationCounterpartyButton = operationSection.getByRole('button', {
+      name: 'Select operation counterparty agent app-engineering'
+    });
+    const workflowUrl = '/agents/app-engineering/workflow?limit=10&window=60m';
+    const workspacePreviewButton = collectorObservationSection.getByRole('button', {
+      name: 'Jump to shared memory artifact /tmp/revenue-handoff.md revenue-handoff.md · 2026-03-10T23:39:00.000Z'
+    });
+    const tmuxPreviewButton = collectorObservationSection.getByRole('button', {
+      name: `Jump to shared memory artifact ${tmuxArtifactRef} ${tmuxPreviewLabel}`
+    });
+    const focusedSharedMemoryRecord = detailsPanel.locator('li[data-shared-memory-target]:focus');
+
+    await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
+    await expect(operationCounterpartyButton).toBeVisible();
+    await focusHubControlWithTab(page, operationCounterpartyButton, 'Select operation counterparty agent app-engineering');
+    await expect(operationCounterpartyButton).toBeFocused();
+
+    const workflowResponse = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'GET' && response.status() === 200 && response.url().includes(workflowUrl)
+    );
+    const scopedArtifactsResponse = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'GET' && response.status() === 200 && response.url().includes(scopedArtifactsUrl)
+    );
+
+    await page.keyboard.press('Enter');
+    await workflowResponse;
+    await scopedArtifactsResponse;
+
+    await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+    await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
+    await expect(collectorObservationSection).toContainText(`Tmux preview · ${tmuxPreviewLabel}`);
+    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
+    await expect(correlationSection.getByText('corr-app-review', { exact: true })).toHaveCount(0);
+    await expect(memorySection.getByText('Request scope · app-engineering · corr-revenue-handoff')).toBeVisible();
+    await expect(memorySection.getByText(`Ref · ${tmuxArtifactRef}`)).toBeVisible();
+    await expect(workspacePreviewButton).toBeVisible();
+    await expect(tmuxPreviewButton).toBeVisible();
+    await expect(focusedSharedMemoryRecord).toHaveCount(0);
+    await focusHubControlWithTab(
+      page,
+      workspacePreviewButton,
+      'Jump to shared memory artifact /tmp/revenue-handoff.md revenue-handoff.md · 2026-03-10T23:39:00.000Z'
+    );
+    await expect(workspacePreviewButton).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(tmuxPreviewButton).toBeFocused();
+
+    const requestCountBeforeJump = requestedUrls.length;
+
+    await page.keyboard.press('Enter');
+
+    await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+    await expect(collectorObservationSection).toContainText(`Tmux preview · ${tmuxPreviewLabel}`);
+    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
+    await expect(correlationSection.getByText('corr-app-review', { exact: true })).toHaveCount(0);
+    await expect(memorySection.getByText('Request scope · app-engineering · corr-revenue-handoff')).toBeVisible();
+    await expect(focusedSharedMemoryRecord).toHaveCount(1);
+    await expect(focusedSharedMemoryRecord).toContainText(`Ref · ${tmuxArtifactRef}`);
+
+    await page.waitForTimeout(150);
+
+    const postJumpRequests = requestedUrls.slice(requestCountBeforeJump);
+    expect(postJumpRequests).not.toContain('/office/operations?agent_id=growth-revenue');
+    expect(postJumpRequests).not.toContain('/agents/growth-revenue/workflow?limit=10&window=60m');
+    expect(postJumpRequests).not.toContain('/office/operations?agent_id=app-engineering');
+    expect(postJumpRequests).not.toContain('/correlations/corr-app-review?limit=10&window=60m');
+    expect(postJumpRequests).not.toContain(
+      '/memory/artifacts?limit=4&window=60m&agent_id=app-engineering&correlation_id=corr-app-review'
+    );
+  });
+
   test('keeps the active crew-overview correlation when opening a collector-snapshot actor pivot via keyboard traversal', async ({
     page
   }) => {

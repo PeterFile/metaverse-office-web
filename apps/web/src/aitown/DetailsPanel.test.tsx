@@ -5002,6 +5002,480 @@ describe('DetailsPanel accountability signals', () => {
     expect(onSelectCorrelation).not.toHaveBeenCalled();
   });
 
+  it('renders matching collector tmux previews as shared-memory jumps in both collector provenance surfaces', async () => {
+    const user = userEvent.setup();
+    const onSelectAgent = vi.fn();
+    const onSelectCorrelation = vi.fn();
+    const tmuxArtifactRef = 'tmux://5-web3-app-engineering/0.1';
+    const tmuxPreviewLabel = 'pnpm test · 2026-03-16T08:58:30.000Z';
+    const baseCollectorSnapshot = buildCollectorSnapshot();
+    const baseCollectorItem = baseCollectorSnapshot.items[0];
+    const collectorSnapshot: CollectorSnapshot = {
+      ...baseCollectorSnapshot,
+      items: [
+        {
+          ...baseCollectorItem,
+          session_ref: '5-web3-app-engineering',
+          tmux_observations: [
+            {
+              session_name: '5-web3-app-engineering',
+              window_index: '0',
+              pane_index: '0',
+              pane_id: '%10',
+              pane_title: 'editor',
+              pane_current_command: 'vim',
+              pane_active: false,
+              pane_dead: false,
+              pane_activity_at: '2026-03-16T08:54:00.000Z'
+            },
+            {
+              session_name: '5-web3-app-engineering',
+              window_index: '0',
+              pane_index: '1',
+              pane_id: '%11',
+              pane_title: 'tests',
+              pane_current_command: 'pnpm test',
+              pane_active: true,
+              pane_dead: false,
+              pane_activity_at: '2026-03-16T08:58:30.000Z'
+            }
+          ]
+        }
+      ]
+    };
+    const memoryArtifacts: MemoryArtifactIndex = {
+      generated_at: '2026-03-16T09:00:00.000Z',
+      items: [
+        ...buildMemoryArtifacts().items,
+        {
+          artifact_ref: tmuxArtifactRef,
+          artifact_kind: 'tmux_observation',
+          file_name: '5-web3-app-engineering/0.1',
+          first_seen_at: '2026-03-16T08:58:30.000Z',
+          last_seen_at: '2026-03-16T08:58:30.000Z',
+          mention_count: 1,
+          agent_ids: ['app-engineering'],
+          correlation_ids: ['corr-app-review'],
+          source_kinds: ['collector_snapshot'],
+          latest_summary: 'Collector preview tmux pane',
+          latest_event_type: 'collector_snapshot_written',
+          collector_last_modified_at: '2026-03-16T08:58:30.000Z'
+        }
+      ]
+    };
+
+    const { unmount } = render(
+      <DetailsPanel
+        {...buildProps({
+          collectorSnapshot,
+          memoryArtifacts,
+          selectedAgent: null,
+          selectedCorrelationId: null,
+          selectedOperation: null,
+          workflow: null,
+          correlation: null,
+          onSelectAgent,
+          onSelectCorrelation
+        })}
+      />
+    );
+
+    const collectorSupervisionSection = screen.getByRole('heading', { name: 'Collector Supervision' }).closest('section');
+    const sharedMemorySection = screen.getByRole('heading', { name: 'Shared Memory' }).closest('section');
+    expect(collectorSupervisionSection).not.toBeNull();
+    expect(sharedMemorySection).not.toBeNull();
+
+    const crewOverviewArtifactRecord = within(sharedMemorySection!).getByText(`Ref · ${tmuxArtifactRef}`).closest('li');
+    expect(crewOverviewArtifactRecord).not.toBeNull();
+    expect(
+      within(collectorSupervisionSection!).getByRole('button', {
+        name: `Jump to shared memory artifact ${tmuxArtifactRef} ${tmuxPreviewLabel}`
+      })
+    ).toHaveTextContent(tmuxPreviewLabel);
+    expect(collectorSupervisionSection).toHaveTextContent(`Tmux preview · ${tmuxPreviewLabel}`);
+
+    await user.click(
+      within(collectorSupervisionSection!).getByRole('button', {
+        name: `Jump to shared memory artifact ${tmuxArtifactRef} ${tmuxPreviewLabel}`
+      })
+    );
+
+    expect(document.activeElement).toBe(crewOverviewArtifactRecord);
+    expect(onSelectAgent).not.toHaveBeenCalled();
+    expect(onSelectCorrelation).not.toHaveBeenCalled();
+
+    unmount();
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          collectorSnapshot,
+          memoryArtifacts,
+          onSelectAgent,
+          onSelectCorrelation
+        })}
+      />
+    );
+
+    const collectorObservationSection = screen.getByRole('heading', { name: 'Collector Observation' }).closest('section');
+    const selectedArtifactRecord = within(screen.getByRole('heading', { name: 'Shared Memory' }).closest('section')!).getByText(
+      `Ref · ${tmuxArtifactRef}`
+    ).closest('li');
+    expect(collectorObservationSection).not.toBeNull();
+    expect(selectedArtifactRecord).not.toBeNull();
+    expect(
+      within(collectorObservationSection!).getByRole('button', {
+        name: `Jump to shared memory artifact ${tmuxArtifactRef} ${tmuxPreviewLabel}`
+      })
+    ).toHaveTextContent(tmuxPreviewLabel);
+    expect(collectorObservationSection).toHaveTextContent(`Tmux preview · ${tmuxPreviewLabel}`);
+
+    await user.click(
+      within(collectorObservationSection!).getByRole('button', {
+        name: `Jump to shared memory artifact ${tmuxArtifactRef} ${tmuxPreviewLabel}`
+      })
+    );
+
+    expect(document.activeElement).toBe(selectedArtifactRecord);
+    expect(onSelectAgent).not.toHaveBeenCalled();
+    expect(onSelectCorrelation).not.toHaveBeenCalled();
+  });
+
+  it('prefers the stable tmux evidence ref when the latest collector preview session name diverges from session_ref', async () => {
+    const user = userEvent.setup();
+    const onSelectAgent = vi.fn();
+    const onSelectCorrelation = vi.fn();
+    const tmuxArtifactRef = 'tmux://5-web3-app-engineering/0.1';
+    const tmuxPreviewLabel = 'pnpm test · 2026-03-16T08:58:30.000Z';
+    const baseCollectorSnapshot = buildCollectorSnapshot();
+    const baseCollectorItem = baseCollectorSnapshot.items[0];
+    const collectorSnapshot: CollectorSnapshot = {
+      ...baseCollectorSnapshot,
+      items: [
+        {
+          ...baseCollectorItem,
+          session_ref: '5-web3-app-engineering',
+          evidence_refs: [tmuxArtifactRef],
+          tmux_observations: [
+            {
+              session_name: 'app-engineering',
+              window_index: '0',
+              pane_index: '1',
+              pane_id: '%11',
+              pane_title: 'tests',
+              pane_current_command: 'pnpm test',
+              pane_active: true,
+              pane_dead: false,
+              pane_activity_at: '2026-03-16T08:58:30.000Z'
+            }
+          ]
+        }
+      ]
+    };
+    const memoryArtifacts: MemoryArtifactIndex = {
+      generated_at: '2026-03-16T09:00:00.000Z',
+      items: [
+        ...buildMemoryArtifacts().items,
+        {
+          artifact_ref: tmuxArtifactRef,
+          artifact_kind: 'tmux_observation',
+          file_name: '5-web3-app-engineering/0.1',
+          first_seen_at: '2026-03-16T08:58:30.000Z',
+          last_seen_at: '2026-03-16T08:58:30.000Z',
+          mention_count: 1,
+          agent_ids: ['app-engineering'],
+          correlation_ids: ['corr-app-review'],
+          source_kinds: ['collector_snapshot'],
+          latest_summary: 'Collector preview tmux pane',
+          latest_event_type: 'collector_snapshot_written',
+          collector_last_modified_at: '2026-03-16T08:58:30.000Z'
+        }
+      ]
+    };
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          collectorSnapshot,
+          memoryArtifacts,
+          onSelectAgent,
+          onSelectCorrelation
+        })}
+      />
+    );
+
+    const collectorObservationSection = screen.getByRole('heading', { name: 'Collector Observation' }).closest('section');
+    const selectedArtifactRecord = within(screen.getByRole('heading', { name: 'Shared Memory' }).closest('section')!).getByText(
+      `Ref · ${tmuxArtifactRef}`
+    ).closest('li');
+    expect(collectorObservationSection).not.toBeNull();
+    expect(selectedArtifactRecord).not.toBeNull();
+    expect(
+      within(collectorObservationSection!).getByRole('button', {
+        name: `Jump to shared memory artifact ${tmuxArtifactRef} ${tmuxPreviewLabel}`
+      })
+    ).toHaveTextContent(tmuxPreviewLabel);
+    expect(
+      within(collectorObservationSection!).queryByRole('button', {
+        name: `Jump to shared memory artifact tmux://app-engineering/0.1 ${tmuxPreviewLabel}`
+      })
+    ).not.toBeInTheDocument();
+
+    await user.click(
+      within(collectorObservationSection!).getByRole('button', {
+        name: `Jump to shared memory artifact ${tmuxArtifactRef} ${tmuxPreviewLabel}`
+      })
+    );
+
+    expect(document.activeElement).toBe(selectedArtifactRecord);
+    expect(onSelectAgent).not.toHaveBeenCalled();
+    expect(onSelectCorrelation).not.toHaveBeenCalled();
+  });
+
+  it('falls back to a single stable tmux evidence ref when the latest collector preview loses pane coordinates', async () => {
+    const user = userEvent.setup();
+    const onSelectAgent = vi.fn();
+    const onSelectCorrelation = vi.fn();
+    const tmuxArtifactRef = 'tmux://5-web3-app-engineering/0.1';
+    const tmuxPreviewLabel = 'pnpm test · 2026-03-16T08:58:30.000Z';
+    const baseCollectorSnapshot = buildCollectorSnapshot();
+    const baseCollectorItem = baseCollectorSnapshot.items[0];
+    const collectorSnapshot: CollectorSnapshot = {
+      ...baseCollectorSnapshot,
+      items: [
+        {
+          ...baseCollectorItem,
+          session_ref: '5-web3-app-engineering',
+          evidence_refs: [tmuxArtifactRef],
+          tmux_observations: [
+            {
+              session_name: '5-web3-app-engineering',
+              window_index: 'null',
+              pane_index: 'null',
+              pane_id: '%11',
+              pane_title: 'tests',
+              pane_current_command: 'pnpm test',
+              pane_active: true,
+              pane_dead: false,
+              pane_activity_at: '2026-03-16T08:58:30.000Z'
+            }
+          ]
+        }
+      ]
+    };
+    const memoryArtifacts: MemoryArtifactIndex = {
+      generated_at: '2026-03-16T09:00:00.000Z',
+      items: [
+        ...buildMemoryArtifacts().items,
+        {
+          artifact_ref: tmuxArtifactRef,
+          artifact_kind: 'tmux_observation',
+          file_name: '5-web3-app-engineering/0.1',
+          first_seen_at: '2026-03-16T08:58:30.000Z',
+          last_seen_at: '2026-03-16T08:58:30.000Z',
+          mention_count: 1,
+          agent_ids: ['app-engineering'],
+          correlation_ids: ['corr-app-review'],
+          source_kinds: ['collector_snapshot'],
+          latest_summary: 'Collector preview tmux pane',
+          latest_event_type: 'collector_snapshot_written',
+          collector_last_modified_at: '2026-03-16T08:58:30.000Z'
+        }
+      ]
+    };
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          collectorSnapshot,
+          memoryArtifacts,
+          onSelectAgent,
+          onSelectCorrelation
+        })}
+      />
+    );
+
+    const collectorObservationSection = screen.getByRole('heading', { name: 'Collector Observation' }).closest('section');
+    const selectedArtifactRecord = within(screen.getByRole('heading', { name: 'Shared Memory' }).closest('section')!).getByText(
+      `Ref · ${tmuxArtifactRef}`
+    ).closest('li');
+    expect(collectorObservationSection).not.toBeNull();
+    expect(selectedArtifactRecord).not.toBeNull();
+    expect(
+      within(collectorObservationSection!).getByRole('button', {
+        name: `Jump to shared memory artifact ${tmuxArtifactRef} ${tmuxPreviewLabel}`
+      })
+    ).toHaveTextContent(tmuxPreviewLabel);
+    expect(collectorObservationSection).toHaveTextContent(`Tmux preview · ${tmuxPreviewLabel}`);
+
+    await user.click(
+      within(collectorObservationSection!).getByRole('button', {
+        name: `Jump to shared memory artifact ${tmuxArtifactRef} ${tmuxPreviewLabel}`
+      })
+    );
+
+    expect(document.activeElement).toBe(selectedArtifactRecord);
+    expect(onSelectAgent).not.toHaveBeenCalled();
+    expect(onSelectCorrelation).not.toHaveBeenCalled();
+  });
+
+  it('falls back to a single stable tmux evidence ref when only one pane coordinate degrades', async () => {
+    const user = userEvent.setup();
+    const onSelectAgent = vi.fn();
+    const onSelectCorrelation = vi.fn();
+    const tmuxArtifactRef = 'tmux://5-web3-app-engineering/0.1';
+    const tmuxPreviewLabel = 'pnpm test · 2026-03-16T08:58:30.000Z';
+    const baseCollectorSnapshot = buildCollectorSnapshot();
+    const baseCollectorItem = baseCollectorSnapshot.items[0];
+    const collectorSnapshot: CollectorSnapshot = {
+      ...baseCollectorSnapshot,
+      items: [
+        {
+          ...baseCollectorItem,
+          session_ref: '5-web3-app-engineering',
+          evidence_refs: [tmuxArtifactRef],
+          tmux_observations: [
+            {
+              session_name: '5-web3-app-engineering',
+              window_index: '0',
+              pane_index: 'null',
+              pane_id: '%11',
+              pane_title: 'tests',
+              pane_current_command: 'pnpm test',
+              pane_active: true,
+              pane_dead: false,
+              pane_activity_at: '2026-03-16T08:58:30.000Z'
+            }
+          ]
+        }
+      ]
+    };
+    const memoryArtifacts: MemoryArtifactIndex = {
+      generated_at: '2026-03-16T09:00:00.000Z',
+      items: [
+        ...buildMemoryArtifacts().items,
+        {
+          artifact_ref: tmuxArtifactRef,
+          artifact_kind: 'tmux_observation',
+          file_name: '5-web3-app-engineering/0.1',
+          first_seen_at: '2026-03-16T08:58:30.000Z',
+          last_seen_at: '2026-03-16T08:58:30.000Z',
+          mention_count: 1,
+          agent_ids: ['app-engineering'],
+          correlation_ids: ['corr-app-review'],
+          source_kinds: ['collector_snapshot'],
+          latest_summary: 'Collector preview tmux pane',
+          latest_event_type: 'collector_snapshot_written',
+          collector_last_modified_at: '2026-03-16T08:58:30.000Z'
+        }
+      ]
+    };
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          collectorSnapshot,
+          memoryArtifacts,
+          onSelectAgent,
+          onSelectCorrelation
+        })}
+      />
+    );
+
+    const collectorObservationSection = screen.getByRole('heading', { name: 'Collector Observation' }).closest('section');
+    const selectedArtifactRecord = within(screen.getByRole('heading', { name: 'Shared Memory' }).closest('section')!).getByText(
+      `Ref · ${tmuxArtifactRef}`
+    ).closest('li');
+    expect(collectorObservationSection).not.toBeNull();
+    expect(selectedArtifactRecord).not.toBeNull();
+    expect(
+      within(collectorObservationSection!).getByRole('button', {
+        name: `Jump to shared memory artifact ${tmuxArtifactRef} ${tmuxPreviewLabel}`
+      })
+    ).toHaveTextContent(tmuxPreviewLabel);
+    expect(collectorObservationSection).toHaveTextContent(`Tmux preview · ${tmuxPreviewLabel}`);
+
+    await user.click(
+      within(collectorObservationSection!).getByRole('button', {
+        name: `Jump to shared memory artifact ${tmuxArtifactRef} ${tmuxPreviewLabel}`
+      })
+    );
+
+    expect(document.activeElement).toBe(selectedArtifactRecord);
+    expect(onSelectAgent).not.toHaveBeenCalled();
+    expect(onSelectCorrelation).not.toHaveBeenCalled();
+  });
+
+  it('keeps collector tmux previews as plain text when no matching shared-memory artifact exists', () => {
+    const tmuxArtifactRef = 'tmux://5-web3-app-engineering/0.1';
+    const tmuxPreviewLabel = 'pnpm test · 2026-03-16T08:58:30.000Z';
+    const baseCollectorSnapshot = buildCollectorSnapshot();
+    const baseCollectorItem = baseCollectorSnapshot.items[0];
+    const collectorSnapshot: CollectorSnapshot = {
+      ...baseCollectorSnapshot,
+      items: [
+        {
+          ...baseCollectorItem,
+          session_ref: '5-web3-app-engineering',
+          tmux_observations: [
+            {
+              session_name: '5-web3-app-engineering',
+              window_index: '0',
+              pane_index: '1',
+              pane_id: '%11',
+              pane_title: 'tests',
+              pane_current_command: 'pnpm test',
+              pane_active: true,
+              pane_dead: false,
+              pane_activity_at: '2026-03-16T08:58:30.000Z'
+            }
+          ]
+        }
+      ]
+    };
+
+    const { unmount } = render(
+      <DetailsPanel
+        {...buildProps({
+          collectorSnapshot,
+          selectedAgent: null,
+          selectedCorrelationId: null,
+          selectedOperation: null,
+          workflow: null,
+          correlation: null
+        })}
+      />
+    );
+
+    const collectorSupervisionSection = screen.getByRole('heading', { name: 'Collector Supervision' }).closest('section');
+    expect(collectorSupervisionSection).not.toBeNull();
+    expect(within(collectorSupervisionSection!).getByText(`Tmux preview · ${tmuxPreviewLabel}`)).toBeVisible();
+    expect(
+      within(collectorSupervisionSection!).queryByRole('button', {
+        name: `Jump to shared memory artifact ${tmuxArtifactRef} ${tmuxPreviewLabel}`
+      })
+    ).not.toBeInTheDocument();
+
+    unmount();
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          collectorSnapshot
+        })}
+      />
+    );
+
+    const collectorObservationSection = screen.getByRole('heading', { name: 'Collector Observation' }).closest('section');
+    expect(collectorObservationSection).not.toBeNull();
+    expect(within(collectorObservationSection!).getByText(`Tmux preview · ${tmuxPreviewLabel}`)).toBeVisible();
+    expect(
+      within(collectorObservationSection!).queryByRole('button', {
+        name: `Jump to shared memory artifact ${tmuxArtifactRef} ${tmuxPreviewLabel}`
+      })
+    ).not.toBeInTheDocument();
+  });
+
   it('jumps from matching top-level correlation evidence refs to shared memory in crew overview while leaving non-matching refs as plain text', async () => {
     const user = userEvent.setup();
     const onSelectAgent = vi.fn();

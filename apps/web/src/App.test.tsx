@@ -10881,6 +10881,122 @@ afterEach(() => {
     expect(newFetchUrlsAfterJump).not.toContain(selectedCorrelationMemoryArtifactsUrl);
   });
 
+  it('jumps from matching collector tmux previews to shared memory without changing the selected agent, active correlation, or scoped request surface', async () => {
+    const tmuxArtifactRef = 'tmux://5-web3-app-engineering/0.1';
+    const tmuxPreviewLabel = 'pnpm test · 2026-03-16T08:59:10.000Z';
+    const collectorSnapshotWithTmux = {
+      ...collectorSnapshotFixture,
+      items: collectorSnapshotFixture.items.map((item) =>
+        item.agent_id === 'app-engineering'
+          ? {
+              ...item,
+              session_ref: '5-web3-app-engineering',
+              tmux_observations: [
+                {
+                  session_name: '5-web3-app-engineering',
+                  window_index: '0',
+                  pane_index: '1',
+                  pane_id: '%11',
+                  pane_title: 'tests',
+                  pane_current_command: 'pnpm test',
+                  pane_active: true,
+                  pane_dead: false,
+                  pane_activity_at: '2026-03-16T08:59:10.000Z'
+                }
+              ]
+            }
+          : item
+      )
+    };
+    const scopedMemoryArtifactsWithTmux = {
+      ...selectedCorrelationMemoryArtifactsFixture,
+      items: [
+        ...selectedCorrelationMemoryArtifactsFixture.items,
+        {
+          artifact_ref: tmuxArtifactRef,
+          artifact_kind: 'tmux_observation',
+          file_name: '5-web3-app-engineering/0.1',
+          first_seen_at: '2026-03-16T08:59:10.000Z',
+          last_seen_at: '2026-03-16T08:59:10.000Z',
+          mention_count: 1,
+          agent_ids: ['app-engineering'],
+          correlation_ids: ['corr-app-review'],
+          source_kinds: ['collector_snapshot'],
+          latest_summary: 'Collector observed tmux test pane for the active review scope',
+          latest_event_type: 'collector_snapshot_written',
+          collector_last_modified_at: '2026-03-16T08:59:10.000Z'
+        }
+      ]
+    };
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === collectorSnapshotUrl) {
+          return jsonResponse({ item: collectorSnapshotWithTmux });
+        }
+
+        if (url === appEngineeringMemoryArtifactsUrl || url === selectedCorrelationMemoryArtifactsUrl) {
+          return jsonResponse(scopedMemoryArtifactsWithTmux);
+        }
+
+        return resolveTestFetchResponse(url);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
+
+    const collectorSection = await within(details).findByRole('heading', { name: 'Collector Observation' });
+    const collectorContainer = collectorSection.closest('section');
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    const memorySection = within(details).getByRole('heading', { name: 'Shared Memory' }).closest('section');
+    expect(collectorContainer).not.toBeNull();
+    expect(correlationSection).not.toBeNull();
+    expect(memorySection).not.toBeNull();
+
+    const tmuxArtifactRecord = within(memorySection!).getByText(`Ref · ${tmuxArtifactRef}`).closest('li');
+    expect(tmuxArtifactRecord).not.toBeNull();
+    expect(within(memorySection!).getByText('Request scope · app-engineering · corr-app-review')).toBeVisible();
+    expect(collectorContainer).toHaveTextContent(`Tmux preview · ${tmuxPreviewLabel}`);
+    expect(
+      within(collectorContainer!).getByRole('button', {
+        name: `Jump to shared memory artifact ${tmuxArtifactRef} ${tmuxPreviewLabel}`
+      })
+    ).toBeVisible();
+
+    await waitFor(() => {
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+    });
+
+    const fetchCallCountBeforeJump = vi.mocked(globalThis.fetch).mock.calls.length;
+
+    await user.click(
+      within(collectorContainer!).getByRole('button', {
+        name: `Jump to shared memory artifact ${tmuxArtifactRef} ${tmuxPreviewLabel}`
+      })
+    );
+
+    expect(document.activeElement).toBe(tmuxArtifactRecord);
+    expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+    expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+    expect(within(memorySection!).getByText('Request scope · app-engineering · corr-app-review')).toBeVisible();
+
+    const newFetchUrlsAfterJump = vi
+      .mocked(globalThis.fetch)
+      .mock.calls.slice(fetchCallCountBeforeJump)
+      .map(([input]) => (typeof input === 'string' ? input : input.toString()));
+    expect(newFetchUrlsAfterJump).not.toContain(workflowUrl);
+    expect(newFetchUrlsAfterJump).not.toContain(correlationUrl);
+    expect(newFetchUrlsAfterJump).not.toContain(appEngineeringMemoryArtifactsUrl);
+    expect(newFetchUrlsAfterJump).not.toContain(selectedCorrelationMemoryArtifactsUrl);
+  });
+
   it('preserves the active selected-agent correlation when pivoting through the collector observation watch target', async () => {
     const user = userEvent.setup();
     render(<App />);

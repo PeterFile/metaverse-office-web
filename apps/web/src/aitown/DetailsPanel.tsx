@@ -698,6 +698,65 @@ function renderTmuxObservationPreview(observation: CollectorTmuxObservation) {
   return observation.pane_activity_at ? `${previewLabel} · ${observation.pane_activity_at}` : previewLabel;
 }
 
+function normalizeCollectorTmuxCoordinate(value: string | null | undefined) {
+  const normalized = `${value ?? ''}`.trim();
+  return normalized && normalized !== 'null' && normalized !== 'undefined' ? normalized : null;
+}
+
+function isValidCollectorTmuxArtifactRef(ref: string | null | undefined) {
+  if (typeof ref !== 'string' || !ref.startsWith('tmux://')) {
+    return false;
+  }
+
+  const coordinateMatch = ref.match(/^tmux:\/\/.+\/([^/.]+)\.([^/.]+)$/);
+  if (!coordinateMatch) {
+    return true;
+  }
+
+  const [, windowIndex, paneIndex] = coordinateMatch;
+  return windowIndex !== 'null' && windowIndex !== 'undefined' && paneIndex !== 'null' && paneIndex !== 'undefined';
+}
+
+function deriveCollectorTmuxArtifactRef(item: CollectorItem, observation: CollectorTmuxObservation | null) {
+  const stableTmuxRefs = item.evidence_refs.filter((ref) => isValidCollectorTmuxArtifactRef(ref));
+
+  if (observation) {
+    const windowIndex = normalizeCollectorTmuxCoordinate(observation.window_index);
+    const paneIndex = normalizeCollectorTmuxCoordinate(observation.pane_index);
+
+    if (windowIndex && paneIndex) {
+      const candidateSessionRefs = [item.session_ref, observation.session_name].filter(
+        (value, index, values): value is string => Boolean(value) && values.indexOf(value) === index
+      );
+
+      for (const sessionRef of candidateSessionRefs) {
+        const exactRef = `tmux://${sessionRef}/${windowIndex}.${paneIndex}`;
+        const stableRef = stableTmuxRefs.find((ref) => ref === exactRef);
+        if (stableRef) {
+          return stableRef;
+        }
+      }
+
+      if (candidateSessionRefs.length > 0) {
+        return `tmux://${candidateSessionRefs[0]}/${windowIndex}.${paneIndex}`;
+      }
+    }
+
+    if (stableTmuxRefs.length === 1) {
+      return stableTmuxRefs[0] ?? null;
+    }
+
+    if (observation.pane_id) {
+      const paneIdRef = `tmux://${observation.pane_id}`;
+      return stableTmuxRefs.find((ref) => ref === paneIdRef) ?? paneIdRef;
+    }
+
+    return null;
+  }
+
+  return stableTmuxRefs.length === 1 ? stableTmuxRefs[0] ?? null : null;
+}
+
 function renderCollectorProvenancePreview({
   item,
   sharedMemoryArtifactRefs,
@@ -710,6 +769,8 @@ function renderCollectorProvenancePreview({
   const latestWorkspaceObservation = selectLatestWorkspaceObservation(item.workspace_observations);
   const latestTmuxObservation = selectLatestTmuxObservation(item.tmux_observations);
   const workspacePreviewLabel = latestWorkspaceObservation ? renderWorkspaceObservationPreview(latestWorkspaceObservation) : 'None';
+  const tmuxPreviewLabel = latestTmuxObservation ? renderTmuxObservationPreview(latestTmuxObservation) : 'None';
+  const tmuxArtifactRef = deriveCollectorTmuxArtifactRef(item, latestTmuxObservation);
 
   return (
     <>
@@ -728,7 +789,18 @@ function renderCollectorProvenancePreview({
             })
           : 'None'}
       </span>
-      <span>{`Tmux preview · ${latestTmuxObservation ? renderTmuxObservationPreview(latestTmuxObservation) : 'None'}`}</span>
+      <span>
+        Tmux preview ·{' '}
+        {latestTmuxObservation && tmuxArtifactRef
+          ? renderSharedMemoryArtifactJump({
+              artifactRef: tmuxArtifactRef,
+              label: tmuxPreviewLabel,
+              sharedMemoryArtifactRefs,
+              onJump,
+              ariaLabelSuffix: tmuxPreviewLabel
+            })
+          : tmuxPreviewLabel}
+      </span>
     </>
   );
 }

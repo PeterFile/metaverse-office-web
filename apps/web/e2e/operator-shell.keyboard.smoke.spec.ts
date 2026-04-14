@@ -8131,6 +8131,70 @@ test.describe('operator shell smoke', () => {
     await expect(correlationSection.getByText('Counts · 0 incidents · 1 interactions · 2 events')).toBeVisible();
   });
 
+  test('shows the selected-agent workflow loading state explicitly before surfacing the first workflow failure', async ({
+    page
+  }) => {
+    let releaseSelectedWorkflow: (() => void) | null = null;
+    const selectedWorkflowPath = '/agents/app-engineering/workflow?limit=10&window=60m';
+    const selectedWorkflowRequests: string[] = [];
+
+    await page.route('**/agents/app-engineering/workflow?limit=10&window=60m', async (route) => {
+      const url = new URL(route.request().url());
+      selectedWorkflowRequests.push(`${url.pathname}${url.search}`);
+
+      if (selectedWorkflowRequests.length === 1) {
+        await new Promise<void>((resolve) => {
+          releaseSelectedWorkflow = resolve;
+        });
+      }
+
+      await route.fulfill({
+        status: 500,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          error: 'internal_error',
+          details: 'workflow request failed'
+        })
+      });
+    });
+
+    await page.goto('/');
+    await expect(page.getByText('Metaverse Office operator shell')).toBeVisible();
+    await page.getByRole('button', { name: 'Open Hub' }).click();
+
+    const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
+    const inspectButton = detailsPanel.getByRole('button', {
+      name: 'Inspect App Engineering Agent',
+      exact: true
+    });
+
+    await focusHubControlWithTab(page, inspectButton, 'Inspect App Engineering Agent');
+    await expect(inspectButton).toBeFocused();
+    await page.keyboard.press('Enter');
+
+    const workflowSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Workflow' })
+    });
+
+    await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+    await expect(page.getByText('Metaverse Office operator shell')).toBeVisible();
+    await expect(workflowSection.getByText('Loading workflow...')).toBeVisible();
+    await expect(workflowSection.getByText(/Unable to load workflow\./)).toHaveCount(0);
+    await expect(workflowSection.getByText('No open watch alerts.')).toHaveCount(0);
+    await expect(workflowSection.getByText('Latest heartbeat')).toHaveCount(0);
+    await expect.poll(() => selectedWorkflowRequests.filter((request) => request === selectedWorkflowPath).length).toBe(1);
+
+    expect(releaseSelectedWorkflow).not.toBeNull();
+    releaseSelectedWorkflow!();
+
+    await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+    await expect(page.getByText('Metaverse Office operator shell')).toBeVisible();
+    await expect(workflowSection.getByText('Unable to load workflow. workflow request failed')).toBeVisible();
+    await expect(workflowSection.getByText('Loading workflow...')).toHaveCount(0);
+    await expect(workflowSection.getByText('No open watch alerts.')).toHaveCount(0);
+    await expect(workflowSection.getByText('Latest heartbeat')).toHaveCount(0);
+  });
+
   test('keeps selected-agent workflow details pinned when a refresh-only workflow 404 arrives before overview drops the agent', async ({ page }) => {
     await installFastPollInterval(page);
 

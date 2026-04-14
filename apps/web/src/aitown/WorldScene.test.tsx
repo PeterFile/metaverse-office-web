@@ -980,6 +980,1430 @@ describe('WorldScene watch overlay caption gating', () => {
     expect(centerAfterPaddingChange.x).not.toBeCloseTo(expectedFollowCenterX, 4);
   });
 
+  it('preserves a portrait selected-watch manual view across clear and reselect of the same agent', async () => {
+    appInitMock.mockReset().mockResolvedValue(undefined);
+    vi.mocked(loadAiTownAssets).mockResolvedValue(makeAssets());
+
+    const scene = makeWideSelectedAgentScene();
+    const clearedScene = {
+      ...scene,
+      selectedAgentId: null,
+      agents: scene.agents.map((agent) => ({
+        ...agent,
+        selected: false
+      }))
+    } satisfies AiTownSceneModel;
+    const selectedAgent = scene.agents.find((agent) => agent.agentId === scene.selectedAgentId);
+    const { container, rerender } = render(
+      <main className="aitown-shell">
+        <section className="aitown-panel aitown-panel--game">
+          <WorldScene scene={scene} onSelectAgent={vi.fn()} />
+        </section>
+      </main>
+    );
+
+    expect(selectedAgent).toBeDefined();
+
+    const host = container.querySelector('.aitown-world__host');
+    expect(host).toBeInstanceOf(HTMLDivElement);
+    (host as HTMLDivElement).setPointerCapture = vi.fn();
+    (host as HTMLDivElement).releasePointerCapture = vi.fn();
+    (host as HTMLDivElement).hasPointerCapture = vi.fn(() => true);
+    setElementRect(host as HTMLDivElement, { left: 0, top: 0, width: 390, height: 844 });
+
+    const selectedWatchOverlay = await screen.findByRole('region', { name: 'Selected watch links' });
+    setElementRect(selectedWatchOverlay, { left: 150, top: 120, width: 240, height: 220 });
+    act(() => {
+      MockResizeObserver.triggerAll();
+    });
+
+    await waitFor(() => {
+      expect(readViewportInspector()?.read().clampPadding).toEqual({
+        top: 0,
+        right: 240
+      });
+    });
+
+    const initialCenter = readViewportCenter();
+    fireEvent.pointerDown(host as HTMLDivElement, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      button: 0,
+      buttons: 1,
+      clientX: 195,
+      clientY: 420
+    });
+    fireEvent.pointerMove(host as HTMLDivElement, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      buttons: 1,
+      clientX: 125,
+      clientY: 420
+    });
+    fireEvent.pointerUp(host as HTMLDivElement, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      button: 0,
+      clientX: 125,
+      clientY: 420
+    });
+
+    const manualCenter = readViewportCenter();
+    expect(manualCenter.x).not.toBeCloseTo(initialCenter.x, 4);
+
+    rerender(
+      <main className="aitown-shell">
+        <section className="aitown-panel aitown-panel--game">
+          <WorldScene scene={clearedScene} onSelectAgent={vi.fn()} />
+        </section>
+      </main>
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByRole('region', { name: 'Selected watch links' })).not.toBeInTheDocument();
+      expect(readViewportInspector()?.read().clampPadding).toEqual({
+        top: 0,
+        right: 0
+      });
+      expect(readViewportCenter().x).toBeCloseTo(manualCenter.x, 4);
+    });
+
+    rerender(
+      <main className="aitown-shell">
+        <section className="aitown-panel aitown-panel--game">
+          <WorldScene scene={{ ...clearedScene }} onSelectAgent={vi.fn()} />
+        </section>
+      </main>
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByRole('region', { name: 'Selected watch links' })).not.toBeInTheDocument();
+      expect(readViewportCenter().x).toBeCloseTo(manualCenter.x, 4);
+      expect(readViewportCenter().y).toBeCloseTo(manualCenter.y, 4);
+    });
+
+    rerender(
+      <main className="aitown-shell">
+        <section className="aitown-panel aitown-panel--game">
+          <WorldScene scene={{ ...scene }} onSelectAgent={vi.fn()} />
+        </section>
+      </main>
+    );
+
+    const reselectedWatchOverlay = await screen.findByRole('region', { name: 'Selected watch links' });
+    setElementRect(reselectedWatchOverlay, { left: 150, top: 120, width: 240, height: 220 });
+    act(() => {
+      MockResizeObserver.triggerAll();
+    });
+
+    await waitFor(() => {
+      expect(readViewportInspector()?.read().clampPadding).toEqual({
+        top: 0,
+        right: 240
+      });
+    });
+
+    const inspection = readViewportInspector()?.read();
+    const reselectedCenter = readViewportCenter();
+    const expectedFollowCenterX = (selectedAgent?.position.x ?? 0) + (inspection?.clampPadding.right ?? 0) / ((inspection?.scale ?? 1) * 2);
+
+    expect(reselectedCenter.x).toBeCloseTo(manualCenter.x, 4);
+    expect(reselectedCenter.y).toBeCloseTo(manualCenter.y, 4);
+    expect(reselectedCenter.x).not.toBeCloseTo(expectedFollowCenterX, 4);
+  });
+
+  it('preserves a portrait selected-watch manual view when clearing before clamp padding sync completes', async () => {
+    appInitMock.mockReset().mockResolvedValue(undefined);
+    vi.mocked(loadAiTownAssets).mockResolvedValue(makeAssets());
+
+    const scene = makeWideSelectedAgentScene();
+    const clearedScene = {
+      ...scene,
+      selectedAgentId: null,
+      agents: scene.agents.map((agent) => ({
+        ...agent,
+        selected: false
+      }))
+    } satisfies AiTownSceneModel;
+    const selectedAgent = scene.agents.find((agent) => agent.agentId === scene.selectedAgentId);
+    const { container, rerender } = render(
+      <main className="aitown-shell">
+        <section className="aitown-panel aitown-panel--game">
+          <WorldScene scene={scene} onSelectAgent={vi.fn()} />
+        </section>
+      </main>
+    );
+
+    expect(selectedAgent).toBeDefined();
+
+    const host = container.querySelector('.aitown-world__host');
+    expect(host).toBeInstanceOf(HTMLDivElement);
+    (host as HTMLDivElement).setPointerCapture = vi.fn();
+    (host as HTMLDivElement).releasePointerCapture = vi.fn();
+    (host as HTMLDivElement).hasPointerCapture = vi.fn(() => true);
+    setElementRect(host as HTMLDivElement, { left: 0, top: 0, width: 390, height: 844 });
+
+    await screen.findByRole('region', { name: 'Selected watch links' });
+    await waitFor(() => {
+      expect(readViewportInspector()?.read().clampPadding).toEqual({
+        top: 0,
+        right: 0
+      });
+    });
+
+    const initialCenter = readViewportCenter();
+    fireEvent.pointerDown(host as HTMLDivElement, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      button: 0,
+      buttons: 1,
+      clientX: 195,
+      clientY: 420
+    });
+    fireEvent.pointerMove(host as HTMLDivElement, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      buttons: 1,
+      clientX: 125,
+      clientY: 420
+    });
+    fireEvent.pointerUp(host as HTMLDivElement, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      button: 0,
+      clientX: 125,
+      clientY: 420
+    });
+
+    const manualCenter = readViewportCenter();
+    expect(manualCenter.x).not.toBeCloseTo(initialCenter.x, 4);
+
+    rerender(
+      <main className="aitown-shell">
+        <section className="aitown-panel aitown-panel--game">
+          <WorldScene scene={clearedScene} onSelectAgent={vi.fn()} />
+        </section>
+      </main>
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByRole('region', { name: 'Selected watch links' })).not.toBeInTheDocument();
+      expect(readViewportCenter().x).toBeCloseTo(manualCenter.x, 4);
+      expect(readViewportCenter().y).toBeCloseTo(manualCenter.y, 4);
+    });
+
+    rerender(
+      <main className="aitown-shell">
+        <section className="aitown-panel aitown-panel--game">
+          <WorldScene scene={{ ...scene }} onSelectAgent={vi.fn()} />
+        </section>
+      </main>
+    );
+
+    const reselectedWatchOverlay = await screen.findByRole('region', { name: 'Selected watch links' });
+    setElementRect(reselectedWatchOverlay, { left: 150, top: 120, width: 240, height: 220 });
+    act(() => {
+      MockResizeObserver.triggerAll();
+    });
+
+    await waitFor(() => {
+      expect(readViewportInspector()?.read().clampPadding).toEqual({
+        top: 0,
+        right: 240
+      });
+    });
+
+    const inspection = readViewportInspector()?.read();
+    const reselectedCenter = readViewportCenter();
+    const expectedFollowCenterX = (selectedAgent?.position.x ?? 0) + (inspection?.clampPadding.right ?? 0) / ((inspection?.scale ?? 1) * 2);
+
+    expect(reselectedCenter.x).toBeCloseTo(manualCenter.x, 4);
+    expect(reselectedCenter.y).toBeCloseTo(manualCenter.y, 4);
+    expect(reselectedCenter.x).not.toBeCloseTo(expectedFollowCenterX, 4);
+  });
+
+  it('recenters when deselected right-side safe-area contributors change after a quick clear before watch clamp sync', async () => {
+    appInitMock.mockReset().mockResolvedValue(undefined);
+    vi.mocked(loadAiTownAssets).mockResolvedValue(makeAssets());
+
+    const scene = makeWideSelectedAgentScene();
+    const clearedScene = {
+      ...scene,
+      selectedAgentId: null,
+      agents: scene.agents.map((agent) => ({
+        ...agent,
+        selected: false
+      }))
+    } satisfies AiTownSceneModel;
+    const selectedAgent = scene.agents.find((agent) => agent.agentId === scene.selectedAgentId);
+    const { container, rerender } = render(
+      <main className="aitown-shell">
+        <div className="aitown-shell__stats">Stats</div>
+        <section className="aitown-panel aitown-panel--game">
+          <WorldScene scene={scene} onSelectAgent={vi.fn()} />
+        </section>
+      </main>
+    );
+
+    expect(selectedAgent).toBeDefined();
+
+    const host = container.querySelector('.aitown-world__host');
+    const stats = container.querySelector('.aitown-shell__stats');
+    expect(host).toBeInstanceOf(HTMLDivElement);
+    expect(stats).toBeInstanceOf(HTMLElement);
+    (host as HTMLDivElement).setPointerCapture = vi.fn();
+    (host as HTMLDivElement).releasePointerCapture = vi.fn();
+    (host as HTMLDivElement).hasPointerCapture = vi.fn(() => true);
+    setElementRect(host as HTMLDivElement, { left: 0, top: 0, width: 390, height: 844 });
+    setElementRect(stats as HTMLElement, { left: 390, top: 80, width: 0, height: 140 });
+
+    await screen.findByRole('region', { name: 'Selected watch links' });
+    await waitFor(() => {
+      expect(readViewportInspector()?.read().clampPadding).toEqual({
+        top: 0,
+        right: 0
+      });
+    });
+
+    fireEvent.pointerDown(host as HTMLDivElement, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      button: 0,
+      buttons: 1,
+      clientX: 195,
+      clientY: 420
+    });
+    fireEvent.pointerMove(host as HTMLDivElement, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      buttons: 1,
+      clientX: 125,
+      clientY: 420
+    });
+    fireEvent.pointerUp(host as HTMLDivElement, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      button: 0,
+      clientX: 125,
+      clientY: 420
+    });
+
+    const manualCenter = readViewportCenter();
+
+    rerender(
+      <main className="aitown-shell">
+        <div className="aitown-shell__stats">Stats</div>
+        <section className="aitown-panel aitown-panel--game">
+          <WorldScene scene={clearedScene} onSelectAgent={vi.fn()} />
+        </section>
+      </main>
+    );
+
+    setElementRect(stats as HTMLElement, { left: 110, top: 80, width: 280, height: 140 });
+    act(() => {
+      MockResizeObserver.triggerAll();
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByRole('region', { name: 'Selected watch links' })).not.toBeInTheDocument();
+      expect(readViewportCenter().x).toBeCloseTo(manualCenter.x, 4);
+      expect(readViewportInspector()?.read().clampPadding).toEqual({
+        top: 0,
+        right: 280
+      });
+    });
+
+    rerender(
+      <main className="aitown-shell">
+        <div className="aitown-shell__stats">Stats</div>
+        <section className="aitown-panel aitown-panel--game">
+          <WorldScene scene={{ ...scene }} onSelectAgent={vi.fn()} />
+        </section>
+      </main>
+    );
+
+    const reselectedWatchOverlay = await screen.findByRole('region', { name: 'Selected watch links' });
+    setElementRect(stats as HTMLElement, { left: 110, top: 80, width: 280, height: 140 });
+    setElementRect(reselectedWatchOverlay, { left: 150, top: 120, width: 240, height: 220 });
+    act(() => {
+      MockResizeObserver.triggerAll();
+    });
+
+    await waitFor(() => {
+      expect(readViewportInspector()?.read().clampPadding).toEqual({
+        top: 0,
+        right: 280
+      });
+    });
+
+    const inspection = readViewportInspector()?.read();
+    const reselectedCenter = readViewportCenter();
+    const expectedFollowCenterX = (selectedAgent?.position.x ?? 0) + (inspection?.clampPadding.right ?? 0) / ((inspection?.scale ?? 1) * 2);
+
+    expect(reselectedCenter.x).toBeCloseTo(expectedFollowCenterX, 4);
+    expect(reselectedCenter.y).toBeCloseTo(selectedAgent?.position.y ?? 0, 4);
+    expect(reselectedCenter.x).not.toBeCloseTo(manualCenter.x, 4);
+  });
+
+  it('preserves a deselected manual pose after dragging again following a deselected layout change before reselecting the same selected-watch agent', async () => {
+    appInitMock.mockReset().mockResolvedValue(undefined);
+    vi.mocked(loadAiTownAssets).mockResolvedValue(makeAssets());
+
+    const scene = makeWideSelectedAgentScene();
+    const clearedScene = {
+      ...scene,
+      selectedAgentId: null,
+      agents: scene.agents.map((agent) => ({
+        ...agent,
+        selected: false
+      }))
+    } satisfies AiTownSceneModel;
+    const selectedAgent = scene.agents.find((agent) => agent.agentId === scene.selectedAgentId);
+    const { container, rerender } = render(
+      <main className="aitown-shell">
+        <div className="aitown-shell__stats">Stats</div>
+        <section className="aitown-panel aitown-panel--game">
+          <WorldScene scene={scene} onSelectAgent={vi.fn()} />
+        </section>
+      </main>
+    );
+
+    expect(selectedAgent).toBeDefined();
+
+    const host = container.querySelector('.aitown-world__host');
+    const stats = container.querySelector('.aitown-shell__stats');
+    expect(host).toBeInstanceOf(HTMLDivElement);
+    expect(stats).toBeInstanceOf(HTMLElement);
+    (host as HTMLDivElement).setPointerCapture = vi.fn();
+    (host as HTMLDivElement).releasePointerCapture = vi.fn();
+    (host as HTMLDivElement).hasPointerCapture = vi.fn(() => true);
+    setElementRect(host as HTMLDivElement, { left: 0, top: 0, width: 390, height: 844 });
+    setElementRect(stats as HTMLElement, { left: 390, top: 80, width: 0, height: 140 });
+
+    await screen.findByRole('region', { name: 'Selected watch links' });
+    await waitFor(() => {
+      expect(readViewportInspector()?.read().clampPadding).toEqual({
+        top: 0,
+        right: 0
+      });
+    });
+
+    fireEvent.pointerDown(host as HTMLDivElement, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      button: 0,
+      buttons: 1,
+      clientX: 195,
+      clientY: 420
+    });
+    fireEvent.pointerMove(host as HTMLDivElement, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      buttons: 1,
+      clientX: 125,
+      clientY: 420
+    });
+    fireEvent.pointerUp(host as HTMLDivElement, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      button: 0,
+      clientX: 125,
+      clientY: 420
+    });
+
+    rerender(
+      <main className="aitown-shell">
+        <div className="aitown-shell__stats">Stats</div>
+        <section className="aitown-panel aitown-panel--game">
+          <WorldScene scene={clearedScene} onSelectAgent={vi.fn()} />
+        </section>
+      </main>
+    );
+
+    setElementRect(stats as HTMLElement, { left: 110, top: 80, width: 280, height: 140 });
+    act(() => {
+      MockResizeObserver.triggerAll();
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByRole('region', { name: 'Selected watch links' })).not.toBeInTheDocument();
+      expect(readViewportInspector()?.read().clampPadding).toEqual({
+        top: 0,
+        right: 280
+      });
+    });
+
+    fireEvent.pointerDown(host as HTMLDivElement, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      button: 0,
+      buttons: 1,
+      clientX: 195,
+      clientY: 420
+    });
+    fireEvent.pointerMove(host as HTMLDivElement, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      buttons: 1,
+      clientX: 265,
+      clientY: 420
+    });
+    fireEvent.pointerUp(host as HTMLDivElement, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      button: 0,
+      clientX: 265,
+      clientY: 420
+    });
+
+    const updatedManualCenter = readViewportCenter();
+
+    rerender(
+      <main className="aitown-shell">
+        <div className="aitown-shell__stats">Stats</div>
+        <section className="aitown-panel aitown-panel--game">
+          <WorldScene scene={{ ...scene }} onSelectAgent={vi.fn()} />
+        </section>
+      </main>
+    );
+
+    const reselectedWatchOverlay = await screen.findByRole('region', { name: 'Selected watch links' });
+    setElementRect(stats as HTMLElement, { left: 110, top: 80, width: 280, height: 140 });
+    setElementRect(reselectedWatchOverlay, { left: 150, top: 120, width: 240, height: 220 });
+    act(() => {
+      MockResizeObserver.triggerAll();
+    });
+
+    await waitFor(() => {
+      expect(readViewportInspector()?.read().clampPadding).toEqual({
+        top: 0,
+        right: 280
+      });
+    });
+
+    const inspection = readViewportInspector()?.read();
+    const reselectedCenter = readViewportCenter();
+    const expectedFollowCenterX = (selectedAgent?.position.x ?? 0) + (inspection?.clampPadding.right ?? 0) / ((inspection?.scale ?? 1) * 2);
+
+    expect(reselectedCenter.x).toBeCloseTo(updatedManualCenter.x, 4);
+    expect(reselectedCenter.y).toBeCloseTo(updatedManualCenter.y, 4);
+    expect(reselectedCenter.x).not.toBeCloseTo(expectedFollowCenterX, 4);
+  });
+
+  it('preserves the latest manual pose across repeated clear and reselect cycles after mounting without a selected watch overlay', async () => {
+    appInitMock.mockReset().mockResolvedValue(undefined);
+    vi.mocked(loadAiTownAssets).mockResolvedValue(makeAssets());
+
+    const selectedScene = makeWideSelectedAgentScene();
+    const clearedScene = {
+      ...selectedScene,
+      selectedAgentId: null,
+      agents: selectedScene.agents.map((agent) => ({
+        ...agent,
+        selected: false
+      }))
+    } satisfies AiTownSceneModel;
+    const { container, rerender } = render(
+      <main className="aitown-shell">
+        <section className="aitown-panel aitown-panel--game">
+          <WorldScene scene={clearedScene} onSelectAgent={vi.fn()} />
+        </section>
+      </main>
+    );
+
+    const host = container.querySelector('.aitown-world__host');
+    expect(host).toBeInstanceOf(HTMLDivElement);
+    (host as HTMLDivElement).setPointerCapture = vi.fn();
+    (host as HTMLDivElement).releasePointerCapture = vi.fn();
+    (host as HTMLDivElement).hasPointerCapture = vi.fn(() => true);
+    setElementRect(host as HTMLDivElement, { left: 0, top: 0, width: 390, height: 844 });
+
+    rerender(
+      <main className="aitown-shell">
+        <section className="aitown-panel aitown-panel--game">
+          <WorldScene scene={selectedScene} onSelectAgent={vi.fn()} />
+        </section>
+      </main>
+    );
+
+    const firstOverlay = await screen.findByRole('region', { name: 'Selected watch links' });
+    setElementRect(firstOverlay, { left: 80, top: 120, width: 240, height: 220 });
+    act(() => {
+      MockResizeObserver.triggerAll();
+    });
+
+    await waitFor(() => {
+      expect(readViewportInspector()?.read().clampPadding).toEqual({
+        top: 0,
+        right: 0
+      });
+    });
+
+    fireEvent.pointerDown(host as HTMLDivElement, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      button: 0,
+      buttons: 1,
+      clientX: 195,
+      clientY: 420
+    });
+    fireEvent.pointerMove(host as HTMLDivElement, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      buttons: 1,
+      clientX: 125,
+      clientY: 420
+    });
+    fireEvent.pointerUp(host as HTMLDivElement, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      button: 0,
+      clientX: 125,
+      clientY: 420
+    });
+
+    const firstManualCenter = readViewportCenter();
+
+    rerender(
+      <main className="aitown-shell">
+        <section className="aitown-panel aitown-panel--game">
+          <WorldScene scene={clearedScene} onSelectAgent={vi.fn()} />
+        </section>
+      </main>
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByRole('region', { name: 'Selected watch links' })).not.toBeInTheDocument();
+      expect(readViewportInspector()?.read().clampPadding).toEqual({
+        top: 0,
+        right: 0
+      });
+    });
+
+    rerender(
+      <main className="aitown-shell">
+        <section className="aitown-panel aitown-panel--game">
+          <WorldScene scene={{ ...selectedScene }} onSelectAgent={vi.fn()} />
+        </section>
+      </main>
+    );
+
+    const secondOverlay = await screen.findByRole('region', { name: 'Selected watch links' });
+    setElementRect(secondOverlay, { left: 80, top: 120, width: 240, height: 220 });
+    act(() => {
+      MockResizeObserver.triggerAll();
+    });
+
+    await waitFor(() => {
+      expect(readViewportInspector()?.read().clampPadding).toEqual({
+        top: 0,
+        right: 0
+      });
+    });
+
+    expect(readViewportCenter().x).toBeCloseTo(firstManualCenter.x, 4);
+    expect(readViewportCenter().y).toBeCloseTo(firstManualCenter.y, 4);
+
+    fireEvent.pointerDown(host as HTMLDivElement, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      button: 0,
+      buttons: 1,
+      clientX: 195,
+      clientY: 420
+    });
+    fireEvent.pointerMove(host as HTMLDivElement, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      buttons: 1,
+      clientX: 265,
+      clientY: 420
+    });
+    fireEvent.pointerUp(host as HTMLDivElement, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      button: 0,
+      clientX: 265,
+      clientY: 420
+    });
+
+    const secondManualCenter = readViewportCenter();
+    expect(secondManualCenter.x).not.toBeCloseTo(firstManualCenter.x, 4);
+
+    rerender(
+      <main className="aitown-shell">
+        <section className="aitown-panel aitown-panel--game">
+          <WorldScene scene={clearedScene} onSelectAgent={vi.fn()} />
+        </section>
+      </main>
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByRole('region', { name: 'Selected watch links' })).not.toBeInTheDocument();
+      expect(readViewportInspector()?.read().clampPadding).toEqual({
+        top: 0,
+        right: 0
+      });
+    });
+
+    rerender(
+      <main className="aitown-shell">
+        <section className="aitown-panel aitown-panel--game">
+          <WorldScene scene={{ ...selectedScene }} onSelectAgent={vi.fn()} />
+        </section>
+      </main>
+    );
+
+    const thirdOverlay = await screen.findByRole('region', { name: 'Selected watch links' });
+    setElementRect(thirdOverlay, { left: 80, top: 120, width: 240, height: 220 });
+    act(() => {
+      MockResizeObserver.triggerAll();
+    });
+
+    await waitFor(() => {
+      expect(readViewportInspector()?.read().clampPadding).toEqual({
+        top: 0,
+        right: 0
+      });
+    });
+
+    expect(readViewportCenter().x).toBeCloseTo(secondManualCenter.x, 4);
+    expect(readViewportCenter().y).toBeCloseTo(secondManualCenter.y, 4);
+  });
+
+  it('preserves the manual pose when deselected layout changes return to the original geometry before reselecting the same selected-watch agent', async () => {
+    appInitMock.mockReset().mockResolvedValue(undefined);
+    vi.mocked(loadAiTownAssets).mockResolvedValue(makeAssets());
+
+    const scene = makeWideSelectedAgentScene();
+    const clearedScene = {
+      ...scene,
+      selectedAgentId: null,
+      agents: scene.agents.map((agent) => ({
+        ...agent,
+        selected: false
+      }))
+    } satisfies AiTownSceneModel;
+    const { container, rerender } = render(
+      <main className="aitown-shell">
+        <div className="aitown-shell__stats">Stats</div>
+        <section className="aitown-panel aitown-panel--game">
+          <WorldScene scene={scene} onSelectAgent={vi.fn()} />
+        </section>
+      </main>
+    );
+
+    const host = container.querySelector('.aitown-world__host');
+    const stats = container.querySelector('.aitown-shell__stats');
+    expect(host).toBeInstanceOf(HTMLDivElement);
+    expect(stats).toBeInstanceOf(HTMLElement);
+    (host as HTMLDivElement).setPointerCapture = vi.fn();
+    (host as HTMLDivElement).releasePointerCapture = vi.fn();
+    (host as HTMLDivElement).hasPointerCapture = vi.fn(() => true);
+    setElementRect(host as HTMLDivElement, { left: 0, top: 0, width: 390, height: 844 });
+    setElementRect(stats as HTMLElement, { left: 390, top: 80, width: 0, height: 140 });
+
+    const selectedWatchOverlay = await screen.findByRole('region', { name: 'Selected watch links' });
+    setElementRect(selectedWatchOverlay, { left: 80, top: 120, width: 240, height: 220 });
+    act(() => {
+      MockResizeObserver.triggerAll();
+    });
+
+    await waitFor(() => {
+      expect(readViewportInspector()?.read().clampPadding).toEqual({
+        top: 0,
+        right: 0
+      });
+    });
+
+    fireEvent.pointerDown(host as HTMLDivElement, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      button: 0,
+      buttons: 1,
+      clientX: 195,
+      clientY: 420
+    });
+    fireEvent.pointerMove(host as HTMLDivElement, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      buttons: 1,
+      clientX: 125,
+      clientY: 420
+    });
+    fireEvent.pointerUp(host as HTMLDivElement, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      button: 0,
+      clientX: 125,
+      clientY: 420
+    });
+
+    const manualCenter = readViewportCenter();
+
+    rerender(
+      <main className="aitown-shell">
+        <div className="aitown-shell__stats">Stats</div>
+        <section className="aitown-panel aitown-panel--game">
+          <WorldScene scene={clearedScene} onSelectAgent={vi.fn()} />
+        </section>
+      </main>
+    );
+
+    setElementRect(stats as HTMLElement, { left: 110, top: 80, width: 280, height: 140 });
+    act(() => {
+      MockResizeObserver.triggerAll();
+    });
+
+    await waitFor(() => {
+      expect(readViewportInspector()?.read().clampPadding).toEqual({
+        top: 0,
+        right: 280
+      });
+    });
+
+    setElementRect(stats as HTMLElement, { left: 390, top: 80, width: 0, height: 140 });
+    act(() => {
+      MockResizeObserver.triggerAll();
+    });
+
+    await waitFor(() => {
+      expect(readViewportInspector()?.read().clampPadding).toEqual({
+        top: 0,
+        right: 0
+      });
+    });
+
+    rerender(
+      <main className="aitown-shell">
+        <div className="aitown-shell__stats">Stats</div>
+        <section className="aitown-panel aitown-panel--game">
+          <WorldScene scene={{ ...scene }} onSelectAgent={vi.fn()} />
+        </section>
+      </main>
+    );
+
+    const reselectedOverlay = await screen.findByRole('region', { name: 'Selected watch links' });
+    setElementRect(stats as HTMLElement, { left: 390, top: 80, width: 0, height: 140 });
+    setElementRect(reselectedOverlay, { left: 80, top: 120, width: 240, height: 220 });
+    act(() => {
+      MockResizeObserver.triggerAll();
+    });
+
+    await waitFor(() => {
+      expect(readViewportInspector()?.read().clampPadding).toEqual({
+        top: 0,
+        right: 0
+      });
+    });
+
+    expect(readViewportCenter().x).toBeCloseTo(manualCenter.x, 4);
+    expect(readViewportCenter().y).toBeCloseTo(manualCenter.y, 4);
+  });
+
+  it('preserves a deselected manual pose after user zooms before reselecting the same selected-watch agent', async () => {
+    appInitMock.mockReset().mockResolvedValue(undefined);
+    vi.mocked(loadAiTownAssets).mockResolvedValue(makeAssets());
+
+    const scene = makeWideSelectedAgentScene();
+    const clearedScene = {
+      ...scene,
+      selectedAgentId: null,
+      agents: scene.agents.map((agent) => ({
+        ...agent,
+        selected: false
+      }))
+    } satisfies AiTownSceneModel;
+    const selectedAgent = scene.agents.find((agent) => agent.agentId === scene.selectedAgentId);
+    const { container, rerender } = render(
+      <main className="aitown-shell">
+        <section className="aitown-panel aitown-panel--game">
+          <WorldScene scene={scene} onSelectAgent={vi.fn()} />
+        </section>
+      </main>
+    );
+
+    expect(selectedAgent).toBeDefined();
+
+    const host = container.querySelector('.aitown-world__host');
+    expect(host).toBeInstanceOf(HTMLDivElement);
+    (host as HTMLDivElement).setPointerCapture = vi.fn();
+    (host as HTMLDivElement).releasePointerCapture = vi.fn();
+    (host as HTMLDivElement).hasPointerCapture = vi.fn(() => true);
+    setElementRect(host as HTMLDivElement, { left: 0, top: 0, width: 390, height: 844 });
+
+    const selectedWatchOverlay = await screen.findByRole('region', { name: 'Selected watch links' });
+    setElementRect(selectedWatchOverlay, { left: 150, top: 120, width: 240, height: 220 });
+    act(() => {
+      MockResizeObserver.triggerAll();
+    });
+
+    await waitFor(() => {
+      expect(readViewportInspector()?.read().clampPadding).toEqual({
+        top: 0,
+        right: 240
+      });
+    });
+
+    fireEvent.pointerDown(host as HTMLDivElement, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      button: 0,
+      buttons: 1,
+      clientX: 195,
+      clientY: 420
+    });
+    fireEvent.pointerMove(host as HTMLDivElement, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      buttons: 1,
+      clientX: 125,
+      clientY: 420
+    });
+    fireEvent.pointerUp(host as HTMLDivElement, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      button: 0,
+      clientX: 125,
+      clientY: 420
+    });
+
+    const manualCenter = readViewportCenter();
+
+    rerender(
+      <main className="aitown-shell">
+        <section className="aitown-panel aitown-panel--game">
+          <WorldScene scene={clearedScene} onSelectAgent={vi.fn()} />
+        </section>
+      </main>
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByRole('region', { name: 'Selected watch links' })).not.toBeInTheDocument();
+      expect(readViewportCenter().x).toBeCloseTo(manualCenter.x, 4);
+      expect(readViewportCenter().y).toBeCloseTo(manualCenter.y, 4);
+    });
+
+    setElementRect(host as HTMLDivElement, { left: 0, top: 0, width: 1000, height: 844 });
+    act(() => {
+      MockResizeObserver.triggerAll();
+    });
+
+    setElementRect(host as HTMLDivElement, { left: 0, top: 0, width: 320, height: 844 });
+    act(() => {
+      MockResizeObserver.triggerAll();
+    });
+
+    const scaleBeforeZoom = readViewportInspector()?.read().scale ?? 1;
+    const zoomedScale = readViewportInspector()?.zoomToMinimum();
+    const zoomedCenter = readViewportCenter();
+    expect(zoomedScale).not.toBeCloseTo(scaleBeforeZoom, 4);
+
+    rerender(
+      <main className="aitown-shell">
+        <section className="aitown-panel aitown-panel--game">
+          <WorldScene scene={{ ...scene }} onSelectAgent={vi.fn()} />
+        </section>
+      </main>
+    );
+
+    const reselectedWatchOverlay = await screen.findByRole('region', { name: 'Selected watch links' });
+    setElementRect(reselectedWatchOverlay, { left: 80, top: 120, width: 240, height: 220 });
+    act(() => {
+      MockResizeObserver.triggerAll();
+    });
+
+    await waitFor(() => {
+      expect(readViewportInspector()?.read().clampPadding).toEqual({
+        top: 0,
+        right: 240
+      });
+    });
+
+    const inspection = readViewportInspector()?.read();
+    const reselectedCenter = readViewportCenter();
+    const expectedFollowCenterX = (selectedAgent?.position.x ?? 0) + (inspection?.clampPadding.right ?? 0) / ((inspection?.scale ?? 1) * 2);
+
+    expect(reselectedCenter.x).toBeCloseTo(zoomedCenter.x, 4);
+    expect(reselectedCenter.y).toBeCloseTo(zoomedCenter.y, 4);
+    expect(reselectedCenter.x).not.toBeCloseTo(expectedFollowCenterX, 4);
+  });
+
+  it('recenters a portrait selected-watch reselect when the safe-area geometry changed while deselected', async () => {
+    appInitMock.mockReset().mockResolvedValue(undefined);
+    vi.mocked(loadAiTownAssets).mockResolvedValue(makeAssets());
+
+    const scene = makeWideSelectedAgentScene();
+    const clearedScene = {
+      ...scene,
+      selectedAgentId: null,
+      agents: scene.agents.map((agent) => ({
+        ...agent,
+        selected: false
+      }))
+    } satisfies AiTownSceneModel;
+    const selectedAgent = scene.agents.find((agent) => agent.agentId === scene.selectedAgentId);
+    const { container, rerender } = render(
+      <main className="aitown-shell">
+        <section className="aitown-panel aitown-panel--game">
+          <WorldScene scene={scene} onSelectAgent={vi.fn()} />
+        </section>
+      </main>
+    );
+
+    expect(selectedAgent).toBeDefined();
+
+    const host = container.querySelector('.aitown-world__host');
+    expect(host).toBeInstanceOf(HTMLDivElement);
+    (host as HTMLDivElement).setPointerCapture = vi.fn();
+    (host as HTMLDivElement).releasePointerCapture = vi.fn();
+    (host as HTMLDivElement).hasPointerCapture = vi.fn(() => true);
+    setElementRect(host as HTMLDivElement, { left: 0, top: 0, width: 390, height: 844 });
+
+    const selectedWatchOverlay = await screen.findByRole('region', { name: 'Selected watch links' });
+    setElementRect(selectedWatchOverlay, { left: 150, top: 120, width: 240, height: 220 });
+    act(() => {
+      MockResizeObserver.triggerAll();
+    });
+
+    await waitFor(() => {
+      expect(readViewportInspector()?.read().clampPadding).toEqual({
+        top: 0,
+        right: 240
+      });
+    });
+
+    fireEvent.pointerDown(host as HTMLDivElement, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      button: 0,
+      buttons: 1,
+      clientX: 195,
+      clientY: 420
+    });
+    fireEvent.pointerMove(host as HTMLDivElement, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      buttons: 1,
+      clientX: 125,
+      clientY: 420
+    });
+    fireEvent.pointerUp(host as HTMLDivElement, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      button: 0,
+      clientX: 125,
+      clientY: 420
+    });
+
+    const manualCenter = readViewportCenter();
+
+    rerender(
+      <main className="aitown-shell">
+        <section className="aitown-panel aitown-panel--game">
+          <WorldScene scene={clearedScene} onSelectAgent={vi.fn()} />
+        </section>
+      </main>
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByRole('region', { name: 'Selected watch links' })).not.toBeInTheDocument();
+      expect(readViewportInspector()?.read().clampPadding).toEqual({
+        top: 0,
+        right: 0
+      });
+    });
+
+    setElementRect(host as HTMLDivElement, { left: 0, top: 0, width: 600, height: 844 });
+    act(() => {
+      MockResizeObserver.triggerAll();
+    });
+
+    rerender(
+      <main className="aitown-shell">
+        <section className="aitown-panel aitown-panel--game">
+          <WorldScene scene={{ ...scene }} onSelectAgent={vi.fn()} />
+        </section>
+      </main>
+    );
+
+    const reselectedWatchOverlay = await screen.findByRole('region', { name: 'Selected watch links' });
+    setElementRect(reselectedWatchOverlay, { left: 360, top: 120, width: 240, height: 220 });
+    act(() => {
+      MockResizeObserver.triggerAll();
+    });
+
+    await waitFor(() => {
+      const inspection = readViewportInspector()?.read();
+      const center = readViewportCenter();
+      const expectedFollowCenterX = (selectedAgent?.position.x ?? 0) + (inspection?.clampPadding.right ?? 0) / ((inspection?.scale ?? 1) * 2);
+
+      expect(inspection?.clampPadding).toEqual({
+        top: 0,
+        right: 240
+      });
+      expect(center.x).toBeCloseTo(expectedFollowCenterX, 4);
+      expect(center.y).toBeCloseTo(selectedAgent?.position.y ?? 0, 4);
+      expect(center.x).not.toBeCloseTo(manualCenter.x, 4);
+    });
+  });
+
+  it('recenters a portrait selected-watch reselect when the same agent moved while deselected', async () => {
+    appInitMock.mockReset().mockResolvedValue(undefined);
+    vi.mocked(loadAiTownAssets).mockResolvedValue(makeAssets());
+
+    const scene = makeWideSelectedAgentScene();
+    const clearedScene = {
+      ...scene,
+      selectedAgentId: null,
+      agents: scene.agents.map((agent) => ({
+        ...agent,
+        selected: false
+      }))
+    } satisfies AiTownSceneModel;
+    const movedWhileClearedScene = {
+      ...clearedScene,
+      agents: clearedScene.agents.map((agent) =>
+        agent.agentId === scene.selectedAgentId
+          ? {
+              ...agent,
+              position: {
+                x: agent.position.x + 80,
+                y: agent.position.y + 40
+              }
+            }
+          : agent
+      )
+    } satisfies AiTownSceneModel;
+    const movedReselectedScene = {
+      ...movedWhileClearedScene,
+      selectedAgentId: scene.selectedAgentId,
+      agents: movedWhileClearedScene.agents.map((agent) => ({
+        ...agent,
+        selected: agent.agentId === scene.selectedAgentId
+      }))
+    } satisfies AiTownSceneModel;
+    const movedSelectedAgent = movedReselectedScene.agents.find((agent) => agent.agentId === scene.selectedAgentId);
+    const { container, rerender } = render(
+      <main className="aitown-shell">
+        <section className="aitown-panel aitown-panel--game">
+          <WorldScene scene={scene} onSelectAgent={vi.fn()} />
+        </section>
+      </main>
+    );
+
+    expect(movedSelectedAgent).toBeDefined();
+
+    const host = container.querySelector('.aitown-world__host');
+    expect(host).toBeInstanceOf(HTMLDivElement);
+    (host as HTMLDivElement).setPointerCapture = vi.fn();
+    (host as HTMLDivElement).releasePointerCapture = vi.fn();
+    (host as HTMLDivElement).hasPointerCapture = vi.fn(() => true);
+    setElementRect(host as HTMLDivElement, { left: 0, top: 0, width: 390, height: 844 });
+
+    const selectedWatchOverlay = await screen.findByRole('region', { name: 'Selected watch links' });
+    setElementRect(selectedWatchOverlay, { left: 150, top: 120, width: 240, height: 220 });
+    act(() => {
+      MockResizeObserver.triggerAll();
+    });
+
+    await waitFor(() => {
+      expect(readViewportInspector()?.read().clampPadding).toEqual({
+        top: 0,
+        right: 240
+      });
+    });
+
+    fireEvent.pointerDown(host as HTMLDivElement, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      button: 0,
+      buttons: 1,
+      clientX: 195,
+      clientY: 420
+    });
+    fireEvent.pointerMove(host as HTMLDivElement, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      buttons: 1,
+      clientX: 125,
+      clientY: 420
+    });
+    fireEvent.pointerUp(host as HTMLDivElement, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      button: 0,
+      clientX: 125,
+      clientY: 420
+    });
+
+    const manualCenter = readViewportCenter();
+
+    rerender(
+      <main className="aitown-shell">
+        <section className="aitown-panel aitown-panel--game">
+          <WorldScene scene={clearedScene} onSelectAgent={vi.fn()} />
+        </section>
+      </main>
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByRole('region', { name: 'Selected watch links' })).not.toBeInTheDocument();
+      expect(readViewportInspector()?.read().clampPadding).toEqual({
+        top: 0,
+        right: 0
+      });
+      expect(readViewportCenter().x).toBeCloseTo(manualCenter.x, 4);
+    });
+
+    rerender(
+      <main className="aitown-shell">
+        <section className="aitown-panel aitown-panel--game">
+          <WorldScene scene={movedWhileClearedScene} onSelectAgent={vi.fn()} />
+        </section>
+      </main>
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByRole('region', { name: 'Selected watch links' })).not.toBeInTheDocument();
+      expect(readViewportCenter().x).toBeCloseTo(manualCenter.x, 4);
+      expect(readViewportCenter().y).toBeCloseTo(manualCenter.y, 4);
+    });
+
+    rerender(
+      <main className="aitown-shell">
+        <section className="aitown-panel aitown-panel--game">
+          <WorldScene scene={movedReselectedScene} onSelectAgent={vi.fn()} />
+        </section>
+      </main>
+    );
+
+    const reselectedWatchOverlay = await screen.findByRole('region', { name: 'Selected watch links' });
+    setElementRect(reselectedWatchOverlay, { left: 150, top: 120, width: 240, height: 220 });
+    act(() => {
+      MockResizeObserver.triggerAll();
+    });
+
+    await waitFor(() => {
+      const inspection = readViewportInspector()?.read();
+      const center = readViewportCenter();
+      const expectedFollowCenterX = (movedSelectedAgent?.position.x ?? 0) + (inspection?.clampPadding.right ?? 0) / ((inspection?.scale ?? 1) * 2);
+
+      expect(inspection?.clampPadding).toEqual({
+        top: 0,
+        right: 240
+      });
+      expect(center.x).toBeCloseTo(expectedFollowCenterX, 4);
+      expect(center.y).toBeCloseTo(movedSelectedAgent?.position.y ?? 0, 4);
+      expect(center.x).not.toBeCloseTo(manualCenter.x, 4);
+    });
+  });
+
+  it('recenters a same-agent reselect outside selected-watch mode after a manual pan', async () => {
+    appInitMock.mockReset().mockResolvedValue(undefined);
+    vi.mocked(loadAiTownAssets).mockResolvedValue(makeAssets());
+
+    const scene = {
+      ...makeWideSelectedAgentScene(),
+      watchEdges: []
+    } satisfies AiTownSceneModel;
+    const clearedScene = {
+      ...scene,
+      selectedAgentId: null,
+      agents: scene.agents.map((agent) => ({
+        ...agent,
+        selected: false
+      }))
+    } satisfies AiTownSceneModel;
+    const selectedAgent = scene.agents.find((agent) => agent.agentId === scene.selectedAgentId);
+    const { container, rerender } = render(
+      <main className="aitown-shell">
+        <section className="aitown-panel aitown-panel--game">
+          <WorldScene scene={scene} onSelectAgent={vi.fn()} />
+        </section>
+      </main>
+    );
+
+    expect(selectedAgent).toBeDefined();
+
+    const host = container.querySelector('.aitown-world__host');
+    expect(host).toBeInstanceOf(HTMLDivElement);
+    (host as HTMLDivElement).setPointerCapture = vi.fn();
+    (host as HTMLDivElement).releasePointerCapture = vi.fn();
+    (host as HTMLDivElement).hasPointerCapture = vi.fn(() => true);
+    setElementRect(host as HTMLDivElement, { left: 0, top: 0, width: 1000, height: 800 });
+    act(() => {
+      MockResizeObserver.triggerAll();
+    });
+
+    await waitFor(() => {
+      expect(readViewportInspector()?.read()).toBeDefined();
+    });
+
+    const initialCenter = readViewportCenter();
+    fireEvent.pointerDown(host as HTMLDivElement, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      button: 0,
+      buttons: 1,
+      clientX: 500,
+      clientY: 400
+    });
+    fireEvent.pointerMove(host as HTMLDivElement, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      buttons: 1,
+      clientX: 420,
+      clientY: 400
+    });
+    fireEvent.pointerUp(host as HTMLDivElement, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      button: 0,
+      clientX: 420,
+      clientY: 400
+    });
+
+    const manualCenter = readViewportCenter();
+    expect(manualCenter.x).not.toBeCloseTo(initialCenter.x, 4);
+
+    rerender(
+      <main className="aitown-shell">
+        <section className="aitown-panel aitown-panel--game">
+          <WorldScene scene={clearedScene} onSelectAgent={vi.fn()} />
+        </section>
+      </main>
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByRole('region', { name: 'Selected watch links' })).not.toBeInTheDocument();
+      expect(readViewportCenter().x).toBeCloseTo(manualCenter.x, 4);
+    });
+
+    rerender(
+      <main className="aitown-shell">
+        <section className="aitown-panel aitown-panel--game">
+          <WorldScene scene={{ ...scene }} onSelectAgent={vi.fn()} />
+        </section>
+      </main>
+    );
+
+    await waitFor(() => {
+      const center = readViewportCenter();
+      expect(center.x).toBeCloseTo(initialCenter.x, 4);
+      expect(center.y).toBeCloseTo(initialCenter.y, 4);
+      expect(center.x).not.toBeCloseTo(manualCenter.x, 4);
+    });
+  });
+
+  it('recenters a same-agent reselect when selected-watch mode disappears while deselected', async () => {
+    appInitMock.mockReset().mockResolvedValue(undefined);
+    vi.mocked(loadAiTownAssets).mockResolvedValue(makeAssets());
+
+    const scene = makeWideSelectedAgentScene();
+    const clearedScene = {
+      ...scene,
+      selectedAgentId: null,
+      agents: scene.agents.map((agent) => ({
+        ...agent,
+        selected: false
+      }))
+    } satisfies AiTownSceneModel;
+    const nonWatchReselectedScene = {
+      ...scene,
+      watchEdges: [],
+      agents: scene.agents.map((agent) => ({
+        ...agent,
+        selected: agent.agentId === scene.selectedAgentId
+      }))
+    } satisfies AiTownSceneModel;
+    const selectedAgent = nonWatchReselectedScene.agents.find((agent) => agent.agentId === nonWatchReselectedScene.selectedAgentId);
+    const { container, rerender } = render(
+      <main className="aitown-shell">
+        <section className="aitown-panel aitown-panel--game">
+          <WorldScene scene={scene} onSelectAgent={vi.fn()} />
+        </section>
+      </main>
+    );
+
+    expect(selectedAgent).toBeDefined();
+
+    const host = container.querySelector('.aitown-world__host');
+    expect(host).toBeInstanceOf(HTMLDivElement);
+    (host as HTMLDivElement).setPointerCapture = vi.fn();
+    (host as HTMLDivElement).releasePointerCapture = vi.fn();
+    (host as HTMLDivElement).hasPointerCapture = vi.fn(() => true);
+    setElementRect(host as HTMLDivElement, { left: 0, top: 0, width: 390, height: 844 });
+
+    const selectedWatchOverlay = await screen.findByRole('region', { name: 'Selected watch links' });
+    setElementRect(selectedWatchOverlay, { left: 150, top: 120, width: 240, height: 220 });
+    act(() => {
+      MockResizeObserver.triggerAll();
+    });
+
+    await waitFor(() => {
+      expect(readViewportInspector()?.read().clampPadding).toEqual({
+        top: 0,
+        right: 240
+      });
+    });
+
+    fireEvent.pointerDown(host as HTMLDivElement, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      button: 0,
+      buttons: 1,
+      clientX: 195,
+      clientY: 420
+    });
+    fireEvent.pointerMove(host as HTMLDivElement, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      buttons: 1,
+      clientX: 125,
+      clientY: 420
+    });
+    fireEvent.pointerUp(host as HTMLDivElement, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      button: 0,
+      clientX: 125,
+      clientY: 420
+    });
+
+    const manualCenter = readViewportCenter();
+
+    rerender(
+      <main className="aitown-shell">
+        <section className="aitown-panel aitown-panel--game">
+          <WorldScene scene={clearedScene} onSelectAgent={vi.fn()} />
+        </section>
+      </main>
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByRole('region', { name: 'Selected watch links' })).not.toBeInTheDocument();
+      expect(readViewportCenter().x).toBeCloseTo(manualCenter.x, 4);
+      expect(readViewportCenter().y).toBeCloseTo(manualCenter.y, 4);
+    });
+
+    rerender(
+      <main className="aitown-shell">
+        <section className="aitown-panel aitown-panel--game">
+          <WorldScene scene={nonWatchReselectedScene} onSelectAgent={vi.fn()} />
+        </section>
+      </main>
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByRole('region', { name: 'Selected watch links' })).not.toBeInTheDocument();
+      const center = readViewportCenter();
+      expect(center.x).toBeCloseTo(selectedAgent?.position.x ?? 0, 4);
+      expect(center.y).toBeCloseTo(selectedAgent?.position.y ?? 0, 4);
+      expect(center.x).not.toBeCloseTo(manualCenter.x, 4);
+    });
+  });
+
   it('recomputes selected-agent safe-area recenter when scale changes without a clamp-padding delta', async () => {
     appInitMock.mockReset().mockResolvedValue(undefined);
     vi.mocked(loadAiTownAssets).mockResolvedValue(makeAssets());

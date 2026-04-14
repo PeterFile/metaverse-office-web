@@ -8901,7 +8901,7 @@ test.describe('operator shell smoke', () => {
     expectViewportAtLeftClampEdge(left, baselineScale, baselineTop);
   });
 
-  test('keeps portrait selected-watch clamp padding reset and drag reachability stable after clearing and reselecting through the UI', async ({
+  test('preserves the portrait selected-watch manual pose and zero-right-clamp reachability after clearing and reselecting through the UI', async ({
     page
   }) => {
     test.slow();
@@ -8972,7 +8972,8 @@ test.describe('operator shell smoke', () => {
     };
 
     const firstWatchOverlay = await selectWatchOverlay();
-    const firstSelected = await expectZeroRightClampPaddingKeepsHorizontalDragReachability();
+    await expectZeroRightClampPaddingKeepsHorizontalDragReachability();
+    const firstSelectedManualPose = await waitForViewportSettle(page);
 
     await page.getByRole('button', { name: 'Clear Selection' }).click();
     await expect(firstWatchOverlay).toHaveCount(0);
@@ -8986,13 +8987,14 @@ test.describe('operator shell smoke', () => {
     expect(cleared.clampPadding?.right ?? 0).toBeCloseTo(baselineClampPadding.right, 4);
 
     await expectZeroRightClampPaddingKeepsHorizontalDragReachability();
+    const clearedManualPose = await waitForViewportSettle(page);
 
     await selectWatchOverlay();
     const reselected = await waitForViewportSettle(page);
-    expect(reselected.scale).toBeCloseTo(firstSelected.scale ?? baselineScale, 4);
-    expect(Math.abs(reselected.x - firstSelected.x)).toBeLessThanOrEqual(0.5);
-    expect(Math.abs(reselected.y - firstSelected.y)).toBeLessThanOrEqual(0.5);
-    expect(reselected.clampPadding?.top ?? 0).toBe(firstSelected.clampPadding?.top ?? baselineClampPadding.top);
+    expect(reselected.scale).toBeCloseTo(clearedManualPose.scale ?? baselineScale, 4);
+    expect(Math.abs(reselected.x - clearedManualPose.x)).toBeLessThanOrEqual(0.5);
+    expect(Math.abs(reselected.y - clearedManualPose.y)).toBeLessThanOrEqual(0.5);
+    expect(reselected.clampPadding?.top ?? 0).toBe(clearedManualPose.clampPadding?.top ?? baselineClampPadding.top);
     expect(reselected.clampPadding?.right ?? 0).toBe(0);
 
     await expectZeroRightClampPaddingKeepsHorizontalDragReachability();

@@ -1059,6 +1059,7 @@ function AppInner() {
               selectedCorrelationId={selectedCorrelationId}
               selectedOperationsState={selectedOperationsState}
               selectedOperation={selectedOperation}
+              selectedOperationRequestActive={selectedOperationSelection !== null}
               timelineReplay={crewTimelineResource.data}
               timelineReplayError={crewTimelineResource.error}
               timelineReplayState={crewTimelineResource.state}

@@ -1777,6 +1777,96 @@ test.describe('operator shell smoke', () => {
     await expect(runContextSection.getByText(/Latest event type ·/)).toBeVisible();
   });
 
+  test('shows the selected-agent Current Operation first-load loading and failure states explicitly instead of widening into another surface', async ({
+    page
+  }) => {
+    let releaseSelectedOperation: (() => void) | null = null;
+    const selectedOperationPath = '/office/operations?agent_id=app-engineering';
+    const selectedOperationRequests: string[] = [];
+    const unexpectedSelectedOperationRequests: string[] = [];
+
+    await page.route('**/office/operations?limit=4', async (route) => {
+      const response = await route.fetch();
+      const operations = (await response.json()) as {
+        items: Array<{ agent_id: string }>;
+      };
+
+      await route.fulfill({
+        response,
+        json: {
+          ...operations,
+          items: operations.items.filter((item) => item.agent_id !== 'app-engineering')
+        }
+      });
+    });
+
+    await page.route('**/office/operations**', async (route) => {
+      const url = new URL(route.request().url());
+      if (url.pathname !== '/office/operations' || url.searchParams.get('agent_id') !== 'app-engineering') {
+        await route.continue();
+        return;
+      }
+
+      const requestPath = `${url.pathname}${url.search}`;
+      if (requestPath !== selectedOperationPath) {
+        unexpectedSelectedOperationRequests.push(requestPath);
+        await route.continue();
+        return;
+      }
+
+      selectedOperationRequests.push(requestPath);
+      if (selectedOperationRequests.length === 1) {
+        await new Promise<void>((resolve) => {
+          releaseSelectedOperation = resolve;
+        });
+      }
+
+      await route.fulfill({
+        status: 500,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          error: 'internal_error',
+          details: 'operations refresh failed'
+        })
+      });
+    });
+
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Hub' }).click();
+
+    const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
+    const inspectButton = detailsPanel.getByRole('button', {
+      name: 'Inspect App Engineering Agent',
+      exact: true
+    });
+    const operationSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Current Operation' })
+    });
+
+    await focusHubControlWithTab(page, inspectButton, 'Inspect App Engineering Agent');
+    await expect(inspectButton).toBeFocused();
+    await page.keyboard.press('Enter');
+
+    await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+    await expect(operationSection.getByText('Loading current operation...')).toBeVisible();
+    await expect(operationSection.getByText(/Unable to load current operation\./)).toHaveCount(0);
+    await expect(detailsPanel.getByRole('heading', { name: 'Run Context' })).toHaveCount(0);
+    await expect(operationSection.getByText('working · Load current operation snapshot')).toHaveCount(0);
+    await expect
+      .poll(() => selectedOperationRequests.filter((request) => request === selectedOperationPath).length)
+      .toBe(1);
+    expect(unexpectedSelectedOperationRequests).toEqual([]);
+
+    expect(releaseSelectedOperation).not.toBeNull();
+    releaseSelectedOperation!();
+
+    await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+    await expect(operationSection.getByText('Unable to load current operation. operations refresh failed')).toBeVisible();
+    await expect(operationSection.getByText('Loading current operation...')).toHaveCount(0);
+    await expect(detailsPanel.getByRole('heading', { name: 'Run Context' })).toHaveCount(0);
+    await expect(operationSection.getByText('working · Load current operation snapshot')).toHaveCount(0);
+  });
+
   test('treats Hub as a dismissible dialog and restores trigger focus on Escape', async ({ page }) => {
     await page.goto('/');
 

@@ -1747,6 +1747,94 @@ test.describe('operator shell smoke', () => {
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toHaveCount(0);
   });
 
+  test('shows explicit first-load fallback state when a crew-overview correlation drilldown fails', async ({ page }) => {
+    const interceptedCorrelationRequests: string[] = [];
+    let releaseFirstCorrelationResponse: (() => void) | null = null;
+    const firstCorrelationResponseReleased = new Promise<void>((resolve) => {
+      releaseFirstCorrelationResponse = resolve;
+    });
+    const activeQueueCorrelationUrl = '/correlations/corr-growth-lead-review?limit=10&window=60m';
+    const activeQueueCorrelationRoute = `**${activeQueueCorrelationUrl}`;
+    const activeQueueCorrelationHandler = async (route: Route) => {
+      const requestUrl = new URL(route.request().url());
+      const requestPath = `${route.request().method()} ${requestUrl.pathname}${requestUrl.search}`;
+      interceptedCorrelationRequests.push(requestPath);
+      expect(requestPath).toBe(`GET ${activeQueueCorrelationUrl}`);
+
+      await firstCorrelationResponseReleased;
+      await route.fulfill({
+        status: 500,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: 'internal_error', details: 'correlation refresh failed' })
+      });
+    };
+
+    await page.route('**/office/operations?limit=4', async (route) => {
+      const response = await route.fetch();
+      const operations = (await response.json()) as {
+        items: Array<{
+          agent_id: string;
+          correlation_id: string | null;
+        }>;
+      };
+
+      await route.fulfill({
+        response,
+        json: {
+          ...operations,
+          items: operations.items.map((item) =>
+            item.agent_id === 'team-lead'
+              ? {
+                  ...item,
+                  correlation_id: 'corr-growth-lead-review'
+                }
+              : item
+          )
+        }
+      });
+    });
+    await page.route(activeQueueCorrelationRoute, activeQueueCorrelationHandler);
+
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Hub' }).click();
+
+    const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
+    const correlationSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Correlation Drilldown' })
+    });
+    const activeQueueCorrelationButton = detailsPanel.getByRole('button', {
+      name: 'Open active queue correlation corr-growth-lead-review'
+    });
+
+    await expect(detailsPanel.getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
+    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
+    await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
+    await focusHubControlWithTab(
+      page,
+      activeQueueCorrelationButton,
+      'Open active queue correlation corr-growth-lead-review'
+    );
+    await expect(activeQueueCorrelationButton).toBeFocused();
+    await page.keyboard.press('Enter');
+
+    await expect.poll(() => interceptedCorrelationRequests.length).toBe(1);
+    await expect(correlationSection.getByText('Loading correlation drilldown...')).toBeVisible();
+    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toHaveCount(0);
+    await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toHaveCount(0);
+
+    releaseFirstCorrelationResponse?.();
+
+    await expect(correlationSection.getByText('correlation refresh failed')).toBeVisible();
+    await expect(correlationSection.getByText('Loading correlation drilldown...')).toHaveCount(0);
+    await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toHaveCount(0);
+    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toHaveCount(0);
+    await expect(correlationSection.getByText('Counts · 0 incidents · 1 interactions · 2 events')).toHaveCount(0);
+    await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toHaveCount(0);
+    expect(interceptedCorrelationRequests).toEqual([`GET ${activeQueueCorrelationUrl}`]);
+
+    await page.unroute(activeQueueCorrelationRoute, activeQueueCorrelationHandler);
+  });
+
   test('keeps crew-overview auto correlation mode when re-selecting the current default active-queue correlation via keyboard traversal', async ({
     page
   }) => {

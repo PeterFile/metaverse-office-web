@@ -192,8 +192,29 @@ function resolveSharedMemoryRequestScopeLabel(
     : 'Crew overview';
 }
 
-function resolveSelectedAgentSupervisionHistoryRequestScopeLabel(selectedAgentId: string | null) {
-  return selectedAgentId ? `Target agent · ${selectedAgentId}` : 'Target agent';
+function resolveSelectedAgentSupervisionHistoryCorrelationId(
+  selectedAgentId: string | null,
+  selectedCorrelationId: string | null,
+  defaultCorrelationId: string | null
+) {
+  if (!selectedAgentId) {
+    return null;
+  }
+
+  return selectedCorrelationId ?? defaultCorrelationId;
+}
+
+function resolveSelectedAgentSupervisionHistoryRequestScopeLabel(
+  selectedAgentId: string | null,
+  selectedCorrelationId: string | null
+) {
+  if (!selectedAgentId) {
+    return 'Target agent';
+  }
+
+  return selectedCorrelationId
+    ? `Target agent · ${selectedAgentId} · Active correlation · ${selectedCorrelationId}`
+    : `Target agent · ${selectedAgentId}`;
 }
 
 function resolveCrewReplayCorrelationId(
@@ -346,17 +367,6 @@ function AppInner() {
     },
     resourceKey: selectedAgentId
   });
-  const selectedAgentSupervisionHistoryResource = usePolledResource({
-    enabled: hubOpen && selectedAgentId !== null,
-    load: (signal) =>
-      fetchPeerWatchAlerts({
-        targetAgentId: selectedAgentId!,
-        limit: SELECTED_AGENT_SUPERVISION_HISTORY_LIMIT,
-        signal
-      }),
-    resourceKey: selectedAgentId ? `selected-agent-supervision-history:${selectedAgentId}` : null
-  });
-
   const activeWorkflow =
     workflowResource.data?.agent_id === selectedAgentId ? workflowResource.data : null;
   const sharedMemoryCorrelationId = resolveSharedMemoryCorrelationId(
@@ -368,8 +378,6 @@ function AppInner() {
     selectedAgentId,
     sharedMemoryCorrelationId
   );
-  const selectedAgentSupervisionHistoryRequestScopeLabel =
-    resolveSelectedAgentSupervisionHistoryRequestScopeLabel(selectedAgentId);
 
   const memoryArtifactsResource = usePolledResource({
     enabled: hubOpen,
@@ -528,6 +536,39 @@ function AppInner() {
       }),
     [activeWorkflow, incidentFeedResource.data, selectedAgentId, selectedOperationForAutoCorrelation]
   );
+  const selectedAgentSupervisionHistoryCorrelationId =
+    resolveSelectedAgentSupervisionHistoryCorrelationId(
+      selectedAgentId,
+      selectedCorrelationId,
+      defaultCorrelationId
+    );
+  const selectedAgentSupervisionHistoryDefaultCorrelationPending =
+    selectedAgentId !== null &&
+    selectedCorrelationId === null &&
+    defaultCorrelationId === null &&
+    selectedOperationForAutoCorrelation === null &&
+    workflowResource.state === 'loading';
+  const selectedAgentSupervisionHistoryResource = usePolledResource({
+    enabled:
+      hubOpen &&
+      selectedAgentId !== null &&
+      !selectedAgentSupervisionHistoryDefaultCorrelationPending,
+    load: (signal) =>
+      fetchPeerWatchAlerts({
+        targetAgentId: selectedAgentId!,
+        correlationId: selectedAgentSupervisionHistoryCorrelationId ?? undefined,
+        limit: SELECTED_AGENT_SUPERVISION_HISTORY_LIMIT,
+        signal
+      }),
+    resourceKey: selectedAgentId
+      ? `selected-agent-supervision-history:${selectedAgentId}:${selectedAgentSupervisionHistoryCorrelationId ?? '__all__'}`
+      : null
+  });
+  const selectedAgentSupervisionHistoryRequestScopeLabel =
+    resolveSelectedAgentSupervisionHistoryRequestScopeLabel(
+      selectedAgentId,
+      selectedAgentSupervisionHistoryCorrelationId
+    );
 
   const crewOverviewOperationStateBuckets = useMemo(
     () => crewOverviewStateBucketsResource.data?.summary.state_buckets ?? {},

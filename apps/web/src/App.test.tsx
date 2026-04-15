@@ -79,8 +79,14 @@ const teamLeadWorkflowUrl = '/agents/team-lead/workflow?limit=10&window=60m';
 const teamLeadIncidentsUrl = '/agents/team-lead/incidents?limit=10&window=60m';
 const growthRevenueWorkflowUrl = '/agents/growth-revenue/workflow?limit=10&window=60m';
 const appEngineeringSupervisionHistoryUrl = '/peer-watch/alerts?target_agent_id=app-engineering&limit=4';
+const appEngineeringScopedReviewSupervisionHistoryUrl =
+  '/peer-watch/alerts?target_agent_id=app-engineering&correlation_id=corr-app-review&limit=4';
+const appEngineeringScopedSecondarySupervisionHistoryUrl =
+  '/peer-watch/alerts?target_agent_id=app-engineering&correlation_id=corr-app-secondary&limit=4';
 const teamLeadSupervisionHistoryUrl = '/peer-watch/alerts?target_agent_id=team-lead&limit=4';
 const growthRevenueSupervisionHistoryUrl = '/peer-watch/alerts?target_agent_id=growth-revenue&limit=4';
+const growthRevenueScopedSecondarySupervisionHistoryUrl =
+  '/peer-watch/alerts?target_agent_id=growth-revenue&correlation_id=corr-app-secondary&limit=4';
 const correlationUrl = '/correlations/corr-app-review?limit=10&window=60m';
 const secondaryCorrelationUrl = '/correlations/corr-app-secondary?limit=10&window=60m';
 const memoryArtifactsUrl = '/memory/artifacts?limit=4&window=60m';
@@ -1212,11 +1218,19 @@ function resolveDefaultFetchResponse(url: string) {
     return jsonResponse(growthRevenueWorkflowFixture);
   }
 
-  if (url === appEngineeringSupervisionHistoryUrl) {
+  if (
+    url === appEngineeringSupervisionHistoryUrl ||
+    url === appEngineeringScopedReviewSupervisionHistoryUrl ||
+    url === appEngineeringScopedSecondarySupervisionHistoryUrl
+  ) {
     return jsonResponse(appEngineeringSupervisionHistoryFixture);
   }
 
-  if (url === teamLeadSupervisionHistoryUrl || url === growthRevenueSupervisionHistoryUrl) {
+  if (
+    url === teamLeadSupervisionHistoryUrl ||
+    url === growthRevenueSupervisionHistoryUrl ||
+    url === growthRevenueScopedSecondarySupervisionHistoryUrl
+  ) {
     return jsonResponse(emptySupervisionHistoryFixture);
   }
 
@@ -7021,7 +7035,81 @@ afterEach(() => {
       .mock.calls.map(([input]) => (typeof input === 'string' ? input : input.toString()))
       .filter((url) => url.startsWith('/peer-watch/alerts'));
 
-    expect(peerWatchRequests).toEqual([appEngineeringSupervisionHistoryUrl]);
+    expect(peerWatchRequests).toEqual([appEngineeringScopedReviewSupervisionHistoryUrl]);
+  });
+
+  it('scopes selected-agent supervision history to the active selected correlation', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === appEngineeringSupervisionHistoryUrl) {
+          return jsonResponse({
+            items: [
+              {
+                ...appEngineeringSupervisionHistoryFixture.items[0],
+                alert_id: 'alert-history-unrelated-correlation',
+                summary: 'Unrelated supervision history should not stay visible',
+                correlation_id: 'corr-app-secondary'
+              }
+            ]
+          });
+        }
+
+        if (
+          url === appEngineeringScopedReviewSupervisionHistoryUrl ||
+          url === appEngineeringScopedSecondarySupervisionHistoryUrl
+        ) {
+          return jsonResponse({
+            items: [
+              {
+                ...appEngineeringSupervisionHistoryFixture.items[0],
+                alert_id: 'alert-history-active-correlation',
+                summary: 'Active correlation scoped supervision history stays visible'
+              }
+            ]
+          });
+        }
+
+        return resolveTestFetchResponse(url);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
+
+    const supervisionSection = within(details).getByRole('heading', { name: 'Supervision History' }).closest('section');
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    expect(supervisionSection).not.toBeNull();
+    expect(correlationSection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+      expect(
+        within(supervisionSection!).getByText('Active correlation scoped supervision history stays visible')
+      ).toBeVisible();
+    });
+
+    expect(
+      within(supervisionSection!).getByText(
+        'Request scope · Target agent · app-engineering · Active correlation · corr-app-review'
+      )
+    ).toBeVisible();
+    expect(
+      within(supervisionSection!).queryByText('Unrelated supervision history should not stay visible')
+    ).not.toBeInTheDocument();
+
+    const peerWatchRequests = vi
+      .mocked(globalThis.fetch)
+      .mock.calls.map(([input]) => (typeof input === 'string' ? input : input.toString()))
+      .filter((url) => url.startsWith('/peer-watch/alerts'));
+
+    expect(peerWatchRequests).toContain(appEngineeringScopedReviewSupervisionHistoryUrl);
+    expect(peerWatchRequests.at(-1)).toBe(appEngineeringScopedReviewSupervisionHistoryUrl);
   });
 
   it('keeps supervision history request scope target-agent scoped across manual correlation overrides and agent pivots', async () => {
@@ -7043,7 +7131,11 @@ afterEach(() => {
       expect(within(supervisionSection!).getByText('Peer watch recovered after evidence review')).toBeVisible();
     });
 
-    expect(within(supervisionSection!).getByText('Request scope · Target agent · app-engineering')).toBeVisible();
+    expect(
+      within(supervisionSection!).getByText(
+        'Request scope · Target agent · app-engineering · Active correlation · corr-app-review'
+      )
+    ).toBeVisible();
 
     await user.click(
       within(incidentSection!).getByRole('button', {
@@ -7056,7 +7148,11 @@ afterEach(() => {
       expect(within(details).getByRole('button', { name: 'Return to current scope' })).toBeVisible();
     });
 
-    expect(within(supervisionSection!).getByText('Request scope · Target agent · app-engineering')).toBeVisible();
+    expect(
+      within(supervisionSection!).getByText(
+        'Request scope · Target agent · app-engineering · Active correlation · corr-app-secondary'
+      )
+    ).toBeVisible();
 
     await user.click(
       within(supervisionSection!).getByRole('button', {
@@ -7066,7 +7162,11 @@ afterEach(() => {
 
     await waitFor(() => {
       expect(within(details).getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
-      expect(within(supervisionSection!).getByText('Request scope · Target agent · growth-revenue')).toBeVisible();
+      expect(
+        within(supervisionSection!).getByText(
+          'Request scope · Target agent · growth-revenue · Active correlation · corr-app-secondary'
+        )
+      ).toBeVisible();
     });
   });
 
@@ -7134,7 +7234,10 @@ afterEach(() => {
       vi.fn(async (input: RequestInfo | URL) => {
         const url = typeof input === 'string' ? input : input.toString();
 
-        if (url === appEngineeringSupervisionHistoryUrl) {
+        if (
+          url === appEngineeringScopedReviewSupervisionHistoryUrl ||
+          url === appEngineeringScopedSecondarySupervisionHistoryUrl
+        ) {
           return jsonResponse({
             items: [
               {
@@ -7214,7 +7317,10 @@ afterEach(() => {
       vi.fn(async (input: RequestInfo | URL) => {
         const url = typeof input === 'string' ? input : input.toString();
 
-        if (url === appEngineeringSupervisionHistoryUrl) {
+        if (
+          url === appEngineeringScopedReviewSupervisionHistoryUrl ||
+          url === appEngineeringScopedSecondarySupervisionHistoryUrl
+        ) {
           return jsonResponse({
             items: [
               {
@@ -7288,7 +7394,7 @@ afterEach(() => {
       .map(([input]) => (typeof input === 'string' ? input : input.toString()));
 
     expect(newFetchUrlsAfterPivot).toContain(growthRevenueWorkflowUrl);
-    expect(newFetchUrlsAfterPivot).toContain(growthRevenueSupervisionHistoryUrl);
+    expect(newFetchUrlsAfterPivot).toContain(growthRevenueScopedSecondarySupervisionHistoryUrl);
     expect(newFetchUrlsAfterPivot).toContain(growthRevenueSelectedSecondaryCorrelationMemoryArtifactsUrl);
     expect(newFetchUrlsAfterPivot).not.toContain(growthRevenueSelectedOperationUrl);
     expect(newFetchUrlsAfterPivot).not.toContain(growthRevenueMemoryArtifactsUrl);
@@ -7301,7 +7407,10 @@ afterEach(() => {
       vi.fn(async (input: RequestInfo | URL) => {
         const url = typeof input === 'string' ? input : input.toString();
 
-        if (url === appEngineeringSupervisionHistoryUrl) {
+        if (
+          url === appEngineeringScopedReviewSupervisionHistoryUrl ||
+          url === appEngineeringScopedSecondarySupervisionHistoryUrl
+        ) {
           return jsonResponse({
             items: [
               {
@@ -7370,7 +7479,10 @@ afterEach(() => {
       vi.fn(async (input: RequestInfo | URL) => {
         const url = typeof input === 'string' ? input : input.toString();
 
-        if (url === appEngineeringSupervisionHistoryUrl) {
+        if (
+          url === appEngineeringScopedReviewSupervisionHistoryUrl ||
+          url === appEngineeringScopedSecondarySupervisionHistoryUrl
+        ) {
           return jsonResponse({
             items: [
               {
@@ -7444,7 +7556,7 @@ afterEach(() => {
       .map(([input]) => (typeof input === 'string' ? input : input.toString()));
 
     expect(newFetchUrlsAfterPivot).toContain(growthRevenueWorkflowUrl);
-    expect(newFetchUrlsAfterPivot).toContain(growthRevenueSupervisionHistoryUrl);
+    expect(newFetchUrlsAfterPivot).toContain(growthRevenueScopedSecondarySupervisionHistoryUrl);
     expect(newFetchUrlsAfterPivot).toContain(growthRevenueSelectedSecondaryCorrelationMemoryArtifactsUrl);
     expect(newFetchUrlsAfterPivot).not.toContain(growthRevenueSelectedOperationUrl);
     expect(newFetchUrlsAfterPivot).not.toContain(growthRevenueMemoryArtifactsUrl);

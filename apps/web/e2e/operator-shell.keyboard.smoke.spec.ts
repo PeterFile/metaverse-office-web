@@ -115,6 +115,16 @@ async function readBrowserZoomState(page: Page): Promise<BrowserZoomState> {
   }));
 }
 
+function resolveSelectedAgentSupervisionHistoryPath(targetAgentId: string, correlationId?: string) {
+  const params = new URLSearchParams();
+  params.set('target_agent_id', targetAgentId);
+  if (correlationId) {
+    params.set('correlation_id', correlationId);
+  }
+  params.set('limit', '4');
+  return `/peer-watch/alerts?${params.toString()}`;
+}
+
 function isBrowserZoomStateStable(previousState: BrowserZoomState, nextState: BrowserZoomState) {
   return (
     Math.abs(nextState.devicePixelRatio - previousState.devicePixelRatio) <= 0.01 &&
@@ -7535,7 +7545,11 @@ test.describe('operator shell smoke', () => {
   }) => {
     let releaseSupervisionHistory: (() => void) | null = null;
     const selectedSupervisionHistoryRequests: string[] = [];
-    const selectedSupervisionHistoryPath = '/peer-watch/alerts?target_agent_id=app-engineering&limit=4';
+    const accountabilityCorrelationId = 'collector-snapshot:2026-03-10T23:59:40.000Z';
+    const selectedSupervisionHistoryPath = resolveSelectedAgentSupervisionHistoryPath(
+      'app-engineering',
+      accountabilityCorrelationId
+    );
 
     await page.route('**/peer-watch/alerts**', async (route) => {
       const url = new URL(route.request().url());
@@ -7572,7 +7586,7 @@ test.describe('operator shell smoke', () => {
               summary: 'Selected-agent supervision history loading stays explicit',
               evidence_refs: ['/tmp/revenue-handoff.md'],
               evidence_count: 1,
-              correlation_id: 'collector-snapshot:2026-03-10T23:59:40.000Z',
+              correlation_id: accountabilityCorrelationId,
               source_kind: 'controller_event',
               metadata: {}
             }
@@ -7619,7 +7633,11 @@ test.describe('operator shell smoke', () => {
 
   test('shows the selected-agent supervision history failures explicitly instead of pretending empty', async ({ page }) => {
     const selectedSupervisionHistoryRequests: string[] = [];
-    const selectedSupervisionHistoryPath = '/peer-watch/alerts?target_agent_id=app-engineering&limit=4';
+    const accountabilityCorrelationId = 'collector-snapshot:2026-03-10T23:59:40.000Z';
+    const selectedSupervisionHistoryPath = resolveSelectedAgentSupervisionHistoryPath(
+      'app-engineering',
+      accountabilityCorrelationId
+    );
 
     await page.route('**/peer-watch/alerts**', async (route) => {
       const url = new URL(route.request().url());
@@ -7688,7 +7706,11 @@ test.describe('operator shell smoke', () => {
     });
 
     const accountabilityCorrelationId = 'collector-snapshot:2026-03-10T23:59:40.000Z';
-    await page.route('**/peer-watch/alerts?target_agent_id=app-engineering&limit=4', async (route) => {
+    const selectedSupervisionHistoryPath = resolveSelectedAgentSupervisionHistoryPath(
+      'app-engineering',
+      accountabilityCorrelationId
+    );
+    await page.route(`**${selectedSupervisionHistoryPath}`, async (route) => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -7793,8 +7815,12 @@ test.describe('operator shell smoke', () => {
       });
 
       const accountabilityCorrelationId = 'collector-snapshot:2026-03-10T23:59:40.000Z';
+      const selectedSupervisionHistoryPath = resolveSelectedAgentSupervisionHistoryPath(
+        'app-engineering',
+        accountabilityCorrelationId
+      );
 
-      await page.route('**/peer-watch/alerts?target_agent_id=app-engineering&limit=4', async (route) => {
+      await page.route(`**${selectedSupervisionHistoryPath}`, async (route) => {
         await route.fulfill({
           status: 200,
           contentType: 'application/json',
@@ -7884,14 +7910,14 @@ test.describe('operator shell smoke', () => {
       await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
       await expect(correlationSection.getByText(accountabilityCorrelationId, { exact: true })).toHaveCount(0);
       await expect(returnToCurrentScopeButton).toBeVisible();
-      await expect(reopenDefaultSupervisionCorrelationButton).toBeVisible();
+      await expect(reopenDefaultSupervisionCorrelationButton).toHaveCount(0);
+      await expect(
+        supervisionSection.getByText('Supervision history manual evidence jump stays in shared memory')
+      ).toHaveCount(0);
+      await expect(evidenceJumpButton).toHaveCount(0);
 
-      await focusHubControlWithTab(
-        page,
-        reopenDefaultSupervisionCorrelationButton,
-        `Open supervision history correlation ${accountabilityCorrelationId}`
-      );
-      await expect(reopenDefaultSupervisionCorrelationButton).toBeFocused();
+      await focusHubControlWithTab(page, returnToCurrentScopeButton, 'Return to current scope');
+      await expect(returnToCurrentScopeButton).toBeFocused();
       await page.keyboard.press('Enter');
 
       await expect(selectedSupervisionCorrelationButton).toBeVisible();
@@ -7899,7 +7925,7 @@ test.describe('operator shell smoke', () => {
       await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toHaveCount(0);
       await expect(memorySection.getByText('Collector observed workspace write to revenue-handoff.md')).toBeVisible();
       await expect(selectedSharedMemoryCorrelationButton).toBeVisible();
-      await expect(returnToCurrentScopeButton).toBeVisible();
+      await expect(returnToCurrentScopeButton).toHaveCount(0);
       await expect(evidenceJumpButton).toBeVisible();
       await expect(focusedSharedMemoryRecord).toHaveCount(0);
 
@@ -7917,7 +7943,7 @@ test.describe('operator shell smoke', () => {
       await expect(correlationSection.getByText(accountabilityCorrelationId, { exact: true })).toBeVisible();
       await expect(memorySection.getByText('Collector observed workspace write to revenue-handoff.md')).toBeVisible();
       await expect(selectedSharedMemoryCorrelationButton).toBeVisible();
-      await expect(returnToCurrentScopeButton).toBeVisible();
+      await expect(returnToCurrentScopeButton).toHaveCount(0);
       await expect(focusedSharedMemoryRecord).toHaveCount(1);
       await expect(focusedSharedMemoryRecord).toContainText('Ref · /tmp/revenue-handoff.md');
 
@@ -7942,7 +7968,11 @@ test.describe('operator shell smoke', () => {
     });
 
     const accountabilityCorrelationId = 'collector-snapshot:2026-03-10T23:59:40.000Z';
-    await page.route('**/peer-watch/alerts?target_agent_id=app-engineering&limit=4', async (route) => {
+    const selectedSupervisionHistoryPath = resolveSelectedAgentSupervisionHistoryPath(
+      'app-engineering',
+      accountabilityCorrelationId
+    );
+    await page.route(`**${selectedSupervisionHistoryPath}`, async (route) => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -8076,7 +8106,12 @@ test.describe('operator shell smoke', () => {
       await route.continue();
     });
 
-    await page.route('**/peer-watch/alerts?target_agent_id=app-engineering&limit=4', async (route) => {
+    const accountabilityCorrelationId = 'collector-snapshot:2026-03-10T23:59:40.000Z';
+    const selectedSupervisionHistoryPath = resolveSelectedAgentSupervisionHistoryPath(
+      'app-engineering',
+      accountabilityCorrelationId
+    );
+    await page.route(`**${selectedSupervisionHistoryPath}`, async (route) => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -8126,7 +8161,6 @@ test.describe('operator shell smoke', () => {
     const correlationSection = detailsPanel.locator('section').filter({
       has: page.getByRole('heading', { name: 'Correlation Drilldown' })
     });
-    const accountabilityCorrelationId = 'collector-snapshot:2026-03-10T23:59:40.000Z';
     const supervisionActorButton = supervisionSection.getByRole('button', {
       name: 'Select supervision history actor from alert alert-browser-supervision-history-actor growth-revenue'
     });
@@ -8220,7 +8254,12 @@ test.describe('operator shell smoke', () => {
       }
     });
 
-    await page.route('**/peer-watch/alerts?target_agent_id=app-engineering&limit=4', async (route) => {
+    const accountabilityCorrelationId = 'collector-snapshot:2026-03-10T23:59:40.000Z';
+    const selectedSupervisionHistoryPath = resolveSelectedAgentSupervisionHistoryPath(
+      'app-engineering',
+      accountabilityCorrelationId
+    );
+    await page.route(`**${selectedSupervisionHistoryPath}`, async (route) => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -8351,7 +8390,12 @@ test.describe('operator shell smoke', () => {
       }
     });
 
-    await page.route('**/peer-watch/alerts?target_agent_id=app-engineering&limit=4', async (route) => {
+    const accountabilityCorrelationId = 'collector-snapshot:2026-03-10T23:59:40.000Z';
+    const selectedSupervisionHistoryPath = resolveSelectedAgentSupervisionHistoryPath(
+      'app-engineering',
+      accountabilityCorrelationId
+    );
+    await page.route(`**${selectedSupervisionHistoryPath}`, async (route) => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -8475,7 +8519,11 @@ test.describe('operator shell smoke', () => {
     const requestedUrls: string[] = [];
     const forbiddenRequests: string[] = [];
     const directOperationUrl = '/office/operations?agent_id=growth-revenue';
-    const supervisionHistoryUrl = '/peer-watch/alerts?target_agent_id=growth-revenue&limit=4';
+    const accountabilityCorrelationId = 'collector-snapshot:2026-03-10T23:59:40.000Z';
+    const supervisionHistoryUrl = resolveSelectedAgentSupervisionHistoryPath(
+      'growth-revenue',
+      accountabilityCorrelationId
+    );
     const unscopedArtifactsUrl = '/memory/artifacts?limit=4&window=60m&agent_id=growth-revenue';
     const fallbackCorrelationUrl = '/correlations/corr-growth-lead-review?limit=10&window=60m';
     let trackForbiddenRequests = false;
@@ -8510,7 +8558,11 @@ test.describe('operator shell smoke', () => {
       await route.continue();
     });
 
-    await page.route('**/peer-watch/alerts?target_agent_id=app-engineering&limit=4', async (route) => {
+    const selectedSupervisionHistoryPath = resolveSelectedAgentSupervisionHistoryPath(
+      'app-engineering',
+      accountabilityCorrelationId
+    );
+    await page.route(`**${selectedSupervisionHistoryPath}`, async (route) => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -8560,7 +8612,6 @@ test.describe('operator shell smoke', () => {
     const correlationSection = detailsPanel.locator('section').filter({
       has: page.getByRole('heading', { name: 'Correlation Drilldown' })
     });
-    const accountabilityCorrelationId = 'collector-snapshot:2026-03-10T23:59:40.000Z';
     const supervisionObserverButton = supervisionSection.getByRole('button', {
       name: 'Select supervision history observer from alert alert-browser-supervision-history-observer growth-revenue'
     });
@@ -8653,7 +8704,11 @@ test.describe('operator shell smoke', () => {
     const requestedUrls: string[] = [];
     const forbiddenRequests: string[] = [];
     const directOperationUrl = '/office/operations?agent_id=growth-revenue';
-    const supervisionHistoryUrl = '/peer-watch/alerts?target_agent_id=growth-revenue&limit=4';
+    const accountabilityCorrelationId = 'collector-snapshot:2026-03-10T23:59:40.000Z';
+    const supervisionHistoryUrl = resolveSelectedAgentSupervisionHistoryPath(
+      'growth-revenue',
+      accountabilityCorrelationId
+    );
     const unscopedArtifactsUrl = '/memory/artifacts?limit=4&window=60m&agent_id=growth-revenue';
     const fallbackCorrelationUrl = '/correlations/corr-growth-lead-review?limit=10&window=60m';
     let trackForbiddenRequests = false;
@@ -8688,7 +8743,11 @@ test.describe('operator shell smoke', () => {
       await route.continue();
     });
 
-    await page.route('**/peer-watch/alerts?target_agent_id=app-engineering&limit=4', async (route) => {
+    const selectedSupervisionHistoryPath = resolveSelectedAgentSupervisionHistoryPath(
+      'app-engineering',
+      accountabilityCorrelationId
+    );
+    await page.route(`**${selectedSupervisionHistoryPath}`, async (route) => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -8738,7 +8797,6 @@ test.describe('operator shell smoke', () => {
     const correlationSection = detailsPanel.locator('section').filter({
       has: page.getByRole('heading', { name: 'Correlation Drilldown' })
     });
-    const accountabilityCorrelationId = 'collector-snapshot:2026-03-10T23:59:40.000Z';
     const supervisionWatcherButton = supervisionSection.getByRole('button', {
       name: 'Select supervision history watcher from alert alert-browser-supervision-history-watcher growth-revenue'
     });
@@ -9160,7 +9218,11 @@ test.describe('operator shell smoke', () => {
 
     const frontendOrigin = new URL(page.url()).origin;
     const inspectableBackendOrigin = resolveInspectableBrowserSmokeBackendOrigin();
-    const expectedBrowserRequest = '/peer-watch/alerts?target_agent_id=app-engineering&limit=4';
+    const accountabilityCorrelationId = 'collector-snapshot:2026-03-10T23:59:40.000Z';
+    const expectedBrowserRequest = resolveSelectedAgentSupervisionHistoryPath(
+      'app-engineering',
+      accountabilityCorrelationId
+    );
     const browserRequests = new Set<string>();
     const handleRequest = (request: Request) => {
       const url = new URL(request.url());
@@ -9183,7 +9245,11 @@ test.describe('operator shell smoke', () => {
       await detailsPanel.getByRole('button', { name: 'Inspect App Engineering Agent', exact: true }).click();
 
       await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
-      await expect(detailsPanel.getByText('Request scope · Target agent · app-engineering')).toBeVisible();
+      await expect(
+        detailsPanel.getByText(
+          `Request scope · Target agent · app-engineering · Active correlation · ${accountabilityCorrelationId}`
+        )
+      ).toBeVisible();
 
       await expect.poll(() => browserRequests.has(expectedBrowserRequest)).toBe(true);
 
@@ -9205,6 +9271,122 @@ test.describe('operator shell smoke', () => {
     } finally {
       page.off('request', handleRequest);
     }
+  });
+
+  test('Supervision History stays aligned with the active selected correlation in browser smoke once the selected-agent correlation settles', async ({
+    page
+  }) => {
+    const accountabilityCorrelationId = 'collector-snapshot:2026-03-10T23:59:40.000Z';
+    const scopedSupervisionHistoryPath = resolveSelectedAgentSupervisionHistoryPath(
+      'app-engineering',
+      accountabilityCorrelationId
+    );
+    const unscopedSupervisionHistoryPath = resolveSelectedAgentSupervisionHistoryPath('app-engineering');
+    const requestedUrls: string[] = [];
+
+    page.on('request', (request) => {
+      try {
+        const url = new URL(request.url());
+        requestedUrls.push(`${url.pathname}${url.search}`);
+      } catch {
+        requestedUrls.push(request.url());
+      }
+    });
+
+    await page.route(`**${unscopedSupervisionHistoryPath}`, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          items: [
+            {
+              alert_id: 'alert-browser-supervision-history-unscoped',
+              ts: '2026-03-10T23:00:00.000Z',
+              agent_id: 'app-engineering',
+              target_agent_id: 'app-engineering',
+              actor_id: 'team-lead',
+              observer_agent_id: 'team-lead',
+              watcher_agent_ids: ['team-lead'],
+              severity: 'orange',
+              status: 'open',
+              current_state: 'blocked',
+              active_task: 'Revenue handoff still needs app confirmation',
+              summary: 'Unrelated supervision history should not leak into the scoped view',
+              evidence_refs: ['/tmp/revenue-handoff.md'],
+              evidence_count: 1,
+              correlation_id: 'corr-app-secondary',
+              source_kind: 'controller_event',
+              metadata: {}
+            }
+          ]
+        })
+      });
+    });
+
+    await page.route(`**${scopedSupervisionHistoryPath}`, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          items: [
+            {
+              alert_id: 'alert-browser-supervision-history-scoped',
+              ts: '2026-03-10T23:00:00.000Z',
+              agent_id: 'app-engineering',
+              target_agent_id: 'app-engineering',
+              actor_id: 'team-lead',
+              observer_agent_id: 'team-lead',
+              watcher_agent_ids: ['team-lead'],
+              severity: 'orange',
+              status: 'open',
+              current_state: 'blocked',
+              active_task: 'Revenue handoff still needs app confirmation',
+              summary: 'Supervision History stays aligned with the active selected correlation',
+              evidence_refs: ['/tmp/revenue-handoff.md'],
+              evidence_count: 1,
+              correlation_id: accountabilityCorrelationId,
+              source_kind: 'controller_event',
+              metadata: {}
+            }
+          ]
+        })
+      });
+    });
+
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Hub' }).click();
+
+    const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
+    const supervisionSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Supervision History' })
+    });
+    const correlationSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Correlation Drilldown' })
+    });
+
+    await detailsPanel.getByRole('button', { name: 'Inspect App Engineering Agent', exact: true }).click();
+
+    await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+    await expect(correlationSection.getByText(accountabilityCorrelationId, { exact: true })).toBeVisible();
+    await expect(
+      supervisionSection.getByText('Supervision History stays aligned with the active selected correlation')
+    ).toBeVisible();
+    await expect(
+      detailsPanel.getByText(
+        `Request scope · Target agent · app-engineering · Active correlation · ${accountabilityCorrelationId}`
+      )
+    ).toBeVisible();
+    await expect(
+      supervisionSection.getByText('Unrelated supervision history should not leak into the scoped view')
+    ).toHaveCount(0);
+
+    await expect
+      .poll(() => ({
+        scoped: requestedUrls.includes(scopedSupervisionHistoryPath)
+      }))
+      .toEqual({
+        scoped: true
+      });
   });
 
   test('blocks loopback browser writes against the read-only smoke backend above the helper layer', async ({ page }) => {

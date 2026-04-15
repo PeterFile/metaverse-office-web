@@ -1743,6 +1743,198 @@ test.describe('operator shell smoke', () => {
     }
   });
 
+  test('keeps the portrait Live Focus inspect return lane unobscured and the read-only request surface narrow once the Hub-close transition settles via keyboard traversal', async ({
+    page
+  }) => {
+    test.slow();
+
+    await installFastPollInterval(page);
+
+    const portraitShell = SHELLS.find((shell) => shell.name === 'portrait');
+    expect(portraitShell).toBeDefined();
+
+    await page.setViewportSize(portraitShell!.viewport);
+    await page.goto('/');
+    await expect(page.locator('.aitown-world__host canvas')).toBeVisible();
+    await page.waitForFunction(() => Boolean(window.__AITOWN_VIEWPORT__));
+
+    await expect(page.getByText('Live Focus')).toBeVisible();
+    await expect(page.getByText(/agent needs attention right now\./)).toBeVisible();
+    await expect(page.getByRole('dialog', { name: 'Hub' })).toHaveCount(0);
+    await expect(page.getByRole('complementary', { name: 'Agent details' })).toHaveCount(0);
+
+    const liveFocusButton = page.getByRole('button', {
+      name: 'Inspect live focus agent Growth Revenue Agent'
+    });
+    const frontendOrigin = new URL(page.url()).origin;
+    const allowedPostClosePathnames = new Set(['/office/overview', '/incidents', '/agents/growth-revenue/workflow']);
+    const forbiddenPostClosePathnames = new Set([
+      '/office/operations',
+      '/timeline',
+      '/collectors/controller-snapshot',
+      '/memory/artifacts',
+      '/peer-watch/alerts',
+      '/correlations/corr-revenue-handoff'
+    ]);
+    const expectedOverviewSearch = '';
+    const expectedIncidentsSearch = '?limit=10&window=60m';
+    const expectedWorkflowSearch = '?limit=10&window=60m';
+    const postCloseRequests: Array<{
+      method: string;
+      pathname: string;
+      search: string;
+    }> = [];
+    const readPostCloseGetRequests = () => postCloseRequests.filter((request) => request.method === 'GET');
+    const readPostCloseNonGetRequests = () => postCloseRequests.filter((request) => request.method !== 'GET');
+    let trackPostCloseRequests = false;
+    const dialog = page.getByRole('dialog', { name: 'Hub' });
+    const handleRequest = (request: Request) => {
+      const url = new URL(request.url());
+      if (url.origin !== frontendOrigin || !trackPostCloseRequests) {
+        return;
+      }
+
+      postCloseRequests.push({
+        method: request.method(),
+        pathname: url.pathname,
+        search: url.search
+      });
+    };
+
+    page.on('request', handleRequest);
+
+    try {
+      const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
+      const selectedAgentHeading = detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' });
+      const watchOverlay = page.getByRole('region', { name: 'Selected watch links' });
+      const closeHubButton = page.getByRole('button', { name: 'Close Hub' });
+      const workflowResponsePromise = page.waitForResponse(
+        (response) =>
+          response.request().method() === 'GET' &&
+          response.status() === 200 &&
+          response.url().includes('/agents/growth-revenue/workflow?limit=10&window=60m')
+      );
+      const supervisionHistoryResponsePromise = page.waitForResponse(
+        (response) =>
+          response.request().method() === 'GET' &&
+          response.status() === 200 &&
+          response.url().includes('/peer-watch/alerts?target_agent_id=growth-revenue&limit=4')
+      );
+
+      await focusHubControlWithTab(page, liveFocusButton, 'Inspect live focus agent Growth Revenue Agent');
+      await expect(liveFocusButton).toBeFocused();
+      await page.keyboard.press('Enter');
+
+      await expect(dialog).toBeVisible();
+      await expect(selectedAgentHeading).toBeVisible();
+      await expect(detailsPanel.getByRole('button', { name: 'Clear' })).toBeVisible();
+      await expect(detailsPanel.getByText('Request scope · Target agent · growth-revenue')).toBeVisible();
+      await expect(detailsPanel.getByRole('heading', { name: 'Supervision History' })).toBeVisible();
+      await workflowResponsePromise;
+      await supervisionHistoryResponsePromise;
+
+      await focusHubControlWithTab(page, closeHubButton, 'Close Hub');
+      await expect(closeHubButton).toBeFocused();
+      await page.keyboard.press('Enter');
+
+      await expect(dialog).toHaveCount(0);
+      await expect(detailsPanel).toHaveCount(0);
+      await expect(watchOverlay).toBeVisible();
+      await expect(page.getByRole('list', { name: 'Selected watch link list' })).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Clear Selection' })).toBeVisible();
+
+      const selectedAgentViewport = await waitForViewportLayoutSettle(page);
+      const selectedAgent = selectedAgentViewport.selectedAgent;
+      const selectedBaselineScale = selectedAgentViewport.scale ?? 1;
+      const selectedBaselineTop = selectedAgentViewport.top;
+      const selectedBaselineClampPadding = {
+        top: selectedAgentViewport.clampPadding?.top ?? 0,
+        right: selectedAgentViewport.clampPadding?.right ?? 0
+      };
+
+      expect(selectedAgent).not.toBeNull();
+      expect(selectedAgent!.agentId).toBe('growth-revenue');
+      expect(selectedBaselineClampPadding.right).toBe(0);
+      expectViewportBoundsWithinClampBudget(selectedAgentViewport);
+
+      postCloseRequests.length = 0;
+      trackPostCloseRequests = true;
+
+      const right = await dragViewportToEdge(page, 'right');
+      await expect(watchOverlay).toBeVisible();
+      expect(right.selectedAgent?.agentId).toBe('growth-revenue');
+      expect(right.clampPadding?.top ?? 0).toBe(selectedBaselineClampPadding.top);
+      expect(right.clampPadding?.right ?? 0).toBe(0);
+      expectViewportBoundsWithinClampBudget(right);
+      expect(right.scale).toBeCloseTo(selectedBaselineScale, 4);
+      expect(right.right).toBeGreaterThanOrEqual(right.worldWidth - 0.5);
+      expect(right.right).toBeLessThanOrEqual(right.worldWidth + 0.5);
+      expect(Math.abs(right.top - selectedBaselineTop)).toBeLessThanOrEqual(0.5);
+
+      const left = await dragViewportToEdge(page, 'top-left', { horizontalOnly: true });
+      await expect(watchOverlay).toBeVisible();
+      expect(left.selectedAgent?.agentId).toBe('growth-revenue');
+      expect(left.clampPadding?.top ?? 0).toBe(selectedBaselineClampPadding.top);
+      expect(left.clampPadding?.right ?? 0).toBe(0);
+      expectViewportAtLeftClampEdge(left, selectedBaselineScale, selectedBaselineTop);
+
+      await expect
+        .poll(
+          () =>
+            readPostCloseGetRequests().filter(
+              (request) => request.pathname === '/office/overview' && request.search === expectedOverviewSearch
+            ).length,
+          { timeout: POLL_DRIVEN_ASSERTION_TIMEOUT_MS }
+        )
+        .toBeGreaterThan(0);
+      await expect
+        .poll(
+          () =>
+            readPostCloseGetRequests().filter(
+              (request) => request.pathname === '/incidents' && request.search === expectedIncidentsSearch
+            ).length,
+          { timeout: POLL_DRIVEN_ASSERTION_TIMEOUT_MS }
+        )
+        .toBeGreaterThan(0);
+      await expect
+        .poll(
+          () =>
+            readPostCloseGetRequests().filter(
+              (request) =>
+                request.pathname === '/agents/growth-revenue/workflow' && request.search === expectedWorkflowSearch
+            ).length,
+          { timeout: POLL_DRIVEN_ASSERTION_TIMEOUT_MS }
+        )
+        .toBeGreaterThan(1);
+
+      expect(postCloseRequests.length).toBeGreaterThan(0);
+      expect(readPostCloseNonGetRequests()).toEqual([]);
+      expect(readPostCloseGetRequests().filter((request) => !allowedPostClosePathnames.has(request.pathname))).toEqual(
+        []
+      );
+      expect(
+        readPostCloseGetRequests().filter(
+          (request) => request.pathname === '/office/overview' && request.search !== expectedOverviewSearch
+        )
+      ).toEqual([]);
+      expect(
+        readPostCloseGetRequests().filter(
+          (request) => request.pathname === '/incidents' && request.search !== expectedIncidentsSearch
+        )
+      ).toEqual([]);
+      expect(
+        readPostCloseGetRequests().filter(
+          (request) => request.pathname === '/agents/growth-revenue/workflow' && request.search !== expectedWorkflowSearch
+        )
+      ).toEqual([]);
+      expect(
+        readPostCloseGetRequests().filter((request) => forbiddenPostClosePathnames.has(request.pathname))
+      ).toEqual([]);
+    } finally {
+      page.off('request', handleRequest);
+    }
+  });
+
   test('keeps the last direct-selection Current Operation visible when a roster selection later degrades', async ({
     page
   }) => {

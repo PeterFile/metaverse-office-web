@@ -1144,6 +1144,172 @@ test.describe('operator shell smoke', () => {
     await expect(page.getByRole('button', { name: 'Open Hub' })).toBeVisible();
   });
 
+  test('keeps landscape selected-agent world-shell safe-lane reachability on read-only GET routes once the Hub-close transition settles', async ({
+    page
+  }) => {
+    test.slow();
+
+    await installFastPollInterval(page);
+
+    const landscapeShell = SHELLS.find((shell) => shell.name === 'landscape');
+    expect(landscapeShell).toBeDefined();
+
+    await page.setViewportSize(landscapeShell!.viewport);
+    await page.goto('/');
+    await expect(page.locator('.aitown-world__host canvas')).toBeVisible();
+    await page.waitForFunction(() => Boolean(window.__AITOWN_VIEWPORT__));
+
+    const frontendOrigin = new URL(page.url()).origin;
+    const allowedPostClosePathnames = new Set(['/office/overview', '/incidents', '/agents/growth-revenue/workflow']);
+    const forbiddenPostClosePathnames = new Set([
+      '/office/operations',
+      '/timeline',
+      '/collectors/controller-snapshot',
+      '/memory/artifacts',
+      '/peer-watch/alerts',
+      '/correlations/corr-revenue-handoff'
+    ]);
+    const expectedWorkflowSearch = '?limit=10&window=60m';
+    const postCloseRequests: Array<{
+      method: string;
+      pathname: string;
+      search: string;
+    }> = [];
+    const readPostCloseGetRequests = () => postCloseRequests.filter((request) => request.method === 'GET');
+    const readPostCloseNonGetRequests = () => postCloseRequests.filter((request) => request.method !== 'GET');
+    let trackPostCloseRequests = false;
+    const handleRequest = (request: Request) => {
+      const url = new URL(request.url());
+      if (url.origin !== frontendOrigin || !trackPostCloseRequests) {
+        return;
+      }
+
+      postCloseRequests.push({
+        method: request.method(),
+        pathname: url.pathname,
+        search: url.search
+      });
+    };
+
+    page.on('request', handleRequest);
+
+    try {
+      const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
+      const selectedAgentHeading = detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' });
+      const watchOverlay = page.getByRole('region', { name: 'Selected watch links' });
+      const workflowResponsePromise = page.waitForResponse(
+        (response) =>
+          response.request().method() === 'GET' &&
+          response.status() === 200 &&
+          response.url().includes('/agents/growth-revenue/workflow?limit=10&window=60m')
+      );
+
+      await page.getByRole('button', { name: 'Open Hub' }).click();
+      await detailsPanel.getByRole('button', { name: 'Inspect Growth Revenue Agent', exact: true }).click();
+      await expect(selectedAgentHeading).toBeVisible();
+      await workflowResponsePromise;
+
+      await page.getByRole('button', { name: 'Close Hub' }).click();
+      await expect(detailsPanel).toHaveCount(0);
+      await expect(watchOverlay).toBeVisible();
+      await expect(page.getByRole('list', { name: 'Selected watch link list' })).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Clear Selection' })).toBeVisible();
+
+      const selectedAgentViewport = await waitForViewportLayoutSettle(page);
+      const selectedAgent = selectedAgentViewport.selectedAgent;
+      expect(selectedAgent).not.toBeNull();
+
+      const selectedAgentProjection = resolveWorldPointScreenProjection(selectedAgentViewport, {
+        x: selectedAgent!.x,
+        y: selectedAgent!.y
+      });
+      const toplineCards = await page.locator('.aitown-panel__topline > span').evaluateAll((elements) =>
+        elements
+          .map((element) => {
+            const rect = element.getBoundingClientRect();
+            return {
+              left: rect.left,
+              right: rect.right,
+              top: rect.top,
+              bottom: rect.bottom
+            };
+          })
+          .sort((a, b) => a.left - b.left)
+      );
+      const selectedBaselineScale = selectedAgentViewport.scale ?? 1;
+      const selectedBaselineTop = selectedAgentViewport.top;
+      const selectedBaselineClampPadding = {
+        top: selectedAgentViewport.clampPadding?.top ?? 0,
+        right: selectedAgentViewport.clampPadding?.right ?? 0
+      };
+
+      expect(selectedAgent!.agentId).toBe('growth-revenue');
+      expect(selectedBaselineClampPadding.right).toBeGreaterThan(0);
+      expect(toplineCards).toHaveLength(2);
+      expect(selectedAgentProjection.x).toBeGreaterThan(toplineCards[0]!.right + 0.5);
+      expect(selectedAgentProjection.x).toBeLessThan(toplineCards[1]!.left - 0.5);
+      expect(selectedAgentProjection.y).toBeGreaterThanOrEqual(0);
+      expect(selectedAgentProjection.y).toBeLessThanOrEqual(selectedAgentViewport.screenHeight);
+      expectViewportBoundsWithinClampBudget(selectedAgentViewport);
+
+      postCloseRequests.length = 0;
+      trackPostCloseRequests = true;
+
+      const right = await dragViewportToEdge(page, 'right');
+      await expect(watchOverlay).toBeVisible();
+      expect(right.selectedAgent?.agentId).toBe('growth-revenue');
+      expect(right.clampPadding?.top ?? 0).toBe(selectedBaselineClampPadding.top);
+      expect(right.clampPadding?.right ?? 0).toBe(selectedBaselineClampPadding.right);
+      expectViewportAtRightClampEdge(right, selectedBaselineScale, selectedBaselineTop);
+
+      const left = await dragViewportToEdge(page, 'top-left', { horizontalOnly: true });
+      await expect(watchOverlay).toBeVisible();
+      expect(left.selectedAgent?.agentId).toBe('growth-revenue');
+      expect(left.clampPadding?.top ?? 0).toBe(selectedBaselineClampPadding.top);
+      expect(left.clampPadding?.right ?? 0).toBe(selectedBaselineClampPadding.right);
+      expectViewportAtLeftClampEdge(left, selectedBaselineScale, selectedBaselineTop);
+
+      await expect
+        .poll(
+          () => readPostCloseGetRequests().filter((request) => request.pathname === '/office/overview').length,
+          { timeout: POLL_DRIVEN_ASSERTION_TIMEOUT_MS }
+        )
+        .toBeGreaterThan(0);
+      await expect
+        .poll(
+          () => readPostCloseGetRequests().filter((request) => request.pathname === '/incidents').length,
+          { timeout: POLL_DRIVEN_ASSERTION_TIMEOUT_MS }
+        )
+        .toBeGreaterThan(0);
+      await expect
+        .poll(
+          () =>
+            readPostCloseGetRequests().filter(
+              (request) =>
+                request.pathname === '/agents/growth-revenue/workflow' && request.search === expectedWorkflowSearch
+            ).length,
+          { timeout: POLL_DRIVEN_ASSERTION_TIMEOUT_MS }
+        )
+        .toBeGreaterThan(1);
+
+      expect(postCloseRequests.length).toBeGreaterThan(0);
+      expect(readPostCloseNonGetRequests()).toEqual([]);
+      expect(readPostCloseGetRequests().filter((request) => !allowedPostClosePathnames.has(request.pathname))).toEqual(
+        []
+      );
+      expect(
+        readPostCloseGetRequests().filter(
+          (request) => request.pathname === '/agents/growth-revenue/workflow' && request.search !== expectedWorkflowSearch
+        )
+      ).toEqual([]);
+      expect(
+        readPostCloseGetRequests().filter((request) => forbiddenPostClosePathnames.has(request.pathname))
+      ).toEqual([]);
+    } finally {
+      page.off('request', handleRequest);
+    }
+  });
+
   test('renders the scene status legend for the canvas badge markers on the default shell', async ({ page }) => {
     await page.goto('/');
 

@@ -1727,6 +1727,65 @@ afterEach(() => {
     });
   });
 
+  it('shows selected-agent Current Operation loading and failure explicitly on the first direct roster read', async () => {
+    let resolveSelectedOperationRequest: ((response: Response) => void) | null = null;
+    const queueWithoutAppEngineering = {
+      ...operationsFixture,
+      items: operationsFixture.items.filter((operation) => operation.agent_id !== 'app-engineering')
+    };
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === operationsUrl) {
+          return Promise.resolve(jsonResponse(queueWithoutAppEngineering));
+        }
+
+        if (url === selectedOperationUrl) {
+          return new Promise<Response>((resolve) => {
+            resolveSelectedOperationRequest = resolve;
+          });
+        }
+
+        return resolveTestFetchResponse(url);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
+
+    const operationSection = (await within(details).findByRole('heading', { name: 'Current Operation' })).closest('section');
+    expect(operationSection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(globalThis.fetch).toHaveBeenCalledWith(selectedOperationUrl, expect.anything());
+      expect(within(operationSection!).getByText('Loading current operation...')).toBeVisible();
+      expect(within(operationSection!).queryByText(/Unable to load current operation\./)).not.toBeInTheDocument();
+      expect(within(details).queryByRole('heading', { name: 'Run Context' })).not.toBeInTheDocument();
+    });
+
+    expect(resolveSelectedOperationRequest).not.toBeNull();
+    await act(async () => {
+      resolveSelectedOperationRequest!(
+        new Response(JSON.stringify({ error: 'internal_error', details: 'operations refresh failed' }), {
+          status: 500,
+          headers: { 'content-type': 'application/json' }
+        })
+      );
+    });
+
+    await waitFor(() => {
+      expect(within(operationSection!).getByText('Unable to load current operation. operations refresh failed')).toBeVisible();
+      expect(within(operationSection!).queryByText('Loading current operation...')).not.toBeInTheDocument();
+      expect(within(details).queryByRole('heading', { name: 'Run Context' })).not.toBeInTheDocument();
+    });
+  });
+
   it('keeps direct inactive roster selection without a current operation section', async () => {
     vi.stubGlobal(
       'fetch',

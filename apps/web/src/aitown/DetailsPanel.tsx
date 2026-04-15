@@ -55,6 +55,7 @@ type DetailsPanelProps = {
   selectedCorrelationId: string | null;
   selectedOperationsState: string | null;
   selectedOperation: OfficeOperation | null;
+  selectedOperationRequestActive?: boolean;
   timelineReplay: TimelineReplayResponse | null;
   timelineReplayError: string | null;
   timelineReplayState: LoadState;
@@ -623,6 +624,14 @@ function renderActiveQueueEmptyLabel(selectedOperationsState: string | null) {
   }
 
   return `No active queue items for ${renderDisplayState(selectedOperationsState)} state.`;
+}
+
+function renderSelectedOperationLoadingLabel() {
+  return 'Loading current operation...';
+}
+
+function renderSelectedOperationErrorLabel(operationsError: string) {
+  return `Unable to load current operation. ${operationsError}`;
 }
 
 function renderActiveQueueAllStatesLabel({
@@ -1738,6 +1747,7 @@ export function DetailsPanel({
   selectedCorrelationId,
   selectedOperationsState,
   selectedOperation,
+  selectedOperationRequestActive,
   timelineReplay,
   timelineReplayError,
   timelineReplayState,
@@ -2390,12 +2400,20 @@ export function DetailsPanel({
 
   const selectedWorldAgent = world.agents.get(selectedAgent.agent_id) ?? null;
   const inboundWatchers = world.watch_edges.filter((edge) => edge.to_agent_id === selectedAgent.agent_id);
+  const selectedOperationLoadsIndependently = Boolean(selectedOperationRequestActive);
+  const selectedOperationLoadingState =
+    selectedOperationLoadsIndependently && selectedOperation === null && operationsState === 'loading';
+  const selectedOperationErrorState =
+    selectedOperationLoadsIndependently && selectedOperation === null && Boolean(operationsError);
   const currentOperationMissingFromQueue =
     selectedOperation !== null && operationsState === 'ready' && (operations?.items ?? []).length === 0;
-  const currentOperationWarning = operationsError
-    ? `Showing last operation snapshot. ${operationsError}`
-    : currentOperationMissingFromQueue
-      ? 'Showing last operation snapshot. Operation is no longer in the active queue.'
+  const currentOperationWarning =
+    selectedOperation !== null
+      ? operationsError
+        ? `Showing last operation snapshot. ${operationsError}`
+        : currentOperationMissingFromQueue
+          ? 'Showing last operation snapshot. Operation is no longer in the active queue.'
+          : null
       : null;
   const currentOperationIsStale = currentOperationWarning !== null;
   const selectedOperationLatestEvent = currentOperationIsStale ? null : selectedOperation?.latest_event ?? null;
@@ -2678,80 +2696,90 @@ export function DetailsPanel({
         </ul>
       </section>
 
-      {selectedOperation ? (
+      {selectedOperation || selectedOperationLoadingState || selectedOperationErrorState ? (
         <>
-        <section className="aitown-details__section">
-          <h3>Current Operation</h3>
-          {currentOperationWarning ? <p role="status">{currentOperationWarning}</p> : null}
-          <ul className="aitown-records">
-            <li className={`aitown-record severity-${selectedOperation.effective_severity}`}>
-              <strong>{selectedOperation.display_name}</strong>
-              <span>{`${selectedOperation.current_state} · ${selectedOperation.current_blocker || selectedOperation.active_task}`}</span>
-              <span>{`Location · ${selectedOperation.current_location}`}</span>
-              <span>{`Latest event · ${selectedOperation.latest_event?.summary ?? 'No latest event yet'}`}</span>
-              <span>
-                Actor ·{' '}
-                {canNavigateToSelectedOperationLatestEventActor && selectedOperation.latest_event
-                  ? renderAgentPivotButton({
-                      agentId: selectedOperation.latest_event.actor_id,
-                      ariaLabel: `Select current operation actor from event ${selectedOperation.latest_event.event_id} ${selectedOperation.latest_event.actor_id}`,
-                      correlationId: selectedOperationActorPivotCorrelationId,
-                      onSelectAgent
-                    })
-                  : (selectedOperationLatestEventActorId ?? 'No actor')}
-              </span>
-              {selectedOperation.correlation_id && !currentOperationIsStale
-                ? renderCorrelationButton({
-                    correlationId: selectedOperation.correlation_id,
-                    label: selectedOperation.correlation_id,
-                    buttonLabel: 'Open operation correlation',
-                    activeCorrelationId: selectedCorrelationId,
-                    preserveAutoOnDefaultReselect: true,
-                    onSelectCorrelation
-                  })
-                : null}
-              <span>
-                {'Counterparties · '}
-                {currentOperationIsStale
-                  ? renderCounterparties(selectedOperation.latest_event?.counterparty_agent_ids ?? [])
-                  : renderAgentPivotList({
-                      agentIds: selectedOperation.latest_event?.counterparty_agent_ids ?? [],
-                      currentAgentId: selectedAgent.agent_id,
-                      navigableAgentIds,
-                      emptyLabel: 'No counterparties',
-                      ariaLabelPrefix: 'Select operation counterparty agent',
-                      correlationId: selectedOperationCounterpartyPivotCorrelationId,
-                      onSelectAgent
+          <section className="aitown-details__section">
+            <h3>Current Operation</h3>
+            {currentOperationWarning ? <p role="status">{currentOperationWarning}</p> : null}
+            <ul className="aitown-records">
+              {selectedOperationLoadingState ? (
+                <li className="aitown-record">{renderSelectedOperationLoadingLabel()}</li>
+              ) : null}
+              {selectedOperationErrorState && operationsError ? (
+                <li className="aitown-record">{renderSelectedOperationErrorLabel(operationsError)}</li>
+              ) : null}
+              {selectedOperation ? (
+                <li className={`aitown-record severity-${selectedOperation.effective_severity}`}>
+                  <strong>{selectedOperation.display_name}</strong>
+                  <span>{`${selectedOperation.current_state} · ${selectedOperation.current_blocker || selectedOperation.active_task}`}</span>
+                  <span>{`Location · ${selectedOperation.current_location}`}</span>
+                  <span>{`Latest event · ${selectedOperation.latest_event?.summary ?? 'No latest event yet'}`}</span>
+                  <span>
+                    Actor ·{' '}
+                    {canNavigateToSelectedOperationLatestEventActor && selectedOperation.latest_event
+                      ? renderAgentPivotButton({
+                          agentId: selectedOperation.latest_event.actor_id,
+                          ariaLabel: `Select current operation actor from event ${selectedOperation.latest_event.event_id} ${selectedOperation.latest_event.actor_id}`,
+                          correlationId: selectedOperationActorPivotCorrelationId,
+                          onSelectAgent
+                        })
+                      : (selectedOperationLatestEventActorId ?? 'No actor')}
+                  </span>
+                  {selectedOperation.correlation_id && !currentOperationIsStale
+                    ? renderCorrelationButton({
+                        correlationId: selectedOperation.correlation_id,
+                        label: selectedOperation.correlation_id,
+                        buttonLabel: 'Open operation correlation',
+                        activeCorrelationId: selectedCorrelationId,
+                        preserveAutoOnDefaultReselect: true,
+                        onSelectCorrelation
+                      })
+                    : null}
+                  <span>
+                    {'Counterparties · '}
+                    {currentOperationIsStale
+                      ? renderCounterparties(selectedOperation.latest_event?.counterparty_agent_ids ?? [])
+                      : renderAgentPivotList({
+                          agentIds: selectedOperation.latest_event?.counterparty_agent_ids ?? [],
+                          currentAgentId: selectedAgent.agent_id,
+                          navigableAgentIds,
+                          emptyLabel: 'No counterparties',
+                          ariaLabelPrefix: 'Select operation counterparty agent',
+                          correlationId: selectedOperationCounterpartyPivotCorrelationId,
+                          onSelectAgent
+                        })}
+                  </span>
+                  <span>
+                    Evidence ·{' '}
+                    {renderSharedMemoryEvidenceRefs({
+                      evidenceRefs: selectedOperation.latest_event?.evidence_refs ?? [],
+                      sharedMemoryArtifactRefs,
+                      onJump: focusSharedMemoryArtifact
                     })}
-              </span>
-              <span>
-                Evidence ·{' '}
-                {renderSharedMemoryEvidenceRefs({
-                  evidenceRefs: selectedOperation.latest_event?.evidence_refs ?? [],
-                  sharedMemoryArtifactRefs,
-                  onJump: focusSharedMemoryArtifact
-                })}
-              </span>
-              <span>{`Source · ${selectedOperation.latest_event?.source_kind ?? 'No latest event source'}`}</span>
-            </li>
-          </ul>
-        </section>
-        <section className="aitown-details__section">
-          <h3>Run Context</h3>
-          <ul className="aitown-records">
-            <li className={`aitown-record severity-${selectedOperation.effective_severity}`}>
-              <strong>{selectedOperation.display_name}</strong>
-              <span>{`Run blocker · ${renderOperationBlocker(selectedOperation.current_blocker)}`}</span>
-              <span>{`Latest event type · ${selectedOperation.latest_event?.event_type ?? 'No latest event type'}`}</span>
-              <span>{`Latest event at · ${renderTimestamp(selectedOperation.latest_event?.ts ?? null, 'No latest event timestamp')}`}</span>
-              <span>{`Last event at · ${renderTimestamp(selectedOperation.last_event_at, 'No last event timestamp')}`}</span>
-              <span>{`Last heartbeat · ${renderTimestamp(selectedOperation.last_heartbeat_at, 'No heartbeat yet')}`}</span>
-              <span>{`Last output · ${renderTimestamp(selectedOperation.last_meaningful_output_at, 'No last output timestamp')}`}</span>
-              <span>{`Staleness · ${renderOperationStaleness(selectedOperation)}`}</span>
-              <span>{`Reboot recommendation · ${selectedOperation.reboot_recommended ? 'Recommended' : 'No'}`}</span>
-            </li>
-          </ul>
-        </section>
+                  </span>
+                  <span>{`Source · ${selectedOperation.latest_event?.source_kind ?? 'No latest event source'}`}</span>
+                </li>
+              ) : null}
+            </ul>
+          </section>
+          {selectedOperation ? (
+            <section className="aitown-details__section">
+              <h3>Run Context</h3>
+              <ul className="aitown-records">
+                <li className={`aitown-record severity-${selectedOperation.effective_severity}`}>
+                  <strong>{selectedOperation.display_name}</strong>
+                  <span>{`Run blocker · ${renderOperationBlocker(selectedOperation.current_blocker)}`}</span>
+                  <span>{`Latest event type · ${selectedOperation.latest_event?.event_type ?? 'No latest event type'}`}</span>
+                  <span>{`Latest event at · ${renderTimestamp(selectedOperation.latest_event?.ts ?? null, 'No latest event timestamp')}`}</span>
+                  <span>{`Last event at · ${renderTimestamp(selectedOperation.last_event_at, 'No last event timestamp')}`}</span>
+                  <span>{`Last heartbeat · ${renderTimestamp(selectedOperation.last_heartbeat_at, 'No heartbeat yet')}`}</span>
+                  <span>{`Last output · ${renderTimestamp(selectedOperation.last_meaningful_output_at, 'No last output timestamp')}`}</span>
+                  <span>{`Staleness · ${renderOperationStaleness(selectedOperation)}`}</span>
+                  <span>{`Reboot recommendation · ${selectedOperation.reboot_recommended ? 'Recommended' : 'No'}`}</span>
+                </li>
+              </ul>
+            </section>
+          ) : null}
         </>
       ) : null}
 

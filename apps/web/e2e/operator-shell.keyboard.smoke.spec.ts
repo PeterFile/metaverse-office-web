@@ -2292,6 +2292,62 @@ test.describe('operator shell smoke', () => {
     await page.unroute(activeQueueCorrelationRoute, activeQueueCorrelationHandler);
   });
 
+  test('shows explicit first-load fallback state when crew-overview timeline replay fails', async ({ page }) => {
+    const interceptedTimelineRequests: string[] = [];
+    let releaseFirstTimelineResponse: (() => void) | null = null;
+    const firstTimelineResponseReleased = new Promise<void>((resolve) => {
+      releaseFirstTimelineResponse = resolve;
+    });
+    const crewTimelineUrl = '/timeline?limit=4&window=60m';
+    const crewTimelineRoute = `**${crewTimelineUrl}`;
+    const crewTimelineHandler = async (route: Route) => {
+      const requestUrl = new URL(route.request().url());
+      const requestPath = `${route.request().method()} ${requestUrl.pathname}${requestUrl.search}`;
+      interceptedTimelineRequests.push(requestPath);
+      expect(requestPath).toBe(`GET ${crewTimelineUrl}`);
+
+      await firstTimelineResponseReleased;
+      await route.fulfill({
+        status: 500,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: 'internal_error', details: 'timeline replay refresh failed' })
+      });
+    };
+
+    await page.route(crewTimelineRoute, crewTimelineHandler);
+
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Hub' }).click();
+
+    const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
+    const replaySection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Timeline Replay' })
+    });
+
+    await expect(detailsPanel.getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
+    await expect.poll(() => interceptedTimelineRequests.length).toBe(1);
+    await expect(replaySection.getByText('Loading timeline replay...')).toBeVisible();
+    await expect(replaySection.getByText('timeline replay refresh failed')).toHaveCount(0);
+    await expect(replaySection.getByText('Lead completed the revenue handoff', { exact: true })).toHaveCount(0);
+    await expect(replaySection.getByText('No recent replay events.')).toHaveCount(0);
+    await expect(replaySection.getByText(/^Scoped replay · /)).toHaveCount(0);
+    await expect(replaySection.getByText('Loading scoped timeline replay...')).toHaveCount(0);
+    await expect(replaySection.getByText('Scoped replay unavailable.')).toHaveCount(0);
+
+    releaseFirstTimelineResponse?.();
+
+    await expect(replaySection.getByText('timeline replay refresh failed')).toBeVisible();
+    await expect(replaySection.getByText('Loading timeline replay...')).toHaveCount(0);
+    await expect(replaySection.getByText('Lead completed the revenue handoff', { exact: true })).toHaveCount(0);
+    await expect(replaySection.getByText('No recent replay events.')).toHaveCount(0);
+    await expect(replaySection.getByText(/^Scoped replay · /)).toHaveCount(0);
+    await expect(replaySection.getByText('Loading scoped timeline replay...')).toHaveCount(0);
+    await expect(replaySection.getByText('Scoped replay unavailable.')).toHaveCount(0);
+    expect(interceptedTimelineRequests).toEqual([`GET ${crewTimelineUrl}`]);
+
+    await page.unroute(crewTimelineRoute, crewTimelineHandler);
+  });
+
   test('keeps crew-overview auto correlation mode when re-selecting the current default active-queue correlation via keyboard traversal', async ({
     page
   }) => {

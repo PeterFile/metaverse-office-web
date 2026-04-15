@@ -10431,7 +10431,7 @@ afterEach(() => {
     render(<App />);
 
     expect(await screen.findByRole('heading', { name: 'Metaverse Office' })).toBeVisible();
-    expect(screen.getByText(/Snapshot 2026-03-16T09:00:00.000Z/)).toBeVisible();
+    expect(await screen.findByText(/Snapshot 2026-03-16T09:00:00.000Z/)).toBeVisible();
 
     expect(await screen.findByText('Showing last office snapshot.')).toBeVisible();
     expect(screen.getByText('overview refresh failed')).toBeVisible();

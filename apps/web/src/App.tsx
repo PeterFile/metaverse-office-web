@@ -375,7 +375,7 @@ function AppInner() {
     selectedCorrelationId,
     selectedCorrelationWasExplicit
   );
-  const crewTimelineResource = usePolledResource({
+  const timelineReplayResource = usePolledResource({
     enabled: hubOpen && selectedAgentId === null,
     load: (signal) =>
       fetchTimeline({
@@ -1270,9 +1270,9 @@ function AppInner() {
               selectedOperationsState={selectedOperationsState}
               selectedOperation={selectedOperation}
               selectedOperationRequestActive={selectedOperationSelection !== null}
-              timelineReplay={crewTimelineResource.data}
-              timelineReplayError={crewTimelineResource.error}
-              timelineReplayState={crewTimelineResource.state}
+              timelineReplay={timelineReplayResource.data}
+              timelineReplayError={timelineReplayResource.error}
+              timelineReplayState={timelineReplayResource.state}
               workflow={activeWorkflow}
               workflowError={workflowResource.error}
               workflowState={workflowResource.state}

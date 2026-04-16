@@ -1095,6 +1095,77 @@ function renderReplayTimelineEvent({
   );
 }
 
+function renderTimelineReplaySection({
+  requestScopeLabel = null,
+  scopedReplayCorrelationId = null,
+  timelineReplayItems,
+  timelineReplayError,
+  timelineReplayState,
+  hasReplaySnapshot,
+  loadingLabel,
+  emptyLabel,
+  initialErrorLabel,
+  degradedErrorLabel,
+  activeCorrelationId,
+  currentAgentId,
+  navigableAgentIds,
+  agentNameById,
+  sharedMemoryArtifactRefs,
+  onSelectAgent,
+  onSelectCorrelation
+}: {
+  requestScopeLabel?: string | null;
+  scopedReplayCorrelationId?: string | null;
+  timelineReplayItems: WorkflowTimelineEvent[];
+  timelineReplayError: string | null;
+  timelineReplayState: LoadState;
+  hasReplaySnapshot: boolean;
+  loadingLabel: string;
+  emptyLabel: string;
+  initialErrorLabel: string;
+  degradedErrorLabel: string;
+  activeCorrelationId: string | null;
+  currentAgentId: string | null;
+  navigableAgentIds: Set<string>;
+  agentNameById: Map<string, string>;
+  sharedMemoryArtifactRefs: ReadonlySet<string>;
+  onSelectAgent: SelectAgentHandler;
+  onSelectCorrelation: SelectCorrelationHandler;
+}) {
+  return (
+    <section className="aitown-details__section">
+      <h3>Timeline Replay</h3>
+      {requestScopeLabel ? <p>{`Request scope · ${requestScopeLabel}`}</p> : null}
+      {scopedReplayCorrelationId ? <span>{`Scoped replay · ${scopedReplayCorrelationId}`}</span> : null}
+      <ul className="aitown-records">
+        {timelineReplayState === 'loading' && !hasReplaySnapshot ? (
+          <li className="aitown-record">{loadingLabel}</li>
+        ) : null}
+        {timelineReplayError ? (
+          <li className="aitown-record">
+            {hasReplaySnapshot ? degradedErrorLabel : initialErrorLabel}
+          </li>
+        ) : null}
+        {timelineReplayItems.map((event) =>
+          renderReplayTimelineEvent({
+            event,
+            activeCorrelationId,
+            agentLabel: agentNameById.get(event.agent_id) ?? event.agent_id,
+            currentAgentId,
+            navigableAgentIds,
+            sharedMemoryArtifactRefs,
+            onSelectAgent,
+            onSelectCorrelation
+          })
+        )}
+        {timelineReplayState === 'ready' && !timelineReplayError && hasReplaySnapshot && timelineReplayItems.length === 0 ? (
+          <li className="aitown-record">{emptyLabel}</li>
+        ) : null}
+      </ul>
+    </section>
+  );
+}
+
 function renderWorkflowStatusRecord({
   key,
   kind,
@@ -2289,47 +2360,36 @@ export function DetailsPanel({
           </ul>
         </section>
 
-        <section className="aitown-details__section">
-          <h3>Timeline Replay</h3>
-          {manualCorrelationOverrideActive && selectedCorrelationId ? (
-            <span>{`Scoped replay · ${selectedCorrelationId}`}</span>
-          ) : null}
-          <ul className="aitown-records">
-            {timelineReplayState === 'loading' && !timelineReplay ? (
-              <li className="aitown-record">
-                {manualCorrelationOverrideActive && selectedCorrelationId
-                  ? 'Loading scoped timeline replay...'
-                  : 'Loading timeline replay...'}
-              </li>
-            ) : null}
-            {timelineReplayError ? (
-              <li className="aitown-record">
-                {manualCorrelationOverrideActive && selectedCorrelationId
-                  ? `Scoped replay unavailable. ${timelineReplayError}`
-                  : timelineReplayError}
-              </li>
-            ) : null}
-            {(timelineReplay?.items ?? []).map((event) =>
-              renderReplayTimelineEvent({
-                event,
-                activeCorrelationId: selectedCorrelationId,
-                agentLabel: agentNameById.get(event.agent_id) ?? event.agent_id,
-                currentAgentId: null,
-                navigableAgentIds,
-                sharedMemoryArtifactRefs,
-                onSelectAgent,
-                onSelectCorrelation
-              })
-            )}
-            {timelineReplayState === 'ready' && !timelineReplayError && !timelineReplay?.items.length ? (
-              <li className="aitown-record">
-                {manualCorrelationOverrideActive && selectedCorrelationId
-                  ? `No replay events for ${selectedCorrelationId}.`
-                  : 'No recent replay events.'}
-              </li>
-            ) : null}
-          </ul>
-        </section>
+        {renderTimelineReplaySection({
+          scopedReplayCorrelationId: manualCorrelationOverrideActive ? selectedCorrelationId : null,
+          timelineReplayItems: timelineReplay?.items ?? [],
+          timelineReplayError,
+          timelineReplayState,
+          hasReplaySnapshot: timelineReplay !== null,
+          loadingLabel:
+            manualCorrelationOverrideActive && selectedCorrelationId
+              ? 'Loading scoped timeline replay...'
+              : 'Loading timeline replay...',
+          emptyLabel:
+            manualCorrelationOverrideActive && selectedCorrelationId
+              ? `No replay events for ${selectedCorrelationId}.`
+              : 'No recent replay events.',
+          initialErrorLabel:
+            manualCorrelationOverrideActive && selectedCorrelationId
+              ? `Scoped replay unavailable. ${timelineReplayError}`
+              : (timelineReplayError ?? 'Timeline replay unavailable.'),
+          degradedErrorLabel:
+            manualCorrelationOverrideActive && selectedCorrelationId
+              ? `Scoped replay unavailable. ${timelineReplayError}`
+              : (timelineReplayError ?? 'Timeline replay unavailable.'),
+          activeCorrelationId: selectedCorrelationId,
+          currentAgentId: null,
+          navigableAgentIds,
+          agentNameById,
+          sharedMemoryArtifactRefs,
+          onSelectAgent,
+          onSelectCorrelation
+        })}
 
         <section className="aitown-details__section">
           <h3>Correlation Drilldown</h3>
@@ -2495,6 +2555,21 @@ export function DetailsPanel({
   const alignedWorkflowTimeline = (workflow?.timeline ?? []).filter((event) =>
     isAlignedCorrelation(event.correlation_id, accountabilityCorrelationId)
   );
+  const selectedAgentReplayUsesScopedCorrelation = selectedCorrelationId !== null;
+  const selectedAgentScopedReplayItems = (correlation?.timeline ?? []).filter(
+    (event) => event.agent_id === selectedAgent.agent_id
+  );
+  const selectedAgentReplayItems = selectedAgentReplayUsesScopedCorrelation
+    ? selectedAgentScopedReplayItems
+    : (workflow?.timeline ?? []);
+  const selectedAgentReplayHasSnapshot = selectedAgentReplayUsesScopedCorrelation
+    ? correlation !== null
+    : workflow !== null;
+  const selectedAgentReplayState = selectedAgentReplayUsesScopedCorrelation ? correlationState : workflowState;
+  const selectedAgentReplayError = selectedAgentReplayUsesScopedCorrelation ? correlationError : workflowError;
+  const selectedAgentReplayScopeLabel = selectedCorrelationId
+    ? `Target agent · ${selectedAgent.agent_id} · ${selectedCorrelationId}`
+    : `Target agent · ${selectedAgent.agent_id}`;
   const alignedWorkflowIncidentHistory = (workflow?.incidents ?? []).filter((incident) =>
     isAlignedCorrelation(incident.correlation_id, accountabilityCorrelationId)
   );
@@ -3035,6 +3110,34 @@ export function DetailsPanel({
           ) : null}
         </ul>
       </section>
+
+      {renderTimelineReplaySection({
+        requestScopeLabel: selectedAgentReplayScopeLabel,
+        scopedReplayCorrelationId: selectedCorrelationId,
+        timelineReplayItems: selectedAgentReplayItems,
+        timelineReplayError: selectedAgentReplayError,
+        timelineReplayState: selectedAgentReplayState,
+        hasReplaySnapshot: selectedAgentReplayHasSnapshot,
+        loadingLabel: selectedCorrelationId
+          ? 'Loading scoped timeline replay...'
+          : 'Loading selected-agent timeline replay...',
+        emptyLabel: selectedCorrelationId
+          ? `No replay events for ${selectedCorrelationId}.`
+          : 'No recent replay events.',
+        initialErrorLabel: selectedCorrelationId
+          ? `Scoped replay unavailable. ${selectedAgentReplayError}`
+          : `Unable to load timeline replay. ${selectedAgentReplayError}`,
+        degradedErrorLabel: selectedCorrelationId
+          ? `Scoped replay unavailable. ${selectedAgentReplayError}`
+          : `Showing last timeline replay snapshot. ${selectedAgentReplayError}`,
+        activeCorrelationId: selectedCorrelationId,
+        currentAgentId: selectedAgent.agent_id,
+        navigableAgentIds,
+        agentNameById,
+        sharedMemoryArtifactRefs,
+        onSelectAgent,
+        onSelectCorrelation
+      })}
 
       <section className="aitown-details__section">
         <h3>Correlation Drilldown</h3>

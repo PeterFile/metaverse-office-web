@@ -74,6 +74,16 @@ function resolveWatchModeLabel(watchMode: 'lead' | 'peer') {
   return watchMode === 'lead' ? 'Lead watch' : 'Peer watch';
 }
 
+function resolveActiveCorrelationOverlayParticipants(scene: AiTownSceneModel) {
+  if (!scene.activeCorrelationId) {
+    return [];
+  }
+
+  const participantIds = new Set(scene.correlationParticipantAgentIds);
+
+  return scene.agents.filter((agent) => participantIds.has(agent.agentId));
+}
+
 function createWatchOverlay(scene: AiTownSceneModel) {
   const container = new Container();
   container.eventMode = 'none';
@@ -463,6 +473,8 @@ export default function WorldScene({ scene, onSelectAgent, resetViewSignal = 0 }
   currentSelectedHasWatchOverlayRef.current = currentSelectedHasWatchOverlay;
   const showWatchOverlayCaption = ready && !loadError && watchOverlayCaptionItems.length > 0;
   const selectedSceneAgent = scene.agents.find((agent) => agent.agentId === scene.selectedAgentId);
+  const activeCorrelationOverlayParticipants = resolveActiveCorrelationOverlayParticipants(scene);
+  const showActiveCorrelationOverlay = ready && !loadError && scene.activeCorrelationId !== null;
   selectedAgentRef.current = selectedSceneAgent
     ? {
         agentId: selectedSceneAgent.agentId,
@@ -1195,6 +1207,48 @@ export default function WorldScene({ scene, onSelectAgent, resetViewSignal = 0 }
   return (
     <div className="aitown-world__canvas">
       <div ref={hostRef} className="aitown-world__host" />
+      {showActiveCorrelationOverlay ? (
+        <section className="aitown-correlation-overlay" aria-label="Active correlation">
+          <p className="aitown-correlation-overlay__caption">
+            <span className="aitown-correlation-overlay__title">Active correlation</span>
+            <span className="aitown-correlation-overlay__summary">
+              <span className="aitown-correlation-overlay__id">{scene.activeCorrelationId}</span>
+              {' · '}
+              {activeCorrelationOverlayParticipants.length === 1
+                ? '1 highlighted agent'
+                : `${activeCorrelationOverlayParticipants.length} highlighted agents`}
+            </span>
+          </p>
+          {activeCorrelationOverlayParticipants.length > 0 ? (
+            <ul className="aitown-correlation-overlay__agents" aria-label="Active correlation participant list">
+              {activeCorrelationOverlayParticipants.map((agent) => {
+                const agentSelected = scene.selectedAgentId === agent.agentId;
+
+                return (
+                  <li key={agent.agentId}>
+                    <button
+                      type="button"
+                      className={`aitown-roster__button aitown-correlation-overlay__agent severity-${agent.severity}${
+                        agentSelected ? ' is-active' : ''
+                      }`}
+                      aria-label={`Inspect ${agent.displayName} from active correlation`}
+                      onClick={() => onSelectAgentRef.current(agent.agentId)}
+                    >
+                      <span className="aitown-correlation-overlay__agent-copy">
+                        <strong>{agent.displayName}</strong>
+                        <span>{agentSelected ? 'Selected in viewport' : 'Inspect in Hub'}</span>
+                      </span>
+                      {agentSelected ? <span className="aitown-correlation-overlay__agent-marker">Selected</span> : null}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <p className="aitown-correlation-overlay__empty">No highlighted scene agents are currently available.</p>
+          )}
+        </section>
+      ) : null}
       {showWatchOverlayCaption ? (
         <section className="aitown-watch-overlay" aria-label="Selected watch links">
           <p className="aitown-watch-overlay__caption">

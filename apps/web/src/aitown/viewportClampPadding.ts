@@ -7,6 +7,7 @@ const rightSelectors = [
   '.aitown-panel__toolbar',
   '.aitown-panel__topline > span:last-child',
   '.aitown-hub-sheet',
+  '.aitown-correlation-overlay',
   '.aitown-watch-overlay'
 ];
 const clampContributorSelectors = [...new Set([...topSelectors, ...leftSelectors, ...rightSelectors])];
@@ -16,7 +17,7 @@ const subtreeMutationContributorSelectors = [
   '.aitown-panel__topline',
   '.aitown-panel__toolbar'
 ];
-const fixedWidthContributorSelectors = ['.aitown-hub-sheet', '.aitown-watch-overlay'];
+const fixedWidthContributorSelectors = ['.aitown-hub-sheet', '.aitown-correlation-overlay', '.aitown-watch-overlay'];
 const textContributorSelectors = [...new Set(topSelectors)];
 const clampContributorRootClasses = new Set([
   'aitown-shell__brand',
@@ -24,6 +25,7 @@ const clampContributorRootClasses = new Set([
   'aitown-panel__topline',
   'aitown-panel__toolbar',
   'aitown-hub-sheet',
+  'aitown-correlation-overlay',
   'aitown-watch-overlay'
 ]);
 

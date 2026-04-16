@@ -563,6 +563,120 @@ describe('WorldScene watch overlay caption gating', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
+  it('renders an active correlation overlay with participant inspect buttons only while a correlation is active', async () => {
+    appInitMock.mockReset().mockResolvedValue(undefined);
+    vi.mocked(loadAiTownAssets).mockResolvedValue(makeAssets());
+
+    const onSelectAgent = vi.fn();
+    const inactiveScene = {
+      ...makeScene(),
+      watchEdges: []
+    };
+    const activeScene = {
+      ...inactiveScene,
+      activeCorrelationId: 'corr-app-review',
+      correlationParticipantAgentIds: ['app-engineering', 'team-lead']
+    } satisfies AiTownSceneModel;
+    const { rerender } = render(<WorldScene scene={inactiveScene} onSelectAgent={onSelectAgent} />);
+
+    expect(screen.queryByRole('region', { name: 'Active correlation' })).not.toBeInTheDocument();
+
+    rerender(<WorldScene scene={activeScene} onSelectAgent={onSelectAgent} />);
+
+    const region = await screen.findByRole('region', { name: 'Active correlation' });
+    const list = within(region).getByRole('list', { name: 'Active correlation participant list' });
+    const appEngineeringButton = within(list).getByRole('button', {
+      name: 'Inspect App Engineering Agent from active correlation'
+    });
+    const teamLeadButton = within(list).getByRole('button', {
+      name: 'Inspect Team Lead from active correlation'
+    });
+
+    expect(within(region).getByText('corr-app-review')).toBeVisible();
+    expect(appEngineeringButton).toBeVisible();
+    expect(teamLeadButton).toBeVisible();
+
+    fireEvent.click(teamLeadButton);
+
+    expect(onSelectAgent).toHaveBeenLastCalledWith('team-lead');
+
+    rerender(<WorldScene scene={inactiveScene} onSelectAgent={onSelectAgent} />);
+
+    await waitFor(() => {
+      expect(screen.queryByRole('region', { name: 'Active correlation' })).not.toBeInTheDocument();
+    });
+  });
+
+  it('routes active correlation overlay clamp padding into the viewport inspector and clears it when the overlay disappears', async () => {
+    appInitMock.mockReset().mockResolvedValue(undefined);
+    vi.mocked(loadAiTownAssets).mockResolvedValue(makeAssets());
+
+    const inactiveScene = {
+      ...makeWideSelectedAgentScene(),
+      watchEdges: []
+    };
+    const activeScene = {
+      ...inactiveScene,
+      activeCorrelationId: 'corr-app-review',
+      correlationParticipantAgentIds: ['app-engineering', 'team-lead']
+    } satisfies AiTownSceneModel;
+    const { container, rerender } = render(
+      <main className="aitown-shell">
+        <section className="aitown-panel aitown-panel--game">
+          <WorldScene scene={inactiveScene} onSelectAgent={vi.fn()} />
+        </section>
+      </main>
+    );
+
+    const host = container.querySelector('.aitown-world__host');
+    expect(host).toBeInstanceOf(HTMLDivElement);
+    setElementRect(host as HTMLDivElement, { left: 0, top: 0, width: 1000, height: 800 });
+
+    await waitFor(() => {
+      expect(readViewportInspector()).toBeDefined();
+      expect(screen.queryByRole('region', { name: 'Active correlation' })).not.toBeInTheDocument();
+      expect(readViewportInspector()?.read().clampPadding).toEqual({
+        top: 0,
+        right: 0
+      });
+    });
+
+    rerender(
+      <main className="aitown-shell">
+        <section className="aitown-panel aitown-panel--game">
+          <WorldScene scene={activeScene} onSelectAgent={vi.fn()} />
+        </section>
+      </main>
+    );
+
+    const overlay = await screen.findByRole('region', { name: 'Active correlation' });
+    setElementRect(overlay, { left: 700, top: 18, width: 300, height: 200 });
+    overlay.classList.add('is-measured');
+
+    await waitFor(() => {
+      expect(readViewportInspector()?.read().clampPadding).toEqual({
+        top: 0,
+        right: 300
+      });
+    });
+
+    rerender(
+      <main className="aitown-shell">
+        <section className="aitown-panel aitown-panel--game">
+          <WorldScene scene={inactiveScene} onSelectAgent={vi.fn()} />
+        </section>
+      </main>
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByRole('region', { name: 'Active correlation' })).not.toBeInTheDocument();
+      expect(readViewportInspector()?.read().clampPadding).toEqual({
+        top: 0,
+        right: 0
+      });
+    });
+  });
+
   it('recovers from renderer_init_failed through Retry renderer and registers the viewport inspector after retry cleanup', async () => {
     const tracker = installViewportInspectorTracker();
     appInitMock

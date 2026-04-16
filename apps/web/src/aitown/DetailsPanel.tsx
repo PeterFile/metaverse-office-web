@@ -107,10 +107,234 @@ const SEVERITY_RANK = {
   red: 3
 } as const;
 
+const SHARED_MEMORY_BACKLINK_LIMIT = 4;
+
+type SharedMemoryBacklink = {
+  key: string;
+  sourceLabel: string;
+  label: string;
+};
+
+type SharedMemoryBacklinkSummary = {
+  items: SharedMemoryBacklink[];
+  overflowCount: number;
+};
+
 function dedupeIncidents(incidents: WorkflowIncident[]) {
   return incidents.filter(
     (incident, index, list) => list.findIndex((item) => item.incident_id === incident.incident_id) === index
   );
+}
+
+function appendSharedMemoryBacklink(
+  backlinksByKey: Map<string, SharedMemoryBacklink>,
+  backlink: SharedMemoryBacklink | null
+) {
+  if (!backlink || backlinksByKey.has(backlink.key)) {
+    return;
+  }
+
+  backlinksByKey.set(backlink.key, backlink);
+}
+
+function appendScopedEvidenceRefBacklinks<
+  RecordType extends {
+    evidence_refs: string[];
+    summary: string;
+    correlation_id?: string | null;
+  }
+>(
+  backlinksByKey: Map<string, SharedMemoryBacklink>,
+  records: ReadonlyArray<RecordType>,
+  focusedArtifactRef: string,
+  activeCorrelationId: string | null,
+  createBacklink: (record: RecordType) => SharedMemoryBacklink
+) {
+  records.forEach((record) => {
+    if (!isAlignedCorrelation(record.correlation_id, activeCorrelationId)) {
+      return;
+    }
+
+    if (!record.evidence_refs.includes(focusedArtifactRef)) {
+      return;
+    }
+
+    appendSharedMemoryBacklink(backlinksByKey, createBacklink(record));
+  });
+}
+
+function buildFocusedSharedMemoryBacklinks({
+  focusedArtifactRef,
+  activeCorrelationId,
+  selectedOperation,
+  selectedAgentSupervisionHistory,
+  workflow,
+  correlation
+}: {
+  focusedArtifactRef: string | null | undefined;
+  activeCorrelationId: string | null;
+  selectedOperation: OfficeOperation | null;
+  selectedAgentSupervisionHistory: PeerWatchAlertsResponse | null;
+  workflow: AgentWorkflow | null;
+  correlation: CorrelationDrilldown | null;
+}): SharedMemoryBacklinkSummary {
+  if (!focusedArtifactRef) {
+    return {
+      items: [],
+      overflowCount: 0
+    };
+  }
+
+  const backlinksByKey = new Map<string, SharedMemoryBacklink>();
+
+  if (
+    selectedOperation?.latest_event &&
+    isAlignedCorrelation(selectedOperation.correlation_id, activeCorrelationId) &&
+    selectedOperation.latest_event.evidence_refs.includes(focusedArtifactRef)
+  ) {
+    appendSharedMemoryBacklink(backlinksByKey, {
+      key: `event:${selectedOperation.latest_event.event_id}`,
+      sourceLabel: 'Current operation',
+      label: selectedOperation.latest_event.summary
+    });
+  }
+
+  appendScopedEvidenceRefBacklinks(
+    backlinksByKey,
+    selectedAgentSupervisionHistory?.items ?? [],
+    focusedArtifactRef,
+    activeCorrelationId,
+    (alert) => ({
+      key: `alert:${alert.alert_id}`,
+      sourceLabel: 'Supervision history',
+      label: alert.summary
+    })
+  );
+
+  appendScopedEvidenceRefBacklinks(
+    backlinksByKey,
+    workflow?.detail.open_peer_watch_alerts ?? [],
+    focusedArtifactRef,
+    activeCorrelationId,
+    (alert) => ({
+      key: `alert:${alert.alert_id}`,
+      sourceLabel: 'Workflow alert',
+      label: alert.summary
+    })
+  );
+
+  appendScopedEvidenceRefBacklinks(
+    backlinksByKey,
+    workflow?.detail.recent_incidents ?? [],
+    focusedArtifactRef,
+    activeCorrelationId,
+    (incident) => ({
+      key: `incident:${incident.incident_id}`,
+      sourceLabel: 'Workflow incident',
+      label: incident.summary
+    })
+  );
+
+  appendScopedEvidenceRefBacklinks(
+    backlinksByKey,
+    workflow?.detail.recent_interactions ?? [],
+    focusedArtifactRef,
+    activeCorrelationId,
+    (interaction) => ({
+      key: `interaction:${interaction.interaction_id}`,
+      sourceLabel: 'Workflow interaction',
+      label: interaction.summary
+    })
+  );
+
+  appendScopedEvidenceRefBacklinks(
+    backlinksByKey,
+    workflow?.detail.recent_events ?? [],
+    focusedArtifactRef,
+    activeCorrelationId,
+    (event) => ({
+      key: `event:${event.event_id}`,
+      sourceLabel: 'Workflow event',
+      label: event.summary
+    })
+  );
+
+  appendScopedEvidenceRefBacklinks(
+    backlinksByKey,
+    workflow?.detail.recent_handoffs ?? [],
+    focusedArtifactRef,
+    activeCorrelationId,
+    (handoff) => ({
+      key: `handoff:${handoff.handoff_id}`,
+      sourceLabel: 'Workflow handoff',
+      label: handoff.summary
+    })
+  );
+
+  appendScopedEvidenceRefBacklinks(
+    backlinksByKey,
+    workflow?.detail.recent_reboots ?? [],
+    focusedArtifactRef,
+    activeCorrelationId,
+    (reboot) => ({
+      key: `reboot:${reboot.reboot_id}`,
+      sourceLabel: 'Workflow reboot',
+      label: reboot.summary
+    })
+  );
+
+  if (activeCorrelationId && correlation?.correlation_id === activeCorrelationId) {
+    if (correlation.evidence_refs.includes(focusedArtifactRef)) {
+      appendSharedMemoryBacklink(backlinksByKey, {
+        key: `correlation:${correlation.correlation_id}`,
+        sourceLabel: 'Active correlation',
+        label: correlation.correlation_id
+      });
+    }
+
+    appendScopedEvidenceRefBacklinks(
+      backlinksByKey,
+      correlation.incidents,
+      focusedArtifactRef,
+      activeCorrelationId,
+      (incident) => ({
+        key: `incident:${incident.incident_id}`,
+        sourceLabel: 'Correlation incident',
+        label: incident.summary
+      })
+    );
+
+    appendScopedEvidenceRefBacklinks(
+      backlinksByKey,
+      correlation.interactions,
+      focusedArtifactRef,
+      activeCorrelationId,
+      (interaction) => ({
+        key: `interaction:${interaction.interaction_id}`,
+        sourceLabel: 'Correlation interaction',
+        label: interaction.summary
+      })
+    );
+
+    appendScopedEvidenceRefBacklinks(
+      backlinksByKey,
+      correlation.timeline,
+      focusedArtifactRef,
+      activeCorrelationId,
+      (event) => ({
+        key: `event:${event.event_id}`,
+        sourceLabel: 'Correlation event',
+        label: event.summary
+      })
+    );
+  }
+
+  const allBacklinks = [...backlinksByKey.values()];
+
+  return {
+    items: allBacklinks.slice(0, SHARED_MEMORY_BACKLINK_LIMIT),
+    overflowCount: Math.max(0, allBacklinks.length - SHARED_MEMORY_BACKLINK_LIMIT)
+  };
 }
 
 function renderCorrelationButton({
@@ -1673,12 +1897,43 @@ function renderSharedMemoryArtifact({
   );
 }
 
+function renderFocusedSharedMemoryBacklinkLane({
+  items,
+  overflowCount
+}: SharedMemoryBacklinkSummary) {
+  return (
+    <div className="aitown-shared-memory-backlink-lane">
+      <span className="aitown-shared-memory-backlink-label">Current-scope backlinks</span>
+      {items.length > 0 ? (
+        <div className="aitown-shared-memory-backlink-chips">
+          {items.map((backlink) => (
+            <span key={backlink.key} className="aitown-shared-memory-backlink-chip">
+              <strong>{backlink.sourceLabel}</strong>
+              <span>{backlink.label}</span>
+            </span>
+          ))}
+          {overflowCount > 0 ? (
+            <span className="aitown-shared-memory-backlink-chip">
+              <strong>More</strong>
+              <span>{`+${overflowCount} more current-scope records`}</span>
+            </span>
+          ) : null}
+        </div>
+      ) : (
+        <span className="aitown-shared-memory-backlink-empty">No current-scope backlinks cite this artifact.</span>
+      )}
+    </div>
+  );
+}
+
 function renderSharedMemorySection({
   memoryArtifacts,
   memoryArtifactsError,
   memoryArtifactsState,
   sharedMemoryRequestScopeLabel,
   focusedSharedMemoryArtifactRef,
+  focusedSharedMemoryBacklinks,
+  focusedSharedMemoryBacklinkOverflowCount,
   sharedMemoryJumpStatus,
   activeCorrelationId,
   currentAgentId,
@@ -1691,6 +1946,8 @@ function renderSharedMemorySection({
   memoryArtifactsState: LoadState;
   sharedMemoryRequestScopeLabel: string;
   focusedSharedMemoryArtifactRef?: string | null;
+  focusedSharedMemoryBacklinks: SharedMemoryBacklink[];
+  focusedSharedMemoryBacklinkOverflowCount: number;
   sharedMemoryJumpStatus?: string | null;
   activeCorrelationId: string | null;
   currentAgentId: string | null;
@@ -1708,7 +1965,13 @@ function renderSharedMemorySection({
       <h3>Shared Memory</h3>
       <span>{`Request scope · ${sharedMemoryRequestScopeLabel}`}</span>
       {focusedSharedMemoryArtifactRef ? (
-        <p className="aitown-shared-memory-focus-status">{`Focused exact artifact · ${focusedSharedMemoryArtifactRef}`}</p>
+        <>
+          <p className="aitown-shared-memory-focus-status">{`Focused exact artifact · ${focusedSharedMemoryArtifactRef}`}</p>
+          {renderFocusedSharedMemoryBacklinkLane({
+            items: focusedSharedMemoryBacklinks,
+            overflowCount: focusedSharedMemoryBacklinkOverflowCount
+          })}
+        </>
       ) : null}
       {sharedMemoryWarning ? <p role="status">{sharedMemoryWarning}</p> : null}
       {sharedMemoryJumpStatus ? <p role="status">{sharedMemoryJumpStatus}</p> : null}
@@ -2141,6 +2404,14 @@ export function DetailsPanel({
     .slice(0, 3);
   const sharedMemoryActiveCorrelationId = selectedCorrelationId;
   const sharedMemoryArtifactRefs = new Set((memoryArtifacts?.items ?? []).map((artifact) => artifact.artifact_ref));
+  const focusedSharedMemoryBacklinks = buildFocusedSharedMemoryBacklinks({
+    focusedArtifactRef: focusedSharedMemoryArtifactRef,
+    activeCorrelationId: sharedMemoryActiveCorrelationId,
+    selectedOperation,
+    selectedAgentSupervisionHistory,
+    workflow,
+    correlation
+  });
   const manualCorrelationResetAction =
     manualCorrelationOverrideActive && selectedCorrelationId ? (
       <>
@@ -2521,6 +2792,8 @@ export function DetailsPanel({
           memoryArtifactsState,
           sharedMemoryRequestScopeLabel,
           focusedSharedMemoryArtifactRef,
+          focusedSharedMemoryBacklinks: focusedSharedMemoryBacklinks.items,
+          focusedSharedMemoryBacklinkOverflowCount: focusedSharedMemoryBacklinks.overflowCount,
           sharedMemoryJumpStatus,
           activeCorrelationId: sharedMemoryActiveCorrelationId,
           currentAgentId: null,
@@ -3287,6 +3560,8 @@ export function DetailsPanel({
         memoryArtifactsState,
         sharedMemoryRequestScopeLabel,
         focusedSharedMemoryArtifactRef,
+        focusedSharedMemoryBacklinks: focusedSharedMemoryBacklinks.items,
+        focusedSharedMemoryBacklinkOverflowCount: focusedSharedMemoryBacklinks.overflowCount,
         sharedMemoryJumpStatus,
         activeCorrelationId: sharedMemoryActiveCorrelationId,
         currentAgentId: selectedAgent.agent_id,

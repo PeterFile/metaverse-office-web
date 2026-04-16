@@ -9771,6 +9771,53 @@ test.describe('operator shell smoke', () => {
     });
   }
 
+  test('keeps crew-overview live-resize horizontal reachability after landscape-to-portrait resize without reload', async ({
+    page
+  }) => {
+    test.slow();
+
+    const landscapeShell = SHELLS.find((shell) => shell.name === 'landscape');
+    const portraitShell = SHELLS.find((shell) => shell.name === 'portrait');
+    expect(landscapeShell).toBeDefined();
+    expect(portraitShell).toBeDefined();
+
+    await page.setViewportSize(landscapeShell!.viewport);
+    await page.goto('/');
+    await expect(page.locator('.aitown-world__host canvas')).toBeVisible();
+    await page.waitForFunction(() => Boolean(window.__AITOWN_VIEWPORT__));
+    await waitForViewportLayoutSettle(page);
+
+    await page.setViewportSize(portraitShell!.viewport);
+
+    const resizedViewport = await waitForViewportLayoutSettle(page);
+    const resizedHostSize = await page.locator('.aitown-world__host').evaluate((element) => ({
+      width: element.clientWidth,
+      height: element.clientHeight
+    }));
+    const resizedScale = resizedViewport.scale ?? 1;
+    const resizedTop = resizedViewport.top;
+    const resizedClampPadding = {
+      top: resizedViewport.clampPadding?.top ?? 0,
+      right: resizedViewport.clampPadding?.right ?? 0
+    };
+
+    expect(resizedViewport.screenWidth).toBe(resizedHostSize.width);
+    expect(resizedViewport.screenHeight).toBe(resizedHostSize.height);
+    expect(resizedViewport.selectedAgent).toBeNull();
+    expect(resizedViewport.scale).not.toBeNull();
+    expectViewportBoundsWithinClampBudget(resizedViewport);
+
+    const right = await dragViewportToEdge(page, 'right');
+    expect(right.clampPadding?.top ?? 0).toBe(resizedClampPadding.top);
+    expect(right.clampPadding?.right ?? 0).toBe(resizedClampPadding.right);
+    expectViewportAtRightClampEdge(right, resizedScale, resizedTop);
+
+    const left = await dragViewportToEdge(page, 'top-left', { horizontalOnly: true });
+    expect(left.clampPadding?.top ?? 0).toBe(resizedClampPadding.top);
+    expect(left.clampPadding?.right ?? 0).toBe(resizedClampPadding.right);
+    expectViewportAtLeftClampEdge(left, resizedScale, resizedTop);
+  });
+
   test('keeps portrait selected-watch overlay drag reachability at default zoom without adding right clamp padding', async ({ page }) => {
     const portraitShell = SHELLS.find((shell) => shell.name === 'portrait');
     expect(portraitShell).toBeDefined();
@@ -10663,6 +10710,90 @@ test.describe('operator shell smoke', () => {
     expect(left.clampPadding?.top ?? 0).toBe(baselineClampPadding.top);
     expect(left.clampPadding?.right ?? 0).toBe(baselineClampPadding.right);
     expectViewportAtLeftClampEdge(left, baselineScale, baselineTop);
+  });
+
+  test('keeps selected-agent Hub-open live-resize safe-lane continuity after landscape-to-portrait resize', async ({
+    page
+  }) => {
+    test.slow();
+
+    const landscapeShell = SHELLS.find((shell) => shell.name === 'landscape');
+    const portraitShell = SHELLS.find((shell) => shell.name === 'portrait');
+    expect(landscapeShell).toBeDefined();
+    expect(portraitShell).toBeDefined();
+
+    await page.setViewportSize(landscapeShell!.viewport);
+    await page.goto('/');
+    await expect(page.locator('.aitown-world__host canvas')).toBeVisible();
+    await page.waitForFunction(() => Boolean(window.__AITOWN_VIEWPORT__));
+
+    const dialog = page.getByRole('dialog', { name: 'Hub' });
+    const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
+    const selectedAgentHeading = detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' });
+
+    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await expect(dialog).toBeVisible();
+
+    const inspectButton = detailsPanel.getByRole('button', {
+      name: 'Inspect Growth Revenue Agent',
+      exact: true
+    });
+    await expect(inspectButton).toBeVisible();
+    await inspectButton.click();
+    await expect(selectedAgentHeading).toBeVisible();
+    await waitForViewportLayoutSettle(page);
+
+    await page.setViewportSize(portraitShell!.viewport);
+    await expect(dialog).toBeVisible();
+    await expect(selectedAgentHeading).toBeVisible();
+
+    const resizedViewport = await waitForViewportLayoutSettle(page);
+    const resizedHostSize = await page.locator('.aitown-world__host').evaluate((element) => ({
+      width: element.clientWidth,
+      height: element.clientHeight
+    }));
+    const resizedSelectedAgent = resizedViewport.selectedAgent;
+    expect(resizedSelectedAgent).not.toBeNull();
+
+    expect(resizedViewport.screenWidth).toBe(resizedHostSize.width);
+    expect(resizedViewport.screenHeight).toBe(resizedHostSize.height);
+
+    const resizedProjection = resolveWorldPointScreenProjection(resizedViewport, {
+      x: resizedSelectedAgent!.x,
+      y: resizedSelectedAgent!.y
+    });
+    const resizedSafeAreaTarget = resolveViewportSafeAreaTarget(resizedViewport);
+    const resizedScale = resizedViewport.scale ?? 1;
+    const resizedTop = resizedViewport.top;
+    const resizedClampPadding = {
+      top: resizedViewport.clampPadding?.top ?? 0,
+      right: resizedViewport.clampPadding?.right ?? 0
+    };
+
+    expect(resizedSelectedAgent!.agentId).toBe('growth-revenue');
+    expect(resizedClampPadding.right).toBeGreaterThan(0);
+    expect(Math.abs(resizedProjection.x - resizedSafeAreaTarget.x)).toBeLessThanOrEqual(0.5);
+    expect(Math.abs(resizedProjection.y - resizedSafeAreaTarget.y)).toBeLessThanOrEqual(0.5);
+    expectViewportBoundsWithinClampBudget(resizedViewport);
+
+    const right = await dragViewportToEdge(page, 'right', { driver: 'synthetic-host-pointer' });
+    await expect(dialog).toBeVisible();
+    await expect(selectedAgentHeading).toBeVisible();
+    expect(right.selectedAgent?.agentId).toBe('growth-revenue');
+    expect(right.clampPadding?.top ?? 0).toBe(resizedClampPadding.top);
+    expect(right.clampPadding?.right ?? 0).toBe(resizedClampPadding.right);
+    expectViewportAtRightClampEdge(right, resizedScale, resizedTop);
+
+    const left = await dragViewportToEdge(page, 'top-left', {
+      horizontalOnly: true,
+      driver: 'synthetic-host-pointer'
+    });
+    await expect(dialog).toBeVisible();
+    await expect(selectedAgentHeading).toBeVisible();
+    expect(left.selectedAgent?.agentId).toBe('growth-revenue');
+    expect(left.clampPadding?.top ?? 0).toBe(resizedClampPadding.top);
+    expect(left.clampPadding?.right ?? 0).toBe(resizedClampPadding.right);
+    expectViewportAtLeftClampEdge(left, resizedScale, resizedTop);
   });
 
   test('re-centers the landscape viewport under active right clamp padding after inspecting a selected agent through the Hub', async ({

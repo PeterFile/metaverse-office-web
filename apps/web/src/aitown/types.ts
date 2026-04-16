@@ -71,6 +71,8 @@ export interface AiTownSceneModel {
   agents: SceneAgent[];
   watchEdges: SceneWatchEdge[];
   selectedAgentId: string | null;
+  activeCorrelationId: string | null;
+  correlationParticipantAgentIds: string[];
   pixelWidth: number;
   pixelHeight: number;
 }

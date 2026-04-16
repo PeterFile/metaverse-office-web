@@ -505,6 +505,8 @@ function makeScene(): AiTownSceneModel {
       }
     ],
     selectedAgentId: 'app-engineering',
+    activeCorrelationId: null,
+    correlationParticipantAgentIds: [],
     pixelWidth: 768,
     pixelHeight: 512
   };

@@ -78,6 +78,8 @@ function makeScene(overrides: Partial<AiTownSceneModel> = {}): AiTownSceneModel 
       }
     ],
     selectedAgentId: 'app-engineering',
+    activeCorrelationId: null,
+    correlationParticipantAgentIds: [],
     pixelWidth: 256,
     pixelHeight: 256,
     ...overrides

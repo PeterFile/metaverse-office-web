@@ -110,7 +110,9 @@ function findFallbackZone(agent: WorldAgent, zones: SceneZone[]) {
 
 export function adaptWorldToScene(
   world: WorldState,
-  selectedAgentId: string | null
+  selectedAgentId: string | null,
+  activeCorrelationId: string | null = null,
+  correlationParticipantAgentIds: string[] = []
 ): AiTownSceneModel {
   const sceneZones: SceneZone[] = world.zones.map((zone) => ({
     zoneId: zone.zone_id,
@@ -168,6 +170,12 @@ export function adaptWorldToScene(
   });
 
   const sceneAgentIds = new Set(agents.map((agent) => agent.agentId));
+  const visibleCorrelationParticipantAgentIds =
+    activeCorrelationId === null
+      ? []
+      : correlationParticipantAgentIds.filter(
+          (agentId, index, list) => sceneAgentIds.has(agentId) && list.indexOf(agentId) === index
+        );
   const watchEdges: SceneWatchEdge[] = selectedAgentId
     ? world.watch_edges
         .filter(
@@ -190,6 +198,8 @@ export function adaptWorldToScene(
     agents,
     watchEdges,
     selectedAgentId,
+    activeCorrelationId,
+    correlationParticipantAgentIds: visibleCorrelationParticipantAgentIds,
     pixelWidth: GENTLE_MAP.width * GENTLE_MAP.tileDim,
     pixelHeight: GENTLE_MAP.height * GENTLE_MAP.tileDim
   };

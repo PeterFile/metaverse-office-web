@@ -68,6 +68,7 @@ const statusBadgeStyle = new TextStyle({
 });
 
 const WATCH_PARTICIPANT_HIGHLIGHT_COLOR = 0xffd785;
+const CORRELATION_PARTICIPANT_HIGHLIGHT_COLOR = 0x8be9d5;
 
 function resolveWatchModeLabel(watchMode: 'lead' | 'peer') {
   return watchMode === 'lead' ? 'Lead watch' : 'Peer watch';
@@ -323,6 +324,7 @@ function createAgentStatusBadge(agent: SceneAgent) {
 function createAgentSprite(
   agent: SceneAgent,
   emphasis: WatchOverlayAgentEmphasis | 'none',
+  correlationHighlighted: boolean,
   onSelect: (agentId: string | null) => void,
   characterTextures: Record<string, Texture[]>
 ) {
@@ -340,6 +342,24 @@ function createAgentSprite(
 
   const shadow = new Graphics();
   shadow.ellipse(0, 8, 10, 5).fill({ color: 0x000000, alpha: 0.25 });
+
+  const correlationSpotlight = new Graphics();
+  if (correlationHighlighted) {
+    correlationSpotlight.ellipse(0, 8, selected ? 22 : emphasized ? 21 : 20, selected ? 13 : emphasized ? 12 : 11).fill({
+      color: CORRELATION_PARTICIPANT_HIGHLIGHT_COLOR,
+      alpha: selected ? 0.14 : emphasized ? 0.16 : 0.2
+    });
+    correlationSpotlight.ellipse(
+      0,
+      8,
+      selected ? 24.5 : emphasized ? 23.5 : 22.5,
+      selected ? 14.5 : emphasized ? 13.5 : 12.5
+    ).stroke({
+      color: CORRELATION_PARTICIPANT_HIGHLIGHT_COLOR,
+      width: selected ? 2 : 1.5,
+      alpha: selected ? 0.5 : 0.62
+    });
+  }
 
   const aura = new Graphics();
   aura.ellipse(0, 8, auraRadiusX, auraRadiusY).fill({
@@ -388,7 +408,7 @@ function createAgentSprite(
     onSelect(agent.selected ? null : agent.agentId);
   });
 
-  container.addChild(shadow, aura, emphasisRing, character, statusDot, nameLabel);
+  container.addChild(shadow, correlationSpotlight, aura, emphasisRing, character, statusDot, nameLabel);
   if (statusBadge) {
     container.addChild(statusBadge);
   }
@@ -1097,6 +1117,7 @@ export default function WorldScene({ scene, onSelectAgent, resetViewSignal = 0 }
         scene.selectedAgentId,
         scene.watchEdges
       );
+      const correlationParticipantIds = new Set(scene.correlationParticipantAgentIds);
       const selectedSet = new Set(emphasisByAgentId.keys());
 
       for (const zone of scene.zones) {
@@ -1109,6 +1130,7 @@ export default function WorldScene({ scene, onSelectAgent, resetViewSignal = 0 }
         const agentSprite = createAgentSprite(
           agent,
           emphasisByAgentId.get(agent.agentId) ?? 'none',
+          correlationParticipantIds.has(agent.agentId),
           (agentId) => {
             if (suppressSceneTapRef.current) {
               suppressSceneTapRef.current = false;

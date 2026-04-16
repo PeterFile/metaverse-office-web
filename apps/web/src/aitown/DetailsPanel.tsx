@@ -47,6 +47,7 @@ type DetailsPanelProps = {
   memoryArtifactsError: string | null;
   memoryArtifactsState: LoadState;
   sharedMemoryRequestScopeLabel: string;
+  focusedSharedMemoryArtifactRef?: string | null;
   sharedMemoryJumpStatus?: string | null;
   selectedAgentSupervisionHistoryRequestScopeLabel: string;
   selectedAgentSupervisionHistory: PeerWatchAlertsResponse | null;
@@ -1472,6 +1473,7 @@ function renderSharedMemoryArtifact({
   activeCorrelationId,
   currentAgentId,
   navigableAgentIds,
+  isFocusedExactArtifact = false,
   onSelectAgent,
   onSelectCorrelation
 }: {
@@ -1479,6 +1481,7 @@ function renderSharedMemoryArtifact({
   activeCorrelationId: string | null;
   currentAgentId: string | null;
   navigableAgentIds: Set<string>;
+  isFocusedExactArtifact?: boolean;
   onSelectAgent: SelectAgentHandler;
   onSelectCorrelation: SelectCorrelationHandler;
 }) {
@@ -1489,10 +1492,11 @@ function renderSharedMemoryArtifact({
     <li
       key={artifact.artifact_ref}
       id={resolveSharedMemoryArtifactDomId(artifact.artifact_ref)}
-      className="aitown-record"
+      className={`aitown-record${isFocusedExactArtifact ? ' aitown-record--shared-memory-focused' : ''}`}
       data-shared-memory-target="true"
       tabIndex={-1}
     >
+      {isFocusedExactArtifact ? <span className="aitown-shared-memory-focus-chip">Focused exact jump</span> : null}
       <strong>{artifact.latest_summary ?? artifact.file_name}</strong>
       <span>{`Artifact · ${artifact.file_name} · ${renderDisplayState(artifact.artifact_kind)}`}</span>
       <span>{`Ref · ${artifact.artifact_ref}`}</span>
@@ -1535,6 +1539,7 @@ function renderSharedMemorySection({
   memoryArtifactsError,
   memoryArtifactsState,
   sharedMemoryRequestScopeLabel,
+  focusedSharedMemoryArtifactRef,
   sharedMemoryJumpStatus,
   activeCorrelationId,
   currentAgentId,
@@ -1546,6 +1551,7 @@ function renderSharedMemorySection({
   memoryArtifactsError: string | null;
   memoryArtifactsState: LoadState;
   sharedMemoryRequestScopeLabel: string;
+  focusedSharedMemoryArtifactRef?: string | null;
   sharedMemoryJumpStatus?: string | null;
   activeCorrelationId: string | null;
   currentAgentId: string | null;
@@ -1562,6 +1568,9 @@ function renderSharedMemorySection({
     <section className="aitown-details__section">
       <h3>Shared Memory</h3>
       <span>{`Request scope · ${sharedMemoryRequestScopeLabel}`}</span>
+      {focusedSharedMemoryArtifactRef ? (
+        <p className="aitown-shared-memory-focus-status">{`Focused exact artifact · ${focusedSharedMemoryArtifactRef}`}</p>
+      ) : null}
       {sharedMemoryWarning ? <p role="status">{sharedMemoryWarning}</p> : null}
       {sharedMemoryJumpStatus ? <p role="status">{sharedMemoryJumpStatus}</p> : null}
       <ul className="aitown-records">
@@ -1577,6 +1586,7 @@ function renderSharedMemorySection({
             activeCorrelationId,
             currentAgentId,
             navigableAgentIds,
+            isFocusedExactArtifact: focusedSharedMemoryArtifactRef === artifact.artifact_ref,
             onSelectAgent,
             onSelectCorrelation
           })
@@ -1861,6 +1871,7 @@ export function DetailsPanel({
   memoryArtifactsError,
   memoryArtifactsState,
   sharedMemoryRequestScopeLabel,
+  focusedSharedMemoryArtifactRef,
   sharedMemoryJumpStatus,
   selectedAgentSupervisionHistoryRequestScopeLabel,
   selectedAgentSupervisionHistory,
@@ -2363,6 +2374,7 @@ export function DetailsPanel({
           memoryArtifactsError,
           memoryArtifactsState,
           sharedMemoryRequestScopeLabel,
+          focusedSharedMemoryArtifactRef,
           sharedMemoryJumpStatus,
           activeCorrelationId: sharedMemoryActiveCorrelationId,
           currentAgentId: null,
@@ -3128,6 +3140,7 @@ export function DetailsPanel({
         memoryArtifactsError,
         memoryArtifactsState,
         sharedMemoryRequestScopeLabel,
+        focusedSharedMemoryArtifactRef,
         sharedMemoryJumpStatus,
         activeCorrelationId: sharedMemoryActiveCorrelationId,
         currentAgentId: selectedAgent.agent_id,

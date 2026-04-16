@@ -343,7 +343,8 @@ function AppInner() {
   const [selectedOperationSelection, setSelectedOperationSelection] = useState<OperationSelection | null>(null);
   const [selectedOperationSnapshot, setSelectedOperationSnapshot] = useState<OfficeOperation | null>(null);
   const [invalidSelectedOperationCorrelationId, setInvalidSelectedOperationCorrelationId] = useState<string | null>(null);
-  const [exactMemoryArtifacts, setExactMemoryArtifacts] = useState<Record<string, MemoryArtifact>>({});
+  const [focusedExactMemoryArtifact, setFocusedExactMemoryArtifact] = useState<MemoryArtifact | null>(null);
+  const [focusedSharedMemoryArtifactRef, setFocusedSharedMemoryArtifactRef] = useState<string | null>(null);
   const [sharedMemoryJumpStatus, setSharedMemoryJumpStatus] = useState<string | null>(null);
   const lastSelectedAgentRef = useRef<OfficeAgent | null>(null);
   const correlationSelectionModeRef = useRef<'auto' | 'manual' | 'preserved'>('auto');
@@ -468,30 +469,31 @@ function AppInner() {
   useEffect(() => {
     pendingSharedMemoryFocusRef.current = null;
     sharedMemoryJumpRequestIdRef.current += 1;
-    setExactMemoryArtifacts({});
+    setFocusedExactMemoryArtifact(null);
+    setFocusedSharedMemoryArtifactRef(null);
     setSharedMemoryJumpStatus(null);
   }, [memoryArtifactResourceKey]);
 
   const memoryArtifacts = useMemo<MemoryArtifactIndex | null>(() => {
-    if (!memoryArtifactsResource.data && Object.keys(exactMemoryArtifacts).length === 0) {
+    if (!memoryArtifactsResource.data && !focusedExactMemoryArtifact) {
       return null;
     }
 
     const mergedArtifacts = new Map<string, MemoryArtifact>();
 
-    for (const artifact of Object.values(exactMemoryArtifacts)) {
+    for (const artifact of memoryArtifactsResource.data?.items ?? []) {
       mergedArtifacts.set(artifact.artifact_ref, artifact);
     }
 
-    for (const artifact of memoryArtifactsResource.data?.items ?? []) {
-      mergedArtifacts.set(artifact.artifact_ref, artifact);
+    if (focusedExactMemoryArtifact) {
+      mergedArtifacts.set(focusedExactMemoryArtifact.artifact_ref, focusedExactMemoryArtifact);
     }
 
     return {
       generated_at: memoryArtifactsResource.data?.generated_at ?? new Date().toISOString(),
       items: sortMemoryArtifacts(Array.from(mergedArtifacts.values()))
     };
-  }, [exactMemoryArtifacts, memoryArtifactsResource.data]);
+  }, [focusedExactMemoryArtifact, memoryArtifactsResource.data]);
 
   useEffect(() => {
     const artifactRef = pendingSharedMemoryFocusRef.current;
@@ -1046,9 +1048,22 @@ function AppInner() {
     async (artifactRef: string) => {
       setSharedMemoryJumpStatus(null);
 
-      if (focusSharedMemoryArtifactInDom(artifactRef)) {
+      const existingArtifact = memoryArtifacts?.items.find((item) => item.artifact_ref === artifactRef) ?? null;
+      if (existingArtifact) {
+        setFocusedExactMemoryArtifact(existingArtifact);
+        setFocusedSharedMemoryArtifactRef(existingArtifact.artifact_ref);
+
+        if (focusSharedMemoryArtifactInDom(existingArtifact.artifact_ref)) {
+          return;
+        }
+
+        pendingSharedMemoryFocusRef.current = existingArtifact.artifact_ref;
         return;
       }
+
+      pendingSharedMemoryFocusRef.current = null;
+      setFocusedExactMemoryArtifact(null);
+      setFocusedSharedMemoryArtifactRef(null);
 
       const requestId = sharedMemoryJumpRequestIdRef.current + 1;
       sharedMemoryJumpRequestIdRef.current = requestId;
@@ -1075,10 +1090,8 @@ function AppInner() {
           return;
         }
 
-        setExactMemoryArtifacts((current) => ({
-          ...current,
-          [exactArtifact.artifact_ref]: exactArtifact
-        }));
+        setFocusedExactMemoryArtifact(exactArtifact);
+        setFocusedSharedMemoryArtifactRef(exactArtifact.artifact_ref);
         pendingSharedMemoryFocusRef.current = exactArtifact.artifact_ref;
       } catch (error) {
         if (sharedMemoryJumpRequestIdRef.current !== requestId) {
@@ -1092,7 +1105,7 @@ function AppInner() {
         );
       }
     },
-    [selectedAgentId, sharedMemoryCorrelationId, sharedMemoryRequestScopeLabel]
+    [focusedExactMemoryArtifact?.artifact_ref, memoryArtifacts, selectedAgentId, sharedMemoryCorrelationId, sharedMemoryRequestScopeLabel]
   );
 
   const rendererFallback = (
@@ -1304,6 +1317,7 @@ function AppInner() {
               memoryArtifactsError={memoryArtifactsResource.error}
               memoryArtifactsState={memoryArtifactsResource.state}
               sharedMemoryRequestScopeLabel={sharedMemoryRequestScopeLabel}
+              focusedSharedMemoryArtifactRef={focusedSharedMemoryArtifactRef}
               sharedMemoryJumpStatus={sharedMemoryJumpStatus}
               selectedAgentSupervisionHistoryRequestScopeLabel={
                 selectedAgentSupervisionHistoryRequestScopeLabel

@@ -100,6 +100,8 @@ const secondaryCorrelationUrl = '/correlations/corr-app-secondary?limit=10&windo
 const memoryArtifactsUrl = '/memory/artifacts?limit=4&window=60m';
 const crewOverviewMissingArtifactExactUrl =
   '/memory/artifacts?limit=4&window=60m&artifact_ref=%2Ftmp%2Fmissing.md';
+const crewOverviewSecondaryMissingArtifactExactUrl =
+  '/memory/artifacts?limit=4&window=60m&artifact_ref=%2Ftmp%2Fsecond-missing.md';
 const crewOverviewSelectedCorrelationMemoryArtifactsUrl =
   '/memory/artifacts?limit=4&window=60m&correlation_id=corr-app-secondary';
 const appEngineeringMemoryArtifactsUrl = '/memory/artifacts?limit=4&window=60m&agent_id=app-engineering';
@@ -5693,6 +5695,9 @@ afterEach(() => {
 
     const missingArtifactRecord = within(memorySection!).getByText('Ref · /tmp/missing.md').closest('li');
     expect(missingArtifactRecord).not.toBeNull();
+    expect(within(memorySection!).getByText('Focused exact artifact · /tmp/missing.md')).toBeVisible();
+    expect(missingArtifactRecord).toHaveClass('aitown-record--shared-memory-focused');
+    expect(within(missingArtifactRecord!).getByText('Focused exact jump')).toBeVisible();
     expect(document.activeElement).toBe(missingArtifactRecord);
     expect(within(details).getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
     expect(within(details).queryByRole('heading', { name: 'App Engineering Agent' })).not.toBeInTheDocument();
@@ -5711,6 +5716,143 @@ afterEach(() => {
     expect(globalThis.fetch).not.toHaveBeenCalledWith(selectedOperationUrl, expect.anything());
     expect(globalThis.fetch).not.toHaveBeenCalledWith(teamLeadWorkflowUrl, expect.anything());
     expect(globalThis.fetch).not.toHaveBeenCalledWith(teamLeadSelectedCorrelationMemoryArtifactsUrl, expect.anything());
+  });
+
+  it('keeps exactly one focused shared-memory artifact across exact evidence jumps and clears it on scope changes', async () => {
+    const activeQueueExactArtifactFixture = {
+      ...operationsFixture,
+      items: [
+        {
+          ...operationsFixture.items[0],
+          latest_event: operationsFixture.items[0].latest_event
+            ? {
+                ...operationsFixture.items[0].latest_event,
+                evidence_refs: ['/tmp/missing.md', '/tmp/second-missing.md']
+              }
+            : null
+        },
+        operationsFixture.items[1]
+      ]
+    };
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === operationsUrl || url === blockedOperationsUrl || url === selectedOperationUrl) {
+          return jsonResponse(activeQueueExactArtifactFixture);
+        }
+
+        if (url === crewOverviewMissingArtifactExactUrl) {
+          return jsonResponse({
+            generated_at: '2026-03-16T09:00:00.000Z',
+            items: [
+              {
+                artifact_ref: '/tmp/missing.md',
+                artifact_kind: 'evidence_ref',
+                file_name: 'missing.md',
+                first_seen_at: '2026-03-16T08:58:30.000Z',
+                last_seen_at: '2026-03-16T08:58:30.000Z',
+                mention_count: 1,
+                agent_ids: ['app-engineering', 'team-lead'],
+                correlation_ids: ['corr-app-review'],
+                source_kinds: ['controller_event'],
+                latest_summary: 'First focused exact artifact stays isolated to the jump state',
+                latest_event_type: 'agent_noted',
+                collector_last_modified_at: null
+              }
+            ]
+          });
+        }
+
+        if (url === crewOverviewSecondaryMissingArtifactExactUrl) {
+          return jsonResponse({
+            generated_at: '2026-03-16T09:00:01.000Z',
+            items: [
+              {
+                artifact_ref: '/tmp/second-missing.md',
+                artifact_kind: 'evidence_ref',
+                file_name: 'second-missing.md',
+                first_seen_at: '2026-03-16T08:58:40.000Z',
+                last_seen_at: '2026-03-16T08:58:40.000Z',
+                mention_count: 1,
+                agent_ids: ['app-engineering'],
+                correlation_ids: ['corr-app-review'],
+                source_kinds: ['controller_event'],
+                latest_summary: 'Second focused exact artifact replaces the first one',
+                latest_event_type: 'agent_noted',
+                collector_last_modified_at: null
+              }
+            ]
+          });
+        }
+
+        return resolveTestFetchResponse(url);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    const queueSection = within(details).getByRole('heading', { name: 'Active Queue' }).closest('section');
+    const memorySection = within(details).getByRole('heading', { name: 'Shared Memory' }).closest('section');
+    expect(queueSection).not.toBeNull();
+    expect(memorySection).not.toBeNull();
+
+    await user.selectOptions(
+      within(queueSection!).getByRole('combobox', { name: 'Filter active queue by state' }),
+      'blocked'
+    );
+
+    const queueRecord = await within(queueSection!)
+      .findByRole('button', { name: 'Inspect App Engineering Agent from active queue' })
+      .then((button) => button.closest('li'));
+    expect(queueRecord).not.toBeNull();
+    expect(queueRecord!).toHaveTextContent('Evidence · /tmp/missing.md, /tmp/second-missing.md');
+
+    await user.click(
+      within(queueRecord!).getByRole('button', {
+        name: 'Jump to shared memory artifact /tmp/missing.md'
+      })
+    );
+
+    await waitFor(() => {
+      expect(within(memorySection!).getByText('Focused exact artifact · /tmp/missing.md')).toBeVisible();
+    });
+
+    const firstFocusedRecord = within(memorySection!).getByText('Ref · /tmp/missing.md').closest('li');
+    expect(firstFocusedRecord).not.toBeNull();
+    expect(firstFocusedRecord).toHaveClass('aitown-record--shared-memory-focused');
+    expect(within(firstFocusedRecord!).getByText('Focused exact jump')).toBeVisible();
+    expect(within(details).getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
+    expect(within(details).queryByRole('heading', { name: 'App Engineering Agent' })).not.toBeInTheDocument();
+
+    await user.click(
+      within(queueRecord!).getByRole('button', {
+        name: 'Jump to shared memory artifact /tmp/second-missing.md'
+      })
+    );
+
+    await waitFor(() => {
+      expect(within(memorySection!).getByText('Focused exact artifact · /tmp/second-missing.md')).toBeVisible();
+    });
+
+    const secondFocusedRecord = within(memorySection!).getByText('Ref · /tmp/second-missing.md').closest('li');
+    expect(secondFocusedRecord).not.toBeNull();
+    expect(secondFocusedRecord).toHaveClass('aitown-record--shared-memory-focused');
+    expect(within(secondFocusedRecord!).getByText('Focused exact jump')).toBeVisible();
+    expect(within(memorySection!).queryByText('Focused exact artifact · /tmp/missing.md')).not.toBeInTheDocument();
+    expect(within(memorySection!).queryByText('Ref · /tmp/missing.md')).not.toBeInTheDocument();
+
+    await user.click(within(queueSection!).getByRole('button', { name: 'Inspect App Engineering Agent from active queue' }));
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+      expect(within(memorySection!).queryByText('Focused exact artifact · /tmp/second-missing.md')).not.toBeInTheDocument();
+      expect(within(memorySection!).queryByText('Ref · /tmp/second-missing.md')).not.toBeInTheDocument();
+    });
   });
 
   it('shows when a queue-derived operation does not have a latest event yet', async () => {

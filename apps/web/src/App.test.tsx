@@ -669,6 +669,27 @@ const teamLeadWorkflowFixture = {
   timeline: []
 } satisfies AgentWorkflow;
 
+const teamLeadReplayWorkflowFixture = {
+  ...teamLeadWorkflowFixture,
+  timeline: [
+    {
+      event_id: 'evt-team-lead-replay-1',
+      ts: '2026-03-16T08:58:00.000Z',
+      agent_id: 'team-lead',
+      actor_id: 'team-lead',
+      event_type: 'agent_noted',
+      severity: 'normal',
+      current_state: 'reviewing',
+      location: 'lead-desk',
+      summary: 'Replay captured lead review checkpoint',
+      correlation_id: null,
+      counterparty_agent_ids: [],
+      evidence_refs: ['/tmp/team-lead-review.md'],
+      source_kind: 'workspace_snapshot'
+    }
+  ]
+} satisfies AgentWorkflow;
+
 const growthRevenueWorkflowFixture = {
   agent_id: 'growth-revenue',
   detail: {
@@ -3240,7 +3261,22 @@ afterEach(() => {
     expect(globalThis.fetch).toHaveBeenCalledWith(teamLeadMemoryArtifactsUrl, expect.anything());
   });
 
-  it('loads the timeline replay slice only when Hub opens in Crew Overview and hides it after selecting an agent', async () => {
+  it('keeps timeline replay visible after selecting an agent and reuses workflow timeline when no correlation is active', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === teamLeadWorkflowUrl) {
+          return new Response(JSON.stringify(teamLeadReplayWorkflowFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        return resolveTestFetchResponse(url);
+      })
+    );
+
     const user = userEvent.setup();
     render(<App />);
 
@@ -3258,7 +3294,114 @@ afterEach(() => {
     });
 
     await user.click(within(details).getByRole('button', { name: 'Inspect Team Lead' }));
-    expect(within(details).queryByRole('heading', { name: 'Timeline Replay' })).not.toBeInTheDocument();
+
+    const selectedReplaySection = (await within(details).findByRole('heading', { name: 'Timeline Replay' })).closest(
+      'section'
+    );
+    expect(selectedReplaySection).not.toBeNull();
+    expect(within(details).getByRole('heading', { name: 'Team Lead' })).toBeVisible();
+    expect(within(selectedReplaySection!).getByText('Replay captured lead review checkpoint')).toBeVisible();
+    expect(within(selectedReplaySection!).getByText('Request scope · Target agent · team-lead')).toBeVisible();
+  });
+
+  it('shows an explicit empty replay state for selected agents without an active correlation or recent replay events', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect Team Lead' }));
+
+    const replaySection = (await within(details).findByRole('heading', { name: 'Timeline Replay' })).closest('section');
+    expect(replaySection).not.toBeNull();
+    expect(within(replaySection!).getByText('Request scope · Target agent · team-lead')).toBeVisible();
+    expect(within(replaySection!).getByText('No recent replay events.')).toBeVisible();
+  });
+
+  it('keeps selected-agent timeline replay scoped to the active correlation without widening to the global replay feed', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
+
+    const incidentSection = (await within(details).findByRole('heading', { name: 'Incident Feed' })).closest('section');
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    expect(incidentSection).not.toBeNull();
+    expect(correlationSection).not.toBeNull();
+
+    const fetchCallCountBeforeSelection = vi.mocked(globalThis.fetch).mock.calls.length;
+
+    await user.click(
+      within(incidentSection!).getByRole('button', { name: 'Open incident correlation corr-app-secondary' })
+    );
+
+    const replaySection = (await within(details).findByRole('heading', { name: 'Timeline Replay' })).closest('section');
+    expect(replaySection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+      expect(within(correlationSection!).getByText('corr-app-secondary')).toBeVisible();
+      expect(within(replaySection!).getByText('Request scope · Target agent · app-engineering · corr-app-secondary')).toBeVisible();
+      expect(within(replaySection!).getByText('Scoped replay · corr-app-secondary')).toBeVisible();
+      expect(within(replaySection!).getByText('App engineering finished the secondary review handoff')).toBeVisible();
+      expect(within(replaySection!).queryByText('Replay captured the secondary review handoff')).not.toBeInTheDocument();
+      expect(within(replaySection!).queryByText('Replay captured missing workflow evidence')).not.toBeInTheDocument();
+    });
+
+    const postSelectionRequests = vi
+      .mocked(globalThis.fetch)
+      .mock.calls.slice(fetchCallCountBeforeSelection)
+      .map(([input]) => (typeof input === 'string' ? input : input.toString()));
+
+    expect(postSelectionRequests).toContain(secondaryCorrelationUrl);
+    expect(postSelectionRequests).not.toContain(secondaryScopedTimelineUrl);
+  });
+
+  it('keeps the last selected-agent replay snapshot visible when an unscoped selected-agent replay refresh fails', async () => {
+    (window as typeof window & { __AITOWN_POLL_INTERVAL_MS__?: number }).__AITOWN_POLL_INTERVAL_MS__ = 10;
+
+    let workflowRequests = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === teamLeadWorkflowUrl) {
+          workflowRequests += 1;
+          if (workflowRequests === 1) {
+            return new Response(JSON.stringify(teamLeadReplayWorkflowFixture), {
+              headers: { 'content-type': 'application/json' }
+            });
+          }
+
+          return new Response(JSON.stringify({ error: 'internal_error', details: 'team lead replay refresh failed' }), {
+            status: 500,
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        return resolveTestFetchResponse(url);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect Team Lead' }));
+
+    const replaySection = (await within(details).findByRole('heading', { name: 'Timeline Replay' })).closest('section');
+    expect(replaySection).not.toBeNull();
+    expect(await within(replaySection!).findByText('Replay captured lead review checkpoint')).toBeVisible();
+
+    await waitFor(() => {
+      expect(
+        within(replaySection!).getByText('Showing last timeline replay snapshot. team lead replay refresh failed')
+      ).toBeVisible();
+      expect(within(replaySection!).getByText('Replay captured lead review checkpoint')).toBeVisible();
+    });
+
+    expect(workflowRequests).toBeGreaterThan(1);
   });
 
   it('renders timeline replay evidence-first labels and supports a correlation pivot from crew overview', async () => {

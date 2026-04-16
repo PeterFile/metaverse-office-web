@@ -468,6 +468,13 @@ function renderSharedMemoryEvidenceRefs({
   ));
 }
 
+function resolveSharedMemoryEvidenceJumpBehavior(onFocusSharedMemoryArtifact?: (artifactRef: string) => void) {
+  return {
+    onJump: onFocusSharedMemoryArtifact ?? focusSharedMemoryArtifact,
+    allowExactFallback: Boolean(onFocusSharedMemoryArtifact)
+  };
+}
+
 function renderSharedMemoryArtifactJump({
   artifactRef,
   label,
@@ -832,6 +839,7 @@ function renderCorrelationInteraction({
   onSelectCorrelation,
   sharedMemoryArtifactRefs,
   enableSharedMemoryEvidenceJump = false,
+  onFocusSharedMemoryArtifact,
   participantAriaLabelPrefix = 'Select correlation interaction participant agent'
 }: {
   interaction: WorkflowInteraction;
@@ -842,10 +850,12 @@ function renderCorrelationInteraction({
   onSelectCorrelation?: (correlationId: string | null) => void;
   sharedMemoryArtifactRefs?: ReadonlySet<string>;
   enableSharedMemoryEvidenceJump?: boolean;
+  onFocusSharedMemoryArtifact?: (artifactRef: string) => void;
   participantAriaLabelPrefix?: string;
 }) {
   const canRenderParticipantPivots = Boolean(navigableAgentIds && onSelectAgent);
   const interactionCorrelationId = findFirstNonEmptyString([interaction.correlation_id]);
+  const { onJump, allowExactFallback } = resolveSharedMemoryEvidenceJumpBehavior(onFocusSharedMemoryArtifact);
   const stateTransition =
     interaction.before_state && interaction.after_state
       ? `${interaction.before_state} -> ${interaction.after_state}`
@@ -892,7 +902,8 @@ function renderCorrelationInteraction({
           {renderSharedMemoryEvidenceRefs({
             evidenceRefs: interaction.evidence_refs,
             sharedMemoryArtifactRefs,
-            onJump: focusSharedMemoryArtifact
+            onJump,
+            allowExactFallback
           })}
         </span>
       ) : (
@@ -913,6 +924,7 @@ function renderCorrelationTimelineEvent(
         onSelectAgent?: (agentId: string | null, correlationId?: string | null) => void;
         sharedMemoryArtifactRefs?: ReadonlySet<string>;
         enableSharedMemoryEvidenceJump?: boolean;
+        onFocusSharedMemoryArtifact?: (artifactRef: string) => void;
         subjectPivotAriaLabelPrefix?: string;
         actorPivotAriaLabelPrefix?: string;
         counterpartyPivotAriaLabelPrefix?: string;
@@ -925,6 +937,7 @@ function renderCorrelationTimelineEvent(
   const onSelectAgent = 'event' in input ? input.onSelectAgent : undefined;
   const sharedMemoryArtifactRefs = 'event' in input ? input.sharedMemoryArtifactRefs : undefined;
   const enableSharedMemoryEvidenceJump = 'event' in input ? (input.enableSharedMemoryEvidenceJump ?? false) : false;
+  const onFocusSharedMemoryArtifact = 'event' in input ? input.onFocusSharedMemoryArtifact : undefined;
   const subjectPivotAriaLabelPrefix =
     'event' in input
       ? (input.subjectPivotAriaLabelPrefix ?? 'Select correlation timeline subject agent from event')
@@ -941,6 +954,7 @@ function renderCorrelationTimelineEvent(
   const canRenderActorPivot = Boolean(
     navigableAgentIds && onSelectAgent && event.actor_id !== currentAgentId && navigableAgentIds.has(event.actor_id)
   );
+  const { onJump, allowExactFallback } = resolveSharedMemoryEvidenceJumpBehavior(onFocusSharedMemoryArtifact);
 
   return (
     <li key={event.event_id} className={`aitown-record severity-${event.severity}`}>
@@ -991,7 +1005,8 @@ function renderCorrelationTimelineEvent(
           {renderSharedMemoryEvidenceRefs({
             evidenceRefs: event.evidence_refs,
             sharedMemoryArtifactRefs,
-            onJump: focusSharedMemoryArtifact
+            onJump,
+            allowExactFallback
           })}
         </span>
       ) : (
@@ -1009,6 +1024,7 @@ function renderReplayTimelineEvent({
   currentAgentId,
   navigableAgentIds,
   sharedMemoryArtifactRefs,
+  onFocusSharedMemoryArtifact,
   onSelectAgent,
   onSelectCorrelation
 }: {
@@ -1018,6 +1034,7 @@ function renderReplayTimelineEvent({
   currentAgentId: string | null;
   navigableAgentIds: Set<string>;
   sharedMemoryArtifactRefs: ReadonlySet<string>;
+  onFocusSharedMemoryArtifact?: (artifactRef: string) => void;
   onSelectAgent: SelectAgentHandler;
   onSelectCorrelation: SelectCorrelationHandler;
 }) {
@@ -1025,6 +1042,7 @@ function renderReplayTimelineEvent({
   const preservedCorrelationId = activeCorrelationId ?? event.correlation_id;
   const canNavigateToActor = event.actor_id !== currentAgentId && navigableAgentIds.has(event.actor_id);
   const currentReplayAgentId = currentAgentId ?? event.agent_id;
+  const { onJump, allowExactFallback } = resolveSharedMemoryEvidenceJumpBehavior(onFocusSharedMemoryArtifact);
 
   return (
     <li key={event.event_id} className={`aitown-record severity-${event.severity}`}>
@@ -1062,7 +1080,8 @@ function renderReplayTimelineEvent({
         {renderSharedMemoryEvidenceRefs({
           evidenceRefs: event.evidence_refs,
           sharedMemoryArtifactRefs,
-          onJump: focusSharedMemoryArtifact
+          onJump,
+          allowExactFallback
         })}
       </span>
       <span>{`Source · ${event.source_kind}`}</span>
@@ -1111,6 +1130,7 @@ function renderTimelineReplaySection({
   navigableAgentIds,
   agentNameById,
   sharedMemoryArtifactRefs,
+  onFocusSharedMemoryArtifact,
   onSelectAgent,
   onSelectCorrelation
 }: {
@@ -1129,6 +1149,7 @@ function renderTimelineReplaySection({
   navigableAgentIds: Set<string>;
   agentNameById: Map<string, string>;
   sharedMemoryArtifactRefs: ReadonlySet<string>;
+  onFocusSharedMemoryArtifact?: (artifactRef: string) => void;
   onSelectAgent: SelectAgentHandler;
   onSelectCorrelation: SelectCorrelationHandler;
 }) {
@@ -1154,6 +1175,7 @@ function renderTimelineReplaySection({
             currentAgentId,
             navigableAgentIds,
             sharedMemoryArtifactRefs,
+            onFocusSharedMemoryArtifact,
             onSelectAgent,
             onSelectCorrelation
           })
@@ -1184,7 +1206,8 @@ function renderWorkflowStatusRecord({
   currentAgentId,
   navigableAgentIds,
   onSelectAgent,
-  onSelectCorrelation
+  onSelectCorrelation,
+  onFocusSharedMemoryArtifact
 }: {
   key: string;
   kind: 'Handoff' | 'Reboot';
@@ -1204,11 +1227,13 @@ function renderWorkflowStatusRecord({
   navigableAgentIds: Set<string>;
   onSelectAgent: SelectAgentHandler;
   onSelectCorrelation: SelectCorrelationHandler;
+  onFocusSharedMemoryArtifact?: (artifactRef: string) => void;
 }) {
   const preservedCorrelationId = activeCorrelationId ?? correlationId;
   const canNavigateToActor = actorId !== currentAgentId && navigableAgentIds.has(actorId);
   const actorPivotAriaLabelPrefix = `Select workflow status actor from ${kind.toLowerCase()}`;
   const counterpartyPivotAriaLabelPrefix = `Select workflow status counterparty from ${kind.toLowerCase()} ${key}`;
+  const { onJump, allowExactFallback } = resolveSharedMemoryEvidenceJumpBehavior(onFocusSharedMemoryArtifact);
 
   return (
     <li key={key} className={`aitown-record severity-${severity}`}>
@@ -1244,7 +1269,8 @@ function renderWorkflowStatusRecord({
         {renderSharedMemoryEvidenceRefs({
           evidenceRefs,
           sharedMemoryArtifactRefs,
-          onJump: focusSharedMemoryArtifact
+          onJump,
+          allowExactFallback
         })}
       </span>
       <span>
@@ -1270,7 +1296,8 @@ function renderWorkflowPeerWatchAlert({
   currentAgentId,
   navigableAgentIds,
   onSelectAgent,
-  onSelectCorrelation
+  onSelectCorrelation,
+  onFocusSharedMemoryArtifact
 }: {
   alert: WorkflowPeerWatchAlert;
   sharedMemoryArtifactRefs: ReadonlySet<string>;
@@ -1279,11 +1306,13 @@ function renderWorkflowPeerWatchAlert({
   navigableAgentIds: Set<string>;
   onSelectAgent: SelectAgentHandler;
   onSelectCorrelation: SelectCorrelationHandler;
+  onFocusSharedMemoryArtifact?: (artifactRef: string) => void;
 }) {
   const preservedCorrelationId = activeCorrelationId ?? alert.correlation_id;
   const canNavigateToTarget = alert.target_agent_id !== currentAgentId && navigableAgentIds.has(alert.target_agent_id);
   const canNavigateToObserver =
     alert.observer_agent_id !== currentAgentId && navigableAgentIds.has(alert.observer_agent_id);
+  const { onJump, allowExactFallback } = resolveSharedMemoryEvidenceJumpBehavior(onFocusSharedMemoryArtifact);
 
   return (
     <li key={alert.alert_id} className={`aitown-record severity-${alert.severity}`}>
@@ -1338,7 +1367,8 @@ function renderWorkflowPeerWatchAlert({
         {renderSharedMemoryEvidenceRefs({
           evidenceRefs: alert.evidence_refs,
           sharedMemoryArtifactRefs,
-          onJump: focusSharedMemoryArtifact
+          onJump,
+          allowExactFallback
         })}
       </span>
       <span>{`Evidence count · ${alert.evidence_count}`}</span>
@@ -1354,7 +1384,8 @@ function renderSelectedAgentSupervisionAlert({
   currentAgentId,
   navigableAgentIds,
   onSelectAgent,
-  onSelectCorrelation
+  onSelectCorrelation,
+  onFocusSharedMemoryArtifact
 }: {
   alert: WorkflowPeerWatchAlert;
   sharedMemoryArtifactRefs: ReadonlySet<string>;
@@ -1363,11 +1394,13 @@ function renderSelectedAgentSupervisionAlert({
   navigableAgentIds: Set<string>;
   onSelectAgent: SelectAgentHandler;
   onSelectCorrelation: SelectCorrelationHandler;
+  onFocusSharedMemoryArtifact?: (artifactRef: string) => void;
 }) {
   const preservedCorrelationId = activeCorrelationId ?? alert.correlation_id;
   const canNavigateToActor = alert.actor_id !== currentAgentId && navigableAgentIds.has(alert.actor_id);
   const canNavigateToObserver =
     alert.observer_agent_id !== currentAgentId && navigableAgentIds.has(alert.observer_agent_id);
+  const { onJump, allowExactFallback } = resolveSharedMemoryEvidenceJumpBehavior(onFocusSharedMemoryArtifact);
 
   return (
     <li key={alert.alert_id} className={`aitown-record severity-${alert.severity}`}>
@@ -1424,7 +1457,8 @@ function renderSelectedAgentSupervisionAlert({
         {renderSharedMemoryEvidenceRefs({
           evidenceRefs: alert.evidence_refs,
           sharedMemoryArtifactRefs,
-          onJump: focusSharedMemoryArtifact
+          onJump,
+          allowExactFallback
         })}
       </span>
       <span>{`Evidence count · ${alert.evidence_count}`}</span>
@@ -1562,6 +1596,7 @@ function renderIncidentRecord({
   navigableAgentIds,
   sharedMemoryArtifactRefs,
   enableSharedMemoryEvidenceJump = false,
+  onFocusSharedMemoryArtifact,
   onSelectAgent,
   onSelectCorrelation,
   includeAgentPivot,
@@ -1577,6 +1612,7 @@ function renderIncidentRecord({
   navigableAgentIds: Set<string>;
   sharedMemoryArtifactRefs: ReadonlySet<string>;
   enableSharedMemoryEvidenceJump?: boolean;
+  onFocusSharedMemoryArtifact?: (artifactRef: string) => void;
   onSelectAgent: SelectAgentHandler;
   onSelectCorrelation: SelectCorrelationHandler;
   includeAgentPivot: boolean;
@@ -1586,6 +1622,8 @@ function renderIncidentRecord({
   counterpartyPivotAriaLabelPrefix?: string;
   includeCorrelationPivot?: boolean;
 }) {
+  const { onJump, allowExactFallback } = resolveSharedMemoryEvidenceJumpBehavior(onFocusSharedMemoryArtifact);
+
   return (
     <li key={incident.incident_id} className={`aitown-record severity-${incident.severity}`}>
       <strong>{incident.summary}</strong>
@@ -1646,7 +1684,8 @@ function renderIncidentRecord({
           {renderSharedMemoryEvidenceRefs({
             evidenceRefs: incident.evidence_refs,
             sharedMemoryArtifactRefs,
-            onJump: focusSharedMemoryArtifact
+            onJump,
+            allowExactFallback
           })}
         </span>
       ) : (
@@ -1857,6 +1896,7 @@ export function DetailsPanel({
   const navigableAgentIds = new Set(agents.map((agent) => agent.agentId));
   const attentionQueue = selectAttentionQueue(world);
   const agentNameById = new Map([...world.agents.values()].map((agent) => [agent.agent_id, agent.display_name]));
+  const sharedMemoryEvidenceJump = resolveSharedMemoryEvidenceJumpBehavior(onFocusSharedMemoryArtifact);
   const zoneSource = overviewZones ?? world.zones.map((zone) => ({
     zone_id: zone.zone_id,
     label: zone.label,
@@ -2052,8 +2092,9 @@ export function DetailsPanel({
                     {renderSharedMemoryEvidenceRefs({
                       evidenceRefs: collectorEvidenceRefs,
                       sharedMemoryArtifactRefs,
-                      onJump: focusSharedMemoryArtifact,
-                      jumpAriaLabelPrefix: 'Jump to collector evidence ref'
+                      onJump: sharedMemoryEvidenceJump.onJump,
+                      jumpAriaLabelPrefix: 'Jump to collector evidence ref',
+                      allowExactFallback: sharedMemoryEvidenceJump.allowExactFallback
                     })}
                   </span>
                 </li>
@@ -2304,7 +2345,8 @@ export function DetailsPanel({
                     {renderSharedMemoryEvidenceRefs({
                       evidenceRefs: operation.latest_event?.evidence_refs ?? [],
                       sharedMemoryArtifactRefs,
-                      onJump: focusSharedMemoryArtifact
+                      onJump: sharedMemoryEvidenceJump.onJump,
+                      allowExactFallback: sharedMemoryEvidenceJump.allowExactFallback
                     })}
                   </span>
                 </li>
@@ -2346,6 +2388,7 @@ export function DetailsPanel({
                 navigableAgentIds,
                 sharedMemoryArtifactRefs,
                 enableSharedMemoryEvidenceJump: true,
+                onFocusSharedMemoryArtifact,
                 onSelectAgent,
                 onSelectCorrelation,
                 includeAgentPivot: true,
@@ -2387,6 +2430,7 @@ export function DetailsPanel({
           navigableAgentIds,
           agentNameById,
           sharedMemoryArtifactRefs,
+          onFocusSharedMemoryArtifact,
           onSelectAgent,
           onSelectCorrelation
         })}
@@ -2419,7 +2463,8 @@ export function DetailsPanel({
                     {renderSharedMemoryEvidenceRefs({
                       evidenceRefs: correlation.evidence_refs,
                       sharedMemoryArtifactRefs,
-                      onJump: focusSharedMemoryArtifact
+                      onJump: sharedMemoryEvidenceJump.onJump,
+                      allowExactFallback: sharedMemoryEvidenceJump.allowExactFallback
                     })}
                   </span>
                   <span>{`Counts · ${correlation.incident_count} incidents · ${correlation.interaction_count} interactions · ${correlation.event_count} events`}</span>
@@ -2432,6 +2477,7 @@ export function DetailsPanel({
                     navigableAgentIds,
                     sharedMemoryArtifactRefs,
                     enableSharedMemoryEvidenceJump: true,
+                    onFocusSharedMemoryArtifact,
                     onSelectAgent,
                     onSelectCorrelation,
                     includeAgentPivot: false,
@@ -2448,7 +2494,8 @@ export function DetailsPanel({
                     navigableAgentIds,
                     onSelectAgent,
                     sharedMemoryArtifactRefs,
-                    enableSharedMemoryEvidenceJump: true
+                    enableSharedMemoryEvidenceJump: true,
+                    onFocusSharedMemoryArtifact
                   })
                 )}
                 {correlation.timeline.map((event) =>
@@ -2459,7 +2506,8 @@ export function DetailsPanel({
                     navigableAgentIds,
                     onSelectAgent,
                     sharedMemoryArtifactRefs,
-                    enableSharedMemoryEvidenceJump: true
+                    enableSharedMemoryEvidenceJump: true,
+                    onFocusSharedMemoryArtifact
                   })
                 )}
               </>
@@ -2742,8 +2790,9 @@ export function DetailsPanel({
                 {renderSharedMemoryEvidenceRefs({
                   evidenceRefs: selectedCollectorEvidenceRefs,
                   sharedMemoryArtifactRefs,
-                  onJump: focusSharedMemoryArtifact,
-                  jumpAriaLabelPrefix: 'Jump to collector evidence ref'
+                  onJump: sharedMemoryEvidenceJump.onJump,
+                  jumpAriaLabelPrefix: 'Jump to collector evidence ref',
+                  allowExactFallback: sharedMemoryEvidenceJump.allowExactFallback
                 })}
               </span>
             </li>
@@ -2776,7 +2825,8 @@ export function DetailsPanel({
               currentAgentId: selectedAgent.agent_id,
               navigableAgentIds,
               onSelectAgent,
-              onSelectCorrelation
+              onSelectCorrelation,
+              onFocusSharedMemoryArtifact
             })
           )}
           {selectedAgentSupervisionHistoryState === 'ready' &&
@@ -2899,8 +2949,9 @@ export function DetailsPanel({
                 ? renderSharedMemoryEvidenceRefs({
                     evidenceRefs: accountabilityEvidenceRefs,
                     sharedMemoryArtifactRefs,
-                    onJump: focusSharedMemoryArtifact,
-                    jumpAriaLabelPrefix: 'Jump to accountability evidence ref'
+                    onJump: sharedMemoryEvidenceJump.onJump,
+                    jumpAriaLabelPrefix: 'Jump to accountability evidence ref',
+                    allowExactFallback: sharedMemoryEvidenceJump.allowExactFallback
                   })
                 : 'No loaded evidence refs'}
             </span>
@@ -2957,7 +3008,8 @@ export function DetailsPanel({
               currentAgentId: selectedAgent?.agent_id ?? null,
               navigableAgentIds,
               onSelectAgent,
-              onSelectCorrelation
+              onSelectCorrelation,
+              onFocusSharedMemoryArtifact
             })
           )}
           {workflow && workflow.detail.open_peer_watch_alerts.length === 0 ? (
@@ -3003,7 +3055,8 @@ export function DetailsPanel({
               onSelectCorrelation,
               participantAriaLabelPrefix: `Select workflow interaction participant from interaction ${interaction.interaction_id}`,
               sharedMemoryArtifactRefs,
-              enableSharedMemoryEvidenceJump: true
+              enableSharedMemoryEvidenceJump: true,
+              onFocusSharedMemoryArtifact
             })
           )}
           {(workflow?.detail.recent_events ?? []).slice(0, 2).map((event) =>
@@ -3017,7 +3070,8 @@ export function DetailsPanel({
               actorPivotAriaLabelPrefix: 'Select workflow recent event actor from event',
               counterpartyPivotAriaLabelPrefix: `Select workflow recent event counterparty from event ${event.event_id}`,
               sharedMemoryArtifactRefs,
-              enableSharedMemoryEvidenceJump: true
+              enableSharedMemoryEvidenceJump: true,
+              onFocusSharedMemoryArtifact
             })
           )}
           {(workflow?.detail.recent_handoffs ?? []).slice(0, 2).map((handoff) =>
@@ -3039,7 +3093,8 @@ export function DetailsPanel({
               currentAgentId: selectedAgent.agent_id,
               navigableAgentIds,
               onSelectAgent,
-              onSelectCorrelation
+              onSelectCorrelation,
+              onFocusSharedMemoryArtifact
             })
           )}
           {(workflow?.detail.recent_reboots ?? []).slice(0, 2).map((reboot) =>
@@ -3061,7 +3116,8 @@ export function DetailsPanel({
               currentAgentId: selectedAgent.agent_id,
               navigableAgentIds,
               onSelectAgent,
-              onSelectCorrelation
+              onSelectCorrelation,
+              onFocusSharedMemoryArtifact
             })
           )}
         </ul>
@@ -3097,6 +3153,7 @@ export function DetailsPanel({
               navigableAgentIds,
               sharedMemoryArtifactRefs,
               enableSharedMemoryEvidenceJump: true,
+              onFocusSharedMemoryArtifact,
               onSelectAgent,
               onSelectCorrelation,
               includeAgentPivot: false,
@@ -3135,6 +3192,7 @@ export function DetailsPanel({
         navigableAgentIds,
         agentNameById,
         sharedMemoryArtifactRefs,
+        onFocusSharedMemoryArtifact,
         onSelectAgent,
         onSelectCorrelation
       })}
@@ -3166,7 +3224,8 @@ export function DetailsPanel({
                   {renderSharedMemoryEvidenceRefs({
                     evidenceRefs: correlation.evidence_refs,
                     sharedMemoryArtifactRefs,
-                    onJump: focusSharedMemoryArtifact
+                    onJump: sharedMemoryEvidenceJump.onJump,
+                    allowExactFallback: sharedMemoryEvidenceJump.allowExactFallback
                   })}
                 </span>
                 <span>{`Counts · ${correlation.incident_count} incidents · ${correlation.interaction_count} interactions · ${correlation.event_count} events`}</span>
@@ -3179,6 +3238,7 @@ export function DetailsPanel({
                   navigableAgentIds,
                   sharedMemoryArtifactRefs,
                   enableSharedMemoryEvidenceJump: true,
+                  onFocusSharedMemoryArtifact,
                   onSelectAgent,
                   onSelectCorrelation,
                   includeAgentPivot: true,
@@ -3196,7 +3256,8 @@ export function DetailsPanel({
                   navigableAgentIds,
                   onSelectAgent,
                   sharedMemoryArtifactRefs,
-                  enableSharedMemoryEvidenceJump: true
+                  enableSharedMemoryEvidenceJump: true,
+                  onFocusSharedMemoryArtifact
                 })
               )}
               {correlation.timeline.map((event) =>
@@ -3207,7 +3268,8 @@ export function DetailsPanel({
                   navigableAgentIds,
                   onSelectAgent,
                   sharedMemoryArtifactRefs,
-                  enableSharedMemoryEvidenceJump: true
+                  enableSharedMemoryEvidenceJump: true,
+                  onFocusSharedMemoryArtifact
                 })
               )}
             </>

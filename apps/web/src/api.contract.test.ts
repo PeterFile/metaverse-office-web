@@ -262,6 +262,62 @@ describe('read-only frontend/backend contract smoke', () => {
     });
   });
 
+  it('passes memory artifact_ref exact filters through to the real backend and keeps the current scope constrained', async () => {
+    harness = await createHarness(() => '2026-03-09T19:00:00.000Z');
+    await seedContractSlice(harness.store);
+
+    const nativeFetch = globalThis.fetch.bind(globalThis);
+    const requests: RequestContract[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+        requests.push(getRequestContract(input, harness!.baseUrl, init));
+        return nativeFetch(input, init);
+      })
+    );
+
+    const api = await loadApi(harness.baseUrl);
+    const memoryArtifacts = await api.fetchMemoryArtifacts({
+      agentId: 'app-engineering',
+      correlationId: 'corr-contract',
+      artifactRef: '/tmp/contract-peer-watch.md'
+    });
+
+    expect(requests).toEqual([
+      {
+        method: 'GET',
+        origin: harness.baseUrl,
+        pathname: '/memory/artifacts',
+        query: [
+          ['agent_id', 'app-engineering'],
+          ['artifact_ref', '/tmp/contract-peer-watch.md'],
+          ['correlation_id', 'corr-contract'],
+          ['limit', '10'],
+          ['window', '60m']
+        ]
+      }
+    ]);
+    expect(memoryArtifacts).toEqual({
+      generated_at: '2026-03-09T19:00:00.000Z',
+      items: [
+        {
+          artifact_ref: '/tmp/contract-peer-watch.md',
+          artifact_kind: 'evidence_ref',
+          file_name: 'contract-peer-watch.md',
+          first_seen_at: '2026-03-09T18:45:00.000Z',
+          last_seen_at: '2026-03-09T18:45:00.000Z',
+          mention_count: 1,
+          agent_ids: ['app-engineering', 'protocol-engineering', 'team-lead'],
+          correlation_ids: ['corr-contract'],
+          source_kinds: ['controller_event'],
+          latest_summary: 'Protocol engineering flagged the contract drift',
+          latest_event_type: 'peer_watch_alert_raised',
+          collector_last_modified_at: null
+        }
+      ]
+    });
+  });
+
   it('passes office-operations agent_id filters through to the real backend without widening the request surface', async () => {
     harness = await createHarness(() => '2026-03-09T19:00:00.000Z');
     await seedContractSlice(harness.store);

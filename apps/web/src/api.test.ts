@@ -778,7 +778,7 @@ describe('fetchPeerWatchAlerts', () => {
 });
 
 describe('fetchMemoryArtifacts', () => {
-  it('passes limit, window, agent_id, and correlation_id filters through to the backend query string', async () => {
+  it('passes limit, window, agent_id, correlation_id, and artifact_ref filters through to the backend query string', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue(
@@ -798,11 +798,12 @@ describe('fetchMemoryArtifacts', () => {
       limit: 4,
       window: '30m',
       agentId: 'app-engineering',
-      correlationId: 'corr-app-review'
+      correlationId: 'corr-app-review',
+      artifactRef: '/tmp/app-engineering/todo.md'
     });
 
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      '/memory/artifacts?limit=4&window=30m&agent_id=app-engineering&correlation_id=corr-app-review',
+      '/memory/artifacts?limit=4&window=30m&agent_id=app-engineering&correlation_id=corr-app-review&artifact_ref=%2Ftmp%2Fapp-engineering%2Ftodo.md',
       expect.objectContaining({ signal: undefined })
     );
   });

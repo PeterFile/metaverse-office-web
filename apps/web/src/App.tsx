@@ -20,7 +20,7 @@ import { adaptWorldToScene } from './aitown/sceneAdapter';
 import { WorldProvider, useWorld } from './context/WorldContext';
 import { usePolledResource, type LoadState } from './hooks/usePolledResource';
 import { getHubFocusableElements } from './hubFocus';
-import type { OfficeAgent, OfficeOperation } from './types';
+import type { MemoryArtifact, MemoryArtifactIndex, OfficeAgent, OfficeOperation } from './types';
 import { projectWorldState } from './world/projector';
 import { PHASE_LABELS, selectAttentionQueue, selectAgentZoneLabel } from './world/selectors';
 import type { WorldAgent, WorldState } from './world/types';
@@ -192,6 +192,42 @@ function resolveSharedMemoryRequestScopeLabel(
     : 'Crew overview';
 }
 
+function resolveSharedMemoryArtifactDomId(artifactRef: string) {
+  return `aitown-shared-memory-${encodeURIComponent(artifactRef)}`;
+}
+
+function focusSharedMemoryArtifactInDom(artifactRef: string) {
+  if (typeof document === 'undefined') {
+    return false;
+  }
+
+  const target = document.getElementById(resolveSharedMemoryArtifactDomId(artifactRef));
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+
+  target.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+  target.focus();
+  return true;
+}
+
+function sortMemoryArtifacts(artifacts: MemoryArtifact[]) {
+  return [...artifacts].sort((left, right) => {
+    const rightLastSeen = Date.parse(right.last_seen_at ?? '') || 0;
+    const leftLastSeen = Date.parse(left.last_seen_at ?? '') || 0;
+    const lastSeenDelta = rightLastSeen - leftLastSeen;
+    if (lastSeenDelta !== 0) {
+      return lastSeenDelta;
+    }
+
+    if (right.mention_count !== left.mention_count) {
+      return right.mention_count - left.mention_count;
+    }
+
+    return left.artifact_ref.localeCompare(right.artifact_ref);
+  });
+}
+
 function resolveSelectedAgentSupervisionHistoryCorrelationId(
   selectedAgentId: string | null,
   selectedCorrelationId: string | null,
@@ -275,6 +311,8 @@ function AppInner() {
   const [selectedOperationSelection, setSelectedOperationSelection] = useState<OperationSelection | null>(null);
   const [selectedOperationSnapshot, setSelectedOperationSnapshot] = useState<OfficeOperation | null>(null);
   const [invalidSelectedOperationCorrelationId, setInvalidSelectedOperationCorrelationId] = useState<string | null>(null);
+  const [exactMemoryArtifacts, setExactMemoryArtifacts] = useState<Record<string, MemoryArtifact>>({});
+  const [sharedMemoryJumpStatus, setSharedMemoryJumpStatus] = useState<string | null>(null);
   const lastSelectedAgentRef = useRef<OfficeAgent | null>(null);
   const correlationSelectionModeRef = useRef<'auto' | 'manual' | 'preserved'>('auto');
   const lastCorrelationContextRef = useRef<string | null>(null);
@@ -282,6 +320,8 @@ function AppInner() {
   const hubCloseButtonRef = useRef<HTMLButtonElement | null>(null);
   const hubDialogRef = useRef<HTMLDivElement | null>(null);
   const hubFocusReturnRef = useRef<HTMLElement | null>(null);
+  const pendingSharedMemoryFocusRef = useRef<string | null>(null);
+  const sharedMemoryJumpRequestIdRef = useRef(0);
   const wasHubOpenRef = useRef(false);
 
   const overviewResource = usePolledResource({
@@ -378,6 +418,7 @@ function AppInner() {
     selectedAgentId,
     sharedMemoryCorrelationId
   );
+  const memoryArtifactResourceKey = resolveMemoryArtifactResourceKey(selectedAgentId, sharedMemoryCorrelationId);
 
   const memoryArtifactsResource = usePolledResource({
     enabled: hubOpen,
@@ -389,8 +430,47 @@ function AppInner() {
         correlationId: sharedMemoryCorrelationId ?? undefined,
         signal
       }),
-    resourceKey: resolveMemoryArtifactResourceKey(selectedAgentId, sharedMemoryCorrelationId)
+    resourceKey: memoryArtifactResourceKey
   });
+
+  useEffect(() => {
+    pendingSharedMemoryFocusRef.current = null;
+    sharedMemoryJumpRequestIdRef.current += 1;
+    setExactMemoryArtifacts({});
+    setSharedMemoryJumpStatus(null);
+  }, [memoryArtifactResourceKey]);
+
+  const memoryArtifacts = useMemo<MemoryArtifactIndex | null>(() => {
+    if (!memoryArtifactsResource.data && Object.keys(exactMemoryArtifacts).length === 0) {
+      return null;
+    }
+
+    const mergedArtifacts = new Map<string, MemoryArtifact>();
+
+    for (const artifact of Object.values(exactMemoryArtifacts)) {
+      mergedArtifacts.set(artifact.artifact_ref, artifact);
+    }
+
+    for (const artifact of memoryArtifactsResource.data?.items ?? []) {
+      mergedArtifacts.set(artifact.artifact_ref, artifact);
+    }
+
+    return {
+      generated_at: memoryArtifactsResource.data?.generated_at ?? new Date().toISOString(),
+      items: sortMemoryArtifacts(Array.from(mergedArtifacts.values()))
+    };
+  }, [exactMemoryArtifacts, memoryArtifactsResource.data]);
+
+  useEffect(() => {
+    const artifactRef = pendingSharedMemoryFocusRef.current;
+    if (!artifactRef) {
+      return;
+    }
+
+    if (focusSharedMemoryArtifactInDom(artifactRef)) {
+      pendingSharedMemoryFocusRef.current = null;
+    }
+  }, [hubOpen, memoryArtifacts]);
 
   const correlationResource = usePolledResource({
     enabled: hubOpen && selectedCorrelationId !== null,
@@ -907,6 +987,59 @@ function AppInner() {
     [selectAgentWithSnapshot]
   );
 
+  const handleFocusSharedMemoryArtifact = useCallback(
+    async (artifactRef: string) => {
+      setSharedMemoryJumpStatus(null);
+
+      if (focusSharedMemoryArtifactInDom(artifactRef)) {
+        return;
+      }
+
+      const requestId = sharedMemoryJumpRequestIdRef.current + 1;
+      sharedMemoryJumpRequestIdRef.current = requestId;
+
+      try {
+        const artifactIndex = await fetchMemoryArtifacts({
+          limit: MEMORY_ARTIFACT_LIMIT,
+          window: DEFAULT_WORKFLOW_WINDOW,
+          agentId: selectedAgentId ?? undefined,
+          correlationId: sharedMemoryCorrelationId ?? undefined,
+          artifactRef
+        });
+
+        if (sharedMemoryJumpRequestIdRef.current !== requestId) {
+          return;
+        }
+
+        const exactArtifact = artifactIndex.items.find((item) => item.artifact_ref === artifactRef) ?? null;
+
+        if (!exactArtifact) {
+          setSharedMemoryJumpStatus(
+            `Shared memory miss. ${artifactRef} is not available in ${sharedMemoryRequestScopeLabel}.`
+          );
+          return;
+        }
+
+        setExactMemoryArtifacts((current) => ({
+          ...current,
+          [exactArtifact.artifact_ref]: exactArtifact
+        }));
+        pendingSharedMemoryFocusRef.current = exactArtifact.artifact_ref;
+      } catch (error) {
+        if (sharedMemoryJumpRequestIdRef.current !== requestId) {
+          return;
+        }
+
+        setSharedMemoryJumpStatus(
+          `Shared memory jump failed for ${artifactRef} in ${sharedMemoryRequestScopeLabel}. ${
+            error instanceof Error ? error.message : 'unknown_error'
+          }`
+        );
+      }
+    },
+    [selectedAgentId, sharedMemoryCorrelationId, sharedMemoryRequestScopeLabel]
+  );
+
   const rendererFallback = (
     <div className="aitown-world__placeholder aitown-world__placeholder--static">
       Loading world renderer...
@@ -1108,10 +1241,11 @@ function AppInner() {
               workflowError={workflowResource.error}
               workflowState={workflowResource.state}
               world={projectedWorld}
-              memoryArtifacts={memoryArtifactsResource.data}
+              memoryArtifacts={memoryArtifacts}
               memoryArtifactsError={memoryArtifactsResource.error}
               memoryArtifactsState={memoryArtifactsResource.state}
               sharedMemoryRequestScopeLabel={sharedMemoryRequestScopeLabel}
+              sharedMemoryJumpStatus={sharedMemoryJumpStatus}
               selectedAgentSupervisionHistoryRequestScopeLabel={
                 selectedAgentSupervisionHistoryRequestScopeLabel
               }
@@ -1148,6 +1282,7 @@ function AppInner() {
               onResetCorrelationOverride={handleResetCorrelationOverride}
               onSelectOperationsState={setSelectedOperationsState}
               onSelectOperation={handleSelectOperation}
+              onFocusSharedMemoryArtifact={handleFocusSharedMemoryArtifact}
             />
           </div>
         </div>

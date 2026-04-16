@@ -105,6 +105,10 @@ const growthRevenueSelectedReviewCorrelationMemoryArtifactsUrl =
   '/memory/artifacts?limit=4&window=60m&agent_id=growth-revenue&correlation_id=corr-app-review';
 const selectedCorrelationMemoryArtifactsUrl =
   '/memory/artifacts?limit=4&window=60m&agent_id=app-engineering&correlation_id=corr-app-review';
+const selectedCorrelationMissingArtifactExactUrl =
+  '/memory/artifacts?limit=4&window=60m&agent_id=app-engineering&correlation_id=corr-app-review&artifact_ref=%2Ftmp%2Fmissing.md';
+const selectedCorrelationTmuxArtifactExactUrl =
+  '/memory/artifacts?limit=4&window=60m&agent_id=app-engineering&correlation_id=corr-app-review&artifact_ref=tmux%3A%2F%2F5-web3-app-engineering%2F0.1';
 const collectorSnapshotUrl = '/collectors/controller-snapshot';
 
 const overviewFixture = {
@@ -4891,10 +4895,10 @@ afterEach(() => {
       })
     ).toBeVisible();
     expect(
-      within(operationSection!).queryByRole('button', {
+      within(operationSection!).getByRole('button', {
         name: 'Jump to shared memory artifact /tmp/missing.md'
       })
-    ).not.toBeInTheDocument();
+    ).toBeVisible();
 
     const fetchCallCountBeforeJump = vi.mocked(globalThis.fetch).mock.calls.length;
 
@@ -4916,6 +4920,352 @@ afterEach(() => {
     expect(vi.mocked(globalThis.fetch).mock.calls).toHaveLength(fetchCallCountBeforeJump);
     expect(globalThis.fetch).not.toHaveBeenCalledWith(teamLeadWorkflowUrl, expect.anything());
     expect(globalThis.fetch).not.toHaveBeenCalledWith(teamLeadSelectedCorrelationMemoryArtifactsUrl, expect.anything());
+  });
+
+  it('falls back to one exact shared-memory artifact fetch for current-operation evidence refs that are outside the loaded slice', async () => {
+    const currentOperationExactArtifactFixture = {
+      ...operationsFixture,
+      items: [
+        {
+          ...operationsFixture.items[0],
+          latest_event: operationsFixture.items[0].latest_event
+            ? {
+                ...operationsFixture.items[0].latest_event,
+                evidence_refs: ['/tmp/evidence.md', '/tmp/missing.md']
+              }
+            : null
+        },
+        operationsFixture.items[1]
+      ]
+    };
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === operationsUrl || url === selectedOperationUrl) {
+          return jsonResponse(currentOperationExactArtifactFixture);
+        }
+
+        if (url === selectedCorrelationMissingArtifactExactUrl) {
+          return jsonResponse({
+            generated_at: '2026-03-16T09:00:00.000Z',
+            items: [
+              {
+                artifact_ref: '/tmp/missing.md',
+                artifact_kind: 'evidence_ref',
+                file_name: 'missing.md',
+                first_seen_at: '2026-03-16T08:58:30.000Z',
+                last_seen_at: '2026-03-16T08:58:30.000Z',
+                mention_count: 1,
+                agent_ids: ['app-engineering', 'team-lead'],
+                correlation_ids: ['corr-app-review'],
+                source_kinds: ['controller_event'],
+                latest_summary: 'Exact artifact fallback stayed inside the current operation scope',
+                latest_event_type: 'agent_noted',
+                collector_last_modified_at: null
+              }
+            ]
+          });
+        }
+
+        return resolveTestFetchResponse(url);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent from active queue' }));
+
+    const operationSection = within(details).getByRole('heading', { name: 'Current Operation' }).closest('section');
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    const memorySection = within(details).getByRole('heading', { name: 'Shared Memory' }).closest('section');
+    expect(operationSection).not.toBeNull();
+    expect(correlationSection).not.toBeNull();
+    expect(memorySection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+      expect(within(details).getByRole('heading', { name: 'Current Operation' })).toBeVisible();
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+      expect(within(memorySection!).getByText('Ref · /tmp/evidence.md')).toBeVisible();
+    });
+
+    const fetchCallCountBeforeJump = vi.mocked(globalThis.fetch).mock.calls.length;
+
+    await user.click(
+      within(operationSection!).getByRole('button', {
+        name: 'Jump to shared memory artifact /tmp/missing.md'
+      })
+    );
+
+    await waitFor(() => {
+      expect(within(memorySection!).getByText('Exact artifact fallback stayed inside the current operation scope')).toBeVisible();
+    });
+
+    const missingArtifactRecord = within(memorySection!).getByText('Ref · /tmp/missing.md').closest('li');
+    expect(missingArtifactRecord).not.toBeNull();
+    expect(document.activeElement).toBe(missingArtifactRecord);
+    expect(within(memorySection!).getByText('Request scope · app-engineering · corr-app-review')).toBeVisible();
+    expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+    expect(within(details).getByRole('heading', { name: 'Current Operation' })).toBeVisible();
+    expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+
+    const newFetchUrlsAfterJump = vi
+      .mocked(globalThis.fetch)
+      .mock.calls.slice(fetchCallCountBeforeJump)
+      .map(([input]) => (typeof input === 'string' ? input : input.toString()));
+    expect(newFetchUrlsAfterJump).toEqual([selectedCorrelationMissingArtifactExactUrl]);
+  });
+
+  it('treats a mismatched exact shared-memory response as a miss instead of focusing an unrelated artifact', async () => {
+    const currentOperationExactArtifactFixture = {
+      ...operationsFixture,
+      items: [
+        {
+          ...operationsFixture.items[0],
+          latest_event: operationsFixture.items[0].latest_event
+            ? {
+                ...operationsFixture.items[0].latest_event,
+                evidence_refs: ['/tmp/evidence.md', '/tmp/missing.md']
+              }
+            : null
+        },
+        operationsFixture.items[1]
+      ]
+    };
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === operationsUrl || url === selectedOperationUrl) {
+          return jsonResponse(currentOperationExactArtifactFixture);
+        }
+
+        if (url === selectedCorrelationMissingArtifactExactUrl) {
+          return jsonResponse({
+            generated_at: '2026-03-16T09:00:00.000Z',
+            items: [
+              {
+                artifact_ref: '/tmp/unrelated.md',
+                artifact_kind: 'evidence_ref',
+                file_name: 'unrelated.md',
+                first_seen_at: '2026-03-16T08:58:30.000Z',
+                last_seen_at: '2026-03-16T08:58:30.000Z',
+                mention_count: 1,
+                agent_ids: ['app-engineering'],
+                correlation_ids: ['corr-app-review'],
+                source_kinds: ['controller_event'],
+                latest_summary: 'Unrelated artifact should not satisfy an exact jump',
+                latest_event_type: 'agent_noted',
+                collector_last_modified_at: null
+              }
+            ]
+          });
+        }
+
+        return resolveTestFetchResponse(url);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent from active queue' }));
+
+    const operationSection = within(details).getByRole('heading', { name: 'Current Operation' }).closest('section');
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    const memorySection = within(details).getByRole('heading', { name: 'Shared Memory' }).closest('section');
+    expect(operationSection).not.toBeNull();
+    expect(correlationSection).not.toBeNull();
+    expect(memorySection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+    });
+
+    await user.click(
+      within(operationSection!).getByRole('button', {
+        name: 'Jump to shared memory artifact /tmp/missing.md'
+      })
+    );
+
+    await waitFor(() => {
+      expect(
+        within(memorySection!).getByText(
+          'Shared memory miss. /tmp/missing.md is not available in app-engineering · corr-app-review.'
+        )
+      ).toBeVisible();
+    });
+
+    expect(within(memorySection!).queryByText('Ref · /tmp/unrelated.md')).not.toBeInTheDocument();
+    expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+    expect(within(details).getByRole('heading', { name: 'Current Operation' })).toBeVisible();
+    expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+    expect(operationSection!).toHaveTextContent('Evidence · /tmp/evidence.md, /tmp/missing.md');
+  });
+
+  it('shows an explicit shared-memory miss state for current-operation evidence jumps without resetting the current context', async () => {
+    const currentOperationExactArtifactFixture = {
+      ...operationsFixture,
+      items: [
+        {
+          ...operationsFixture.items[0],
+          latest_event: operationsFixture.items[0].latest_event
+            ? {
+                ...operationsFixture.items[0].latest_event,
+                evidence_refs: ['/tmp/evidence.md', '/tmp/missing.md']
+              }
+            : null
+        },
+        operationsFixture.items[1]
+      ]
+    };
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === operationsUrl || url === selectedOperationUrl) {
+          return jsonResponse(currentOperationExactArtifactFixture);
+        }
+
+        if (url === selectedCorrelationMissingArtifactExactUrl) {
+          return jsonResponse({
+            generated_at: '2026-03-16T09:00:00.000Z',
+            items: []
+          });
+        }
+
+        return resolveTestFetchResponse(url);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent from active queue' }));
+
+    const operationSection = within(details).getByRole('heading', { name: 'Current Operation' }).closest('section');
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    const memorySection = within(details).getByRole('heading', { name: 'Shared Memory' }).closest('section');
+    expect(operationSection).not.toBeNull();
+    expect(correlationSection).not.toBeNull();
+    expect(memorySection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+    });
+
+    await user.click(
+      within(operationSection!).getByRole('button', {
+        name: 'Jump to shared memory artifact /tmp/missing.md'
+      })
+    );
+
+    await waitFor(() => {
+      expect(
+        within(memorySection!).getByText(
+          'Shared memory miss. /tmp/missing.md is not available in app-engineering · corr-app-review.'
+        )
+      ).toBeVisible();
+    });
+
+    expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+    expect(within(details).getByRole('heading', { name: 'Current Operation' })).toBeVisible();
+    expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+    expect(operationSection!).toHaveTextContent('Evidence · /tmp/evidence.md, /tmp/missing.md');
+  });
+
+  it('shows an explicit shared-memory error state for current-operation evidence jumps without resetting the current context', async () => {
+    const currentOperationExactArtifactFixture = {
+      ...operationsFixture,
+      items: [
+        {
+          ...operationsFixture.items[0],
+          latest_event: operationsFixture.items[0].latest_event
+            ? {
+                ...operationsFixture.items[0].latest_event,
+                evidence_refs: ['/tmp/evidence.md', '/tmp/missing.md']
+              }
+            : null
+        },
+        operationsFixture.items[1]
+      ]
+    };
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === operationsUrl || url === selectedOperationUrl) {
+          return jsonResponse(currentOperationExactArtifactFixture);
+        }
+
+        if (url === selectedCorrelationMissingArtifactExactUrl) {
+          return new Response(
+            JSON.stringify({
+              error: 'internal_error',
+              details: 'shared memory exact fetch failed'
+            }),
+            {
+              status: 500,
+              headers: { 'content-type': 'application/json' }
+            }
+          );
+        }
+
+        return resolveTestFetchResponse(url);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent from active queue' }));
+
+    const operationSection = within(details).getByRole('heading', { name: 'Current Operation' }).closest('section');
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    const memorySection = within(details).getByRole('heading', { name: 'Shared Memory' }).closest('section');
+    expect(operationSection).not.toBeNull();
+    expect(correlationSection).not.toBeNull();
+    expect(memorySection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+    });
+
+    await user.click(
+      within(operationSection!).getByRole('button', {
+        name: 'Jump to shared memory artifact /tmp/missing.md'
+      })
+    );
+
+    await waitFor(() => {
+      expect(
+        within(memorySection!).getByText(
+          'Shared memory jump failed for /tmp/missing.md in app-engineering · corr-app-review. shared memory exact fetch failed'
+        )
+      ).toBeVisible();
+    });
+
+    expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+    expect(within(details).getByRole('heading', { name: 'Current Operation' })).toBeVisible();
+    expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+    expect(operationSection!).toHaveTextContent('Evidence · /tmp/evidence.md, /tmp/missing.md');
   });
 
   it('jumps from active-queue evidence refs to shared memory without changing the queue filter, selected agent, current-operation context, or correlation', async () => {
@@ -11166,6 +11516,114 @@ afterEach(() => {
     expect(newFetchUrlsAfterJump).not.toContain(correlationUrl);
     expect(newFetchUrlsAfterJump).not.toContain(appEngineeringMemoryArtifactsUrl);
     expect(newFetchUrlsAfterJump).not.toContain(selectedCorrelationMemoryArtifactsUrl);
+  });
+
+  it('falls back to one exact shared-memory artifact fetch for matching collector tmux previews outside the loaded slice', async () => {
+    const tmuxArtifactRef = 'tmux://5-web3-app-engineering/0.1';
+    const tmuxPreviewLabel = 'pnpm test · 2026-03-16T08:59:10.000Z';
+    const collectorSnapshotWithTmux = {
+      ...collectorSnapshotFixture,
+      items: collectorSnapshotFixture.items.map((item) =>
+        item.agent_id === 'app-engineering'
+          ? {
+              ...item,
+              session_ref: '5-web3-app-engineering',
+              tmux_observations: [
+                {
+                  session_name: '5-web3-app-engineering',
+                  window_index: '0',
+                  pane_index: '1',
+                  pane_id: '%11',
+                  pane_title: 'tests',
+                  pane_current_command: 'pnpm test',
+                  pane_active: true,
+                  pane_dead: false,
+                  pane_activity_at: '2026-03-16T08:59:10.000Z'
+                }
+              ]
+            }
+          : item
+      )
+    };
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === collectorSnapshotUrl) {
+          return jsonResponse({ item: collectorSnapshotWithTmux });
+        }
+
+        if (url === selectedCorrelationTmuxArtifactExactUrl) {
+          return jsonResponse({
+            generated_at: '2026-03-16T09:00:00.000Z',
+            items: [
+              {
+                artifact_ref: tmuxArtifactRef,
+                artifact_kind: 'tmux_observation',
+                file_name: '5-web3-app-engineering/0.1',
+                first_seen_at: '2026-03-16T08:59:10.000Z',
+                last_seen_at: '2026-03-16T08:59:10.000Z',
+                mention_count: 1,
+                agent_ids: ['app-engineering'],
+                correlation_ids: ['corr-app-review'],
+                source_kinds: ['collector_snapshot'],
+                latest_summary: 'Collector tmux fallback stayed inside the selected-agent scope',
+                latest_event_type: 'collector_snapshot_written',
+                collector_last_modified_at: '2026-03-16T08:59:10.000Z'
+              }
+            ]
+          });
+        }
+
+        return resolveTestFetchResponse(url);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
+
+    const collectorSection = await within(details).findByRole('heading', { name: 'Collector Observation' });
+    const collectorContainer = collectorSection.closest('section');
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    const memorySection = within(details).getByRole('heading', { name: 'Shared Memory' }).closest('section');
+    expect(collectorContainer).not.toBeNull();
+    expect(correlationSection).not.toBeNull();
+    expect(memorySection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+    });
+
+    const fetchCallCountBeforeJump = vi.mocked(globalThis.fetch).mock.calls.length;
+
+    await user.click(
+      within(collectorContainer!).getByRole('button', {
+        name: `Jump to shared memory artifact ${tmuxArtifactRef} ${tmuxPreviewLabel}`
+      })
+    );
+
+    await waitFor(() => {
+      expect(within(memorySection!).getByText('Collector tmux fallback stayed inside the selected-agent scope')).toBeVisible();
+    });
+
+    const tmuxArtifactRecord = within(memorySection!).getByText(`Ref · ${tmuxArtifactRef}`).closest('li');
+    expect(tmuxArtifactRecord).not.toBeNull();
+    expect(document.activeElement).toBe(tmuxArtifactRecord);
+    expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+    expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+    expect(within(memorySection!).getByText('Request scope · app-engineering · corr-app-review')).toBeVisible();
+
+    const newFetchUrlsAfterJump = vi
+      .mocked(globalThis.fetch)
+      .mock.calls.slice(fetchCallCountBeforeJump)
+      .map(([input]) => (typeof input === 'string' ? input : input.toString()));
+    expect(newFetchUrlsAfterJump).toEqual([selectedCorrelationTmuxArtifactExactUrl]);
   });
 
   it('preserves the active selected-agent correlation when pivoting through the collector observation watch target', async () => {

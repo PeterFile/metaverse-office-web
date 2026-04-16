@@ -472,6 +472,7 @@ function buildProps(overrides: Partial<DetailsPanelProps> = {}): DetailsPanelPro
     memoryArtifactsError: null,
     memoryArtifactsState: 'ready',
     sharedMemoryRequestScopeLabel: 'app-engineering · corr-app-review',
+    focusedSharedMemoryArtifactRef: null,
     selectedAgentSupervisionHistoryRequestScopeLabel: 'Target agent · app-engineering',
     selectedAgentSupervisionHistory: {
       items: []
@@ -1447,6 +1448,53 @@ describe('DetailsPanel accountability signals', () => {
     expect(onSelectAgent).not.toHaveBeenCalled();
     expect(onSelectCorrelation).not.toHaveBeenCalled();
     expect(onSelectOperation).not.toHaveBeenCalled();
+  });
+
+  it('shows one explicit focused exact-artifact state in shared memory', () => {
+    render(
+      <DetailsPanel
+        {...buildProps({
+          focusedSharedMemoryArtifactRef: 'artifact/review-note',
+          memoryArtifacts: {
+            ...buildMemoryArtifacts(),
+            items: [
+              ...buildMemoryArtifacts().items,
+              {
+                artifact_ref: '/evidence/secondary.md',
+                artifact_kind: 'evidence_ref',
+                file_name: 'secondary.md',
+                first_seen_at: '2026-03-16T08:43:00.000Z',
+                last_seen_at: '2026-03-16T08:43:00.000Z',
+                mention_count: 1,
+                agent_ids: ['app-engineering'],
+                correlation_ids: ['corr-app-review'],
+                source_kinds: ['controller_event'],
+                latest_summary: 'Secondary artifact stays unfocused',
+                latest_event_type: 'agent_noted',
+                collector_last_modified_at: null
+              }
+            ]
+          },
+          selectedAgent: null,
+          selectedCorrelationId: 'corr-app-review',
+          selectedOperation: null,
+          workflow: null
+        })}
+      />
+    );
+
+    const sharedMemorySection = screen.getByRole('heading', { name: 'Shared Memory' }).closest('section');
+    expect(sharedMemorySection).not.toBeNull();
+    expect(within(sharedMemorySection!).getByText('Focused exact artifact · artifact/review-note')).toBeVisible();
+
+    const focusedArtifactRecord = within(sharedMemorySection!).getByText('Ref · artifact/review-note').closest('li');
+    const unfocusedArtifactRecord = within(sharedMemorySection!).getByText('Ref · /evidence/secondary.md').closest('li');
+    expect(focusedArtifactRecord).not.toBeNull();
+    expect(unfocusedArtifactRecord).not.toBeNull();
+    expect(focusedArtifactRecord).toHaveClass('aitown-record--shared-memory-focused');
+    expect(within(focusedArtifactRecord!).getByText('Focused exact jump')).toBeVisible();
+    expect(unfocusedArtifactRecord).not.toHaveClass('aitown-record--shared-memory-focused');
+    expect(within(unfocusedArtifactRecord!).queryByText('Focused exact jump')).not.toBeInTheDocument();
   });
 
   it('keeps the selected active-queue state option visible when its count drops to zero', () => {

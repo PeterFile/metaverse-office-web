@@ -83,6 +83,38 @@ function resolveLiveFocusAgentMeta(agent: WorldAgent, world: WorldState) {
   return `${phaseLabel} · ${zoneLabel}`;
 }
 
+export function resolveViewportToplineStatus(
+  state: LoadState,
+  error: string | null,
+  generatedAt: string | null | undefined
+) {
+  if (generatedAt) {
+    return {
+      status: error ? `Office snapshot · Refresh failed · ${error}` : 'Office snapshot · Live',
+      snapshot: `Snapshot ${generatedAt}`
+    };
+  }
+
+  if (state === 'loading') {
+    return {
+      status: 'Office snapshot · Loading',
+      snapshot: 'Waiting for first office snapshot'
+    };
+  }
+
+  if (error) {
+    return {
+      status: `Office snapshot · Unavailable · ${error}`,
+      snapshot: 'No office snapshot loaded yet'
+    };
+  }
+
+  return {
+    status: 'Office snapshot · Loading',
+    snapshot: 'Waiting for first office snapshot'
+  };
+}
+
 export function resolveOverviewRefreshWarning(error: string | null, hasOverviewData: boolean) {
   if (!error || !hasOverviewData) {
     return null;
@@ -1049,6 +1081,11 @@ function AppInner() {
     overviewResource.error,
     Boolean(overviewResource.data)
   );
+  const viewportToplineStatus = resolveViewportToplineStatus(
+    overviewResource.state,
+    overviewResource.error,
+    overviewResource.data?.generated_at ?? null
+  );
   const incidentFeedHeaderStatus = resolveIncidentFeedHeaderStatus(
     incidentFeedResource.state,
     incidentFeedResource.error,
@@ -1120,9 +1157,8 @@ function AppInner() {
             <span>
               <strong className="aitown-panel__topline-title">Viewport</strong>
               <span className="aitown-panel__topline-copy">Drag to pan. Wheel to zoom. Tap or click an agent to inspect.</span>
-              <span className="aitown-panel__topline-copy">
-                {overviewResource.data?.generated_at ? `Snapshot ${overviewResource.data.generated_at}` : 'Synchronizing'}
-              </span>
+              <span className="aitown-panel__topline-copy">{viewportToplineStatus.status}</span>
+              <span className="aitown-panel__topline-copy">{viewportToplineStatus.snapshot}</span>
             </span>
           </div>
 

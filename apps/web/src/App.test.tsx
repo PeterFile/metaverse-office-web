@@ -10,6 +10,8 @@ vi.mock('./aitown/WorldScene', () => ({
   }: {
     scene: {
       selectedAgentId: string | null;
+      activeCorrelationId: string | null;
+      correlationParticipantAgentIds: string[];
       watchEdges: Array<{
         fromAgentId: string;
         toAgentId: string;
@@ -29,9 +31,15 @@ vi.mock('./aitown/WorldScene', () => ({
     return (
       <div data-testid="mock-world-scene">
         <output data-testid="mock-reset-view-signal">{resetViewSignal}</output>
-        <button type="button" onClick={() => onSelectAgent('app-engineering')}>
-          Select scene agent app-engineering
-        </button>
+        <output data-testid="mock-scene-active-correlation-id">{scene.activeCorrelationId ?? ''}</output>
+        <output data-testid="mock-scene-correlation-participants">
+          {scene.correlationParticipantAgentIds.join(',')}
+        </output>
+        {scene.agents.map((agent) => (
+          <button key={agent.agentId} type="button" onClick={() => onSelectAgent(agent.agentId)}>
+            {`Select scene agent ${agent.agentId}`}
+          </button>
+        ))}
         {scene.watchEdges.length > 0 ? (
           <section aria-label="Selected watch links">
             <span>{`${scene.selectedAgentId} watch links`}</span>
@@ -1458,7 +1466,7 @@ afterEach(() => {
     expect(within(worldRegion).queryByText('Selected supervision')).not.toBeInTheDocument();
     expect(
       within(worldRegion).getByText(
-        'Selected links only. Gold rings mark selected/linked agents; arrows run watcher to target; thick links mean lead watch; colors show target severity.'
+        'Selected links only. Gold rings mark selected/linked agents; teal halos mark agents participating in the active correlation; arrows run watcher to target; thick links mean lead watch; colors show target severity.'
       )
     ).toBeVisible();
     expect(worldRegion).not.toHaveAttribute('aria-describedby');
@@ -1482,6 +1490,63 @@ afterEach(() => {
     expect(items[0]).toHaveTextContent('Team Lead');
     expect(items[0]).toHaveTextContent('App Engineering Agent');
     expect(items[0]).toHaveTextContent('orange');
+  });
+
+  it('passes the active correlation spotlight ids into the scene model when drilldown data is loaded', async () => {
+    const user = userEvent.setup();
+
+    setNavigatorUserAgent('VitestBrowser');
+    render(<App />);
+
+    await user.click(await screen.findByRole('button', { name: 'Select scene agent app-engineering' }));
+
+    const details = await screen.findByRole('complementary', { name: 'Agent details' });
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+
+    expect(correlationSection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+    });
+
+    expect(screen.getByTestId('mock-scene-active-correlation-id')).toHaveTextContent('corr-app-review');
+    expect(screen.getByTestId('mock-scene-correlation-participants')).toHaveTextContent(
+      'app-engineering,team-lead'
+    );
+  });
+
+  it('keeps the active correlation when a highlighted scene participant is inspected', async () => {
+    const user = userEvent.setup();
+
+    setNavigatorUserAgent('VitestBrowser');
+    render(<App />);
+
+    await user.click(await screen.findByRole('button', { name: 'Select scene agent app-engineering' }));
+
+    const details = await screen.findByRole('complementary', { name: 'Agent details' });
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+
+    expect(correlationSection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+      expect(screen.getByTestId('mock-scene-correlation-participants')).toHaveTextContent(
+        'app-engineering,team-lead'
+      );
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Select scene agent team-lead' }));
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'Team Lead' })).toBeVisible();
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+    });
+
+    expect(screen.getByTestId('mock-scene-active-correlation-id')).toHaveTextContent('corr-app-review');
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      teamLeadSelectedCorrelationMemoryArtifactsUrl,
+      expect.anything()
+    );
   });
 
   it('keeps the selected-agent hub context while resetting the world view', async () => {

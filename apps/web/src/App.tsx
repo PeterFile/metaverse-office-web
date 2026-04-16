@@ -529,6 +529,7 @@ function AppInner() {
 
   const activeCorrelation =
     correlationResource.data?.correlation_id === selectedCorrelationId ? correlationResource.data : null;
+  const activeCorrelationParticipantAgentIds = activeCorrelation?.participant_agent_ids ?? [];
   const correlationSelectionContext = resolveCorrelationSelectionContext(selectedAgentId);
 
   const projectedWorld = useMemo(
@@ -547,8 +548,14 @@ function AppInner() {
   }, [projectedWorld, setWorld]);
 
   const scene = useMemo(
-    () => adaptWorldToScene(projectedWorld, selectedAgentId),
-    [projectedWorld, selectedAgentId]
+    () =>
+      adaptWorldToScene(
+        projectedWorld,
+        selectedAgentId,
+        activeCorrelation?.correlation_id ?? null,
+        activeCorrelationParticipantAgentIds
+      ),
+    [activeCorrelation?.correlation_id, activeCorrelationParticipantAgentIds, projectedWorld, selectedAgentId]
   );
   const liveFocusAgents = useMemo(() => selectAttentionQueue(projectedWorld), [projectedWorld]);
 
@@ -984,21 +991,37 @@ function AppInner() {
 
   const handleSceneSelectAgent = useCallback(
     (agentId: string | null) => {
+      const preservedCorrelationId =
+        agentId !== null && activeCorrelationParticipantAgentIds.includes(agentId)
+          ? activeCorrelation?.correlation_id ?? null
+          : null;
       const operationSelection = resolveDirectOperationSelection(agentId, null);
       selectAgentWithSnapshot(
         agentId,
-        null,
+        preservedCorrelationId,
         operationSelection,
-        'auto',
-        false,
-        false,
+        preservedCorrelationId ? 'preserved' : 'auto',
+        preservedCorrelationId !== null &&
+          preservedCorrelationId === selectedCorrelationId &&
+          selectedCorrelationWasExplicit,
+        preservedCorrelationId !== null &&
+          preservedCorrelationId === selectedCorrelationId &&
+          selectedCorrelationCarryForward,
         resolveOperationSnapshotSeed(agentId, crewOverviewOperationSeedData)
       );
       if (agentId) {
         setHubOpen(true);
       }
     },
-    [crewOverviewOperationSeedData, selectAgentWithSnapshot]
+    [
+      activeCorrelation?.correlation_id,
+      activeCorrelationParticipantAgentIds,
+      crewOverviewOperationSeedData,
+      selectAgentWithSnapshot,
+      selectedCorrelationCarryForward,
+      selectedCorrelationId,
+      selectedCorrelationWasExplicit
+    ]
   );
 
   const handleSelectOperation = useCallback(

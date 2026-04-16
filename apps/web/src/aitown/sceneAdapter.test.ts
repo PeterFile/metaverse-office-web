@@ -221,4 +221,15 @@ describe('adaptWorldToScene', () => {
 
     expect(scene.watchEdges).toEqual([]);
   });
+
+  it('keeps only visible active-correlation participants in the scene model', () => {
+    const scene = adaptWorldToScene(world, 'app-engineering', 'corr-app-review', [
+      'app-engineering',
+      'team-lead',
+      'ghost-agent'
+    ]);
+
+    expect(scene.activeCorrelationId).toBe('corr-app-review');
+    expect(scene.correlationParticipantAgentIds).toEqual(['app-engineering', 'team-lead']);
+  });
 });

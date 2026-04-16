@@ -1,7 +1,7 @@
 import { SCENE_AGENT_STATUS_LEGEND } from './agentStatusBadge';
 
 const SELECTED_SUPERVISION_NOTE =
-  'Selected links only. Gold rings mark selected/linked agents; arrows run watcher to target; thick links mean lead watch; colors show target severity.';
+  'Selected links only. Gold rings mark selected/linked agents; teal halos mark agents participating in the active correlation; arrows run watcher to target; thick links mean lead watch; colors show target severity.';
 
 export function SceneStatusLegend() {
   return (

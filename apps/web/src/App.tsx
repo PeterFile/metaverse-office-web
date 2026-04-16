@@ -1027,21 +1027,36 @@ function AppInner() {
   );
 
   const handleSelectOperation = useCallback(
-    (operation: OfficeOperation) => {
+    (
+      operation: OfficeOperation,
+      options?: {
+        preserveActiveCorrelation?: boolean;
+      }
+    ) => {
+      const preserveActiveCorrelation = Boolean(
+        options?.preserveActiveCorrelation && activeCorrelation?.correlation_id
+      );
+      const preservedCorrelationId = preserveActiveCorrelation ? activeCorrelation!.correlation_id : operation.correlation_id;
+
       selectAgentWithSnapshot(
         operation.agent_id,
-        operation.correlation_id,
+        preservedCorrelationId,
         {
           agentId: operation.agent_id
         },
-        'auto',
-        false,
-        false,
+        preserveActiveCorrelation ? 'preserved' : 'auto',
+        preserveActiveCorrelation && selectedCorrelationWasExplicit,
+        preserveActiveCorrelation && selectedCorrelationCarryForward,
         operation
       );
       setHubOpen(true);
     },
-    [selectAgentWithSnapshot]
+    [
+      activeCorrelation?.correlation_id,
+      selectAgentWithSnapshot,
+      selectedCorrelationCarryForward,
+      selectedCorrelationWasExplicit
+    ]
   );
 
   const handleFocusSharedMemoryArtifact = useCallback(

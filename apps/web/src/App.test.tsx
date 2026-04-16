@@ -1752,10 +1752,14 @@ afterEach(() => {
     expect(globalThis.fetch).not.toHaveBeenCalledWith(allOperationsUrl, expect.anything());
 
     const details = await openHub(user);
+    const activeQueueSection = await waitFor(() => {
+      const nextActiveQueueSection = within(details).getByRole('heading', { name: 'Active Queue' }).closest('section');
+      expect(nextActiveQueueSection).not.toBeNull();
+      return nextActiveQueueSection;
+    });
 
-    expect(await within(details).findByRole('heading', { name: 'Active Queue' })).toBeVisible();
-    expect(within(details).getByText('blocked · Workflow evidence is still incomplete')).toBeVisible();
-    expect(within(details).getByText('reviewing · Coordinate rollout')).toBeVisible();
+    expect(within(activeQueueSection!).getByText('blocked · Workflow evidence is still incomplete')).toBeVisible();
+    expect(within(activeQueueSection!).getByText('reviewing · Coordinate rollout')).toBeVisible();
 
     await act(async () => {
       expect(globalThis.fetch).toHaveBeenCalledWith(operationsUrl, expect.anything());
@@ -2020,6 +2024,64 @@ afterEach(() => {
       expect(globalThis.fetch).not.toHaveBeenCalledWith(workflowUrl, expect.anything());
       expect(globalThis.fetch).not.toHaveBeenCalledWith(selectedOperationUrl, expect.anything());
     });
+  });
+
+  it('surfaces an active-correlation queue lane from the existing queue snapshot and preserves that correlation when selecting a lane item', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    const incidentSection = within(details).getByRole('heading', { name: 'Incident Feed' }).closest('section');
+    expect(incidentSection).not.toBeNull();
+
+    await user.click(
+      within(incidentSection!).getByRole('button', {
+        name: 'Open incident correlation corr-app-secondary'
+      })
+    );
+
+    const laneSection = await waitFor(() => {
+      const nextLaneSection = within(details).getByRole('heading', { name: 'Active Correlation Queue' }).closest('section');
+      expect(nextLaneSection).not.toBeNull();
+      expect(within(details).getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
+      expect(within(details).queryByRole('heading', { name: 'App Engineering Agent' })).not.toBeInTheDocument();
+      expect(nextLaneSection).toHaveTextContent(
+        'Scope · corr-app-secondary · 1 of 2 participants in current active queue snapshot'
+      );
+      return nextLaneSection;
+    });
+
+    const correlationQueueButton = within(laneSection!).getByRole('button', {
+      name: 'Inspect App Engineering Agent from active correlation queue'
+    });
+    const correlationQueueRecord = correlationQueueButton.closest('li');
+    expect(correlationQueueRecord).not.toBeNull();
+    expect(correlationQueueRecord).toHaveTextContent('Correlation · corr-app-review');
+    expect(
+      within(laneSection!).queryByRole('button', { name: 'Inspect Team Lead from active correlation queue' })
+    ).not.toBeInTheDocument();
+
+    await user.click(correlationQueueButton);
+
+    await waitFor(() => {
+      const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+      expect(correlationSection).not.toBeNull();
+      expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+      expect(within(details).getByRole('heading', { name: 'Current Operation' })).toBeVisible();
+      expect(within(correlationSection!).getByText('corr-app-secondary')).toBeVisible();
+      expect(within(correlationSection!).queryByText('corr-app-review')).not.toBeInTheDocument();
+    });
+
+    const requestedUrls = vi
+      .mocked(globalThis.fetch)
+      .mock
+      .calls.map(([input]) => (typeof input === 'string' ? input : input.toString()));
+
+    expect(requestedUrls).toContain(secondaryCorrelationUrl);
+    expect(requestedUrls).toContain(selectedOperationUrl);
+    expect(
+      requestedUrls.some((url) => url.startsWith('/office/operations') && url.includes('correlation_id='))
+    ).toBe(false);
   });
 
   it('keeps the active-queue counterparty on the crew-overview agent-only path when no crew-overview correlation is selected', async () => {
@@ -6633,7 +6695,12 @@ afterEach(() => {
     render(<App />);
 
     const details = await openHub(user);
-    expect(await within(details).findByText('Loading operations queue...')).toBeVisible();
+    const activeQueueSection = await waitFor(() => {
+      const nextActiveQueueSection = within(details).getByRole('heading', { name: 'Active Queue' }).closest('section');
+      expect(nextActiveQueueSection).not.toBeNull();
+      return nextActiveQueueSection;
+    });
+    expect(await within(activeQueueSection!).findByText('Loading operations queue...')).toBeVisible();
 
     expect(resolveOperations).not.toBeNull();
     resolveOperations!(
@@ -6642,7 +6709,7 @@ afterEach(() => {
       })
     );
 
-    expect(await within(details).findByText('blocked · Workflow evidence is still incomplete')).toBeVisible();
+    expect(await within(activeQueueSection!).findByText('blocked · Workflow evidence is still incomplete')).toBeVisible();
   });
 
   it('filters the crew active queue by state and keeps filtered loading, empty, and error states explicit', async () => {
@@ -11130,10 +11197,15 @@ afterEach(() => {
     render(<App />);
 
     const details = await openHub(user);
-    expect(await within(details).findByText('blocked · Workflow evidence is still incomplete')).toBeVisible();
+    const activeQueueSection = await waitFor(() => {
+      const nextActiveQueueSection = within(details).getByRole('heading', { name: 'Active Queue' }).closest('section');
+      expect(nextActiveQueueSection).not.toBeNull();
+      return nextActiveQueueSection;
+    });
+    expect(await within(activeQueueSection!).findByText('blocked · Workflow evidence is still incomplete')).toBeVisible();
 
-    expect(await within(details).findByText('Showing last active queue snapshot. operations refresh failed')).toBeVisible();
-    expect(within(details).getByText('blocked · Workflow evidence is still incomplete')).toBeVisible();
+    expect(await within(activeQueueSection!).findByText('Showing last active queue snapshot. operations refresh failed')).toBeVisible();
+    expect(within(activeQueueSection!).getByText('blocked · Workflow evidence is still incomplete')).toBeVisible();
     expect(operationsRequests).toBeGreaterThan(1);
   });
 

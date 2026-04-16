@@ -1108,6 +1108,244 @@ describe('DetailsPanel accountability signals', () => {
     expect(onSelectAgent).toHaveBeenNthCalledWith(2, 'growth-revenue', null);
   });
 
+  it('renders a crew-overview active-correlation queue lane only while an active correlation exists and keeps queue pivots inside that correlation', async () => {
+    const user = userEvent.setup();
+    const onSelectAgent = vi.fn();
+    const onSelectOperation = vi.fn();
+    const operations: OfficeOperations = {
+      generated_at: '2026-03-16T09:00:00.000Z',
+      summary: {
+        item_count: 3,
+        blocked_count: 1,
+        reboot_recommended_count: 1,
+        state_buckets: {
+          blocked: 1,
+          reviewing: 1,
+          waiting: 1
+        },
+        severity_buckets: {
+          normal: 1,
+          yellow: 0,
+          orange: 1,
+          red: 1
+        }
+      },
+      items: [
+        buildSelectedOperation(),
+        {
+          ...buildSelectedOperation(),
+          agent_id: 'team-lead',
+          display_name: 'Team Lead',
+          kind: 'lead',
+          current_state: 'reviewing',
+          active_task: 'Coordinate rollout',
+          current_blocker: '',
+          current_location: 'lead-desk',
+          reported_severity: 'normal',
+          effective_severity: 'normal',
+          derived_staleness: {
+            severity: 'normal',
+            stale_for_ms: 60000,
+            stale_for_minutes: 1,
+            last_meaningful_output_at: '2026-03-16T08:59:00.000Z'
+          },
+          reboot_recommended: false,
+          last_event_at: '2026-03-16T08:59:10.000Z',
+          last_heartbeat_at: null,
+          last_meaningful_output_at: null,
+          correlation_id: null,
+          latest_event: {
+            ...buildSelectedOperation().latest_event!,
+            actor_id: 'team-lead',
+            summary: 'Team lead recorded the current review state'
+          }
+        },
+        {
+          ...buildSelectedOperation(),
+          agent_id: 'growth-revenue',
+          display_name: 'Growth Revenue Agent',
+          current_state: 'waiting',
+          active_task: 'Review launch copy',
+          current_blocker: '',
+          current_location: 'growth-desk',
+          reported_severity: 'red',
+          effective_severity: 'red',
+          derived_staleness: {
+            severity: 'red',
+            stale_for_ms: 900000,
+            stale_for_minutes: 15,
+            last_meaningful_output_at: '2026-03-16T08:45:00.000Z'
+          },
+          reboot_recommended: false,
+          last_event_at: '2026-03-16T08:56:00.000Z',
+          last_heartbeat_at: null,
+          last_meaningful_output_at: '2026-03-16T08:45:00.000Z',
+          correlation_id: 'corr-growth-ghost',
+          latest_event: {
+            ...buildSelectedOperation().latest_event!,
+            actor_id: 'growth-revenue',
+            summary: 'Growth queued a launch review note'
+          }
+        }
+      ]
+    };
+
+    const { rerender } = render(
+      <DetailsPanel
+        {...buildProps({
+          onSelectAgent,
+          onSelectOperation,
+          operations,
+          selectedAgent: null,
+          selectedCorrelationId: 'corr-app-review',
+          selectedOperation: null,
+          workflow: null
+        })}
+      />
+    );
+
+    const laneSection = screen.getByRole('heading', { name: 'Active Correlation Queue' }).closest('section');
+    expect(laneSection).not.toBeNull();
+    expect(within(laneSection!).getByText('Scope · corr-app-review · 2 of 2 participants in current active queue snapshot')).toBeVisible();
+    expect(
+      within(laneSection!).getByRole('button', { name: 'Inspect App Engineering Agent from active correlation queue' })
+    ).toBeVisible();
+    expect(within(laneSection!).getByRole('button', { name: 'Inspect Team Lead from active correlation queue' })).toBeVisible();
+    expect(
+      within(laneSection!).queryByRole('button', { name: 'Inspect Growth Revenue Agent from active correlation queue' })
+    ).not.toBeInTheDocument();
+
+    await user.click(
+      within(laneSection!).getByRole('button', { name: 'Inspect App Engineering Agent from active correlation queue' })
+    );
+
+    expect(onSelectOperation).toHaveBeenCalledWith(expect.objectContaining({ agent_id: 'app-engineering' }), {
+      preserveActiveCorrelation: true
+    });
+
+    await user.click(
+      within(laneSection!).getByRole('button', {
+        name: 'Select active correlation queue actor from operation app-engineering team-lead'
+      })
+    );
+
+    expect(onSelectAgent).toHaveBeenCalledWith('team-lead', 'corr-app-review');
+
+    rerender(
+      <DetailsPanel
+        {...buildProps({
+          onSelectAgent,
+          onSelectOperation,
+          operations,
+          correlation: null,
+          selectedAgent: null,
+          selectedCorrelationId: null,
+          selectedOperation: null,
+          workflow: null
+        })}
+      />
+    );
+
+    expect(screen.queryByRole('heading', { name: 'Active Correlation Queue' })).not.toBeInTheDocument();
+  });
+
+  it('renders explicit active-correlation queue lane loading, empty, and stale-or-error states', () => {
+    const emptyOperations: OfficeOperations = {
+      generated_at: '2026-03-16T09:00:00.000Z',
+      summary: {
+        item_count: 0,
+        blocked_count: 0,
+        reboot_recommended_count: 0,
+        state_buckets: {},
+        severity_buckets: {
+          normal: 0,
+          yellow: 0,
+          orange: 0,
+          red: 0
+        }
+      },
+      items: []
+    };
+
+    const { rerender } = render(
+      <DetailsPanel
+        {...buildProps({
+          operations: null,
+          operationsError: null,
+          operationsState: 'loading',
+          selectedAgent: null,
+          selectedCorrelationId: 'corr-app-review',
+          selectedOperation: null,
+          workflow: null
+        })}
+      />
+    );
+
+    let laneSection = screen.getByRole('heading', { name: 'Active Correlation Queue' }).closest('section');
+    expect(laneSection).not.toBeNull();
+    expect(within(laneSection!).getByText('Loading active-correlation queue lane for corr-app-review...')).toBeVisible();
+
+    rerender(
+      <DetailsPanel
+        {...buildProps({
+          operations: null,
+          operationsError: 'queue request failed',
+          operationsState: 'error',
+          selectedAgent: null,
+          selectedCorrelationId: 'corr-app-review',
+          selectedOperation: null,
+          workflow: null
+        })}
+      />
+    );
+
+    laneSection = screen.getByRole('heading', { name: 'Active Correlation Queue' }).closest('section');
+    expect(laneSection).not.toBeNull();
+    expect(
+      within(laneSection!).getByText('Unable to load active-correlation queue lane for corr-app-review. queue request failed')
+    ).toBeVisible();
+
+    rerender(
+      <DetailsPanel
+        {...buildProps({
+          operations: buildOperations(),
+          operationsError: 'queue refresh failed',
+          operationsState: 'ready',
+          selectedAgent: null,
+          selectedCorrelationId: 'corr-app-review',
+          selectedOperation: null,
+          workflow: null
+        })}
+      />
+    );
+
+    laneSection = screen.getByRole('heading', { name: 'Active Correlation Queue' }).closest('section');
+    expect(laneSection).not.toBeNull();
+    expect(
+      within(laneSection!).getByText('Showing last active-correlation queue lane snapshot for corr-app-review. queue refresh failed')
+    ).toBeVisible();
+
+    rerender(
+      <DetailsPanel
+        {...buildProps({
+          operations: emptyOperations,
+          operationsError: null,
+          operationsState: 'ready',
+          selectedAgent: null,
+          selectedCorrelationId: 'corr-app-review',
+          selectedOperation: null,
+          workflow: null
+        })}
+      />
+    );
+
+    laneSection = screen.getByRole('heading', { name: 'Active Correlation Queue' }).closest('section');
+    expect(laneSection).not.toBeNull();
+    expect(
+      within(laneSection!).getByText('No active-correlation queue items for corr-app-review in current active queue snapshot.')
+    ).toBeVisible();
+  });
+
   it('renders one compact run-context preview line per active-queue row with explicit null fallbacks', () => {
     const operations: OfficeOperations = {
       generated_at: '2026-03-16T09:00:00.000Z',

@@ -49,7 +49,7 @@ vi.mock('./aitown/WorldScene', () => ({
   }
 }));
 
-import App, { resolveOverviewRefreshWarning, resolveSelectedAgent } from './App';
+import App, { resolveOverviewRefreshWarning, resolveSelectedAgent, resolveViewportToplineStatus } from './App';
 import type { AgentWorkflow, OfficeAgent } from './types';
 
 const DEFAULT_NAVIGATOR_USER_AGENT = window.navigator.userAgent;
@@ -1405,6 +1405,8 @@ afterEach(() => {
     expect(
       screen.getByText('Operator shell for real-running, supervised, replayable, accountable agents.')
     ).toBeVisible();
+    expect(screen.getByText('Office snapshot · Live')).toBeVisible();
+    expect(screen.getByText('Snapshot 2026-03-16T09:00:00.000Z')).toBeVisible();
 
     const worldRegion = screen.getByRole('region', { name: 'Office world' });
     expect(worldRegion).toBeVisible();
@@ -10916,6 +10918,25 @@ afterEach(() => {
     expect(resolveOverviewRefreshWarning(null, true)).toBeNull();
   });
 
+  it('resolves explicit viewport topline states for loading, live, refresh-failed, and unavailable overview states', () => {
+    expect(resolveViewportToplineStatus('loading', null, null)).toEqual({
+      status: 'Office snapshot · Loading',
+      snapshot: 'Waiting for first office snapshot'
+    });
+    expect(resolveViewportToplineStatus('ready', null, '2026-03-16T09:00:00.000Z')).toEqual({
+      status: 'Office snapshot · Live',
+      snapshot: 'Snapshot 2026-03-16T09:00:00.000Z'
+    });
+    expect(resolveViewportToplineStatus('error', 'overview refresh failed', '2026-03-16T09:00:00.000Z')).toEqual({
+      status: 'Office snapshot · Refresh failed · overview refresh failed',
+      snapshot: 'Snapshot 2026-03-16T09:00:00.000Z'
+    });
+    expect(resolveViewportToplineStatus('error', 'overview unavailable', null)).toEqual({
+      status: 'Office snapshot · Unavailable · overview unavailable',
+      snapshot: 'No office snapshot loaded yet'
+    });
+  });
+
   it('keeps the last overview snapshot visible when a later overview poll fails', async () => {
     (window as typeof window & { __AITOWN_POLL_INTERVAL_MS__?: number }).__AITOWN_POLL_INTERVAL_MS__ = 10;
 
@@ -10952,12 +10973,45 @@ afterEach(() => {
     render(<App />);
 
     expect(await screen.findByRole('heading', { name: 'Metaverse Office' })).toBeVisible();
+    expect(await screen.findByText('Office snapshot · Live')).toBeVisible();
     expect(await screen.findByText(/Snapshot 2026-03-16T09:00:00.000Z/)).toBeVisible();
 
     expect(await screen.findByText('Showing last office snapshot.')).toBeVisible();
     expect(screen.getByText('overview refresh failed')).toBeVisible();
+    expect(screen.getByText('Office snapshot · Refresh failed · overview refresh failed')).toBeVisible();
     expect(screen.getByText(/Snapshot 2026-03-16T09:00:00.000Z/)).toBeVisible();
     expect(screen.queryByText('Unable to load office overview.')).not.toBeInTheDocument();
+  });
+
+  it('shows an explicit viewport unavailable status when the first overview load fails', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === '/office/overview') {
+          return new Response(JSON.stringify({ error: 'internal_error', details: 'overview unavailable' }), {
+            status: 500,
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === incidentsUrl) {
+          return new Response(JSON.stringify(incidentFeedFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        return resolveTestFetchResponse(url);
+      })
+    );
+
+    render(<App />);
+
+    expect(await screen.findByRole('heading', { name: 'Metaverse Office' })).toBeVisible();
+    expect(await screen.findByText('Office snapshot · Unavailable · overview unavailable')).toBeVisible();
+    expect(screen.getByText('No office snapshot loaded yet')).toBeVisible();
+    expect(screen.getByText('Unable to load office overview.')).toBeVisible();
   });
 
   it('clears stale selected-agent workflow details only after overview confirms the agent is absent', async () => {

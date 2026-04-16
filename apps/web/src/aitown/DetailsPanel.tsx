@@ -47,6 +47,7 @@ type DetailsPanelProps = {
   memoryArtifactsError: string | null;
   memoryArtifactsState: LoadState;
   sharedMemoryRequestScopeLabel: string;
+  sharedMemoryJumpStatus?: string | null;
   selectedAgentSupervisionHistoryRequestScopeLabel: string;
   selectedAgentSupervisionHistory: PeerWatchAlertsResponse | null;
   selectedAgentSupervisionHistoryError: string | null;
@@ -69,6 +70,7 @@ type DetailsPanelProps = {
   onResetCorrelationOverride: () => void;
   onSelectOperationsState: (state: string | null) => void;
   onSelectOperation: (operation: OfficeOperation) => void;
+  onFocusSharedMemoryArtifact?: (artifactRef: string) => void;
 };
 
 type SelectAgentOptions = {
@@ -438,12 +440,14 @@ function renderSharedMemoryEvidenceRefs({
   evidenceRefs,
   sharedMemoryArtifactRefs,
   onJump,
-  jumpAriaLabelPrefix = 'Jump to shared memory artifact'
+  jumpAriaLabelPrefix = 'Jump to shared memory artifact',
+  allowExactFallback = false
 }: {
   evidenceRefs: string[];
   sharedMemoryArtifactRefs: ReadonlySet<string>;
   onJump: (artifactRef: string) => void;
   jumpAriaLabelPrefix?: string;
+  allowExactFallback?: boolean;
 }) {
   if (evidenceRefs.length === 0) {
     return 'No evidence refs';
@@ -457,7 +461,8 @@ function renderSharedMemoryEvidenceRefs({
         label: evidenceRef,
         sharedMemoryArtifactRefs,
         onJump,
-        jumpAriaLabelPrefix
+        jumpAriaLabelPrefix,
+        allowExactFallback
       })}
     </span>
   ));
@@ -469,7 +474,8 @@ function renderSharedMemoryArtifactJump({
   sharedMemoryArtifactRefs,
   onJump,
   jumpAriaLabelPrefix = 'Jump to shared memory artifact',
-  ariaLabelSuffix = null
+  ariaLabelSuffix = null,
+  allowExactFallback = false
 }: {
   artifactRef: string;
   label: string;
@@ -477,8 +483,9 @@ function renderSharedMemoryArtifactJump({
   onJump: (artifactRef: string) => void;
   jumpAriaLabelPrefix?: string;
   ariaLabelSuffix?: string | null;
+  allowExactFallback?: boolean;
 }) {
-  if (!sharedMemoryArtifactRefs.has(artifactRef)) {
+  if (!sharedMemoryArtifactRefs.has(artifactRef) && !allowExactFallback) {
     return label;
   }
 
@@ -794,7 +801,8 @@ function renderCollectorProvenancePreview({
               label: workspacePreviewLabel,
               sharedMemoryArtifactRefs,
               onJump,
-              ariaLabelSuffix: workspacePreviewLabel
+              ariaLabelSuffix: workspacePreviewLabel,
+              allowExactFallback: true
             })
           : 'None'}
       </span>
@@ -806,7 +814,8 @@ function renderCollectorProvenancePreview({
               label: tmuxPreviewLabel,
               sharedMemoryArtifactRefs,
               onJump,
-              ariaLabelSuffix: tmuxPreviewLabel
+              ariaLabelSuffix: tmuxPreviewLabel,
+              allowExactFallback: true
             })
           : tmuxPreviewLabel}
       </span>
@@ -1421,6 +1430,7 @@ function renderSharedMemorySection({
   memoryArtifactsError,
   memoryArtifactsState,
   sharedMemoryRequestScopeLabel,
+  sharedMemoryJumpStatus,
   activeCorrelationId,
   currentAgentId,
   navigableAgentIds,
@@ -1431,6 +1441,7 @@ function renderSharedMemorySection({
   memoryArtifactsError: string | null;
   memoryArtifactsState: LoadState;
   sharedMemoryRequestScopeLabel: string;
+  sharedMemoryJumpStatus?: string | null;
   activeCorrelationId: string | null;
   currentAgentId: string | null;
   navigableAgentIds: Set<string>;
@@ -1447,6 +1458,7 @@ function renderSharedMemorySection({
       <h3>Shared Memory</h3>
       <span>{`Request scope · ${sharedMemoryRequestScopeLabel}`}</span>
       {sharedMemoryWarning ? <p role="status">{sharedMemoryWarning}</p> : null}
+      {sharedMemoryJumpStatus ? <p role="status">{sharedMemoryJumpStatus}</p> : null}
       <ul className="aitown-records">
         {memoryArtifactsState === 'loading' && !memoryArtifacts ? (
           <li className="aitown-record">Loading shared memory...</li>
@@ -1739,6 +1751,7 @@ export function DetailsPanel({
   memoryArtifactsError,
   memoryArtifactsState,
   sharedMemoryRequestScopeLabel,
+  sharedMemoryJumpStatus,
   selectedAgentSupervisionHistoryRequestScopeLabel,
   selectedAgentSupervisionHistory,
   selectedAgentSupervisionHistoryError,
@@ -1760,7 +1773,8 @@ export function DetailsPanel({
   onSelectCorrelation,
   onResetCorrelationOverride,
   onSelectOperationsState,
-  onSelectOperation
+  onSelectOperation,
+  onFocusSharedMemoryArtifact
 }: DetailsPanelProps) {
   const agents = [...world.agents.values()]
     .map((agent) => ({
@@ -1932,7 +1946,7 @@ export function DetailsPanel({
                   {renderCollectorProvenancePreview({
                     item,
                     sharedMemoryArtifactRefs,
-                    onJump: focusSharedMemoryArtifact
+                    onJump: onFocusSharedMemoryArtifact ?? focusSharedMemoryArtifact
                   })}
                   <span>
                     Watch target ·{' '}
@@ -2236,6 +2250,7 @@ export function DetailsPanel({
           memoryArtifactsError,
           memoryArtifactsState,
           sharedMemoryRequestScopeLabel,
+          sharedMemoryJumpStatus,
           activeCorrelationId: sharedMemoryActiveCorrelationId,
           currentAgentId: null,
           navigableAgentIds,
@@ -2618,7 +2633,7 @@ export function DetailsPanel({
               {renderCollectorProvenancePreview({
                 item: selectedCollectorItem,
                 sharedMemoryArtifactRefs,
-                onJump: focusSharedMemoryArtifact
+                onJump: onFocusSharedMemoryArtifact ?? focusSharedMemoryArtifact
               })}
               <span>
                 Watch target ·{' '}
@@ -2754,7 +2769,8 @@ export function DetailsPanel({
                     {renderSharedMemoryEvidenceRefs({
                       evidenceRefs: selectedOperation.latest_event?.evidence_refs ?? [],
                       sharedMemoryArtifactRefs,
-                      onJump: focusSharedMemoryArtifact
+                      onJump: onFocusSharedMemoryArtifact ?? focusSharedMemoryArtifact,
+                      allowExactFallback: true
                     })}
                   </span>
                   <span>{`Source · ${selectedOperation.latest_event?.source_kind ?? 'No latest event source'}`}</span>
@@ -2981,6 +2997,7 @@ export function DetailsPanel({
         memoryArtifactsError,
         memoryArtifactsState,
         sharedMemoryRequestScopeLabel,
+        sharedMemoryJumpStatus,
         activeCorrelationId: sharedMemoryActiveCorrelationId,
         currentAgentId: selectedAgent.agent_id,
         navigableAgentIds,

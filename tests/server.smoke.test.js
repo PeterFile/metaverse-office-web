@@ -1678,6 +1678,27 @@ test('GET /memory/artifacts materializes actor and counterparty evidence plus co
     collector_last_modified_at: '2026-03-09T18:16:30.000Z'
   });
 
+  const exactArtifactResponse = await requestJson(
+    `${baseUrl}/memory/artifacts?agent_id=app-engineering&artifact_ref=${encodeURIComponent('/tmp/shared.md')}&window=20m&limit=10`
+  );
+  assert.equal(exactArtifactResponse.response.status, 200);
+  assert.deepEqual(exactArtifactResponse.body.items, [
+    {
+      artifact_ref: '/tmp/shared.md',
+      artifact_kind: 'workspace_file',
+      file_name: 'shared.md',
+      first_seen_at: '2026-03-09T18:04:00.000Z',
+      last_seen_at: '2026-03-09T18:16:30.000Z',
+      mention_count: 2,
+      agent_ids: ['app-engineering', 'team-lead'],
+      correlation_ids: ['collector-snapshot:2026-03-09T18:18:00.000Z', 'corr-memory-shared'],
+      source_kinds: ['controller_event', 'workspace_file'],
+      latest_summary: 'Existing event already referenced the shared artifact',
+      latest_event_type: 'review_started',
+      collector_last_modified_at: '2026-03-09T18:16:30.000Z'
+    }
+  ]);
+
   const collectorWindowedResponse = await requestJson(`${baseUrl}/memory/artifacts?agent_id=app-engineering&window=1m&limit=10`);
   assert.equal(collectorWindowedResponse.response.status, 200);
   assert.deepEqual(collectorWindowedResponse.body.items, []);

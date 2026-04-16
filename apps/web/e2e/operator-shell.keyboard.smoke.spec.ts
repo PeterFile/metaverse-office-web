@@ -3172,6 +3172,125 @@ test.describe('operator shell smoke', () => {
     expect(requestedUrls).not.toContain('/correlations/corr-growth-lead-review?limit=10&window=60m');
   });
 
+  test('falls back to one exact scoped shared-memory fetch for a selected-agent current-operation evidence jump that is outside the loaded slice', async ({
+    page
+  }) => {
+    const requestedUrls: string[] = [];
+    const scopedArtifactsUrl =
+      '/memory/artifacts?limit=4&window=60m&agent_id=growth-revenue&correlation_id=corr-revenue-handoff';
+    const exactArtifactUrl =
+      '/memory/artifacts?limit=4&window=60m&agent_id=growth-revenue&correlation_id=corr-revenue-handoff&artifact_ref=%2Ftmp%2Frevenue-handoff.md';
+
+    page.on('request', (request) => {
+      try {
+        const url = new URL(request.url());
+        requestedUrls.push(`${url.pathname}${url.search}`);
+      } catch {
+        requestedUrls.push(request.url());
+      }
+    });
+
+    await page.route(`**${scopedArtifactsUrl}`, async (route) => {
+      const response = await route.fetch();
+      const artifacts = (await response.json()) as {
+        generated_at: string;
+        items: Array<Record<string, unknown>>;
+      };
+
+      await route.fulfill({
+        response,
+        json: {
+          ...artifacts,
+          items: artifacts.items.filter((item) => item.artifact_ref !== '/tmp/revenue-handoff.md')
+        }
+      });
+    });
+
+    await page.route(`**${exactArtifactUrl}`, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        json: {
+          generated_at: '2026-03-16T09:00:00.000Z',
+          items: [
+            {
+              artifact_ref: '/tmp/revenue-handoff.md',
+              artifact_kind: 'evidence_ref',
+              file_name: 'revenue-handoff.md',
+              first_seen_at: '2026-03-16T08:58:30.000Z',
+              last_seen_at: '2026-03-16T08:58:30.000Z',
+              mention_count: 1,
+              agent_ids: ['growth-revenue', 'team-lead'],
+              correlation_ids: ['corr-revenue-handoff'],
+              source_kinds: ['controller_event'],
+              latest_summary: 'Exact artifact fallback stayed inside the growth handoff scope',
+              latest_event_type: 'agent_handoff_completed',
+              collector_last_modified_at: null
+            }
+          ]
+        }
+      });
+    });
+
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Hub' }).click();
+
+    const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
+    const queueButton = detailsPanel.getByRole('button', {
+      name: 'Inspect Growth Revenue Agent from active queue'
+    });
+
+    await focusHubControlWithTab(page, queueButton, 'Inspect Growth Revenue Agent from active queue');
+    await expect(queueButton).toBeFocused();
+    await page.keyboard.press('Enter');
+
+    const operationSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Current Operation' })
+    });
+    const correlationSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Correlation Drilldown' })
+    });
+    const memorySection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Shared Memory' })
+    });
+    const evidenceJumpButton = operationSection.getByRole('button', {
+      name: 'Jump to shared memory artifact /tmp/revenue-handoff.md'
+    });
+    const focusedSharedMemoryRecord = detailsPanel.locator('li[data-shared-memory-target]:focus');
+
+    await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+    await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toBeVisible();
+    await expect(operationSection.getByText('planning · Prepare handoff notes')).toBeVisible();
+    await expect(operationSection.getByText('Evidence · /tmp/revenue-handoff.md')).toBeVisible();
+    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
+    await expect(memorySection.getByText('Request scope · growth-revenue · corr-revenue-handoff')).toBeVisible();
+    await expect(memorySection.getByText('Ref · /tmp/revenue-handoff.md')).toHaveCount(0);
+    await expect(evidenceJumpButton).toBeVisible();
+    await focusHubControlWithTab(page, evidenceJumpButton, 'Jump to shared memory artifact /tmp/revenue-handoff.md');
+    await expect(evidenceJumpButton).toBeFocused();
+
+    const requestCountBeforeJump = requestedUrls.length;
+
+    await page.keyboard.press('Enter');
+
+    await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+    await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toBeVisible();
+    await expect(operationSection.getByText('planning · Prepare handoff notes')).toBeVisible();
+    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
+    await expect(memorySection.getByText('Request scope · growth-revenue · corr-revenue-handoff')).toBeVisible();
+    await expect(memorySection.getByText('Exact artifact fallback stayed inside the growth handoff scope')).toBeVisible();
+    await expect(focusedSharedMemoryRecord).toHaveCount(1);
+    await expect(focusedSharedMemoryRecord).toContainText('Ref · /tmp/revenue-handoff.md');
+
+    await page.waitForTimeout(150);
+
+    const postJumpRequests = requestedUrls.slice(requestCountBeforeJump);
+    expect(postJumpRequests).toEqual([exactArtifactUrl]);
+    expect(requestedUrls).not.toContain('/office/operations?agent_id=team-lead');
+    expect(requestedUrls).not.toContain('/memory/artifacts?limit=4&window=60m&agent_id=growth-revenue');
+    expect(requestedUrls).not.toContain('/correlations/corr-growth-lead-review?limit=10&window=60m');
+  });
+
   test('keeps the top-level selected-agent correlation evidence jump focused on shared memory without changing selection or active correlation via keyboard traversal', async ({
     page
   }) => {

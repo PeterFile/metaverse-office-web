@@ -347,7 +347,14 @@ export async function fetchCorrelationDrilldown(
 }
 
 export async function fetchMemoryArtifacts(
-  options: { limit?: number; window?: string; agentId?: string; correlationId?: string; signal?: AbortSignal } = {}
+  options: {
+    limit?: number;
+    window?: string;
+    agentId?: string;
+    correlationId?: string;
+    artifactRef?: string;
+    signal?: AbortSignal;
+  } = {}
 ): Promise<MemoryArtifactIndex> {
   const params = new URLSearchParams({
     limit: String(options.limit ?? DEFAULT_WORKFLOW_LIMIT),
@@ -360,6 +367,10 @@ export async function fetchMemoryArtifacts(
 
   if (options.correlationId) {
     params.set('correlation_id', options.correlationId);
+  }
+
+  if (options.artifactRef) {
+    params.set('artifact_ref', options.artifactRef);
   }
 
   const response = await fetch(resolveApiUrl(`/memory/artifacts?${params.toString()}`), {

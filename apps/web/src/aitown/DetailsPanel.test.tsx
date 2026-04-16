@@ -2816,7 +2816,7 @@ describe('DetailsPanel accountability signals', () => {
     expect(onSelectCorrelation).not.toHaveBeenCalled();
   });
 
-  it('jumps from matching current-operation evidence refs to shared memory while leaving non-matching refs as plain text', async () => {
+  it('renders current-operation evidence refs as shared-memory jumps when loaded or eligible for exact fallback', async () => {
     const user = userEvent.setup();
     const onSelectAgent = vi.fn();
     const onSelectCorrelation = vi.fn();
@@ -2886,10 +2886,10 @@ describe('DetailsPanel accountability signals', () => {
       })
     ).toHaveTextContent('/evidence/review.md');
     expect(
-      within(operationRecord!).queryByRole('button', {
+      within(operationRecord!).getByRole('button', {
         name: 'Jump to shared memory artifact /evidence/missing.md'
       })
-    ).not.toBeInTheDocument();
+    ).toBeVisible();
 
     await user.click(
       within(operationRecord!).getByRole('button', {
@@ -4748,14 +4748,10 @@ describe('DetailsPanel accountability signals', () => {
     expect(
       within(collectorSupervisionSection!).getByText('Last file write · 2026-03-16T08:57:00.000Z')
     ).toBeVisible();
-    expect(
-      within(collectorSupervisionSection!).getByText(
-        'Workspace preview · collector-preview.ts · 2026-03-16T08:58:45.000Z'
-      )
-    ).toBeVisible();
-    expect(
-      within(collectorSupervisionSection!).getByText('Tmux preview · pnpm test · 2026-03-16T08:58:30.000Z')
-    ).toBeVisible();
+    expect(collectorSupervisionSection).toHaveTextContent(
+      'Workspace preview · collector-preview.ts · 2026-03-16T08:58:45.000Z'
+    );
+    expect(collectorSupervisionSection).toHaveTextContent('Tmux preview · pnpm test · 2026-03-16T08:58:30.000Z');
 
     unmount();
 
@@ -4776,14 +4772,10 @@ describe('DetailsPanel accountability signals', () => {
     expect(
       within(collectorObservationSection!).getByText('Last file write · 2026-03-16T08:57:00.000Z')
     ).toBeVisible();
-    expect(
-      within(collectorObservationSection!).getByText(
-        'Workspace preview · collector-preview.ts · 2026-03-16T08:58:45.000Z'
-      )
-    ).toBeVisible();
-    expect(
-      within(collectorObservationSection!).getByText('Tmux preview · pnpm test · 2026-03-16T08:58:30.000Z')
-    ).toBeVisible();
+    expect(collectorObservationSection).toHaveTextContent(
+      'Workspace preview · collector-preview.ts · 2026-03-16T08:58:45.000Z'
+    );
+    expect(collectorObservationSection).toHaveTextContent('Tmux preview · pnpm test · 2026-03-16T08:58:30.000Z');
   });
 
   it('renders explicit none fallbacks in collector provenance previews when freshness evidence is missing', () => {
@@ -5406,7 +5398,7 @@ describe('DetailsPanel accountability signals', () => {
     expect(onSelectCorrelation).not.toHaveBeenCalled();
   });
 
-  it('keeps collector tmux previews as plain text when no matching shared-memory artifact exists', () => {
+  it('renders collector tmux previews as exact shared-memory fallback jumps when no matching shared-memory artifact is loaded', () => {
     const tmuxArtifactRef = 'tmux://5-web3-app-engineering/0.1';
     const tmuxPreviewLabel = 'pnpm test · 2026-03-16T08:58:30.000Z';
     const baseCollectorSnapshot = buildCollectorSnapshot();
@@ -5449,12 +5441,12 @@ describe('DetailsPanel accountability signals', () => {
 
     const collectorSupervisionSection = screen.getByRole('heading', { name: 'Collector Supervision' }).closest('section');
     expect(collectorSupervisionSection).not.toBeNull();
-    expect(within(collectorSupervisionSection!).getByText(`Tmux preview · ${tmuxPreviewLabel}`)).toBeVisible();
+    expect(collectorSupervisionSection).toHaveTextContent(`Tmux preview · ${tmuxPreviewLabel}`);
     expect(
-      within(collectorSupervisionSection!).queryByRole('button', {
+      within(collectorSupervisionSection!).getByRole('button', {
         name: `Jump to shared memory artifact ${tmuxArtifactRef} ${tmuxPreviewLabel}`
       })
-    ).not.toBeInTheDocument();
+    ).toBeVisible();
 
     unmount();
 
@@ -5468,12 +5460,12 @@ describe('DetailsPanel accountability signals', () => {
 
     const collectorObservationSection = screen.getByRole('heading', { name: 'Collector Observation' }).closest('section');
     expect(collectorObservationSection).not.toBeNull();
-    expect(within(collectorObservationSection!).getByText(`Tmux preview · ${tmuxPreviewLabel}`)).toBeVisible();
+    expect(collectorObservationSection).toHaveTextContent(`Tmux preview · ${tmuxPreviewLabel}`);
     expect(
-      within(collectorObservationSection!).queryByRole('button', {
+      within(collectorObservationSection!).getByRole('button', {
         name: `Jump to shared memory artifact ${tmuxArtifactRef} ${tmuxPreviewLabel}`
       })
-    ).not.toBeInTheDocument();
+    ).toBeVisible();
   });
 
   it('jumps from matching top-level correlation evidence refs to shared memory in crew overview while leaving non-matching refs as plain text', async () => {

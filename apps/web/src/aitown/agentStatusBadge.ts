@@ -2,7 +2,7 @@ import type { SceneAgent } from './types';
 
 export type SceneAgentStatusState = Pick<
   SceneAgent,
-  'openAlertCount' | 'hasOpenIncidents' | 'rebootRecommended'
+  'openAlertCount' | 'hasOpenIncidents' | 'rebootRecommended' | 'runtimeFreshnessSeverity'
 >;
 
 export type SceneAgentStatusBadge = {
@@ -16,7 +16,8 @@ export type SceneAgentStatusBadge = {
 export const SCENE_AGENT_STATUS_LEGEND = [
   { token: '#', label: 'Peer-watch alert count' },
   { token: '!', label: 'Open alerts or workflow incidents' },
-  { token: 'R', label: 'Reboot recommended' }
+  { token: 'R', label: 'Reboot recommended' },
+  { token: 'S', label: 'Runtime freshness degraded' }
 ] as const;
 
 export const BADGE_HEIGHT = 14;
@@ -30,7 +31,8 @@ const BADGE_MIN_WIDTH = 14;
 function resolveAgentStatusTokens({
   openAlertCount,
   hasOpenIncidents,
-  rebootRecommended
+  rebootRecommended,
+  runtimeFreshnessSeverity
 }: SceneAgentStatusState) {
   const tokens: string[] = [];
 
@@ -44,6 +46,10 @@ function resolveAgentStatusTokens({
 
   if (rebootRecommended) {
     tokens.push('R');
+  }
+
+  if (runtimeFreshnessSeverity !== null && runtimeFreshnessSeverity !== undefined && runtimeFreshnessSeverity !== 'normal') {
+    tokens.push('S');
   }
 
   return tokens;

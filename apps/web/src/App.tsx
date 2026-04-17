@@ -20,7 +20,13 @@ import { adaptWorldToScene } from './aitown/sceneAdapter';
 import { WorldProvider, useWorld } from './context/WorldContext';
 import { usePolledResource, type LoadState } from './hooks/usePolledResource';
 import { getHubFocusableElements } from './hubFocus';
-import type { MemoryArtifact, MemoryArtifactIndex, OfficeAgent, OfficeOperation } from './types';
+import type {
+  CorrelationDrilldown,
+  MemoryArtifact,
+  MemoryArtifactIndex,
+  OfficeAgent,
+  OfficeOperation
+} from './types';
 import { projectWorldState } from './world/projector';
 import { PHASE_LABELS, selectAttentionQueue, selectAgentZoneLabel } from './world/selectors';
 import type { WorldAgent, WorldState } from './world/types';
@@ -30,6 +36,8 @@ const LazyWorldScene = lazy(() => import('./aitown/WorldScene'));
 type OperationSelection = {
   agentId: string;
 };
+
+type CorrelationSpotlight = Pick<CorrelationDrilldown, 'correlation_id' | 'participant_agent_ids'>;
 
 const CREW_TIMELINE_LIMIT = 4;
 const MEMORY_ARTIFACT_LIMIT = 4;
@@ -346,6 +354,7 @@ function AppInner() {
   const [focusedExactMemoryArtifact, setFocusedExactMemoryArtifact] = useState<MemoryArtifact | null>(null);
   const [focusedSharedMemoryArtifactRef, setFocusedSharedMemoryArtifactRef] = useState<string | null>(null);
   const [sharedMemoryJumpStatus, setSharedMemoryJumpStatus] = useState<string | null>(null);
+  const [cachedCorrelationSpotlight, setCachedCorrelationSpotlight] = useState<CorrelationSpotlight | null>(null);
   const lastSelectedAgentRef = useRef<OfficeAgent | null>(null);
   const correlationSelectionModeRef = useRef<'auto' | 'manual' | 'preserved'>('auto');
   const lastCorrelationContextRef = useRef<string | null>(null);
@@ -531,7 +540,40 @@ function AppInner() {
 
   const activeCorrelation =
     correlationResource.data?.correlation_id === selectedCorrelationId ? correlationResource.data : null;
-  const activeCorrelationParticipantAgentIds = activeCorrelation?.participant_agent_ids ?? [];
+
+  useEffect(() => {
+    if (activeCorrelation) {
+      setCachedCorrelationSpotlight({
+        correlation_id: activeCorrelation.correlation_id,
+        participant_agent_ids: activeCorrelation.participant_agent_ids
+      });
+      return;
+    }
+
+    if (!selectedCorrelationId) {
+      setCachedCorrelationSpotlight(null);
+      return;
+    }
+
+    setCachedCorrelationSpotlight((current) =>
+      current?.correlation_id === selectedCorrelationId ? current : null
+    );
+  }, [activeCorrelation, selectedCorrelationId]);
+
+  const activeCorrelationSpotlight = useMemo(() => {
+    if (activeCorrelation) {
+      return {
+        correlation_id: activeCorrelation.correlation_id,
+        participant_agent_ids: activeCorrelation.participant_agent_ids
+      };
+    }
+
+    return cachedCorrelationSpotlight?.correlation_id === selectedCorrelationId
+      ? cachedCorrelationSpotlight
+      : null;
+  }, [activeCorrelation, cachedCorrelationSpotlight, selectedCorrelationId]);
+
+  const activeCorrelationParticipantAgentIds = activeCorrelationSpotlight?.participant_agent_ids ?? [];
   const correlationSelectionContext = resolveCorrelationSelectionContext(selectedAgentId);
 
   const projectedWorld = useMemo(
@@ -554,10 +596,10 @@ function AppInner() {
       adaptWorldToScene(
         projectedWorld,
         selectedAgentId,
-        activeCorrelation?.correlation_id ?? null,
+        activeCorrelationSpotlight?.correlation_id ?? null,
         activeCorrelationParticipantAgentIds
       ),
-    [activeCorrelation?.correlation_id, activeCorrelationParticipantAgentIds, projectedWorld, selectedAgentId]
+    [activeCorrelationParticipantAgentIds, activeCorrelationSpotlight?.correlation_id, projectedWorld, selectedAgentId]
   );
   const liveFocusAgents = useMemo(() => selectAttentionQueue(projectedWorld), [projectedWorld]);
 
@@ -995,7 +1037,7 @@ function AppInner() {
     (agentId: string | null) => {
       const preservedCorrelationId =
         agentId !== null && activeCorrelationParticipantAgentIds.includes(agentId)
-          ? activeCorrelation?.correlation_id ?? null
+          ? activeCorrelationSpotlight?.correlation_id ?? null
           : null;
       const operationSelection = resolveDirectOperationSelection(agentId, null);
       selectAgentWithSnapshot(
@@ -1016,8 +1058,8 @@ function AppInner() {
       }
     },
     [
-      activeCorrelation?.correlation_id,
       activeCorrelationParticipantAgentIds,
+      activeCorrelationSpotlight?.correlation_id,
       crewOverviewOperationSeedData,
       selectAgentWithSnapshot,
       selectedCorrelationCarryForward,
@@ -1034,9 +1076,11 @@ function AppInner() {
       }
     ) => {
       const preserveActiveCorrelation = Boolean(
-        options?.preserveActiveCorrelation && activeCorrelation?.correlation_id
+        options?.preserveActiveCorrelation && activeCorrelationSpotlight?.correlation_id
       );
-      const preservedCorrelationId = preserveActiveCorrelation ? activeCorrelation!.correlation_id : operation.correlation_id;
+      const preservedCorrelationId = preserveActiveCorrelation
+        ? activeCorrelationSpotlight!.correlation_id
+        : operation.correlation_id;
 
       selectAgentWithSnapshot(
         operation.agent_id,
@@ -1052,7 +1096,7 @@ function AppInner() {
       setHubOpen(true);
     },
     [
-      activeCorrelation?.correlation_id,
+      activeCorrelationSpotlight?.correlation_id,
       selectAgentWithSnapshot,
       selectedCorrelationCarryForward,
       selectedCorrelationWasExplicit

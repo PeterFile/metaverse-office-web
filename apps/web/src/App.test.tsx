@@ -1517,6 +1517,60 @@ afterEach(() => {
     );
   });
 
+  it(
+    'keeps the active correlation spotlight in the scene after the Hub closes without polling correlations',
+    async () => {
+      (window as typeof window & { __AITOWN_POLL_INTERVAL_MS__?: number }).__AITOWN_POLL_INTERVAL_MS__ = 1000;
+
+      const user = userEvent.setup();
+
+      setNavigatorUserAgent('VitestBrowser');
+      render(<App />);
+
+      await user.click(await screen.findByRole('button', { name: 'Select scene agent app-engineering' }));
+
+      const details = await screen.findByRole('complementary', { name: 'Agent details' });
+      const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+
+      expect(correlationSection).not.toBeNull();
+
+      await waitFor(() => {
+        expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+      });
+
+      const countCorrelationRequests = () =>
+        vi
+          .mocked(globalThis.fetch)
+          .mock.calls.filter(([input]) => {
+            const url = typeof input === 'string' ? input : input.toString();
+            return url === correlationUrl;
+          }).length;
+
+      expect(screen.getByTestId('mock-scene-active-correlation-id')).toHaveTextContent('corr-app-review');
+      expect(screen.getByTestId('mock-scene-correlation-participants')).toHaveTextContent(
+        'app-engineering,team-lead'
+      );
+
+      const correlationRequestsBeforeClose = countCorrelationRequests();
+      expect(correlationRequestsBeforeClose).toBeGreaterThan(0);
+
+      await user.click(screen.getByRole('button', { name: 'Close Hub' }));
+
+      expect(screen.queryByRole('dialog', { name: 'Hub' })).not.toBeInTheDocument();
+      expect(screen.getByTestId('mock-scene-active-correlation-id')).toHaveTextContent('corr-app-review');
+      expect(screen.getByTestId('mock-scene-correlation-participants')).toHaveTextContent(
+        'app-engineering,team-lead'
+      );
+
+      await act(async () => {
+        await new Promise((resolve) => window.setTimeout(resolve, 1100));
+      });
+
+      expect(countCorrelationRequests()).toBe(correlationRequestsBeforeClose);
+    },
+    10000
+  );
+
   it('keeps the active correlation when a highlighted scene participant is inspected', async () => {
     const user = userEvent.setup();
 
@@ -1548,6 +1602,104 @@ afterEach(() => {
     expect(globalThis.fetch).toHaveBeenCalledWith(
       teamLeadSelectedCorrelationMemoryArtifactsUrl,
       expect.anything()
+    );
+  });
+
+  it('preserves the active correlation when a highlighted scene participant is inspected after the Hub closes', async () => {
+    const user = userEvent.setup();
+
+    setNavigatorUserAgent('VitestBrowser');
+    render(<App />);
+
+    await user.click(await screen.findByRole('button', { name: 'Select scene agent app-engineering' }));
+
+    let details = await screen.findByRole('complementary', { name: 'Agent details' });
+    let correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+
+    expect(correlationSection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+      expect(screen.getByTestId('mock-scene-correlation-participants')).toHaveTextContent(
+        'app-engineering,team-lead'
+      );
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Close Hub' }));
+
+    expect(screen.queryByRole('dialog', { name: 'Hub' })).not.toBeInTheDocument();
+    expect(screen.getByTestId('mock-scene-active-correlation-id')).toHaveTextContent('corr-app-review');
+    expect(screen.getByTestId('mock-scene-correlation-participants')).toHaveTextContent(
+      'app-engineering,team-lead'
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Select scene agent team-lead' }));
+
+    details = await screen.findByRole('complementary', { name: 'Agent details' });
+    correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+
+    expect(correlationSection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'Team Lead' })).toBeVisible();
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+    });
+
+    expect(screen.getByTestId('mock-scene-active-correlation-id')).toHaveTextContent('corr-app-review');
+    expect(screen.getByTestId('mock-scene-correlation-participants')).toHaveTextContent(
+      'app-engineering,team-lead'
+    );
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      teamLeadSelectedCorrelationMemoryArtifactsUrl,
+      expect.anything()
+    );
+  });
+
+  it('replaces the cached scene spotlight when a different correlation is selected', async () => {
+    const user = userEvent.setup();
+
+    setNavigatorUserAgent('VitestBrowser');
+    render(<App />);
+
+    await user.click(await screen.findByRole('button', { name: 'Select scene agent app-engineering' }));
+
+    let details = await screen.findByRole('complementary', { name: 'Agent details' });
+    let correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+
+    expect(correlationSection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Close Hub' }));
+    expect(screen.getByTestId('mock-scene-active-correlation-id')).toHaveTextContent('corr-app-review');
+
+    details = await openHub(user);
+    const incidentSection = within(details).getByRole('heading', { name: 'Incident Feed' }).closest('section');
+    correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+
+    expect(incidentSection).not.toBeNull();
+    expect(correlationSection).not.toBeNull();
+
+    await user.click(
+      within(incidentSection!).getByRole('button', { name: 'Open incident correlation corr-app-secondary' })
+    );
+
+    await waitFor(() => {
+      expect(within(correlationSection!).getByText('corr-app-secondary')).toBeVisible();
+      expect(screen.getByTestId('mock-scene-active-correlation-id')).toHaveTextContent('corr-app-secondary');
+      expect(screen.getByTestId('mock-scene-correlation-participants')).toHaveTextContent(
+        'app-engineering,growth-revenue'
+      );
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Close Hub' }));
+
+    expect(screen.queryByRole('dialog', { name: 'Hub' })).not.toBeInTheDocument();
+    expect(screen.getByTestId('mock-scene-active-correlation-id')).toHaveTextContent('corr-app-secondary');
+    expect(screen.getByTestId('mock-scene-correlation-participants')).toHaveTextContent(
+      'app-engineering,growth-revenue'
     );
   });
 

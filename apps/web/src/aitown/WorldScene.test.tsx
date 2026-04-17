@@ -677,6 +677,57 @@ describe('WorldScene watch overlay caption gating', () => {
     });
   });
 
+  it('clears active correlation overlay clamp padding when the overlay is intentionally hidden', async () => {
+    appInitMock.mockReset().mockResolvedValue(undefined);
+    vi.mocked(loadAiTownAssets).mockResolvedValue(makeAssets());
+
+    const activeScene = {
+      ...makeWideSelectedAgentScene(),
+      watchEdges: [],
+      activeCorrelationId: 'corr-app-review',
+      correlationParticipantAgentIds: ['app-engineering', 'team-lead']
+    } satisfies AiTownSceneModel;
+    const { container, rerender } = render(
+      <main className="aitown-shell">
+        <section className="aitown-panel aitown-panel--game">
+          <WorldScene scene={activeScene} onSelectAgent={vi.fn()} />
+        </section>
+      </main>
+    );
+
+    const host = container.querySelector('.aitown-world__host');
+    expect(host).toBeInstanceOf(HTMLDivElement);
+    setElementRect(host as HTMLDivElement, { left: 0, top: 0, width: 1000, height: 800 });
+
+    const overlay = await screen.findByRole('region', { name: 'Active correlation' });
+    setElementRect(overlay, { left: 700, top: 18, width: 300, height: 200 });
+    overlay.classList.add('is-measured');
+
+    await waitFor(() => {
+      expect(readViewportInspector()).toBeDefined();
+      expect(readViewportInspector()?.read().clampPadding).toEqual({
+        top: 0,
+        right: 300
+      });
+    });
+
+    rerender(
+      <main className="aitown-shell">
+        <section className="aitown-panel aitown-panel--game">
+          <WorldScene scene={activeScene} onSelectAgent={vi.fn()} showActiveCorrelationOverlay={false} />
+        </section>
+      </main>
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByRole('region', { name: 'Active correlation' })).not.toBeInTheDocument();
+      expect(readViewportInspector()?.read().clampPadding).toEqual({
+        top: 0,
+        right: 0
+      });
+    });
+  });
+
   it('recovers from renderer_init_failed through Retry renderer and registers the viewport inspector after retry cleanup', async () => {
     const tracker = installViewportInspectorTracker();
     appInitMock

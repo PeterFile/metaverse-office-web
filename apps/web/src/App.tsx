@@ -1307,6 +1307,7 @@ function AppInner() {
                 scene={scene}
                 onSelectAgent={handleSceneSelectAgent}
                 resetViewSignal={resetViewSignal}
+                showActiveCorrelationOverlay={hubOpen}
               />
             </Suspense>
           )}

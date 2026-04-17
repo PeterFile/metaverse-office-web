@@ -1806,6 +1806,9 @@ test.describe('operator shell smoke', () => {
     try {
       const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
       const selectedAgentHeading = detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' });
+      const supervisionSection = detailsPanel.locator('section').filter({
+        has: page.getByRole('heading', { name: 'Supervision History' })
+      });
       const watchOverlay = page.getByRole('region', { name: 'Selected watch links' });
       const closeHubButton = page.getByRole('button', { name: 'Close Hub' });
       const workflowResponsePromise = page.waitForResponse(
@@ -1828,10 +1831,14 @@ test.describe('operator shell smoke', () => {
       await expect(dialog).toBeVisible();
       await expect(selectedAgentHeading).toBeVisible();
       await expect(detailsPanel.getByRole('button', { name: 'Clear' })).toBeVisible();
-      await expect(detailsPanel.getByText('Request scope · Target agent · growth-revenue')).toBeVisible();
       await expect(detailsPanel.getByRole('heading', { name: 'Supervision History' })).toBeVisible();
       await workflowResponsePromise;
       await supervisionHistoryResponsePromise;
+      await expect(
+        supervisionSection.getByText(
+          'Request scope · Target agent · growth-revenue · Active correlation · corr-revenue-handoff'
+        )
+      ).toBeVisible();
 
       await focusHubControlWithTab(page, closeHubButton, 'Close Hub');
       await expect(closeHubButton).toBeFocused();
@@ -7883,7 +7890,7 @@ test.describe('operator shell smoke', () => {
       alertRecord.getByRole('button', {
         name: 'Jump to shared memory artifact /tmp/missing.md'
       })
-    ).toHaveCount(0);
+    ).toBeVisible();
     await expect(memorySection.getByText('Collector observed workspace write to revenue-handoff.md')).toBeVisible();
     await expect(detailsPanel.getByRole('button', { name: 'Return to current scope' })).toHaveCount(0);
     await expect(focusedSharedMemoryRecord).toHaveCount(0);
@@ -8128,6 +8135,9 @@ test.describe('operator shell smoke', () => {
     const memorySection = detailsPanel.locator('section').filter({
       has: page.getByRole('heading', { name: 'Shared Memory' })
     });
+    const replaySection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Timeline Replay' })
+    });
     const selectedSupervisionCorrelationButton = supervisionSection.getByRole('button', {
       name: `Open supervision history correlation ${accountabilityCorrelationId}, currently selected`
     });
@@ -8139,8 +8149,8 @@ test.describe('operator shell smoke', () => {
     await expect(supervisionSection.getByText('Supervision history default correlation stays auto')).toBeVisible();
     await expect(selectedSupervisionCorrelationButton).toBeVisible();
     await expect(correlationSection.getByText(accountabilityCorrelationId, { exact: true })).toBeVisible();
-    await expect(detailsPanel.getByRole('heading', { name: 'Timeline Replay' })).toHaveCount(0);
-    await expect(detailsPanel.getByText(`Scoped replay · ${accountabilityCorrelationId}`)).toHaveCount(0);
+    await expect(replaySection.getByRole('heading', { name: 'Timeline Replay' })).toBeVisible();
+    await expect(replaySection.getByText(`Scoped replay · ${accountabilityCorrelationId}`)).toBeVisible();
     await expect(memorySection.getByText('Collector observed workspace write to revenue-handoff.md')).toBeVisible();
     await expect(selectedSharedMemoryCorrelationButton).toBeVisible();
     await expect(detailsPanel.getByRole('button', { name: 'Return to current scope' })).toHaveCount(0);
@@ -8157,8 +8167,8 @@ test.describe('operator shell smoke', () => {
     await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
     await expect(selectedSupervisionCorrelationButton).toBeVisible();
     await expect(correlationSection.getByText(accountabilityCorrelationId, { exact: true })).toBeVisible();
-    await expect(detailsPanel.getByRole('heading', { name: 'Timeline Replay' })).toHaveCount(0);
-    await expect(detailsPanel.getByText(`Scoped replay · ${accountabilityCorrelationId}`)).toHaveCount(0);
+    await expect(replaySection.getByRole('heading', { name: 'Timeline Replay' })).toBeVisible();
+    await expect(replaySection.getByText(`Scoped replay · ${accountabilityCorrelationId}`)).toBeVisible();
     await expect(memorySection.getByText('Collector observed workspace write to revenue-handoff.md')).toBeVisible();
     await expect(selectedSharedMemoryCorrelationButton).toBeVisible();
     await expect(detailsPanel.getByRole('button', { name: 'Return to current scope' })).toHaveCount(0);
@@ -8258,6 +8268,9 @@ test.describe('operator shell smoke', () => {
       const evidenceJumpButton = supervisionSection.getByRole('button', {
         name: 'Jump to shared memory artifact /tmp/revenue-handoff.md'
       });
+      const sharedMemoryRecord = detailsPanel
+        .locator('li[data-shared-memory-target]')
+        .filter({ hasText: 'Collector observed workspace write to revenue-handoff.md' });
       const focusedSharedMemoryRecord = detailsPanel.locator('li[data-shared-memory-target]:focus');
 
       await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
@@ -8266,7 +8279,7 @@ test.describe('operator shell smoke', () => {
       ).toBeVisible();
       await expect(selectedSupervisionCorrelationButton).toBeVisible();
       await expect(correlationSection.getByText(accountabilityCorrelationId, { exact: true })).toBeVisible();
-      await expect(memorySection.getByText('Collector observed workspace write to revenue-handoff.md')).toBeVisible();
+      await expect(sharedMemoryRecord).toContainText('Collector observed workspace write to revenue-handoff.md');
       await expect(selectedSharedMemoryCorrelationButton).toBeVisible();
       await expect(returnToCurrentScopeButton).toHaveCount(0);
 
@@ -8290,7 +8303,7 @@ test.describe('operator shell smoke', () => {
       await expect(selectedSupervisionCorrelationButton).toBeVisible();
       await expect(correlationSection.getByText(accountabilityCorrelationId, { exact: true })).toBeVisible();
       await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toHaveCount(0);
-      await expect(memorySection.getByText('Collector observed workspace write to revenue-handoff.md')).toBeVisible();
+      await expect(sharedMemoryRecord).toContainText('Collector observed workspace write to revenue-handoff.md');
       await expect(selectedSharedMemoryCorrelationButton).toBeVisible();
       await expect(returnToCurrentScopeButton).toHaveCount(0);
       await expect(evidenceJumpButton).toBeVisible();
@@ -8308,7 +8321,7 @@ test.describe('operator shell smoke', () => {
       ).toBeVisible();
       await expect(selectedSupervisionCorrelationButton).toBeVisible();
       await expect(correlationSection.getByText(accountabilityCorrelationId, { exact: true })).toBeVisible();
-      await expect(memorySection.getByText('Collector observed workspace write to revenue-handoff.md')).toBeVisible();
+      await expect(sharedMemoryRecord).toContainText('Collector observed workspace write to revenue-handoff.md');
       await expect(selectedSharedMemoryCorrelationButton).toBeVisible();
       await expect(returnToCurrentScopeButton).toHaveCount(0);
       await expect(focusedSharedMemoryRecord).toHaveCount(1);
@@ -8400,13 +8413,16 @@ test.describe('operator shell smoke', () => {
     const evidenceJumpButton = supervisionSection.getByRole('button', {
       name: 'Jump to shared memory artifact /tmp/revenue-handoff.md'
     });
+    const sharedMemoryRecord = detailsPanel
+      .locator('li[data-shared-memory-target]')
+      .filter({ hasText: 'Collector observed workspace write to revenue-handoff.md' });
     const focusedSharedMemoryRecord = detailsPanel.locator('li[data-shared-memory-target]:focus');
 
     await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
     await expect(supervisionSection.getByText('Supervision history evidence jump stays in shared memory')).toBeVisible();
     await expect(selectedSupervisionCorrelationButton).toBeVisible();
     await expect(correlationSection.getByText(accountabilityCorrelationId, { exact: true })).toBeVisible();
-    await expect(memorySection.getByText('Collector observed workspace write to revenue-handoff.md')).toBeVisible();
+    await expect(sharedMemoryRecord).toContainText('Collector observed workspace write to revenue-handoff.md');
     await expect(selectedSharedMemoryCorrelationButton).toBeVisible();
     await expect(detailsPanel.getByRole('button', { name: 'Return to current scope' })).toHaveCount(0);
     await expect(evidenceJumpButton).toBeVisible();
@@ -8422,7 +8438,7 @@ test.describe('operator shell smoke', () => {
     await expect(supervisionSection.getByText('Supervision history evidence jump stays in shared memory')).toBeVisible();
     await expect(selectedSupervisionCorrelationButton).toBeVisible();
     await expect(correlationSection.getByText(accountabilityCorrelationId, { exact: true })).toBeVisible();
-    await expect(memorySection.getByText('Collector observed workspace write to revenue-handoff.md')).toBeVisible();
+    await expect(sharedMemoryRecord).toContainText('Collector observed workspace write to revenue-handoff.md');
     await expect(selectedSharedMemoryCorrelationButton).toBeVisible();
     await expect(detailsPanel.getByRole('button', { name: 'Return to current scope' })).toHaveCount(0);
     await expect(focusedSharedMemoryRecord).toHaveCount(1);
@@ -9507,7 +9523,8 @@ test.describe('operator shell smoke', () => {
     await expect(page.getByText('Showing last office snapshot.')).toBeVisible({
       timeout: POLL_DRIVEN_ASSERTION_TIMEOUT_MS
     });
-    await expect(page.getByText('overview refresh failed')).toBeVisible();
+    await expect(page.getByText('overview refresh failed', { exact: true })).toBeVisible();
+    await expect(page.getByText('Office snapshot · Refresh failed · overview refresh failed')).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Metaverse Office' })).toBeVisible();
     await expect(page.getByRole('region', { name: 'Office world' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Open Hub' })).toBeVisible();

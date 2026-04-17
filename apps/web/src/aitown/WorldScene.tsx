@@ -430,6 +430,7 @@ type WorldSceneProps = {
   scene: AiTownSceneModel;
   onSelectAgent: (agentId: string | null) => void;
   resetViewSignal?: number;
+  showActiveCorrelationOverlay?: boolean;
 };
 
 type CenteredAgentState = {
@@ -438,7 +439,12 @@ type CenteredAgentState = {
   y: number;
 };
 
-export default function WorldScene({ scene, onSelectAgent, resetViewSignal = 0 }: WorldSceneProps) {
+export default function WorldScene({
+  scene,
+  onSelectAgent,
+  resetViewSignal = 0,
+  showActiveCorrelationOverlay = true
+}: WorldSceneProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<Application | null>(null);
   const viewportRef = useRef<Viewport | null>(null);
@@ -474,7 +480,8 @@ export default function WorldScene({ scene, onSelectAgent, resetViewSignal = 0 }
   const showWatchOverlayCaption = ready && !loadError && watchOverlayCaptionItems.length > 0;
   const selectedSceneAgent = scene.agents.find((agent) => agent.agentId === scene.selectedAgentId);
   const activeCorrelationOverlayParticipants = resolveActiveCorrelationOverlayParticipants(scene);
-  const showActiveCorrelationOverlay = ready && !loadError && scene.activeCorrelationId !== null;
+  const showSceneCorrelationOverlay =
+    showActiveCorrelationOverlay && ready && !loadError && scene.activeCorrelationId !== null;
   selectedAgentRef.current = selectedSceneAgent
     ? {
         agentId: selectedSceneAgent.agentId,
@@ -1207,7 +1214,7 @@ export default function WorldScene({ scene, onSelectAgent, resetViewSignal = 0 }
   return (
     <div className="aitown-world__canvas">
       <div ref={hostRef} className="aitown-world__host" />
-      {showActiveCorrelationOverlay ? (
+      {showSceneCorrelationOverlay ? (
         <section className="aitown-correlation-overlay" aria-label="Active correlation">
           <p className="aitown-correlation-overlay__caption">
             <span className="aitown-correlation-overlay__title">Active correlation</span>

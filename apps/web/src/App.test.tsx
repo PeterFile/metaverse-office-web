@@ -6,7 +6,8 @@ vi.mock('./aitown/WorldScene', () => ({
   default: function MockWorldScene({
     scene,
     onSelectAgent,
-    resetViewSignal = 0
+    resetViewSignal = 0,
+    showActiveCorrelationOverlay = true
   }: {
     scene: {
       selectedAgentId: string | null;
@@ -25,6 +26,7 @@ vi.mock('./aitown/WorldScene', () => ({
     };
     onSelectAgent: (agentId: string | null) => void;
     resetViewSignal?: number;
+    showActiveCorrelationOverlay?: boolean;
   }) {
     const labelByAgentId = new Map(scene.agents.map((agent) => [agent.agentId, agent.displayName]));
 
@@ -35,6 +37,9 @@ vi.mock('./aitown/WorldScene', () => ({
         <output data-testid="mock-scene-correlation-participants">
           {scene.correlationParticipantAgentIds.join(',')}
         </output>
+        {showActiveCorrelationOverlay && scene.activeCorrelationId ? (
+          <section aria-label="Active correlation">{scene.activeCorrelationId}</section>
+        ) : null}
         {scene.agents.map((agent) => (
           <button key={agent.agentId} type="button" onClick={() => onSelectAgent(agent.agentId)}>
             {`Select scene agent ${agent.agentId}`}
@@ -1550,6 +1555,7 @@ afterEach(() => {
       expect(screen.getByTestId('mock-scene-correlation-participants')).toHaveTextContent(
         'app-engineering,team-lead'
       );
+      expect(screen.getByRole('region', { name: 'Active correlation' })).toBeVisible();
 
       const correlationRequestsBeforeClose = countCorrelationRequests();
       expect(correlationRequestsBeforeClose).toBeGreaterThan(0);
@@ -1557,6 +1563,7 @@ afterEach(() => {
       await user.click(screen.getByRole('button', { name: 'Close Hub' }));
 
       expect(screen.queryByRole('dialog', { name: 'Hub' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('region', { name: 'Active correlation' })).not.toBeInTheDocument();
       expect(screen.getByTestId('mock-scene-active-correlation-id')).toHaveTextContent('corr-app-review');
       expect(screen.getByTestId('mock-scene-correlation-participants')).toHaveTextContent(
         'app-engineering,team-lead'

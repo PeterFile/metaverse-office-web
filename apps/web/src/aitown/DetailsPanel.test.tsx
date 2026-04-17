@@ -10,7 +10,8 @@ import type {
   OfficeAgent,
   OfficeOperation,
   OfficeOperations,
-  PeerWatchAlertsResponse
+  PeerWatchAlertsResponse,
+  WorkflowInteraction
 } from '../types';
 import type { WorldState } from '../world/types';
 
@@ -1724,6 +1725,8 @@ describe('DetailsPanel accountability signals', () => {
     const sharedMemorySection = screen.getByRole('heading', { name: 'Shared Memory' }).closest('section');
     expect(sharedMemorySection).not.toBeNull();
     expect(within(sharedMemorySection!).getByText('Focused exact artifact · artifact/review-note')).toBeVisible();
+    expect(within(sharedMemorySection!).getByText('Current-scope backlinks')).toBeVisible();
+    expect(within(sharedMemorySection!).getByText('No current-scope backlinks cite this artifact.')).toBeVisible();
 
     const focusedArtifactRecord = within(sharedMemorySection!).getByText('Ref · artifact/review-note').closest('li');
     const unfocusedArtifactRecord = within(sharedMemorySection!).getByText('Ref · /evidence/secondary.md').closest('li');
@@ -1733,6 +1736,399 @@ describe('DetailsPanel accountability signals', () => {
     expect(within(focusedArtifactRecord!).getByText('Focused exact jump')).toBeVisible();
     expect(unfocusedArtifactRecord).not.toHaveClass('aitown-record--shared-memory-focused');
     expect(within(unfocusedArtifactRecord!).queryByText('Focused exact jump')).not.toBeInTheDocument();
+  });
+
+  it('shows focused exact-artifact backlinks from crew-overview current-scope correlation data without a selected agent', () => {
+    const focusedArtifactRef = '/evidence/review.md';
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          focusedSharedMemoryArtifactRef: focusedArtifactRef,
+          selectedAgent: null,
+          selectedOperation: null,
+          selectedAgentSupervisionHistory: null,
+          workflow: null,
+          correlation: {
+            ...buildCorrelation(),
+            evidence_refs: [focusedArtifactRef]
+          }
+        })}
+      />
+    );
+
+    const sharedMemorySection = screen.getByRole('heading', { name: 'Shared Memory' }).closest('section');
+    expect(sharedMemorySection).not.toBeNull();
+
+    const backlinkLane = within(sharedMemorySection!).getByText('Current-scope backlinks').closest('div');
+    expect(backlinkLane).not.toBeNull();
+    expect(within(backlinkLane!).getByText('Active correlation')).toBeVisible();
+    expect(within(backlinkLane!).getByText('corr-app-review')).toBeVisible();
+    expect(within(backlinkLane!).getByText('Correlation interaction')).toBeVisible();
+    expect(within(backlinkLane!).getByText('Reviewed the missing workflow package')).toBeVisible();
+    expect(
+      within(backlinkLane!).queryByText('No current-scope backlinks cite this artifact.')
+    ).not.toBeInTheDocument();
+  });
+
+  it('shows focused exact-artifact backlinks from the scoped current records and omits cross-correlation duplicates', () => {
+    const focusedArtifactRef = '/evidence/review.md';
+    const sharedInteraction: WorkflowInteraction = {
+      interaction_id: 'int-1',
+      interaction_type: 'peer_watch',
+      correlation_id: 'corr-app-review',
+      started_at: '2026-03-16T08:45:00.000Z',
+      participant_agent_ids: ['app-engineering', 'team-lead'],
+      trigger_event_id: 'evt-1',
+      severity: 'yellow',
+      evidence_refs: [focusedArtifactRef],
+      summary: 'Reviewed the missing workflow package'
+    };
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          focusedSharedMemoryArtifactRef: focusedArtifactRef,
+          memoryArtifacts: {
+            ...buildMemoryArtifacts(),
+            items: [
+              ...buildMemoryArtifacts().items,
+              {
+                artifact_ref: focusedArtifactRef,
+                artifact_kind: 'evidence_ref',
+                file_name: 'review.md',
+                first_seen_at: '2026-03-16T08:49:00.000Z',
+                last_seen_at: '2026-03-16T08:58:00.000Z',
+                mention_count: 3,
+                agent_ids: ['app-engineering', 'team-lead'],
+                correlation_ids: ['corr-app-review'],
+                source_kinds: ['controller_event', 'workflow_event'],
+                latest_summary: 'Review evidence anchor',
+                latest_event_type: 'workflow_event',
+                collector_last_modified_at: '2026-03-16T08:58:00.000Z'
+              }
+            ]
+          },
+          selectedAgentSupervisionHistory: {
+            items: [
+              {
+                alert_id: 'alert-history-1',
+                ts: '2026-03-16T08:55:00.000Z',
+                agent_id: 'app-engineering',
+                target_agent_id: 'app-engineering',
+                actor_id: 'team-lead',
+                observer_agent_id: 'team-lead',
+                watcher_agent_ids: ['growth-revenue', 'team-lead'],
+                severity: 'orange',
+                status: 'resolved',
+                current_state: 'blocked',
+                active_task: 'Fix workflow issue',
+                summary: 'Peer watch recovered after evidence review',
+                evidence_refs: [focusedArtifactRef],
+                evidence_count: 1,
+                correlation_id: 'corr-app-review',
+                source_kind: 'controller_event',
+                metadata: {
+                  resolution: 'review_complete'
+                }
+              },
+              {
+                alert_id: 'alert-history-cross-scope',
+                ts: '2026-03-16T08:54:00.000Z',
+                agent_id: 'app-engineering',
+                target_agent_id: 'app-engineering',
+                actor_id: 'growth-revenue',
+                observer_agent_id: 'team-lead',
+                watcher_agent_ids: [],
+                severity: 'yellow',
+                status: 'open',
+                current_state: 'blocked',
+                active_task: 'Cross-correlation alert stays hidden',
+                summary: 'Cross-correlation supervision note stays hidden',
+                evidence_refs: [focusedArtifactRef],
+                evidence_count: 1,
+                correlation_id: 'corr-app-secondary',
+                source_kind: 'controller_event',
+                metadata: {}
+              }
+            ]
+          },
+          workflow: {
+            ...buildWorkflow(),
+            detail: {
+              ...buildWorkflow().detail,
+              recent_interactions: [sharedInteraction],
+              recent_events: [
+                {
+                  event_id: 'evt-cross-scope',
+                  ts: '2026-03-16T08:57:00.000Z',
+                  agent_id: 'app-engineering',
+                  actor_id: 'growth-revenue',
+                  agent_role: 'app-engineering',
+                  event_type: 'workflow_event',
+                  severity: 'yellow',
+                  current_state: 'blocked',
+                  active_task: 'Cross-correlation workflow note stays hidden',
+                  location: 'delivery-desk',
+                  summary: 'Cross-correlation workflow note stays hidden',
+                  correlation_id: 'corr-app-secondary',
+                  counterparty_agent_ids: ['growth-revenue'],
+                  evidence_refs: [focusedArtifactRef],
+                  source_kind: 'workflow_event',
+                  metadata: {}
+                }
+              ]
+            }
+          },
+          correlation: {
+            ...buildCorrelation(),
+            evidence_refs: [focusedArtifactRef],
+            interactions: [sharedInteraction]
+          }
+        })}
+      />
+    );
+
+    const sharedMemorySection = screen.getByRole('heading', { name: 'Shared Memory' }).closest('section');
+    expect(sharedMemorySection).not.toBeNull();
+
+    const backlinkLane = within(sharedMemorySection!).getByText('Current-scope backlinks').closest('div');
+    expect(backlinkLane).not.toBeNull();
+    expect(within(backlinkLane!).getByText('Current operation')).toBeVisible();
+    expect(within(backlinkLane!).getByText('Followed up on missing workflow evidence')).toBeVisible();
+    expect(within(backlinkLane!).getByText('Supervision history')).toBeVisible();
+    expect(within(backlinkLane!).getByText('Peer watch recovered after evidence review')).toBeVisible();
+    expect(within(backlinkLane!).getByText('Workflow interaction')).toBeVisible();
+    expect(within(backlinkLane!).getByText('Reviewed the missing workflow package')).toBeVisible();
+    expect(within(backlinkLane!).getAllByText('Reviewed the missing workflow package')).toHaveLength(1);
+    expect(within(backlinkLane!).getByText('Active correlation')).toBeVisible();
+    expect(within(backlinkLane!).getByText('corr-app-review')).toBeVisible();
+    expect(within(backlinkLane!).queryByText('Cross-correlation supervision note stays hidden')).not.toBeInTheDocument();
+    expect(within(backlinkLane!).queryByText('Cross-correlation workflow note stays hidden')).not.toBeInTheDocument();
+    expect(within(backlinkLane!).queryByText('More')).not.toBeInTheDocument();
+  });
+
+  it('includes workflow recent incidents in focused exact-artifact backlinks', () => {
+    const focusedArtifactRef = '/evidence/review.md';
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          focusedSharedMemoryArtifactRef: focusedArtifactRef,
+          selectedOperation: null,
+          correlation: null,
+          selectedAgentSupervisionHistory: { items: [] },
+          workflow: {
+            ...buildWorkflow(),
+            detail: {
+              ...buildWorkflow().detail,
+              recent_events: [],
+              recent_interactions: [],
+              recent_incidents: [
+                {
+                  incident_id: 'inc-workflow-1',
+                  kind: 'peer_watch',
+                  ts: '2026-03-16T08:56:30.000Z',
+                  agent_id: 'app-engineering',
+                  actor_id: 'team-lead',
+                  status: 'open',
+                  severity: 'orange',
+                  summary: 'Workflow incident cites the exact artifact',
+                  correlation_id: 'corr-app-review',
+                  evidence_refs: [focusedArtifactRef],
+                  counterparty_agent_ids: ['team-lead'],
+                  source_kind: 'workflow_event'
+                }
+              ],
+              recent_handoffs: [],
+              recent_reboots: []
+            }
+          }
+        })}
+      />
+    );
+
+    const sharedMemorySection = screen.getByRole('heading', { name: 'Shared Memory' }).closest('section');
+    expect(sharedMemorySection).not.toBeNull();
+
+    const backlinkLane = within(sharedMemorySection!).getByText('Current-scope backlinks').closest('div');
+    expect(backlinkLane).not.toBeNull();
+    expect(within(backlinkLane!).getByText('Workflow incident')).toBeVisible();
+    expect(within(backlinkLane!).getByText('Workflow incident cites the exact artifact')).toBeVisible();
+    expect(
+      within(backlinkLane!).queryByText('No current-scope backlinks cite this artifact.')
+    ).not.toBeInTheDocument();
+  });
+
+  it('surfaces focused exact-artifact backlinks beyond the first two already-loaded workflow records', () => {
+    const focusedArtifactRef = '/evidence/review.md';
+    const workflow = buildWorkflow();
+    const workflowEventTemplate = workflow.detail.recent_events[0];
+    const workflowInteractionTemplate = buildCorrelation().interactions[0];
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          focusedSharedMemoryArtifactRef: focusedArtifactRef,
+          selectedOperation: null,
+          correlation: null,
+          selectedAgentSupervisionHistory: { items: [] },
+          workflow: {
+            ...workflow,
+            detail: {
+              ...workflow.detail,
+              recent_incidents: [],
+              recent_interactions: [
+                {
+                  ...workflowInteractionTemplate,
+                  interaction_id: 'int-ignore-1',
+                  trigger_event_id: 'evt-ignore-1',
+                  evidence_refs: ['/evidence/other-interaction-1.md'],
+                  summary: 'Ignore interaction one'
+                },
+                {
+                  ...workflowInteractionTemplate,
+                  interaction_id: 'int-ignore-2',
+                  trigger_event_id: 'evt-ignore-2',
+                  evidence_refs: ['/evidence/other-interaction-2.md'],
+                  summary: 'Ignore interaction two'
+                },
+                {
+                  ...workflowInteractionTemplate,
+                  interaction_id: 'int-match',
+                  trigger_event_id: 'evt-match',
+                  evidence_refs: [focusedArtifactRef],
+                  summary: 'Late workflow interaction match'
+                }
+              ],
+              recent_events: [
+                {
+                  ...workflowEventTemplate,
+                  event_id: 'evt-ignore-1',
+                  evidence_refs: ['/evidence/other-event-1.md'],
+                  summary: 'Ignore event one'
+                },
+                {
+                  ...workflowEventTemplate,
+                  event_id: 'evt-ignore-2',
+                  evidence_refs: ['/evidence/other-event-2.md'],
+                  summary: 'Ignore event two'
+                },
+                {
+                  ...workflowEventTemplate,
+                  event_id: 'evt-match',
+                  evidence_refs: [focusedArtifactRef],
+                  summary: 'Late workflow event match'
+                }
+              ],
+              recent_handoffs: [
+                {
+                  handoff_id: 'handoff-ignore-1',
+                  ts: '2026-03-16T08:53:00.000Z',
+                  agent_id: 'app-engineering',
+                  actor_id: 'team-lead',
+                  phase: 'blocked',
+                  status: 'pending',
+                  severity: 'yellow',
+                  summary: 'Ignore handoff one',
+                  counterparty_agent_ids: ['team-lead'],
+                  evidence_refs: ['/evidence/other-handoff-1.md'],
+                  correlation_id: 'corr-app-review',
+                  source_kind: 'handoff_log'
+                },
+                {
+                  handoff_id: 'handoff-ignore-2',
+                  ts: '2026-03-16T08:54:00.000Z',
+                  agent_id: 'app-engineering',
+                  actor_id: 'team-lead',
+                  phase: 'blocked',
+                  status: 'pending',
+                  severity: 'yellow',
+                  summary: 'Ignore handoff two',
+                  counterparty_agent_ids: ['team-lead'],
+                  evidence_refs: ['/evidence/other-handoff-2.md'],
+                  correlation_id: 'corr-app-review',
+                  source_kind: 'handoff_log'
+                },
+                {
+                  handoff_id: 'handoff-match',
+                  ts: '2026-03-16T08:55:00.000Z',
+                  agent_id: 'app-engineering',
+                  actor_id: 'team-lead',
+                  phase: 'blocked',
+                  status: 'pending',
+                  severity: 'orange',
+                  summary: 'Late workflow handoff match',
+                  counterparty_agent_ids: ['team-lead'],
+                  evidence_refs: [focusedArtifactRef],
+                  correlation_id: 'corr-app-review',
+                  source_kind: 'handoff_log'
+                }
+              ],
+              recent_reboots: [
+                {
+                  reboot_id: 'reboot-ignore-1',
+                  ts: '2026-03-16T08:56:00.000Z',
+                  agent_id: 'app-engineering',
+                  actor_id: 'controller',
+                  phase: 'blocked',
+                  status: 'recommended',
+                  severity: 'yellow',
+                  summary: 'Ignore reboot one',
+                  counterparty_agent_ids: [],
+                  evidence_refs: ['/evidence/other-reboot-1.md'],
+                  correlation_id: 'corr-app-review',
+                  source_kind: 'controller_event'
+                },
+                {
+                  reboot_id: 'reboot-ignore-2',
+                  ts: '2026-03-16T08:57:00.000Z',
+                  agent_id: 'app-engineering',
+                  actor_id: 'controller',
+                  phase: 'blocked',
+                  status: 'recommended',
+                  severity: 'yellow',
+                  summary: 'Ignore reboot two',
+                  counterparty_agent_ids: [],
+                  evidence_refs: ['/evidence/other-reboot-2.md'],
+                  correlation_id: 'corr-app-review',
+                  source_kind: 'controller_event'
+                },
+                {
+                  reboot_id: 'reboot-match',
+                  ts: '2026-03-16T08:58:00.000Z',
+                  agent_id: 'app-engineering',
+                  actor_id: 'controller',
+                  phase: 'blocked',
+                  status: 'recommended',
+                  severity: 'orange',
+                  summary: 'Late workflow reboot match',
+                  counterparty_agent_ids: [],
+                  evidence_refs: [focusedArtifactRef],
+                  correlation_id: 'corr-app-review',
+                  source_kind: 'controller_event'
+                }
+              ]
+            }
+          }
+        })}
+      />
+    );
+
+    const sharedMemorySection = screen.getByRole('heading', { name: 'Shared Memory' }).closest('section');
+    expect(sharedMemorySection).not.toBeNull();
+
+    const backlinkLane = within(sharedMemorySection!).getByText('Current-scope backlinks').closest('div');
+    expect(backlinkLane).not.toBeNull();
+    expect(within(backlinkLane!).getByText('Workflow interaction')).toBeVisible();
+    expect(within(backlinkLane!).getByText('Late workflow interaction match')).toBeVisible();
+    expect(within(backlinkLane!).getByText('Workflow event')).toBeVisible();
+    expect(within(backlinkLane!).getByText('Late workflow event match')).toBeVisible();
+    expect(within(backlinkLane!).getByText('Workflow handoff')).toBeVisible();
+    expect(within(backlinkLane!).getByText('Late workflow handoff match')).toBeVisible();
+    expect(within(backlinkLane!).getByText('Workflow reboot')).toBeVisible();
+    expect(within(backlinkLane!).getByText('Late workflow reboot match')).toBeVisible();
+    expect(within(backlinkLane!).queryByText('More')).not.toBeInTheDocument();
   });
 
   it('keeps the selected active-queue state option visible when its count drops to zero', () => {

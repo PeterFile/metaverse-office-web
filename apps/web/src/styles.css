@@ -648,6 +648,47 @@ button {
   font-size: 0.78rem;
 }
 
+.aitown-shared-memory-backlink-lane {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.aitown-shared-memory-backlink-label {
+  color: #f5cf79;
+  font-size: 0.76rem;
+}
+
+.aitown-shared-memory-backlink-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.aitown-shared-memory-backlink-chip {
+  display: flex;
+  flex: 0 1 220px;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 3px 8px;
+  border: 1px solid rgba(247, 213, 123, 0.35);
+  background: rgba(52, 31, 38, 0.88);
+}
+
+.aitown-shared-memory-backlink-chip strong {
+  color: #fff7df;
+  font-size: 0.74rem;
+}
+
+.aitown-shared-memory-backlink-chip span,
+.aitown-shared-memory-backlink-empty {
+  color: #dccca4;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
 .aitown-shared-memory-focus-chip {
   align-self: flex-start;
   padding: 1px 7px;

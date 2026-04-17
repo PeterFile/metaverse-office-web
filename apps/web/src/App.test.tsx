@@ -1463,13 +1463,15 @@ afterEach(() => {
     const items = within(legend).getAllByRole('listitem');
 
     expect(legend).toBeVisible();
-    expect(items).toHaveLength(3);
+    expect(items).toHaveLength(4);
     expect(items[0]).toHaveTextContent('#');
     expect(items[0]).toHaveTextContent('Peer-watch alert count');
     expect(items[1]).toHaveTextContent('!');
     expect(items[1]).toHaveTextContent('Open alerts or workflow incidents');
     expect(items[2]).toHaveTextContent('R');
     expect(items[2]).toHaveTextContent('Reboot recommended');
+    expect(items[3]).toHaveTextContent('S');
+    expect(items[3]).toHaveTextContent('Runtime freshness degraded');
     expect(within(worldRegion).queryByText('Selected supervision')).not.toBeInTheDocument();
     expect(
       within(worldRegion).getByText(

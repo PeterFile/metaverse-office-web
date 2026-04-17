@@ -166,6 +166,7 @@ describe('adaptWorldToScene', () => {
       zoneId: 'meeting-zone',
       severity: 'orange',
       selected: true,
+      runtimeFreshnessSeverity: 'orange',
       rebootRecommended: true,
       openAlertCount: 1,
       hasOpenIncidents: true

@@ -56,6 +56,7 @@ export interface SceneAgent {
   rebootRecommended: boolean;
   openAlertCount: number;
   hasOpenIncidents: boolean;
+  runtimeFreshnessSeverity?: Severity | null;
 }
 
 export interface SceneWatchEdge {

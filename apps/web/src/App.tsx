@@ -40,6 +40,7 @@ type OperationSelection = {
 type CorrelationSpotlight = Pick<CorrelationDrilldown, 'correlation_id' | 'participant_agent_ids'>;
 
 const CREW_TIMELINE_LIMIT = 4;
+const CREW_OPEN_SUPERVISION_ALERTS_LIMIT = 4;
 const MEMORY_ARTIFACT_LIMIT = 4;
 const SELECTED_AGENT_SUPERVISION_HISTORY_LIMIT = 4;
 const RESET_VIEW_SHORTCUT_KEY = 'r';
@@ -271,9 +272,14 @@ function sortMemoryArtifacts(artifacts: MemoryArtifact[]) {
 function resolveSelectedAgentSupervisionHistoryCorrelationId(
   selectedAgentId: string | null,
   selectedCorrelationId: string | null,
-  defaultCorrelationId: string | null
+  defaultCorrelationId: string | null,
+  preserveNullCorrelation: boolean
 ) {
   if (!selectedAgentId) {
+    return null;
+  }
+
+  if (preserveNullCorrelation) {
     return null;
   }
 
@@ -395,6 +401,16 @@ function AppInner() {
         signal
       }),
     resourceKey: `timeline-replay:${crewReplayCorrelationId ?? '__all__'}`
+  });
+  const crewOpenSupervisionAlertsResource = usePolledResource({
+    enabled: hubOpen && selectedAgentId === null,
+    load: (signal) =>
+      fetchPeerWatchAlerts({
+        status: 'open',
+        limit: CREW_OPEN_SUPERVISION_ALERTS_LIMIT,
+        signal
+      }),
+    resourceKey: 'crew-open-supervision-alerts'
   });
   const collectorSnapshotResource = usePolledResource({
     enabled: hubOpen,
@@ -699,14 +715,20 @@ function AppInner() {
       }),
     [activeWorkflow, incidentFeedResource.data, selectedAgentId, selectedOperationForAutoCorrelation]
   );
+  const selectedAgentPreservesNullCorrelation =
+    selectedAgentId !== null &&
+    selectedCorrelationId === null &&
+    correlationSelectionModeRef.current === 'preserved';
   const selectedAgentSupervisionHistoryCorrelationId =
     resolveSelectedAgentSupervisionHistoryCorrelationId(
       selectedAgentId,
       selectedCorrelationId,
-      defaultCorrelationId
+      defaultCorrelationId,
+      selectedAgentPreservesNullCorrelation
     );
   const selectedAgentSupervisionHistoryDefaultCorrelationPending =
     selectedAgentId !== null &&
+    !selectedAgentPreservesNullCorrelation &&
     selectedCorrelationId === null &&
     defaultCorrelationId === null &&
     selectedOperationForAutoCorrelation === null &&
@@ -1104,10 +1126,29 @@ function AppInner() {
   );
 
   const handleFocusSharedMemoryArtifact = useCallback(
-    async (artifactRef: string) => {
+    async (
+      artifactRef: string,
+      scope?: {
+        correlationId?: string | null;
+        preserveNullCorrelation?: boolean;
+      }
+    ) => {
       setSharedMemoryJumpStatus(null);
 
-      const existingArtifact = memoryArtifacts?.items.find((item) => item.artifact_ref === artifactRef) ?? null;
+      const hasScopeOverride = Boolean(scope?.preserveNullCorrelation) || scope?.correlationId !== undefined;
+      const jumpCorrelationId = scope?.preserveNullCorrelation
+        ? null
+        : hasScopeOverride
+          ? scope?.correlationId ?? null
+          : sharedMemoryCorrelationId;
+      const jumpRequestScopeLabel = hasScopeOverride
+        ? resolveSharedMemoryRequestScopeLabel(selectedAgentId, jumpCorrelationId)
+        : sharedMemoryRequestScopeLabel;
+
+      const existingArtifact =
+        !hasScopeOverride
+          ? (memoryArtifacts?.items.find((item) => item.artifact_ref === artifactRef) ?? null)
+          : null;
       if (existingArtifact) {
         setFocusedExactMemoryArtifact(existingArtifact);
         setFocusedSharedMemoryArtifactRef(existingArtifact.artifact_ref);
@@ -1132,7 +1173,7 @@ function AppInner() {
           limit: MEMORY_ARTIFACT_LIMIT,
           window: DEFAULT_WORKFLOW_WINDOW,
           agentId: selectedAgentId ?? undefined,
-          correlationId: sharedMemoryCorrelationId ?? undefined,
+          correlationId: jumpCorrelationId ?? undefined,
           artifactRef
         });
 
@@ -1144,7 +1185,7 @@ function AppInner() {
 
         if (!exactArtifact) {
           setSharedMemoryJumpStatus(
-            `Shared memory miss. ${artifactRef} is not available in ${sharedMemoryRequestScopeLabel}.`
+            `Shared memory miss. ${artifactRef} is not available in ${jumpRequestScopeLabel}.`
           );
           return;
         }
@@ -1158,7 +1199,7 @@ function AppInner() {
         }
 
         setSharedMemoryJumpStatus(
-          `Shared memory jump failed for ${artifactRef} in ${sharedMemoryRequestScopeLabel}. ${
+          `Shared memory jump failed for ${artifactRef} in ${jumpRequestScopeLabel}. ${
             error instanceof Error ? error.message : 'unknown_error'
           }`
         );
@@ -1352,6 +1393,9 @@ function AppInner() {
               incidentFeed={incidentFeedResource.data}
               incidentFeedError={incidentFeedResource.error}
               incidentFeedState={incidentFeedResource.state}
+              openSupervisionAlerts={crewOpenSupervisionAlertsResource.data}
+              openSupervisionAlertsError={crewOpenSupervisionAlertsResource.error}
+              openSupervisionAlertsState={crewOpenSupervisionAlertsResource.state}
               operations={operationsResource.data}
               operationsError={operationsResource.error}
               operationsState={operationsResource.state}

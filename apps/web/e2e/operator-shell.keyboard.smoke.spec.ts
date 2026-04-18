@@ -1513,10 +1513,11 @@ test.describe('operator shell smoke', () => {
     await expect(worldRegion).toBeVisible();
     await expect(worldRegion.getByText('Badge legend')).toBeVisible();
     await expect(legend).toBeVisible();
-    await expect(items).toHaveCount(3);
+    await expect(items).toHaveCount(4);
     await expect(legend).toContainText('#');
     await expect(legend).toContainText('!');
     await expect(legend).toContainText('R');
+    await expect(legend).toContainText('S');
   });
 
   test('surfaces live focus agents on the world shell before Hub opens and lets operators inspect them directly', async ({

@@ -24,6 +24,11 @@ import { buildZoneLayoutModels } from '../layout';
 import type { WorldState } from '../world/types';
 import { selectAgentBadge, selectAgentZoneLabel, selectAttentionQueue, selectWatchEdgeRisk } from '../world/selectors';
 
+type SharedMemoryJumpScope = {
+  correlationId?: string | null;
+  preserveNullCorrelation?: boolean;
+};
+
 type DetailsPanelProps = {
   collectorSnapshot: CollectorSnapshot | null;
   collectorSnapshotError: string | null;
@@ -34,6 +39,9 @@ type DetailsPanelProps = {
   incidentFeed: IncidentFeedResponse | null;
   incidentFeedError: string | null;
   incidentFeedState: LoadState;
+  openSupervisionAlerts?: PeerWatchAlertsResponse | null;
+  openSupervisionAlertsError?: string | null;
+  openSupervisionAlertsState?: LoadState;
   operations: OfficeOperations | null;
   operationsError: string | null;
   operationsState: LoadState;
@@ -71,7 +79,7 @@ type DetailsPanelProps = {
   onResetCorrelationOverride: () => void;
   onSelectOperationsState: (state: string | null) => void;
   onSelectOperation: (operation: OfficeOperation, options?: SelectOperationOptions) => void;
-  onFocusSharedMemoryArtifact?: (artifactRef: string) => void;
+  onFocusSharedMemoryArtifact?: (artifactRef: string, scope?: SharedMemoryJumpScope) => void;
 };
 
 type SelectAgentOptions = {
@@ -697,7 +705,9 @@ function renderSharedMemoryEvidenceRefs({
   ));
 }
 
-function resolveSharedMemoryEvidenceJumpBehavior(onFocusSharedMemoryArtifact?: (artifactRef: string) => void) {
+function resolveSharedMemoryEvidenceJumpBehavior(
+  onFocusSharedMemoryArtifact?: (artifactRef: string, scope?: SharedMemoryJumpScope) => void
+) {
   return {
     onJump: onFocusSharedMemoryArtifact ?? focusSharedMemoryArtifact,
     allowExactFallback: Boolean(onFocusSharedMemoryArtifact)
@@ -1214,7 +1224,7 @@ function renderCorrelationInteraction({
   onSelectCorrelation?: (correlationId: string | null) => void;
   sharedMemoryArtifactRefs?: ReadonlySet<string>;
   enableSharedMemoryEvidenceJump?: boolean;
-  onFocusSharedMemoryArtifact?: (artifactRef: string) => void;
+  onFocusSharedMemoryArtifact?: (artifactRef: string, scope?: SharedMemoryJumpScope) => void;
   participantAriaLabelPrefix?: string;
 }) {
   const canRenderParticipantPivots = Boolean(navigableAgentIds && onSelectAgent);
@@ -1288,7 +1298,7 @@ function renderCorrelationTimelineEvent(
         onSelectAgent?: (agentId: string | null, correlationId?: string | null) => void;
         sharedMemoryArtifactRefs?: ReadonlySet<string>;
         enableSharedMemoryEvidenceJump?: boolean;
-        onFocusSharedMemoryArtifact?: (artifactRef: string) => void;
+        onFocusSharedMemoryArtifact?: (artifactRef: string, scope?: SharedMemoryJumpScope) => void;
         subjectPivotAriaLabelPrefix?: string;
         actorPivotAriaLabelPrefix?: string;
         counterpartyPivotAriaLabelPrefix?: string;
@@ -1398,7 +1408,7 @@ function renderReplayTimelineEvent({
   currentAgentId: string | null;
   navigableAgentIds: Set<string>;
   sharedMemoryArtifactRefs: ReadonlySet<string>;
-  onFocusSharedMemoryArtifact?: (artifactRef: string) => void;
+  onFocusSharedMemoryArtifact?: (artifactRef: string, scope?: SharedMemoryJumpScope) => void;
   onSelectAgent: SelectAgentHandler;
   onSelectCorrelation: SelectCorrelationHandler;
 }) {
@@ -1513,7 +1523,7 @@ function renderTimelineReplaySection({
   navigableAgentIds: Set<string>;
   agentNameById: Map<string, string>;
   sharedMemoryArtifactRefs: ReadonlySet<string>;
-  onFocusSharedMemoryArtifact?: (artifactRef: string) => void;
+  onFocusSharedMemoryArtifact?: (artifactRef: string, scope?: SharedMemoryJumpScope) => void;
   onSelectAgent: SelectAgentHandler;
   onSelectCorrelation: SelectCorrelationHandler;
 }) {
@@ -1591,7 +1601,7 @@ function renderWorkflowStatusRecord({
   navigableAgentIds: Set<string>;
   onSelectAgent: SelectAgentHandler;
   onSelectCorrelation: SelectCorrelationHandler;
-  onFocusSharedMemoryArtifact?: (artifactRef: string) => void;
+  onFocusSharedMemoryArtifact?: (artifactRef: string, scope?: SharedMemoryJumpScope) => void;
 }) {
   const preservedCorrelationId = activeCorrelationId ?? correlationId;
   const canNavigateToActor = actorId !== currentAgentId && navigableAgentIds.has(actorId);
@@ -1670,7 +1680,7 @@ function renderWorkflowPeerWatchAlert({
   navigableAgentIds: Set<string>;
   onSelectAgent: SelectAgentHandler;
   onSelectCorrelation: SelectCorrelationHandler;
-  onFocusSharedMemoryArtifact?: (artifactRef: string) => void;
+  onFocusSharedMemoryArtifact?: (artifactRef: string, scope?: SharedMemoryJumpScope) => void;
 }) {
   const preservedCorrelationId = activeCorrelationId ?? alert.correlation_id;
   const canNavigateToTarget = alert.target_agent_id !== currentAgentId && navigableAgentIds.has(alert.target_agent_id);
@@ -1758,7 +1768,7 @@ function renderSelectedAgentSupervisionAlert({
   navigableAgentIds: Set<string>;
   onSelectAgent: SelectAgentHandler;
   onSelectCorrelation: SelectCorrelationHandler;
-  onFocusSharedMemoryArtifact?: (artifactRef: string) => void;
+  onFocusSharedMemoryArtifact?: (artifactRef: string, scope?: SharedMemoryJumpScope) => void;
 }) {
   const preservedCorrelationId = activeCorrelationId ?? alert.correlation_id;
   const canNavigateToActor = alert.actor_id !== currentAgentId && navigableAgentIds.has(alert.actor_id);
@@ -1822,6 +1832,128 @@ function renderSelectedAgentSupervisionAlert({
           evidenceRefs: alert.evidence_refs,
           sharedMemoryArtifactRefs,
           onJump,
+          allowExactFallback
+        })}
+      </span>
+      <span>{`Evidence count · ${alert.evidence_count}`}</span>
+      <span>{`Source · ${alert.source_kind}`}</span>
+    </li>
+  );
+}
+
+function renderCrewOpenSupervisionAlert({
+  alert,
+  agentNameById,
+  sharedMemoryArtifactRefs,
+  activeCorrelationId,
+  navigableAgentIds,
+  onSelectAgent,
+  onSelectCorrelation,
+  onFocusSharedMemoryArtifact
+}: {
+  alert: WorkflowPeerWatchAlert;
+  agentNameById: Map<string, string>;
+  sharedMemoryArtifactRefs: ReadonlySet<string>;
+  activeCorrelationId: string | null;
+  navigableAgentIds: Set<string>;
+  onSelectAgent: SelectAgentHandler;
+  onSelectCorrelation: SelectCorrelationHandler;
+  onFocusSharedMemoryArtifact?: (artifactRef: string, scope?: SharedMemoryJumpScope) => void;
+}) {
+  const preservedCorrelationId =
+    activeCorrelationId !== null && alert.correlation_id === activeCorrelationId
+      ? activeCorrelationId
+      : alert.correlation_id;
+  const preserveNullCorrelation = preservedCorrelationId === null;
+  const targetLabel = agentNameById.get(alert.target_agent_id) ?? alert.target_agent_id;
+  const actorLabel = agentNameById.get(alert.actor_id) ?? alert.actor_id;
+  const observerLabel = agentNameById.get(alert.observer_agent_id) ?? alert.observer_agent_id;
+  const canNavigateToTarget = navigableAgentIds.has(alert.target_agent_id);
+  const canNavigateToActor = navigableAgentIds.has(alert.actor_id);
+  const canNavigateToObserver = navigableAgentIds.has(alert.observer_agent_id);
+  const openSupervisionAlertEvidenceJump = onFocusSharedMemoryArtifact
+    ? (artifactRef: string) =>
+        onFocusSharedMemoryArtifact(artifactRef, {
+          correlationId: preservedCorrelationId,
+          preserveNullCorrelation
+        })
+    : focusSharedMemoryArtifact;
+  const allowExactFallback = Boolean(onFocusSharedMemoryArtifact);
+
+  return (
+    <li key={alert.alert_id} className={`aitown-record severity-${alert.severity}`}>
+      <strong>{alert.summary}</strong>
+      {renderCorrelationButton({
+        correlationId: alert.correlation_id,
+        label: alert.correlation_id ?? 'No correlation id',
+        buttonLabel: 'Open supervision queue correlation',
+        activeCorrelationId,
+        preserveAutoOnDefaultReselect: true,
+        onSelectCorrelation
+      })}
+      <span>{`At · ${renderTimestamp(alert.ts, 'No alert timestamp')}`}</span>
+      <span>{`Severity · ${alert.severity}`}</span>
+      <span>{`Status · ${alert.status}`}</span>
+      <span>{`Workflow status · ${alert.current_state}`}</span>
+      <span>{`Task · ${alert.active_task}`}</span>
+      <span>
+        Target ·{' '}
+        {canNavigateToTarget
+          ? renderAgentPivotButton({
+              agentId: alert.target_agent_id,
+              label: targetLabel,
+              ariaLabel: `Inspect ${targetLabel} from open supervision alerts queue`,
+              correlationId: preservedCorrelationId,
+              preserveNullCorrelation,
+              onSelectAgent
+            })
+          : targetLabel}
+      </span>
+      <span>
+        Actor ·{' '}
+        {canNavigateToActor
+          ? renderAgentPivotButton({
+              agentId: alert.actor_id,
+              label: actorLabel,
+              ariaLabel: `Select open supervision alert actor from alert ${alert.alert_id} ${alert.actor_id}`,
+              correlationId: preservedCorrelationId,
+              preserveNullCorrelation,
+              onSelectAgent
+            })
+          : actorLabel}
+      </span>
+      <span>
+        Observer ·{' '}
+        {canNavigateToObserver
+          ? renderAgentPivotButton({
+              agentId: alert.observer_agent_id,
+              label: observerLabel,
+              ariaLabel: `Select open supervision alert observer from alert ${alert.alert_id} ${alert.observer_agent_id}`,
+              correlationId: preservedCorrelationId,
+              preserveNullCorrelation,
+              onSelectAgent
+            })
+          : observerLabel}
+      </span>
+      <span>
+        Watchers ·{' '}
+        {renderAgentPivotList({
+          agentIds: alert.watcher_agent_ids,
+          currentAgentId: null,
+          navigableAgentIds,
+          emptyLabel: 'No watchers',
+          ariaLabelPrefix: `Select open supervision alert watcher from alert ${alert.alert_id}`,
+          correlationId: preservedCorrelationId,
+          preserveNullCorrelation,
+          onSelectAgent
+        })}
+      </span>
+      <span>
+        Evidence ·{' '}
+        {renderSharedMemoryEvidenceRefs({
+          evidenceRefs: alert.evidence_refs,
+          sharedMemoryArtifactRefs,
+          onJump: openSupervisionAlertEvidenceJump,
           allowExactFallback
         })}
       </span>
@@ -2024,7 +2156,7 @@ function renderIncidentRecord({
   navigableAgentIds: Set<string>;
   sharedMemoryArtifactRefs: ReadonlySet<string>;
   enableSharedMemoryEvidenceJump?: boolean;
-  onFocusSharedMemoryArtifact?: (artifactRef: string) => void;
+  onFocusSharedMemoryArtifact?: (artifactRef: string, scope?: SharedMemoryJumpScope) => void;
   onSelectAgent: SelectAgentHandler;
   onSelectCorrelation: SelectCorrelationHandler;
   includeAgentPivot: boolean;
@@ -2260,6 +2392,9 @@ export function DetailsPanel({
   incidentFeed,
   incidentFeedError,
   incidentFeedState,
+  openSupervisionAlerts = null,
+  openSupervisionAlertsError = null,
+  openSupervisionAlertsState = 'ready',
   operations,
   operationsError,
   operationsState,
@@ -2386,6 +2521,10 @@ export function DetailsPanel({
   const collectorWarning =
     collectorSnapshotError && collectorSnapshot
       ? `Showing last collector snapshot. ${collectorSnapshotError}`
+      : null;
+  const openSupervisionAlertsWarning =
+    openSupervisionAlertsError && openSupervisionAlerts
+      ? `Showing last open supervision alerts queue snapshot. ${openSupervisionAlertsError}`
       : null;
   const supervisionHistoryWarning =
     selectedAgentSupervisionHistoryError && selectedAgentSupervisionHistory
@@ -2782,6 +2921,36 @@ export function DetailsPanel({
             )}
             {operationsState === 'ready' && !operationsError && !operations?.items.length ? (
               <li className="aitown-record">{renderActiveQueueEmptyLabel(selectedOperationsState)}</li>
+            ) : null}
+          </ul>
+        </section>
+
+        <section className="aitown-details__section">
+          <h3>Open Supervision Alerts</h3>
+          {openSupervisionAlertsWarning ? <p role="status">{openSupervisionAlertsWarning}</p> : null}
+          <ul className="aitown-records">
+            {openSupervisionAlertsState === 'loading' && !openSupervisionAlerts ? (
+              <li className="aitown-record">Loading open supervision alerts queue...</li>
+            ) : null}
+            {openSupervisionAlertsError && !openSupervisionAlerts ? (
+              <li className="aitown-record">{`Unable to load open supervision alerts queue. ${openSupervisionAlertsError}`}</li>
+            ) : null}
+            {(openSupervisionAlerts?.items ?? []).map((alert) =>
+              renderCrewOpenSupervisionAlert({
+                alert,
+                agentNameById,
+                sharedMemoryArtifactRefs,
+                activeCorrelationId: selectedCorrelationId,
+                navigableAgentIds,
+                onSelectAgent,
+                onSelectCorrelation,
+                onFocusSharedMemoryArtifact
+              })
+            )}
+            {openSupervisionAlertsState === 'ready' &&
+            !openSupervisionAlertsError &&
+            (openSupervisionAlerts?.items.length ?? 0) === 0 ? (
+              <li className="aitown-record">No open supervision alerts in crew overview queue.</li>
             ) : null}
           </ul>
         </section>

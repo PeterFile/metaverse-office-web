@@ -2155,6 +2155,69 @@ test.describe('operator shell smoke', () => {
     await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
   });
 
+  test('opens agent detail from the crew open supervision alerts queue with the alert correlation via keyboard traversal', async ({ page }) => {
+    await page.route('**/peer-watch/alerts?status=open&limit=4', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          items: [
+            {
+              alert_id: 'alert-open-queue-growth-review',
+              ts: '2026-03-16T08:55:00.000Z',
+              agent_id: 'growth-revenue',
+              target_agent_id: 'growth-revenue',
+              actor_id: 'team-lead',
+              observer_agent_id: 'app-engineering',
+              watcher_agent_ids: ['team-lead'],
+              severity: 'orange',
+              status: 'open',
+              current_state: 'blocked',
+              active_task: 'Escalate missing revenue evidence before release review',
+              summary: 'Growth revenue needs open supervision review follow-up',
+              evidence_refs: ['/tmp/revenue-evidence.md'],
+              evidence_count: 1,
+              correlation_id: 'corr-growth-lead-review',
+              source_kind: 'controller_event',
+              metadata: {
+                escalation: 'release-review'
+              }
+            }
+          ]
+        })
+      });
+    });
+
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Hub' }).click();
+
+    const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
+    const correlationSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Correlation Drilldown' })
+    });
+    const openAlertsButton = detailsPanel.getByRole('button', {
+      name: 'Inspect Growth Revenue Agent from open supervision alerts queue'
+    });
+
+    await expect(detailsPanel.getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
+    await expect(detailsPanel.getByRole('heading', { name: 'Open Supervision Alerts' })).toBeVisible();
+    await expect(detailsPanel.getByText('Growth revenue needs open supervision review follow-up')).toBeVisible();
+    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
+    await focusHubControlWithTab(
+      page,
+      openAlertsButton,
+      'Inspect Growth Revenue Agent from open supervision alerts queue'
+    );
+    await expect(openAlertsButton).toBeFocused();
+    await page.keyboard.press('Enter');
+
+    await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+    await expect(detailsPanel.getByRole('button', { name: 'Clear' })).toBeFocused();
+    await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
+    await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toBeVisible();
+    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toHaveCount(0);
+  });
+
   test('opens a crew-overview active-queue correlation drilldown via keyboard traversal without selecting an agent', async ({
     page
   }) => {

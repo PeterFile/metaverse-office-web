@@ -810,6 +810,126 @@ describe('DetailsPanel accountability signals', () => {
     });
   });
 
+  it('preserves auto mode when re-selecting the already-active default correlation from the open supervision alerts queue', async () => {
+    const user = userEvent.setup();
+    const onSelectCorrelation = vi.fn();
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          onSelectCorrelation,
+          selectedAgent: null,
+          selectedCorrelationId: 'corr-app-review',
+          selectedOperation: null,
+          workflow: null,
+          openSupervisionAlerts: {
+            items: [
+              {
+                alert_id: 'alert-open-queue-default-correlation',
+                ts: '2026-03-16T08:55:00.000Z',
+                agent_id: 'growth-revenue',
+                target_agent_id: 'growth-revenue',
+                actor_id: 'team-lead',
+                observer_agent_id: 'app-engineering',
+                watcher_agent_ids: ['team-lead'],
+                severity: 'orange',
+                status: 'open',
+                current_state: 'blocked',
+                active_task: 'Escalate missing revenue evidence before release review',
+                summary: 'Open supervision queue keeps auto mode on default correlation reselect',
+                evidence_refs: ['/tmp/revenue-evidence.md'],
+                evidence_count: 1,
+                correlation_id: 'corr-app-review',
+                source_kind: 'controller_event',
+                metadata: {
+                  escalation: 'release-review'
+                }
+              }
+            ]
+          }
+        })}
+      />
+    );
+
+    const section = screen.getByRole('heading', { name: 'Open Supervision Alerts' }).closest('section');
+    expect(section).not.toBeNull();
+
+    const openSupervisionCorrelationButton = within(section!).getByRole('button', {
+      name: 'Open supervision queue correlation corr-app-review, currently selected'
+    });
+
+    await user.click(openSupervisionCorrelationButton);
+
+    expect(onSelectCorrelation).toHaveBeenCalledWith('corr-app-review', {
+      preserveAutoOnDefaultReselect: true
+    });
+  });
+
+  it('preserves the null-correlation path when opening target and watcher pivots from the open supervision alerts queue', async () => {
+    const user = userEvent.setup();
+    const onSelectAgent = vi.fn();
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          onSelectAgent,
+          selectedAgent: null,
+          selectedCorrelationId: null,
+          selectedOperation: null,
+          workflow: null,
+          openSupervisionAlerts: {
+            items: [
+              {
+                alert_id: 'alert-open-queue-null-correlation',
+                ts: '2026-03-16T08:55:00.000Z',
+                agent_id: 'growth-revenue',
+                target_agent_id: 'growth-revenue',
+                actor_id: 'team-lead',
+                observer_agent_id: 'app-engineering',
+                watcher_agent_ids: ['team-lead'],
+                severity: 'orange',
+                status: 'open',
+                current_state: 'blocked',
+                active_task: 'Escalate missing revenue evidence before release review',
+                summary: 'Open supervision queue keeps null-correlation pivots on the no-correlation path',
+                evidence_refs: ['/tmp/revenue-evidence.md'],
+                evidence_count: 1,
+                correlation_id: null,
+                source_kind: 'controller_event',
+                metadata: {
+                  escalation: 'release-review'
+                }
+              }
+            ]
+          }
+        })}
+      />
+    );
+
+    const section = screen.getByRole('heading', { name: 'Open Supervision Alerts' }).closest('section');
+    expect(section).not.toBeNull();
+
+    await user.click(
+      within(section!).getByRole('button', {
+        name: 'Inspect Growth Revenue Agent from open supervision alerts queue'
+      })
+    );
+
+    expect(onSelectAgent).toHaveBeenCalledWith('growth-revenue', null, {
+      preserveNullCorrelation: true
+    });
+
+    await user.click(
+      within(section!).getByRole('button', {
+        name: 'Select open supervision alert watcher from alert alert-open-queue-null-correlation team-lead'
+      })
+    );
+
+    expect(onSelectAgent).toHaveBeenLastCalledWith('team-lead', null, {
+      preserveNullCorrelation: true
+    });
+  });
+
   it('renders active-queue counterparties as pivots only for navigable non-self agents, preserves an active crew-overview correlation, and otherwise keeps the agent-only path', async () => {
     const user = userEvent.setup();
     const onSelectAgent = vi.fn();

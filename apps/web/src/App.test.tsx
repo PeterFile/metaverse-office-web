@@ -96,8 +96,11 @@ const appEngineeringScopedReviewSupervisionHistoryUrl =
   '/peer-watch/alerts?target_agent_id=app-engineering&correlation_id=corr-app-review&limit=4';
 const appEngineeringScopedSecondarySupervisionHistoryUrl =
   '/peer-watch/alerts?target_agent_id=app-engineering&correlation_id=corr-app-secondary&limit=4';
+const crewOpenSupervisionAlertsUrl = '/peer-watch/alerts?status=open&limit=4';
 const teamLeadSupervisionHistoryUrl = '/peer-watch/alerts?target_agent_id=team-lead&limit=4';
 const growthRevenueSupervisionHistoryUrl = '/peer-watch/alerts?target_agent_id=growth-revenue&limit=4';
+const growthRevenueScopedReviewSupervisionHistoryUrl =
+  '/peer-watch/alerts?target_agent_id=growth-revenue&correlation_id=corr-app-review&limit=4';
 const growthRevenueScopedSecondarySupervisionHistoryUrl =
   '/peer-watch/alerts?target_agent_id=growth-revenue&correlation_id=corr-app-secondary&limit=4';
 const correlationUrl = '/correlations/corr-app-review?limit=10&window=60m';
@@ -105,7 +108,13 @@ const secondaryCorrelationUrl = '/correlations/corr-app-secondary?limit=10&windo
 const memoryArtifactsUrl = '/memory/artifacts?limit=4&window=60m';
 const crewOverviewMissingArtifactExactUrl =
   '/memory/artifacts?limit=4&window=60m&artifact_ref=%2Ftmp%2Fmissing.md';
-const crewOverviewSecondaryMissingArtifactExactUrl =
+const crewOverviewEvidenceArtifactExactUrl =
+  '/memory/artifacts?limit=4&window=60m&artifact_ref=%2Ftmp%2Fevidence.md';
+const crewOverviewSecondaryCorrelationMissingArtifactExactUrl =
+  '/memory/artifacts?limit=4&window=60m&correlation_id=corr-app-secondary&artifact_ref=%2Ftmp%2Fmissing.md';
+const crewOverviewSecondaryCorrelationEvidenceArtifactExactUrl =
+  '/memory/artifacts?limit=4&window=60m&correlation_id=corr-app-secondary&artifact_ref=%2Ftmp%2Fevidence.md';
+const crewOverviewSecondMissingArtifactExactUrl =
   '/memory/artifacts?limit=4&window=60m&artifact_ref=%2Ftmp%2Fsecond-missing.md';
 const crewOverviewSelectedCorrelationMemoryArtifactsUrl =
   '/memory/artifacts?limit=4&window=60m&correlation_id=corr-app-secondary';
@@ -763,6 +772,58 @@ const emptySupervisionHistoryFixture = {
   items: []
 };
 
+const crewOpenSupervisionAlertsFixture = {
+  items: [
+    {
+      alert_id: 'alert-open-growth-revenue',
+      ts: '2026-03-16T08:55:00.000Z',
+      agent_id: 'growth-revenue',
+      target_agent_id: 'growth-revenue',
+      actor_id: 'team-lead',
+      observer_agent_id: 'app-engineering',
+      watcher_agent_ids: ['team-lead'],
+      severity: 'orange',
+      status: 'open',
+      current_state: 'blocked',
+      active_task: 'Escalate missing revenue evidence before release review',
+      summary: 'Growth revenue still needs supervision before release review',
+      evidence_refs: ['/tmp/revenue-evidence.md'],
+      evidence_count: 1,
+      correlation_id: 'corr-app-secondary',
+      source_kind: 'controller_event',
+      metadata: {
+        escalation: 'release-review'
+      }
+    }
+  ]
+};
+
+const crewOpenSupervisionAlertsNoCorrelationFixture = {
+  items: [
+    {
+      alert_id: 'alert-open-growth-revenue-no-correlation',
+      ts: '2026-03-16T08:55:00.000Z',
+      agent_id: 'growth-revenue',
+      target_agent_id: 'growth-revenue',
+      actor_id: 'team-lead',
+      observer_agent_id: 'app-engineering',
+      watcher_agent_ids: ['team-lead'],
+      severity: 'orange',
+      status: 'open',
+      current_state: 'blocked',
+      active_task: 'Escalate missing revenue evidence before release review',
+      summary: 'Growth revenue open supervision alert without a correlation id',
+      evidence_refs: ['/tmp/revenue-evidence.md'],
+      evidence_count: 1,
+      correlation_id: null,
+      source_kind: 'controller_event',
+      metadata: {
+        escalation: 'release-review'
+      }
+    }
+  ]
+};
+
 const correlationFixture = {
   correlation_id: 'corr-app-review',
   participant_agent_ids: ['app-engineering', 'team-lead'],
@@ -1261,16 +1322,20 @@ function resolveDefaultFetchResponse(url: string) {
   }
 
   if (
+    url === crewOpenSupervisionAlertsUrl ||
     url === appEngineeringSupervisionHistoryUrl ||
     url === appEngineeringScopedReviewSupervisionHistoryUrl ||
     url === appEngineeringScopedSecondarySupervisionHistoryUrl
   ) {
-    return jsonResponse(appEngineeringSupervisionHistoryFixture);
+    return url === crewOpenSupervisionAlertsUrl
+      ? jsonResponse(crewOpenSupervisionAlertsFixture)
+      : jsonResponse(appEngineeringSupervisionHistoryFixture);
   }
 
   if (
     url === teamLeadSupervisionHistoryUrl ||
     url === growthRevenueSupervisionHistoryUrl ||
+    url === growthRevenueScopedReviewSupervisionHistoryUrl ||
     url === growthRevenueScopedSecondarySupervisionHistoryUrl
   ) {
     return jsonResponse(emptySupervisionHistoryFixture);
@@ -4433,6 +4498,434 @@ afterEach(() => {
     });
   });
 
+  it('opens agent detail from the crew open supervision alerts queue using the alert correlation instead of an unrelated crew-overview default', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    expect(correlationSection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+    });
+
+    const alertsSection = within(details).getByRole('heading', { name: 'Open Supervision Alerts' }).closest('section');
+    expect(alertsSection).not.toBeNull();
+    expect(
+      within(alertsSection!).getByText('Growth revenue still needs supervision before release review')
+    ).toBeVisible();
+
+    await user.click(
+      await within(alertsSection!).findByRole('button', {
+        name: 'Inspect Growth Revenue Agent from open supervision alerts queue'
+      })
+    );
+
+    await waitFor(() => {
+      const activeCorrelationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+      expect(activeCorrelationSection).not.toBeNull();
+      expect(within(details).getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+      expect(within(activeCorrelationSection!).getByText('corr-app-secondary')).toBeVisible();
+      expect(within(activeCorrelationSection!).queryByText('corr-app-review')).not.toBeInTheDocument();
+    });
+
+    const peerWatchRequests = vi
+      .mocked(globalThis.fetch)
+      .mock.calls.map(([input]) => (typeof input === 'string' ? input : input.toString()))
+      .filter((url) => url.startsWith('/peer-watch/alerts'));
+
+    expect(peerWatchRequests).toContain(crewOpenSupervisionAlertsUrl);
+    expect(peerWatchRequests).toContain(growthRevenueScopedSecondarySupervisionHistoryUrl);
+    expect(peerWatchRequests).not.toContain(growthRevenueScopedReviewSupervisionHistoryUrl);
+  });
+
+  it('uses the open supervision alert correlation for exact shared-memory evidence jumps without changing the crew-overview selection', async () => {
+    const alertsWithExactFallbackFixture = {
+      items: [
+        {
+          ...crewOpenSupervisionAlertsFixture.items[0],
+          evidence_refs: ['/tmp/missing.md'],
+          evidence_count: 1,
+          summary: 'Open supervision alert exact evidence jump stays on the alert correlation'
+        }
+      ]
+    };
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === crewOpenSupervisionAlertsUrl) {
+          return jsonResponse(alertsWithExactFallbackFixture);
+        }
+
+        if (url === crewOverviewSecondaryCorrelationMissingArtifactExactUrl) {
+          return jsonResponse({
+            generated_at: '2026-03-16T09:00:00.000Z',
+            items: [
+              {
+                artifact_ref: '/tmp/missing.md',
+                artifact_kind: 'evidence_ref',
+                file_name: 'missing.md',
+                first_seen_at: '2026-03-16T08:58:30.000Z',
+                last_seen_at: '2026-03-16T08:58:30.000Z',
+                mention_count: 1,
+                agent_ids: ['growth-revenue', 'team-lead'],
+                correlation_ids: ['corr-app-secondary'],
+                source_kinds: ['controller_event'],
+                latest_summary: 'Open supervision alert exact fallback kept the alert correlation scope',
+                latest_event_type: 'peer_watch_alert',
+                collector_last_modified_at: null
+              }
+            ]
+          });
+        }
+
+        return resolveTestFetchResponse(url);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    const alertsSection = within(details).getByRole('heading', { name: 'Open Supervision Alerts' }).closest('section');
+    const memorySection = within(details).getByRole('heading', { name: 'Shared Memory' }).closest('section');
+    expect(correlationSection).not.toBeNull();
+    expect(alertsSection).not.toBeNull();
+    expect(memorySection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+      expect(within(alertsSection!).getByText('Open supervision alert exact evidence jump stays on the alert correlation')).toBeVisible();
+    });
+
+    expect(within(memorySection!).queryByText('Ref · /tmp/missing.md')).not.toBeInTheDocument();
+
+    const fetchCallCountBeforeJump = vi.mocked(globalThis.fetch).mock.calls.length;
+
+    await user.click(
+      within(alertsSection!).getByRole('button', {
+        name: 'Jump to shared memory artifact /tmp/missing.md'
+      })
+    );
+
+    await waitFor(() => {
+      expect(within(memorySection!).getByText('Ref · /tmp/missing.md')).toBeVisible();
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+      expect(within(correlationSection!).queryByText('corr-app-secondary')).not.toBeInTheDocument();
+    });
+
+    const postJumpRequests = vi
+      .mocked(globalThis.fetch)
+      .mock.calls.slice(fetchCallCountBeforeJump)
+      .map(([input]) => (typeof input === 'string' ? input : input.toString()));
+
+    expect(postJumpRequests).toEqual([crewOverviewSecondaryCorrelationMissingArtifactExactUrl]);
+  });
+
+  it('reruns an exact scoped fetch for an open supervision alert evidence ref even when the same artifact is already loaded in the current crew scope', async () => {
+    const alertsWithLoadedArtifactFixture = {
+      items: [
+        {
+          ...crewOpenSupervisionAlertsFixture.items[0],
+          evidence_refs: ['/tmp/evidence.md'],
+          evidence_count: 1,
+          summary: 'Open supervision alert exact evidence jump replaces the current-scope artifact copy'
+        }
+      ]
+    };
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === crewOpenSupervisionAlertsUrl) {
+          return jsonResponse(alertsWithLoadedArtifactFixture);
+        }
+
+        if (url === crewOverviewSecondaryCorrelationEvidenceArtifactExactUrl) {
+          return jsonResponse({
+            generated_at: '2026-03-16T09:00:00.000Z',
+            items: [
+              {
+                artifact_ref: '/tmp/evidence.md',
+                artifact_kind: 'evidence_ref',
+                file_name: 'evidence.md',
+                first_seen_at: '2026-03-16T08:58:30.000Z',
+                last_seen_at: '2026-03-16T08:58:30.000Z',
+                mention_count: 1,
+                agent_ids: ['growth-revenue', 'team-lead'],
+                correlation_ids: ['corr-app-secondary'],
+                source_kinds: ['controller_event'],
+                latest_summary: 'Open supervision alert exact fetch replaced the current-scope evidence artifact',
+                latest_event_type: 'peer_watch_alert',
+                collector_last_modified_at: null
+              }
+            ]
+          });
+        }
+
+        return resolveTestFetchResponse(url);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    const alertsSection = within(details).getByRole('heading', { name: 'Open Supervision Alerts' }).closest('section');
+    const memorySection = within(details).getByRole('heading', { name: 'Shared Memory' }).closest('section');
+    expect(correlationSection).not.toBeNull();
+    expect(alertsSection).not.toBeNull();
+    expect(memorySection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+      expect(within(alertsSection!).getByText('Open supervision alert exact evidence jump replaces the current-scope artifact copy')).toBeVisible();
+      expect(within(memorySection!).getByText('Ref · /tmp/evidence.md')).toBeVisible();
+    });
+
+    const fetchCallCountBeforeJump = vi.mocked(globalThis.fetch).mock.calls.length;
+
+    await user.click(
+      within(alertsSection!).getByRole('button', {
+        name: 'Jump to shared memory artifact /tmp/evidence.md'
+      })
+    );
+
+    await waitFor(() => {
+      expect(within(memorySection!).getByText('Focused exact artifact · /tmp/evidence.md')).toBeVisible();
+      expect(
+        within(memorySection!).getByText('Open supervision alert exact fetch replaced the current-scope evidence artifact')
+      ).toBeVisible();
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+      expect(within(correlationSection!).queryByText('corr-app-secondary')).not.toBeInTheDocument();
+    });
+
+    const postJumpRequests = vi
+      .mocked(globalThis.fetch)
+      .mock.calls.slice(fetchCallCountBeforeJump)
+      .map(([input]) => (typeof input === 'string' ? input : input.toString()));
+
+    expect(postJumpRequests).toEqual([crewOverviewSecondaryCorrelationEvidenceArtifactExactUrl]);
+  });
+
+  it('keeps correlation-less open supervision alert evidence jumps on the unscoped shared-memory path', async () => {
+    const alertsWithNullCorrelationExactFallbackFixture = {
+      items: [
+        {
+          ...crewOpenSupervisionAlertsNoCorrelationFixture.items[0],
+          evidence_refs: ['/tmp/missing.md'],
+          evidence_count: 1,
+          summary: 'Open supervision alert exact evidence jump stays on the no-correlation path'
+        }
+      ]
+    };
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === crewOpenSupervisionAlertsUrl) {
+          return jsonResponse(alertsWithNullCorrelationExactFallbackFixture);
+        }
+
+        if (url === crewOverviewMissingArtifactExactUrl) {
+          return jsonResponse({
+            generated_at: '2026-03-16T09:00:00.000Z',
+            items: [
+              {
+                artifact_ref: '/tmp/missing.md',
+                artifact_kind: 'evidence_ref',
+                file_name: 'missing.md',
+                first_seen_at: '2026-03-16T08:58:30.000Z',
+                last_seen_at: '2026-03-16T08:58:30.000Z',
+                mention_count: 1,
+                agent_ids: ['growth-revenue', 'team-lead'],
+                correlation_ids: [],
+                source_kinds: ['controller_event'],
+                latest_summary: 'Open supervision alert exact fallback stayed on the unscoped crew-overview path',
+                latest_event_type: 'peer_watch_alert',
+                collector_last_modified_at: null
+              }
+            ]
+          });
+        }
+
+        return resolveTestFetchResponse(url);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    const alertsSection = within(details).getByRole('heading', { name: 'Open Supervision Alerts' }).closest('section');
+    const memorySection = within(details).getByRole('heading', { name: 'Shared Memory' }).closest('section');
+    expect(correlationSection).not.toBeNull();
+    expect(alertsSection).not.toBeNull();
+    expect(memorySection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+      expect(within(alertsSection!).getByText('Open supervision alert exact evidence jump stays on the no-correlation path')).toBeVisible();
+    });
+
+    expect(within(memorySection!).queryByText('Ref · /tmp/missing.md')).not.toBeInTheDocument();
+
+    const fetchCallCountBeforeJump = vi.mocked(globalThis.fetch).mock.calls.length;
+
+    await user.click(
+      within(alertsSection!).getByRole('button', {
+        name: 'Jump to shared memory artifact /tmp/missing.md'
+      })
+    );
+
+    await waitFor(() => {
+      expect(within(memorySection!).getByText('Ref · /tmp/missing.md')).toBeVisible();
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+      expect(within(correlationSection!).queryByText('No correlation selected.')).not.toBeInTheDocument();
+    });
+
+    const postJumpRequests = vi
+      .mocked(globalThis.fetch)
+      .mock.calls.slice(fetchCallCountBeforeJump)
+      .map(([input]) => (typeof input === 'string' ? input : input.toString()));
+
+    expect(postJumpRequests).toEqual([crewOverviewMissingArtifactExactUrl]);
+  });
+
+  it('keeps correlation-less open supervision alerts on the no-correlation selected-agent path', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === incidentsUrl) {
+          return jsonResponse({
+            items: []
+          });
+        }
+
+        if (url === crewOpenSupervisionAlertsUrl) {
+          return jsonResponse(crewOpenSupervisionAlertsNoCorrelationFixture);
+        }
+
+        return resolveTestFetchResponse(url);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    expect(correlationSection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(correlationSection!).getByText('No correlation selected.')).toBeVisible();
+    });
+
+    const alertsSection = within(details).getByRole('heading', { name: 'Open Supervision Alerts' }).closest('section');
+    expect(alertsSection).not.toBeNull();
+    expect(
+      within(alertsSection!).getByText('Growth revenue open supervision alert without a correlation id')
+    ).toBeVisible();
+
+    await user.click(
+      await within(alertsSection!).findByRole('button', {
+        name: 'Inspect Growth Revenue Agent from open supervision alerts queue'
+      })
+    );
+
+    await waitFor(() => {
+      const activeCorrelationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+      expect(activeCorrelationSection).not.toBeNull();
+      expect(within(details).getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+      expect(within(activeCorrelationSection!).getByText('No correlation selected.')).toBeVisible();
+    });
+
+    const peerWatchRequests = vi
+      .mocked(globalThis.fetch)
+      .mock.calls.map(([input]) => (typeof input === 'string' ? input : input.toString()))
+      .filter((url) => url.startsWith('/peer-watch/alerts'));
+
+    expect(peerWatchRequests).toContain(crewOpenSupervisionAlertsUrl);
+    expect(peerWatchRequests).toContain(growthRevenueSupervisionHistoryUrl);
+    expect(peerWatchRequests).not.toContain(growthRevenueScopedReviewSupervisionHistoryUrl);
+    expect(peerWatchRequests).not.toContain(growthRevenueScopedSecondarySupervisionHistoryUrl);
+  });
+
+  it('does not block null-correlation open supervision alert pivots on a loading workflow before requesting supervision history', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === incidentsUrl) {
+          return Promise.resolve(jsonResponse({ items: [] }));
+        }
+
+        if (url === crewOpenSupervisionAlertsUrl) {
+          return Promise.resolve(jsonResponse(crewOpenSupervisionAlertsNoCorrelationFixture));
+        }
+
+        if (url === growthRevenueWorkflowUrl) {
+          return new Promise<Response>(() => {});
+        }
+
+        return Promise.resolve(resolveTestFetchResponse(url));
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    const supervisionSection = within(details).getByRole('heading', { name: 'Open Supervision Alerts' }).closest('section');
+    expect(correlationSection).not.toBeNull();
+    expect(supervisionSection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(correlationSection!).getByText('No correlation selected.')).toBeVisible();
+    });
+
+    await user.click(
+      within(supervisionSection!).getByRole('button', {
+        name: 'Inspect Growth Revenue Agent from open supervision alerts queue'
+      })
+    );
+
+    const selectedSupervisionSection = within(details)
+      .getByRole('heading', { name: 'Supervision History' })
+      .closest('section');
+    expect(selectedSupervisionSection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+      expect(within(selectedSupervisionSection!).getByText('Request scope · Target agent · growth-revenue')).toBeVisible();
+      expect(within(selectedSupervisionSection!).getByText('No recent supervision history.')).toBeVisible();
+    });
+
+    const peerWatchRequests = vi
+      .mocked(globalThis.fetch)
+      .mock.calls.map(([input]) => (typeof input === 'string' ? input : input.toString()))
+      .filter((url) => url.startsWith('/peer-watch/alerts'));
+
+    expect(peerWatchRequests).toContain(growthRevenueSupervisionHistoryUrl);
+    expect(peerWatchRequests).not.toContain(growthRevenueScopedReviewSupervisionHistoryUrl);
+    expect(peerWatchRequests).not.toContain(growthRevenueScopedSecondarySupervisionHistoryUrl);
+  });
+
   it('keeps the current operation path intact when selecting a filtered active queue item', async () => {
     vi.stubGlobal(
       'fetch',
@@ -5989,7 +6482,7 @@ afterEach(() => {
           });
         }
 
-        if (url === crewOverviewSecondaryMissingArtifactExactUrl) {
+        if (url === crewOverviewSecondMissingArtifactExactUrl) {
           return jsonResponse({
             generated_at: '2026-03-16T09:00:01.000Z',
             items: [
@@ -8198,7 +8691,10 @@ afterEach(() => {
       .mock.calls.map(([input]) => (typeof input === 'string' ? input : input.toString()))
       .filter((url) => url.startsWith('/peer-watch/alerts'));
 
-    expect(peerWatchRequests).toEqual([appEngineeringScopedReviewSupervisionHistoryUrl]);
+    expect(peerWatchRequests).toEqual([
+      crewOpenSupervisionAlertsUrl,
+      appEngineeringScopedReviewSupervisionHistoryUrl
+    ]);
   });
 
   it('scopes selected-agent supervision history to the active selected correlation', async () => {

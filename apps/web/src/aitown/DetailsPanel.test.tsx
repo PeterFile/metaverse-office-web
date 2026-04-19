@@ -218,6 +218,21 @@ function buildOperations(): OfficeOperations {
 function buildWorkflow(): AgentWorkflow {
   return {
     agent_id: 'app-engineering',
+    summary: {
+      incident_count: 0,
+      interaction_count: 0,
+      event_count: 0,
+      incident_kind_buckets: {},
+      interaction_type_buckets: {},
+      event_type_buckets: {},
+      severity_buckets: {
+        normal: 0,
+        yellow: 0,
+        orange: 0,
+        red: 0
+      },
+      latest_activity_at: null
+    },
     correlation_ids: ['corr-app-review'],
     counterparty_agent_ids: ['team-lead'],
     incidents: [],

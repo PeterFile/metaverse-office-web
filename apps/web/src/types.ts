@@ -328,9 +328,21 @@ export interface TimelineReplayResponse {
   items: WorkflowTimelineEvent[];
 }
 
+export interface WorkflowSummary {
+  incident_count: number;
+  interaction_count: number;
+  event_count: number;
+  incident_kind_buckets: Record<string, number>;
+  interaction_type_buckets: Record<string, number>;
+  event_type_buckets: Record<string, number>;
+  severity_buckets: Record<Severity, number>;
+  latest_activity_at: string | null;
+}
+
 export interface AgentWorkflow {
   agent_id: string;
   detail: WorkflowDetail;
+  summary: WorkflowSummary;
   correlation_ids: string[];
   counterparty_agent_ids: string[];
   incidents: WorkflowIncident[];

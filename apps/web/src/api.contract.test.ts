@@ -1244,6 +1244,33 @@ function expectWorkflowContract(workflow: AgentWorkflow) {
     })
   ]);
   expect(workflow.detail.recent_reboots).toEqual([]);
+  expect(workflow.summary).toEqual({
+    incident_count: 3,
+    interaction_count: 4,
+    event_count: 5,
+    incident_kind_buckets: {
+      peer_watch_alert: 2,
+      handoff: 1
+    },
+    interaction_type_buckets: {
+      peer_watch: 2,
+      handoff: 1,
+      review: 1
+    },
+    event_type_buckets: {
+      review_started: 1,
+      review_completed: 1,
+      peer_watch_alert_raised: 2,
+      agent_handoff_completed: 1
+    },
+    severity_buckets: {
+      normal: 0,
+      yellow: 6,
+      orange: 6,
+      red: 0
+    },
+    latest_activity_at: '2026-03-09T18:59:00.000Z'
+  });
   expect(workflow.correlation_ids).toEqual([
     'collector-snapshot:2026-03-09T18:59:00.000Z',
     'corr-contract'

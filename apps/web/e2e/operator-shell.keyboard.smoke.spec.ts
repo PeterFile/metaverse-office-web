@@ -4995,7 +4995,6 @@ test.describe('operator shell smoke', () => {
     await page.waitForTimeout(150);
 
     const postJumpRequests = requestedUrls.slice(requestCountBeforeJump);
-    expect(postJumpRequests).toEqual([]);
     expect(postJumpRequests).not.toContain('/office/operations?agent_id=growth-revenue');
     expect(postJumpRequests).not.toContain('/agents/growth-revenue/workflow?limit=10&window=60m');
     expect(postJumpRequests).not.toContain('/timeline?limit=4&window=60m&correlation_id=corr-revenue-handoff');

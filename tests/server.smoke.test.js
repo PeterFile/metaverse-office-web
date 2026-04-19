@@ -2968,6 +2968,119 @@ test('collector snapshot endpoints stay read-only on GET and require team-lead o
   assert.equal(JSON.parse(lines[2]).kind, 'heartbeat');
 });
 
+test('collector snapshot POST exposes shared artifact rollups for refs shared by multiple agents', async (t) => {
+  const sharedArtifactRef = '/tmp/shared-controller-snapshot/todo.md';
+  const controllerSnapshotCollector = {
+    async collectSnapshot({ actorId, collectedAt }) {
+      assert.equal(actorId, 'team-lead');
+      assert.equal(collectedAt, '2026-03-09T18:05:00.000Z');
+
+      return {
+        collected_at: collectedAt,
+        actor_id: actorId,
+        summary: {
+          agent_count: 2,
+          heartbeat_count: 2,
+          tmux_observed_count: 0,
+          workspace_observed_count: 2,
+          reboot_recommended_count: 0
+        },
+        items: [
+          {
+            agent_id: 'app-engineering',
+            workspace_root: '/tmp/shared-controller-snapshot',
+            session_ref: '5-web3-app-engineering',
+            evidence_refs: [sharedArtifactRef],
+            workspace_observations: [
+              {
+                path: sharedArtifactRef,
+                file_name: 'todo.md',
+                kind: 'workspace_file',
+                last_modified_at: '2026-03-09T18:04:30.000Z'
+              }
+            ],
+            tmux_observations: [],
+            supervision: {
+              watch_target: 'growth-revenue',
+              watched_by: ['protocol-engineering', 'team-lead'],
+              needs_attention: false
+            },
+            heartbeat: {
+              agent_id: 'app-engineering',
+              actor_id: actorId,
+              received_at: collectedAt,
+              current_state: 'coding',
+              active_task: 'Implement shared snapshot artifact rollup',
+              last_meaningful_output_at: '2026-03-09T18:04:30.000Z',
+              last_file_write_at: '2026-03-09T18:04:30.000Z',
+              current_blocker: '',
+              confidence_level: 'high',
+              reboot_recommended: false
+            }
+          },
+          {
+            agent_id: 'growth-revenue',
+            workspace_root: '/tmp/shared-controller-snapshot',
+            session_ref: '6-web3-growth-revenue',
+            evidence_refs: [sharedArtifactRef],
+            workspace_observations: [
+              {
+                path: sharedArtifactRef,
+                file_name: 'todo.md',
+                kind: 'workspace_file',
+                last_modified_at: '2026-03-09T18:04:45.000Z'
+              }
+            ],
+            tmux_observations: [],
+            supervision: {
+              watch_target: 'app-engineering',
+              watched_by: ['team-lead'],
+              needs_attention: false
+            },
+            heartbeat: {
+              agent_id: 'growth-revenue',
+              actor_id: actorId,
+              received_at: collectedAt,
+              current_state: 'researching',
+              active_task: 'Review shared snapshot artifact rollup',
+              last_meaningful_output_at: '2026-03-09T18:04:45.000Z',
+              last_file_write_at: '2026-03-09T18:04:45.000Z',
+              current_blocker: '',
+              confidence_level: 'high',
+              reboot_recommended: false
+            }
+          }
+        ]
+      };
+    }
+  };
+
+  const { baseUrl } = await createHarness(t, { controllerSnapshotCollector });
+
+  const collected = await requestJson(`${baseUrl}/collectors/controller-snapshot`, {
+    method: 'POST',
+    headers: {
+      'x-actor-id': 'team-lead'
+    }
+  });
+  assert.equal(collected.response.status, 201);
+  assert.deepEqual(collected.body.item.shared_artifacts, [
+    {
+      artifact_ref: sharedArtifactRef,
+      artifact_kind: 'workspace_file',
+      file_name: 'todo.md',
+      agent_ids: ['app-engineering', 'growth-revenue'],
+      agent_count: 2,
+      mention_count: 2,
+      last_seen_at: '2026-03-09T18:04:45.000Z',
+      source_kinds: ['workspace_file']
+    }
+  ]);
+
+  const latest = await requestJson(`${baseUrl}/collectors/controller-snapshot`);
+  assert.equal(latest.response.status, 200);
+  assert.deepEqual(latest.body.item.shared_artifacts, collected.body.item.shared_artifacts);
+});
 
 test('collector snapshot POST emits supervision events onto existing query surfaces', async (t) => {
   const controllerSnapshotCollector = {

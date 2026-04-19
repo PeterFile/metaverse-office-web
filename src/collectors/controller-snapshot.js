@@ -74,6 +74,7 @@ async function collectControllerSnapshot(options = {}) {
     collected_at: collectedAt,
     actor_id: actorId,
     summary: createCollectorSummary(items),
+    shared_artifacts: createSharedArtifactRollup(items),
     items
   };
 }
@@ -133,16 +134,27 @@ function groupTmuxPanesBySession(panes) {
 }
 
 function normalizeTmuxObservation(pane) {
+  const sessionName = pane.session_name || pane.session_ref || null;
+  const windowIndex = `${pane.window_index}`;
+  const paneIndex = `${pane.pane_index}`;
+  const paneId = pane.pane_id || null;
+
   return {
-    session_name: pane.session_name || pane.session_ref,
-    window_index: `${pane.window_index}`,
-    pane_index: `${pane.pane_index}`,
-    pane_id: pane.pane_id || null,
+    session_name: sessionName,
+    window_index: windowIndex,
+    pane_index: paneIndex,
+    pane_id: paneId,
     pane_title: sanitizeText(pane.pane_title),
     pane_current_command: sanitizeText(pane.pane_current_command),
     pane_active: Boolean(pane.pane_active),
     pane_dead: Boolean(pane.pane_dead),
-    pane_activity_at: normalizeIsoTimestamp(pane.pane_activity_at)
+    pane_activity_at: normalizeIsoTimestamp(pane.pane_activity_at),
+    artifact_ref: deriveTmuxArtifactRef({
+      session_name: sessionName,
+      window_index: windowIndex,
+      pane_index: paneIndex,
+      pane_id: paneId
+    })
   };
 }
 
@@ -215,6 +227,175 @@ function createCollectorSummary(items) {
   };
 }
 
+function createSharedArtifactRollup(items = []) {
+  const sharedArtifacts = new Map();
+
+  for (const item of items) {
+    if (!item || typeof item.agent_id !== 'string' || item.agent_id.length === 0) {
+      continue;
+    }
+
+    for (const mention of collectItemArtifactMentions(item)) {
+      const artifactRef = mention.artifact_ref;
+      if (!artifactRef) {
+        continue;
+      }
+
+      const existing = sharedArtifacts.get(artifactRef) || {
+        artifact_ref: artifactRef,
+        artifact_kind: mention.artifact_kind,
+        file_name: mention.file_name || null,
+        agent_ids: new Set(),
+        mention_count: 0,
+        last_seen_at: mention.last_seen_at || null,
+        source_kinds: new Set()
+      };
+
+      existing.artifact_kind = rankArtifactKind(existing.artifact_kind, mention.artifact_kind);
+      if (!existing.artifact_kind) {
+        existing.artifact_kind = mention.artifact_kind || 'workspace_file';
+      }
+      if (!existing.file_name && mention.file_name) {
+        existing.file_name = mention.file_name;
+      }
+      existing.agent_ids.add(item.agent_id);
+      existing.mention_count += 1;
+      if (
+        mention.last_seen_at &&
+        (!existing.last_seen_at ||
+          Date.parse(mention.last_seen_at) > Date.parse(existing.last_seen_at))
+      ) {
+        existing.last_seen_at = mention.last_seen_at;
+      }
+      if (mention.source_kind) {
+        existing.source_kinds.add(mention.source_kind);
+      }
+
+      sharedArtifacts.set(artifactRef, existing);
+    }
+  }
+
+  return Array.from(sharedArtifacts.values())
+    .filter((artifact) => artifact.agent_ids.size >= 2)
+    .map((artifact) => ({
+      artifact_ref: artifact.artifact_ref,
+      artifact_kind: artifact.artifact_kind,
+      ...(artifact.file_name ? { file_name: artifact.file_name } : {}),
+      agent_ids: Array.from(artifact.agent_ids).sort(),
+      agent_count: artifact.agent_ids.size,
+      mention_count: artifact.mention_count,
+      last_seen_at: artifact.last_seen_at,
+      source_kinds: Array.from(artifact.source_kinds).sort()
+    }))
+    .sort(compareSharedArtifacts);
+}
+
+function collectItemArtifactMentions(item = {}) {
+  const mentions = [];
+  const seenArtifactRefs = new Set();
+
+  for (const observation of item.workspace_observations || []) {
+    if (!observation || typeof observation.path !== 'string' || observation.path.length === 0) {
+      continue;
+    }
+
+    seenArtifactRefs.add(observation.path);
+    if (observation.kind !== 'workspace_file') {
+      continue;
+    }
+
+    mentions.push({
+      artifact_ref: observation.path,
+      artifact_kind: 'workspace_file',
+      file_name: observation.file_name || path.basename(observation.path),
+      last_seen_at: normalizeIsoTimestamp(observation.last_modified_at),
+      source_kind: 'workspace_file'
+    });
+  }
+
+  for (const observation of item.tmux_observations || []) {
+    const artifactRef = observation?.artifact_ref || deriveTmuxArtifactRef(observation);
+    if (!artifactRef) {
+      continue;
+    }
+
+    seenArtifactRefs.add(artifactRef);
+    mentions.push({
+      artifact_ref: artifactRef,
+      artifact_kind: 'tmux_observation',
+      file_name: null,
+      last_seen_at: normalizeIsoTimestamp(observation.pane_activity_at),
+      source_kind: 'tmux_observation'
+    });
+  }
+
+  for (const evidenceRef of normalizeEvidenceRefs(item.evidence_refs)) {
+    if (seenArtifactRefs.has(evidenceRef)) {
+      continue;
+    }
+
+    const artifactKind = deriveArtifactKindFromRef(evidenceRef);
+    mentions.push({
+      artifact_ref: evidenceRef,
+      artifact_kind: artifactKind,
+      file_name: artifactKind === 'tmux_observation' ? null : path.basename(evidenceRef),
+      last_seen_at: deriveSharedArtifactLastSeenAt({ item, artifactKind }),
+      source_kind: artifactKind === 'tmux_observation' ? 'tmux_observation' : 'workspace_file'
+    });
+  }
+
+  return mentions;
+}
+
+function normalizeEvidenceRefs(evidenceRefs) {
+  if (!Array.isArray(evidenceRefs)) {
+    return [];
+  }
+
+  return Array.from(new Set(evidenceRefs.filter((ref) => typeof ref === 'string' && ref.length > 0)));
+}
+
+function deriveArtifactKindFromRef(artifactRef) {
+  if (typeof artifactRef === 'string' && artifactRef.startsWith('tmux://')) {
+    return 'tmux_observation';
+  }
+
+  return 'workspace_file';
+}
+
+function deriveSharedArtifactLastSeenAt({ item, artifactKind }) {
+  const heartbeat = item?.heartbeat || {};
+
+  if (artifactKind === 'tmux_observation') {
+    return normalizeIsoTimestamp(heartbeat.last_meaningful_output_at);
+  }
+
+  return maxIsoTimestamp([heartbeat.last_file_write_at, heartbeat.last_meaningful_output_at]);
+}
+
+function compareSharedArtifacts(left, right) {
+  const recencyDelta = parseComparableTimestamp(right.last_seen_at) - parseComparableTimestamp(left.last_seen_at);
+  if (recencyDelta !== 0) {
+    return recencyDelta;
+  }
+
+  if (right.mention_count !== left.mention_count) {
+    return right.mention_count - left.mention_count;
+  }
+
+  return left.artifact_ref.localeCompare(right.artifact_ref);
+}
+
+function rankArtifactKind(left, right) {
+  const rank = {
+    workspace_file: 1,
+    tmux_observation: 2
+  };
+  const leftRank = left && rank[left] ? rank[left] : 0;
+  const rightRank = right && rank[right] ? rank[right] : 0;
+  return rightRank > leftRank ? right : left;
+}
+
 function createEvidenceRefs({ workspaceObservations, tmuxObservations }) {
   const refs = [];
 
@@ -223,7 +404,10 @@ function createEvidenceRefs({ workspaceObservations, tmuxObservations }) {
   }
 
   for (const pane of tmuxObservations) {
-    refs.push(`tmux://${pane.session_name}/${pane.window_index}.${pane.pane_index}`);
+    const artifactRef = pane.artifact_ref || deriveTmuxArtifactRef(pane);
+    if (artifactRef) {
+      refs.push(artifactRef);
+    }
   }
 
   return refs;
@@ -309,6 +493,30 @@ function maxIsoTimestamp(values) {
   }
 
   return latestValue;
+}
+
+function deriveTmuxArtifactRef(tmuxObservation) {
+  if (
+    tmuxObservation?.session_name &&
+    tmuxObservation.window_index !== undefined &&
+    tmuxObservation.window_index !== null &&
+    tmuxObservation.window_index !== '' &&
+    tmuxObservation.window_index !== 'null' &&
+    tmuxObservation.window_index !== 'undefined' &&
+    tmuxObservation.pane_index !== undefined &&
+    tmuxObservation.pane_index !== null &&
+    tmuxObservation.pane_index !== '' &&
+    tmuxObservation.pane_index !== 'null' &&
+    tmuxObservation.pane_index !== 'undefined'
+  ) {
+    return `tmux://${tmuxObservation.session_name}/${tmuxObservation.window_index}.${tmuxObservation.pane_index}`;
+  }
+
+  if (tmuxObservation?.pane_id) {
+    return `tmux://${tmuxObservation.pane_id}`;
+  }
+
+  return null;
 }
 
 function normalizeIsoTimestamp(value) {
@@ -435,6 +643,7 @@ function handleTmuxError(error) {
 module.exports = {
   OBSERVED_WORKSPACE_PATHS,
   collectControllerSnapshot,
+  createSharedArtifactRollup,
   createControllerSnapshotCollector,
   createEvidenceRefs,
   defaultListTmuxPanes,

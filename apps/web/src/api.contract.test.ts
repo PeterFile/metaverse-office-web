@@ -1043,6 +1043,7 @@ async function seedContractSlice(store: BackendStore) {
       workspace_observed_count: 1,
       reboot_recommended_count: 0
     },
+    shared_artifacts: [],
     items: [
       {
         agent_id: 'app-engineering',
@@ -1321,7 +1322,8 @@ function expectCollectorSnapshotContract(snapshot: CollectorSnapshot | null) {
       tmux_observed_count: 1,
       workspace_observed_count: 1,
       reboot_recommended_count: 0
-    }
+    },
+    shared_artifacts: []
   });
   expect(snapshot?.items).toHaveLength(1);
   expect(snapshot?.items[0]).toMatchObject({

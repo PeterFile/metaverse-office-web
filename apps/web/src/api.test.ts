@@ -83,7 +83,7 @@ describe('fetchOfficeOverview', () => {
 });
 
 describe('fetchOfficeOperations', () => {
-  it('passes limit, state, and agent_id filters through to the backend query string', async () => {
+  it('passes limit, state, severity, and agent_id filters through to the backend query string', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue(
@@ -109,11 +109,12 @@ describe('fetchOfficeOperations', () => {
     await fetchOfficeOperations({
       limit: 1,
       state: 'blocked',
+      severity: 'red',
       agentId: 'app-engineering'
     });
 
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      '/office/operations?limit=1&state=blocked&agent_id=app-engineering',
+      '/office/operations?limit=1&state=blocked&severity=red&agent_id=app-engineering',
       expect.objectContaining({ signal: undefined })
     );
   });

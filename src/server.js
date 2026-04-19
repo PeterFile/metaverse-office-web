@@ -71,6 +71,7 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
       now: now(),
       agent_id: url.searchParams.get('agent_id'),
       state: url.searchParams.get('state'),
+      severity: url.searchParams.get('severity'),
       limit: url.searchParams.get('limit')
     }));
     return;

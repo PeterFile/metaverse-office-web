@@ -25,7 +25,8 @@ import type {
   MemoryArtifact,
   MemoryArtifactIndex,
   OfficeAgent,
-  OfficeOperation
+  OfficeOperation,
+  Severity
 } from './types';
 import { projectWorldState } from './world/projector';
 import { PHASE_LABELS, selectAttentionQueue, selectAgentZoneLabel } from './world/selectors';
@@ -45,6 +46,12 @@ const MEMORY_ARTIFACT_LIMIT = 4;
 const SELECTED_AGENT_SUPERVISION_HISTORY_LIMIT = 4;
 const RESET_VIEW_SHORTCUT_KEY = 'r';
 const RESET_VIEW_SHORTCUT_ARIA = 'R';
+const EMPTY_SEVERITY_BUCKETS: Record<Severity, number> = {
+  normal: 0,
+  yellow: 0,
+  orange: 0,
+  red: 0
+};
 
 function isJsdomEnvironment() {
   return typeof navigator !== 'undefined' && /jsdom/i.test(navigator.userAgent);
@@ -354,6 +361,7 @@ function AppInner() {
   const [selectedCorrelationWasExplicit, setSelectedCorrelationWasExplicit] = useState(false);
   const [selectedCorrelationCarryForward, setSelectedCorrelationCarryForward] = useState(false);
   const [selectedOperationsState, setSelectedOperationsState] = useState<string | null>(null);
+  const [selectedOperationsSeverity, setSelectedOperationsSeverity] = useState<Severity | null>(null);
   const [selectedOperationSelection, setSelectedOperationSelection] = useState<OperationSelection | null>(null);
   const [selectedOperationSnapshot, setSelectedOperationSnapshot] = useState<OfficeOperation | null>(null);
   const [invalidSelectedOperationCorrelationId, setInvalidSelectedOperationCorrelationId] = useState<string | null>(null);
@@ -426,12 +434,13 @@ function AppInner() {
       fetchOfficeOperations({
         limit: selectedOperationSelection ? undefined : 4,
         state: selectedOperationSelection ? undefined : selectedOperationsState ?? undefined,
+        severity: selectedOperationSelection ? undefined : selectedOperationsSeverity ?? undefined,
         agentId: selectedOperationSelection?.agentId,
         signal
       }),
     resourceKey: selectedOperationSelection
       ? `office-operations:${selectedOperationSelection.agentId}`
-      : `office-operations:${selectedOperationsState ?? '__all__'}`
+      : `office-operations:state=${selectedOperationsState ?? '__all__'}:severity=${selectedOperationsSeverity ?? '__all__'}`
   });
   const crewOverviewStateBucketsResource = usePolledResource({
     enabled: hubOpen && selectedAgentId === null && selectedOperationSelection === null,
@@ -759,12 +768,22 @@ function AppInner() {
     () => crewOverviewStateBucketsResource.data?.summary.state_buckets ?? {},
     [crewOverviewStateBucketsResource.data]
   );
+  const crewOverviewOperationSeverityBuckets = useMemo(
+    () => crewOverviewStateBucketsResource.data?.summary.severity_buckets ?? EMPTY_SEVERITY_BUCKETS,
+    [crewOverviewStateBucketsResource.data]
+  );
+  const selectedOperationsFiltersActive =
+    selectedOperationsState !== null || selectedOperationsSeverity !== null;
   const crewOverviewOperationSeedData = useMemo(
     () =>
-      selectedOperationsState !== null
+      selectedOperationsFiltersActive
         ? crewOverviewStateBucketsResource.data ?? operationsResource.data
         : operationsResource.data,
-    [crewOverviewStateBucketsResource.data, operationsResource.data, selectedOperationsState]
+    [
+      crewOverviewStateBucketsResource.data,
+      operationsResource.data,
+      selectedOperationsFiltersActive
+    ]
   );
 
   useEffect(() => {
@@ -1400,6 +1419,7 @@ function AppInner() {
               operationsError={operationsResource.error}
               operationsState={operationsResource.state}
               operationsStateBuckets={crewOverviewOperationStateBuckets}
+              operationsSeverityBuckets={crewOverviewOperationSeverityBuckets}
               operationsStateBucketsError={crewOverviewStateBucketsResource.error}
               operationsStateBucketsState={crewOverviewStateBucketsResource.state}
               overviewZones={overviewResource.data?.zones ?? null}
@@ -1408,6 +1428,7 @@ function AppInner() {
               selectedAgent={selectedAgent}
               selectedCorrelationId={selectedCorrelationId}
               selectedOperationsState={selectedOperationsState}
+              selectedOperationsSeverity={selectedOperationsSeverity}
               selectedOperation={selectedOperation}
               selectedOperationRequestActive={selectedOperationSelection !== null}
               timelineReplay={timelineReplayResource.data}
@@ -1458,6 +1479,7 @@ function AppInner() {
               onSelectCorrelation={handleSelectCorrelation}
               onResetCorrelationOverride={handleResetCorrelationOverride}
               onSelectOperationsState={setSelectedOperationsState}
+              onSelectOperationsSeverity={setSelectedOperationsSeverity}
               onSelectOperation={handleSelectOperation}
               onFocusSharedMemoryArtifact={handleFocusSharedMemoryArtifact}
             />

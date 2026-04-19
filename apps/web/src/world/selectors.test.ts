@@ -6,6 +6,7 @@ import {
   selectAgentZoneLabel,
   selectAttentionQueue,
   selectGlobalSeverity,
+  selectHotZones,
   selectWatchEdgeRisk,
 } from './selectors';
 import type { WatchEdgeSnapshot, WorldAgent, WorldState, ZoneSnapshot } from './types';
@@ -31,10 +32,50 @@ function makeWorldAgent(overrides: Partial<WorldAgent> = {}): WorldAgent {
   };
 }
 
+function makeZoneSnapshot(overrides: Partial<ZoneSnapshot> = {}): ZoneSnapshot {
+  return {
+    zone_id: 'desk-app-engineering',
+    label: 'App Engineering Desk',
+    kind: 'desk',
+    occupant_ids: [],
+    grid_x: 0,
+    grid_y: 0,
+    grid_w: 1,
+    grid_h: 1,
+    ...overrides,
+  };
+}
+
+function makeWorldState(overrides: Partial<WorldState> = {}): WorldState {
+  return {
+    generated_at: '2026-03-14T10:00:00Z',
+    projection_ts: '2026-03-14T10:00:00Z',
+    agents: new Map(),
+    zones: [],
+    watch_edges: [],
+    incidents: [],
+    summary: {
+      total_agents: 0,
+      blocked_count: 0,
+      reboot_count: 0,
+      severity_buckets: { normal: 0, yellow: 0, orange: 0, red: 0 },
+      highest_severity: 'normal',
+    },
+    data_quality: {
+      overview_available: true,
+      workflow_agent_ids: [],
+      incident_feed_available: true,
+      last_overview_at: '2026-03-14T10:00:00Z',
+      degraded_reasons: [],
+    },
+    ...overrides,
+  };
+}
+
 const ZONES: ZoneSnapshot[] = [
-  { zone_id: 'desk-app-engineering', label: 'App Engineering Desk', kind: 'desk', occupant_ids: [], grid_x: 0, grid_y: 0, grid_w: 1, grid_h: 1 },
-  { zone_id: 'meeting-zone', label: 'Meeting Zone', kind: 'shared', occupant_ids: [], grid_x: 1, grid_y: 0, grid_w: 1, grid_h: 1 },
-  { zone_id: 'review-zone', label: 'Review Zone', kind: 'shared', occupant_ids: [], grid_x: 2, grid_y: 0, grid_w: 1, grid_h: 1 },
+  makeZoneSnapshot(),
+  makeZoneSnapshot({ zone_id: 'meeting-zone', label: 'Meeting Zone', kind: 'shared', grid_x: 1 }),
+  makeZoneSnapshot({ zone_id: 'review-zone', label: 'Review Zone', kind: 'shared', grid_x: 2 }),
 ];
 
 describe('selectAgentLabel', () => {
@@ -137,5 +178,158 @@ describe('selectGlobalSeverity', () => {
       summary: { highest_severity: 'orange' },
     } as WorldState;
     expect(selectGlobalSeverity(world)).toBe('orange');
+  });
+});
+
+describe('selectHotZones', () => {
+  it('returns the hottest occupied zones in a deterministic order', () => {
+    const agents = new Map<string, WorldAgent>([
+      [
+        'a',
+        makeWorldAgent({
+          agent_id: 'a',
+          display_name: 'A',
+          zone: 'war-room',
+          severity: 'red',
+          phase: 'blocked',
+          reboot_recommended: true,
+          has_open_incidents: true,
+        }),
+      ],
+      [
+        'b',
+        makeWorldAgent({
+          agent_id: 'b',
+          display_name: 'B',
+          zone: 'war-room',
+          severity: 'yellow',
+          has_open_incidents: true,
+        }),
+      ],
+      [
+        'c',
+        makeWorldAgent({
+          agent_id: 'c',
+          display_name: 'C',
+          zone: 'meeting-zone',
+          severity: 'orange',
+          has_open_incidents: true,
+        }),
+      ],
+      [
+        'd',
+        makeWorldAgent({
+          agent_id: 'd',
+          display_name: 'D',
+          zone: 'review-zone',
+          severity: 'yellow',
+          reboot_recommended: true,
+        }),
+      ],
+      [
+        'e',
+        makeWorldAgent({ agent_id: 'e', display_name: 'E', zone: 'focus-booth', severity: 'normal' }),
+      ],
+      [
+        'f',
+        makeWorldAgent({
+          agent_id: 'f',
+          display_name: 'F',
+          zone: 'handoff-hub',
+          severity: 'yellow',
+          phase: 'blocked',
+        }),
+      ],
+    ]);
+
+    const world = makeWorldState({
+      agents,
+      zones: [
+        makeZoneSnapshot({ zone_id: 'war-room', label: 'War Room', kind: 'shared', occupant_ids: ['a', 'b'] }),
+        makeZoneSnapshot({ zone_id: 'meeting-zone', label: 'Meeting Zone', kind: 'shared', occupant_ids: ['c'] }),
+        makeZoneSnapshot({ zone_id: 'review-zone', label: 'Review Zone', kind: 'shared', occupant_ids: ['d'] }),
+        makeZoneSnapshot({ zone_id: 'focus-booth', label: 'Focus Booth', kind: 'shared', occupant_ids: ['e'] }),
+        makeZoneSnapshot({ zone_id: 'handoff-hub', label: 'Handoff Hub', kind: 'shared', occupant_ids: ['f'] }),
+      ],
+    });
+
+    expect(selectHotZones(world)).toEqual([
+      {
+        zone_id: 'war-room',
+        label: 'War Room',
+        highest_severity: 'red',
+        occupant_count: 2,
+        blocked_count: 1,
+        reboot_count: 1,
+        open_alert_or_incident_occupant_count: 2,
+      },
+      {
+        zone_id: 'meeting-zone',
+        label: 'Meeting Zone',
+        highest_severity: 'orange',
+        occupant_count: 1,
+        blocked_count: 0,
+        reboot_count: 0,
+        open_alert_or_incident_occupant_count: 1,
+      },
+      {
+        zone_id: 'handoff-hub',
+        label: 'Handoff Hub',
+        highest_severity: 'yellow',
+        occupant_count: 1,
+        blocked_count: 1,
+        reboot_count: 0,
+        open_alert_or_incident_occupant_count: 0,
+      },
+    ]);
+  });
+
+  it('treats the combined alert/incident flag as a hot-zone signal on its own', () => {
+    const world = makeWorldState({
+      agents: new Map([
+        [
+          'steady',
+          makeWorldAgent({
+            agent_id: 'steady',
+            display_name: 'Steady',
+            zone: 'focus-booth',
+            has_open_incidents: true,
+          }),
+        ],
+      ]),
+      zones: [
+        makeZoneSnapshot({
+          zone_id: 'focus-booth',
+          label: 'Focus Booth',
+          kind: 'shared',
+          occupant_ids: ['steady'],
+        }),
+      ],
+    });
+
+    expect(selectHotZones(world)).toEqual([
+      {
+        zone_id: 'focus-booth',
+        label: 'Focus Booth',
+        highest_severity: 'normal',
+        occupant_count: 1,
+        blocked_count: 0,
+        reboot_count: 0,
+        open_alert_or_incident_occupant_count: 1,
+      },
+    ]);
+  });
+
+  it('falls back quietly when world data is unavailable or zones are not hot', () => {
+    expect(selectHotZones(null)).toEqual([]);
+
+    const world = makeWorldState({
+      agents: new Map([
+        ['steady', makeWorldAgent({ agent_id: 'steady', display_name: 'Steady', zone: 'focus-booth' })],
+      ]),
+      zones: [makeZoneSnapshot({ zone_id: 'focus-booth', label: 'Focus Booth', kind: 'shared', occupant_ids: ['steady'] })],
+    });
+
+    expect(selectHotZones(world)).toEqual([]);
   });
 });

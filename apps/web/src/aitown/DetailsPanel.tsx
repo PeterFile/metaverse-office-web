@@ -46,6 +46,9 @@ type DetailsPanelProps = {
   operations: OfficeOperations | null;
   operationsError: string | null;
   operationsState: LoadState;
+  activeCorrelationQueueOperations?: OfficeOperations | null;
+  activeCorrelationQueueError?: string | null;
+  activeCorrelationQueueState?: LoadState;
   operationsStateBuckets: Record<string, number>;
   operationsSeverityBuckets: Record<Severity, number>;
   operationsStateBucketsError: string | null;
@@ -2478,6 +2481,9 @@ export function DetailsPanel({
   operations,
   operationsError,
   operationsState,
+  activeCorrelationQueueOperations = operations,
+  activeCorrelationQueueError = operationsError,
+  activeCorrelationQueueState = operationsState,
   operationsStateBuckets,
   operationsSeverityBuckets,
   operationsStateBucketsError,
@@ -2599,24 +2605,83 @@ export function DetailsPanel({
     operationsStateBucketsState === 'ready' && operationsStateBucketsError
       ? renderActiveQueueStateBucketsStatusLabel(operationsStateBucketsError)
       : null;
-  const activeCrewOverviewCorrelation =
-    !selectedAgent && correlation?.correlation_id === selectedCorrelationId ? correlation : null;
-  const activeCorrelationQueueParticipantAgentIds = activeCrewOverviewCorrelation?.participant_agent_ids ?? [];
+  const activeCorrelationQueueCorrelation =
+    correlation?.correlation_id === selectedCorrelationId ? correlation : null;
+  const activeCorrelationQueueParticipantAgentIds = activeCorrelationQueueCorrelation?.participant_agent_ids ?? [];
   const activeCorrelationQueueParticipantAgentIdSet = new Set(activeCorrelationQueueParticipantAgentIds);
-  const activeCorrelationQueueItems = activeCrewOverviewCorrelation
-    ? (operations?.items ?? []).filter((operation) => activeCorrelationQueueParticipantAgentIdSet.has(operation.agent_id))
+  const activeCorrelationQueueItems = activeCorrelationQueueCorrelation
+    ? (activeCorrelationQueueOperations?.items ?? []).filter((operation) =>
+        activeCorrelationQueueParticipantAgentIdSet.has(operation.agent_id)
+      )
     : [];
-  const activeCorrelationQueueScopeLabel = activeCrewOverviewCorrelation
+  const activeCorrelationQueueScopeLabel = activeCorrelationQueueCorrelation
     ? renderActiveCorrelationQueueScopeLabel({
-        correlationId: activeCrewOverviewCorrelation.correlation_id,
+        correlationId: activeCorrelationQueueCorrelation.correlation_id,
         matchedCount: activeCorrelationQueueItems.length,
         participantCount: activeCorrelationQueueParticipantAgentIds.length
       })
     : null;
   const activeCorrelationQueueWarning =
-    activeCrewOverviewCorrelation && operationsError && operations
-      ? renderActiveCorrelationQueueWarningLabel(activeCrewOverviewCorrelation.correlation_id, operationsError)
+    activeCorrelationQueueCorrelation && activeCorrelationQueueError && activeCorrelationQueueOperations
+      ? renderActiveCorrelationQueueWarningLabel(
+          activeCorrelationQueueCorrelation.correlation_id,
+          activeCorrelationQueueError
+        )
       : null;
+  const shouldRenderActiveCorrelationQueueSection =
+    Boolean(activeCorrelationQueueCorrelation) &&
+    (!selectedAgent ||
+      activeCorrelationQueueOperations !== null ||
+      activeCorrelationQueueState !== 'idle' ||
+      activeCorrelationQueueError !== null);
+  const sharedMemoryActiveCorrelationId = selectedCorrelationId;
+  const sharedMemoryArtifactRefs = new Set((memoryArtifacts?.items ?? []).map((artifact) => artifact.artifact_ref));
+  const activeCorrelationQueueSection = shouldRenderActiveCorrelationQueueSection && activeCorrelationQueueCorrelation ? (
+    <section className="aitown-details__section">
+      <h3>Active Correlation Queue</h3>
+      {activeCorrelationQueueScopeLabel ? <p>{activeCorrelationQueueScopeLabel}</p> : null}
+      <ul className="aitown-records">
+        {activeCorrelationQueueState === 'loading' && !activeCorrelationQueueOperations ? (
+          <li className="aitown-record">
+            {renderActiveCorrelationQueueLoadingLabel(activeCorrelationQueueCorrelation.correlation_id)}
+          </li>
+        ) : null}
+        {activeCorrelationQueueError && !activeCorrelationQueueOperations ? (
+          <li className="aitown-record">
+            {renderActiveCorrelationQueueErrorLabel(
+              activeCorrelationQueueCorrelation.correlation_id,
+              activeCorrelationQueueError
+            )}
+          </li>
+        ) : null}
+        {activeCorrelationQueueWarning ? <li className="aitown-record">{activeCorrelationQueueWarning}</li> : null}
+        {activeCorrelationQueueItems.map((operation) =>
+          renderOperationsQueueRecord({
+            operation,
+            activeCorrelationId: selectedCorrelationId,
+            pivotCorrelationId: selectedCorrelationId,
+            queueScopeLabel: 'active correlation queue',
+            domIdPrefix: 'active-correlation-queue',
+            navigableAgentIds,
+            sharedMemoryArtifactRefs,
+            onJumpToSharedMemoryArtifact: sharedMemoryEvidenceJump.onJump,
+            allowExactSharedMemoryFallback: sharedMemoryEvidenceJump.allowExactFallback,
+            onSelectAgent,
+            onSelectCorrelation,
+            onSelectOperation,
+            preserveActiveCorrelationOnSelect: true
+          })
+        )}
+        {activeCorrelationQueueState === 'ready' &&
+        !activeCorrelationQueueError &&
+        activeCorrelationQueueItems.length === 0 ? (
+          <li className="aitown-record">
+            {renderActiveCorrelationQueueEmptyLabel(activeCorrelationQueueCorrelation.correlation_id)}
+          </li>
+        ) : null}
+      </ul>
+    </section>
+  ) : null;
   const collectorWarning =
     collectorSnapshotError && collectorSnapshot
       ? `Showing last collector snapshot. ${collectorSnapshotError}`
@@ -2640,8 +2705,6 @@ export function DetailsPanel({
     )
     .sort(compareCollectorItems)
     .slice(0, 3);
-  const sharedMemoryActiveCorrelationId = selectedCorrelationId;
-  const sharedMemoryArtifactRefs = new Set((memoryArtifacts?.items ?? []).map((artifact) => artifact.artifact_ref));
   const focusedSharedMemoryBacklinks = buildFocusedSharedMemoryBacklinks({
     focusedArtifactRef: focusedSharedMemoryArtifactRef,
     activeCorrelationId: sharedMemoryActiveCorrelationId,
@@ -2918,49 +2981,7 @@ export function DetailsPanel({
           </ul>
         </section>
 
-        {activeCrewOverviewCorrelation ? (
-          <section className="aitown-details__section">
-            <h3>Active Correlation Queue</h3>
-            {activeCorrelationQueueScopeLabel ? <p>{activeCorrelationQueueScopeLabel}</p> : null}
-            <ul className="aitown-records">
-              {operationsState === 'loading' && !operations ? (
-                <li className="aitown-record">
-                  {renderActiveCorrelationQueueLoadingLabel(activeCrewOverviewCorrelation.correlation_id)}
-                </li>
-              ) : null}
-              {operationsError && !operations ? (
-                <li className="aitown-record">
-                  {renderActiveCorrelationQueueErrorLabel(activeCrewOverviewCorrelation.correlation_id, operationsError)}
-                </li>
-              ) : null}
-              {activeCorrelationQueueWarning ? (
-                <li className="aitown-record">{activeCorrelationQueueWarning}</li>
-              ) : null}
-              {activeCorrelationQueueItems.map((operation) =>
-                renderOperationsQueueRecord({
-                  operation,
-                  activeCorrelationId: selectedCorrelationId,
-                  pivotCorrelationId: selectedCorrelationId,
-                  queueScopeLabel: 'active correlation queue',
-                  domIdPrefix: 'active-correlation-queue',
-                  navigableAgentIds,
-                  sharedMemoryArtifactRefs,
-                  onJumpToSharedMemoryArtifact: sharedMemoryEvidenceJump.onJump,
-                  allowExactSharedMemoryFallback: sharedMemoryEvidenceJump.allowExactFallback,
-                  onSelectAgent,
-                  onSelectCorrelation,
-                  onSelectOperation,
-                  preserveActiveCorrelationOnSelect: true
-                })
-              )}
-              {operationsState === 'ready' && !operationsError && activeCorrelationQueueItems.length === 0 ? (
-                <li className="aitown-record">
-                  {renderActiveCorrelationQueueEmptyLabel(activeCrewOverviewCorrelation.correlation_id)}
-                </li>
-              ) : null}
-            </ul>
-          </section>
-        ) : null}
+        {activeCorrelationQueueSection}
 
         <section className="aitown-details__section">
           <h3>Active Queue</h3>
@@ -3659,6 +3680,8 @@ export function DetailsPanel({
           ) : null}
         </>
       ) : null}
+
+      {activeCorrelationQueueSection}
 
       <section className="aitown-details__section">
         <h3>Audit Signals</h3>

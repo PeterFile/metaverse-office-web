@@ -30,6 +30,18 @@ const SEVERITY_EMOJI: Record<Severity, string> = {
   red: '🔴',
 };
 
+const HOT_ZONE_LIMIT = 3;
+
+export interface HotZoneSummary {
+  zone_id: string;
+  label: string;
+  highest_severity: Severity;
+  occupant_count: number;
+  blocked_count: number;
+  reboot_count: number;
+  open_alert_or_incident_occupant_count: number;
+}
+
 // ── Single agent ──
 
 export function selectAgentLabel(agent: WorldAgent): string {
@@ -93,7 +105,96 @@ export function selectGlobalSeverity(world: WorldState): Severity {
   return world.summary.highest_severity;
 }
 
+export function selectHotZones(
+  world: WorldState | null | undefined,
+  limit = HOT_ZONE_LIMIT
+): HotZoneSummary[] {
+  if (!world || limit <= 0 || world.zones.length === 0 || world.agents.size === 0) {
+    return [];
+  }
+
+  const hotZones: HotZoneSummary[] = [];
+
+  for (const zone of world.zones) {
+    const occupants = zone.occupant_ids
+      .map((occupantId) => world.agents.get(occupantId))
+      .filter((occupant): occupant is WorldAgent => occupant !== undefined);
+
+    if (occupants.length === 0) {
+      continue;
+    }
+
+    let highestSeverity: Severity = 'normal';
+    let blockedCount = 0;
+    let rebootCount = 0;
+    let openAlertOrIncidentOccupantCount = 0;
+
+    for (const occupant of occupants) {
+      if (SEVERITY_RANK[occupant.severity] > SEVERITY_RANK[highestSeverity]) {
+        highestSeverity = occupant.severity;
+      }
+
+      if (occupant.phase === 'blocked') {
+        blockedCount += 1;
+      }
+
+      if (occupant.reboot_recommended) {
+        rebootCount += 1;
+      }
+
+      if (occupant.has_open_incidents) {
+        openAlertOrIncidentOccupantCount += 1;
+      }
+    }
+
+    const summary: HotZoneSummary = {
+      zone_id: zone.zone_id,
+      label: zone.label || zone.zone_id,
+      highest_severity: highestSeverity,
+      occupant_count: occupants.length,
+      blocked_count: blockedCount,
+      reboot_count: rebootCount,
+      open_alert_or_incident_occupant_count: openAlertOrIncidentOccupantCount,
+    };
+
+    if (isHotZone(summary)) {
+      hotZones.push(summary);
+    }
+  }
+
+  return hotZones.sort(compareHotZones).slice(0, limit);
+}
+
 // ── Internal helpers ──
+
+function isHotZone(zone: HotZoneSummary): boolean {
+  return (
+    SEVERITY_RANK[zone.highest_severity] > SEVERITY_RANK.normal ||
+    zone.blocked_count > 0 ||
+    zone.reboot_count > 0 ||
+    zone.open_alert_or_incident_occupant_count > 0
+  );
+}
+
+function compareHotZones(a: HotZoneSummary, b: HotZoneSummary): number {
+  const severityDelta = SEVERITY_RANK[b.highest_severity] - SEVERITY_RANK[a.highest_severity];
+  if (severityDelta !== 0) return severityDelta;
+
+  const alertOrIncidentDelta =
+    b.open_alert_or_incident_occupant_count - a.open_alert_or_incident_occupant_count;
+  if (alertOrIncidentDelta !== 0) return alertOrIncidentDelta;
+
+  const blockedDelta = b.blocked_count - a.blocked_count;
+  if (blockedDelta !== 0) return blockedDelta;
+
+  const rebootDelta = b.reboot_count - a.reboot_count;
+  if (rebootDelta !== 0) return rebootDelta;
+
+  const occupantDelta = b.occupant_count - a.occupant_count;
+  if (occupantDelta !== 0) return occupantDelta;
+
+  return a.label.localeCompare(b.label) || a.zone_id.localeCompare(b.zone_id);
+}
 
 function isAttentionWorthy(agent: WorldAgent): boolean {
   if (agent.severity !== 'normal') return true;

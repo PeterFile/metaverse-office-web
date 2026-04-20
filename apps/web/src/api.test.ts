@@ -121,7 +121,7 @@ describe('fetchOfficeOperations', () => {
 });
 
 describe('fetchTimeline', () => {
-  it('passes limit, window, and correlation_id filters through to the backend query string', async () => {
+  it('passes limit, window, agent_id, event_type, severity, and correlation_id filters through to the backend query string', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue(
@@ -139,11 +139,14 @@ describe('fetchTimeline', () => {
     await fetchTimeline({
       limit: 4,
       window: '30m',
+      agentId: 'app-engineering',
+      eventType: 'peer_watch_alert_raised',
+      severity: 'orange',
       correlationId: 'corr-app-review'
     });
 
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      '/timeline?limit=4&window=30m&correlation_id=corr-app-review',
+      '/timeline?limit=4&window=30m&agent_id=app-engineering&event_type=peer_watch_alert_raised&severity=orange&correlation_id=corr-app-review',
       expect.objectContaining({ signal: undefined })
     );
   });

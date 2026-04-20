@@ -134,7 +134,7 @@ Optional env:
 - `GET /interactions`
 - `GET /collectors/controller-snapshot`
 - `GET /office/overview`
-- `GET /office/operations?limit=&state=&agent_id=`
+- `GET /office/operations?limit=&state=&agent_id=&severity=`
 - `GET /timeline?window=&agent_id=&event_type=&severity=&correlation_id=&limit=`
 - `GET /peer-watch/alerts?status=&target_agent_id=&agent_id=&watcher_agent_id=&observer_agent_id=&correlation_id=&severity=&limit=`
 - `GET /incidents?kind=&agent_id=&severity=&status=&correlation_id=&limit=&window=`
@@ -156,7 +156,7 @@ Optional env:
 ### Office operations notes
 - `GET /office/operations` is a read-only live-operations queue derived from the existing append-only events, heartbeats, and current agent projections
 - default output includes only currently active agents: `current_state` is neither `idle` nor `sleeping`
-- optional `agent_id` narrows the queue to one agent before the existing state/limit handling; optional `state` filters the queue by one canonical `current_state`; optional `limit` caps the returned queue after sorting
+- optional `agent_id` narrows the queue to one agent before the existing state/severity/limit handling; optional `state` filters the queue by one canonical `current_state`; optional `severity` exact-matches derived `effective_severity` (`normal`, `yellow`, `orange`, `red`) after state handling and before `limit`; optional `limit` caps the returned queue after sorting
 - queue items reuse the existing projection plus `reported_severity`, `derived_staleness`, and `effective_severity` from the overview logic
 - `correlation_id` and `latest_event` come from the latest event for that agent when one exists; heartbeats do not fabricate them
 - summary fields describe the returned queue slice: `item_count`, `blocked_count`, `reboot_recommended_count`, `state_buckets`, and `severity_buckets`
@@ -247,7 +247,7 @@ This keeps employee writes self-scoped and reserves cross-agent task dispatch pl
 
 ### React operator shell notes
 - `apps/web` is the first living office surface for Phase 1 and stays strictly evidence-first
-- the shell consumes `GET /office/overview`, `GET /office/operations?limit=&state=&agent_id=`, `GET /agents/:id/workflow?limit=&window=`, `GET /incidents?limit=&window=`, `GET /timeline?limit=&window=`, `GET /collectors/controller-snapshot`, and `GET /correlations/:correlation_id?limit=&window=` only
+- the shell consumes `GET /office/overview`, `GET /office/operations?limit=&state=&agent_id=&severity=`, `GET /agents/:id/workflow?limit=&window=`, `GET /incidents?limit=&window=`, `GET /timeline?limit=&window=`, `GET /collectors/controller-snapshot`, and `GET /correlations/:correlation_id?limit=&window=` only
 - API calls are same-origin by default; cross-origin `VITE_API_BASE_URL` deployment requires the backend to allow that frontend origin via `CORS_ALLOWED_ORIGINS`, and local development may still proxy `/office`, `/agents`, `/incidents`, `/timeline`, `/correlations`, and `/collectors` through Vite via `VITE_DEV_PROXY_TARGET`
 - workflow and incident surfaces can open correlation drill-down without introducing a new backend contract or write path
 - workflow counterparties, correlation participants, and incident agent ids remain read-only but are directly selectable so operators can pivot into another agent workflow from the current evidence surface

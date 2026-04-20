@@ -649,6 +649,7 @@ class PrototypeStore {
           latestEvent: latestEventsByAgentId.get(agent.agent_id) || null,
           now: generatedAt
         }))
+        .filter((item) => matchesOfficeOperationSeverity(item, filters.severity))
         .sort(compareOfficeOperations),
       limit
     );
@@ -721,6 +722,14 @@ function matchesOfficeOperationState(agent, state) {
 function matchesOfficeOperationAgentId(agent, agentId) {
   if (typeof agentId === 'string' && agentId.length > 0) {
     return agent.agent_id === agentId;
+  }
+
+  return true;
+}
+
+function matchesOfficeOperationSeverity(item, severity) {
+  if (typeof severity === 'string' && severity.length > 0) {
+    return item.effective_severity === severity;
   }
 
   return true;

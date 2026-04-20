@@ -94,7 +94,13 @@ export async function fetchCollectorSnapshot(signal?: AbortSignal): Promise<Coll
 }
 
 export async function fetchOfficeOperations(
-  options: { limit?: number; state?: string; agentId?: string; signal?: AbortSignal } = {}
+  options: {
+    limit?: number;
+    state?: string;
+    severity?: string;
+    agentId?: string;
+    signal?: AbortSignal;
+  } = {}
 ): Promise<OfficeOperations> {
   const params = new URLSearchParams();
   if (options.limit !== undefined) {
@@ -102,6 +108,9 @@ export async function fetchOfficeOperations(
   }
   if (options.state) {
     params.set('state', options.state);
+  }
+  if (options.severity) {
+    params.set('severity', options.severity);
   }
   if (options.agentId) {
     params.set('agent_id', options.agentId);

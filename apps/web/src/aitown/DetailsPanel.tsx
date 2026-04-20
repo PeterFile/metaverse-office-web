@@ -13,6 +13,7 @@ import type {
   OfficeOperations,
   OfficeZone,
   PeerWatchAlertsResponse,
+  Severity,
   TimelineReplayResponse,
   WorkflowIncident,
   WorkflowInteraction,
@@ -46,6 +47,7 @@ type DetailsPanelProps = {
   operationsError: string | null;
   operationsState: LoadState;
   operationsStateBuckets: Record<string, number>;
+  operationsSeverityBuckets: Record<Severity, number>;
   operationsStateBucketsError: string | null;
   operationsStateBucketsState: LoadState;
   overviewZones: OfficeZone[] | null;
@@ -64,6 +66,7 @@ type DetailsPanelProps = {
   selectedAgent: OfficeAgent | null;
   selectedCorrelationId: string | null;
   selectedOperationsState: string | null;
+  selectedOperationsSeverity: Severity | null;
   selectedOperation: OfficeOperation | null;
   selectedOperationRequestActive?: boolean;
   timelineReplay: TimelineReplayResponse | null;
@@ -78,6 +81,7 @@ type DetailsPanelProps = {
   onSelectCorrelation: SelectCorrelationHandler;
   onResetCorrelationOverride: () => void;
   onSelectOperationsState: (state: string | null) => void;
+  onSelectOperationsSeverity: (severity: Severity | null) => void;
   onSelectOperation: (operation: OfficeOperation, options?: SelectOperationOptions) => void;
   onFocusSharedMemoryArtifact?: (artifactRef: string, scope?: SharedMemoryJumpScope) => void;
 };
@@ -114,6 +118,13 @@ const SEVERITY_RANK = {
   orange: 2,
   red: 3
 } as const;
+
+const EMPTY_SEVERITY_BUCKETS: Record<Severity, number> = {
+  normal: 0,
+  yellow: 0,
+  orange: 0,
+  red: 0
+};
 
 const SHARED_MEMORY_BACKLINK_LIMIT = 4;
 
@@ -847,36 +858,87 @@ function renderDisplayState(value: string) {
     .join(' ');
 }
 
-function renderActiveQueueLoadingLabel(selectedOperationsState: string | null) {
-  if (!selectedOperationsState) {
+function renderActiveQueueFilterScopeLabel(
+  selectedOperationsState: string | null,
+  selectedOperationsSeverity: Severity | null
+) {
+  const scopeParts: string[] = [];
+
+  if (selectedOperationsState) {
+    scopeParts.push(`${renderDisplayState(selectedOperationsState)} state`);
+  }
+
+  if (selectedOperationsSeverity) {
+    scopeParts.push(`${SEVERITY_LABELS[selectedOperationsSeverity]} severity`);
+  }
+
+  return scopeParts.length > 0 ? scopeParts.join(' · ') : null;
+}
+
+function renderActiveQueueLoadingLabel(
+  selectedOperationsState: string | null,
+  selectedOperationsSeverity: Severity | null
+) {
+  const activeQueueFilterScope = renderActiveQueueFilterScopeLabel(
+    selectedOperationsState,
+    selectedOperationsSeverity
+  );
+
+  if (!activeQueueFilterScope) {
     return 'Loading operations queue...';
   }
 
-  return `Loading active queue for ${renderDisplayState(selectedOperationsState)} state...`;
+  return `Loading active queue for ${activeQueueFilterScope}...`;
 }
 
-function renderActiveQueueErrorLabel(selectedOperationsState: string | null, operationsError: string) {
-  if (!selectedOperationsState) {
+function renderActiveQueueErrorLabel(
+  selectedOperationsState: string | null,
+  selectedOperationsSeverity: Severity | null,
+  operationsError: string
+) {
+  const activeQueueFilterScope = renderActiveQueueFilterScopeLabel(
+    selectedOperationsState,
+    selectedOperationsSeverity
+  );
+
+  if (!activeQueueFilterScope) {
     return `Unable to load active queue. ${operationsError}`;
   }
 
-  return `Unable to load active queue for ${renderDisplayState(selectedOperationsState)} state. ${operationsError}`;
+  return `Unable to load active queue for ${activeQueueFilterScope}. ${operationsError}`;
 }
 
-function renderActiveQueueWarningLabel(selectedOperationsState: string | null, operationsError: string) {
-  if (!selectedOperationsState) {
+function renderActiveQueueWarningLabel(
+  selectedOperationsState: string | null,
+  selectedOperationsSeverity: Severity | null,
+  operationsError: string
+) {
+  const activeQueueFilterScope = renderActiveQueueFilterScopeLabel(
+    selectedOperationsState,
+    selectedOperationsSeverity
+  );
+
+  if (!activeQueueFilterScope) {
     return `Showing last active queue snapshot. ${operationsError}`;
   }
 
-  return `Showing last active queue snapshot for ${renderDisplayState(selectedOperationsState)} state. ${operationsError}`;
+  return `Showing last active queue snapshot for ${activeQueueFilterScope}. ${operationsError}`;
 }
 
-function renderActiveQueueEmptyLabel(selectedOperationsState: string | null) {
-  if (!selectedOperationsState) {
+function renderActiveQueueEmptyLabel(
+  selectedOperationsState: string | null,
+  selectedOperationsSeverity: Severity | null
+) {
+  const activeQueueFilterScope = renderActiveQueueFilterScopeLabel(
+    selectedOperationsState,
+    selectedOperationsSeverity
+  );
+
+  if (!activeQueueFilterScope) {
     return 'No active operations queue.';
   }
 
-  return `No active queue items for ${renderDisplayState(selectedOperationsState)} state.`;
+  return `No active queue items for ${activeQueueFilterScope}.`;
 }
 
 function renderSelectedOperationLoadingLabel() {
@@ -903,6 +965,24 @@ function renderActiveQueueStateOptionLabel({
   state: string;
 }) {
   return `${renderDisplayState(state)} (${count})`;
+}
+
+function renderActiveQueueAllSeveritiesLabel({
+  activeQueueSeverityCount
+}: {
+  activeQueueSeverityCount: number;
+}) {
+  return `All severities (${activeQueueSeverityCount})`;
+}
+
+function renderActiveQueueSeverityOptionLabel({
+  count,
+  severity
+}: {
+  count: number;
+  severity: Severity;
+}) {
+  return `${SEVERITY_LABELS[severity]} (${count})`;
 }
 
 function renderActiveQueueStateBucketsStatusLabel(error: string) {
@@ -2399,6 +2479,7 @@ export function DetailsPanel({
   operationsError,
   operationsState,
   operationsStateBuckets,
+  operationsSeverityBuckets,
   operationsStateBucketsError,
   operationsStateBucketsState,
   overviewZones,
@@ -2417,6 +2498,7 @@ export function DetailsPanel({
   selectedAgent,
   selectedCorrelationId,
   selectedOperationsState,
+  selectedOperationsSeverity,
   selectedOperation,
   selectedOperationRequestActive,
   timelineReplay,
@@ -2431,6 +2513,7 @@ export function DetailsPanel({
   onSelectCorrelation,
   onResetCorrelationOverride,
   onSelectOperationsState,
+  onSelectOperationsSeverity,
   onSelectOperation,
   onFocusSharedMemoryArtifact
 }: DetailsPanelProps) {
@@ -2496,6 +2579,22 @@ export function DetailsPanel({
     ([state, count]) => count > 0 || state === selectedOperationsState
   );
   const activeQueueStateCount = activeQueueStateOptions.reduce((total, [, count]) => total + count, 0);
+  const activeQueueSeverityBuckets = new Map<Severity, number>(
+    Object.entries(
+      operationsStateBucketsState === 'ready'
+        ? operationsSeverityBuckets
+        : (operations?.summary.severity_buckets ?? EMPTY_SEVERITY_BUCKETS)
+    ) as [Severity, number][]
+  );
+
+  if (selectedOperationsSeverity && !activeQueueSeverityBuckets.has(selectedOperationsSeverity)) {
+    activeQueueSeverityBuckets.set(selectedOperationsSeverity, 0);
+  }
+
+  const activeQueueSeverityOptions = [...activeQueueSeverityBuckets.entries()].filter(
+    ([severity, count]) => count > 0 || severity === selectedOperationsSeverity
+  );
+  const activeQueueSeverityCount = activeQueueSeverityOptions.reduce((total, [, count]) => total + count, 0);
   const activeQueueStateBucketsStatus =
     operationsStateBucketsState === 'ready' && operationsStateBucketsError
       ? renderActiveQueueStateBucketsStatusLabel(operationsStateBucketsError)
@@ -2889,18 +2988,53 @@ export function DetailsPanel({
               ))}
             </select>
           </div>
+          <div>
+            <label htmlFor="aitown-active-queue-severity-filter">Severity filter</label>{' '}
+            <select
+              id="aitown-active-queue-severity-filter"
+              aria-label="Filter active queue by severity"
+              value={selectedOperationsSeverity ?? ''}
+              onChange={(event) =>
+                onSelectOperationsSeverity((event.target.value || null) as Severity | null)
+              }
+            >
+              <option value="">
+                {renderActiveQueueAllSeveritiesLabel({
+                  activeQueueSeverityCount
+                })}
+              </option>
+              {activeQueueSeverityOptions.map(([severity, count]) => (
+                <option key={severity} value={severity}>
+                  {renderActiveQueueSeverityOptionLabel({
+                    count,
+                    severity
+                  })}
+                </option>
+              ))}
+            </select>
+          </div>
           <ul className="aitown-records">
             {operationsState === 'loading' && !operations ? (
-              <li className="aitown-record">{renderActiveQueueLoadingLabel(selectedOperationsState)}</li>
+              <li className="aitown-record">
+                {renderActiveQueueLoadingLabel(selectedOperationsState, selectedOperationsSeverity)}
+              </li>
             ) : null}
             {operationsError && !operations ? (
               <li className="aitown-record">
-                {renderActiveQueueErrorLabel(selectedOperationsState, operationsError)}
+                {renderActiveQueueErrorLabel(
+                  selectedOperationsState,
+                  selectedOperationsSeverity,
+                  operationsError
+                )}
               </li>
             ) : null}
             {operationsError && operations ? (
               <li className="aitown-record">
-                {renderActiveQueueWarningLabel(selectedOperationsState, operationsError)}
+                {renderActiveQueueWarningLabel(
+                  selectedOperationsState,
+                  selectedOperationsSeverity,
+                  operationsError
+                )}
               </li>
             ) : null}
             {(operations?.items ?? []).slice(0, 4).map((operation) =>
@@ -2920,7 +3054,9 @@ export function DetailsPanel({
               })
             )}
             {operationsState === 'ready' && !operationsError && !operations?.items.length ? (
-              <li className="aitown-record">{renderActiveQueueEmptyLabel(selectedOperationsState)}</li>
+              <li className="aitown-record">
+                {renderActiveQueueEmptyLabel(selectedOperationsState, selectedOperationsSeverity)}
+              </li>
             ) : null}
           </ul>
         </section>

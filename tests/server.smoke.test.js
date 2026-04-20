@@ -150,7 +150,7 @@ test('GET /office/overview exposes seeded layout, empty zones, and watch edges',
   );
 });
 
-test('GET /office/operations exposes the active queue with agent_id, state, and limit filters', async (t) => {
+test('GET /office/operations exposes the active queue with agent_id, state, severity, and limit filters', async (t) => {
   const { baseUrl, store } = await createHarness(t);
 
   await store.appendHeartbeat({
@@ -294,6 +294,26 @@ test('GET /office/operations exposes the active queue with agent_id, state, and 
     }
   });
   assert.deepEqual(filtered.body.items.map((item) => item.agent_id), ['app-engineering']);
+
+  const severityFiltered = await requestJson(`${baseUrl}/office/operations?severity=yellow&limit=1`);
+  assert.equal(severityFiltered.response.status, 200);
+  assert.deepEqual(severityFiltered.body.items.map((item) => item.agent_id), ['market-intel']);
+  assert.deepEqual(severityFiltered.body.summary, {
+    item_count: 1,
+    blocked_count: 0,
+    reboot_recommended_count: 0,
+    state_buckets: {
+      researching: 1
+    },
+    severity_buckets: {
+      normal: 0,
+      yellow: 1,
+      orange: 0,
+      red: 0
+    }
+  });
+  assert.equal(severityFiltered.body.items[0].reported_severity, 'normal');
+  assert.equal(severityFiltered.body.items[0].effective_severity, 'yellow');
 
   const limited = await requestJson(`${baseUrl}/office/operations?limit=2`);
   assert.equal(limited.response.status, 200);

@@ -479,6 +479,12 @@ function buildProps(overrides: Partial<DetailsPanelProps> = {}): DetailsPanelPro
     operationsStateBuckets: {
       blocked: 1
     },
+    operationsSeverityBuckets: {
+      normal: 0,
+      yellow: 0,
+      orange: 1,
+      red: 0
+    },
     operationsStateBucketsError: null,
     operationsStateBucketsState: 'ready',
     overviewZones: null,
@@ -498,6 +504,7 @@ function buildProps(overrides: Partial<DetailsPanelProps> = {}): DetailsPanelPro
     selectedAgent: buildSelectedAgent(),
     selectedCorrelationId: 'corr-app-review',
     selectedOperationsState: null,
+    selectedOperationsSeverity: null,
     selectedOperation: buildSelectedOperation(),
     timelineReplay: null,
     timelineReplayError: null,
@@ -511,6 +518,7 @@ function buildProps(overrides: Partial<DetailsPanelProps> = {}): DetailsPanelPro
     onSelectCorrelation: vi.fn(),
     onResetCorrelationOverride: vi.fn(),
     onSelectOperationsState: vi.fn(),
+    onSelectOperationsSeverity: vi.fn(),
     onSelectOperation: vi.fn(),
     ...overrides
   };
@@ -1682,6 +1690,45 @@ describe('DetailsPanel accountability signals', () => {
     await user.selectOptions(stateFilter, 'waiting');
 
     expect(onSelectOperationsState).toHaveBeenCalledWith('waiting');
+  });
+
+  it('renders active-queue severity options from the provided crew-overview buckets while filtered', async () => {
+    const user = userEvent.setup();
+    const onSelectOperationsSeverity = vi.fn();
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          onSelectOperationsSeverity,
+          operationsSeverityBuckets: {
+            normal: 0,
+            yellow: 1,
+            orange: 1,
+            red: 0
+          },
+          selectedAgent: null,
+          selectedCorrelationId: null,
+          selectedOperationsSeverity: 'yellow',
+          selectedOperation: null,
+          workflow: null
+        })}
+      />
+    );
+
+    const section = screen.getByRole('heading', { name: 'Active Queue' }).closest('section');
+    expect(section).not.toBeNull();
+
+    const severityFilter = within(section!).getByRole('combobox', {
+      name: 'Filter active queue by severity'
+    });
+
+    expect(within(severityFilter).getByRole('option', { name: 'All severities (2)' })).toBeVisible();
+    expect(within(severityFilter).getByRole('option', { name: 'Yellow (1)' })).toBeVisible();
+    expect(within(severityFilter).getByRole('option', { name: 'Orange (1)' })).toBeVisible();
+
+    await user.selectOptions(severityFilter, 'orange');
+
+    expect(onSelectOperationsSeverity).toHaveBeenCalledWith('orange');
   });
 
   it('jumps from matching active-queue evidence refs to shared memory while leaving non-matching refs as plain text and showing explicit fallbacks', async () => {

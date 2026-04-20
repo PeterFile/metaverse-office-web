@@ -77,6 +77,7 @@ function setNavigatorUserAgent(userAgent: string) {
 const operationsUrl = '/office/operations?limit=4';
 const allOperationsUrl = '/office/operations';
 const blockedOperationsUrl = '/office/operations?limit=4&state=blocked';
+const orangeOperationsUrl = '/office/operations?limit=4&severity=orange';
 const planningOperationsUrl = '/office/operations?limit=4&state=planning';
 const reviewingOperationsUrl = '/office/operations?limit=4&state=reviewing';
 const selectedOperationUrl = '/office/operations?agent_id=app-engineering';
@@ -1304,6 +1305,10 @@ function resolveDefaultFetchResponse(url: string) {
     return jsonResponse(operationsFixture);
   }
 
+  if (url === orangeOperationsUrl) {
+    return jsonResponse(blockedOperationsFixture);
+  }
+
   if (url === teamLeadSelectedOperationUrl) {
     return jsonResponse(teamLeadOperationFixture);
   }
@@ -1449,6 +1454,12 @@ describe('App', () => {
 
         if (url === operationsUrl || url === selectedOperationUrl) {
           return new Response(JSON.stringify(operationsFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === orangeOperationsUrl) {
+          return new Response(JSON.stringify(blockedOperationsFixture), {
             headers: { 'content-type': 'application/json' }
           });
         }
@@ -4945,6 +4956,42 @@ afterEach(() => {
     expect(peerWatchRequests).toContain(growthRevenueSupervisionHistoryUrl);
     expect(peerWatchRequests).not.toContain(growthRevenueScopedReviewSupervisionHistoryUrl);
     expect(peerWatchRequests).not.toContain(growthRevenueScopedSecondarySupervisionHistoryUrl);
+  });
+
+  it('shows the active-queue severity filter and forwards severity-only requests to office operations', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    const queueSection = within(details).getByRole('heading', { name: 'Active Queue' }).closest('section');
+    expect(queueSection).not.toBeNull();
+
+    const severityFilter = within(queueSection!).getByRole('combobox', {
+      name: 'Filter active queue by severity'
+    });
+
+    expect(within(severityFilter).getByRole('option', { name: 'All severities (3)' })).toBeVisible();
+    expect(within(severityFilter).getByRole('option', { name: 'Normal (1)' })).toBeVisible();
+    expect(within(severityFilter).getByRole('option', { name: 'Yellow (1)' })).toBeVisible();
+    expect(within(severityFilter).getByRole('option', { name: 'Orange (1)' })).toBeVisible();
+
+    await user.selectOptions(severityFilter, 'orange');
+
+    await waitFor(() => {
+      expect(
+        within(queueSection!).getByRole('button', { name: 'Inspect App Engineering Agent from active queue' })
+      ).toBeVisible();
+      expect(
+        within(queueSection!).queryByRole('button', { name: 'Inspect Team Lead from active queue' })
+      ).not.toBeInTheDocument();
+    });
+
+    const requestedUrls = vi
+      .mocked(globalThis.fetch)
+      .mock
+      .calls.map(([input]) => (typeof input === 'string' ? input : input.toString()));
+
+    expect(requestedUrls).toContain(orangeOperationsUrl);
   });
 
   it('keeps the current operation path intact when selecting a filtered active queue item', async () => {

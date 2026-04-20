@@ -165,6 +165,7 @@ describe('fetchCollectorSnapshot', () => {
                 workspace_observed_count: 1,
                 reboot_recommended_count: 0
               },
+              shared_artifacts: [],
               items: [
                 {
                   agent_id: 'app-engineering',
@@ -208,6 +209,7 @@ describe('fetchCollectorSnapshot', () => {
       summary: {
         heartbeat_count: 1
       },
+      shared_artifacts: [],
       items: [
         expect.objectContaining({
           agent_id: 'app-engineering',

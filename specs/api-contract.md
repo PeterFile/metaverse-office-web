@@ -40,6 +40,8 @@
 - collected heartbeat fields are derived from real workspace file metadata (`inbox.md`, `outbox.md`, `todo.md`) and tmux pane metadata for the canonical seven-actor roster
 - the collector must not fabricate random activity, random severity, or random timestamps
 - the latest collector report is an in-memory read model; heartbeat storage stays backward compatible as append-only `heartbeat` records
+- the latest collector report also exposes `shared_artifacts`, a top-level per-snapshot rollup derived only from the current collected items
+- `shared_artifacts` entries appear only when at least two agents in the same snapshot mention the same `artifact_ref` and expose `artifact_ref`, `artifact_kind`, optional `file_name`, `agent_ids`, `agent_count`, `mention_count`, `last_seen_at`, and `source_kinds`
 - collector-derived activity uses canonical event types only: `agent_state_changed` and `agent_wrote_file`
 - collector-derived supervision uses existing canonical event types only: `peer_watch_alert_raised` and `peer_watch_alert_resolved`
 - collector-derived `agent_state_changed` requires evidence-backed state drift versus the previously known projection and uses `tmux_observation` or `workspace_file` as the source kind

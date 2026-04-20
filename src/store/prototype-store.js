@@ -13,6 +13,7 @@ const {
   MEANINGFUL_OUTPUT_EVENT_TYPES,
   validateEventPayload
 } = require('../domain');
+const { createSharedArtifactRollup } = require('../collectors/controller-snapshot');
 
 const COLLECTOR_ALERT_SOURCE = 'controller_snapshot';
 const SEVERITY_RANK = Object.freeze({
@@ -1394,12 +1395,14 @@ function normalizeCollectorReport(report = {}, previousReport = null) {
   const previousItemsByAgentId = new Map(
     (previousReport?.items || []).map((item) => [item.agent_id, item])
   );
+  const normalizedItems = (report.items || []).map((item) =>
+    normalizeCollectorReportItem(item, previousItemsByAgentId.get(item.agent_id) || null)
+  );
 
   return {
     ...report,
-    items: (report.items || []).map((item) =>
-      normalizeCollectorReportItem(item, previousItemsByAgentId.get(item.agent_id) || null)
-    )
+    shared_artifacts: createSharedArtifactRollup(normalizedItems),
+    items: normalizedItems
   };
 }
 

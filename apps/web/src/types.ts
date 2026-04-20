@@ -127,10 +127,22 @@ export interface CollectorSnapshotSummary {
   reboot_recommended_count: number;
 }
 
+export interface CollectorSharedArtifact {
+  artifact_ref: string;
+  artifact_kind: 'workspace_file' | 'tmux_observation';
+  file_name?: string | null;
+  agent_ids: string[];
+  agent_count: number;
+  mention_count: number;
+  last_seen_at: string | null;
+  source_kinds: Array<'workspace_file' | 'tmux_observation'>;
+}
+
 export interface CollectorSnapshot {
   collected_at: string;
   actor_id: string;
   summary: CollectorSnapshotSummary;
+  shared_artifacts?: CollectorSharedArtifact[];
   items: CollectorItem[];
 }
 

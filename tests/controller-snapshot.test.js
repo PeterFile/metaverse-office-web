@@ -124,6 +124,7 @@ test('collector derives evidence-backed heartbeats from workspace and tmux metad
   assert.equal(report.summary.agent_count, 2);
   assert.equal(report.summary.tmux_observed_count, 2);
   assert.equal(report.summary.reboot_recommended_count, 1);
+  assert.deepEqual(report.shared_artifacts, []);
 
   const appEngineering = report.items.find((item) => item.agent_id === 'app-engineering');
   assert.equal(appEngineering.heartbeat.current_state, 'coding');
@@ -143,6 +144,51 @@ test('collector derives evidence-backed heartbeats from workspace and tmux metad
   assert.equal(growthRevenue.heartbeat.last_meaningful_output_at, '2026-03-09T17:59:00.000Z');
   assert.equal(growthRevenue.heartbeat.confidence_level, 'high');
   assert.equal(growthRevenue.supervision.needs_attention, true);
+});
+
+test('collector rolls up shared artifacts referenced by multiple agents in the same snapshot', async () => {
+  const sharedWorkspaceRoot = '/tmp/shared-snapshot-workspace';
+  const appAgent = {
+    ...SEED_AGENTS.find((agent) => agent.agent_id === 'app-engineering'),
+    workspace_root: sharedWorkspaceRoot
+  };
+  const growthAgent = {
+    ...SEED_AGENTS.find((agent) => agent.agent_id === 'growth-revenue'),
+    workspace_root: sharedWorkspaceRoot
+  };
+
+  const report = await collectControllerSnapshot({
+    agents: [appAgent, growthAgent],
+    collectedAt: '2026-03-09T18:05:00.000Z',
+    readPathStat: async (targetPath) => {
+      if (targetPath === sharedWorkspaceRoot) {
+        return { mtime: '2026-03-09T18:00:00.000Z' };
+      }
+
+      if (targetPath === path.join(sharedWorkspaceRoot, 'todo.md')) {
+        return { mtime: '2026-03-09T18:04:00.000Z' };
+      }
+
+      return null;
+    },
+    listTmuxPanes: async () => []
+  });
+
+  assert.deepEqual(report.shared_artifacts, [
+    {
+      artifact_ref: path.join(sharedWorkspaceRoot, 'todo.md'),
+      artifact_kind: 'workspace_file',
+      file_name: 'todo.md',
+      agent_ids: ['app-engineering', 'growth-revenue'],
+      agent_count: 2,
+      mention_count: 2,
+      last_seen_at: '2026-03-09T18:04:00.000Z',
+      source_kinds: ['workspace_file']
+    }
+  ]);
+  assert.ok(
+    report.items.every((item) => item.evidence_refs.includes(path.join(sharedWorkspaceRoot, 'todo.md')))
+  );
 });
 
 test('store appends collector heartbeats and exposes the latest collector report', async () => {
@@ -205,6 +251,52 @@ test('store appends collector heartbeats and exposes the latest collector report
   assert.equal(JSON.parse(lines[0]).kind, 'event');
   assert.equal(JSON.parse(lines[1]).kind, 'event');
   assert.equal(JSON.parse(lines[2]).kind, 'heartbeat');
+});
+
+test('store derives shared snapshot artifacts from appended collector report items', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'metaverse-office-store-'));
+  const storeFile = path.join(root, 'prototype-store.jsonl');
+  const store = await createPrototypeStore({ filePath: storeFile });
+
+  const storedReport = await store.appendCollectorReport(
+    createCollectorReport({
+      collectedAt: '2026-03-09T18:05:00.000Z',
+      items: [
+        createReportItem({
+          collectedAt: '2026-03-09T18:05:00.000Z',
+          agentId: 'app-engineering',
+          evidenceRefs: ['/tmp/shared-snapshot/todo.md'],
+          currentState: 'coding',
+          activeTask: 'Implement shared flow',
+          lastMeaningfulOutputAt: '2026-03-09T18:04:30.000Z',
+          lastFileWriteAt: '2026-03-09T18:04:30.000Z'
+        }),
+        createReportItem({
+          collectedAt: '2026-03-09T18:05:00.000Z',
+          agentId: 'growth-revenue',
+          evidenceRefs: ['/tmp/shared-snapshot/todo.md'],
+          currentState: 'researching',
+          activeTask: 'Review shared flow',
+          lastMeaningfulOutputAt: '2026-03-09T18:04:45.000Z',
+          lastFileWriteAt: '2026-03-09T18:04:45.000Z'
+        })
+      ]
+    })
+  );
+
+  assert.deepEqual(storedReport.shared_artifacts, [
+    {
+      artifact_ref: '/tmp/shared-snapshot/todo.md',
+      artifact_kind: 'workspace_file',
+      file_name: 'todo.md',
+      agent_ids: ['app-engineering', 'growth-revenue'],
+      agent_count: 2,
+      mention_count: 2,
+      last_seen_at: '2026-03-09T18:04:45.000Z',
+      source_kinds: ['workspace_file']
+    }
+  ]);
+  assert.deepEqual(store.getLatestCollectorReport().shared_artifacts, storedReport.shared_artifacts);
 });
 
 test('store appends collector-driven peer watch alerts for staleness and blocked snapshots', async () => {

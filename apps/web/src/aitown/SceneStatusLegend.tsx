@@ -1,5 +1,5 @@
 import { useWorld } from '../context/WorldContext';
-import { SEVERITY_EMOJI, selectHotZones } from '../world/selectors';
+import { SEVERITY_EMOJI, selectDataQualitySummary, selectHotZones } from '../world/selectors';
 import type { Severity } from '../world/types';
 
 import { SCENE_AGENT_STATUS_LEGEND } from './agentStatusBadge';
@@ -38,9 +38,18 @@ function formatHotZoneSummary(
   ].join(' · ');
 }
 
+function formatDataQualitySummary(degradedReasonCount: number, lastOverviewAt: string | null): string {
+  const parts = [formatCount(degradedReasonCount, 'evidence gap')];
+  if (lastOverviewAt) {
+    parts.push(`last overview ${lastOverviewAt}`);
+  }
+  return parts.join(' · ');
+}
+
 export function SceneStatusLegend() {
   const { world } = useWorld();
   const hotZones = selectHotZones(world);
+  const dataQualitySummary = selectDataQualitySummary(world);
 
   return (
     <div id="scene-status-legend" className="aitown-status-legend">
@@ -82,6 +91,29 @@ export function SceneStatusLegend() {
                 </span>
               </li>
             ))}
+          </ul>
+        </>
+      ) : null}
+
+      {dataQualitySummary ? (
+        <>
+          <span className="aitown-status-legend__title">Data quality</span>
+          <ul className="aitown-status-legend__items" aria-label="Data quality legend">
+            <li className="aitown-status-legend__item">
+              <span className="aitown-status-legend__token" aria-hidden="true">
+                ⚠
+              </span>
+              <span>
+                <strong>Degraded</strong>
+                {' · '}
+                {formatDataQualitySummary(
+                  dataQualitySummary.degraded_reasons.length,
+                  dataQualitySummary.last_overview_at
+                )}
+                {' · '}
+                {dataQualitySummary.degraded_reasons.join('; ')}
+              </span>
+            </li>
           </ul>
         </>
       ) : null}

@@ -5,6 +5,7 @@ import {
   selectAgentTrailSummary,
   selectAgentZoneLabel,
   selectAttentionQueue,
+  selectDataQualitySummary,
   selectGlobalSeverity,
   selectHotZones,
   selectWatchEdgeRisk,
@@ -178,6 +179,30 @@ describe('selectGlobalSeverity', () => {
       summary: { highest_severity: 'orange' },
     } as WorldState;
     expect(selectGlobalSeverity(world)).toBe('orange');
+  });
+});
+
+describe('selectDataQualitySummary', () => {
+  it('returns null when projected data quality is healthy', () => {
+    expect(selectDataQualitySummary(makeWorldState())).toBeNull();
+    expect(selectDataQualitySummary(null)).toBeNull();
+  });
+
+  it('surfaces degraded reasons and last overview evidence when projected data is incomplete', () => {
+    const world = makeWorldState({
+      data_quality: {
+        overview_available: false,
+        workflow_agent_ids: ['app-engineering'],
+        incident_feed_available: false,
+        last_overview_at: '2026-03-14T09:55:00Z',
+        degraded_reasons: ['overview unavailable', 'incident feed unavailable', 'workflow partial'],
+      },
+    });
+
+    expect(selectDataQualitySummary(world)).toEqual({
+      degraded_reasons: ['overview unavailable', 'incident feed unavailable', 'workflow partial'],
+      last_overview_at: '2026-03-14T09:55:00Z',
+    });
   });
 });
 

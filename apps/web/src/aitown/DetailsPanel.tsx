@@ -3559,7 +3559,7 @@ export function DetailsPanel({
               Artifacts ·{' '}
               {renderAccountabilityArtifactJumpList({
                 artifacts: accountabilityMemoryArtifacts,
-                onJump: focusSharedMemoryArtifact
+                onJump: sharedMemoryEvidenceJump.onJump
               })}
             </span>
             <span>{`Source · ${renderNamedList(accountabilitySources, 'No loaded source signals')}`}</span>

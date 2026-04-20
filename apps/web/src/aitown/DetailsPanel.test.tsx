@@ -4423,7 +4423,37 @@ describe('DetailsPanel accountability signals', () => {
     expect(onSelectAgent).toHaveBeenCalledWith('team-lead', 'corr-app-review');
   });
 
-  it('jumps from an accountability artifact to the matching shared-memory record without changing selection state', async () => {
+  it('routes accountability artifact jumps through exact shared-memory focus when available without changing selection state', async () => {
+    const user = userEvent.setup();
+    const onSelectAgent = vi.fn();
+    const onSelectCorrelation = vi.fn();
+    const onFocusSharedMemoryArtifact = vi.fn();
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          onSelectAgent,
+          onSelectCorrelation,
+          onFocusSharedMemoryArtifact
+        })}
+      />
+    );
+
+    const auditSection = screen.getByRole('heading', { name: 'Audit Signals' }).closest('section');
+    expect(auditSection).not.toBeNull();
+
+    await user.click(
+      within(auditSection!).getByRole('button', {
+        name: 'Jump to shared memory artifact artifact/review-note'
+      })
+    );
+
+    expect(onFocusSharedMemoryArtifact).toHaveBeenCalledWith('artifact/review-note');
+    expect(onSelectAgent).not.toHaveBeenCalled();
+    expect(onSelectCorrelation).not.toHaveBeenCalled();
+  });
+
+  it('falls back to DOM-only accountability artifact jumps when exact shared-memory focus is unavailable', async () => {
     const user = userEvent.setup();
     const onSelectAgent = vi.fn();
     const onSelectCorrelation = vi.fn();

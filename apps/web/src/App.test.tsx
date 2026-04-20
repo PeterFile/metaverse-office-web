@@ -8076,7 +8076,7 @@ afterEach(() => {
     });
   });
 
-  it('jumps from audit-signal artifacts to shared memory without changing the selected agent or correlation', async () => {
+  it('focuses audit-signal artifacts through exact shared memory without changing the selected agent or correlation', async () => {
     const user = userEvent.setup();
     render(<App />);
 
@@ -8104,6 +8104,7 @@ afterEach(() => {
         element.textContent ===
           'Artifacts · Correlation-scoped evidence trail for the missing workflow review (/tmp/evidence.md)'
     );
+    const fetchCallCountBeforeJump = vi.mocked(globalThis.fetch).mock.calls.length;
 
     await user.click(
       within(artifactLine).getByRole('button', {
@@ -8111,9 +8112,16 @@ afterEach(() => {
       })
     );
 
-    expect(document.activeElement).toBe(artifactRecord);
-    expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
-    expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+    await waitFor(() => {
+      expect(within(memorySection!).getByText('Focused exact artifact · /tmp/evidence.md')).toBeVisible();
+      expect(artifactRecord).toHaveClass('aitown-record--shared-memory-focused');
+      expect(within(artifactRecord!).getByText('Focused exact jump')).toBeVisible();
+      expect(document.activeElement).toBe(artifactRecord);
+      expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+    });
+
+    expect(vi.mocked(globalThis.fetch).mock.calls).toHaveLength(fetchCallCountBeforeJump);
     expect(globalThis.fetch).not.toHaveBeenCalledWith(teamLeadWorkflowUrl, expect.anything());
     expect(globalThis.fetch).not.toHaveBeenCalledWith(teamLeadSelectedCorrelationMemoryArtifactsUrl, expect.anything());
   });

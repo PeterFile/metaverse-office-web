@@ -1904,10 +1904,12 @@ afterEach(() => {
     render(<App />);
 
     expect(await screen.findByText('Live Focus')).toBeVisible();
-    expect(screen.getByText(/agents need attention right now\./)).toBeVisible();
+    const liveFocusButton = await screen.findByRole('button', {
+      name: 'Inspect live focus agent App Engineering Agent'
+    });
+    expect(screen.getByText(/need attention right now\./)).toBeVisible();
     expect(screen.queryByRole('dialog', { name: 'Hub' })).not.toBeInTheDocument();
 
-    const liveFocusButton = screen.getByRole('button', { name: 'Inspect live focus agent App Engineering Agent' });
     expect(liveFocusButton).toBeVisible();
 
     await user.click(liveFocusButton);

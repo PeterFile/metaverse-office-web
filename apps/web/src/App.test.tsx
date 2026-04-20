@@ -2079,22 +2079,24 @@ afterEach(() => {
     const details = await openHub(user);
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
 
-    const operationSection = await within(details).findByRole('heading', { name: 'Current Operation' });
+    const operationSection = (await within(details).findByRole('heading', { name: 'Current Operation' })).closest('section');
     const runContextSection = within(details).getByRole('heading', { name: 'Run Context' }).closest('section');
-    expect(operationSection).toBeVisible();
+    expect(operationSection).not.toBeNull();
     expect(runContextSection).not.toBeNull();
 
     await waitFor(() => {
       expect(globalThis.fetch).toHaveBeenCalledWith(selectedOperationUrl, expect.anything());
-      expect(within(details).getByText('working · Load current operation snapshot')).toBeVisible();
-      expect(within(details).getByText('Latest event · Controller assigned the direct-selection snapshot task')).toBeVisible();
+      expect(within(operationSection!).getByText('working · Load current operation snapshot')).toBeVisible();
+      expect(
+        within(operationSection!).getByText('Latest event · Controller assigned the direct-selection snapshot task')
+      ).toBeVisible();
       expect(within(runContextSection!).getByText('Latest event type · agent_received_task')).toBeVisible();
     });
 
     await waitFor(() => {
       expect(selectedOperationRequests).toBeGreaterThan(1);
       expect(within(details).getByText('Showing last operation snapshot. operations refresh failed')).toBeVisible();
-      expect(within(details).getByText('working · Load current operation snapshot')).toBeVisible();
+      expect(within(operationSection!).getByText('working · Load current operation snapshot')).toBeVisible();
       expect(within(runContextSection!).getByText('Latest event type · agent_received_task')).toBeVisible();
     });
   });
@@ -2304,7 +2306,7 @@ afterEach(() => {
       expect(within(details).getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
       expect(within(details).queryByRole('heading', { name: 'App Engineering Agent' })).not.toBeInTheDocument();
       expect(nextLaneSection).toHaveTextContent(
-        'Scope · corr-app-secondary · 1 of 2 participants in current active queue snapshot'
+        'Scope · corr-app-secondary · 2 of 2 participants in current active queue snapshot'
       );
       return nextLaneSection;
     });
@@ -2316,16 +2318,21 @@ afterEach(() => {
     expect(correlationQueueRecord).not.toBeNull();
     expect(correlationQueueRecord).toHaveTextContent('Correlation · corr-app-review');
     expect(
-      within(laneSection!).queryByRole('button', { name: 'Inspect Team Lead from active correlation queue' })
-    ).not.toBeInTheDocument();
+      within(laneSection!).getByRole('button', { name: 'Inspect Growth Revenue Agent from active correlation queue' })
+    ).toBeVisible();
 
     await user.click(correlationQueueButton);
 
     await waitFor(() => {
       const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+      const selectedLaneSection = within(details).getByRole('heading', { name: 'Active Correlation Queue' }).closest('section');
       expect(correlationSection).not.toBeNull();
+      expect(selectedLaneSection).not.toBeNull();
       expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
       expect(within(details).getByRole('heading', { name: 'Current Operation' })).toBeVisible();
+      expect(selectedLaneSection).toHaveTextContent(
+        'Scope · corr-app-secondary · 2 of 2 participants in current active queue snapshot'
+      );
       expect(within(correlationSection!).getByText('corr-app-secondary')).toBeVisible();
       expect(within(correlationSection!).queryByText('corr-app-review')).not.toBeInTheDocument();
     });
@@ -2449,9 +2456,12 @@ afterEach(() => {
 
     await waitFor(() => {
       const activeCorrelationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+      const laneSection = within(details).getByRole('heading', { name: 'Active Correlation Queue' }).closest('section');
       expect(activeCorrelationSection).not.toBeNull();
+      expect(laneSection).not.toBeNull();
       expect(within(details).getByRole('heading', { name: 'Team Lead' })).toBeVisible();
       expect(within(details).queryByRole('heading', { name: 'Current Operation' })).not.toBeInTheDocument();
+      expect(laneSection).toHaveTextContent('Scope · corr-app-review · 2 of 2 participants in current active queue snapshot');
       expect(within(activeCorrelationSection!).getByText('corr-app-review')).toBeVisible();
       expect(within(activeCorrelationSection!).queryByText('corr-app-secondary')).not.toBeInTheDocument();
     });
@@ -2466,6 +2476,144 @@ afterEach(() => {
       );
       expect(globalThis.fetch).not.toHaveBeenCalledWith(teamLeadSelectedOperationUrl, expect.anything());
       expect(globalThis.fetch).not.toHaveBeenCalledWith(selectedOperationUrl, expect.anything());
+    });
+  });
+
+  it('waits for the unfiltered crew snapshot before surfacing the selected-agent active-correlation queue lane', async () => {
+    let resolveAllOperations: ((response: Response) => void) | null = null;
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === allOperationsUrl) {
+          return new Promise<Response>((resolve) => {
+            resolveAllOperations = resolve;
+          });
+        }
+
+        if (url === operationsUrl) {
+          return Promise.resolve(jsonResponse(operationsFixture));
+        }
+
+        return Promise.resolve(resolveTestFetchResponse(url));
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    const incidentSection = within(details).getByRole('heading', { name: 'Incident Feed' }).closest('section');
+    const queueSection = within(details).getByRole('heading', { name: 'Active Queue' }).closest('section');
+    expect(incidentSection).not.toBeNull();
+    expect(queueSection).not.toBeNull();
+
+    await waitFor(() => {
+      const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+      expect(correlationSection).not.toBeNull();
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+    });
+
+    await user.click(
+      within(queueSection!).getByRole('button', {
+        name: 'Select active queue counterparty agent from operation app-engineering team-lead'
+      })
+    );
+
+    await waitFor(() => {
+      const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+      expect(correlationSection).not.toBeNull();
+      expect(within(details).getByRole('heading', { name: 'Team Lead' })).toBeVisible();
+      expect(within(details).queryByRole('heading', { name: 'Current Operation' })).not.toBeInTheDocument();
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+      expect(within(details).queryByRole('heading', { name: 'Active Correlation Queue' })).not.toBeInTheDocument();
+    });
+
+    expect(resolveAllOperations).not.toBeNull();
+    await act(async () => {
+      resolveAllOperations!(jsonResponse(allOperationsFixture));
+    });
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'Team Lead' })).toBeVisible();
+      expect(within(details).queryByRole('heading', { name: 'Active Correlation Queue' })).not.toBeInTheDocument();
+    });
+  });
+
+  it('keeps the active-correlation queue stale warning after pivoting into selected-agent mode', async () => {
+    (window as typeof window & { __AITOWN_POLL_INTERVAL_MS__?: number }).__AITOWN_POLL_INTERVAL_MS__ = 10;
+
+    let allOperationsRequests = 0;
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === allOperationsUrl) {
+          allOperationsRequests += 1;
+          if (allOperationsRequests === 1) {
+            return jsonResponse(allOperationsFixture);
+          }
+
+          return new Response(JSON.stringify({ error: 'internal_error', details: 'queue snapshot failed' }), {
+            status: 500,
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        return resolveTestFetchResponse(url);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    const incidentSection = within(details).getByRole('heading', { name: 'Incident Feed' }).closest('section');
+    const queueSection = within(details).getByRole('heading', { name: 'Active Queue' }).closest('section');
+    expect(incidentSection).not.toBeNull();
+    expect(queueSection).not.toBeNull();
+
+    await waitFor(() => {
+      const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+      expect(correlationSection).not.toBeNull();
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+    });
+
+    await waitFor(() => {
+      const laneSection = within(details).getByRole('heading', { name: 'Active Correlation Queue' }).closest('section');
+      expect(laneSection).not.toBeNull();
+      expect(laneSection).toHaveTextContent('Scope · corr-app-review · 2 of 2 participants in current active queue snapshot');
+    });
+
+    await waitFor(() => {
+      expect(allOperationsRequests).toBeGreaterThan(1);
+      expect(
+        within(details).getByText(
+          'Showing last active-correlation queue lane snapshot for corr-app-review. queue snapshot failed'
+        )
+      ).toBeVisible();
+    });
+
+    await user.click(
+      within(queueSection!).getByRole('button', {
+        name: 'Select active queue counterparty agent from operation app-engineering team-lead'
+      })
+    );
+
+    await waitFor(() => {
+      const laneSection = within(details).getByRole('heading', { name: 'Active Correlation Queue' }).closest('section');
+      expect(laneSection).not.toBeNull();
+      expect(within(details).getByRole('heading', { name: 'Team Lead' })).toBeVisible();
+      expect(within(details).queryByRole('heading', { name: 'Current Operation' })).not.toBeInTheDocument();
+      expect(
+        within(laneSection!).getByText(
+          'Showing last active-correlation queue lane snapshot for corr-app-review. queue snapshot failed'
+        )
+      ).toBeVisible();
     });
   });
 
@@ -5075,8 +5223,9 @@ afterEach(() => {
 
     await user.click(filteredQueueButton);
 
-    expect(await within(details).findByRole('heading', { name: 'Current Operation' })).toBeVisible();
-    expect(within(details).getByText('working · Load current operation snapshot')).toBeVisible();
+    const currentOperationSection = (await within(details).findByRole('heading', { name: 'Current Operation' })).closest('section');
+    expect(currentOperationSection).not.toBeNull();
+    expect(within(currentOperationSection!).getByText('working · Load current operation snapshot')).toBeVisible();
 
     const requestedUrls = vi
       .mocked(globalThis.fetch)
@@ -6892,8 +7041,8 @@ afterEach(() => {
     const details = await openHub(user);
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent from active queue' }));
 
-    const operationSection = await within(details).findByRole('heading', { name: 'Current Operation' });
-    expect(operationSection).toBeVisible();
+    const operationSection = (await within(details).findByRole('heading', { name: 'Current Operation' })).closest('section');
+    expect(operationSection).not.toBeNull();
 
     const auditSignalsSection = within(details).getByRole('heading', { name: 'Audit Signals' }).closest('section');
     const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
@@ -6904,11 +7053,11 @@ afterEach(() => {
       expect(operationsRequests).toBeGreaterThan(1);
       expect(globalThis.fetch).toHaveBeenCalledWith(selectedOperationUrl, expect.anything());
       expect(within(details).getByText('Showing last operation snapshot. operations refresh failed')).toBeVisible();
-      expect(within(details).getByText('blocked · Workflow evidence is still incomplete')).toBeVisible();
-      expect(within(details).getByText('Latest event · Stale queue snapshot should not win')).toBeVisible();
-      expect(within(details).getByText('Counterparties · team-lead')).toBeVisible();
+      expect(within(operationSection!).getByText('blocked · Workflow evidence is still incomplete')).toBeVisible();
+      expect(within(operationSection!).getByText('Latest event · Stale queue snapshot should not win')).toBeVisible();
+      expect(within(operationSection!).getByText('Counterparties · team-lead')).toBeVisible();
       expect(
-        within(details).queryByRole('button', { name: 'Select operation counterparty agent team-lead' })
+        within(operationSection!).queryByRole('button', { name: 'Select operation counterparty agent team-lead' })
       ).not.toBeInTheDocument();
       expect(within(auditSignalsSection!).getByText('What · Agent attached workflow evidence for lead review')).toBeVisible();
       expect(within(auditSignalsSection!).queryByText('What · Stale queue snapshot should not win')).not.toBeInTheDocument();
@@ -7048,16 +7197,17 @@ afterEach(() => {
     const details = await openHub(user);
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent from active queue' }));
 
-    expect(await within(details).findByRole('heading', { name: 'Current Operation' })).toBeVisible();
+    const operationSection = (await within(details).findByRole('heading', { name: 'Current Operation' })).closest('section');
+    expect(operationSection).not.toBeNull();
     dropSelectedOperation = true;
 
     await waitFor(() => {
       expect(operationsRequests).toBeGreaterThan(1);
       expect(within(details).getByText('Showing last operation snapshot. Operation is no longer in the active queue.')).toBeVisible();
-      expect(within(details).getByText('blocked · Workflow evidence is still incomplete')).toBeVisible();
-      expect(within(details).getByText('Counterparties · team-lead')).toBeVisible();
+      expect(within(operationSection!).getByText('blocked · Workflow evidence is still incomplete')).toBeVisible();
+      expect(within(operationSection!).getByText('Counterparties · team-lead')).toBeVisible();
       expect(
-        within(details).queryByRole('button', { name: 'Select operation counterparty agent team-lead' })
+        within(operationSection!).queryByRole('button', { name: 'Select operation counterparty agent team-lead' })
       ).not.toBeInTheDocument();
     });
   });

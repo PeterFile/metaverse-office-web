@@ -26,6 +26,7 @@ import type {
   MemoryArtifactIndex,
   OfficeAgent,
   OfficeOperation,
+  OfficeOperations,
   Severity
 } from './types';
 import { projectWorldState } from './world/projector';
@@ -364,6 +365,8 @@ function AppInner() {
   const [selectedOperationsSeverity, setSelectedOperationsSeverity] = useState<Severity | null>(null);
   const [selectedOperationSelection, setSelectedOperationSelection] = useState<OperationSelection | null>(null);
   const [selectedOperationSnapshot, setSelectedOperationSnapshot] = useState<OfficeOperation | null>(null);
+  const [activeCorrelationQueueSnapshot, setActiveCorrelationQueueSnapshot] = useState<OfficeOperations | null>(null);
+  const [activeCorrelationQueueSnapshotError, setActiveCorrelationQueueSnapshotError] = useState<string | null>(null);
   const [invalidSelectedOperationCorrelationId, setInvalidSelectedOperationCorrelationId] = useState<string | null>(null);
   const [focusedExactMemoryArtifact, setFocusedExactMemoryArtifact] = useState<MemoryArtifact | null>(null);
   const [focusedSharedMemoryArtifactRef, setFocusedSharedMemoryArtifactRef] = useState<string | null>(null);
@@ -785,6 +788,43 @@ function AppInner() {
       selectedOperationsFiltersActive
     ]
   );
+  const crewOverviewActiveCorrelationQueueSource = crewOverviewStateBucketsResource.data;
+  const crewOverviewActiveCorrelationQueueState = crewOverviewStateBucketsResource.state;
+  const crewOverviewActiveCorrelationQueueError = crewOverviewStateBucketsResource.error;
+
+  useEffect(() => {
+    if (!hubOpen) {
+      setActiveCorrelationQueueSnapshot(null);
+      setActiveCorrelationQueueSnapshotError(null);
+      return;
+    }
+
+    if (selectedAgentId !== null) {
+      return;
+    }
+
+    if (crewOverviewActiveCorrelationQueueSource) {
+      setActiveCorrelationQueueSnapshot(crewOverviewActiveCorrelationQueueSource);
+    }
+
+    setActiveCorrelationQueueSnapshotError(crewOverviewActiveCorrelationQueueError);
+  }, [
+    hubOpen,
+    selectedAgentId,
+    crewOverviewActiveCorrelationQueueSource,
+    crewOverviewActiveCorrelationQueueError
+  ]);
+
+  const activeCorrelationQueueOperations =
+    selectedAgentId === null ? crewOverviewActiveCorrelationQueueSource : activeCorrelationQueueSnapshot;
+  const activeCorrelationQueueState =
+    selectedAgentId === null
+      ? crewOverviewActiveCorrelationQueueState
+      : activeCorrelationQueueSnapshot
+        ? 'ready'
+        : 'idle';
+  const activeCorrelationQueueError =
+    selectedAgentId === null ? crewOverviewActiveCorrelationQueueError : activeCorrelationQueueSnapshotError;
 
   useEffect(() => {
     if (liveSelectedOperation) {
@@ -1418,6 +1458,9 @@ function AppInner() {
               operations={operationsResource.data}
               operationsError={operationsResource.error}
               operationsState={operationsResource.state}
+              activeCorrelationQueueOperations={activeCorrelationQueueOperations}
+              activeCorrelationQueueError={activeCorrelationQueueError}
+              activeCorrelationQueueState={activeCorrelationQueueState}
               operationsStateBuckets={crewOverviewOperationStateBuckets}
               operationsSeverityBuckets={crewOverviewOperationSeverityBuckets}
               operationsStateBucketsError={crewOverviewStateBucketsResource.error}

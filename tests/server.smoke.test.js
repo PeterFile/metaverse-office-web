@@ -1018,6 +1018,37 @@ test('GET /agents/:id/workflow aggregates detail with default 60m window and per
     defaultWindow.body.detail.recent_interactions.at(-1).interaction_id,
     'interaction:evt_workflow_old_alert'
   );
+  assert.deepEqual(defaultWindow.body.summary, {
+    incident_count: 4,
+    interaction_count: 3,
+    event_count: 7,
+    incident_kind_buckets: {
+      reboot: 1,
+      handoff: 2,
+      peer_watch_alert: 1
+    },
+    interaction_type_buckets: {
+      handoff: 1,
+      peer_watch: 1,
+      review: 1
+    },
+    event_type_buckets: {
+      review_started: 1,
+      review_completed: 1,
+      peer_watch_alert_raised: 1,
+      agent_handoff_started: 1,
+      agent_handoff_completed: 1,
+      agent_reboot_requested: 1,
+      agent_wrote_file: 1
+    },
+    severity_buckets: {
+      normal: 4,
+      yellow: 5,
+      orange: 3,
+      red: 2
+    },
+    latest_activity_at: '2026-03-09T18:55:00.000Z'
+  });
   assert.deepEqual(
     defaultWindow.body.incidents.map((item) => item.incident_id),
     [
@@ -1084,6 +1115,30 @@ test('GET /agents/:id/workflow aggregates detail with default 60m window and per
     limited.body.timeline.map((item) => item.event_id),
     ['evt_workflow_reboot', 'evt_workflow_write']
   );
+  assert.deepEqual(limited.body.summary, {
+    incident_count: 2,
+    interaction_count: 2,
+    event_count: 2,
+    incident_kind_buckets: {
+      reboot: 1,
+      handoff: 1
+    },
+    interaction_type_buckets: {
+      handoff: 1,
+      peer_watch: 1
+    },
+    event_type_buckets: {
+      agent_reboot_requested: 1,
+      agent_wrote_file: 1
+    },
+    severity_buckets: {
+      normal: 2,
+      yellow: 1,
+      orange: 1,
+      red: 2
+    },
+    latest_activity_at: '2026-03-09T18:55:00.000Z'
+  });
   assert.deepEqual(limited.body.correlation_ids, [
     'corr-workflow-handoff',
     'corr-workflow-peer-watch',

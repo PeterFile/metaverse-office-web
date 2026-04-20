@@ -127,6 +127,7 @@
 - `detail` reuses the existing `GET /agents/:id` item semantics, including the current detail-slice default `limit=5`
 - `window` defaults to `60m` and filters only the top-level `incidents`, `interactions`, and `timeline` slices
 - `limit`, when provided, caps the top-level `incidents`, `interactions`, and `timeline` slices individually using their existing ordering semantics, and is also passed through to `detail` so its recent slices keep the existing detail limit behavior
+- `summary` is derived only from the returned top-level `incidents`, `interactions`, and `timeline` slices, so its counts, buckets, and `latest_activity_at` reflect the already limited/windowed response rather than hidden records
 - `correlation_ids` are deduped from all returned top-level workflow slices
 - `counterparty_agent_ids` are deduped from all returned top-level workflow slices: `incidents` and `timeline` contribute their `counterparty_agent_ids`, `interactions` contribute via `participant_agent_ids`, and the final workflow list excludes the focal `:id` plus `team-lead`
 - no new write path, event type, or stored workflow projection is introduced
@@ -144,6 +145,21 @@
     "recent_incidents": [],
     "recent_handoffs": [],
     "recent_reboots": []
+  },
+  "summary": {
+    "incident_count": 0,
+    "interaction_count": 0,
+    "event_count": 0,
+    "incident_kind_buckets": {},
+    "interaction_type_buckets": {},
+    "event_type_buckets": {},
+    "severity_buckets": {
+      "normal": 0,
+      "yellow": 0,
+      "orange": 0,
+      "red": 0
+    },
+    "latest_activity_at": null
   },
   "correlation_ids": [
     "corr-workflow-handoff",

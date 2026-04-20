@@ -276,10 +276,16 @@ class PrototypeStore {
       limit,
       now: filters.now
     });
+    const summary = createWorkflowSummary({
+      incidents,
+      interactions,
+      timeline
+    });
 
     return {
       agent_id: agentId,
       detail,
+      summary,
       correlation_ids: normalizeStringValues([
         ...incidents.map((incident) => incident.correlation_id),
         ...interactions.map((interaction) => interaction.correlation_id),
@@ -765,6 +771,79 @@ function createOfficeOperationsSummary(items) {
     state_buckets: stateBuckets,
     severity_buckets: severityBuckets
   };
+}
+
+function createWorkflowSummary({ incidents = [], interactions = [], timeline = [] }) {
+  const severityBuckets = createSeverityBuckets();
+  const incidentKindBuckets = {};
+  const interactionTypeBuckets = {};
+  const eventTypeBuckets = {};
+  let latestActivityAt = null;
+
+  for (const incident of incidents) {
+    incrementBucket(incidentKindBuckets, incident.kind);
+    incrementSeverityBucket(severityBuckets, incident.severity);
+    latestActivityAt = getLatestIsoValue(latestActivityAt, incident.ts);
+  }
+
+  for (const interaction of interactions) {
+    incrementBucket(interactionTypeBuckets, interaction.interaction_type);
+    incrementSeverityBucket(severityBuckets, interaction.severity);
+    latestActivityAt = getLatestIsoValue(
+      latestActivityAt,
+      interaction.ended_at || interaction.started_at
+    );
+  }
+
+  for (const event of timeline) {
+    incrementBucket(eventTypeBuckets, event.event_type);
+    incrementSeverityBucket(severityBuckets, event.severity);
+    latestActivityAt = getLatestIsoValue(latestActivityAt, event.ts);
+  }
+
+  return {
+    incident_count: incidents.length,
+    interaction_count: interactions.length,
+    event_count: timeline.length,
+    incident_kind_buckets: incidentKindBuckets,
+    interaction_type_buckets: interactionTypeBuckets,
+    event_type_buckets: eventTypeBuckets,
+    severity_buckets: severityBuckets,
+    latest_activity_at: latestActivityAt
+  };
+}
+
+function createSeverityBuckets() {
+  return {
+    normal: 0,
+    yellow: 0,
+    orange: 0,
+    red: 0
+  };
+}
+
+function incrementBucket(buckets, key) {
+  if (typeof key !== 'string' || key.length === 0) {
+    return;
+  }
+
+  buckets[key] = (buckets[key] || 0) + 1;
+}
+
+function incrementSeverityBucket(buckets, severity) {
+  if (typeof severity !== 'string' || !Object.prototype.hasOwnProperty.call(buckets, severity)) {
+    return;
+  }
+
+  buckets[severity] += 1;
+}
+
+function getLatestIsoValue(currentValue, nextValue) {
+  if (compareIsoAsc(currentValue, nextValue) >= 0) {
+    return currentValue;
+  }
+
+  return nextValue || currentValue || null;
 }
 
 function compareOfficeOperations(left, right) {

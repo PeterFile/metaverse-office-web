@@ -177,6 +177,7 @@ Optional env:
 - `detail` stays backward-compatible with `GET /agents/:id`; the route does not add a stored workflow projection
 - `window` defaults to `60m` and filters only the top-level `incidents`, `interactions`, and `timeline` slices
 - when `limit` is present, it reuses existing per-slice semantics: `detail` applies the existing detail limit to its recent slices, and top-level `incidents`, `interactions`, and `timeline` each cap independently using their existing ordering
+- `summary` is derived only from the returned top-level workflow slices, so its counts, buckets, and `latest_activity_at` reflect the already windowed/limited response rather than hidden history
 - `correlation_ids` are deduped from all returned top-level workflow slices for quick operator pivots
 - `counterparty_agent_ids` are deduped from all returned top-level workflow slices: `incidents` and `timeline` contribute their `counterparty_agent_ids`, `interactions` contribute via `participant_agent_ids`, and the final workflow list excludes the focal agent id plus `team-lead`
 

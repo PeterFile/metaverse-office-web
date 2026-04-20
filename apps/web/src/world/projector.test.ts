@@ -73,6 +73,8 @@ function makeOverview(agents: OfficeAgent[] = [makeAgent()]): OfficeOverview {
 }
 
 function makeWorkflow(overrides: Partial<AgentWorkflow> = {}): AgentWorkflow {
+  const { summary: overrideSummary, ...restOverrides } = overrides;
+
   return {
     agent_id: 'app-engineering',
     detail: {
@@ -89,12 +91,27 @@ function makeWorkflow(overrides: Partial<AgentWorkflow> = {}): AgentWorkflow {
       recent_handoffs: [],
       recent_reboots: [],
     },
+    summary: overrideSummary || {
+      incident_count: 0,
+      interaction_count: 0,
+      event_count: 0,
+      incident_kind_buckets: {},
+      interaction_type_buckets: {},
+      event_type_buckets: {},
+      severity_buckets: {
+        normal: 0,
+        yellow: 0,
+        orange: 0,
+        red: 0,
+      },
+      latest_activity_at: null,
+    },
     correlation_ids: [],
     counterparty_agent_ids: [],
     incidents: [],
     interactions: [],
     timeline: [],
-    ...overrides,
+    ...restOverrides,
   };
 }
 

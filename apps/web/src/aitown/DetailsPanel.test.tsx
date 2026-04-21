@@ -4899,6 +4899,163 @@ describe('DetailsPanel accountability signals', () => {
     expect(onSelectCorrelation).not.toHaveBeenCalled();
   });
 
+  it('renders crew-overview collector shared snapshot artifact rows as shared-memory jumps and locally focuses matching shared-memory artifacts', async () => {
+    const user = userEvent.setup();
+    const sharedArtifactRef = '/evidence/collector-shared.md';
+    const collectorSnapshot: CollectorSnapshot = {
+      ...buildCollectorSnapshot(),
+      shared_artifacts: [
+        {
+          artifact_ref: sharedArtifactRef,
+          artifact_kind: 'workspace_file',
+          file_name: 'collector-shared.md',
+          agent_ids: ['app-engineering', 'growth-revenue'],
+          agent_count: 2,
+          mention_count: 3,
+          last_seen_at: '2026-03-16T08:59:00.000Z',
+          source_kinds: ['workspace_file', 'tmux_observation']
+        }
+      ]
+    };
+    const memoryArtifacts: MemoryArtifactIndex = {
+      generated_at: '2026-03-16T09:00:00.000Z',
+      items: [
+        ...buildMemoryArtifacts().items,
+        {
+          artifact_ref: sharedArtifactRef,
+          artifact_kind: 'workspace_file',
+          file_name: 'collector-shared.md',
+          first_seen_at: '2026-03-16T08:56:00.000Z',
+          last_seen_at: '2026-03-16T08:59:00.000Z',
+          mention_count: 3,
+          agent_ids: ['app-engineering', 'growth-revenue'],
+          correlation_ids: [],
+          source_kinds: ['collector_snapshot'],
+          latest_summary: 'Collector shared snapshot artifact',
+          latest_event_type: 'collector_snapshot_written',
+          collector_last_modified_at: '2026-03-16T08:59:00.000Z'
+        }
+      ]
+    };
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          collectorSnapshot,
+          memoryArtifacts,
+          selectedAgent: null,
+          selectedCorrelationId: null,
+          selectedOperation: null,
+          workflow: null,
+          correlation: null
+        })}
+      />
+    );
+
+    const collectorSection = screen.getByRole('heading', { name: 'Collector Supervision' }).closest('section');
+    const memorySection = screen.getByRole('heading', { name: 'Shared Memory' }).closest('section');
+    expect(collectorSection).not.toBeNull();
+    expect(memorySection).not.toBeNull();
+    expect(
+      within(collectorSection!).getByText('Shared snapshot artifacts · 1 shared artifact in latest collector snapshot')
+    ).toBeVisible();
+
+    const sharedArtifactRecord = within(collectorSection!).getByText('Agent count · 2').closest('li');
+    const focusedArtifactRecord = within(memorySection!).getByText(`Ref · ${sharedArtifactRef}`).closest('li');
+    expect(sharedArtifactRecord).not.toBeNull();
+    expect(focusedArtifactRecord).not.toBeNull();
+    expect(
+      within(sharedArtifactRecord!).getByRole('button', {
+        name: `Jump to shared memory artifact ${sharedArtifactRef}`
+      })
+    ).toHaveTextContent(sharedArtifactRef);
+    expect(sharedArtifactRecord!).toHaveTextContent('Mention count · 3');
+    expect(sharedArtifactRecord!).toHaveTextContent('Last seen · 2026-03-16T08:59:00.000Z');
+    expect(sharedArtifactRecord!).toHaveTextContent('Source kinds · workspace_file, tmux_observation');
+    expect(sharedArtifactRecord!).toHaveTextContent('Participating agents · app-engineering, growth-revenue');
+
+    await user.click(
+      within(sharedArtifactRecord!).getByRole('button', {
+        name: `Jump to shared memory artifact ${sharedArtifactRef}`
+      })
+    );
+
+    expect(document.activeElement).toBe(focusedArtifactRecord);
+  });
+
+  it('shows explicit crew-overview collector shared snapshot artifact loading, empty, and degraded states', () => {
+    const baseProps = {
+      selectedAgent: null,
+      selectedCorrelationId: null,
+      selectedOperation: null,
+      workflow: null,
+      correlation: null
+    } as const;
+
+    const { rerender } = render(
+      <DetailsPanel
+        {...buildProps({
+          ...baseProps,
+          collectorSnapshot: null,
+          collectorSnapshotError: null,
+          collectorSnapshotState: 'loading'
+        })}
+      />
+    );
+
+    const collectorSection = screen.getByRole('heading', { name: 'Collector Supervision' }).closest('section');
+    expect(collectorSection).not.toBeNull();
+    expect(within(collectorSection!).getByText('Loading collector shared snapshot artifacts...')).toBeVisible();
+
+    rerender(
+      <DetailsPanel
+        {...buildProps({
+          ...baseProps,
+          collectorSnapshot: null,
+          collectorSnapshotError: 'collector snapshot request failed',
+          collectorSnapshotState: 'error'
+        })}
+      />
+    );
+
+    expect(
+      within(collectorSection!).getByText('Unable to load collector shared snapshot artifacts. collector snapshot request failed')
+    ).toBeVisible();
+
+    rerender(
+      <DetailsPanel
+        {...buildProps({
+          ...baseProps,
+          collectorSnapshot: buildCollectorSnapshot(),
+          collectorSnapshotError: null,
+          collectorSnapshotState: 'ready'
+        })}
+      />
+    );
+
+    expect(
+      within(collectorSection!).getByText('Collector shared snapshot artifacts unavailable in latest collector snapshot.')
+    ).toBeVisible();
+
+    rerender(
+      <DetailsPanel
+        {...buildProps({
+          ...baseProps,
+          collectorSnapshot: {
+            ...buildCollectorSnapshot(),
+            shared_artifacts: []
+          },
+          collectorSnapshotError: null,
+          collectorSnapshotState: 'ready'
+        })}
+      />
+    );
+
+    expect(
+      within(collectorSection!).getByText('No shared snapshot artifacts in latest collector snapshot.')
+    ).toBeVisible();
+  });
+
   it('renders crew-overview collector supervision watchers as pivots and carries the active correlation when present, otherwise keeps no-correlation behavior', async () => {
     const user = userEvent.setup();
     const onSelectAgent = vi.fn();

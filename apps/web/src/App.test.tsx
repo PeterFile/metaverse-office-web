@@ -3970,6 +3970,162 @@ afterEach(() => {
     expect(within(replaySection!).getByText('No recent replay events.')).toBeVisible();
   });
 
+  it('filters selected-agent workflow timeline replay locally by severity without fetching replay', async () => {
+    const teamLeadWorkflowWithReplay = {
+      ...teamLeadWorkflowFixture,
+      timeline: [
+        {
+          ...teamLeadReplayWorkflowFixture.timeline[0],
+          event_id: 'evt-team-lead-normal-replay',
+          severity: 'normal',
+          summary: 'Team lead normal replay checkpoint'
+        },
+        {
+          ...teamLeadReplayWorkflowFixture.timeline[0],
+          event_id: 'evt-team-lead-orange-replay',
+          severity: 'orange',
+          summary: 'Team lead orange replay checkpoint'
+        }
+      ]
+    } satisfies AgentWorkflow;
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === teamLeadWorkflowUrl) {
+          return jsonResponse(teamLeadWorkflowWithReplay);
+        }
+
+        return resolveTestFetchResponse(url);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect Team Lead' }));
+
+    const replaySection = (await within(details).findByRole('heading', { name: 'Timeline Replay' })).closest('section');
+    expect(replaySection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(replaySection!).getByText('Request scope · Target agent · team-lead')).toBeVisible();
+      expect(within(replaySection!).getByText('Team lead normal replay checkpoint')).toBeVisible();
+      expect(within(replaySection!).getByText('Team lead orange replay checkpoint')).toBeVisible();
+    });
+
+    const severityFilter = within(replaySection!).getByRole('combobox', {
+      name: 'Filter timeline replay by severity'
+    });
+    const fetchCallCountBeforeFilter = vi.mocked(globalThis.fetch).mock.calls.length;
+
+    await user.selectOptions(severityFilter, 'orange');
+
+    await waitFor(() => {
+      expect(within(replaySection!).getByText('Team lead orange replay checkpoint')).toBeVisible();
+      expect(within(replaySection!).queryByText('Team lead normal replay checkpoint')).not.toBeInTheDocument();
+      expect(within(replaySection!).queryByText('Scoped replay ·')).not.toBeInTheDocument();
+    });
+
+    const postFilterRequests = vi
+      .mocked(globalThis.fetch)
+      .mock.calls.slice(fetchCallCountBeforeFilter)
+      .map(([input]) => (typeof input === 'string' ? input : input.toString()));
+
+    expect(postFilterRequests.filter((url) => url.startsWith('/timeline'))).toEqual([]);
+  });
+
+  it('resets selected-agent replay severity when switching to a different agent', async () => {
+    const teamLeadWorkflowWithReplay = {
+      ...teamLeadWorkflowFixture,
+      timeline: [
+        {
+          ...teamLeadReplayWorkflowFixture.timeline[0],
+          event_id: 'evt-team-lead-normal-replay',
+          severity: 'normal',
+          summary: 'Team lead normal replay checkpoint'
+        },
+        {
+          ...teamLeadReplayWorkflowFixture.timeline[0],
+          event_id: 'evt-team-lead-orange-replay',
+          severity: 'orange',
+          summary: 'Team lead orange replay checkpoint'
+        }
+      ]
+    } satisfies AgentWorkflow;
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === teamLeadWorkflowUrl) {
+          return jsonResponse(teamLeadWorkflowWithReplay);
+        }
+
+        return resolveTestFetchResponse(url);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect Team Lead' }));
+
+    let replaySection = (await within(details).findByRole('heading', { name: 'Timeline Replay' })).closest('section');
+    expect(replaySection).not.toBeNull();
+
+    const severityFilter = within(replaySection!).getByRole('combobox', {
+      name: 'Filter timeline replay by severity'
+    });
+
+    await user.selectOptions(severityFilter, 'orange');
+
+    await waitFor(() => {
+      expect(severityFilter).toHaveValue('orange');
+      expect(within(replaySection!).getByText('Team lead orange replay checkpoint')).toBeVisible();
+    });
+
+    await user.click(
+      within(details).getByRole('button', {
+        name: 'Select responsibility chain agent app-engineering'
+      })
+    );
+
+    replaySection = (await within(details).findByRole('heading', { name: 'Timeline Replay' })).closest('section');
+    expect(replaySection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+      expect(
+        within(replaySection!).getByRole('combobox', {
+          name: 'Filter timeline replay by severity'
+        })
+      ).toHaveValue('');
+    });
+
+    await user.click(within(details).getByRole('button', { name: 'Clear' }));
+    await user.click(within(details).getByRole('button', { name: 'Inspect Team Lead' }));
+
+    replaySection = (await within(details).findByRole('heading', { name: 'Timeline Replay' })).closest('section');
+    expect(replaySection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'Team Lead' })).toBeVisible();
+      expect(
+        within(replaySection!).getByRole('combobox', {
+          name: 'Filter timeline replay by severity'
+        })
+      ).toHaveValue('');
+      expect(within(replaySection!).getByText('Team lead normal replay checkpoint')).toBeVisible();
+      expect(within(replaySection!).getByText('Team lead orange replay checkpoint')).toBeVisible();
+    });
+  });
+
   it('keeps selected-agent timeline replay scoped to the active correlation without widening to the global replay feed', async () => {
     const user = userEvent.setup();
     render(<App />);
@@ -4008,6 +4164,50 @@ afterEach(() => {
 
     expect(postSelectionRequests).toContain(secondaryCorrelationUrl);
     expect(postSelectionRequests).not.toContain(secondaryScopedTimelineUrl);
+  });
+
+  it('filters selected-agent scoped correlation replay locally by severity without fetching replay', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
+
+    const incidentSection = (await within(details).findByRole('heading', { name: 'Incident Feed' })).closest('section');
+    const replaySection = (await within(details).findByRole('heading', { name: 'Timeline Replay' })).closest('section');
+    expect(incidentSection).not.toBeNull();
+    expect(replaySection).not.toBeNull();
+
+    await user.click(
+      within(incidentSection!).getByRole('button', { name: 'Open incident correlation corr-app-secondary' })
+    );
+
+    await waitFor(() => {
+      expect(within(replaySection!).getByText('Scoped replay · corr-app-secondary')).toBeVisible();
+      expect(within(replaySection!).getByText('App engineering finished the secondary review handoff')).toBeVisible();
+    });
+
+    const severityFilter = within(replaySection!).getByRole('combobox', {
+      name: 'Filter timeline replay by severity'
+    });
+    const fetchCallCountBeforeFilter = vi.mocked(globalThis.fetch).mock.calls.length;
+
+    await user.selectOptions(severityFilter, 'orange');
+
+    await waitFor(() => {
+      expect(within(replaySection!).getByText('Scoped replay · corr-app-secondary')).toBeVisible();
+      expect(within(replaySection!).getByText('No replay events for corr-app-secondary at Orange severity.')).toBeVisible();
+      expect(
+        within(replaySection!).queryByText('App engineering finished the secondary review handoff')
+      ).not.toBeInTheDocument();
+    });
+
+    const postFilterRequests = vi
+      .mocked(globalThis.fetch)
+      .mock.calls.slice(fetchCallCountBeforeFilter)
+      .map(([input]) => (typeof input === 'string' ? input : input.toString()));
+
+    expect(postFilterRequests.filter((url) => url.startsWith('/timeline'))).toEqual([]);
   });
 
   it('keeps the last selected-agent replay snapshot visible when an unscoped selected-agent replay refresh fails', async () => {

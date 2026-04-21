@@ -219,6 +219,12 @@ describe('selectHotZones', () => {
           phase: 'blocked',
           reboot_recommended: true,
           has_open_incidents: true,
+          staleness: {
+            severity: 'orange',
+            stale_for_ms: 120000,
+            stale_for_minutes: 2,
+            last_meaningful_output_at: '2026-03-14T09:58:00Z',
+          },
         }),
       ],
       [
@@ -239,6 +245,12 @@ describe('selectHotZones', () => {
           zone: 'meeting-zone',
           severity: 'orange',
           has_open_incidents: true,
+          staleness: {
+            severity: 'yellow',
+            stale_for_ms: 60000,
+            stale_for_minutes: 1,
+            last_meaningful_output_at: '2026-03-14T09:59:00Z',
+          },
         }),
       ],
       [
@@ -287,6 +299,7 @@ describe('selectHotZones', () => {
         blocked_count: 1,
         reboot_count: 1,
         open_alert_or_incident_occupant_count: 2,
+        runtime_freshness_degraded_count: 1,
       },
       {
         zone_id: 'meeting-zone',
@@ -296,6 +309,7 @@ describe('selectHotZones', () => {
         blocked_count: 0,
         reboot_count: 0,
         open_alert_or_incident_occupant_count: 1,
+        runtime_freshness_degraded_count: 1,
       },
       {
         zone_id: 'handoff-hub',
@@ -305,6 +319,7 @@ describe('selectHotZones', () => {
         blocked_count: 1,
         reboot_count: 0,
         open_alert_or_incident_occupant_count: 0,
+        runtime_freshness_degraded_count: 0,
       },
     ]);
   });
@@ -341,6 +356,7 @@ describe('selectHotZones', () => {
         blocked_count: 0,
         reboot_count: 0,
         open_alert_or_incident_occupant_count: 1,
+        runtime_freshness_degraded_count: 0,
       },
     ]);
   });

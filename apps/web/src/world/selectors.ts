@@ -40,6 +40,7 @@ export interface HotZoneSummary {
   blocked_count: number;
   reboot_count: number;
   open_alert_or_incident_occupant_count: number;
+  runtime_freshness_degraded_count: number;
 }
 
 export interface DataQualitySummary {
@@ -159,6 +160,7 @@ export function selectHotZones(
     let blockedCount = 0;
     let rebootCount = 0;
     let openAlertOrIncidentOccupantCount = 0;
+    let runtimeFreshnessDegradedCount = 0;
 
     for (const occupant of occupants) {
       if (SEVERITY_RANK[occupant.severity] > SEVERITY_RANK[highestSeverity]) {
@@ -176,6 +178,10 @@ export function selectHotZones(
       if (occupant.has_open_incidents) {
         openAlertOrIncidentOccupantCount += 1;
       }
+
+      if (occupant.staleness && occupant.staleness.severity !== 'normal') {
+        runtimeFreshnessDegradedCount += 1;
+      }
     }
 
     const summary: HotZoneSummary = {
@@ -186,6 +192,7 @@ export function selectHotZones(
       blocked_count: blockedCount,
       reboot_count: rebootCount,
       open_alert_or_incident_occupant_count: openAlertOrIncidentOccupantCount,
+      runtime_freshness_degraded_count: runtimeFreshnessDegradedCount,
     };
 
     if (isHotZone(summary)) {

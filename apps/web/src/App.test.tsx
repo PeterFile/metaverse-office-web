@@ -3113,6 +3113,113 @@ afterEach(() => {
     ).toBeVisible();
   });
 
+  it('focuses crew-overview collector shared snapshot artifacts through exact shared memory without changing the crew-overview selection', async () => {
+    const collectorSnapshotWithSharedArtifact = {
+      ...collectorSnapshotFixture,
+      shared_artifacts: [
+        {
+          artifact_ref: '/tmp/missing.md',
+          artifact_kind: 'workspace_file',
+          file_name: 'missing.md',
+          agent_ids: ['app-engineering', 'growth-revenue'],
+          agent_count: 2,
+          mention_count: 2,
+          last_seen_at: '2026-03-16T08:59:10.000Z',
+          source_kinds: ['workspace_file', 'tmux_observation']
+        }
+      ]
+    };
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === collectorSnapshotUrl) {
+          return jsonResponse({ item: collectorSnapshotWithSharedArtifact });
+        }
+
+        if (url === crewOverviewMissingArtifactExactUrl) {
+          return jsonResponse({
+            generated_at: '2026-03-16T09:00:00.000Z',
+            items: [
+              {
+                artifact_ref: '/tmp/missing.md',
+                artifact_kind: 'workspace_file',
+                file_name: 'missing.md',
+                first_seen_at: '2026-03-16T08:58:30.000Z',
+                last_seen_at: '2026-03-16T08:59:10.000Z',
+                mention_count: 2,
+                agent_ids: ['app-engineering', 'growth-revenue'],
+                correlation_ids: [],
+                source_kinds: ['collector_snapshot'],
+                latest_summary: 'Collector shared snapshot exact fallback stayed on the crew-overview path',
+                latest_event_type: 'collector_snapshot_written',
+                collector_last_modified_at: '2026-03-16T08:59:10.000Z'
+              }
+            ]
+          });
+        }
+
+        return resolveTestFetchResponse(url);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    const collectorSection = within(details).getByRole('heading', { name: 'Collector Supervision' }).closest('section');
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    const memorySection = within(details).getByRole('heading', { name: 'Shared Memory' }).closest('section');
+    expect(collectorSection).not.toBeNull();
+    expect(correlationSection).not.toBeNull();
+    expect(memorySection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+      expect(
+        within(collectorSection!).getByText('Shared snapshot artifacts · 1 shared artifact in latest collector snapshot')
+      ).toBeVisible();
+    });
+
+    const sharedArtifactRecord = within(collectorSection!).getByText('Agent count · 2').closest('li');
+    expect(sharedArtifactRecord).not.toBeNull();
+    expect(sharedArtifactRecord!).toHaveTextContent('Mention count · 2');
+    expect(sharedArtifactRecord!).toHaveTextContent('Last seen · 2026-03-16T08:59:10.000Z');
+    expect(sharedArtifactRecord!).toHaveTextContent('Source kinds · workspace_file, tmux_observation');
+    expect(sharedArtifactRecord!).toHaveTextContent('Participating agents · app-engineering, growth-revenue');
+    expect(within(memorySection!).queryByText('Ref · /tmp/missing.md')).not.toBeInTheDocument();
+
+    const fetchCallCountBeforeJump = vi.mocked(globalThis.fetch).mock.calls.length;
+
+    await user.click(
+      within(sharedArtifactRecord!).getByRole('button', {
+        name: 'Jump to shared memory artifact /tmp/missing.md'
+      })
+    );
+
+    await waitFor(() => {
+      expect(within(memorySection!).getByText('Ref · /tmp/missing.md')).toBeVisible();
+      expect(within(memorySection!).getByText('Focused exact artifact · /tmp/missing.md')).toBeVisible();
+      expect(within(memorySection!).getByText('Collector shared snapshot exact fallback stayed on the crew-overview path')).toBeVisible();
+      expect(within(details).getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+    });
+
+    const focusedArtifactRecord = within(memorySection!).getByText('Ref · /tmp/missing.md').closest('li');
+    expect(focusedArtifactRecord).not.toBeNull();
+    expect(document.activeElement).toBe(focusedArtifactRecord);
+
+    const postJumpRequests = vi
+      .mocked(globalThis.fetch)
+      .mock.calls.slice(fetchCallCountBeforeJump)
+      .map(([input]) => (typeof input === 'string' ? input : input.toString()));
+
+    expect(postJumpRequests).toEqual([crewOverviewMissingArtifactExactUrl]);
+  });
+
   it('preserves the active crew-overview correlation when pivoting through a collector supervision row agent label', async () => {
     const user = userEvent.setup();
     render(<App />);

@@ -1,6 +1,7 @@
 import type {
   AgentWorkflow,
   CollectorItem,
+  CollectorSharedArtifact,
   CollectorSnapshot,
   CollectorTmuxObservation,
   CollectorWorkspaceObservation,
@@ -2758,6 +2759,7 @@ export function DetailsPanel({
     )
     .sort(compareCollectorItems)
     .slice(0, 3);
+  const collectorSharedArtifacts = collectorSnapshot?.shared_artifacts;
   const focusedSharedMemoryBacklinks = buildFocusedSharedMemoryBacklinks({
     focusedArtifactRef: focusedSharedMemoryArtifactRef,
     activeCorrelationId: sharedMemoryActiveCorrelationId,
@@ -2803,8 +2805,16 @@ export function DetailsPanel({
             {collectorSnapshotState === 'loading' && !collectorSnapshot ? (
               <li className="aitown-record">Loading collector snapshot...</li>
             ) : null}
+            {collectorSnapshotState === 'loading' && !collectorSnapshot ? (
+              <li className="aitown-record">Loading collector shared snapshot artifacts...</li>
+            ) : null}
             {collectorSnapshotError && !collectorSnapshot ? (
               <li className="aitown-record">{`Unable to load collector snapshot. ${collectorSnapshotError}`}</li>
+            ) : null}
+            {collectorSnapshotError && !collectorSnapshot ? (
+              <li className="aitown-record">
+                {`Unable to load collector shared snapshot artifacts. ${collectorSnapshotError}`}
+              </li>
             ) : null}
             {collectorSnapshot ? (
               <li className="aitown-record">
@@ -2825,6 +2835,31 @@ export function DetailsPanel({
                 <span>{`Reboot flags · ${collectorSnapshot.summary.reboot_recommended_count}`}</span>
               </li>
             ) : null}
+            {collectorSnapshot && collectorSharedArtifacts !== undefined ? (
+              <li className="aitown-record">
+                <strong>
+                  {`Shared snapshot artifacts · ${collectorSharedArtifacts.length} shared artifact${collectorSharedArtifacts.length === 1 ? '' : 's'} in latest collector snapshot`}
+                </strong>
+              </li>
+            ) : null}
+            {collectorSharedArtifacts?.map((artifact) => (
+              <li key={artifact.artifact_ref} className="aitown-record">
+                <strong>
+                  {renderSharedMemoryArtifactJump({
+                    artifactRef: artifact.artifact_ref,
+                    label: artifact.artifact_ref,
+                    sharedMemoryArtifactRefs,
+                    onJump: sharedMemoryEvidenceJump.onJump,
+                    allowExactFallback: sharedMemoryEvidenceJump.allowExactFallback
+                  })}
+                </strong>
+                <span>{`Agent count · ${artifact.agent_count}`}</span>
+                <span>{`Mention count · ${artifact.mention_count}`}</span>
+                <span>{`Last seen · ${renderTimestamp(artifact.last_seen_at, 'No shared snapshot timestamp')}`}</span>
+                <span>{`Source kinds · ${renderNamedList(artifact.source_kinds, 'No source kinds')}`}</span>
+                <span>{`Participating agents · ${renderNamedList(artifact.agent_ids, 'No participating agents')}`}</span>
+              </li>
+            ))}
             {collectorSignalItems.map((item) => {
               const collectorEvidenceRefs = resolveCollectorEvidenceRefs(item);
               const collectorLabel = agentNameById.get(item.agent_id) ?? item.agent_id;
@@ -2895,6 +2930,12 @@ export function DetailsPanel({
             })}
             {collectorSnapshotState === 'ready' && !collectorSnapshotError && !collectorSnapshot ? (
               <li className="aitown-record">No collector snapshot available yet.</li>
+            ) : null}
+            {collectorSnapshot && collectorSharedArtifacts === undefined ? (
+              <li className="aitown-record">Collector shared snapshot artifacts unavailable in latest collector snapshot.</li>
+            ) : null}
+            {collectorSharedArtifacts && collectorSharedArtifacts.length === 0 ? (
+              <li className="aitown-record">No shared snapshot artifacts in latest collector snapshot.</li>
             ) : null}
             {collectorSnapshot && collectorSignalItems.length === 0 ? (
               <li className="aitown-record">No collector attention items in latest snapshot.</li>

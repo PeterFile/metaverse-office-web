@@ -100,6 +100,7 @@ const appEngineeringScopedReviewSupervisionHistoryUrl =
 const appEngineeringScopedSecondarySupervisionHistoryUrl =
   '/peer-watch/alerts?target_agent_id=app-engineering&correlation_id=corr-app-secondary&limit=4';
 const crewOpenSupervisionAlertsUrl = '/peer-watch/alerts?status=open&limit=4';
+const orangeCrewOpenSupervisionAlertsUrl = '/peer-watch/alerts?status=open&severity=orange&limit=4';
 const teamLeadSupervisionHistoryUrl = '/peer-watch/alerts?target_agent_id=team-lead&limit=4';
 const growthRevenueSupervisionHistoryUrl = '/peer-watch/alerts?target_agent_id=growth-revenue&limit=4';
 const growthRevenueScopedReviewSupervisionHistoryUrl =
@@ -5020,6 +5021,55 @@ afterEach(() => {
     expect(peerWatchRequests).toContain(crewOpenSupervisionAlertsUrl);
     expect(peerWatchRequests).toContain(growthRevenueScopedSecondarySupervisionHistoryUrl);
     expect(peerWatchRequests).not.toContain(growthRevenueScopedReviewSupervisionHistoryUrl);
+  });
+
+  it('refetches crew open supervision alerts with the selected severity filter', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === orangeCrewOpenSupervisionAlertsUrl) {
+          return jsonResponse({
+            items: [
+              {
+                ...crewOpenSupervisionAlertsFixture.items[0],
+                summary: 'Orange open supervision alert remains in the crew queue'
+              }
+            ]
+          });
+        }
+
+        return resolveTestFetchResponse(url);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    const alertsSection = within(details).getByRole('heading', { name: 'Open Supervision Alerts' }).closest('section');
+    expect(alertsSection).not.toBeNull();
+
+    const severityFilter = await within(alertsSection!).findByRole('combobox', {
+      name: 'Filter open supervision alerts by severity'
+    });
+
+    expect(severityFilter).toHaveValue('');
+    expect(within(severityFilter).getByRole('option', { name: 'All severities' })).toBeVisible();
+
+    await user.selectOptions(severityFilter, 'orange');
+
+    await waitFor(() => {
+      expect(
+        within(alertsSection!).getByText('Orange open supervision alert remains in the crew queue')
+      ).toBeVisible();
+      expect(
+        within(alertsSection!).queryByText('Growth revenue still needs supervision before release review')
+      ).not.toBeInTheDocument();
+    });
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(orangeCrewOpenSupervisionAlertsUrl, expect.anything());
   });
 
   it('uses the open supervision alert correlation for exact shared-memory evidence jumps without changing the crew-overview selection', async () => {

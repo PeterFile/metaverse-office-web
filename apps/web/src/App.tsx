@@ -362,6 +362,8 @@ function AppInner() {
   const [selectedCorrelationWasExplicit, setSelectedCorrelationWasExplicit] = useState(false);
   const [selectedCorrelationCarryForward, setSelectedCorrelationCarryForward] = useState(false);
   const [selectedCrewReplaySeverity, setSelectedCrewReplaySeverity] = useState<Severity | null>(null);
+  const [selectedCrewOpenSupervisionSeverity, setSelectedCrewOpenSupervisionSeverity] =
+    useState<Severity | null>(null);
   const [selectedOperationsState, setSelectedOperationsState] = useState<string | null>(null);
   const [selectedOperationsSeverity, setSelectedOperationsSeverity] = useState<Severity | null>(null);
   const [selectedOperationSelection, setSelectedOperationSelection] = useState<OperationSelection | null>(null);
@@ -420,10 +422,11 @@ function AppInner() {
     load: (signal) =>
       fetchPeerWatchAlerts({
         status: 'open',
+        severity: selectedCrewOpenSupervisionSeverity ?? undefined,
         limit: CREW_OPEN_SUPERVISION_ALERTS_LIMIT,
         signal
       }),
-    resourceKey: 'crew-open-supervision-alerts'
+    resourceKey: `crew-open-supervision-alerts:severity=${selectedCrewOpenSupervisionSeverity ?? '__all__'}`
   });
   const collectorSnapshotResource = usePolledResource({
     enabled: hubOpen,
@@ -1472,6 +1475,7 @@ function AppInner() {
               preserveWorkflowCounterpartyCorrelation={preserveWorkflowCounterpartyCorrelation}
               selectedAgent={selectedAgent}
               selectedCorrelationId={selectedCorrelationId}
+              selectedCrewOpenSupervisionSeverity={selectedCrewOpenSupervisionSeverity}
               selectedCrewReplaySeverity={selectedCrewReplaySeverity}
               selectedOperationsState={selectedOperationsState}
               selectedOperationsSeverity={selectedOperationsSeverity}
@@ -1524,6 +1528,7 @@ function AppInner() {
               }
               onSelectCorrelation={handleSelectCorrelation}
               onResetCorrelationOverride={handleResetCorrelationOverride}
+              onSelectCrewOpenSupervisionSeverity={setSelectedCrewOpenSupervisionSeverity}
               onSelectCrewReplaySeverity={setSelectedCrewReplaySeverity}
               onSelectOperationsState={setSelectedOperationsState}
               onSelectOperationsSeverity={setSelectedOperationsSeverity}

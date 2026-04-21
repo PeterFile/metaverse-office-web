@@ -503,6 +503,7 @@ function buildProps(overrides: Partial<DetailsPanelProps> = {}): DetailsPanelPro
     selectedAgentSupervisionHistoryState: 'ready',
     selectedAgent: buildSelectedAgent(),
     selectedCorrelationId: 'corr-app-review',
+    selectedCrewOpenSupervisionSeverity: null,
     selectedCrewReplaySeverity: null,
     selectedOperationsState: null,
     selectedOperationsSeverity: null,
@@ -516,6 +517,7 @@ function buildProps(overrides: Partial<DetailsPanelProps> = {}): DetailsPanelPro
     world: buildWorld(),
     onInspectAgent: vi.fn(),
     onSelectAgent: vi.fn(),
+    onSelectCrewOpenSupervisionSeverity: vi.fn(),
     onSelectCrewReplaySeverity: vi.fn(),
     onSelectCorrelation: vi.fn(),
     onResetCorrelationOverride: vi.fn(),
@@ -1012,6 +1014,128 @@ describe('DetailsPanel accountability signals', () => {
     expect(onSelectAgent).toHaveBeenLastCalledWith('team-lead', null, {
       preserveNullCorrelation: true
     });
+  });
+
+  it('renders the open supervision alerts severity filter and routes changes', async () => {
+    const user = userEvent.setup();
+    const onSelectCrewOpenSupervisionSeverity = vi.fn();
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          onSelectCrewOpenSupervisionSeverity,
+          selectedAgent: null,
+          selectedCorrelationId: null,
+          selectedCrewOpenSupervisionSeverity: null,
+          selectedOperation: null,
+          workflow: null,
+          openSupervisionAlerts: {
+            items: [
+              {
+                alert_id: 'alert-open-queue-filter',
+                ts: '2026-03-16T08:55:00.000Z',
+                agent_id: 'growth-revenue',
+                target_agent_id: 'growth-revenue',
+                actor_id: 'team-lead',
+                observer_agent_id: 'app-engineering',
+                watcher_agent_ids: ['team-lead'],
+                severity: 'orange',
+                status: 'open',
+                current_state: 'blocked',
+                active_task: 'Escalate missing revenue evidence before release review',
+                summary: 'Open supervision queue filter keeps the alert list scoped',
+                evidence_refs: ['/tmp/revenue-evidence.md'],
+                evidence_count: 1,
+                correlation_id: null,
+                source_kind: 'controller_event',
+                metadata: {}
+              }
+            ]
+          }
+        })}
+      />
+    );
+
+    const section = screen.getByRole('heading', { name: 'Open Supervision Alerts' }).closest('section');
+    expect(section).not.toBeNull();
+
+    const severityFilter = within(section!).getByRole('combobox', {
+      name: 'Filter open supervision alerts by severity'
+    });
+
+    expect(within(severityFilter).getByRole('option', { name: 'All severities' })).toBeVisible();
+    expect(within(severityFilter).getByRole('option', { name: 'Normal' })).toBeVisible();
+    expect(within(severityFilter).getByRole('option', { name: 'Yellow' })).toBeVisible();
+    expect(within(severityFilter).getByRole('option', { name: 'Orange' })).toBeVisible();
+    expect(within(severityFilter).getByRole('option', { name: 'Red' })).toBeVisible();
+
+    await user.selectOptions(severityFilter, 'orange');
+
+    expect(onSelectCrewOpenSupervisionSeverity).toHaveBeenCalledWith('orange');
+  });
+
+  it('renders open supervision alerts lifecycle copy for the selected severity', () => {
+    const props = buildProps({
+      selectedAgent: null,
+      selectedCorrelationId: null,
+      selectedCrewOpenSupervisionSeverity: 'orange',
+      selectedOperation: null,
+      workflow: null,
+      openSupervisionAlerts: null,
+      openSupervisionAlertsError: null,
+      openSupervisionAlertsState: 'loading'
+    });
+
+    const { rerender } = render(<DetailsPanel {...props} />);
+
+    let section = screen.getByRole('heading', { name: 'Open Supervision Alerts' }).closest('section');
+    expect(section).not.toBeNull();
+    expect(within(section!).getByText('Loading open supervision alerts queue at Orange severity...')).toBeVisible();
+
+    rerender(
+      <DetailsPanel
+        {...props}
+        openSupervisionAlertsError="open alerts request failed"
+        openSupervisionAlertsState="ready"
+      />
+    );
+
+    section = screen.getByRole('heading', { name: 'Open Supervision Alerts' }).closest('section');
+    expect(
+      within(section!).getByText(
+        'Unable to load open supervision alerts queue at Orange severity. open alerts request failed'
+      )
+    ).toBeVisible();
+
+    rerender(
+      <DetailsPanel
+        {...props}
+        openSupervisionAlerts={{ items: [] }}
+        openSupervisionAlertsError="open alerts refresh failed"
+        openSupervisionAlertsState="ready"
+      />
+    );
+
+    section = screen.getByRole('heading', { name: 'Open Supervision Alerts' }).closest('section');
+    expect(
+      within(section!).getByText(
+        'Showing last open supervision alerts queue snapshot at Orange severity. open alerts refresh failed'
+      )
+    ).toBeVisible();
+
+    rerender(
+      <DetailsPanel
+        {...props}
+        openSupervisionAlerts={{ items: [] }}
+        openSupervisionAlertsError={null}
+        openSupervisionAlertsState="ready"
+      />
+    );
+
+    section = screen.getByRole('heading', { name: 'Open Supervision Alerts' }).closest('section');
+    expect(
+      within(section!).getByText('No open supervision alerts at Orange severity in crew overview queue.')
+    ).toBeVisible();
   });
 
   it('renders active-queue counterparties as pivots only for navigable non-self agents, preserves an active crew-overview correlation, and otherwise keeps the agent-only path', async () => {

@@ -69,6 +69,7 @@ type DetailsPanelProps = {
   selectedAgentSupervisionHistoryState: LoadState;
   selectedAgent: OfficeAgent | null;
   selectedCorrelationId: string | null;
+  selectedCrewOpenSupervisionSeverity: Severity | null;
   selectedCrewReplaySeverity: Severity | null;
   selectedOperationsState: string | null;
   selectedOperationsSeverity: Severity | null;
@@ -85,6 +86,7 @@ type DetailsPanelProps = {
   onInspectAgent: (agentId: string | null) => void;
   onSelectCorrelation: SelectCorrelationHandler;
   onResetCorrelationOverride: () => void;
+  onSelectCrewOpenSupervisionSeverity: (severity: Severity | null) => void;
   onSelectCrewReplaySeverity: (severity: Severity | null) => void;
   onSelectOperationsState: (state: string | null) => void;
   onSelectOperationsSeverity: (severity: Severity | null) => void;
@@ -1015,6 +1017,44 @@ function renderActiveQueueSeverityOptionLabel({
 
 function renderActiveQueueStateBucketsStatusLabel(error: string) {
   return `Showing last active queue state buckets. ${error}`;
+}
+
+function renderOpenSupervisionAlertsSeverityScopeLabel(selectedSeverity: Severity | null) {
+  return selectedSeverity ? `${SEVERITY_LABELS[selectedSeverity]} severity` : null;
+}
+
+function renderOpenSupervisionAlertsLoadingLabel(selectedSeverity: Severity | null) {
+  const severityScope = renderOpenSupervisionAlertsSeverityScopeLabel(selectedSeverity);
+  return severityScope
+    ? `Loading open supervision alerts queue at ${severityScope}...`
+    : 'Loading open supervision alerts queue...';
+}
+
+function renderOpenSupervisionAlertsErrorLabel(
+  selectedSeverity: Severity | null,
+  openSupervisionAlertsError: string
+) {
+  const severityScope = renderOpenSupervisionAlertsSeverityScopeLabel(selectedSeverity);
+  return severityScope
+    ? `Unable to load open supervision alerts queue at ${severityScope}. ${openSupervisionAlertsError}`
+    : `Unable to load open supervision alerts queue. ${openSupervisionAlertsError}`;
+}
+
+function renderOpenSupervisionAlertsWarningLabel(
+  selectedSeverity: Severity | null,
+  openSupervisionAlertsError: string
+) {
+  const severityScope = renderOpenSupervisionAlertsSeverityScopeLabel(selectedSeverity);
+  return severityScope
+    ? `Showing last open supervision alerts queue snapshot at ${severityScope}. ${openSupervisionAlertsError}`
+    : `Showing last open supervision alerts queue snapshot. ${openSupervisionAlertsError}`;
+}
+
+function renderOpenSupervisionAlertsEmptyLabel(selectedSeverity: Severity | null) {
+  const severityScope = renderOpenSupervisionAlertsSeverityScopeLabel(selectedSeverity);
+  return severityScope
+    ? `No open supervision alerts at ${severityScope} in crew overview queue.`
+    : 'No open supervision alerts in crew overview queue.';
 }
 
 function renderActiveCorrelationQueueScopeLabel({
@@ -2611,6 +2651,7 @@ export function DetailsPanel({
   selectedAgentSupervisionHistoryState,
   selectedAgent,
   selectedCorrelationId,
+  selectedCrewOpenSupervisionSeverity,
   selectedCrewReplaySeverity,
   selectedOperationsState,
   selectedOperationsSeverity,
@@ -2627,6 +2668,7 @@ export function DetailsPanel({
   onInspectAgent,
   onSelectCorrelation,
   onResetCorrelationOverride,
+  onSelectCrewOpenSupervisionSeverity,
   onSelectCrewReplaySeverity,
   onSelectOperationsState,
   onSelectOperationsSeverity,
@@ -2828,7 +2870,10 @@ export function DetailsPanel({
       : null;
   const openSupervisionAlertsWarning =
     openSupervisionAlertsError && openSupervisionAlerts
-      ? `Showing last open supervision alerts queue snapshot. ${openSupervisionAlertsError}`
+      ? renderOpenSupervisionAlertsWarningLabel(
+          selectedCrewOpenSupervisionSeverity,
+          openSupervisionAlertsError
+        )
       : null;
   const supervisionHistoryWarning =
     selectedAgentSupervisionHistoryError && selectedAgentSupervisionHistory
@@ -3266,12 +3311,36 @@ export function DetailsPanel({
         <section className="aitown-details__section">
           <h3>Open Supervision Alerts</h3>
           {openSupervisionAlertsWarning ? <p role="status">{openSupervisionAlertsWarning}</p> : null}
+          <p>
+            <label htmlFor="aitown-open-supervision-alerts-severity-filter">Severity filter</label>{' '}
+            <select
+              id="aitown-open-supervision-alerts-severity-filter"
+              aria-label="Filter open supervision alerts by severity"
+              value={selectedCrewOpenSupervisionSeverity ?? ''}
+              onChange={(event) =>
+                onSelectCrewOpenSupervisionSeverity(event.target.value ? (event.target.value as Severity) : null)
+              }
+            >
+              <option value="">All severities</option>
+              <option value="normal">Normal</option>
+              <option value="yellow">Yellow</option>
+              <option value="orange">Orange</option>
+              <option value="red">Red</option>
+            </select>
+          </p>
           <ul className="aitown-records">
             {openSupervisionAlertsState === 'loading' && !openSupervisionAlerts ? (
-              <li className="aitown-record">Loading open supervision alerts queue...</li>
+              <li className="aitown-record">
+                {renderOpenSupervisionAlertsLoadingLabel(selectedCrewOpenSupervisionSeverity)}
+              </li>
             ) : null}
             {openSupervisionAlertsError && !openSupervisionAlerts ? (
-              <li className="aitown-record">{`Unable to load open supervision alerts queue. ${openSupervisionAlertsError}`}</li>
+              <li className="aitown-record">
+                {renderOpenSupervisionAlertsErrorLabel(
+                  selectedCrewOpenSupervisionSeverity,
+                  openSupervisionAlertsError
+                )}
+              </li>
             ) : null}
             {(openSupervisionAlerts?.items ?? []).map((alert) =>
               renderCrewOpenSupervisionAlert({
@@ -3288,7 +3357,9 @@ export function DetailsPanel({
             {openSupervisionAlertsState === 'ready' &&
             !openSupervisionAlertsError &&
             (openSupervisionAlerts?.items.length ?? 0) === 0 ? (
-              <li className="aitown-record">No open supervision alerts in crew overview queue.</li>
+              <li className="aitown-record">
+                {renderOpenSupervisionAlertsEmptyLabel(selectedCrewOpenSupervisionSeverity)}
+              </li>
             ) : null}
           </ul>
         </section>

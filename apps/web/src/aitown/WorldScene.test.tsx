@@ -275,6 +275,7 @@ type ResettableWorldSceneProps = {
   scene: AiTownSceneModel;
   onSelectAgent: (agentId: string | null) => void;
   resetViewSignal?: number;
+  zoneFocusRequest?: { zoneId: string; requestId: number } | null;
 };
 
 const ResettableWorldScene = WorldScene as unknown as ComponentType<ResettableWorldSceneProps>;
@@ -2887,6 +2888,64 @@ describe('WorldScene watch overlay caption gating', () => {
 
       expect(center.x).toBeCloseTo((selectedAgent?.position.x ?? 0) + expectedBiasX, 4);
       expect(center.y).toBeCloseTo(selectedAgent?.position.y ?? 0, 4);
+    });
+
+    expect(onSelectAgent).not.toHaveBeenCalled();
+  });
+
+  it('focuses a requested zone anchor through the current safe-area lane', async () => {
+    appInitMock.mockReset().mockResolvedValue(undefined);
+    vi.mocked(loadAiTownAssets).mockResolvedValue(makeAssets());
+
+    const baseScene = makeWideSelectedAgentScene();
+    const scene = {
+      ...baseScene,
+      selectedAgentId: null,
+      agents: baseScene.agents.map((agent) => ({
+        ...agent,
+        selected: false
+      })),
+      zones: [
+        ...baseScene.zones,
+        {
+          zoneId: 'review-zone',
+          label: 'Review Zone',
+          kind: 'shared',
+          anchor: { x: 70, y: 50 },
+          occupantIds: []
+        }
+      ]
+    } satisfies AiTownSceneModel;
+    const onSelectAgent = vi.fn();
+    const { container } = render(
+      <main className="aitown-shell">
+        <section className="aitown-panel aitown-panel--game">
+          <div className="aitown-shell__stats">Stats</div>
+          <WorldScene
+            scene={scene}
+            onSelectAgent={onSelectAgent}
+            zoneFocusRequest={{ zoneId: 'review-zone', requestId: 1 }}
+          />
+        </section>
+      </main>
+    );
+
+    const host = container.querySelector('.aitown-world__host');
+    const stats = container.querySelector('.aitown-shell__stats');
+
+    expect(host).toBeInstanceOf(HTMLDivElement);
+    expect(stats).toBeInstanceOf(HTMLElement);
+
+    setElementRect(host as HTMLDivElement, { left: 0, top: 0, width: 1000, height: 800 });
+    setElementRect(stats as HTMLElement, { left: 760, top: 80, width: 240, height: 140 });
+
+    await waitFor(() => {
+      const inspection = readViewportInspector()?.read();
+      const center = readViewportCenter();
+      const expectedBiasX = (inspection?.clampPadding.right ?? 0) / ((inspection?.scale ?? 1) * 2);
+
+      expect(center.x).toBeCloseTo(70 * scene.map.tileDim + expectedBiasX, 4);
+      expect(center.y).toBeCloseTo(50 * scene.map.tileDim, 4);
     });
 
     expect(onSelectAgent).not.toHaveBeenCalled();

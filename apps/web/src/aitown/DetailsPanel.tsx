@@ -92,6 +92,7 @@ type DetailsPanelProps = {
   onSelectOperationsSeverity: (severity: Severity | null) => void;
   onSelectOperation: (operation: OfficeOperation, options?: SelectOperationOptions) => void;
   onFocusSharedMemoryArtifact?: (artifactRef: string, scope?: SharedMemoryJumpScope) => void;
+  onFocusWorldZone?: (zoneId: string) => void;
 };
 
 type SelectAgentOptions = {
@@ -2673,7 +2674,8 @@ export function DetailsPanel({
   onSelectOperationsState,
   onSelectOperationsSeverity,
   onSelectOperation,
-  onFocusSharedMemoryArtifact
+  onFocusSharedMemoryArtifact,
+  onFocusWorldZone
 }: DetailsPanelProps) {
   const agents = [...world.agents.values()]
     .map((agent) => ({
@@ -3156,6 +3158,19 @@ export function DetailsPanel({
                     })}
                   </span>
                   <span>{`Severity · ${severitySummary}`}</span>
+                  {onFocusWorldZone ? (
+                    <span>
+                      Viewport ·{' '}
+                      <button
+                        type="button"
+                        className="aitown-link-button"
+                        aria-label={`Focus ${zone.label} in world viewport`}
+                        onClick={() => onFocusWorldZone(zone.zone_id)}
+                      >
+                        Focus
+                      </button>
+                    </span>
+                  ) : null}
                 </li>
               );
             })}

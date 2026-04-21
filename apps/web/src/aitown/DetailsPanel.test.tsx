@@ -5838,6 +5838,7 @@ describe('DetailsPanel accountability signals', () => {
   it('renders crew-overview office-grid home agents as pivots when navigable, preserves the active correlation, and keeps unassigned or unknown homes as plain text', async () => {
     const user = userEvent.setup();
     const onSelectAgent = vi.fn();
+    const onFocusWorldZone = vi.fn();
     const world = buildWorld();
     const officeGridWorld: WorldState = {
       ...world,
@@ -5875,6 +5876,7 @@ describe('DetailsPanel accountability signals', () => {
           selectedAgent: null,
           selectedCorrelationId: 'corr-app-review',
           selectedOperation: null,
+          onFocusWorldZone,
           world: officeGridWorld
         })}
       />
@@ -5893,6 +5895,10 @@ describe('DetailsPanel accountability signals', () => {
       })
     ).toBeVisible();
     expect(within(officeGridSection!).getByText('Home · Unassigned')).toBeVisible();
+    const focusZoneButton = within(officeGridSection!).getByRole('button', {
+      name: 'Focus Delivery Desk in world viewport'
+    });
+    expect(focusZoneButton).toBeVisible();
 
     const unknownHomeLine = within(officeGridSection!).getByText(
       (_content, element) => element?.tagName === 'SPAN' && element.textContent === 'Home · ghost-agent'
@@ -5902,6 +5908,11 @@ describe('DetailsPanel accountability signals', () => {
         name: 'Select home agent ghost-agent in Ghost Desk'
       })
     ).not.toBeInTheDocument();
+
+    await user.click(focusZoneButton);
+
+    expect(onFocusWorldZone).toHaveBeenCalledWith('delivery-desk');
+    expect(onSelectAgent).not.toHaveBeenCalled();
 
     await user.click(homeButton);
 
@@ -5914,6 +5925,7 @@ describe('DetailsPanel accountability signals', () => {
           selectedAgent: null,
           selectedCorrelationId: null,
           selectedOperation: null,
+          onFocusWorldZone,
           world: officeGridWorld
         })}
       />
@@ -5931,6 +5943,7 @@ describe('DetailsPanel accountability signals', () => {
   it('appends runtime-only world zones to the office grid when overview zones are present and uses projected occupants', async () => {
     const user = userEvent.setup();
     const onSelectAgent = vi.fn();
+    const onFocusWorldZone = vi.fn();
     const world = buildWorld();
     const officeGridWorld: WorldState = {
       ...world,
@@ -5976,6 +5989,7 @@ describe('DetailsPanel accountability signals', () => {
           selectedAgent: null,
           selectedCorrelationId: 'corr-app-review',
           selectedOperation: null,
+          onFocusWorldZone,
           world: officeGridWorld
         })}
       />
@@ -5995,6 +6009,15 @@ describe('DetailsPanel accountability signals', () => {
     expect(reviewOccupantButton).toBeVisible();
     expect(within(officeGridSection!).getByText('Home · Unassigned')).toBeVisible();
     expect(within(officeGridSection!).getByText('Severity · Yellow · 1 occupant(s)')).toBeVisible();
+
+    await user.click(
+      within(officeGridSection!).getByRole('button', {
+        name: 'Focus Review Zone in world viewport'
+      })
+    );
+
+    expect(onFocusWorldZone).toHaveBeenCalledWith('review-zone');
+    expect(onSelectAgent).not.toHaveBeenCalled();
 
     await user.click(reviewOccupantButton);
 

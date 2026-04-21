@@ -106,6 +106,12 @@ describe('SceneStatusLegend', () => {
             phase: 'blocked',
             reboot_recommended: true,
             has_open_incidents: true,
+            staleness: {
+              severity: 'orange',
+              stale_for_ms: 120000,
+              stale_for_minutes: 2,
+              last_meaningful_output_at: '2026-03-14T09:58:00Z',
+            },
           }),
         ],
         [
@@ -151,6 +157,7 @@ describe('SceneStatusLegend', () => {
     expect(hotZoneItems[0]).toHaveTextContent('1 blocked');
     expect(hotZoneItems[0]).toHaveTextContent('1 reboot');
     expect(hotZoneItems[0]).toHaveTextContent('2 occupants with open alerts or incidents');
+    expect(hotZoneItems[0]).toHaveTextContent('1 occupant with runtime freshness degraded');
 
     expect(hotZoneItems[1]).toHaveTextContent('Meeting Zone');
     expect(hotZoneItems[1]).toHaveTextContent('Orange');
@@ -158,6 +165,7 @@ describe('SceneStatusLegend', () => {
     expect(hotZoneItems[1]).toHaveTextContent('0 blocked');
     expect(hotZoneItems[1]).toHaveTextContent('0 reboot');
     expect(hotZoneItems[1]).toHaveTextContent('1 occupant with open alerts or incidents');
+    expect(hotZoneItems[1]).not.toHaveTextContent('runtime freshness degraded');
 
     expect(screen.queryByRole('list', { name: 'Data quality legend' })).not.toBeInTheDocument();
     expect(screen.queryByText('Data quality')).not.toBeInTheDocument();

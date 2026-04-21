@@ -23,9 +23,10 @@ function formatHotZoneSummary(
   occupantCount: number,
   blockedCount: number,
   rebootCount: number,
-  openAlertOrIncidentOccupantCount: number
+  openAlertOrIncidentOccupantCount: number,
+  runtimeFreshnessDegradedCount: number
 ): string {
-  return [
+  const summary = [
     SEVERITY_LABELS[highestSeverity],
     formatCount(occupantCount, 'occupant'),
     `${blockedCount} blocked`,
@@ -35,7 +36,19 @@ function formatHotZoneSummary(
       'occupant with open alerts or incidents',
       'occupants with open alerts or incidents'
     ),
-  ].join(' · ');
+  ];
+
+  if (runtimeFreshnessDegradedCount > 0) {
+    summary.push(
+      formatCount(
+        runtimeFreshnessDegradedCount,
+        'occupant with runtime freshness degraded',
+        'occupants with runtime freshness degraded'
+      )
+    );
+  }
+
+  return summary.join(' · ');
 }
 
 function formatDataQualitySummary(degradedReasonCount: number, lastOverviewAt: string | null): string {
@@ -86,7 +99,8 @@ export function SceneStatusLegend() {
                     zone.occupant_count,
                     zone.blocked_count,
                     zone.reboot_count,
-                    zone.open_alert_or_incident_occupant_count
+                    zone.open_alert_or_incident_occupant_count,
+                    zone.runtime_freshness_degraded_count
                   )}
                 </span>
               </li>

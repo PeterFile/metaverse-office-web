@@ -7821,6 +7821,74 @@ afterEach(() => {
     expect(within(details).queryByText('No active operations queue.')).not.toBeInTheDocument();
   });
 
+  it('surfaces read-only workflow summary facets after selecting an agent', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === workflowUrl) {
+          return jsonResponse({
+            ...workflowFixture,
+            summary: {
+              ...emptyWorkflowSummaryFixture,
+              incident_count: 3,
+              interaction_count: 2,
+              event_count: 5,
+              incident_kind_buckets: {
+                peer_watch: 2,
+                handoff: 1,
+                noop: 0
+              },
+              interaction_type_buckets: {
+                peer_watch: 1,
+                review: 1
+              },
+              event_type_buckets: {
+                agent_waiting: 2,
+                handoff_completed: 1,
+                agent_started: 2
+              },
+              severity_buckets: {
+                normal: 1,
+                yellow: 2,
+                orange: 0,
+                red: 1
+              },
+              latest_activity_at: '2026-03-16T08:58:00.000Z'
+            }
+          } satisfies AgentWorkflow);
+        }
+
+        return resolveTestFetchResponse(url);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
+
+    const workflowSection = within(details).getByRole('heading', { name: 'Workflow' }).closest('section');
+    expect(workflowSection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(workflowSection!).getByText('Counts · 3 incidents · 2 interactions · 5 events')).toBeVisible();
+      expect(within(workflowSection!).getByText('Incident kinds · Peer Watch (2), Handoff (1)')).toBeVisible();
+      expect(within(workflowSection!).getByText('Interaction types · Peer Watch (1), Review (1)')).toBeVisible();
+      expect(
+        within(workflowSection!).getByText(
+          'Event types · Agent Started (2), Agent Waiting (2), Handoff Completed (1)'
+        )
+      ).toBeVisible();
+      expect(
+        within(workflowSection!).getByText('Severities · Red (1), Orange (0), Yellow (2), Normal (1)')
+      ).toBeVisible();
+      expect(within(workflowSection!).getByText('Latest activity · 2026-03-16T08:58:00.000Z')).toBeVisible();
+    });
+  });
+
   it('loads correlation drilldown from selected-agent workflow evidence', async () => {
     const user = userEvent.setup();
     render(<App />);

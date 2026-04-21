@@ -581,6 +581,65 @@ describe('DetailsPanel selected-agent workflow lifecycle', () => {
     ).toBeVisible();
     expect(within(workflowSection!).queryByText(/Unable to load workflow\./)).not.toBeInTheDocument();
   });
+
+  it('surfaces read-only workflow summary facets in the selected-agent workflow section', () => {
+    const workflow = buildWorkflow();
+    workflow.summary = {
+      ...workflow.summary,
+      incident_count: 3,
+      interaction_count: 2,
+      event_count: 5,
+      incident_kind_buckets: {
+        peer_watch: 2,
+        handoff: 1,
+        noop: 0
+      },
+      interaction_type_buckets: {
+        peer_watch: 1,
+        review: 1
+      },
+      event_type_buckets: {
+        agent_waiting: 2,
+        handoff_completed: 1,
+        agent_started: 2
+      },
+      severity_buckets: {
+        normal: 1,
+        yellow: 2,
+        orange: 0,
+        red: 1
+      },
+      latest_activity_at: '2026-03-16T08:58:00.000Z'
+    };
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          workflow
+        })}
+      />
+    );
+
+    const workflowSection = screen.getByRole('heading', { name: 'Workflow' }).closest('section');
+    expect(workflowSection).not.toBeNull();
+    expect(
+      within(workflowSection!).getByText(
+        (_, element) => element?.tagName === 'STRONG' && element.textContent === 'Workflow summary'
+      )
+    ).toBeVisible();
+    expect(within(workflowSection!).getByText('Counts · 3 incidents · 2 interactions · 5 events')).toBeVisible();
+    expect(within(workflowSection!).getByText('Incident kinds · Peer Watch (2), Handoff (1)')).toBeVisible();
+    expect(within(workflowSection!).getByText('Interaction types · Peer Watch (1), Review (1)')).toBeVisible();
+    expect(
+      within(workflowSection!).getByText(
+        'Event types · Agent Started (2), Agent Waiting (2), Handoff Completed (1)'
+      )
+    ).toBeVisible();
+    expect(
+      within(workflowSection!).getByText('Severities · Red (1), Orange (0), Yellow (2), Normal (1)')
+    ).toBeVisible();
+    expect(within(workflowSection!).getByText('Latest activity · 2026-03-16T08:58:00.000Z')).toBeVisible();
+  });
 });
 
 describe('DetailsPanel accountability signals', () => {

@@ -22,9 +22,9 @@ import type {
 } from '../types';
 import type { LoadState } from '../hooks/usePolledResource';
 import { buildZoneLayoutModels } from '../layout';
+import { selectWorkflowSummaryFacets } from '../workflow/summary';
 import type { WorldState } from '../world/types';
 import { selectAgentBadge, selectAgentZoneLabel, selectAttentionQueue, selectWatchEdgeRisk } from '../world/selectors';
-
 type SharedMemoryJumpScope = {
   correlationId?: string | null;
   preserveNullCorrelation?: boolean;
@@ -859,6 +859,28 @@ function renderDisplayState(value: string) {
     .split('_')
     .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
     .join(' ');
+}
+
+function renderWorkflowSummaryBucketList(
+  buckets: ReadonlyArray<{
+    key: string;
+    count: number;
+  }>,
+  emptyLabel: string
+) {
+  return renderNamedList(
+    buckets.map(({ key, count }) => `${renderDisplayState(key)} (${count})`),
+    emptyLabel
+  );
+}
+
+function renderWorkflowSummarySeverityList(
+  severities: ReadonlyArray<{
+    severity: Severity;
+    count: number;
+  }>
+) {
+  return severities.map(({ severity, count }) => `${SEVERITY_LABELS[severity]} (${count})`).join(', ');
 }
 
 function renderActiveQueueFilterScopeLabel(
@@ -2725,6 +2747,7 @@ export function DetailsPanel({
       ? `Showing last supervision history. ${selectedAgentSupervisionHistoryError}`
       : null;
   const workflowWarning = workflowError && workflow ? renderWorkflowWarningLabel(workflowError) : null;
+  const workflowSummaryFacets = workflow ? selectWorkflowSummaryFacets(workflow.summary) : null;
   const collectorSignalItems = (collectorSnapshot?.items ?? [])
     .filter(
       (item) =>
@@ -3778,6 +3801,37 @@ export function DetailsPanel({
           ) : null}
           {workflowError && !workflow ? (
             <li className="aitown-record">{renderWorkflowErrorLabel(workflowError)}</li>
+          ) : null}
+          {workflowSummaryFacets ? (
+            <li className="aitown-record">
+              <strong>Workflow summary</strong>
+              <span>{`Counts · ${workflowSummaryFacets.counts.incident_count} incidents · ${workflowSummaryFacets.counts.interaction_count} interactions · ${workflowSummaryFacets.counts.event_count} events`}</span>
+              <span>
+                {`Incident kinds · ${renderWorkflowSummaryBucketList(
+                  workflowSummaryFacets.incidentKinds,
+                  'No incident kinds in current workflow window'
+                )}`}
+              </span>
+              <span>
+                {`Interaction types · ${renderWorkflowSummaryBucketList(
+                  workflowSummaryFacets.interactionTypes,
+                  'No interaction types in current workflow window'
+                )}`}
+              </span>
+              <span>
+                {`Event types · ${renderWorkflowSummaryBucketList(
+                  workflowSummaryFacets.eventTypes,
+                  'No event types in current workflow window'
+                )}`}
+              </span>
+              <span>{`Severities · ${renderWorkflowSummarySeverityList(workflowSummaryFacets.severities)}`}</span>
+              <span>
+                {`Latest activity · ${renderTimestamp(
+                  workflowSummaryFacets.latestActivityAt,
+                  'No activity in current workflow window'
+                )}`}
+              </span>
+            </li>
           ) : null}
           {workflow?.detail.latest_heartbeat ? (
             <li className="aitown-record">

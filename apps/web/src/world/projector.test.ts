@@ -160,6 +160,31 @@ describe('projectWorldState', () => {
     expect(agent.zone).toBe('review-zone');
   });
 
+  it('materializes runtime-only zones missing from the overview', () => {
+    const overview = makeOverview([makeAgent({ current_state: 'reviewing' })]);
+    overview.zones = overview.zones.filter((zone) => zone.zone_id !== 'review-zone');
+
+    const input: ProjectorInput = {
+      overview,
+      workflows: new Map(),
+      incidentFeed: null,
+      now: NOW,
+    };
+    const world = projectWorldState(input);
+
+    expect(world.zones.map((zone) => zone.zone_id)).toEqual([
+      'desk-app-engineering',
+      'meeting-zone',
+      'review-zone',
+    ]);
+    expect(world.zones.find((zone) => zone.zone_id === 'review-zone')).toMatchObject({
+      label: 'Review Zone',
+      kind: 'shared',
+      home_agent_id: null,
+      occupant_ids: ['app-engineering'],
+    });
+  });
+
   it('merges severity from staleness', () => {
     const input: ProjectorInput = {
       overview: makeOverview([

@@ -23,13 +23,25 @@ const DESK_ANCHORS: ScenePoint[] = [
 ];
 
 const SHARED_ANCHORS: ScenePoint[] = [
-  { x: 20.5, y: 14.5 },
-  { x: 17.5, y: 18.5 },
-  { x: 24.5, y: 18.5 },
-  { x: 11.5, y: 15.5 },
-  { x: 29.5, y: 14.5 },
-  { x: 21.5, y: 9.5 }
+  { x: 14.5, y: 10.5 },
+  { x: 31.5, y: 18.5 },
+  { x: 16.5, y: 21.5 },
+  { x: 26.5, y: 22.5 }
 ];
+
+const FIXED_SHARED_ZONE_ANCHORS: Record<string, ScenePoint> = {
+  'meeting-zone': { x: 20.5, y: 14.5 },
+  'review-zone': { x: 17.5, y: 18.5 },
+  'rest-zone': { x: 24.5, y: 18.5 },
+  'focus-booth': { x: 11.5, y: 15.5 },
+  'reboot-zone': { x: 29.5, y: 14.5 },
+  'handoff-hub': { x: 21.5, y: 9.5 },
+  'war-room': { x: 27.5, y: 9.5 }
+};
+
+function hasFixedSharedZoneAnchor(zoneId: string) {
+  return Object.hasOwn(FIXED_SHARED_ZONE_ANCHORS, zoneId);
+}
 
 function stableHash(value: string) {
   let hash = 2166136261;
@@ -108,6 +120,12 @@ function findFallbackZone(agent: WorldAgent, zones: SceneZone[]) {
   return zones.find((zone) => zone.kind === 'shared') ?? zones[0] ?? null;
 }
 
+function resolveSharedZoneAnchor(zoneId: string, sharedAssignments: Map<string, ScenePoint>) {
+  return hasFixedSharedZoneAnchor(zoneId)
+    ? FIXED_SHARED_ZONE_ANCHORS[zoneId]
+    : sharedAssignments.get(zoneId) ?? SHARED_ANCHORS[0];
+}
+
 export function adaptWorldToScene(
   world: WorldState,
   selectedAgentId: string | null,
@@ -127,7 +145,7 @@ export function adaptWorldToScene(
     DESK_ANCHORS
   );
   const sharedAssignments = assignAnchors(
-    sceneZones.filter((zone) => zone.kind === 'shared'),
+    sceneZones.filter((zone) => zone.kind === 'shared' && !hasFixedSharedZoneAnchor(zone.zoneId)),
     SHARED_ANCHORS
   );
 
@@ -136,7 +154,7 @@ export function adaptWorldToScene(
     anchor:
       zone.kind === 'desk'
         ? deskAssignments.get(zone.zoneId) ?? DESK_ANCHORS[0]
-        : sharedAssignments.get(zone.zoneId) ?? SHARED_ANCHORS[0]
+        : resolveSharedZoneAnchor(zone.zoneId, sharedAssignments)
   }));
 
   const agents = [...world.agents.values()].map((agent) => {

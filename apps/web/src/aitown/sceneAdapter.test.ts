@@ -198,6 +198,166 @@ describe('adaptWorldToScene', () => {
     expect(teamLead?.position.y).not.toBeCloseTo(15.5 * scene.map.tileDim, 4);
   });
 
+  it('keeps materialized runtime-only zones in the scene model without shifting existing shared anchors', () => {
+    const baselineScene = adaptWorldToScene(world, 'team-lead');
+    const baselineMeetingZone = baselineScene.zones.find((zone) => zone.zoneId === 'meeting-zone');
+    const runtimeWorld: WorldState = {
+      ...world,
+      agents: new Map(world.agents).set('team-lead', {
+        ...world.agents.get('team-lead')!,
+        phase: 'reviewing',
+        zone: 'review-zone'
+      }),
+      zones: [
+        ...world.zones,
+        {
+          zone_id: 'review-zone',
+          label: 'Review Zone',
+          kind: 'shared',
+          grid_x: 0,
+          grid_y: 3,
+          grid_w: 1,
+          grid_h: 1,
+          home_agent_id: null,
+          occupant_ids: ['team-lead']
+        }
+      ]
+    };
+
+    const scene = adaptWorldToScene(runtimeWorld, 'team-lead');
+    const meetingZone = scene.zones.find((zone) => zone.zoneId === 'meeting-zone');
+    const reviewZone = scene.zones.find((zone) => zone.zoneId === 'review-zone');
+    const teamLead = scene.agents.find((agent) => agent.agentId === 'team-lead');
+
+    expect(meetingZone?.anchor).toEqual(baselineMeetingZone?.anchor);
+    expect(reviewZone).toMatchObject({
+      label: 'Review Zone',
+      kind: 'shared',
+      occupantIds: ['team-lead'],
+      anchor: { x: 17.5, y: 18.5 }
+    });
+    expect(teamLead).toMatchObject({
+      agentId: 'team-lead',
+      zoneId: 'review-zone',
+      selected: true
+    });
+  });
+
+  it('treats runtime-only zone ids that shadow Object.prototype as normal dynamic shared zones', () => {
+    const runtimeWorld: WorldState = {
+      ...world,
+      agents: new Map(world.agents).set('team-lead', {
+        ...world.agents.get('team-lead')!,
+        phase: 'reviewing',
+        zone: 'toString'
+      }),
+      zones: [
+        ...world.zones,
+        {
+          zone_id: 'toString',
+          label: 'String Trap',
+          kind: 'shared',
+          grid_x: 0,
+          grid_y: 3,
+          grid_w: 1,
+          grid_h: 1,
+          home_agent_id: null,
+          occupant_ids: ['team-lead']
+        }
+      ]
+    };
+
+    const scene = adaptWorldToScene(runtimeWorld, 'team-lead');
+    const toStringZone = scene.zones.find((zone) => zone.zoneId === 'toString');
+    const teamLead = scene.agents.find((agent) => agent.agentId === 'team-lead');
+
+    expect(toStringZone).toMatchObject({
+      label: 'String Trap',
+      kind: 'shared',
+      occupantIds: ['team-lead'],
+      anchor: { x: 14.5, y: 10.5 }
+    });
+    expect(teamLead).toMatchObject({
+      agentId: 'team-lead',
+      zoneId: 'toString',
+      selected: true,
+      position: {
+        x: 14.5 * scene.map.tileDim,
+        y: 10.5 * scene.map.tileDim
+      }
+    });
+  });
+
+  it('keeps enough non-runtime shared anchors when a runtime-only zone is added', () => {
+    const expandedWorld: WorldState = {
+      ...world,
+      zones: [
+        ...world.zones,
+        {
+          zone_id: 'review-zone',
+          label: 'Review Zone',
+          kind: 'shared',
+          grid_x: 0,
+          grid_y: 3,
+          grid_w: 1,
+          grid_h: 1,
+          home_agent_id: null,
+          occupant_ids: []
+        },
+        {
+          zone_id: 'war-room',
+          label: 'War Room',
+          kind: 'shared',
+          grid_x: 1,
+          grid_y: 3,
+          grid_w: 1,
+          grid_h: 1,
+          home_agent_id: null,
+          occupant_ids: []
+        },
+        {
+          zone_id: 'focus-booth',
+          label: 'Focus Booth',
+          kind: 'shared',
+          grid_x: 2,
+          grid_y: 3,
+          grid_w: 1,
+          grid_h: 1,
+          home_agent_id: null,
+          occupant_ids: []
+        },
+        {
+          zone_id: 'handoff-hub',
+          label: 'Handoff Hub',
+          kind: 'shared',
+          grid_x: 3,
+          grid_y: 3,
+          grid_w: 1,
+          grid_h: 1,
+          home_agent_id: null,
+          occupant_ids: []
+        }
+      ]
+    };
+
+    const scene = adaptWorldToScene(expandedWorld, null);
+    const meetingZone = scene.zones.find((zone) => zone.zoneId === 'meeting-zone');
+    const reviewZone = scene.zones.find((zone) => zone.zoneId === 'review-zone');
+    const warRoom = scene.zones.find((zone) => zone.zoneId === 'war-room');
+    const focusBooth = scene.zones.find((zone) => zone.zoneId === 'focus-booth');
+    const handoffHub = scene.zones.find((zone) => zone.zoneId === 'handoff-hub');
+    const sharedZones = scene.zones.filter((zone) => zone.kind === 'shared');
+    const sharedAnchors = sharedZones.map((zone) => `${zone.anchor.x},${zone.anchor.y}`);
+
+    expect(meetingZone?.anchor).toEqual({ x: 20.5, y: 14.5 });
+    expect(reviewZone?.anchor).toEqual({ x: 17.5, y: 18.5 });
+    expect(warRoom?.anchor).toEqual({ x: 27.5, y: 9.5 });
+    expect(focusBooth?.anchor).toEqual({ x: 11.5, y: 15.5 });
+    expect(handoffHub?.anchor).toEqual({ x: 21.5, y: 9.5 });
+    expect(sharedZones).toHaveLength(5);
+    expect(new Set(sharedAnchors).size).toBe(5);
+  });
+
   it('projects only inbound and outbound watch edges for the selected agent', () => {
     const scene = adaptWorldToScene(world, 'app-engineering');
 

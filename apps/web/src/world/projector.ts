@@ -377,9 +377,10 @@ function buildZoneSnapshots(
   overview: OfficeOverview,
   agents: Map<string, WorldAgent>
 ): ZoneSnapshot[] {
-  // Build occupancy from derived zones
   const occupancy = new Map<string, string[]>();
+  const overviewZoneIds = new Set<string>();
   for (const zone of overview.zones) {
+    overviewZoneIds.add(zone.zone_id);
     occupancy.set(zone.zone_id, []);
   }
   for (const [, wa] of agents) {
@@ -391,7 +392,7 @@ function buildZoneSnapshots(
     }
   }
 
-  return overview.zones.map((z) => ({
+  const overviewSnapshots = overview.zones.map((z) => ({
     zone_id: z.zone_id,
     label: z.label,
     kind: z.kind,
@@ -402,6 +403,38 @@ function buildZoneSnapshots(
     home_agent_id: z.home_agent_id,
     occupant_ids: occupancy.get(z.zone_id) ?? [],
   }));
+
+  const runtimeGridY = overview.zones.reduce(
+    (next, zone) => Math.max(next, zone.grid_y + zone.grid_h),
+    0
+  );
+  const runtimeSnapshots = Array.from(occupancy.keys())
+    .filter((zoneId) => !overviewZoneIds.has(zoneId))
+    .sort()
+    .map((zoneId, index) => ({
+      zone_id: zoneId,
+      label: formatRuntimeZoneLabel(zoneId),
+      kind: 'shared' as const,
+      grid_x: 0,
+      grid_y: runtimeGridY + index,
+      grid_w: 1,
+      grid_h: 1,
+      home_agent_id: null,
+      occupant_ids: occupancy.get(zoneId) ?? [],
+    }));
+
+  return [...overviewSnapshots, ...runtimeSnapshots];
+}
+
+function formatRuntimeZoneLabel(zoneId: string): string {
+  const words = zoneId.split('-').filter(Boolean);
+  if (words.length === 0) {
+    return zoneId;
+  }
+
+  return words
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
 }
 
 // ── Watch edge enrichment ──

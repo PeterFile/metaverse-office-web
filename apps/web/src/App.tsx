@@ -361,6 +361,7 @@ function AppInner() {
   const [selectedCorrelationId, setSelectedCorrelationId] = useState<string | null>(null);
   const [selectedCorrelationWasExplicit, setSelectedCorrelationWasExplicit] = useState(false);
   const [selectedCorrelationCarryForward, setSelectedCorrelationCarryForward] = useState(false);
+  const [selectedCrewReplaySeverity, setSelectedCrewReplaySeverity] = useState<Severity | null>(null);
   const [selectedOperationsState, setSelectedOperationsState] = useState<string | null>(null);
   const [selectedOperationsSeverity, setSelectedOperationsSeverity] = useState<Severity | null>(null);
   const [selectedOperationSelection, setSelectedOperationSelection] = useState<OperationSelection | null>(null);
@@ -408,10 +409,11 @@ function AppInner() {
       fetchTimeline({
         limit: CREW_TIMELINE_LIMIT,
         window: DEFAULT_WORKFLOW_WINDOW,
+        severity: selectedCrewReplaySeverity ?? undefined,
         correlationId: crewReplayCorrelationId ?? undefined,
         signal
       }),
-    resourceKey: `timeline-replay:${crewReplayCorrelationId ?? '__all__'}`
+    resourceKey: `timeline-replay:severity=${selectedCrewReplaySeverity ?? '__all__'}:correlation=${crewReplayCorrelationId ?? '__all__'}`
   });
   const crewOpenSupervisionAlertsResource = usePolledResource({
     enabled: hubOpen && selectedAgentId === null,
@@ -1470,6 +1472,7 @@ function AppInner() {
               preserveWorkflowCounterpartyCorrelation={preserveWorkflowCounterpartyCorrelation}
               selectedAgent={selectedAgent}
               selectedCorrelationId={selectedCorrelationId}
+              selectedCrewReplaySeverity={selectedCrewReplaySeverity}
               selectedOperationsState={selectedOperationsState}
               selectedOperationsSeverity={selectedOperationsSeverity}
               selectedOperation={selectedOperation}
@@ -1521,6 +1524,7 @@ function AppInner() {
               }
               onSelectCorrelation={handleSelectCorrelation}
               onResetCorrelationOverride={handleResetCorrelationOverride}
+              onSelectCrewReplaySeverity={setSelectedCrewReplaySeverity}
               onSelectOperationsState={setSelectedOperationsState}
               onSelectOperationsSeverity={setSelectedOperationsSeverity}
               onSelectOperation={handleSelectOperation}

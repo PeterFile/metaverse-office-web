@@ -503,6 +503,7 @@ function buildProps(overrides: Partial<DetailsPanelProps> = {}): DetailsPanelPro
     selectedAgentSupervisionHistoryState: 'ready',
     selectedAgent: buildSelectedAgent(),
     selectedCorrelationId: 'corr-app-review',
+    selectedCrewReplaySeverity: null,
     selectedOperationsState: null,
     selectedOperationsSeverity: null,
     selectedOperation: buildSelectedOperation(),
@@ -515,6 +516,7 @@ function buildProps(overrides: Partial<DetailsPanelProps> = {}): DetailsPanelPro
     world: buildWorld(),
     onInspectAgent: vi.fn(),
     onSelectAgent: vi.fn(),
+    onSelectCrewReplaySeverity: vi.fn(),
     onSelectCorrelation: vi.fn(),
     onResetCorrelationOverride: vi.fn(),
     onSelectOperationsState: vi.fn(),
@@ -1929,6 +1931,106 @@ describe('DetailsPanel accountability signals', () => {
     await user.selectOptions(severityFilter, 'orange');
 
     expect(onSelectOperationsSeverity).toHaveBeenCalledWith('orange');
+  });
+
+  it('renders a crew-overview timeline severity filter with an explicit all state and routes changes', async () => {
+    const user = userEvent.setup();
+    const onSelectCrewReplaySeverity = vi.fn();
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          onSelectCrewReplaySeverity,
+          selectedAgent: null,
+          selectedCorrelationId: null,
+          selectedCrewReplaySeverity: null,
+          selectedOperation: null,
+          timelineReplay: {
+            items: [
+              buildCorrelation().timeline[0],
+              {
+                ...buildSecondaryCorrelation().timeline[0],
+                summary: 'Crew overview replay shows the secondary handoff'
+              }
+            ]
+          },
+          workflow: null
+        })}
+      />
+    );
+
+    const section = screen.getByRole('heading', { name: 'Timeline Replay' }).closest('section');
+    expect(section).not.toBeNull();
+
+    const severityFilter = within(section!).getByRole('combobox', {
+      name: 'Filter timeline replay by severity'
+    });
+
+    expect(within(severityFilter).getByRole('option', { name: 'All severities' })).toBeVisible();
+    expect(within(severityFilter).getByRole('option', { name: 'Normal' })).toBeVisible();
+    expect(within(severityFilter).getByRole('option', { name: 'Yellow' })).toBeVisible();
+    expect(within(severityFilter).getByRole('option', { name: 'Orange' })).toBeVisible();
+    expect(within(severityFilter).getByRole('option', { name: 'Red' })).toBeVisible();
+
+    await user.selectOptions(severityFilter, 'orange');
+
+    expect(onSelectCrewReplaySeverity).toHaveBeenCalledWith('orange');
+  });
+
+  it('renders crew-overview replay lifecycle copy that stays scoped to the selected severity and manual correlation', () => {
+    const props = buildProps({
+      selectedAgent: null,
+      selectedCorrelationId: 'corr-app-secondary',
+      selectedCrewReplaySeverity: 'orange',
+      selectedOperation: null,
+      manualCorrelationOverrideActive: true,
+      workflow: null
+    });
+
+    const { rerender } = render(
+      <DetailsPanel
+        {...props}
+        timelineReplay={null}
+        timelineReplayError={null}
+        timelineReplayState="loading"
+      />
+    );
+
+    let section = screen.getByRole('heading', { name: 'Timeline Replay' }).closest('section');
+    expect(section).not.toBeNull();
+    expect(
+      within(section!).getByText('Loading timeline replay for corr-app-secondary at Orange severity...')
+    ).toBeVisible();
+
+    rerender(
+      <DetailsPanel
+        {...props}
+        timelineReplay={{ items: [] }}
+        timelineReplayError={null}
+        timelineReplayState="ready"
+      />
+    );
+
+    section = screen.getByRole('heading', { name: 'Timeline Replay' }).closest('section');
+    expect(section).not.toBeNull();
+    expect(within(section!).getByText('No replay events for corr-app-secondary at Orange severity.')).toBeVisible();
+
+    rerender(
+      <DetailsPanel
+        {...props}
+        timelineReplay={{ items: [buildSecondaryCorrelation().timeline[0]] }}
+        timelineReplayError="replay request failed"
+        timelineReplayState="error"
+      />
+    );
+
+    section = screen.getByRole('heading', { name: 'Timeline Replay' }).closest('section');
+    expect(section).not.toBeNull();
+    expect(
+      within(section!).getByText(
+        'Showing last timeline replay snapshot for corr-app-secondary at Orange severity. replay request failed'
+      )
+    ).toBeVisible();
   });
 
   it('jumps from matching active-queue evidence refs to shared memory while leaving non-matching refs as plain text and showing explicit fallbacks', async () => {

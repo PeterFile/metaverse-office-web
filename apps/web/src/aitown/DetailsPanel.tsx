@@ -69,6 +69,7 @@ type DetailsPanelProps = {
   selectedAgentSupervisionHistoryState: LoadState;
   selectedAgent: OfficeAgent | null;
   selectedCorrelationId: string | null;
+  selectedCrewReplaySeverity: Severity | null;
   selectedOperationsState: string | null;
   selectedOperationsSeverity: Severity | null;
   selectedOperation: OfficeOperation | null;
@@ -84,6 +85,7 @@ type DetailsPanelProps = {
   onInspectAgent: (agentId: string | null) => void;
   onSelectCorrelation: SelectCorrelationHandler;
   onResetCorrelationOverride: () => void;
+  onSelectCrewReplaySeverity: (severity: Severity | null) => void;
   onSelectOperationsState: (state: string | null) => void;
   onSelectOperationsSeverity: (severity: Severity | null) => void;
   onSelectOperation: (operation: OfficeOperation, options?: SelectOperationOptions) => void;
@@ -1594,9 +1596,72 @@ function renderReplayTimelineEvent({
   );
 }
 
+function renderCrewReplayLoadingLabel(scopedReplayCorrelationId: string | null, selectedSeverity: Severity | null) {
+  if (scopedReplayCorrelationId && selectedSeverity) {
+    return `Loading timeline replay for ${scopedReplayCorrelationId} at ${SEVERITY_LABELS[selectedSeverity]} severity...`;
+  }
+  if (scopedReplayCorrelationId) {
+    return 'Loading scoped timeline replay...';
+  }
+  if (selectedSeverity) {
+    return `Loading timeline replay at ${SEVERITY_LABELS[selectedSeverity]} severity...`;
+  }
+  return 'Loading timeline replay...';
+}
+
+function renderCrewReplayEmptyLabel(scopedReplayCorrelationId: string | null, selectedSeverity: Severity | null) {
+  if (scopedReplayCorrelationId && selectedSeverity) {
+    return `No replay events for ${scopedReplayCorrelationId} at ${SEVERITY_LABELS[selectedSeverity]} severity.`;
+  }
+  if (scopedReplayCorrelationId) {
+    return `No replay events for ${scopedReplayCorrelationId}.`;
+  }
+  if (selectedSeverity) {
+    return `No replay events at ${SEVERITY_LABELS[selectedSeverity]} severity.`;
+  }
+  return 'No recent replay events.';
+}
+
+function renderCrewReplayInitialErrorLabel(
+  scopedReplayCorrelationId: string | null,
+  selectedSeverity: Severity | null,
+  timelineReplayError: string | null
+) {
+  const errorLabel = timelineReplayError ?? 'Timeline replay unavailable.';
+  if (scopedReplayCorrelationId && selectedSeverity) {
+    return `Unable to load timeline replay for ${scopedReplayCorrelationId} at ${SEVERITY_LABELS[selectedSeverity]} severity. ${errorLabel}`;
+  }
+  if (scopedReplayCorrelationId) {
+    return `Scoped replay unavailable. ${errorLabel}`;
+  }
+  if (selectedSeverity) {
+    return `Unable to load timeline replay at ${SEVERITY_LABELS[selectedSeverity]} severity. ${errorLabel}`;
+  }
+  return errorLabel;
+}
+
+function renderCrewReplayDegradedErrorLabel(
+  scopedReplayCorrelationId: string | null,
+  selectedSeverity: Severity | null,
+  timelineReplayError: string | null
+) {
+  const errorLabel = timelineReplayError ?? 'Timeline replay unavailable.';
+  if (scopedReplayCorrelationId && selectedSeverity) {
+    return `Showing last timeline replay snapshot for ${scopedReplayCorrelationId} at ${SEVERITY_LABELS[selectedSeverity]} severity. ${errorLabel}`;
+  }
+  if (scopedReplayCorrelationId) {
+    return `Scoped replay unavailable. ${errorLabel}`;
+  }
+  if (selectedSeverity) {
+    return `Showing last timeline replay snapshot at ${SEVERITY_LABELS[selectedSeverity]} severity. ${errorLabel}`;
+  }
+  return errorLabel;
+}
+
 function renderTimelineReplaySection({
   requestScopeLabel = null,
   scopedReplayCorrelationId = null,
+  selectedSeverity = null,
   timelineReplayItems,
   timelineReplayError,
   timelineReplayState,
@@ -1610,12 +1675,14 @@ function renderTimelineReplaySection({
   navigableAgentIds,
   agentNameById,
   sharedMemoryArtifactRefs,
+  onSelectSeverity,
   onFocusSharedMemoryArtifact,
   onSelectAgent,
   onSelectCorrelation
 }: {
   requestScopeLabel?: string | null;
   scopedReplayCorrelationId?: string | null;
+  selectedSeverity?: Severity | null;
   timelineReplayItems: WorkflowTimelineEvent[];
   timelineReplayError: string | null;
   timelineReplayState: LoadState;
@@ -1629,6 +1696,7 @@ function renderTimelineReplaySection({
   navigableAgentIds: Set<string>;
   agentNameById: Map<string, string>;
   sharedMemoryArtifactRefs: ReadonlySet<string>;
+  onSelectSeverity?: (severity: Severity | null) => void;
   onFocusSharedMemoryArtifact?: (artifactRef: string, scope?: SharedMemoryJumpScope) => void;
   onSelectAgent: SelectAgentHandler;
   onSelectCorrelation: SelectCorrelationHandler;
@@ -1638,6 +1706,23 @@ function renderTimelineReplaySection({
       <h3>Timeline Replay</h3>
       {requestScopeLabel ? <p>{`Request scope · ${requestScopeLabel}`}</p> : null}
       {scopedReplayCorrelationId ? <span>{`Scoped replay · ${scopedReplayCorrelationId}`}</span> : null}
+      {onSelectSeverity ? (
+        <p>
+          <label htmlFor="aitown-timeline-replay-severity-filter">Severity filter</label>{' '}
+          <select
+            id="aitown-timeline-replay-severity-filter"
+            aria-label="Filter timeline replay by severity"
+            value={selectedSeverity ?? ''}
+            onChange={(event) => onSelectSeverity(event.target.value ? (event.target.value as Severity) : null)}
+          >
+            <option value="">All severities</option>
+            <option value="normal">Normal</option>
+            <option value="yellow">Yellow</option>
+            <option value="orange">Orange</option>
+            <option value="red">Red</option>
+          </select>
+        </p>
+      ) : null}
       <ul className="aitown-records">
         {timelineReplayState === 'loading' && !hasReplaySnapshot ? (
           <li className="aitown-record">{loadingLabel}</li>
@@ -2526,6 +2611,7 @@ export function DetailsPanel({
   selectedAgentSupervisionHistoryState,
   selectedAgent,
   selectedCorrelationId,
+  selectedCrewReplaySeverity,
   selectedOperationsState,
   selectedOperationsSeverity,
   selectedOperation,
@@ -2541,6 +2627,7 @@ export function DetailsPanel({
   onInspectAgent,
   onSelectCorrelation,
   onResetCorrelationOverride,
+  onSelectCrewReplaySeverity,
   onSelectOperationsState,
   onSelectOperationsSeverity,
   onSelectOperation,
@@ -3256,31 +3343,35 @@ export function DetailsPanel({
 
         {renderTimelineReplaySection({
           scopedReplayCorrelationId: manualCorrelationOverrideActive ? selectedCorrelationId : null,
+          selectedSeverity: selectedCrewReplaySeverity,
           timelineReplayItems: timelineReplay?.items ?? [],
           timelineReplayError,
           timelineReplayState,
           hasReplaySnapshot: timelineReplay !== null,
-          loadingLabel:
-            manualCorrelationOverrideActive && selectedCorrelationId
-              ? 'Loading scoped timeline replay...'
-              : 'Loading timeline replay...',
-          emptyLabel:
-            manualCorrelationOverrideActive && selectedCorrelationId
-              ? `No replay events for ${selectedCorrelationId}.`
-              : 'No recent replay events.',
-          initialErrorLabel:
-            manualCorrelationOverrideActive && selectedCorrelationId
-              ? `Scoped replay unavailable. ${timelineReplayError}`
-              : (timelineReplayError ?? 'Timeline replay unavailable.'),
-          degradedErrorLabel:
-            manualCorrelationOverrideActive && selectedCorrelationId
-              ? `Scoped replay unavailable. ${timelineReplayError}`
-              : (timelineReplayError ?? 'Timeline replay unavailable.'),
+          loadingLabel: renderCrewReplayLoadingLabel(
+            manualCorrelationOverrideActive ? selectedCorrelationId : null,
+            selectedCrewReplaySeverity
+          ),
+          emptyLabel: renderCrewReplayEmptyLabel(
+            manualCorrelationOverrideActive ? selectedCorrelationId : null,
+            selectedCrewReplaySeverity
+          ),
+          initialErrorLabel: renderCrewReplayInitialErrorLabel(
+            manualCorrelationOverrideActive ? selectedCorrelationId : null,
+            selectedCrewReplaySeverity,
+            timelineReplayError
+          ),
+          degradedErrorLabel: renderCrewReplayDegradedErrorLabel(
+            manualCorrelationOverrideActive ? selectedCorrelationId : null,
+            selectedCrewReplaySeverity,
+            timelineReplayError
+          ),
           activeCorrelationId: selectedCorrelationId,
           currentAgentId: null,
           navigableAgentIds,
           agentNameById,
           sharedMemoryArtifactRefs,
+          onSelectSeverity: onSelectCrewReplaySeverity,
           onFocusSharedMemoryArtifact,
           onSelectAgent,
           onSelectCorrelation

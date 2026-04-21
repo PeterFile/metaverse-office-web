@@ -86,8 +86,10 @@ const growthRevenueSelectedOperationUrl = '/office/operations?agent_id=growth-re
 const incidentsUrl = '/incidents?limit=10&window=60m';
 const selectedAgentIncidentsUrl = '/agents/app-engineering/incidents?limit=10&window=60m';
 const timelineUrl = '/timeline?limit=4&window=60m';
+const orangeTimelineUrl = '/timeline?limit=4&window=60m&severity=orange';
 const reviewScopedTimelineUrl = '/timeline?limit=4&window=60m&correlation_id=corr-app-review';
 const secondaryScopedTimelineUrl = '/timeline?limit=4&window=60m&correlation_id=corr-app-secondary';
+const orangeSecondaryScopedTimelineUrl = '/timeline?limit=4&window=60m&severity=orange&correlation_id=corr-app-secondary';
 const workflowUrl = '/agents/app-engineering/workflow?limit=10&window=60m';
 const teamLeadWorkflowUrl = '/agents/team-lead/workflow?limit=10&window=60m';
 const teamLeadIncidentsUrl = '/agents/team-lead/incidents?limit=10&window=60m';
@@ -4134,6 +4136,119 @@ afterEach(() => {
     });
 
     expect(globalThis.fetch).toHaveBeenCalledWith(secondaryScopedTimelineUrl, expect.anything());
+  });
+
+  it('refetches crew-overview timeline replay with the selected severity filter', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === orangeTimelineUrl) {
+          return jsonResponse(reviewScopedTimelineFixture);
+        }
+
+        return resolveTestFetchResponse(url);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    const replaySection = (await within(details).findByRole('heading', { name: 'Timeline Replay' })).closest('section');
+    expect(replaySection).not.toBeNull();
+
+    const severityFilter = within(replaySection!).getByRole('combobox', {
+      name: 'Filter timeline replay by severity'
+    });
+
+    expect(await within(replaySection!).findByText('Replay captured launch copy review note')).toBeVisible();
+    expect(severityFilter).toHaveValue('');
+    expect(within(severityFilter).getByRole('option', { name: 'All severities' })).toBeVisible();
+
+    await user.selectOptions(severityFilter, 'orange');
+
+    await waitFor(() => {
+      expect(within(replaySection!).getByText('Replay captured missing workflow evidence')).toBeVisible();
+      expect(within(replaySection!).queryByText('Replay captured launch copy review note')).not.toBeInTheDocument();
+    });
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(orangeTimelineUrl, expect.anything());
+  });
+
+  it('stacks the crew-overview timeline severity filter with a manual correlation scope and restores that scope when cleared', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === orangeSecondaryScopedTimelineUrl) {
+          return jsonResponse({ items: [] });
+        }
+
+        return resolveTestFetchResponse(url);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    const incidentSection = within(details).getByRole('heading', { name: 'Incident Feed' }).closest('section');
+    const replaySection = (await within(details).findByRole('heading', { name: 'Timeline Replay' })).closest('section');
+    expect(incidentSection).not.toBeNull();
+    expect(replaySection).not.toBeNull();
+
+    await user.click(
+      within(incidentSection!).getByRole('button', { name: 'Open incident correlation corr-app-secondary' })
+    );
+
+    await waitFor(() => {
+      expect(within(replaySection!).getByText('Scoped replay · corr-app-secondary')).toBeVisible();
+      expect(within(replaySection!).getByText('Replay captured the secondary review handoff')).toBeVisible();
+    });
+
+    const severityFilter = within(replaySection!).getByRole('combobox', {
+      name: 'Filter timeline replay by severity'
+    });
+    const fetchCallCountBeforeFilter = vi.mocked(globalThis.fetch).mock.calls.length;
+
+    await user.selectOptions(severityFilter, 'orange');
+
+    await waitFor(() => {
+      expect(within(replaySection!).getByText('Scoped replay · corr-app-secondary')).toBeVisible();
+      expect(within(replaySection!).getByText('No replay events for corr-app-secondary at Orange severity.')).toBeVisible();
+      expect(within(replaySection!).queryByText('Replay captured the secondary review handoff')).not.toBeInTheDocument();
+    });
+
+    const postFilterRequests = vi
+      .mocked(globalThis.fetch)
+      .mock.calls.slice(fetchCallCountBeforeFilter)
+      .map(([input]) => (typeof input === 'string' ? input : input.toString()));
+
+    expect(postFilterRequests).toContain(orangeSecondaryScopedTimelineUrl);
+    expect(postFilterRequests).not.toContain(orangeTimelineUrl);
+
+    const fetchCallCountBeforeClear = vi.mocked(globalThis.fetch).mock.calls.length;
+
+    await user.selectOptions(severityFilter, '');
+
+    await waitFor(() => {
+      expect(within(replaySection!).getByText('Scoped replay · corr-app-secondary')).toBeVisible();
+      expect(within(replaySection!).getByText('Replay captured the secondary review handoff')).toBeVisible();
+      expect(
+        within(replaySection!).queryByText('No replay events for corr-app-secondary at Orange severity.')
+      ).not.toBeInTheDocument();
+    });
+
+    const postClearRequests = vi
+      .mocked(globalThis.fetch)
+      .mock.calls.slice(fetchCallCountBeforeClear)
+      .map(([input]) => (typeof input === 'string' ? input : input.toString()));
+
+    expect(postClearRequests).toContain(secondaryScopedTimelineUrl);
+    expect(postClearRequests).not.toContain(timelineUrl);
   });
 
   it('keeps crew-overview auto correlation mode when re-selecting the current default correlation from timeline replay', async () => {

@@ -273,13 +273,30 @@ export async function fetchIncidents(
 }
 
 export async function fetchTimeline(
-  options: { limit?: number; window?: string; correlationId?: string; signal?: AbortSignal } = {}
+  options: {
+    limit?: number;
+    window?: string;
+    agentId?: string;
+    eventType?: string;
+    severity?: string;
+    correlationId?: string;
+    signal?: AbortSignal;
+  } = {}
 ): Promise<TimelineReplayResponse> {
   const params = new URLSearchParams({
     limit: String(options.limit ?? DEFAULT_WORKFLOW_LIMIT),
     window: options.window ?? DEFAULT_WORKFLOW_WINDOW
   });
 
+  if (options.agentId) {
+    params.set('agent_id', options.agentId);
+  }
+  if (options.eventType) {
+    params.set('event_type', options.eventType);
+  }
+  if (options.severity) {
+    params.set('severity', options.severity);
+  }
   if (options.correlationId) {
     params.set('correlation_id', options.correlationId);
   }

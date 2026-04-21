@@ -93,7 +93,7 @@ describe('SceneStatusLegend', () => {
     expect(screen.queryByRole('list', { name: 'Hot zones legend' })).not.toBeInTheDocument();
   });
 
-  it('renders live hot zones beneath the badge legend with combined alert/incident copy', async () => {
+  it('renders live hot zones beneath the badge legend with combined alert/incident copy and keeps healthy data quality quiet', async () => {
     const world = makeWorldState({
       agents: new Map([
         [
@@ -159,6 +159,29 @@ describe('SceneStatusLegend', () => {
     expect(hotZoneItems[1]).toHaveTextContent('0 reboot');
     expect(hotZoneItems[1]).toHaveTextContent('1 occupant with open alerts or incidents');
 
+    expect(screen.queryByRole('list', { name: 'Data quality legend' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Data quality')).not.toBeInTheDocument();
+    expect(screen.queryByText('Degraded')).not.toBeInTheDocument();
     expect(screen.queryByText('Focus Booth')).not.toBeInTheDocument();
+  });
+
+  it('renders a degraded data-quality section when evidence coverage is incomplete', async () => {
+    const world = makeWorldState({
+      data_quality: {
+        overview_available: false,
+        workflow_agent_ids: ['app-engineering'],
+        incident_feed_available: false,
+        last_overview_at: '2026-03-14T09:55:00Z',
+        degraded_reasons: ['overview unavailable', 'incident feed unavailable', 'workflow partial'],
+      },
+    });
+
+    renderLegend(world);
+
+    const dataQualityList = await screen.findByRole('list', { name: 'Data quality legend' });
+    expect(screen.getByText('Data quality')).toBeVisible();
+    expect(within(dataQualityList).getByRole('listitem')).toHaveTextContent(
+      'Degraded · 3 evidence gaps · last overview 2026-03-14T09:55:00Z · overview unavailable; incident feed unavailable; workflow partial'
+    );
   });
 });

@@ -42,6 +42,11 @@ export interface HotZoneSummary {
   open_alert_or_incident_occupant_count: number;
 }
 
+export interface DataQualitySummary {
+  degraded_reasons: string[];
+  last_overview_at: string | null;
+}
+
 // ── Single agent ──
 
 export function selectAgentLabel(agent: WorldAgent): string {
@@ -103,6 +108,32 @@ export function selectAttentionQueue(world: WorldState): WorldAgent[] {
 
 export function selectGlobalSeverity(world: WorldState): Severity {
   return world.summary.highest_severity;
+}
+
+export function selectDataQualitySummary(
+  world: WorldState | null | undefined
+): DataQualitySummary | null {
+  if (!world) {
+    return null;
+  }
+
+  const degradedReasons = new Set(world.data_quality.degraded_reasons);
+  if (!world.data_quality.overview_available) {
+    degradedReasons.add('overview unavailable');
+  }
+  if (!world.data_quality.incident_feed_available) {
+    degradedReasons.add('incident feed unavailable');
+  }
+
+  const normalizedReasons = Array.from(degradedReasons).filter((reason) => reason.length > 0);
+  if (normalizedReasons.length === 0) {
+    return null;
+  }
+
+  return {
+    degraded_reasons: normalizedReasons,
+    last_overview_at: world.data_quality.last_overview_at,
+  };
 }
 
 export function selectHotZones(

@@ -4496,10 +4496,10 @@ afterEach(() => {
     expect(officeGridSection).not.toBeNull();
 
     const officeGridLabels = Array.from(officeGridSection!.querySelectorAll('li strong')).map((node) => node.textContent);
-    expect(officeGridLabels).toEqual(['Team Lead Desk', 'QA Desk', 'Meeting Zone']);
+    expect(officeGridLabels).toEqual(['Team Lead Desk', 'QA Desk', 'Meeting Zone', 'Review Zone']);
 
     expect(within(officeGridSection!).getAllByText('Kind · desk')).toHaveLength(2);
-    expect(within(officeGridSection!).getByText('Kind · shared')).toBeVisible();
+    expect(within(officeGridSection!).getAllByText('Kind · shared')).toHaveLength(2);
     expect(
       within(officeGridSection!).getByRole('button', {
         name: 'Select home agent Team Lead in Team Lead Desk'
@@ -4514,7 +4514,10 @@ afterEach(() => {
       within(officeGridSection!).getByRole('button', { name: 'Select zone occupant Team Lead in Team Lead Desk' })
     ).toBeVisible();
     expect(within(officeGridSection!).getAllByText('Occupants · Empty')).toHaveLength(1);
-    expect(within(officeGridSection!).getByText('Severity · Normal · 1 occupant(s)')).toBeVisible();
+
+    const reviewZoneRow = within(officeGridSection!).getByText('Review Zone').closest('li');
+    expect(reviewZoneRow).not.toBeNull();
+    expect(within(reviewZoneRow!).getByText('Severity · Normal · 1 occupant(s)')).toBeVisible();
     expect(within(officeGridSection!).getByText('Severity · Orange · 2 occupant(s)')).toBeVisible();
 
     const occupantButton = within(officeGridSection!).getByRole('button', {
@@ -4524,6 +4527,83 @@ afterEach(() => {
 
     await user.click(occupantButton);
     expect(await within(details).findByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+  });
+
+  it('appends runtime-only projected zones to the crew-overview office grid when overview data omits them', async () => {
+    const user = userEvent.setup();
+    const runtimeOnlyZoneOverviewFixture = {
+      ...overviewFixture,
+      agents: overviewFixture.agents.map((agent) =>
+        agent.agent_id === 'app-engineering'
+          ? {
+              ...agent,
+              current_state: 'reviewing',
+              current_location: 'meeting-zone'
+            }
+          : agent
+      )
+    };
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === '/office/overview') {
+          return new Response(JSON.stringify(runtimeOnlyZoneOverviewFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === operationsUrl || url === selectedOperationUrl) {
+          return new Response(JSON.stringify(operationsFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === incidentsUrl) {
+          return new Response(JSON.stringify(incidentFeedFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === workflowUrl) {
+          return new Response(JSON.stringify(workflowFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        if (url === correlationUrl) {
+          return new Response(JSON.stringify(correlationFixture), {
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        return resolveTestFetchResponse(url);
+      })
+    );
+
+    render(<App />);
+
+    const details = await openHub(user);
+    const officeGridSection = within(details).getByRole('heading', { name: 'Office Grid' }).closest('section');
+    expect(officeGridSection).not.toBeNull();
+
+    const officeGridLabels = Array.from(officeGridSection!.querySelectorAll('li strong')).map((node) => node.textContent);
+    expect(officeGridLabels).toEqual(['Team Lead Desk', 'Meeting Zone', 'Review Zone']);
+
+    const reviewZoneRow = within(officeGridSection!).getByText('Review Zone').closest('li');
+    expect(reviewZoneRow).not.toBeNull();
+    expect(within(reviewZoneRow!).getByText('Severity · Normal · 1 occupant(s)')).toBeVisible();
+
+    const reviewZoneOccupantButton = within(reviewZoneRow!).getByRole('button', {
+      name: 'Select zone occupant Team Lead in Review Zone'
+    });
+    expect(reviewZoneOccupantButton).toBeVisible();
+
+    await user.click(reviewZoneOccupantButton);
+
+    expect(await within(details).findByRole('heading', { name: 'Team Lead' })).toBeVisible();
   });
 
   it('preserves a manually selected crew-overview correlation when pivoting through an office-grid zone occupant', async () => {

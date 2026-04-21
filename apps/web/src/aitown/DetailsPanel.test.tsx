@@ -5486,6 +5486,79 @@ describe('DetailsPanel accountability signals', () => {
     expect(onSelectAgent).toHaveBeenLastCalledWith('app-engineering', null);
   });
 
+  it('appends runtime-only world zones to the office grid when overview zones are present and uses projected occupants', async () => {
+    const user = userEvent.setup();
+    const onSelectAgent = vi.fn();
+    const world = buildWorld();
+    const officeGridWorld: WorldState = {
+      ...world,
+      agents: new Map(world.agents).set('team-lead', {
+        ...world.agents.get('team-lead')!,
+        raw_location: 'lead-desk',
+        zone: 'review-zone'
+      }),
+      zones: [
+        ...world.zones,
+        {
+          zone_id: 'review-zone',
+          label: 'Review Zone',
+          kind: 'shared',
+          grid_x: 0,
+          grid_y: 1,
+          grid_w: 1,
+          grid_h: 1,
+          home_agent_id: null,
+          occupant_ids: ['team-lead']
+        }
+      ]
+    };
+    const overviewZones = officeGridWorld.zones
+      .filter((zone) => zone.zone_id !== 'review-zone')
+      .map((zone) => ({
+        zone_id: zone.zone_id,
+        label: zone.label,
+        kind: zone.kind,
+        grid_x: zone.grid_x,
+        grid_y: zone.grid_y,
+        grid_w: zone.grid_w,
+        grid_h: zone.grid_h,
+        home_agent_id: zone.home_agent_id ?? null,
+        occupants: []
+      }));
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          onSelectAgent,
+          overviewZones,
+          selectedAgent: null,
+          selectedCorrelationId: 'corr-app-review',
+          selectedOperation: null,
+          world: officeGridWorld
+        })}
+      />
+    );
+
+    const officeGridSection = screen.getByRole('heading', { name: 'Office Grid' }).closest('section');
+    expect(officeGridSection).not.toBeNull();
+
+    const officeGridLabels = Array.from(within(officeGridSection!).getAllByRole('listitem')).map((node) =>
+      node.querySelector('strong')?.textContent
+    );
+    expect(officeGridLabels).toEqual(['Delivery Desk', 'Review Zone']);
+
+    const reviewOccupantButton = within(officeGridSection!).getByRole('button', {
+      name: 'Select zone occupant Team Lead in Review Zone'
+    });
+    expect(reviewOccupantButton).toBeVisible();
+    expect(within(officeGridSection!).getByText('Home · Unassigned')).toBeVisible();
+    expect(within(officeGridSection!).getByText('Severity · Yellow · 1 occupant(s)')).toBeVisible();
+
+    await user.click(reviewOccupantButton);
+
+    expect(onSelectAgent).toHaveBeenCalledWith('team-lead', 'corr-app-review');
+  });
+
   it('renders the selected-agent collector observation watch target as a pivot only for navigable non-current targets and preserves the active correlation', async () => {
     const user = userEvent.setup();
     const onSelectAgent = vi.fn();

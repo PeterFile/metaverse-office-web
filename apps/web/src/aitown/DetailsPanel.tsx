@@ -2534,33 +2534,63 @@ export function DetailsPanel({
   const attentionQueue = selectAttentionQueue(world);
   const agentNameById = new Map([...world.agents.values()].map((agent) => [agent.agent_id, agent.display_name]));
   const sharedMemoryEvidenceJump = resolveSharedMemoryEvidenceJumpBehavior(onFocusSharedMemoryArtifact);
-  const zoneSource = overviewZones ?? world.zones.map((zone) => ({
-    zone_id: zone.zone_id,
-    label: zone.label,
-    kind: zone.kind,
-    grid_x: zone.grid_x,
-    grid_y: zone.grid_y,
-    grid_w: zone.grid_w,
-    grid_h: zone.grid_h,
-    home_agent_id: zone.home_agent_id ?? null,
-    occupants: []
-  }));
+  const projectedZoneById = new Map(world.zones.map((zone) => [zone.zone_id, zone]));
+  const zoneSource = overviewZones
+    ? [
+        ...overviewZones,
+        ...world.zones
+          .filter((zone) => !overviewZones.some((candidate) => candidate.zone_id === zone.zone_id))
+          .map((zone) => ({
+            zone_id: zone.zone_id,
+            label: zone.label,
+            kind: zone.kind,
+            grid_x: zone.grid_x,
+            grid_y: zone.grid_y,
+            grid_w: zone.grid_w,
+            grid_h: zone.grid_h,
+            home_agent_id: zone.home_agent_id ?? null,
+            occupants: []
+          }))
+      ]
+    : world.zones.map((zone) => ({
+        zone_id: zone.zone_id,
+        label: zone.label,
+        kind: zone.kind,
+        grid_x: zone.grid_x,
+        grid_y: zone.grid_y,
+        grid_w: zone.grid_w,
+        grid_h: zone.grid_h,
+        home_agent_id: zone.home_agent_id ?? null,
+        occupants: []
+      }));
   const officeGrid = buildZoneLayoutModels(zoneSource).map((layoutModel) => {
     const zone = layoutModel.zone;
     const overviewZone = overviewZones?.find((candidate) => candidate.zone_id === zone.zone_id) ?? null;
-    const occupants = overviewZone && overviewZone.occupants.length > 0
-      ? overviewZone.occupants.map((occupant) => ({
-          agentId: occupant.agent_id,
-          displayName: occupant.display_name,
-          severity: occupant.effective_severity
-        }))
-      : [...world.agents.values()]
-          .filter((agent) => agent.raw_location === zone.zone_id)
-          .map((agent) => ({
-            agentId: agent.agent_id,
-            displayName: agent.display_name,
-            severity: agent.severity
-          }));
+    const projectedZone = projectedZoneById.get(zone.zone_id) ?? null;
+    const occupants = overviewZone
+      ? overviewZone.occupants.length > 0
+        ? overviewZone.occupants.map((occupant) => ({
+            agentId: occupant.agent_id,
+            displayName: occupant.display_name,
+            severity: occupant.effective_severity
+          }))
+        : [...world.agents.values()]
+            .filter((agent) => agent.raw_location === zone.zone_id)
+            .map((agent) => ({
+              agentId: agent.agent_id,
+              displayName: agent.display_name,
+              severity: agent.severity
+            }))
+      : (projectedZone?.occupant_ids ?? []).flatMap((occupantId) => {
+          const occupant = world.agents.get(occupantId);
+          return occupant
+            ? [{
+                agentId: occupant.agent_id,
+                displayName: occupant.display_name,
+                severity: occupant.severity
+              }]
+            : [];
+        });
 
     return {
       zone,

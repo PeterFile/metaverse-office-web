@@ -3213,6 +3213,10 @@ afterEach(() => {
       expect(within(memorySection!).getByText('Ref · /tmp/missing.md')).toBeVisible();
       expect(within(memorySection!).getByText('Focused exact artifact · /tmp/missing.md')).toBeVisible();
       expect(within(memorySection!).getByText('Collector shared snapshot exact fallback stayed on the crew-overview path')).toBeVisible();
+      const backlinkLane = within(memorySection!).getByText('Current-scope backlinks').closest('div');
+      expect(backlinkLane).not.toBeNull();
+      expect(within(backlinkLane!).getByText('Collector shared snapshot')).toBeVisible();
+      expect(within(backlinkLane!).getByText('/tmp/missing.md')).toBeVisible();
       expect(within(details).getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
       expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
     });
@@ -4554,6 +4558,10 @@ afterEach(() => {
 
     await waitFor(() => {
       expect(document.activeElement).toBe(artifactRecord);
+      const backlinkLane = within(memorySection!).getByText('Current-scope backlinks').closest('div');
+      expect(backlinkLane).not.toBeNull();
+      expect(within(backlinkLane!).getByText('Timeline replay')).toBeVisible();
+      expect(within(backlinkLane!).getByText('Replay captured missing workflow evidence')).toBeVisible();
       expect(within(details).getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
       expect(within(details).queryByRole('button', { name: 'Clear' })).not.toBeInTheDocument();
       expect(within(details).queryByRole('heading', { name: 'Current Operation' })).not.toBeInTheDocument();
@@ -5366,6 +5374,12 @@ afterEach(() => {
 
     await waitFor(() => {
       expect(within(memorySection!).getByText('Ref · /tmp/missing.md')).toBeVisible();
+      const backlinkLane = within(memorySection!).getByText('Current-scope backlinks').closest('div');
+      expect(backlinkLane).not.toBeNull();
+      expect(within(backlinkLane!).getByText('Open supervision alert')).toBeVisible();
+      expect(
+        within(backlinkLane!).getByText('Open supervision alert exact evidence jump stays on the alert correlation')
+      ).toBeVisible();
       expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
       expect(within(correlationSection!).queryByText('corr-app-secondary')).not.toBeInTheDocument();
     });
@@ -13846,6 +13860,10 @@ afterEach(() => {
     const tmuxArtifactRecord = within(memorySection!).getByText(`Ref · ${tmuxArtifactRef}`).closest('li');
     expect(tmuxArtifactRecord).not.toBeNull();
     expect(document.activeElement).toBe(tmuxArtifactRecord);
+    const backlinkLane = within(memorySection!).getByText('Current-scope backlinks').closest('div');
+    expect(backlinkLane).not.toBeNull();
+    expect(within(backlinkLane!).getByText('Collector tmux preview')).toBeVisible();
+    expect(within(backlinkLane!).getByText(`app-engineering · ${tmuxPreviewLabel}`)).toBeVisible();
     expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
     expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
     expect(within(memorySection!).getByText('Request scope · app-engineering · corr-app-review')).toBeVisible();

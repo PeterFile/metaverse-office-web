@@ -2906,6 +2906,243 @@ describe('DetailsPanel accountability signals', () => {
     expect(within(backlinkLane!).queryByText('More')).not.toBeInTheDocument();
   });
 
+  it('includes current open supervision alert backlinks for focused exact artifacts', () => {
+    const focusedArtifactRef = '/evidence/open-alert.md';
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          focusedSharedMemoryArtifactRef: focusedArtifactRef,
+          collectorSnapshot: null,
+          correlation: null,
+          memoryArtifacts: {
+            generated_at: '2026-03-16T09:00:00.000Z',
+            items: [
+              {
+                artifact_ref: focusedArtifactRef,
+                artifact_kind: 'evidence_ref',
+                file_name: 'open-alert.md',
+                first_seen_at: '2026-03-16T08:54:00.000Z',
+                last_seen_at: '2026-03-16T08:58:00.000Z',
+                mention_count: 2,
+                agent_ids: ['growth-revenue'],
+                correlation_ids: ['corr-app-review'],
+                source_kinds: ['controller_event'],
+                latest_summary: 'Open alert artifact',
+                latest_event_type: 'peer_watch_alert',
+                collector_last_modified_at: null
+              }
+            ]
+          },
+          openSupervisionAlerts: {
+            items: [
+              {
+                alert_id: 'alert-open-1',
+                ts: '2026-03-16T08:55:00.000Z',
+                agent_id: 'growth-revenue',
+                target_agent_id: 'growth-revenue',
+                actor_id: 'team-lead',
+                observer_agent_id: 'team-lead',
+                watcher_agent_ids: ['team-lead'],
+                severity: 'orange',
+                status: 'open',
+                current_state: 'blocked',
+                active_task: 'Review launch blocker',
+                summary: 'Open queue alert cites the exact artifact',
+                evidence_refs: [focusedArtifactRef],
+                evidence_count: 1,
+                correlation_id: 'corr-app-review',
+                source_kind: 'controller_event',
+                metadata: {}
+              }
+            ]
+          },
+          selectedAgent: null,
+          selectedAgentSupervisionHistory: null,
+          selectedOperation: null,
+          sharedMemoryRequestScopeLabel: 'Crew overview · corr-app-review',
+          timelineReplay: null,
+          workflow: null
+        })}
+      />
+    );
+
+    const sharedMemorySection = screen.getByRole('heading', { name: 'Shared Memory' }).closest('section');
+    expect(sharedMemorySection).not.toBeNull();
+
+    const backlinkLane = within(sharedMemorySection!).getByText('Current-scope backlinks').closest('div');
+    expect(backlinkLane).not.toBeNull();
+    expect(within(backlinkLane!).getByText('Open supervision alert')).toBeVisible();
+    expect(within(backlinkLane!).getByText('Open queue alert cites the exact artifact')).toBeVisible();
+  });
+
+  it('prioritizes current timeline replay rows over duplicate workflow event backlinks for focused exact artifacts', () => {
+    const focusedArtifactRef = '/evidence/replay-priority.md';
+    const workflow = buildWorkflow();
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          focusedSharedMemoryArtifactRef: focusedArtifactRef,
+          collectorSnapshot: null,
+          correlation: null,
+          memoryArtifacts: {
+            generated_at: '2026-03-16T09:00:00.000Z',
+            items: [
+              {
+                artifact_ref: focusedArtifactRef,
+                artifact_kind: 'evidence_ref',
+                file_name: 'replay-priority.md',
+                first_seen_at: '2026-03-16T08:52:00.000Z',
+                last_seen_at: '2026-03-16T08:58:00.000Z',
+                mention_count: 2,
+                agent_ids: ['app-engineering'],
+                correlation_ids: ['corr-app-review'],
+                source_kinds: ['timeline_replay'],
+                latest_summary: 'Replay priority artifact',
+                latest_event_type: 'timeline_note',
+                collector_last_modified_at: null
+              }
+            ]
+          },
+          selectedAgentSupervisionHistory: null,
+          selectedOperation: null,
+          sharedMemoryRequestScopeLabel: 'Crew overview · corr-app-review',
+          timelineReplay: {
+            items: [
+              {
+                event_id: 'evt-replay-priority',
+                ts: '2026-03-16T08:58:00.000Z',
+                agent_id: 'app-engineering',
+                actor_id: 'team-lead',
+                event_type: 'timeline_note',
+                severity: 'orange',
+                current_state: 'blocked',
+                location: 'delivery-desk',
+                summary: 'Replay row cites the exact artifact',
+                correlation_id: 'corr-app-review',
+                counterparty_agent_ids: ['team-lead'],
+                evidence_refs: [focusedArtifactRef],
+                source_kind: 'timeline_replay'
+              }
+            ]
+          },
+          workflow: {
+            ...workflow,
+            detail: {
+              ...workflow.detail,
+              open_peer_watch_alerts: [],
+              recent_events: [
+                {
+                  ...workflow.detail.recent_events[0],
+                  event_id: 'evt-replay-priority',
+                  summary: 'Workflow copy should defer to the replay row',
+                  evidence_refs: [focusedArtifactRef]
+                }
+              ],
+              recent_interactions: [],
+              recent_incidents: [],
+              recent_handoffs: [],
+              recent_reboots: []
+            }
+          }
+        })}
+      />
+    );
+
+    const sharedMemorySection = screen.getByRole('heading', { name: 'Shared Memory' }).closest('section');
+    expect(sharedMemorySection).not.toBeNull();
+
+    const backlinkLane = within(sharedMemorySection!).getByText('Current-scope backlinks').closest('div');
+    expect(backlinkLane).not.toBeNull();
+    expect(within(backlinkLane!).getByText('Timeline replay')).toBeVisible();
+    expect(within(backlinkLane!).getByText('Replay row cites the exact artifact')).toBeVisible();
+    expect(within(backlinkLane!).queryByText('Workflow event')).not.toBeInTheDocument();
+    expect(within(backlinkLane!).queryByText('Workflow copy should defer to the replay row')).not.toBeInTheDocument();
+  });
+
+  it('includes collector shared snapshot and workspace provenance backlinks for focused exact artifacts in crew overview', () => {
+    const focusedArtifactRef = '/workspace/app-engineering/review.md';
+    const collectorSnapshot: CollectorSnapshot = {
+      ...buildCollectorSnapshot(),
+      shared_artifacts: [
+        {
+          artifact_ref: focusedArtifactRef,
+          artifact_kind: 'workspace_file',
+          file_name: 'review.md',
+          last_seen_at: '2026-03-16T08:59:00.000Z',
+          agent_count: 1,
+          agent_ids: ['app-engineering'],
+          mention_count: 1,
+          source_kinds: ['workspace_file']
+        }
+      ],
+      items: buildCollectorSnapshot().items.map((item) =>
+        item.agent_id === 'app-engineering'
+          ? {
+              ...item,
+              workspace_observations: [
+                {
+                  path: focusedArtifactRef,
+                  file_name: 'review.md',
+                  kind: 'workspace_file',
+                  last_modified_at: '2026-03-16T08:58:45.000Z'
+                }
+              ]
+            }
+          : item
+      )
+    };
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          focusedSharedMemoryArtifactRef: focusedArtifactRef,
+          collectorSnapshot,
+          correlation: null,
+          memoryArtifacts: {
+            generated_at: '2026-03-16T09:00:00.000Z',
+            items: [
+              {
+                artifact_ref: focusedArtifactRef,
+                artifact_kind: 'workspace_file',
+                file_name: 'review.md',
+                first_seen_at: '2026-03-16T08:52:00.000Z',
+                last_seen_at: '2026-03-16T08:58:45.000Z',
+                mention_count: 2,
+                agent_ids: ['app-engineering'],
+                correlation_ids: [],
+                source_kinds: ['collector_snapshot'],
+                latest_summary: 'Collector workspace artifact',
+                latest_event_type: 'collector_snapshot_written',
+                collector_last_modified_at: '2026-03-16T08:58:45.000Z'
+              }
+            ]
+          },
+          openSupervisionAlerts: null,
+          selectedAgent: null,
+          selectedAgentSupervisionHistory: null,
+          selectedOperation: null,
+          sharedMemoryRequestScopeLabel: 'Crew overview',
+          timelineReplay: null,
+          workflow: null
+        })}
+      />
+    );
+
+    const sharedMemorySection = screen.getByRole('heading', { name: 'Shared Memory' }).closest('section');
+    expect(sharedMemorySection).not.toBeNull();
+
+    const backlinkLane = within(sharedMemorySection!).getByText('Current-scope backlinks').closest('div');
+    expect(backlinkLane).not.toBeNull();
+    expect(within(backlinkLane!).getByText('Collector shared snapshot')).toBeVisible();
+    expect(within(backlinkLane!).getByText(focusedArtifactRef)).toBeVisible();
+    expect(within(backlinkLane!).getByText('Collector workspace preview')).toBeVisible();
+    expect(
+      within(backlinkLane!).getByText('app-engineering · review.md · 2026-03-16T08:58:45.000Z')
+    ).toBeVisible();
+  });
+
   it('keeps the selected active-queue state option visible when its count drops to zero', () => {
     render(
       <DetailsPanel

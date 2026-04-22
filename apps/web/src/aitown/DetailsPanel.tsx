@@ -193,20 +193,88 @@ function appendScopedEvidenceRefBacklinks<
   });
 }
 
+function appendVisibleEvidenceRefBacklinks<RecordType extends { evidence_refs: string[]; summary: string }>(
+  backlinksByKey: Map<string, SharedMemoryBacklink>,
+  records: ReadonlyArray<RecordType>,
+  focusedArtifactRef: string,
+  createBacklink: (record: RecordType) => SharedMemoryBacklink
+) {
+  records.forEach((record) => {
+    if (!record.evidence_refs.includes(focusedArtifactRef)) {
+      return;
+    }
+
+    appendSharedMemoryBacklink(backlinksByKey, createBacklink(record));
+  });
+}
+
+function appendCollectorSharedArtifactBacklinks(
+  backlinksByKey: Map<string, SharedMemoryBacklink>,
+  collectorSharedArtifacts: ReadonlyArray<CollectorSharedArtifact> | null | undefined,
+  focusedArtifactRef: string
+) {
+  collectorSharedArtifacts?.forEach((artifact) => {
+    if (artifact.artifact_ref !== focusedArtifactRef) {
+      return;
+    }
+
+    appendSharedMemoryBacklink(backlinksByKey, {
+      key: `collector-shared-artifact:${artifact.artifact_ref}`,
+      sourceLabel: 'Collector shared snapshot',
+      label: artifact.artifact_ref
+    });
+  });
+}
+
+function appendCollectorProvenanceBacklinks(
+  backlinksByKey: Map<string, SharedMemoryBacklink>,
+  collectorItems: ReadonlyArray<CollectorItem>,
+  focusedArtifactRef: string
+) {
+  collectorItems.forEach((item) => {
+    const latestWorkspaceObservation = selectLatestWorkspaceObservation(item.workspace_observations);
+    if (latestWorkspaceObservation?.path === focusedArtifactRef) {
+      appendSharedMemoryBacklink(backlinksByKey, {
+        key: `collector-workspace:${item.agent_id}:${latestWorkspaceObservation.path}`,
+        sourceLabel: 'Collector workspace preview',
+        label: `${item.agent_id} · ${renderWorkspaceObservationPreview(latestWorkspaceObservation)}`
+      });
+    }
+
+    const latestTmuxObservation = selectLatestTmuxObservation(item.tmux_observations);
+    const tmuxArtifactRef = deriveCollectorTmuxArtifactRef(item, latestTmuxObservation);
+    if (latestTmuxObservation && tmuxArtifactRef === focusedArtifactRef) {
+      appendSharedMemoryBacklink(backlinksByKey, {
+        key: `collector-tmux:${item.agent_id}:${tmuxArtifactRef}`,
+        sourceLabel: 'Collector tmux preview',
+        label: `${item.agent_id} · ${renderTmuxObservationPreview(latestTmuxObservation)}`
+      });
+    }
+  });
+}
+
 function buildFocusedSharedMemoryBacklinks({
   focusedArtifactRef,
   activeCorrelationId,
   selectedOperation,
+  openSupervisionAlerts,
   selectedAgentSupervisionHistory,
+  timelineReplay,
   workflow,
-  correlation
+  correlation,
+  collectorSharedArtifacts,
+  visibleCollectorItems
 }: {
   focusedArtifactRef: string | null | undefined;
   activeCorrelationId: string | null;
   selectedOperation: OfficeOperation | null;
+  openSupervisionAlerts: PeerWatchAlertsResponse | null | undefined;
   selectedAgentSupervisionHistory: PeerWatchAlertsResponse | null;
+  timelineReplay: TimelineReplayResponse | null;
   workflow: AgentWorkflow | null;
   correlation: CorrelationDrilldown | null;
+  collectorSharedArtifacts: ReadonlyArray<CollectorSharedArtifact> | null | undefined;
+  visibleCollectorItems: ReadonlyArray<CollectorItem>;
 }): SharedMemoryBacklinkSummary {
   if (!focusedArtifactRef) {
     return {
@@ -229,6 +297,17 @@ function buildFocusedSharedMemoryBacklinks({
     });
   }
 
+  appendVisibleEvidenceRefBacklinks(
+    backlinksByKey,
+    openSupervisionAlerts?.items ?? [],
+    focusedArtifactRef,
+    (alert) => ({
+      key: `alert:${alert.alert_id}`,
+      sourceLabel: 'Open supervision alert',
+      label: alert.summary
+    })
+  );
+
   appendScopedEvidenceRefBacklinks(
     backlinksByKey,
     selectedAgentSupervisionHistory?.items ?? [],
@@ -238,6 +317,17 @@ function buildFocusedSharedMemoryBacklinks({
       key: `alert:${alert.alert_id}`,
       sourceLabel: 'Supervision history',
       label: alert.summary
+    })
+  );
+
+  appendVisibleEvidenceRefBacklinks(
+    backlinksByKey,
+    timelineReplay?.items ?? [],
+    focusedArtifactRef,
+    (event) => ({
+      key: `event:${event.event_id}`,
+      sourceLabel: 'Timeline replay',
+      label: event.summary
     })
   );
 
@@ -358,6 +448,9 @@ function buildFocusedSharedMemoryBacklinks({
       })
     );
   }
+
+  appendCollectorSharedArtifactBacklinks(backlinksByKey, collectorSharedArtifacts, focusedArtifactRef);
+  appendCollectorProvenanceBacklinks(backlinksByKey, visibleCollectorItems, focusedArtifactRef);
 
   const allBacklinks = [...backlinksByKey.values()];
 
@@ -2970,13 +3063,21 @@ export function DetailsPanel({
     .sort(compareCollectorItems)
     .slice(0, 3);
   const collectorSharedArtifacts = collectorSnapshot?.shared_artifacts;
+  const selectedCollectorItem = selectedAgent
+    ? collectorSnapshot?.items.find((item) => item.agent_id === selectedAgent.agent_id) ?? null
+    : null;
+  const visibleCollectorItems = selectedAgent ? (selectedCollectorItem ? [selectedCollectorItem] : []) : collectorSignalItems;
   const focusedSharedMemoryBacklinks = buildFocusedSharedMemoryBacklinks({
     focusedArtifactRef: focusedSharedMemoryArtifactRef,
     activeCorrelationId: sharedMemoryActiveCorrelationId,
     selectedOperation,
+    openSupervisionAlerts: selectedAgent ? null : openSupervisionAlerts,
     selectedAgentSupervisionHistory,
+    timelineReplay,
     workflow,
-    correlation
+    correlation,
+    collectorSharedArtifacts: selectedAgent ? null : collectorSharedArtifacts,
+    visibleCollectorItems
   });
   const manualCorrelationResetAction =
     manualCorrelationOverrideActive && selectedCorrelationId ? (
@@ -3667,8 +3768,6 @@ export function DetailsPanel({
   );
   const workflowHasAdditionalPivots =
     workflowPivotCorrelationIds.length > 0 || (workflow?.counterparty_agent_ids.length ?? 0) > 0;
-  const selectedCollectorItem =
-    collectorSnapshot?.items.find((item) => item.agent_id === selectedAgent.agent_id) ?? null;
   const selectedCollectorEvidenceRefs = selectedCollectorItem ? resolveCollectorEvidenceRefs(selectedCollectorItem) : [];
   const selectedCollectorWatchGraphAlignment = selectedCollectorItem
     ? resolveCollectorWatchGraphAlignment(selectedCollectorItem, world)

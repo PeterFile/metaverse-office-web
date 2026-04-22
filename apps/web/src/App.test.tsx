@@ -1585,6 +1585,41 @@ afterEach(() => {
     expect(worldRegion).not.toHaveAttribute('aria-describedby');
   });
 
+  it('focuses hot zones from the scene legend without clearing selected agent, active correlation, or fetch state', async () => {
+    const user = userEvent.setup();
+
+    setNavigatorUserAgent('VitestBrowser');
+    render(<App />);
+
+    await user.click(await screen.findByRole('button', { name: 'Select scene agent app-engineering' }));
+
+    const details = await screen.findByRole('complementary', { name: 'Agent details' });
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+
+    expect(correlationSection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Close Hub' }));
+    expect(screen.queryByRole('dialog', { name: 'Hub' })).not.toBeInTheDocument();
+
+    const fetchCallCountBeforeFocus = vi.mocked(globalThis.fetch).mock.calls.length;
+    const worldRegion = screen.getByRole('region', { name: 'Office world' });
+
+    await user.click(
+      within(worldRegion).getByRole('button', {
+        name: /Meeting Zone/
+      })
+    );
+
+    expect(screen.getByTestId('mock-zone-focus-request')).toHaveTextContent('meeting-zone:1');
+    expect(screen.getByTestId('mock-scene-selected-agent-id')).toHaveTextContent('app-engineering');
+    expect(screen.getByTestId('mock-scene-active-correlation-id')).toHaveTextContent('corr-app-review');
+    expect(vi.mocked(globalThis.fetch).mock.calls).toHaveLength(fetchCallCountBeforeFocus);
+  });
+
   it('routes selected-agent watch links into the scene overlay path without widening scene data', async () => {
     const user = userEvent.setup();
 

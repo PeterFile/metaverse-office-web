@@ -1,6 +1,7 @@
 import { render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { useEffect } from 'react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { useWorld, WorldProvider } from '../context/WorldContext';
 import type { WorldAgent, WorldState, ZoneSnapshot } from '../world/types';
@@ -67,20 +68,26 @@ function makeWorldState(overrides: Partial<WorldState> = {}): WorldState {
   };
 }
 
-function WorldFixture({ world }: { world: WorldState | null }) {
+function WorldFixture({
+  world,
+  onFocusWorldZone,
+}: {
+  world: WorldState | null;
+  onFocusWorldZone?: (zoneId: string) => void;
+}) {
   const { setWorld } = useWorld();
 
   useEffect(() => {
     setWorld(world);
   }, [setWorld, world]);
 
-  return <SceneStatusLegend />;
+  return <SceneStatusLegend onFocusWorldZone={onFocusWorldZone} />;
 }
 
-function renderLegend(world: WorldState | null) {
+function renderLegend(world: WorldState | null, onFocusWorldZone?: (zoneId: string) => void) {
   return render(
     <WorldProvider>
-      <WorldFixture world={world} />
+      <WorldFixture world={world} onFocusWorldZone={onFocusWorldZone} />
     </WorldProvider>
   );
 }
@@ -171,6 +178,55 @@ describe('SceneStatusLegend', () => {
     expect(screen.queryByText('Data quality')).not.toBeInTheDocument();
     expect(screen.queryByText('Degraded')).not.toBeInTheDocument();
     expect(screen.queryByText('Focus Booth')).not.toBeInTheDocument();
+  });
+
+  it('renders stale-only hot zones as focusable viewport entrypoints when world focus is available', async () => {
+    const user = userEvent.setup();
+    const onFocusWorldZone = vi.fn();
+    const world = makeWorldState({
+      agents: new Map([
+        [
+          'stale',
+          makeWorldAgent({
+            agent_id: 'stale',
+            display_name: 'Stale Agent',
+            zone: 'stale-pod',
+            staleness: {
+              severity: 'yellow',
+              stale_for_ms: 180000,
+              stale_for_minutes: 3,
+              last_meaningful_output_at: '2026-03-14T09:57:00Z',
+            },
+          }),
+        ],
+      ]),
+      zones: [
+        makeZoneSnapshot({
+          zone_id: 'stale-pod',
+          label: 'Stale Pod',
+          kind: 'shared',
+          occupant_ids: ['stale'],
+        }),
+      ],
+    });
+
+    renderLegend(world, onFocusWorldZone);
+
+    const staleZoneButton = await screen.findByRole('button', { name: /Stale Pod/ });
+
+    expect(staleZoneButton).toBeVisible();
+    expect(staleZoneButton).toHaveAttribute(
+      'aria-label',
+      expect.stringContaining('1 occupant with runtime freshness degraded')
+    );
+    expect(staleZoneButton).toHaveAttribute('aria-label', expect.stringContaining('Focus in world viewport'));
+    expect(staleZoneButton).toHaveTextContent('Stale Pod');
+    expect(staleZoneButton).toHaveTextContent('Normal');
+    expect(staleZoneButton).toHaveTextContent('1 occupant with runtime freshness degraded');
+
+    await user.click(staleZoneButton);
+
+    expect(onFocusWorldZone).toHaveBeenCalledWith('stale-pod');
   });
 
   it('renders a degraded data-quality section when evidence coverage is incomplete', async () => {

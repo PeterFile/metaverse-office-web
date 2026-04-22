@@ -1417,7 +1417,7 @@ function AppInner() {
               </button>
             ) : null}
           </div>
-          <SceneStatusLegend />
+          <SceneStatusLegend onFocusWorldZone={handleFocusWorldZone} />
 
           {overviewRefreshWarning ? (
             <div className="aitown-world__placeholder aitown-world__placeholder--warning" role="status">

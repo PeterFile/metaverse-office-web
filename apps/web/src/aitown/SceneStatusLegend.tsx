@@ -59,7 +59,11 @@ function formatDataQualitySummary(degradedReasonCount: number, lastOverviewAt: s
   return parts.join(' · ');
 }
 
-export function SceneStatusLegend() {
+type SceneStatusLegendProps = {
+  onFocusWorldZone?: (zoneId: string) => void;
+};
+
+export function SceneStatusLegend({ onFocusWorldZone }: SceneStatusLegendProps) {
   const { world } = useWorld();
   const hotZones = selectHotZones(world);
   const dataQualitySummary = selectDataQualitySummary(world);
@@ -82,29 +86,57 @@ export function SceneStatusLegend() {
         <>
           <span className="aitown-status-legend__title">Hot zones</span>
           <ul className="aitown-status-legend__items" aria-label="Hot zones legend">
-            {hotZones.map((zone) => (
-              <li key={zone.zone_id} className="aitown-status-legend__item">
-                <span
-                  className="aitown-status-legend__token"
-                  aria-hidden="true"
-                  title={`Highest occupant severity: ${SEVERITY_LABELS[zone.highest_severity]}`}
-                >
-                  {SEVERITY_EMOJI[zone.highest_severity]}
-                </span>
-                <span>
-                  <strong>{zone.label}</strong>
-                  {' · '}
-                  {formatHotZoneSummary(
-                    zone.highest_severity,
-                    zone.occupant_count,
-                    zone.blocked_count,
-                    zone.reboot_count,
-                    zone.open_alert_or_incident_occupant_count,
-                    zone.runtime_freshness_degraded_count
+            {hotZones.map((zone) => {
+              const summary = formatHotZoneSummary(
+                zone.highest_severity,
+                zone.occupant_count,
+                zone.blocked_count,
+                zone.reboot_count,
+                zone.open_alert_or_incident_occupant_count,
+                zone.runtime_freshness_degraded_count
+              );
+
+              return (
+                <li key={zone.zone_id} className="aitown-status-legend__item">
+                  {onFocusWorldZone ? (
+                    <button
+                      type="button"
+                      className="aitown-status-legend__action"
+                      aria-label={`${zone.label} · ${summary} · Focus in world viewport`}
+                      onClick={() => onFocusWorldZone(zone.zone_id)}
+                    >
+                      <span
+                        className="aitown-status-legend__token"
+                        aria-hidden="true"
+                        title={`Highest occupant severity: ${SEVERITY_LABELS[zone.highest_severity]}`}
+                      >
+                        {SEVERITY_EMOJI[zone.highest_severity]}
+                      </span>
+                      <span className="aitown-status-legend__action-copy">
+                        <strong>{zone.label}</strong>
+                        {' · '}
+                        {summary}
+                      </span>
+                    </button>
+                  ) : (
+                    <>
+                      <span
+                        className="aitown-status-legend__token"
+                        aria-hidden="true"
+                        title={`Highest occupant severity: ${SEVERITY_LABELS[zone.highest_severity]}`}
+                      >
+                        {SEVERITY_EMOJI[zone.highest_severity]}
+                      </span>
+                      <span>
+                        <strong>{zone.label}</strong>
+                        {' · '}
+                        {summary}
+                      </span>
+                    </>
                   )}
-                </span>
-              </li>
-            ))}
+                </li>
+              );
+            })}
           </ul>
         </>
       ) : null}

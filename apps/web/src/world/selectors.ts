@@ -210,7 +210,8 @@ function isHotZone(zone: HotZoneSummary): boolean {
     SEVERITY_RANK[zone.highest_severity] > SEVERITY_RANK.normal ||
     zone.blocked_count > 0 ||
     zone.reboot_count > 0 ||
-    zone.open_alert_or_incident_occupant_count > 0
+    zone.open_alert_or_incident_occupant_count > 0 ||
+    zone.runtime_freshness_degraded_count > 0
   );
 }
 

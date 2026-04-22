@@ -361,6 +361,48 @@ describe('selectHotZones', () => {
     ]);
   });
 
+  it('treats stale-only runtime freshness degradation as a hot-zone signal on its own', () => {
+    const world = makeWorldState({
+      agents: new Map([
+        [
+          'stale',
+          makeWorldAgent({
+            agent_id: 'stale',
+            display_name: 'Stale Agent',
+            zone: 'stale-pod',
+            staleness: {
+              severity: 'orange',
+              stale_for_ms: 180000,
+              stale_for_minutes: 3,
+              last_meaningful_output_at: '2026-03-14T09:57:00Z',
+            },
+          }),
+        ],
+      ]),
+      zones: [
+        makeZoneSnapshot({
+          zone_id: 'stale-pod',
+          label: 'Stale Pod',
+          kind: 'shared',
+          occupant_ids: ['stale'],
+        }),
+      ],
+    });
+
+    expect(selectHotZones(world)).toEqual([
+      {
+        zone_id: 'stale-pod',
+        label: 'Stale Pod',
+        highest_severity: 'normal',
+        occupant_count: 1,
+        blocked_count: 0,
+        reboot_count: 0,
+        open_alert_or_incident_occupant_count: 0,
+        runtime_freshness_degraded_count: 1,
+      },
+    ]);
+  });
+
   it('falls back quietly when world data is unavailable or zones are not hot', () => {
     expect(selectHotZones(null)).toEqual([]);
 

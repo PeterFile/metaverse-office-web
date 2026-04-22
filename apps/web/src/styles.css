@@ -349,6 +349,37 @@ button {
   gap: 8px;
 }
 
+.aitown-status-legend__action {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.aitown-status-legend__action:hover {
+  filter: brightness(1.08);
+}
+
+.aitown-status-legend__action:focus-visible {
+  outline: 2px solid #f7d57b;
+  outline-offset: 2px;
+}
+
+.aitown-status-legend__action-copy {
+  min-width: 0;
+}
+
+.aitown-status-legend__action-copy strong {
+  color: #fff7df;
+}
+
 .aitown-status-legend__token {
   min-width: 18px;
   padding: 2px 4px;

@@ -1571,6 +1571,36 @@ test.describe('operator shell smoke', () => {
     await expect(legend).toContainText('S');
   });
 
+  test('focuses a hot-zone legend entry in the world viewport via keyboard traversal', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.locator('.aitown-world__host canvas')).toBeVisible();
+    await page.waitForFunction(() => Boolean(window.__AITOWN_VIEWPORT__));
+
+    await forceViewportAgainstTopRightClamp(page);
+    const before = await waitForViewportSettle(page);
+    const hotZoneButton = page.getByRole('button', {
+      name: /Meeting Zone.*Focus in world viewport/
+    });
+
+    await focusHubControlWithTab(page, hotZoneButton, 'Meeting Zone hot-zone legend entry');
+    await expect(hotZoneButton).toBeFocused();
+    await page.keyboard.press('Enter');
+
+    await expect
+      .poll(async () => {
+        const current = await readViewportState(page);
+
+        return current ? Math.hypot(current.left - before.left, current.top - before.top) : 0;
+      }, {
+        timeout: POLL_DRIVEN_ASSERTION_TIMEOUT_MS
+      })
+      .toBeGreaterThan(16);
+
+    const after = await waitForViewportSettle(page);
+    expect(after.selectedAgent).toBeNull();
+    expectViewportBoundsWithinClampBudget(after);
+  });
+
   test('surfaces live focus agents on the world shell before Hub opens and lets operators inspect them directly', async ({
     page
   }) => {

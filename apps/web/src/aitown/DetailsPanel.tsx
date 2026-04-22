@@ -79,6 +79,9 @@ type DetailsPanelProps = {
   timelineReplay: TimelineReplayResponse | null;
   timelineReplayError: string | null;
   timelineReplayState: LoadState;
+  selectedAgentTimelineReplay: TimelineReplayResponse | null;
+  selectedAgentTimelineReplayError: string | null;
+  selectedAgentTimelineReplayState: LoadState;
   workflow: AgentWorkflow | null;
   workflowError: string | null;
   workflowState: LoadState;
@@ -2829,6 +2832,9 @@ export function DetailsPanel({
   timelineReplay,
   timelineReplayError,
   timelineReplayState,
+  selectedAgentTimelineReplay,
+  selectedAgentTimelineReplayError,
+  selectedAgentTimelineReplayState,
   workflow,
   workflowError,
   workflowState,
@@ -3807,25 +3813,44 @@ export function DetailsPanel({
     isAlignedCorrelation(event.correlation_id, accountabilityCorrelationId)
   );
   const selectedAgentReplayUsesScopedCorrelation = selectedCorrelationId !== null;
-  const selectedAgentScopedReplayItems = (correlation?.timeline ?? []).filter(
+  const selectedAgentCanonicalReplayItems = (selectedAgentTimelineReplay?.items ?? []).filter(
     (event) => event.agent_id === selectedAgent.agent_id
   );
-  const selectedAgentUnscopedReplayItems = filterTimelineBySeverity(
+  const selectedAgentFallbackScopedReplayItems = (correlation?.timeline ?? []).filter(
+    (event) => event.agent_id === selectedAgent.agent_id
+  );
+  const selectedAgentFallbackUnscopedReplayItems = filterTimelineBySeverity(
     workflow?.timeline ?? [],
     selectedAgentReplaySeverity
   );
-  const selectedAgentFilteredScopedReplayItems = filterTimelineBySeverity(
-    selectedAgentScopedReplayItems,
+  const selectedAgentFallbackFilteredScopedReplayItems = filterTimelineBySeverity(
+    selectedAgentFallbackScopedReplayItems,
     selectedAgentReplaySeverity
   );
-  const selectedAgentReplayItems = selectedAgentReplayUsesScopedCorrelation
-    ? selectedAgentFilteredScopedReplayItems
-    : selectedAgentUnscopedReplayItems;
-  const selectedAgentReplayHasSnapshot = selectedAgentReplayUsesScopedCorrelation
-    ? correlation !== null
-    : workflow !== null;
-  const selectedAgentReplayState = selectedAgentReplayUsesScopedCorrelation ? correlationState : workflowState;
-  const selectedAgentReplayError = selectedAgentReplayUsesScopedCorrelation ? correlationError : workflowError;
+  const selectedAgentUsesCanonicalTimelineReplay =
+    selectedAgentTimelineReplay !== null ||
+    selectedAgentTimelineReplayError !== null ||
+    selectedAgentTimelineReplayState !== 'idle';
+  const selectedAgentReplayItems = selectedAgentUsesCanonicalTimelineReplay
+    ? selectedAgentCanonicalReplayItems
+    : selectedAgentReplayUsesScopedCorrelation
+      ? selectedAgentFallbackFilteredScopedReplayItems
+      : selectedAgentFallbackUnscopedReplayItems;
+  const selectedAgentReplayHasSnapshot = selectedAgentUsesCanonicalTimelineReplay
+    ? selectedAgentTimelineReplay !== null
+    : selectedAgentReplayUsesScopedCorrelation
+      ? correlation !== null
+      : workflow !== null;
+  const selectedAgentReplayState = selectedAgentUsesCanonicalTimelineReplay
+    ? selectedAgentTimelineReplayState
+    : selectedAgentReplayUsesScopedCorrelation
+      ? correlationState
+      : workflowState;
+  const selectedAgentReplayError = selectedAgentUsesCanonicalTimelineReplay
+    ? selectedAgentTimelineReplayError
+    : selectedAgentReplayUsesScopedCorrelation
+      ? correlationError
+      : workflowError;
   const selectedAgentReplayScopeLabel = selectedCorrelationId
     ? `Target agent · ${selectedAgent.agent_id} · ${selectedCorrelationId}`
     : `Target agent · ${selectedAgent.agent_id}`;

@@ -27,7 +27,8 @@ import type {
   OfficeAgent,
   OfficeOperation,
   OfficeOperations,
-  Severity
+  Severity,
+  TimelineReplayResponse
 } from './types';
 import { projectWorldState } from './world/projector';
 import { PHASE_LABELS, selectAttentionQueue, selectAgentZoneLabel } from './world/selectors';
@@ -45,6 +46,11 @@ type ZoneFocusRequest = {
 };
 
 type CorrelationSpotlight = Pick<CorrelationDrilldown, 'correlation_id' | 'participant_agent_ids'>;
+
+type SelectedAgentTimelineReplayPayload = {
+  targetAgentId: string;
+  timelineReplay: TimelineReplayResponse;
+};
 
 const CREW_TIMELINE_LIMIT = 4;
 const CREW_OPEN_SUPERVISION_ALERTS_LIMIT = 4;
@@ -497,9 +503,21 @@ function AppInner() {
     },
     resourceKey: selectedAgentId
   });
-
+  const previousSelectedAgentWorkflowResourceKeyRef = useRef<string | null>(selectedAgentId);
+  const selectedAgentWorkflowSelectionChanged =
+    selectedAgentId !== null && previousSelectedAgentWorkflowResourceKeyRef.current !== selectedAgentId;
+  const workflowPayloadMatchesSelectedAgent = workflowResource.data?.agent_id === selectedAgentId;
+  const selectedAgentWorkflowSurfaceIsStale =
+    selectedAgentWorkflowSelectionChanged ||
+    (workflowResource.data !== null && !workflowPayloadMatchesSelectedAgent);
   const activeWorkflow =
-    workflowResource.data?.agent_id === selectedAgentId ? workflowResource.data : null;
+    !selectedAgentWorkflowSurfaceIsStale && workflowPayloadMatchesSelectedAgent ? workflowResource.data : null;
+  const workflowError = selectedAgentWorkflowSurfaceIsStale ? null : workflowResource.error;
+  const workflowState: LoadState = selectedAgentWorkflowSurfaceIsStale ? 'loading' : workflowResource.state;
+
+  useEffect(() => {
+    previousSelectedAgentWorkflowResourceKeyRef.current = selectedAgentId;
+  }, [selectedAgentId]);
   const sharedMemoryCorrelationId = resolveSharedMemoryCorrelationId(
     selectedAgentId,
     selectedCorrelationId,
@@ -752,13 +770,20 @@ function AppInner() {
     selectedAgentId !== null &&
     selectedCorrelationId === null &&
     correlationSelectionModeRef.current === 'preserved';
-  const selectedAgentSupervisionHistoryCorrelationId =
+  const selectedAgentScopedCorrelationId =
     resolveSelectedAgentSupervisionHistoryCorrelationId(
       selectedAgentId,
       selectedCorrelationId,
       defaultCorrelationId,
       selectedAgentPreservesNullCorrelation
     );
+  const selectedAgentTimelineReplayDefaultCorrelationPending =
+    selectedAgentId !== null &&
+    !selectedAgentPreservesNullCorrelation &&
+    selectedCorrelationId === null &&
+    defaultCorrelationId === null &&
+    activeWorkflow === null &&
+    workflowError === null;
   const selectedAgentSupervisionHistoryDefaultCorrelationPending =
     selectedAgentId !== null &&
     !selectedAgentPreservesNullCorrelation &&
@@ -766,6 +791,58 @@ function AppInner() {
     defaultCorrelationId === null &&
     selectedOperationForAutoCorrelation === null &&
     workflowResource.state === 'loading';
+  const selectedAgentTimelineReplayResourceKey = selectedAgentId
+    ? `selected-agent-timeline-replay:${selectedAgentId}:correlation=${selectedAgentScopedCorrelationId ?? '__all__'}:severity=${selectedAgentReplaySeverity ?? '__all__'}`
+    : null;
+  const previousSelectedAgentTimelineReplayResourceKeyRef = useRef<string | null>(
+    selectedAgentTimelineReplayResourceKey
+  );
+  const selectedAgentTimelineReplayResource = usePolledResource<SelectedAgentTimelineReplayPayload>({
+    enabled:
+      hubOpen &&
+      selectedAgentId !== null &&
+      !selectedAgentTimelineReplayDefaultCorrelationPending,
+    load: async (signal) => ({
+      targetAgentId: selectedAgentId!,
+      timelineReplay: await fetchTimeline({
+        limit: DEFAULT_WORKFLOW_LIMIT,
+        window: DEFAULT_WORKFLOW_WINDOW,
+        agentId: selectedAgentId!,
+        correlationId: selectedAgentScopedCorrelationId ?? undefined,
+        severity: selectedAgentReplaySeverity ?? undefined,
+        signal
+      })
+    }),
+    resourceKey: selectedAgentTimelineReplayResourceKey
+  });
+  const selectedAgentTimelineReplaySelectionChanged =
+    selectedAgentId !== null &&
+    selectedAgentTimelineReplayResourceKey !== null &&
+    previousSelectedAgentTimelineReplayResourceKeyRef.current !==
+      selectedAgentTimelineReplayResourceKey;
+  const selectedAgentTimelineReplayPayloadMatchesAgent =
+    selectedAgentTimelineReplayResource.data?.targetAgentId === selectedAgentId;
+  const selectedAgentTimelineReplaySurfaceIsStale =
+    selectedAgentTimelineReplaySelectionChanged ||
+    (selectedAgentTimelineReplayResource.data !== null &&
+      !selectedAgentTimelineReplayPayloadMatchesAgent);
+  const selectedAgentTimelineReplay =
+    !selectedAgentTimelineReplaySurfaceIsStale &&
+    selectedAgentTimelineReplayPayloadMatchesAgent &&
+    selectedAgentTimelineReplayResource.data !== null
+      ? selectedAgentTimelineReplayResource.data.timelineReplay
+      : null;
+  const selectedAgentTimelineReplayError = selectedAgentTimelineReplaySurfaceIsStale
+    ? null
+    : selectedAgentTimelineReplayResource.error;
+  const selectedAgentTimelineReplayState: LoadState =
+    selectedAgentTimelineReplaySurfaceIsStale
+      ? 'loading'
+      : selectedAgentTimelineReplayResource.state;
+  useEffect(() => {
+    previousSelectedAgentTimelineReplayResourceKeyRef.current =
+      selectedAgentTimelineReplayResourceKey;
+  }, [selectedAgentTimelineReplayResourceKey]);
   const selectedAgentSupervisionHistoryResource = usePolledResource({
     enabled:
       hubOpen &&
@@ -774,18 +851,18 @@ function AppInner() {
     load: (signal) =>
       fetchPeerWatchAlerts({
         targetAgentId: selectedAgentId!,
-        correlationId: selectedAgentSupervisionHistoryCorrelationId ?? undefined,
+        correlationId: selectedAgentScopedCorrelationId ?? undefined,
         limit: SELECTED_AGENT_SUPERVISION_HISTORY_LIMIT,
         signal
       }),
     resourceKey: selectedAgentId
-      ? `selected-agent-supervision-history:${selectedAgentId}:${selectedAgentSupervisionHistoryCorrelationId ?? '__all__'}`
+      ? `selected-agent-supervision-history:${selectedAgentId}:${selectedAgentScopedCorrelationId ?? '__all__'}`
       : null
   });
   const selectedAgentSupervisionHistoryRequestScopeLabel =
     resolveSelectedAgentSupervisionHistoryRequestScopeLabel(
       selectedAgentId,
-      selectedAgentSupervisionHistoryCorrelationId
+      selectedAgentScopedCorrelationId
     );
 
   const crewOverviewOperationStateBuckets = useMemo(
@@ -1513,9 +1590,12 @@ function AppInner() {
               timelineReplay={timelineReplayResource.data}
               timelineReplayError={timelineReplayResource.error}
               timelineReplayState={timelineReplayResource.state}
+              selectedAgentTimelineReplay={selectedAgentTimelineReplay}
+              selectedAgentTimelineReplayError={selectedAgentTimelineReplayError}
+              selectedAgentTimelineReplayState={selectedAgentTimelineReplayState}
               workflow={activeWorkflow}
-              workflowError={workflowResource.error}
-              workflowState={workflowResource.state}
+              workflowError={workflowError}
+              workflowState={workflowState}
               world={projectedWorld}
               memoryArtifacts={memoryArtifacts}
               memoryArtifactsError={memoryArtifactsResource.error}

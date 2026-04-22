@@ -430,6 +430,10 @@ type WorldSceneProps = {
   scene: AiTownSceneModel;
   onSelectAgent: (agentId: string | null) => void;
   resetViewSignal?: number;
+  zoneFocusRequest?: {
+    zoneId: string;
+    requestId: number;
+  } | null;
   showActiveCorrelationOverlay?: boolean;
 };
 
@@ -443,6 +447,7 @@ export default function WorldScene({
   scene,
   onSelectAgent,
   resetViewSignal = 0,
+  zoneFocusRequest = null,
   showActiveCorrelationOverlay = true
 }: WorldSceneProps) {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -471,6 +476,7 @@ export default function WorldScene({
   const viewportInspectorRef = useRef<ViewportInspector | null>(null);
   const resetViewportToContextDefaultRef = useRef<(() => void) | null>(null);
   const appliedResetViewSignalRef = useRef(resetViewSignal);
+  const appliedZoneFocusRequestIdRef = useRef<number | null>(null);
   const [ready, setReady] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loadAttempt, setLoadAttempt] = useState(0);
@@ -1111,6 +1117,27 @@ export default function WorldScene({
     appliedResetViewSignalRef.current = resetViewSignal;
     resetViewportToContextDefaultRef.current?.();
   }, [ready, resetViewSignal]);
+
+  useEffect(() => {
+    if (!ready || !zoneFocusRequest || appliedZoneFocusRequestIdRef.current === zoneFocusRequest.requestId) {
+      return;
+    }
+
+    const viewport = viewportRef.current;
+    const zone = scene.zones.find((candidate) => candidate.zoneId === zoneFocusRequest.zoneId);
+
+    if (!viewport || !zone) {
+      return;
+    }
+
+    appliedZoneFocusRequestIdRef.current = zoneFocusRequest.requestId;
+    moveViewportCenterIntoSafeArea(
+      viewport,
+      zone.anchor.x * scene.map.tileDim,
+      zone.anchor.y * scene.map.tileDim
+    );
+    stopSelectedAgentFollowState();
+  }, [ready, scene.map.tileDim, scene.zones, zoneFocusRequest]);
 
   useEffect(() => {
     if (!ready) {

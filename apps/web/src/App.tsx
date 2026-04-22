@@ -39,6 +39,11 @@ type OperationSelection = {
   agentId: string;
 };
 
+type ZoneFocusRequest = {
+  zoneId: string;
+  requestId: number;
+};
+
 type CorrelationSpotlight = Pick<CorrelationDrilldown, 'correlation_id' | 'participant_agent_ids'>;
 
 const CREW_TIMELINE_LIMIT = 4;
@@ -358,6 +363,7 @@ function AppInner() {
   const { selectedAgentId, setSelectedAgentId, setWorld } = useWorld();
   const [hubOpen, setHubOpen] = useState(false);
   const [resetViewSignal, setResetViewSignal] = useState(0);
+  const [zoneFocusRequest, setZoneFocusRequest] = useState<ZoneFocusRequest | null>(null);
   const [selectedCorrelationId, setSelectedCorrelationId] = useState<string | null>(null);
   const [selectedCorrelationWasExplicit, setSelectedCorrelationWasExplicit] = useState(false);
   const [selectedCorrelationCarryForward, setSelectedCorrelationCarryForward] = useState(false);
@@ -384,6 +390,7 @@ function AppInner() {
   const hubFocusReturnRef = useRef<HTMLElement | null>(null);
   const pendingSharedMemoryFocusRef = useRef<string | null>(null);
   const sharedMemoryJumpRequestIdRef = useRef(0);
+  const zoneFocusRequestIdRef = useRef(0);
   const wasHubOpenRef = useRef(false);
 
   const overviewResource = usePolledResource({
@@ -934,6 +941,14 @@ function AppInner() {
     setResetViewSignal((signal) => signal + 1);
   }, []);
 
+  const handleFocusWorldZone = useCallback((zoneId: string) => {
+    zoneFocusRequestIdRef.current += 1;
+    setZoneFocusRequest({
+      zoneId,
+      requestId: zoneFocusRequestIdRef.current
+    });
+  }, []);
+
   const toggleHub = useCallback(() => {
     setHubOpen((open) => !open);
   }, []);
@@ -1412,6 +1427,7 @@ function AppInner() {
                 scene={scene}
                 onSelectAgent={handleSceneSelectAgent}
                 resetViewSignal={resetViewSignal}
+                zoneFocusRequest={zoneFocusRequest}
                 showActiveCorrelationOverlay={hubOpen}
               />
             </Suspense>
@@ -1534,6 +1550,7 @@ function AppInner() {
               onSelectOperationsSeverity={setSelectedOperationsSeverity}
               onSelectOperation={handleSelectOperation}
               onFocusSharedMemoryArtifact={handleFocusSharedMemoryArtifact}
+              onFocusWorldZone={handleFocusWorldZone}
             />
           </div>
         </div>

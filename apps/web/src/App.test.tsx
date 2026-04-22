@@ -7,6 +7,7 @@ vi.mock('./aitown/WorldScene', () => ({
     scene,
     onSelectAgent,
     resetViewSignal = 0,
+    zoneFocusRequest = null,
     showActiveCorrelationOverlay = true
   }: {
     scene: {
@@ -26,6 +27,7 @@ vi.mock('./aitown/WorldScene', () => ({
     };
     onSelectAgent: (agentId: string | null) => void;
     resetViewSignal?: number;
+    zoneFocusRequest?: { zoneId: string; requestId: number } | null;
     showActiveCorrelationOverlay?: boolean;
   }) {
     const labelByAgentId = new Map(scene.agents.map((agent) => [agent.agentId, agent.displayName]));
@@ -33,6 +35,10 @@ vi.mock('./aitown/WorldScene', () => ({
     return (
       <div data-testid="mock-world-scene">
         <output data-testid="mock-reset-view-signal">{resetViewSignal}</output>
+        <output data-testid="mock-zone-focus-request">
+          {zoneFocusRequest ? `${zoneFocusRequest.zoneId}:${zoneFocusRequest.requestId}` : ''}
+        </output>
+        <output data-testid="mock-scene-selected-agent-id">{scene.selectedAgentId ?? ''}</output>
         <output data-testid="mock-scene-active-correlation-id">{scene.activeCorrelationId ?? ''}</output>
         <output data-testid="mock-scene-correlation-participants">
           {scene.correlationParticipantAgentIds.join(',')}
@@ -4754,6 +4760,7 @@ afterEach(() => {
 
   it('appends runtime-only projected zones to the crew-overview office grid when overview data omits them', async () => {
     const user = userEvent.setup();
+    setNavigatorUserAgent('VitestBrowser');
     const runtimeOnlyZoneOverviewFixture = {
       ...overviewFixture,
       agents: overviewFixture.agents.map((agent) =>
@@ -4823,6 +4830,18 @@ afterEach(() => {
       name: 'Select zone occupant Team Lead in Review Zone'
     });
     expect(reviewZoneOccupantButton).toBeVisible();
+
+    await user.click(
+      within(reviewZoneRow!).getByRole('button', {
+        name: 'Focus Review Zone in world viewport'
+      })
+    );
+
+    expect(screen.getByTestId('mock-zone-focus-request')).toHaveTextContent('review-zone:1');
+    expect(screen.getByRole('dialog', { name: 'Hub' })).toBeVisible();
+    expect(within(details).getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
+    expect(screen.getByTestId('mock-scene-selected-agent-id')).toHaveTextContent('');
+    expect(screen.getByTestId('mock-scene-active-correlation-id')).toHaveTextContent('corr-app-review');
 
     await user.click(reviewZoneOccupantButton);
 

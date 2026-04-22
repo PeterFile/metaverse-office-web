@@ -70,6 +70,7 @@ type DetailsPanelProps = {
   selectedAgent: OfficeAgent | null;
   selectedCorrelationId: string | null;
   selectedCrewOpenSupervisionSeverity: Severity | null;
+  selectedAgentReplaySeverity: Severity | null;
   selectedCrewReplaySeverity: Severity | null;
   selectedOperationsState: string | null;
   selectedOperationsSeverity: Severity | null;
@@ -87,6 +88,7 @@ type DetailsPanelProps = {
   onSelectCorrelation: SelectCorrelationHandler;
   onResetCorrelationOverride: () => void;
   onSelectCrewOpenSupervisionSeverity: (severity: Severity | null) => void;
+  onSelectSelectedAgentReplaySeverity: (severity: Severity | null) => void;
   onSelectCrewReplaySeverity: (severity: Severity | null) => void;
   onSelectOperationsState: (state: string | null) => void;
   onSelectOperationsSeverity: (severity: Severity | null) => void;
@@ -834,6 +836,10 @@ function findFirstNonEmptyString(values: Array<string | null | undefined>) {
 
 function selectLatestTimelineEvent(timeline: WorkflowTimelineEvent[]) {
   return timeline.length > 0 ? timeline[timeline.length - 1] : null;
+}
+
+function filterTimelineBySeverity(timeline: WorkflowTimelineEvent[], selectedSeverity: Severity | null) {
+  return selectedSeverity ? timeline.filter((event) => event.severity === selectedSeverity) : timeline;
 }
 
 function renderTimestamp(value: string | null | undefined, fallback: string) {
@@ -1697,6 +1703,74 @@ function renderCrewReplayDegradedErrorLabel(
     return `Showing last timeline replay snapshot at ${SEVERITY_LABELS[selectedSeverity]} severity. ${errorLabel}`;
   }
   return errorLabel;
+}
+
+function renderSelectedAgentReplayLoadingLabel(
+  scopedReplayCorrelationId: string | null,
+  selectedSeverity: Severity | null
+) {
+  if (scopedReplayCorrelationId && selectedSeverity) {
+    return `Loading timeline replay for ${scopedReplayCorrelationId} at ${SEVERITY_LABELS[selectedSeverity]} severity...`;
+  }
+  if (scopedReplayCorrelationId) {
+    return 'Loading scoped timeline replay...';
+  }
+  if (selectedSeverity) {
+    return `Loading selected-agent timeline replay at ${SEVERITY_LABELS[selectedSeverity]} severity...`;
+  }
+  return 'Loading selected-agent timeline replay...';
+}
+
+function renderSelectedAgentReplayEmptyLabel(
+  scopedReplayCorrelationId: string | null,
+  selectedSeverity: Severity | null
+) {
+  if (scopedReplayCorrelationId && selectedSeverity) {
+    return `No replay events for ${scopedReplayCorrelationId} at ${SEVERITY_LABELS[selectedSeverity]} severity.`;
+  }
+  if (scopedReplayCorrelationId) {
+    return `No replay events for ${scopedReplayCorrelationId}.`;
+  }
+  if (selectedSeverity) {
+    return `No selected-agent replay events at ${SEVERITY_LABELS[selectedSeverity]} severity.`;
+  }
+  return 'No recent replay events.';
+}
+
+function renderSelectedAgentReplayInitialErrorLabel(
+  scopedReplayCorrelationId: string | null,
+  selectedSeverity: Severity | null,
+  timelineReplayError: string | null
+) {
+  const errorLabel = timelineReplayError ?? 'Timeline replay unavailable.';
+  if (scopedReplayCorrelationId && selectedSeverity) {
+    return `Unable to load timeline replay for ${scopedReplayCorrelationId} at ${SEVERITY_LABELS[selectedSeverity]} severity. ${errorLabel}`;
+  }
+  if (scopedReplayCorrelationId) {
+    return `Scoped replay unavailable. ${errorLabel}`;
+  }
+  if (selectedSeverity) {
+    return `Unable to load selected-agent timeline replay at ${SEVERITY_LABELS[selectedSeverity]} severity. ${errorLabel}`;
+  }
+  return `Unable to load timeline replay. ${errorLabel}`;
+}
+
+function renderSelectedAgentReplayDegradedErrorLabel(
+  scopedReplayCorrelationId: string | null,
+  selectedSeverity: Severity | null,
+  timelineReplayError: string | null
+) {
+  const errorLabel = timelineReplayError ?? 'Timeline replay unavailable.';
+  if (scopedReplayCorrelationId && selectedSeverity) {
+    return `Showing last timeline replay snapshot for ${scopedReplayCorrelationId} at ${SEVERITY_LABELS[selectedSeverity]} severity. ${errorLabel}`;
+  }
+  if (scopedReplayCorrelationId) {
+    return `Scoped replay unavailable. ${errorLabel}`;
+  }
+  if (selectedSeverity) {
+    return `Showing last selected-agent timeline replay snapshot at ${SEVERITY_LABELS[selectedSeverity]} severity. ${errorLabel}`;
+  }
+  return `Showing last timeline replay snapshot. ${errorLabel}`;
 }
 
 function renderTimelineReplaySection({
@@ -2653,6 +2727,7 @@ export function DetailsPanel({
   selectedAgent,
   selectedCorrelationId,
   selectedCrewOpenSupervisionSeverity,
+  selectedAgentReplaySeverity,
   selectedCrewReplaySeverity,
   selectedOperationsState,
   selectedOperationsSeverity,
@@ -2670,6 +2745,7 @@ export function DetailsPanel({
   onSelectCorrelation,
   onResetCorrelationOverride,
   onSelectCrewOpenSupervisionSeverity,
+  onSelectSelectedAgentReplaySeverity,
   onSelectCrewReplaySeverity,
   onSelectOperationsState,
   onSelectOperationsSeverity,
@@ -3635,9 +3711,17 @@ export function DetailsPanel({
   const selectedAgentScopedReplayItems = (correlation?.timeline ?? []).filter(
     (event) => event.agent_id === selectedAgent.agent_id
   );
+  const selectedAgentUnscopedReplayItems = filterTimelineBySeverity(
+    workflow?.timeline ?? [],
+    selectedAgentReplaySeverity
+  );
+  const selectedAgentFilteredScopedReplayItems = filterTimelineBySeverity(
+    selectedAgentScopedReplayItems,
+    selectedAgentReplaySeverity
+  );
   const selectedAgentReplayItems = selectedAgentReplayUsesScopedCorrelation
-    ? selectedAgentScopedReplayItems
-    : (workflow?.timeline ?? []);
+    ? selectedAgentFilteredScopedReplayItems
+    : selectedAgentUnscopedReplayItems;
   const selectedAgentReplayHasSnapshot = selectedAgentReplayUsesScopedCorrelation
     ? correlation !== null
     : workflow !== null;
@@ -4235,27 +4319,29 @@ export function DetailsPanel({
       {renderTimelineReplaySection({
         requestScopeLabel: selectedAgentReplayScopeLabel,
         scopedReplayCorrelationId: selectedCorrelationId,
+        selectedSeverity: selectedAgentReplaySeverity,
         timelineReplayItems: selectedAgentReplayItems,
         timelineReplayError: selectedAgentReplayError,
         timelineReplayState: selectedAgentReplayState,
         hasReplaySnapshot: selectedAgentReplayHasSnapshot,
-        loadingLabel: selectedCorrelationId
-          ? 'Loading scoped timeline replay...'
-          : 'Loading selected-agent timeline replay...',
-        emptyLabel: selectedCorrelationId
-          ? `No replay events for ${selectedCorrelationId}.`
-          : 'No recent replay events.',
-        initialErrorLabel: selectedCorrelationId
-          ? `Scoped replay unavailable. ${selectedAgentReplayError}`
-          : `Unable to load timeline replay. ${selectedAgentReplayError}`,
-        degradedErrorLabel: selectedCorrelationId
-          ? `Scoped replay unavailable. ${selectedAgentReplayError}`
-          : `Showing last timeline replay snapshot. ${selectedAgentReplayError}`,
+        loadingLabel: renderSelectedAgentReplayLoadingLabel(selectedCorrelationId, selectedAgentReplaySeverity),
+        emptyLabel: renderSelectedAgentReplayEmptyLabel(selectedCorrelationId, selectedAgentReplaySeverity),
+        initialErrorLabel: renderSelectedAgentReplayInitialErrorLabel(
+          selectedCorrelationId,
+          selectedAgentReplaySeverity,
+          selectedAgentReplayError
+        ),
+        degradedErrorLabel: renderSelectedAgentReplayDegradedErrorLabel(
+          selectedCorrelationId,
+          selectedAgentReplaySeverity,
+          selectedAgentReplayError
+        ),
         activeCorrelationId: selectedCorrelationId,
         currentAgentId: selectedAgent.agent_id,
         navigableAgentIds,
         agentNameById,
         sharedMemoryArtifactRefs,
+        onSelectSeverity: onSelectSelectedAgentReplaySeverity,
         onFocusSharedMemoryArtifact,
         onSelectAgent,
         onSelectCorrelation

@@ -370,6 +370,14 @@ function AppInner() {
   const [selectedCrewReplaySeverity, setSelectedCrewReplaySeverity] = useState<Severity | null>(null);
   const [selectedCrewOpenSupervisionSeverity, setSelectedCrewOpenSupervisionSeverity] =
     useState<Severity | null>(null);
+  const [selectedAgentReplayFilter, setSelectedAgentReplayFilter] = useState<{
+    agentId: string;
+    severity: Severity | null;
+  } | null>(null);
+  const selectedAgentReplaySeverity =
+    selectedAgentId !== null && selectedAgentReplayFilter?.agentId === selectedAgentId
+      ? selectedAgentReplayFilter.severity
+      : null;
   const [selectedOperationsState, setSelectedOperationsState] = useState<string | null>(null);
   const [selectedOperationsSeverity, setSelectedOperationsSeverity] = useState<Severity | null>(null);
   const [selectedOperationSelection, setSelectedOperationSelection] = useState<OperationSelection | null>(null);
@@ -489,6 +497,7 @@ function AppInner() {
     },
     resourceKey: selectedAgentId
   });
+
   const activeWorkflow =
     workflowResource.data?.agent_id === selectedAgentId ? workflowResource.data : null;
   const sharedMemoryCorrelationId = resolveSharedMemoryCorrelationId(
@@ -1106,9 +1115,12 @@ function AppInner() {
       setSelectedCorrelationWasExplicit(correlationId !== null && correlationWasExplicit);
       setSelectedCorrelationCarryForward(correlationId !== null && correlationCarryForward);
       setSelectedOperationSelection(operationSelection);
+      if (agentId !== selectedAgentId) {
+        setSelectedAgentReplayFilter(null);
+      }
       setSelectedAgentId(agentId);
     },
-    [overviewResource.data, setSelectedAgentId]
+    [overviewResource.data, selectedAgentId, setSelectedAgentId]
   );
 
   const selectAgentWithSnapshot = useCallback(
@@ -1492,6 +1504,7 @@ function AppInner() {
               selectedAgent={selectedAgent}
               selectedCorrelationId={selectedCorrelationId}
               selectedCrewOpenSupervisionSeverity={selectedCrewOpenSupervisionSeverity}
+              selectedAgentReplaySeverity={selectedAgentReplaySeverity}
               selectedCrewReplaySeverity={selectedCrewReplaySeverity}
               selectedOperationsState={selectedOperationsState}
               selectedOperationsSeverity={selectedOperationsSeverity}
@@ -1545,6 +1558,16 @@ function AppInner() {
               onSelectCorrelation={handleSelectCorrelation}
               onResetCorrelationOverride={handleResetCorrelationOverride}
               onSelectCrewOpenSupervisionSeverity={setSelectedCrewOpenSupervisionSeverity}
+              onSelectSelectedAgentReplaySeverity={(severity) =>
+                setSelectedAgentReplayFilter(
+                  selectedAgentId !== null
+                    ? {
+                        agentId: selectedAgentId,
+                        severity
+                      }
+                    : null
+                )
+              }
               onSelectCrewReplaySeverity={setSelectedCrewReplaySeverity}
               onSelectOperationsState={setSelectedOperationsState}
               onSelectOperationsSeverity={setSelectedOperationsSeverity}

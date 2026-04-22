@@ -96,6 +96,20 @@ const orangeTimelineUrl = '/timeline?limit=4&window=60m&severity=orange';
 const reviewScopedTimelineUrl = '/timeline?limit=4&window=60m&correlation_id=corr-app-review';
 const secondaryScopedTimelineUrl = '/timeline?limit=4&window=60m&correlation_id=corr-app-secondary';
 const orangeSecondaryScopedTimelineUrl = '/timeline?limit=4&window=60m&severity=orange&correlation_id=corr-app-secondary';
+const appEngineeringSelectedTimelineUrl = '/timeline?limit=10&window=60m&agent_id=app-engineering';
+const appEngineeringReviewSelectedTimelineUrl =
+  '/timeline?limit=10&window=60m&agent_id=app-engineering&correlation_id=corr-app-review';
+const appEngineeringSecondarySelectedTimelineUrl =
+  '/timeline?limit=10&window=60m&agent_id=app-engineering&correlation_id=corr-app-secondary';
+const orangeAppEngineeringSecondarySelectedTimelineUrl =
+  '/timeline?limit=10&window=60m&agent_id=app-engineering&severity=orange&correlation_id=corr-app-secondary';
+const teamLeadSelectedTimelineUrl = '/timeline?limit=10&window=60m&agent_id=team-lead';
+const orangeTeamLeadSelectedTimelineUrl = '/timeline?limit=10&window=60m&agent_id=team-lead&severity=orange';
+const growthRevenueSelectedTimelineUrl = '/timeline?limit=10&window=60m&agent_id=growth-revenue';
+const growthRevenueReviewSelectedTimelineUrl =
+  '/timeline?limit=10&window=60m&agent_id=growth-revenue&correlation_id=corr-app-review';
+const growthRevenueSecondarySelectedTimelineUrl =
+  '/timeline?limit=10&window=60m&agent_id=growth-revenue&correlation_id=corr-app-secondary';
 const workflowUrl = '/agents/app-engineering/workflow?limit=10&window=60m';
 const teamLeadWorkflowUrl = '/agents/team-lead/workflow?limit=10&window=60m';
 const teamLeadIncidentsUrl = '/agents/team-lead/incidents?limit=10&window=60m';
@@ -1301,6 +1315,49 @@ function jsonResponse(body: unknown) {
   });
 }
 
+function resolveSelectedAgentTimelineResponse(url: string) {
+  if (!url.startsWith('/timeline?')) {
+    return null;
+  }
+
+  const parsedUrl = new URL(url, 'http://localhost');
+  const agentId = parsedUrl.searchParams.get('agent_id');
+  if (!agentId) {
+    return null;
+  }
+
+  const correlationId = parsedUrl.searchParams.get('correlation_id');
+  const severity = parsedUrl.searchParams.get('severity');
+
+  let items = [] as Array<(typeof timelineFixture.items)[number]>;
+
+  if (agentId === 'team-lead') {
+    items = teamLeadWorkflowFixture.timeline;
+  } else if (agentId === 'app-engineering') {
+    if (correlationId === 'corr-app-secondary') {
+      items = secondaryCorrelationFixture.timeline.filter((event) => event.agent_id === 'app-engineering');
+    } else if (correlationId === 'corr-app-review') {
+      items = correlationFixture.timeline.filter((event) => event.agent_id === 'app-engineering');
+    } else {
+      items = [...correlationFixture.timeline, ...secondaryCorrelationFixture.timeline].filter(
+        (event) => event.agent_id === 'app-engineering'
+      );
+    }
+  } else if (agentId === 'growth-revenue') {
+    if (correlationId === 'corr-app-review') {
+      items = correlationFixture.timeline.filter((event) => event.agent_id === 'growth-revenue');
+    } else if (correlationId === 'corr-app-secondary') {
+      items = secondaryCorrelationFixture.timeline.filter((event) => event.agent_id === 'growth-revenue');
+    } else {
+      items = timelineFixture.items.filter((event) => event.agent_id === 'growth-revenue');
+    }
+  }
+
+  return jsonResponse({
+    items: severity ? items.filter((event) => event.severity === severity) : items
+  });
+}
+
 function resolveDefaultFetchResponse(url: string) {
   if (url === '/office/overview') {
     return jsonResponse(overviewFixture);
@@ -1340,6 +1397,11 @@ function resolveDefaultFetchResponse(url: string) {
 
   if (url === secondaryScopedTimelineUrl) {
     return jsonResponse(secondaryScopedTimelineFixture);
+  }
+
+  const selectedAgentTimelineResponse = resolveSelectedAgentTimelineResponse(url);
+  if (selectedAgentTimelineResponse) {
+    return selectedAgentTimelineResponse;
   }
 
   if (url === workflowUrl) {
@@ -3953,16 +4015,18 @@ afterEach(() => {
     expect(globalThis.fetch).toHaveBeenCalledWith(teamLeadMemoryArtifactsUrl, expect.anything());
   });
 
-  it('keeps timeline replay visible after selecting an agent and reuses workflow timeline when no correlation is active', async () => {
+  it('keeps timeline replay visible after selecting an agent and refetches selected-agent replay from canonical timeline queries when no correlation is active', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
         const url = typeof input === 'string' ? input : input.toString();
 
         if (url === teamLeadWorkflowUrl) {
-          return new Response(JSON.stringify(teamLeadReplayWorkflowFixture), {
-            headers: { 'content-type': 'application/json' }
-          });
+          return jsonResponse(teamLeadWorkflowFixture);
+        }
+
+        if (url === teamLeadSelectedTimelineUrl) {
+          return jsonResponse({ items: teamLeadReplayWorkflowFixture.timeline });
         }
 
         return resolveTestFetchResponse(url);
@@ -3973,7 +4037,7 @@ afterEach(() => {
     render(<App />);
 
     await screen.findByRole('button', { name: 'Open Hub' });
-    expect(globalThis.fetch).not.toHaveBeenCalledWith(timelineUrl, expect.anything());
+    expect(globalThis.fetch).not.toHaveBeenCalledWith(teamLeadSelectedTimelineUrl, expect.anything());
 
     const details = await openHub(user);
     const replaySection = (await within(details).findByRole('heading', { name: 'Timeline Replay' })).closest('section');
@@ -3991,9 +4055,15 @@ afterEach(() => {
       'section'
     );
     expect(selectedReplaySection).not.toBeNull();
-    expect(within(details).getByRole('heading', { name: 'Team Lead' })).toBeVisible();
-    expect(within(selectedReplaySection!).getByText('Replay captured lead review checkpoint')).toBeVisible();
-    expect(within(selectedReplaySection!).getByText('Request scope · Target agent · team-lead')).toBeVisible();
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'Team Lead' })).toBeVisible();
+      expect(within(selectedReplaySection!).getByText('Replay captured lead review checkpoint')).toBeVisible();
+      expect(within(selectedReplaySection!).getByText('Request scope · Target agent · team-lead')).toBeVisible();
+    });
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(teamLeadWorkflowUrl, expect.anything());
+    expect(globalThis.fetch).toHaveBeenCalledWith(teamLeadSelectedTimelineUrl, expect.anything());
   });
 
   it('shows an explicit empty replay state for selected agents without an active correlation or recent replay events', async () => {
@@ -4009,10 +4079,9 @@ afterEach(() => {
     expect(within(replaySection!).getByText('No recent replay events.')).toBeVisible();
   });
 
-  it('filters selected-agent workflow timeline replay locally by severity without fetching replay', async () => {
-    const teamLeadWorkflowWithReplay = {
-      ...teamLeadWorkflowFixture,
-      timeline: [
+  it('refetches selected-agent timeline replay with the selected severity filter', async () => {
+    const teamLeadSelectedTimelineFixture = {
+      items: [
         {
           ...teamLeadReplayWorkflowFixture.timeline[0],
           event_id: 'evt-team-lead-normal-replay',
@@ -4026,7 +4095,7 @@ afterEach(() => {
           summary: 'Team lead orange replay checkpoint'
         }
       ]
-    } satisfies AgentWorkflow;
+    };
 
     vi.stubGlobal(
       'fetch',
@@ -4034,7 +4103,15 @@ afterEach(() => {
         const url = typeof input === 'string' ? input : input.toString();
 
         if (url === teamLeadWorkflowUrl) {
-          return jsonResponse(teamLeadWorkflowWithReplay);
+          return jsonResponse(teamLeadWorkflowFixture);
+        }
+
+        if (url === teamLeadSelectedTimelineUrl) {
+          return jsonResponse(teamLeadSelectedTimelineFixture);
+        }
+
+        if (url === orangeTeamLeadSelectedTimelineUrl) {
+          return jsonResponse({ items: [teamLeadSelectedTimelineFixture.items[1]] });
         }
 
         return resolveTestFetchResponse(url);
@@ -4074,13 +4151,13 @@ afterEach(() => {
       .mock.calls.slice(fetchCallCountBeforeFilter)
       .map(([input]) => (typeof input === 'string' ? input : input.toString()));
 
-    expect(postFilterRequests.filter((url) => url.startsWith('/timeline'))).toEqual([]);
+    expect(postFilterRequests).toContain(orangeTeamLeadSelectedTimelineUrl);
+    expect(postFilterRequests).not.toContain(timelineUrl);
   });
 
   it('resets selected-agent replay severity when switching to a different agent', async () => {
-    const teamLeadWorkflowWithReplay = {
-      ...teamLeadWorkflowFixture,
-      timeline: [
+    const teamLeadSelectedTimelineFixture = {
+      items: [
         {
           ...teamLeadReplayWorkflowFixture.timeline[0],
           event_id: 'evt-team-lead-normal-replay',
@@ -4094,7 +4171,11 @@ afterEach(() => {
           summary: 'Team lead orange replay checkpoint'
         }
       ]
-    } satisfies AgentWorkflow;
+    };
+    const appEngineeringSelectedTimelineFixture = {
+      items: correlationFixture.timeline.filter((event) => event.agent_id === 'app-engineering')
+    };
+    let resolveAppEngineeringSelectedTimeline: ((response: Response) => void) | null = null;
 
     vi.stubGlobal(
       'fetch',
@@ -4102,7 +4183,21 @@ afterEach(() => {
         const url = typeof input === 'string' ? input : input.toString();
 
         if (url === teamLeadWorkflowUrl) {
-          return jsonResponse(teamLeadWorkflowWithReplay);
+          return jsonResponse(teamLeadWorkflowFixture);
+        }
+
+        if (url === teamLeadSelectedTimelineUrl) {
+          return jsonResponse(teamLeadSelectedTimelineFixture);
+        }
+
+        if (url === orangeTeamLeadSelectedTimelineUrl) {
+          return jsonResponse({ items: [teamLeadSelectedTimelineFixture.items[1]] });
+        }
+
+        if (url === appEngineeringReviewSelectedTimelineUrl) {
+          return new Promise<Response>((resolve) => {
+            resolveAppEngineeringSelectedTimeline = resolve;
+          });
         }
 
         return resolveTestFetchResponse(url);
@@ -4140,11 +4235,26 @@ afterEach(() => {
 
     await waitFor(() => {
       expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+      expect(within(replaySection!).queryByText('Team lead orange replay checkpoint')).not.toBeInTheDocument();
+      expect(within(replaySection!).getByText('Loading scoped timeline replay...')).toBeVisible();
       expect(
         within(replaySection!).getByRole('combobox', {
           name: 'Filter timeline replay by severity'
         })
       ).toHaveValue('');
+    });
+
+    expect(resolveAppEngineeringSelectedTimeline).not.toBeNull();
+    resolveAppEngineeringSelectedTimeline!(jsonResponse(appEngineeringSelectedTimelineFixture));
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+      expect(
+        within(replaySection!).getByRole('combobox', {
+          name: 'Filter timeline replay by severity'
+        })
+      ).toHaveValue('');
+      expect(within(replaySection!).getByText('Workflow evidence is still incomplete')).toBeVisible();
     });
 
     await user.click(within(details).getByRole('button', { name: 'Clear' }));
@@ -4165,7 +4275,7 @@ afterEach(() => {
     });
   });
 
-  it('keeps selected-agent timeline replay scoped to the active correlation without widening to the global replay feed', async () => {
+  it('keeps selected-agent timeline replay scoped to the active correlation via canonical timeline queries without widening to the crew replay feed', async () => {
     const user = userEvent.setup();
     render(<App />);
 
@@ -4202,10 +4312,12 @@ afterEach(() => {
       .map(([input]) => (typeof input === 'string' ? input : input.toString()));
 
     expect(postSelectionRequests).toContain(secondaryCorrelationUrl);
+    expect(postSelectionRequests).toContain(appEngineeringSecondarySelectedTimelineUrl);
     expect(postSelectionRequests).not.toContain(secondaryScopedTimelineUrl);
+    expect(postSelectionRequests).not.toContain(timelineUrl);
   });
 
-  it('filters selected-agent scoped correlation replay locally by severity without fetching replay', async () => {
+  it('refetches selected-agent scoped correlation replay with the selected severity filter', async () => {
     const user = userEvent.setup();
     render(<App />);
 
@@ -4246,24 +4358,27 @@ afterEach(() => {
       .mock.calls.slice(fetchCallCountBeforeFilter)
       .map(([input]) => (typeof input === 'string' ? input : input.toString()));
 
-    expect(postFilterRequests.filter((url) => url.startsWith('/timeline'))).toEqual([]);
+    expect(postFilterRequests).toContain(orangeAppEngineeringSecondarySelectedTimelineUrl);
+    expect(postFilterRequests).not.toContain(orangeTimelineUrl);
   });
 
-  it('keeps the last selected-agent replay snapshot visible when an unscoped selected-agent replay refresh fails', async () => {
+  it('keeps the last selected-agent replay snapshot visible when a canonical selected-agent replay refresh fails', async () => {
     (window as typeof window & { __AITOWN_POLL_INTERVAL_MS__?: number }).__AITOWN_POLL_INTERVAL_MS__ = 10;
 
-    let workflowRequests = 0;
+    let selectedTimelineRequests = 0;
     vi.stubGlobal(
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
         const url = typeof input === 'string' ? input : input.toString();
 
         if (url === teamLeadWorkflowUrl) {
-          workflowRequests += 1;
-          if (workflowRequests === 1) {
-            return new Response(JSON.stringify(teamLeadReplayWorkflowFixture), {
-              headers: { 'content-type': 'application/json' }
-            });
+          return jsonResponse(teamLeadWorkflowFixture);
+        }
+
+        if (url === teamLeadSelectedTimelineUrl) {
+          selectedTimelineRequests += 1;
+          if (selectedTimelineRequests === 1) {
+            return jsonResponse({ items: teamLeadReplayWorkflowFixture.timeline });
           }
 
           return new Response(JSON.stringify({ error: 'internal_error', details: 'team lead replay refresh failed' }), {
@@ -4293,7 +4408,7 @@ afterEach(() => {
       expect(within(replaySection!).getByText('Replay captured lead review checkpoint')).toBeVisible();
     });
 
-    expect(workflowRequests).toBeGreaterThan(1);
+    expect(selectedTimelineRequests).toBeGreaterThan(1);
   });
 
   it('renders timeline replay evidence-first labels and supports a correlation pivot from crew overview', async () => {
@@ -11606,6 +11721,7 @@ afterEach(() => {
 
   it('does not fall back to crew-overview correlations while a selected-agent workflow is still loading', async () => {
     let correlationRequests = 0;
+    let selectedAgentReplayRequests = 0;
 
     vi.stubGlobal(
       'fetch',
@@ -11629,6 +11745,11 @@ afterEach(() => {
         }
 
         if (url === incidentsUrl || url === teamLeadWorkflowUrl) {
+          return new Promise<Response>(() => {});
+        }
+
+        if (url === teamLeadSelectedTimelineUrl) {
+          selectedAgentReplayRequests += 1;
           return new Promise<Response>(() => {});
         }
 
@@ -11659,6 +11780,146 @@ afterEach(() => {
       expect(within(correlationSection!).getByText('No correlation selected.')).toBeVisible();
     });
     expect(correlationRequests).toBe(0);
+    expect(selectedAgentReplayRequests).toBe(0);
+  });
+
+  it('keeps selected-agent supervision history on the seeded target-agent path while selected-agent replay still waits for workflow correlation', async () => {
+    let selectedAgentReplayRequests = 0;
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === '/office/overview') {
+          return Promise.resolve(
+            new Response(JSON.stringify(overviewFixture), {
+              headers: { 'content-type': 'application/json' }
+            })
+          );
+        }
+
+        if (url === operationsUrl || url === selectedOperationUrl) {
+          return Promise.resolve(
+            new Response(JSON.stringify(operationsFixture), {
+              headers: { 'content-type': 'application/json' }
+            })
+          );
+        }
+
+        if (url === incidentsUrl || url === teamLeadWorkflowUrl) {
+          return new Promise<Response>(() => {});
+        }
+
+        if (url === teamLeadSelectedTimelineUrl) {
+          selectedAgentReplayRequests += 1;
+          return new Promise<Response>(() => {});
+        }
+
+        return resolveTestFetchResponse(url);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect Team Lead' }));
+
+    const supervisionSection = within(details).getByRole('heading', { name: 'Supervision History' }).closest('section');
+    expect(supervisionSection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'Team Lead' })).toBeVisible();
+      expect(within(supervisionSection!).getByText('Request scope · Target agent · team-lead')).toBeVisible();
+      expect(within(supervisionSection!).getByText('No recent supervision history.')).toBeVisible();
+    });
+
+    const peerWatchRequests = vi
+      .mocked(globalThis.fetch)
+      .mock.calls.map(([input]) => (typeof input === 'string' ? input : input.toString()))
+      .filter((url) => url.startsWith('/peer-watch/alerts'));
+
+    expect(peerWatchRequests).toContain(teamLeadSupervisionHistoryUrl);
+    expect(selectedAgentReplayRequests).toBe(0);
+  });
+
+  it('does not reuse a stale selected-agent workflow error to start replay before the next agent workflow resolves', async () => {
+    let growthRevenueSelectedReplayRequests = 0;
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === '/office/overview') {
+          return Promise.resolve(
+            new Response(JSON.stringify(overviewFixture), {
+              headers: { 'content-type': 'application/json' }
+            })
+          );
+        }
+
+        if (url === operationsUrl || url === selectedOperationUrl) {
+          return Promise.resolve(
+            new Response(JSON.stringify(operationsFixture), {
+              headers: { 'content-type': 'application/json' }
+            })
+          );
+        }
+
+        if (url === incidentsUrl) {
+          return new Promise<Response>(() => {});
+        }
+
+        if (url === workflowUrl) {
+          return Promise.resolve(
+            new Response(JSON.stringify({ error: 'internal_error', details: 'workflow failed for app-engineering' }), {
+              status: 500,
+              headers: { 'content-type': 'application/json' }
+            })
+          );
+        }
+
+        if (url === growthRevenueWorkflowUrl) {
+          return new Promise<Response>(() => {});
+        }
+
+        if (url === growthRevenueSelectedTimelineUrl) {
+          growthRevenueSelectedReplayRequests += 1;
+          return new Promise<Response>(() => {});
+        }
+
+        return resolveTestFetchResponse(url);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
+
+    const workflowSection = within(details).getByRole('heading', { name: 'Workflow' }).closest('section');
+    expect(workflowSection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+      expect(within(workflowSection!).getByText('Unable to load workflow. workflow failed for app-engineering')).toBeVisible();
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Inspect live focus agent Growth Revenue Agent' }));
+
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    expect(correlationSection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+      expect(within(correlationSection!).getByText('No correlation selected.')).toBeVisible();
+      expect(globalThis.fetch).toHaveBeenCalledWith(growthRevenueWorkflowUrl, expect.anything());
+    });
+
+    expect(growthRevenueSelectedReplayRequests).toBe(0);
   });
 
   it('clears stale correlation drilldown when switching to an agent without correlations', async () => {

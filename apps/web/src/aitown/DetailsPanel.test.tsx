@@ -512,6 +512,11 @@ function buildProps(overrides: Partial<DetailsPanelProps> = {}): DetailsPanelPro
     timelineReplay: null,
     timelineReplayError: null,
     timelineReplayState: 'ready',
+    selectedAgentTimelineReplay: {
+      items: buildCorrelation().timeline.filter((event) => event.agent_id === 'app-engineering')
+    },
+    selectedAgentTimelineReplayError: null,
+    selectedAgentTimelineReplayState: 'ready',
     workflow: buildWorkflow(),
     workflowError: null,
     workflowState: 'ready',
@@ -2159,26 +2164,9 @@ describe('DetailsPanel accountability signals', () => {
     ).toBeVisible();
   });
 
-  it('filters selected-agent workflow replay locally by severity and routes severity changes', async () => {
+  it('renders selected-agent canonical replay payloads and routes severity changes', async () => {
     const user = userEvent.setup();
     const onSelectSelectedAgentReplaySeverity = vi.fn();
-    const workflow = {
-      ...buildWorkflow(),
-      timeline: [
-        {
-          ...buildCorrelation().timeline[0],
-          event_id: 'evt-selected-yellow',
-          severity: 'yellow',
-          summary: 'Selected workflow yellow replay'
-        },
-        {
-          ...buildCorrelation().timeline[0],
-          event_id: 'evt-selected-orange',
-          severity: 'orange',
-          summary: 'Selected workflow orange replay'
-        }
-      ]
-    } satisfies AgentWorkflow;
 
     render(
       <DetailsPanel
@@ -2186,7 +2174,16 @@ describe('DetailsPanel accountability signals', () => {
           onSelectSelectedAgentReplaySeverity,
           selectedAgentReplaySeverity: 'orange',
           selectedCorrelationId: null,
-          workflow
+          selectedAgentTimelineReplay: {
+            items: [
+              {
+                ...buildCorrelation().timeline[0],
+                event_id: 'evt-selected-orange',
+                severity: 'orange',
+                summary: 'Selected workflow orange replay'
+              }
+            ]
+          }
         })}
       />
     );
@@ -2196,7 +2193,7 @@ describe('DetailsPanel accountability signals', () => {
     expect(within(section!).getByText('Request scope · Target agent · app-engineering')).toBeVisible();
     expect(within(section!).queryByText('Scoped replay · corr-app-review')).not.toBeInTheDocument();
     expect(within(section!).getByText('Selected workflow orange replay')).toBeVisible();
-    expect(within(section!).queryByText('Selected workflow yellow replay')).not.toBeInTheDocument();
+    expect(within(section!).queryByText('Replay captured workflow follow-up')).not.toBeInTheDocument();
 
     const severityFilter = within(section!).getByRole('combobox', {
       name: 'Filter timeline replay by severity'
@@ -2208,38 +2205,29 @@ describe('DetailsPanel accountability signals', () => {
     expect(onSelectSelectedAgentReplaySeverity).toHaveBeenCalledWith('yellow');
   });
 
-  it('filters selected-agent scoped correlation replay locally by severity and agent', () => {
-    const correlation = {
-      ...buildCorrelation(),
-      timeline: [
-        {
-          ...buildCorrelation().timeline[0],
-          event_id: 'evt-scoped-yellow',
-          severity: 'yellow',
-          summary: 'Selected scoped yellow replay'
-        },
-        {
-          ...buildCorrelation().timeline[0],
-          event_id: 'evt-scoped-orange',
-          severity: 'orange',
-          summary: 'Selected scoped orange replay'
-        },
-        {
-          ...buildCorrelation().timeline[0],
-          event_id: 'evt-scoped-other-agent-orange',
-          agent_id: 'team-lead',
-          severity: 'orange',
-          summary: 'Other agent scoped orange replay'
-        }
-      ]
-    } satisfies CorrelationDrilldown;
-
+  it('renders selected-agent scoped canonical replay payloads for the active agent and correlation', () => {
     render(
       <DetailsPanel
         {...buildProps({
-          correlation,
           selectedAgentReplaySeverity: 'orange',
-          selectedCorrelationId: 'corr-app-review'
+          selectedCorrelationId: 'corr-app-review',
+          selectedAgentTimelineReplay: {
+            items: [
+              {
+                ...buildCorrelation().timeline[0],
+                event_id: 'evt-scoped-orange',
+                severity: 'orange',
+                summary: 'Selected scoped orange replay'
+              },
+              {
+                ...buildCorrelation().timeline[0],
+                event_id: 'evt-scoped-other-agent-orange',
+                agent_id: 'team-lead',
+                severity: 'orange',
+                summary: 'Other agent scoped orange replay'
+              }
+            ]
+          }
         })}
       />
     );
@@ -2249,24 +2237,21 @@ describe('DetailsPanel accountability signals', () => {
     expect(within(section!).getByText('Request scope · Target agent · app-engineering · corr-app-review')).toBeVisible();
     expect(within(section!).getByText('Scoped replay · corr-app-review')).toBeVisible();
     expect(within(section!).getByText('Selected scoped orange replay')).toBeVisible();
-    expect(within(section!).queryByText('Selected scoped yellow replay')).not.toBeInTheDocument();
     expect(within(section!).queryByText('Other agent scoped orange replay')).not.toBeInTheDocument();
+    expect(within(section!).queryByText('Replay captured workflow follow-up')).not.toBeInTheDocument();
   });
 
-  it('renders selected-agent replay lifecycle copy for local severity filters', () => {
+  it('renders selected-agent replay lifecycle copy for canonical timeline payloads', () => {
     const props = buildProps({
       selectedAgentReplaySeverity: 'orange',
       selectedCorrelationId: null,
-      workflow: null
+      workflow: null,
+      selectedAgentTimelineReplay: null,
+      selectedAgentTimelineReplayError: null,
+      selectedAgentTimelineReplayState: 'loading'
     });
 
-    const { rerender } = render(
-      <DetailsPanel
-        {...props}
-        workflowError={null}
-        workflowState="loading"
-      />
-    );
+    const { rerender } = render(<DetailsPanel {...props} />);
 
     let section = screen.getByRole('heading', { name: 'Timeline Replay' }).closest('section');
     expect(section).not.toBeNull();
@@ -2275,19 +2260,9 @@ describe('DetailsPanel accountability signals', () => {
     rerender(
       <DetailsPanel
         {...props}
-        workflow={{
-          ...buildWorkflow(),
-          timeline: [
-            {
-              ...buildCorrelation().timeline[0],
-              event_id: 'evt-selected-yellow-only',
-              severity: 'yellow',
-              summary: 'Selected workflow yellow-only replay'
-            }
-          ]
-        }}
-        workflowError={null}
-        workflowState="ready"
+        selectedAgentTimelineReplay={{ items: [] }}
+        selectedAgentTimelineReplayError={null}
+        selectedAgentTimelineReplayState="ready"
       />
     );
 
@@ -2298,9 +2273,8 @@ describe('DetailsPanel accountability signals', () => {
     rerender(
       <DetailsPanel
         {...props}
-        workflow={{
-          ...buildWorkflow(),
-          timeline: [
+        selectedAgentTimelineReplay={{
+          items: [
             {
               ...buildCorrelation().timeline[0],
               event_id: 'evt-selected-orange-snapshot',
@@ -2309,8 +2283,8 @@ describe('DetailsPanel accountability signals', () => {
             }
           ]
         }}
-        workflowError="workflow refresh failed"
-        workflowState="error"
+        selectedAgentTimelineReplayError="timeline replay refresh failed"
+        selectedAgentTimelineReplayState="ready"
       />
     );
 
@@ -2318,7 +2292,7 @@ describe('DetailsPanel accountability signals', () => {
     expect(section).not.toBeNull();
     expect(
       within(section!).getByText(
-        'Showing last selected-agent timeline replay snapshot at Orange severity. workflow refresh failed'
+        'Showing last selected-agent timeline replay snapshot at Orange severity. timeline replay refresh failed'
       )
     ).toBeVisible();
     expect(within(section!).getByText('Selected workflow orange degraded replay')).toBeVisible();

@@ -31,7 +31,13 @@ import type {
   TimelineReplayResponse
 } from './types';
 import { projectWorldState } from './world/projector';
-import { PHASE_LABELS, selectAttentionQueue, selectAgentZoneLabel } from './world/selectors';
+import {
+  PHASE_LABELS,
+  selectAttentionQueue,
+  selectAgentZoneLabel,
+  selectHotZones,
+  type HotZoneSummary
+} from './world/selectors';
 import type { WorldAgent, WorldState } from './world/types';
 
 const LazyWorldScene = lazy(() => import('./aitown/WorldScene'));
@@ -63,6 +69,12 @@ const EMPTY_SEVERITY_BUCKETS: Record<Severity, number> = {
   yellow: 0,
   orange: 0,
   red: 0
+};
+const HOT_ZONE_SEVERITY_LABELS: Record<Severity, string> = {
+  normal: 'Normal',
+  yellow: 'Yellow',
+  orange: 'Orange',
+  red: 'Red'
 };
 
 function isJsdomEnvironment() {
@@ -109,6 +121,31 @@ function resolveLiveFocusAgentMeta(agent: WorldAgent, world: WorldState) {
   const zoneLabel = selectAgentZoneLabel(agent, world.zones);
 
   return `${phaseLabel} · ${zoneLabel}`;
+}
+
+function resolveHotZoneFocusMeta(zone: HotZoneSummary) {
+  const parts = [
+    `${HOT_ZONE_SEVERITY_LABELS[zone.highest_severity]} severity`,
+    `${zone.occupant_count} ${zone.occupant_count === 1 ? 'agent' : 'agents'}`
+  ];
+
+  if (zone.blocked_count > 0) {
+    parts.push(`${zone.blocked_count} blocked`);
+  }
+
+  if (zone.reboot_count > 0) {
+    parts.push(`${zone.reboot_count} reboot`);
+  }
+
+  if (zone.open_alert_or_incident_occupant_count > 0) {
+    parts.push(`${zone.open_alert_or_incident_occupant_count} alert/incident`);
+  }
+
+  if (zone.runtime_freshness_degraded_count > 0) {
+    parts.push(`${zone.runtime_freshness_degraded_count} runtime stale`);
+  }
+
+  return parts.join(' · ');
 }
 
 export function resolveViewportToplineStatus(
@@ -669,6 +706,7 @@ function AppInner() {
     [activeCorrelationParticipantAgentIds, activeCorrelationSpotlight?.correlation_id, projectedWorld, selectedAgentId]
   );
   const liveFocusAgents = useMemo(() => selectAttentionQueue(projectedWorld), [projectedWorld]);
+  const hotZones = useMemo(() => selectHotZones(projectedWorld), [projectedWorld]);
 
   const selectedAgent = resolveSelectedAgent(
     selectedAgentId,
@@ -1461,6 +1499,29 @@ function AppInner() {
             <span>
               <strong className="aitown-panel__topline-title">Viewport</strong>
               <span className="aitown-panel__topline-copy">Drag to pan. Wheel to zoom. Tap or click an agent to inspect.</span>
+              {hotZones.length > 0 ? (
+                <>
+                  <span className="aitown-panel__topline-copy">Hot zones</span>
+                  <span
+                    className="aitown-panel__focus-chips aitown-panel__focus-chips--compact"
+                    role="group"
+                    aria-label="Hot zone focus"
+                  >
+                    {hotZones.map((zone) => (
+                      <button
+                        key={zone.zone_id}
+                        type="button"
+                        className={`aitown-focus-chip aitown-focus-chip--hot-zone severity-${zone.highest_severity}`}
+                        aria-label={`${zone.label} · ${resolveHotZoneFocusMeta(zone)} · Focus in world viewport`}
+                        onClick={() => handleFocusWorldZone(zone.zone_id)}
+                      >
+                        <strong>{zone.label}</strong>
+                        <span>{resolveHotZoneFocusMeta(zone)}</span>
+                      </button>
+                    ))}
+                  </span>
+                </>
+              ) : null}
               <span className="aitown-panel__topline-copy">{viewportToplineStatus.status}</span>
               <span className="aitown-panel__topline-copy">{viewportToplineStatus.snapshot}</span>
             </span>

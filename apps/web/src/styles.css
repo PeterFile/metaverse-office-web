@@ -246,6 +246,10 @@ button {
   gap: 8px;
 }
 
+.aitown-panel__focus-chips--compact {
+  gap: 6px;
+}
+
 .aitown-focus-chip {
   pointer-events: auto;
   display: flex;
@@ -264,6 +268,11 @@ button {
   color: inherit;
   text-align: left;
   cursor: pointer;
+}
+
+.aitown-focus-chip--hot-zone {
+  flex-basis: 128px;
+  padding: 3px 8px 6px;
 }
 
 .aitown-focus-chip:hover {

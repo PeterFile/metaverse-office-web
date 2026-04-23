@@ -2420,6 +2420,10 @@ function listMemoryArtifactItems({ events = [], latestCollectorReport = null, fi
     );
 
     const existing = artifactMap.get(artifactRef);
+    if (!existing && hasMemoryArtifactEventFacetFilters(filters)) {
+      continue;
+    }
+
     if (existing) {
       existing.artifact_kind = rankArtifactKind(existing.artifact_kind, collectorObservation.artifact_kind);
       existing.first_seen_at = compareIsoAsc(existing.first_seen_at, firstSeenAt) <= 0 ? existing.first_seen_at : firstSeenAt;
@@ -2619,6 +2623,10 @@ function matchesMemoryArtifactFilters({ artifactRef, event, artifactKind, filter
   }
 
   return true;
+}
+
+function hasMemoryArtifactEventFacetFilters(filters = {}) {
+  return Boolean(filters.event_type || filters.severity);
 }
 
 function listMatchingCollectorObservationEntries({

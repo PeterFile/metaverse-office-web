@@ -379,6 +379,9 @@ export async function fetchMemoryArtifacts(
     agentId?: string;
     correlationId?: string;
     artifactRef?: string;
+    eventType?: string;
+    severity?: string;
+    artifactKind?: string;
     signal?: AbortSignal;
   } = {}
 ): Promise<MemoryArtifactIndex> {
@@ -397,6 +400,18 @@ export async function fetchMemoryArtifacts(
 
   if (options.artifactRef) {
     params.set('artifact_ref', options.artifactRef);
+  }
+
+  if (options.eventType) {
+    params.set('event_type', options.eventType);
+  }
+
+  if (options.severity) {
+    params.set('severity', options.severity);
+  }
+
+  if (options.artifactKind) {
+    params.set('artifact_kind', options.artifactKind);
   }
 
   const response = await fetch(resolveApiUrl(`/memory/artifacts?${params.toString()}`), {

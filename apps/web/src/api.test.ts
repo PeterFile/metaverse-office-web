@@ -784,7 +784,7 @@ describe('fetchPeerWatchAlerts', () => {
 });
 
 describe('fetchMemoryArtifacts', () => {
-  it('passes limit, window, agent_id, correlation_id, and artifact_ref filters through to the backend query string', async () => {
+  it('passes limit, window, agent_id, correlation_id, artifact_ref, and evidence facet filters through to the backend query string', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue(
@@ -805,11 +805,14 @@ describe('fetchMemoryArtifacts', () => {
       window: '30m',
       agentId: 'app-engineering',
       correlationId: 'corr-app-review',
-      artifactRef: '/tmp/app-engineering/todo.md'
+      artifactRef: '/tmp/app-engineering/todo.md',
+      eventType: 'peer_watch_alert_raised',
+      severity: 'orange',
+      artifactKind: 'workspace_file'
     });
 
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      '/memory/artifacts?limit=4&window=30m&agent_id=app-engineering&correlation_id=corr-app-review&artifact_ref=%2Ftmp%2Fapp-engineering%2Ftodo.md',
+      '/memory/artifacts?limit=4&window=30m&agent_id=app-engineering&correlation_id=corr-app-review&artifact_ref=%2Ftmp%2Fapp-engineering%2Ftodo.md&event_type=peer_watch_alert_raised&severity=orange&artifact_kind=workspace_file',
       expect.objectContaining({ signal: undefined })
     );
   });

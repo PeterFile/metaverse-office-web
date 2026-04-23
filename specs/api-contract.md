@@ -17,7 +17,7 @@
 - `GET /peer-watch/alerts?status=&target_agent_id=&agent_id=&watcher_agent_id=&observer_agent_id=&correlation_id=&severity=&limit=`
 - `GET /incidents?kind=&agent_id=&severity=&status=&correlation_id=&limit=&window=`
 - `GET /correlations/:correlation_id?limit=&window=`
-- `GET /memory/artifacts?limit=&window=&agent_id=&correlation_id=`
+- `GET /memory/artifacts?limit=&window=&agent_id=&correlation_id=&artifact_ref=&event_type=&severity=&artifact_kind=`
 - `GET /handoffs`
 - `GET /reboots`
 
@@ -256,11 +256,12 @@
 
 ## Shared memory artifact query semantics
 - `GET /memory/artifacts` is read-only and derives a shared engineering-memory surface from existing event `evidence_refs` plus the latest collector workspace/tmux observations when available
-- supported query params are `limit`, `window`, `agent_id`, and `correlation_id`
+- supported query params are `limit`, `window`, `agent_id`, `correlation_id`, `artifact_ref`, `event_type`, `severity`, and `artifact_kind`
 - the route does not create a markdown-backed status store, write path, or task-assignment surface; it reuses the append-only evidence trail already present in canonical events and collector snapshots
 - items are grouped by `artifact_ref`; repeated mentions increase `mention_count` while preserving first/last observation timestamps, including matching collector observations from the latest snapshot
 - `agent_id`, when present, matches artifacts mentioned by that agent, actor, or listed counterparties; collector-only observations stay agent-scoped instead of leaking other observed agents
 - `correlation_id`, when present, narrows to artifacts referenced by events inside that correlation slice or the matching latest collector snapshot correlation when no derived activity event exists
+- `event_type`, `severity`, and `artifact_kind` are additive read-only facets; event-backed artifacts may still be extended by matching collector observations, but event-facet queries do not materialize unrelated collector-only artifacts
 - collector-only observations may expose `latest_summary` and `latest_event_type` as `null` when the latest snapshot did not materialize a canonical activity event for that artifact
 - item ordering is newest `last_seen_at` first, then highest `mention_count`, then stable `artifact_ref`
 

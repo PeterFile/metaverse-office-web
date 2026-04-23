@@ -1869,6 +1869,75 @@ function renderSelectedAgentReplayDegradedErrorLabel(
   return `Showing last timeline replay snapshot. ${errorLabel}`;
 }
 
+type ReplaySummaryBucket = {
+  key: string;
+  count: number;
+};
+
+type ReplaySummarySeverityBucket = {
+  severity: Severity;
+  count: number;
+};
+
+type ReplaySummaryFacets = {
+  eventCount: number;
+  eventTypes: ReplaySummaryBucket[];
+  severities: ReplaySummarySeverityBucket[];
+  latestActivityAt: string | null;
+};
+
+const REPLAY_SUMMARY_SEVERITY_ORDER: Severity[] = ['red', 'orange', 'yellow', 'normal'];
+
+function selectReplaySummaryFacets(events: ReadonlyArray<WorkflowTimelineEvent>): ReplaySummaryFacets {
+  const eventTypeBuckets = new Map<string, number>();
+  const severityBuckets: Record<Severity, number> = { ...EMPTY_SEVERITY_BUCKETS };
+  let latestActivityAt: string | null = null;
+
+  events.forEach((event) => {
+    eventTypeBuckets.set(event.event_type, (eventTypeBuckets.get(event.event_type) ?? 0) + 1);
+    severityBuckets[event.severity] += 1;
+    latestActivityAt = latestActivityAt && latestActivityAt > event.ts ? latestActivityAt : event.ts;
+  });
+
+  return {
+    eventCount: events.length,
+    eventTypes: Array.from(eventTypeBuckets, ([key, count]) => ({ key, count })).sort(compareReplaySummaryBuckets),
+    severities: REPLAY_SUMMARY_SEVERITY_ORDER.map((severity) => ({
+      severity,
+      count: severityBuckets[severity]
+    })),
+    latestActivityAt
+  };
+}
+
+function compareReplaySummaryBuckets(left: ReplaySummaryBucket, right: ReplaySummaryBucket) {
+  const countDelta = right.count - left.count;
+  if (countDelta !== 0) {
+    return countDelta;
+  }
+
+  return left.key.localeCompare(right.key);
+}
+
+function renderReplaySummaryBucketList(buckets: ReadonlyArray<ReplaySummaryBucket>, emptyLabel: string) {
+  return renderNamedList(
+    buckets.map(({ key, count }) => `${renderDisplayState(key)} (${count})`),
+    emptyLabel
+  );
+}
+
+function renderReplaySummaryFacets(facets: ReplaySummaryFacets) {
+  return (
+    <li className="aitown-record">
+      <strong>Replay summary</strong>
+      <span>{`Counts · ${facets.eventCount} events`}</span>
+      <span>{`Event types · ${renderReplaySummaryBucketList(facets.eventTypes, 'No event types in current replay window')}`}</span>
+      <span>{`Severities · ${renderWorkflowSummarySeverityList(facets.severities)}`}</span>
+      <span>{`Latest activity · ${renderTimestamp(facets.latestActivityAt, 'No activity in current replay window')}`}</span>
+    </li>
+  );
+}
+
 function renderTimelineReplaySection({
   requestScopeLabel = null,
   scopedReplayCorrelationId = null,
@@ -1912,6 +1981,8 @@ function renderTimelineReplaySection({
   onSelectAgent: SelectAgentHandler;
   onSelectCorrelation: SelectCorrelationHandler;
 }) {
+  const replaySummaryFacets = hasReplaySnapshot ? selectReplaySummaryFacets(timelineReplayItems) : null;
+
   return (
     <section className="aitown-details__section">
       <h3>Timeline Replay</h3>
@@ -1943,6 +2014,7 @@ function renderTimelineReplaySection({
             {hasReplaySnapshot ? degradedErrorLabel : initialErrorLabel}
           </li>
         ) : null}
+        {replaySummaryFacets ? renderReplaySummaryFacets(replaySummaryFacets) : null}
         {timelineReplayItems.map((event) =>
           renderReplayTimelineEvent({
             event,

@@ -60,10 +60,34 @@ export function projectWorldState(input: ProjectorInput): WorldState {
   let blockedCount = 0;
   let rebootCount = 0;
   let highestSeverity: Severity = 'normal';
+  const latestIncidentFeedItems = buildLatestIncidentLifecycleItems(incidentFeed);
+  const activeIncidentCountsByAgent = buildActiveIncidentCountsByAgent(latestIncidentFeedItems);
+  const activePeerWatchAlertCountsByAgent = buildActiveIncidentCountsByAgent(
+    latestIncidentFeedItems,
+    (incident) => incident.kind === 'peer_watch_alert'
+  );
+  const activeIncidentMaxSeverityByAgent = buildActiveIncidentMaxSeverityByAgent(latestIncidentFeedItems);
+  const latestHandoffStatusByAgent = buildLatestIncidentStatusesByAgent(
+    latestIncidentFeedItems,
+    'handoff'
+  );
+  const latestRebootStatusByAgent = buildLatestIncidentStatusesByAgent(
+    latestIncidentFeedItems,
+    'reboot'
+  );
 
   for (const oa of overview.agents) {
     const workflow = workflows.get(oa.agent_id) ?? null;
-    const wa = projectAgent(oa, workflow, now);
+    const wa = projectAgent(
+      oa,
+      workflow,
+      activePeerWatchAlertCountsByAgent.get(oa.agent_id) ?? 0,
+      activeIncidentCountsByAgent.get(oa.agent_id) ?? 0,
+      activeIncidentMaxSeverityByAgent.get(oa.agent_id) ?? 'normal',
+      latestHandoffStatusByAgent.get(oa.agent_id) ?? null,
+      latestRebootStatusByAgent.get(oa.agent_id) ?? null,
+      now
+    );
     agents.set(wa.agent_id, wa);
 
     severityBuckets[wa.severity] += 1;
@@ -105,24 +129,47 @@ export function projectWorldState(input: ProjectorInput): WorldState {
 function projectAgent(
   oa: OfficeAgent,
   workflow: AgentWorkflow | null,
+  incidentFeedAlertCount: number,
+  incidentFeedOpenCount: number,
+  incidentFeedMaxSeverity: Severity,
+  incidentFeedLatestHandoffStatus: TimestampedStatus | null,
+  incidentFeedLatestRebootStatus: TimestampedStatus | null,
   now: string
 ): WorldAgent {
-  const signals = extractPhaseSignals(oa, workflow);
+  const signals = extractPhaseSignals(
+    oa,
+    workflow,
+    incidentFeedOpenCount,
+    incidentFeedLatestHandoffStatus,
+    incidentFeedLatestRebootStatus
+  );
   const phase = deriveAgentPhase(oa.current_state, signals);
   const homeZone = oa.current_location || `desk-${oa.agent_id}`;
   const zone = deriveAgentZone(phase, homeZone);
 
   const staleness = projectStaleness(oa);
-  const { severity, severity_reason } = projectSeverity(oa, workflow, staleness);
+  const { severity, severity_reason } = projectSeverity(
+    oa,
+    workflow,
+    staleness,
+    incidentFeedMaxSeverity
+  );
   const recentTrail = extractTrail(workflow);
 
-  const openAlertCount = workflow?.detail?.open_peer_watch_alerts?.length ?? 0;
-  const latestHandoffStatus = getLatestStatusRecord(workflow?.detail?.recent_handoffs ?? []);
-  const latestRebootStatus = getLatestStatusRecord(workflow?.detail?.recent_reboots ?? []);
-  const hasOpenIncidents =
-    openAlertCount > 0 ||
-    isCurrentActiveStatus(latestHandoffStatus, workflow?.incidents ?? [], 'handoff') ||
-    isCurrentActiveStatus(latestRebootStatus, workflow?.incidents ?? [], 'reboot');
+  const openAlertCount = workflow
+    ? workflow.detail.open_peer_watch_alerts.length
+    : incidentFeedAlertCount;
+  const latestHandoffStatus = workflow
+    ? getLatestStatusRecord(workflow.detail.recent_handoffs)
+    : incidentFeedLatestHandoffStatus;
+  const latestRebootStatus = workflow
+    ? getLatestStatusRecord(workflow.detail.recent_reboots)
+    : incidentFeedLatestRebootStatus;
+  const hasOpenIncidents = workflow
+    ? openAlertCount > 0 ||
+      isCurrentActiveStatus(latestHandoffStatus, workflow.incidents, 'handoff') ||
+      isCurrentActiveStatus(latestRebootStatus, workflow.incidents, 'reboot')
+    : incidentFeedOpenCount > 0;
 
   return {
     agent_id: oa.agent_id,
@@ -145,11 +192,18 @@ function projectAgent(
 
 function extractPhaseSignals(
   oa: OfficeAgent,
-  workflow: AgentWorkflow | null
+  workflow: AgentWorkflow | null,
+  incidentFeedOpenCount: number,
+  incidentFeedLatestHandoffStatus: TimestampedStatus | null,
+  incidentFeedLatestRebootStatus: TimestampedStatus | null
 ): PhaseSignals {
   const incidents = workflow?.incidents ?? [];
-  const latestHandoffStatus = getLatestStatusRecord(workflow?.detail?.recent_handoffs ?? []);
-  const latestRebootStatus = getLatestStatusRecord(workflow?.detail?.recent_reboots ?? []);
+  const latestHandoffStatus = workflow
+    ? getLatestStatusRecord(workflow.detail.recent_handoffs)
+    : incidentFeedLatestHandoffStatus;
+  const latestRebootStatus = workflow
+    ? getLatestStatusRecord(workflow.detail.recent_reboots)
+    : incidentFeedLatestRebootStatus;
 
   const hasOpenHandoff = isCurrentStatus(latestHandoffStatus, incidents, 'handoff', 'started');
   const hasPendingHandoff = isCurrentStatus(latestHandoffStatus, incidents, 'handoff', 'waiting');
@@ -161,9 +215,11 @@ function extractPhaseSignals(
     'completed'
   );
   const hasOpenIncident =
-    workflow?.detail?.open_peer_watch_alerts.length !== 0 ||
-    isCurrentActiveStatus(latestHandoffStatus, incidents, 'handoff') ||
-    isCurrentActiveStatus(latestRebootStatus, incidents, 'reboot');
+    workflow
+      ? workflow.detail.open_peer_watch_alerts.length !== 0 ||
+        isCurrentActiveStatus(latestHandoffStatus, incidents, 'handoff') ||
+        isCurrentActiveStatus(latestRebootStatus, incidents, 'reboot')
+      : incidentFeedOpenCount > 0;
 
   return {
     reboot_recommended: oa.reboot_recommended,
@@ -191,7 +247,8 @@ function projectStaleness(oa: OfficeAgent): StalenessDerived | null {
 function projectSeverity(
   oa: OfficeAgent,
   workflow: AgentWorkflow | null,
-  staleness: StalenessDerived | null
+  staleness: StalenessDerived | null,
+  incidentFeedMaxSeverity: Severity
 ): { severity: Severity; severity_reason: string } {
   let best: Severity = oa.reported_severity ?? oa.severity ?? 'normal';
   let reason = 'reported';
@@ -202,12 +259,10 @@ function projectSeverity(
     reason = `staleness: ${staleness?.stale_for_minutes ?? '?'}m`;
   }
 
-  if (workflow) {
-    const incidentMax = maxIncidentSeverity(workflow);
-    if (SEVERITY_RANK[incidentMax] > SEVERITY_RANK[best]) {
-      best = incidentMax;
-      reason = 'open incident';
-    }
+  const incidentMax = workflow ? maxIncidentSeverity(workflow) : incidentFeedMaxSeverity;
+  if (SEVERITY_RANK[incidentMax] > SEVERITY_RANK[best]) {
+    best = incidentMax;
+    reason = 'open incident';
   }
 
   // effective_severity from backend is authoritative when higher
@@ -251,6 +306,94 @@ function maxIncidentSeverity(workflow: AgentWorkflow): Severity {
 
 function isActiveIncident(incident: WorkflowIncident): boolean {
   return ACTIVE_INCIDENT_STATUSES.has(incident.status);
+}
+
+function buildLatestIncidentLifecycleItems(feed: IncidentFeedResponse | null): WorkflowIncident[] {
+  if (!feed?.items) return [];
+
+  const latestIncidentsByLifecycle = new Map<string, WorkflowIncident>();
+
+  for (const incident of feed.items) {
+    const key = buildIncidentLifecycleKey(incident);
+    const current = latestIncidentsByLifecycle.get(key);
+
+    if (!current || Date.parse(incident.ts) > Date.parse(current.ts)) {
+      latestIncidentsByLifecycle.set(key, incident);
+    }
+  }
+
+  return Array.from(latestIncidentsByLifecycle.values());
+}
+
+function buildActiveIncidentCountsByAgent(
+  incidents: WorkflowIncident[],
+  predicate: (incident: WorkflowIncident) => boolean = () => true
+): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const incident of incidents) {
+    if (!isActiveIncident(incident) || !predicate(incident)) {
+      continue;
+    }
+
+    counts.set(incident.agent_id, (counts.get(incident.agent_id) ?? 0) + 1);
+  }
+
+  return counts;
+}
+
+function buildActiveIncidentMaxSeverityByAgent(incidents: WorkflowIncident[]): Map<string, Severity> {
+  const severities = new Map<string, Severity>();
+
+  for (const incident of incidents) {
+    if (!isActiveIncident(incident)) {
+      continue;
+    }
+
+    const current = severities.get(incident.agent_id) ?? 'normal';
+    if (SEVERITY_RANK[incident.severity] > SEVERITY_RANK[current]) {
+      severities.set(incident.agent_id, incident.severity);
+    }
+  }
+
+  return severities;
+}
+
+function buildLatestIncidentStatusesByAgent(
+  incidents: WorkflowIncident[],
+  kind: WorkflowIncident['kind']
+): Map<string, TimestampedStatus> {
+  const statuses = new Map<string, TimestampedStatus>();
+
+  for (const incident of incidents) {
+    if (incident.kind !== kind) {
+      continue;
+    }
+
+    const current = statuses.get(incident.agent_id);
+    if (!current || Date.parse(incident.ts) > Date.parse(current.ts)) {
+      statuses.set(incident.agent_id, {
+        status: incident.status,
+        ts: incident.ts,
+        severity: incident.severity,
+      });
+    }
+  }
+
+  return statuses;
+}
+
+function buildIncidentLifecycleKey(incident: WorkflowIncident): string {
+  const counterparties = Array.isArray(incident.counterparty_agent_ids)
+    ? [...incident.counterparty_agent_ids].sort().join('|')
+    : '';
+
+  return [
+    incident.agent_id,
+    incident.kind,
+    incident.actor_id,
+    incident.correlation_id ?? '',
+    counterparties,
+  ].join('::');
 }
 
 function getLatestStatusRecord(

@@ -265,6 +265,187 @@ describe('projectWorldState', () => {
     expect(world.incidents[0].incident_id).toBe('inc-1');
   });
 
+  it('backfills incident-feed severity and handoff phase without workflow coverage while keeping alert counts peer-watch specific', () => {
+    const feed: IncidentFeedResponse = {
+      items: [
+        {
+          incident_id: 'inc-alert',
+          kind: 'peer_watch_alert',
+          ts: '2026-03-14T10:00:00Z',
+          agent_id: 'app-engineering',
+          actor_id: 'team-lead',
+          status: 'open',
+          severity: 'orange',
+          summary: 'Peer-watch alert raised',
+          correlation_id: 'corr-1',
+          evidence_refs: [],
+          counterparty_agent_ids: [],
+          source_kind: 'controller_event',
+        },
+        {
+          incident_id: 'inc-active-2',
+          kind: 'handoff',
+          ts: '2026-03-14T10:01:00Z',
+          agent_id: 'app-engineering',
+          actor_id: 'team-lead',
+          status: 'waiting',
+          severity: 'yellow',
+          summary: 'Handoff waiting',
+          correlation_id: 'corr-2',
+          evidence_refs: [],
+          counterparty_agent_ids: ['team-lead'],
+          source_kind: 'controller_event',
+        },
+        {
+          incident_id: 'inc-completed',
+          kind: 'handoff',
+          ts: '2026-03-14T09:55:00Z',
+          agent_id: 'app-engineering',
+          actor_id: 'team-lead',
+          status: 'completed',
+          severity: 'red',
+          summary: 'Completed handoff',
+          correlation_id: 'corr-3',
+          evidence_refs: [],
+          counterparty_agent_ids: ['team-lead'],
+          source_kind: 'controller_event',
+        },
+      ],
+    };
+    const input: ProjectorInput = {
+      overview: makeOverview(),
+      workflows: new Map(),
+      incidentFeed: feed,
+      now: NOW,
+    };
+
+    const world = projectWorldState(input);
+    const agent = world.agents.get('app-engineering')!;
+    const edge = world.watch_edges.find((candidate) => candidate.to_agent_id === 'app-engineering');
+
+    expect(agent.open_alert_count).toBe(1);
+    expect(agent.has_open_incidents).toBe(true);
+    expect(agent.phase).toBe('handoff_pending');
+    expect(agent.zone).toBe('meeting-zone');
+    expect(agent.severity).toBe('orange');
+    expect(agent.severity_reason).toBe('open incident (workflow unavailable)');
+    expect(world.summary.highest_severity).toBe('orange');
+    expect(edge?.risk_level).toBe('orange');
+  });
+
+  it('keeps workflow-derived runtime risk authoritative when incident feed also has active items', () => {
+    const wf = makeWorkflow();
+    const feed: IncidentFeedResponse = {
+      items: [
+        {
+          incident_id: 'inc-feed',
+          kind: 'reboot',
+          ts: '2026-03-14T10:00:00Z',
+          agent_id: 'app-engineering',
+          actor_id: 'team-lead',
+          status: 'requested',
+          severity: 'red',
+          summary: 'Feed reboot requested',
+          correlation_id: 'corr-feed',
+          evidence_refs: [],
+          counterparty_agent_ids: [],
+          source_kind: 'controller_event',
+        },
+      ],
+    };
+    const input: ProjectorInput = {
+      overview: makeOverview(),
+      workflows: new Map([['app-engineering', wf]]),
+      incidentFeed: feed,
+      now: NOW,
+    };
+
+    const world = projectWorldState(input);
+    const agent = world.agents.get('app-engineering')!;
+
+    expect(agent.open_alert_count).toBe(0);
+    expect(agent.has_open_incidents).toBe(false);
+    expect(agent.phase).toBe('active');
+    expect(agent.zone).toBe('desk-app-engineering');
+    expect(agent.severity).toBe('normal');
+    expect(agent.severity_reason).toBe('reported');
+  });
+
+  it('ignores stale active feed entries when a newer incident lifecycle record has resolved or completed', () => {
+    const feed: IncidentFeedResponse = {
+      items: [
+        {
+          incident_id: 'handoff-waiting',
+          kind: 'handoff',
+          ts: '2026-03-14T10:00:00Z',
+          agent_id: 'app-engineering',
+          actor_id: 'team-lead',
+          status: 'waiting',
+          severity: 'yellow',
+          summary: 'Earlier handoff waiting',
+          correlation_id: 'corr-resolved',
+          evidence_refs: [],
+          counterparty_agent_ids: ['growth-revenue'],
+          source_kind: 'controller_event',
+        },
+        {
+          incident_id: 'handoff-completed',
+          kind: 'handoff',
+          ts: '2026-03-14T10:02:00Z',
+          agent_id: 'app-engineering',
+          actor_id: 'team-lead',
+          status: 'completed',
+          severity: 'yellow',
+          summary: 'Later handoff completed',
+          correlation_id: 'corr-resolved',
+          evidence_refs: [],
+          counterparty_agent_ids: ['growth-revenue'],
+          source_kind: 'controller_event',
+        },
+        {
+          incident_id: 'alert-open',
+          kind: 'peer_watch_alert',
+          ts: '2026-03-14T10:01:00Z',
+          agent_id: 'app-engineering',
+          actor_id: 'team-lead',
+          status: 'open',
+          severity: 'orange',
+          summary: 'Earlier alert open',
+          correlation_id: 'corr-alert',
+          evidence_refs: [],
+          counterparty_agent_ids: [],
+          source_kind: 'controller_event',
+        },
+        {
+          incident_id: 'alert-resolved',
+          kind: 'peer_watch_alert',
+          ts: '2026-03-14T10:03:00Z',
+          agent_id: 'app-engineering',
+          actor_id: 'team-lead',
+          status: 'resolved',
+          severity: 'orange',
+          summary: 'Later alert resolved',
+          correlation_id: 'corr-alert',
+          evidence_refs: [],
+          counterparty_agent_ids: [],
+          source_kind: 'controller_event',
+        },
+      ],
+    };
+    const input: ProjectorInput = {
+      overview: makeOverview(),
+      workflows: new Map(),
+      incidentFeed: feed,
+      now: NOW,
+    };
+
+    const world = projectWorldState(input);
+    const agent = world.agents.get('app-engineering')!;
+
+    expect(agent.open_alert_count).toBe(0);
+    expect(agent.has_open_incidents).toBe(false);
+  });
+
   it('derives handoff_active phase from workflow', () => {
     const wf = makeWorkflow({
       detail: {

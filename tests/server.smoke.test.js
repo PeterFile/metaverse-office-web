@@ -1468,6 +1468,28 @@ test('GET /incidents exposes a descending normalized incident feed with read-onl
       source_kind: 'controller_event'
     }
   ]);
+
+  const openActiveIncidents = await requestJson(
+    `${baseUrl}/incidents?status=open&window=20m`
+  );
+  assert.equal(openActiveIncidents.response.status, 200);
+  assert.deepEqual(
+    openActiveIncidents.body.items.map((item) => item.incident_id),
+    [
+      'evt_incident_reboot_requested',
+      'evt_incident_handoff_started',
+      'evt_incident_alert_unresolved'
+    ]
+  );
+
+  const completedIncidents = await requestJson(
+    `${baseUrl}/incidents?status=completed&correlation_id=corr-incident-feed`
+  );
+  assert.equal(completedIncidents.response.status, 200);
+  assert.deepEqual(
+    completedIncidents.body.items.map((item) => item.incident_id),
+    ['evt_incident_handoff_completed']
+  );
 });
 
 test('GET /agents/:id/incidents reuses incident feed semantics with an implicit agent filter', async (t) => {
@@ -1528,6 +1550,22 @@ test('GET /agents/:id/incidents reuses incident feed semantics with an implicit 
 
   await store.appendEvent(
     createEvent({
+      eventId: 'evt_agent_incident_reboot',
+      ts: '2026-03-09T18:16:00.000Z',
+      agentId: 'app-engineering',
+      actorId: 'team-lead',
+      eventType: 'agent_reboot_requested',
+      currentState: 'rebooting',
+      activeTask: 'Reset agent incident context',
+      summary: 'Lead requested an agent incident reboot',
+      severity: 'red',
+      correlationId: 'corr-agent-open-reboot',
+      evidenceRefs: ['/tmp/agent-incident-reboot.md']
+    })
+  );
+
+  await store.appendEvent(
+    createEvent({
       eventId: 'evt_other_agent_incident',
       ts: '2026-03-09T18:18:00.000Z',
       agentId: 'market-intel',
@@ -1571,6 +1609,19 @@ test('GET /agents/:id/incidents reuses incident feed semantics with an implicit 
   assert.deepEqual(
     implicitAgentFilter.body.items.map((item) => item.incident_id),
     ['evt_agent_incident_handoff', 'evt_agent_incident_alert']
+  );
+
+  const openActiveIncidents = await requestJson(
+    `${baseUrl}/agents/app-engineering/incidents?status=open&window=20m`
+  );
+  assert.equal(openActiveIncidents.response.status, 200);
+  assert.deepEqual(
+    openActiveIncidents.body.items.map((item) => item.incident_id),
+    [
+      'evt_agent_incident_reboot',
+      'evt_agent_incident_handoff',
+      'evt_agent_incident_alert'
+    ]
   );
 
   const missingAgent = await requestJson(`${baseUrl}/agents/missing-agent/incidents`);

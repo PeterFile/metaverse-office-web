@@ -22,6 +22,11 @@ const SEVERITY_RANK = Object.freeze({
   orange: 2,
   red: 3
 });
+const ACTIVE_INCIDENT_STATUSES_BY_KIND = Object.freeze({
+  peer_watch_alert: Object.freeze(['open']),
+  handoff: Object.freeze(['waiting', 'started']),
+  reboot: Object.freeze(['waiting', 'started', 'requested'])
+});
 const INTERACTION_EVENT_DESCRIPTORS = Object.freeze({
   agent_asked_question: Object.freeze({
     interaction_type: 'question_reply',
@@ -2111,7 +2116,10 @@ function matchesIncidentFilters(incident, filters = {}, { durationMs = null, now
     return false;
   }
 
-  if (filters.status && incident.status !== filters.status) {
+  if (
+    filters.status &&
+    !matchesIncidentStatusFilter(incident, filters.status)
+  ) {
     return false;
   }
 
@@ -2128,6 +2136,19 @@ function matchesIncidentFilters(incident, filters = {}, { durationMs = null, now
   }
 
   return true;
+}
+
+function matchesIncidentStatusFilter(incident, status) {
+  if (status !== 'open') {
+    return incident.status === status;
+  }
+
+  const activeStatuses = ACTIVE_INCIDENT_STATUSES_BY_KIND[incident.kind];
+  if (!activeStatuses) {
+    return incident.status === status;
+  }
+
+  return activeStatuses.includes(incident.status);
 }
 
 function createPeerWatchAlertKey(event) {

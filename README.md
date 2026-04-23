@@ -170,6 +170,7 @@ Optional env:
 ### Agent incident query notes
 - `GET /agents/:id/incidents` stays read-only and applies the requested agent id as an implicit incident filter
 - supported filters are `kind`, `severity`, `status`, `correlation_id`, `limit`, and `window`
+- `status=open` follows the same active-status alias semantics as `GET /incidents`
 - the route returns `404` for unknown agent ids instead of an empty feed
 
 ### Agent workflow query notes
@@ -205,6 +206,8 @@ Optional env:
 - supported `kind` values are `peer_watch_alert`, `handoff`, and `reboot`
 - supported filters are `kind`, `agent_id`, `severity`, `status`, `correlation_id`, `limit`, and `window`
 - output stays descending by `ts` so operators see the newest incident first
+- `status=open` is an active-status alias: unresolved peer-watch `open`, handoff `waiting` / `started`, and reboot `waiting` / `started` / `requested`
+- explicit closed status filters such as `status=completed` and `status=resolved` remain literal matches
 - incident items expose `incident_id`, `kind`, `ts`, `agent_id`, `actor_id`, `status`, `severity`, `summary`, `correlation_id`, `evidence_refs`, `counterparty_agent_ids`, and `source_kind`
 - the feed does not add persisted incident records; it reuses the existing append-only event log and derived read models
 

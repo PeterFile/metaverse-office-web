@@ -2299,6 +2299,104 @@ test.describe('operator shell smoke', () => {
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toHaveCount(0);
   });
 
+  test('keeps severity-filtered open supervision alerts linked from current-scope shared memory backlinks via keyboard traversal', async ({
+    page
+  }) => {
+    const openSupervisionAlertRequests: string[] = [];
+    const orangeAlert = {
+      alert_id: 'alert-open-supervision-orange-backlink',
+      ts: '2026-03-16T08:55:00.000Z',
+      agent_id: 'growth-revenue',
+      target_agent_id: 'growth-revenue',
+      actor_id: 'team-lead',
+      observer_agent_id: 'app-engineering',
+      watcher_agent_ids: ['team-lead'],
+      severity: 'orange',
+      status: 'open',
+      current_state: 'blocked',
+      active_task: 'Escalate missing revenue evidence before release review',
+      summary: 'Orange supervision alert cites revenue handoff',
+      evidence_refs: ['/tmp/revenue-handoff.md'],
+      evidence_count: 1,
+      correlation_id: 'corr-revenue-handoff',
+      source_kind: 'controller_event',
+      metadata: {}
+    };
+    const yellowAlert = {
+      ...orangeAlert,
+      alert_id: 'alert-open-supervision-yellow-backlink',
+      ts: '2026-03-16T08:50:00.000Z',
+      severity: 'yellow',
+      summary: 'Yellow supervision alert should stay out of filtered backlinks'
+    };
+    const orangeOpenAlertsPath = '/peer-watch/alerts?status=open&severity=orange&limit=4';
+
+    await page.route('**/peer-watch/alerts**', async (route) => {
+      const url = new URL(route.request().url());
+      if (
+        url.pathname !== '/peer-watch/alerts' ||
+        url.searchParams.get('status') !== 'open' ||
+        url.searchParams.get('limit') !== '4' ||
+        url.searchParams.has('target_agent_id')
+      ) {
+        await route.continue();
+        return;
+      }
+
+      const pathWithSearch = `${url.pathname}${url.search}`;
+      openSupervisionAlertRequests.push(pathWithSearch);
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          items: url.searchParams.get('severity') === 'orange' ? [orangeAlert] : [yellowAlert, orangeAlert]
+        })
+      });
+    });
+
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open Hub' }).click();
+
+    const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
+    const openAlertsSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Open Supervision Alerts' })
+    });
+    const memorySection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Shared Memory' })
+    });
+    const severityFilter = openAlertsSection.getByLabel('Filter open supervision alerts by severity');
+    const orangeAlertRecord = openAlertsSection
+      .getByText('Orange supervision alert cites revenue handoff')
+      .locator('xpath=ancestor::li[contains(@class,"aitown-record")][1]');
+    const evidenceJumpButton = orangeAlertRecord.getByRole('button', {
+      name: 'Jump to shared memory artifact /tmp/revenue-handoff.md'
+    });
+    const focusedSharedMemoryRecord = detailsPanel.locator('li[data-shared-memory-target]:focus');
+
+    await expect(detailsPanel.getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
+    await expect(openAlertsSection.getByText('Yellow supervision alert should stay out of filtered backlinks')).toBeVisible();
+    await expect(openAlertsSection.getByText('Orange supervision alert cites revenue handoff')).toBeVisible();
+
+    await severityFilter.selectOption('orange');
+
+    await expect.poll(() => openSupervisionAlertRequests.includes(orangeOpenAlertsPath)).toBe(true);
+    await expect(openAlertsSection.getByText('Orange supervision alert cites revenue handoff')).toBeVisible();
+    await expect(openAlertsSection.getByText('Yellow supervision alert should stay out of filtered backlinks')).toHaveCount(0);
+    await expect(evidenceJumpButton).toBeVisible();
+    await expect(focusedSharedMemoryRecord).toHaveCount(0);
+    await focusHubControlWithTab(page, evidenceJumpButton, 'Jump to shared memory artifact /tmp/revenue-handoff.md');
+    await expect(evidenceJumpButton).toBeFocused();
+
+    await page.keyboard.press('Enter');
+
+    await expect(focusedSharedMemoryRecord).toHaveCount(1);
+    await expect(focusedSharedMemoryRecord).toContainText('Ref · /tmp/revenue-handoff.md');
+    await expect(memorySection.getByText('Current-scope backlinks')).toBeVisible();
+    await expect(memorySection.getByText('Open supervision alert')).toBeVisible();
+    await expect(memorySection.getByText('Orange supervision alert cites revenue handoff')).toBeVisible();
+    await expect(memorySection.getByText('Yellow supervision alert should stay out of filtered backlinks')).toHaveCount(0);
+  });
+
   test('opens a crew-overview active-queue correlation drilldown via keyboard traversal without selecting an agent', async ({
     page
   }) => {

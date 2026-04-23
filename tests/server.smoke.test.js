@@ -1779,6 +1779,122 @@ test('GET /memory/artifacts materializes actor and counterparty evidence plus co
   assert.deepEqual(collectorWindowedResponse.body.items, []);
 });
 
+test('GET /memory/artifacts narrows evidence facets without leaking unrelated collector-only artifacts', async (t) => {
+  const { baseUrl, store } = await createHarness(t, {
+    now: () => '2026-03-09T18:20:00.000Z'
+  });
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_memory_facet_match',
+      ts: '2026-03-09T18:04:00.000Z',
+      agentId: 'app-engineering',
+      actorId: 'team-lead',
+      eventType: 'review_started',
+      currentState: 'reviewing',
+      activeTask: 'Review facet artifact coverage',
+      summary: 'Facet event referenced the shared workspace artifact',
+      severity: 'yellow',
+      correlationId: 'corr-memory-facet',
+      counterpartyAgentIds: ['protocol-engineering'],
+      evidenceRefs: ['/tmp/facet-shared.md']
+    })
+  );
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_memory_facet_wrong_type',
+      ts: '2026-03-09T18:05:00.000Z',
+      agentId: 'app-engineering',
+      actorId: 'team-lead',
+      eventType: 'review_completed',
+      currentState: 'reviewing',
+      activeTask: 'Finish facet artifact coverage',
+      summary: 'Completed review should not match the started facet',
+      severity: 'yellow',
+      correlationId: 'corr-memory-facet',
+      counterpartyAgentIds: ['protocol-engineering'],
+      evidenceRefs: ['/tmp/facet-completed.md']
+    })
+  );
+
+  await store.appendCollectorReport({
+    collected_at: '2026-03-09T18:18:00.000Z',
+    actor_id: 'team-lead',
+    summary: {
+      agent_count: 1,
+      heartbeat_count: 1,
+      tmux_observed_count: 0,
+      workspace_observed_count: 2,
+      reboot_recommended_count: 0
+    },
+    items: [
+      {
+        agent_id: 'app-engineering',
+        workspace_root: '/tmp/app-engineering',
+        session_ref: '5-web3-app-engineering',
+        evidence_refs: ['/tmp/facet-collector-only.md'],
+        workspace_observations: [
+          {
+            path: '/tmp/facet-shared.md',
+            file_name: 'facet-shared.md',
+            kind: 'workspace_file',
+            last_modified_at: '2026-03-09T18:16:30.000Z'
+          },
+          {
+            path: '/tmp/facet-collector-only.md',
+            file_name: 'facet-collector-only.md',
+            kind: 'workspace_file',
+            last_modified_at: '2026-03-09T18:17:00.000Z'
+          }
+        ],
+        tmux_observations: [],
+        supervision: {
+          watch_target: 'growth-revenue',
+          watched_by: ['protocol-engineering', 'team-lead'],
+          needs_attention: false
+        },
+        heartbeat: {
+          agent_id: 'app-engineering',
+          actor_id: 'team-lead',
+          received_at: '2026-03-09T18:18:00.000Z',
+          current_state: 'reviewing',
+          active_task: 'Review facet artifact coverage',
+          current_location: 'desk-app-engineering',
+          last_meaningful_output_at: '2026-03-09T18:16:00.000Z',
+          last_file_write_at: '2026-03-09T18:17:00.000Z',
+          current_blocker: '',
+          confidence_level: 'high',
+          reboot_recommended: false,
+          evidence_refs: ['/tmp/facet-collector-only.md']
+        }
+      }
+    ]
+  });
+
+  const response = await requestJson(
+    `${baseUrl}/memory/artifacts?agent_id=app-engineering&event_type=review_started&severity=yellow&artifact_kind=workspace_file&window=20m&limit=10`
+  );
+
+  assert.equal(response.response.status, 200);
+  assert.deepEqual(response.body.items, [
+    {
+      artifact_ref: '/tmp/facet-shared.md',
+      artifact_kind: 'workspace_file',
+      file_name: 'facet-shared.md',
+      first_seen_at: '2026-03-09T18:04:00.000Z',
+      last_seen_at: '2026-03-09T18:16:30.000Z',
+      mention_count: 2,
+      agent_ids: ['app-engineering', 'protocol-engineering', 'team-lead'],
+      correlation_ids: ['collector-snapshot:2026-03-09T18:18:00.000Z', 'corr-memory-facet'],
+      source_kinds: ['controller_event', 'workspace_file'],
+      latest_summary: 'Facet event referenced the shared workspace artifact',
+      latest_event_type: 'review_started',
+      collector_last_modified_at: '2026-03-09T18:16:30.000Z'
+    }
+  ]);
+});
+
 test('GET /memory/artifacts keeps collector-only observations canonical and agent-scoped when no derived activity event exists', async (t) => {
   const { baseUrl, store } = await createHarness(t, {
     now: () => '2026-03-09T18:20:00.000Z'

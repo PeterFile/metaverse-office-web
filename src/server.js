@@ -313,6 +313,9 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
         agent_id: url.searchParams.get('agent_id'),
         correlation_id: url.searchParams.get('correlation_id'),
         artifact_ref: url.searchParams.get('artifact_ref'),
+        event_type: url.searchParams.get('event_type'),
+        severity: url.searchParams.get('severity'),
+        artifact_kind: url.searchParams.get('artifact_kind'),
         limit: url.searchParams.get('limit'),
         now: now()
       })

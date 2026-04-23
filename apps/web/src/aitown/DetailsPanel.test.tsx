@@ -512,6 +512,7 @@ function buildProps(overrides: Partial<DetailsPanelProps> = {}): DetailsPanelPro
     selectedAgent: buildSelectedAgent(),
     selectedCorrelationId: 'corr-app-review',
     selectedCrewOpenSupervisionSeverity: null,
+    selectedAgentSupervisionHistorySeverity: null,
     selectedAgentReplaySeverity: null,
     selectedCrewReplaySeverity: null,
     selectedOperationsState: null,
@@ -532,6 +533,7 @@ function buildProps(overrides: Partial<DetailsPanelProps> = {}): DetailsPanelPro
     onInspectAgent: vi.fn(),
     onSelectAgent: vi.fn(),
     onSelectCrewOpenSupervisionSeverity: vi.fn(),
+    onSelectSelectedAgentSupervisionHistorySeverity: vi.fn(),
     onSelectSelectedAgentReplaySeverity: vi.fn(),
     onSelectCrewReplaySeverity: vi.fn(),
     onSelectCorrelation: vi.fn(),
@@ -9862,6 +9864,87 @@ describe('DetailsPanel workflow peer-watch alerts', () => {
     expect(
       within(supervisionSection!).queryByText('Request scope · app-engineering · corr-app-secondary')
     ).not.toBeInTheDocument();
+  });
+
+  it('renders selected-agent supervision history severity filtering next to request scope with truthful scoped copy', async () => {
+    const user = userEvent.setup();
+    const onSelectSelectedAgentSupervisionHistorySeverity = vi.fn();
+    const { rerender } = render(
+      <DetailsPanel
+        {...buildProps({
+          onSelectSelectedAgentSupervisionHistorySeverity,
+          selectedAgentSupervisionHistorySeverity: 'orange',
+          selectedAgentSupervisionHistory: { items: [] },
+          selectedAgentSupervisionHistoryError: null,
+          selectedAgentSupervisionHistoryState: 'ready'
+        })}
+      />
+    );
+
+    const supervisionSection = screen.getByRole('heading', { name: 'Supervision History' }).closest('section');
+    expect(supervisionSection).not.toBeNull();
+    const requestScopeLine = within(supervisionSection!)
+      .getByText('Request scope · Target agent · app-engineering')
+      .closest('p');
+    expect(requestScopeLine).not.toBeNull();
+
+    const severityFilter = within(requestScopeLine!).getByRole('combobox', {
+      name: 'Filter supervision history by severity'
+    });
+    expect(severityFilter).toHaveValue('orange');
+    expect(within(severityFilter).getByRole('option', { name: 'All severities' })).toBeVisible();
+    expect(within(supervisionSection!).getByText('No recent supervision history at Orange severity.')).toBeVisible();
+
+    await user.selectOptions(severityFilter, 'red');
+    expect(onSelectSelectedAgentSupervisionHistorySeverity).toHaveBeenLastCalledWith('red');
+
+    await user.selectOptions(severityFilter, '');
+    expect(onSelectSelectedAgentSupervisionHistorySeverity).toHaveBeenLastCalledWith(null);
+
+    rerender(
+      <DetailsPanel
+        {...buildProps({
+          selectedAgentSupervisionHistorySeverity: 'orange',
+          selectedAgentSupervisionHistory: null,
+          selectedAgentSupervisionHistoryError: null,
+          selectedAgentSupervisionHistoryState: 'loading'
+        })}
+      />
+    );
+    expect(within(supervisionSection!).getByText('Loading supervision history at Orange severity...')).toBeVisible();
+
+    rerender(
+      <DetailsPanel
+        {...buildProps({
+          selectedAgentSupervisionHistorySeverity: 'orange',
+          selectedAgentSupervisionHistory: null,
+          selectedAgentSupervisionHistoryError: 'peer-watch refresh failed',
+          selectedAgentSupervisionHistoryState: 'error'
+        })}
+      />
+    );
+    expect(
+      within(supervisionSection!).getByText(
+        'Unable to load supervision history at Orange severity. peer-watch refresh failed'
+      )
+    ).toBeVisible();
+
+    rerender(
+      <DetailsPanel
+        {...buildProps({
+          selectedAgentSupervisionHistorySeverity: 'orange',
+          selectedAgentSupervisionHistory: { items: [] },
+          selectedAgentSupervisionHistoryError: 'peer-watch refresh failed',
+          selectedAgentSupervisionHistoryState: 'ready'
+        })}
+      />
+    );
+    expect(
+      within(supervisionSection!).getByText(
+        'Showing last supervision history at Orange severity. peer-watch refresh failed'
+      )
+    ).toBeVisible();
+    expect(within(supervisionSection!).getByText('No recent supervision history at Orange severity.')).toBeVisible();
   });
 
   it('renders selected-agent supervision history loading, empty, error, and degraded states explicitly', () => {

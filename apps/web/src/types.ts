@@ -304,6 +304,7 @@ export interface WorkflowInteraction {
   after_state?: string | null;
   severity?: Severity;
   evidence_refs: string[];
+  source_kind?: string | null;
   summary: string;
   related_event_ids?: string[];
 }

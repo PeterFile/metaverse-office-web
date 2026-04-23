@@ -122,6 +122,7 @@ test('store derives paired and single-event interactions with filters', async ()
     after_state: 'reviewing',
     severity: 'yellow',
     evidence_refs: ['/tmp/review-start.md', '/tmp/review-complete.md'],
+    source_kind: 'controller_event',
     summary: 'Lead completed the backend review',
     related_event_ids: ['evt_review_started', 'evt_review_completed']
   });
@@ -204,4 +205,52 @@ test('store emits single-event interactions when correlation matches but partici
   assert.ok(interactions.every((item) => item.interaction_type === 'question_reply'));
   assert.ok(interactions.every((item) => item.related_event_ids.length === 1));
   assert.ok(interactions.every((item) => item.ended_at === null || item.ended_at === item.started_at));
+});
+
+test('store carries interaction source_kind from the event that supplies the interaction summary', async () => {
+  const store = await createStore();
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_review_source_start',
+      ts: '2026-03-09T18:20:00.000Z',
+      agentId: 'app-engineering',
+      actorId: 'team-lead',
+      eventType: 'review_started',
+      currentState: 'reviewing',
+      activeTask: 'Review source provenance',
+      summary: 'Lead started the provenance review',
+      severity: 'yellow',
+      correlationId: 'review-source',
+      counterpartyAgentIds: ['protocol-engineering'],
+      evidenceRefs: ['/tmp/review-source-start.md'],
+      sourceKind: 'workspace_file'
+    })
+  );
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_review_source_end',
+      ts: '2026-03-09T18:21:00.000Z',
+      agentId: 'app-engineering',
+      actorId: 'team-lead',
+      eventType: 'review_completed',
+      currentState: 'reviewing',
+      activeTask: 'Review source provenance',
+      summary: 'Lead completed the provenance review',
+      severity: 'normal',
+      correlationId: 'review-source',
+      counterpartyAgentIds: ['protocol-engineering'],
+      evidenceRefs: ['/tmp/review-source-end.md'],
+      sourceKind: 'controller_event'
+    })
+  );
+
+  const interactions = store.listInteractions({
+    now: '2026-03-09T18:22:00.000Z'
+  });
+
+  assert.equal(interactions.length, 1);
+  assert.equal(interactions[0].summary, 'Lead completed the provenance review');
+  assert.equal(interactions[0].source_kind, 'controller_event');
 });

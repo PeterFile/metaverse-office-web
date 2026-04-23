@@ -1915,6 +1915,10 @@ function createInteractionRecord({ startEvent, endEvent }) {
   const sourceEvent = startEvent || endEvent;
   const sourceDescriptor = getInteractionDescriptor(sourceEvent);
   const relatedEvents = [startEvent, endEvent].filter(Boolean);
+  const summarySourceEvent =
+    (endEvent && endEvent.summary ? endEvent : null) ||
+    (startEvent && startEvent.summary ? startEvent : null) ||
+    sourceEvent;
   const severity = relatedEvents.reduce(
     (currentSeverity, event) => mergeSeverity(currentSeverity, event.severity),
     'normal'
@@ -1939,10 +1943,8 @@ function createInteractionRecord({ startEvent, endEvent }) {
     after_state: endEvent ? endEvent.current_state : null,
     severity,
     evidence_refs: normalizeEvidenceRefs(relatedEvents.flatMap((event) => event.evidence_refs)),
-    summary:
-      (endEvent && endEvent.summary) ||
-      (startEvent && startEvent.summary) ||
-      sourceEvent.summary,
+    source_kind: summarySourceEvent.source_kind,
+    summary: summarySourceEvent.summary,
     related_event_ids: relatedEvents.map((event) => event.event_id)
   };
 }

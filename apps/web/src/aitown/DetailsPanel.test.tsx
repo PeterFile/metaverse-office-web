@@ -11,7 +11,8 @@ import type {
   OfficeOperation,
   OfficeOperations,
   PeerWatchAlertsResponse,
-  WorkflowInteraction
+  WorkflowInteraction,
+  WorkflowTimelineEvent
 } from '../types';
 import type { WorldState } from '../world/types';
 
@@ -380,6 +381,13 @@ function buildSecondaryCorrelation(): CorrelationDrilldown {
         source_kind: 'timeline_replay'
       }
     ]
+  };
+}
+
+function buildReplayTimelineEvent(overrides: Partial<WorkflowTimelineEvent> = {}): WorkflowTimelineEvent {
+  return {
+    ...buildCorrelation().timeline[0],
+    ...overrides
   };
 }
 
@@ -2164,6 +2172,53 @@ describe('DetailsPanel accountability signals', () => {
     ).toBeVisible();
   });
 
+  it('surfaces read-only replay summary facets in the crew-overview timeline replay section', () => {
+    render(
+      <DetailsPanel
+        {...buildProps({
+          selectedAgent: null,
+          selectedCorrelationId: null,
+          selectedOperation: null,
+          timelineReplay: {
+            items: [
+              buildReplayTimelineEvent({
+                event_id: 'evt-crew-replay-1',
+                event_type: 'timeline_note',
+                severity: 'yellow',
+                ts: '2026-03-16T08:56:00.000Z'
+              }),
+              buildReplayTimelineEvent({
+                event_id: 'evt-crew-replay-2',
+                event_type: 'handoff_completed',
+                severity: 'orange',
+                ts: '2026-03-16T08:59:00.000Z'
+              }),
+              buildReplayTimelineEvent({
+                event_id: 'evt-crew-replay-3',
+                event_type: 'timeline_note',
+                severity: 'yellow',
+                ts: '2026-03-16T08:57:00.000Z'
+              })
+            ]
+          },
+          workflow: null
+        })}
+      />
+    );
+
+    const section = screen.getByRole('heading', { name: 'Timeline Replay' }).closest('section');
+    expect(section).not.toBeNull();
+    expect(
+      within(section!).getByText(
+        (_, element) => element?.tagName === 'STRONG' && element.textContent === 'Replay summary'
+      )
+    ).toBeVisible();
+    expect(within(section!).getByText('Counts · 3 events')).toBeVisible();
+    expect(within(section!).getByText('Event types · Timeline Note (2), Handoff Completed (1)')).toBeVisible();
+    expect(within(section!).getByText('Severities · Red (0), Orange (1), Yellow (2), Normal (0)')).toBeVisible();
+    expect(within(section!).getByText('Latest activity · 2026-03-16T08:59:00.000Z')).toBeVisible();
+  });
+
   it('renders selected-agent canonical replay payloads and routes severity changes', async () => {
     const user = userEvent.setup();
     const onSelectSelectedAgentReplaySeverity = vi.fn();
@@ -2239,6 +2294,53 @@ describe('DetailsPanel accountability signals', () => {
     expect(within(section!).getByText('Selected scoped orange replay')).toBeVisible();
     expect(within(section!).queryByText('Other agent scoped orange replay')).not.toBeInTheDocument();
     expect(within(section!).queryByText('Replay captured workflow follow-up')).not.toBeInTheDocument();
+  });
+
+  it('surfaces read-only replay summary facets in the selected-agent timeline replay section', () => {
+    render(
+      <DetailsPanel
+        {...buildProps({
+          selectedCorrelationId: null,
+          selectedAgentTimelineReplay: {
+            items: [
+              buildReplayTimelineEvent({
+                event_id: 'evt-selected-replay-1',
+                event_type: 'timeline_note',
+                severity: 'yellow',
+                ts: '2026-03-16T08:56:00.000Z'
+              }),
+              buildReplayTimelineEvent({
+                event_id: 'evt-selected-replay-2',
+                event_type: 'handoff_completed',
+                severity: 'orange',
+                ts: '2026-03-16T08:58:00.000Z'
+              }),
+              buildReplayTimelineEvent({
+                event_id: 'evt-other-agent-replay',
+                agent_id: 'team-lead',
+                event_type: 'timeline_note',
+                severity: 'red',
+                ts: '2026-03-16T08:59:00.000Z',
+                summary: 'Other agent replay should stay out of selected-agent facets'
+              })
+            ]
+          }
+        })}
+      />
+    );
+
+    const section = screen.getByRole('heading', { name: 'Timeline Replay' }).closest('section');
+    expect(section).not.toBeNull();
+    expect(
+      within(section!).getByText(
+        (_, element) => element?.tagName === 'STRONG' && element.textContent === 'Replay summary'
+      )
+    ).toBeVisible();
+    expect(within(section!).getByText('Counts · 2 events')).toBeVisible();
+    expect(within(section!).getByText('Event types · Handoff Completed (1), Timeline Note (1)')).toBeVisible();
+    expect(within(section!).getByText('Severities · Red (0), Orange (1), Yellow (1), Normal (0)')).toBeVisible();
+    expect(within(section!).getByText('Latest activity · 2026-03-16T08:58:00.000Z')).toBeVisible();
+    expect(within(section!).queryByText('Other agent replay should stay out of selected-agent facets')).not.toBeInTheDocument();
   });
 
   it('renders selected-agent replay lifecycle copy for canonical timeline payloads', () => {

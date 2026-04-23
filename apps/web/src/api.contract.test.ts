@@ -1334,6 +1334,12 @@ function expectWorkflowContract(workflow: AgentWorkflow) {
     'interaction:evt_contract_peer_watch',
     'interaction:evt_contract_review_started'
   ]);
+  expect(workflow.interactions.map((interaction) => interaction.source_kind)).toEqual([
+    'controller_event',
+    'controller_event',
+    'controller_event',
+    'controller_event'
+  ]);
   expect(workflow.timeline.map((event) => event.event_id)).toEqual([
     'evt_contract_review_started',
     'evt_contract_review_completed',
@@ -1512,6 +1518,11 @@ function expectCorrelationContract(correlation: CorrelationDrilldown) {
     'interaction:evt_contract_peer_watch',
     'interaction:evt_contract_review_started'
   ]);
+  expect(correlation.interactions.map((interaction) => interaction.source_kind)).toEqual([
+    'controller_event',
+    'controller_event',
+    'controller_event'
+  ]);
   expect(correlation.timeline.map((event) => event.event_id)).toEqual([
     'evt_contract_review_started',
     'evt_contract_review_completed',
@@ -1556,7 +1567,8 @@ function expectAgentInteractionsContract(interactions: AgentInteractionsResponse
       interaction_type: 'peer_watch',
       participant_agent_ids: ['app-engineering', 'protocol-engineering', 'team-lead'],
       severity: 'orange',
-      correlation_id: 'corr-contract'
+      correlation_id: 'corr-contract',
+      source_kind: 'controller_event'
     })
   ]);
 }

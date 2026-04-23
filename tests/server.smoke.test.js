@@ -740,6 +740,7 @@ test('GET interaction endpoints expose derived read models and filters', async (
   assert.equal(interactions.body.items.length, 1);
   assert.equal(interactions.body.items[0].interaction_type, 'review');
   assert.equal(interactions.body.items[0].ended_at, '2026-03-09T18:12:00.000Z');
+  assert.equal(interactions.body.items[0].source_kind, 'controller_event');
   assert.deepEqual(interactions.body.items[0].related_event_ids, [
     'evt_review_started',
     'evt_review_completed'
@@ -757,6 +758,7 @@ test('GET interaction endpoints expose derived read models and filters', async (
   assert.equal(agentInteractions.body.agent_id, 'app-engineering');
   assert.equal(agentInteractions.body.items.length, 1);
   assert.equal(agentInteractions.body.items[0].correlation_id, 'review-456');
+  assert.equal(agentInteractions.body.items[0].source_kind, 'controller_event');
 
   const missingAgent = await requestJson(`${baseUrl}/agents/missing-agent/interactions`);
   assert.equal(missingAgent.response.status, 404);
@@ -2576,6 +2578,7 @@ test('GET /correlations/:correlation_id aggregates incident, interaction, and re
         after_state: 'planning',
         severity: 'yellow',
         evidence_refs: ['/tmp/corr-handoff-start.md', '/tmp/corr-handoff-complete.md'],
+        source_kind: 'controller_event',
         summary: 'Lead completed the evidence handoff',
         related_event_ids: ['evt_corr_handoff_started', 'evt_corr_handoff_completed']
       },
@@ -2591,6 +2594,7 @@ test('GET /correlations/:correlation_id aggregates incident, interaction, and re
         after_state: 'reviewing',
         severity: 'yellow',
         evidence_refs: ['/tmp/corr-review-start.md', '/tmp/corr-review-end.md'],
+        source_kind: 'controller_event',
         summary: 'Lead completed the drill-down review',
         related_event_ids: ['evt_corr_review_started', 'evt_corr_review_completed']
       }

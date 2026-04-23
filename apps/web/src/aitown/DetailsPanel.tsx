@@ -26,6 +26,7 @@ import { buildZoneLayoutModels } from '../layout';
 import { selectWorkflowSummaryFacets } from '../workflow/summary';
 import type { WorldState } from '../world/types';
 import { selectAgentBadge, selectAgentZoneLabel, selectAttentionQueue, selectWatchEdgeRisk } from '../world/selectors';
+import { collectInteractionSourceKinds } from './accountabilitySignals';
 type SharedMemoryJumpScope = {
   correlationId?: string | null;
   preserveNullCorrelation?: boolean;
@@ -3929,10 +3930,10 @@ export function DetailsPanel({
   const alignedWorkflowIncidentHistory = (workflow?.incidents ?? []).filter((incident) =>
     isAlignedCorrelation(incident.correlation_id, accountabilityCorrelationId)
   );
-  const alignedWorkflowHistoryInteraction =
-    workflow?.interactions.find((interaction) =>
-      isAlignedCorrelation(interaction.correlation_id, accountabilityCorrelationId)
-    ) ?? null;
+  const alignedWorkflowHistoryInteractions = (workflow?.interactions ?? []).filter((interaction) =>
+    isAlignedCorrelation(interaction.correlation_id, accountabilityCorrelationId)
+  );
+  const alignedWorkflowHistoryInteraction = alignedWorkflowHistoryInteractions[0] ?? null;
   const alignedCorrelation = correlation && accountabilityCorrelationId === correlation.correlation_id ? correlation : null;
   const alignedWorkflowTimelineEvent = selectLatestTimelineEvent(alignedWorkflowTimeline);
   const alignedCorrelationTimelineEvent = selectLatestTimelineEvent(alignedCorrelation?.timeline ?? []);
@@ -3977,14 +3978,22 @@ export function DetailsPanel({
     ...alignedWorkflowHandoffs.flatMap((handoff) => handoff.evidence_refs),
     ...alignedWorkflowReboots.flatMap((reboot) => reboot.evidence_refs),
     ...alignedWorkflowTimeline.flatMap((event) => event.evidence_refs),
-    ...(workflow?.interactions
-      .filter((interaction) => isAlignedCorrelation(interaction.correlation_id, accountabilityCorrelationId))
-      .flatMap((interaction) => interaction.evidence_refs) ?? []),
+    ...alignedWorkflowHistoryInteractions.flatMap((interaction) => interaction.evidence_refs),
     ...alignedWorkflowIncidentHistory.flatMap((incident) => incident.evidence_refs),
     ...(alignedCorrelation?.evidence_refs ?? []),
     ...(accountabilityCorrelationId || !selectedCollectorItem ? [] : selectedCollectorEvidenceRefs)
   ]).slice(0, 4);
+  const accountabilityInteractionSourceKinds = collectInteractionSourceKinds({
+    workflowInteractions: [...alignedWorkflowInteractions, ...alignedWorkflowHistoryInteractions],
+    correlationInteractions: alignedCorrelation?.interactions ?? []
+  });
+  const accountabilityWhatUsesInteractionProvenance = [
+    alignedWorkflowInteractions[0]?.summary,
+    alignedWorkflowHistoryInteraction?.summary,
+    alignedCorrelation?.interactions[0]?.summary
+  ].some((summary) => summary === accountabilityWhat && summary !== null);
   const accountabilitySources = dedupeNonEmptyStrings([
+    ...(accountabilityWhatUsesInteractionProvenance ? accountabilityInteractionSourceKinds : []),
     includeSelectedOperationSignal ? selectedOperationLatestEvent?.source_kind : null,
     ...alignedWorkflowAlerts.map((alert) => alert.source_kind),
     ...alignedWorkflowEvents.map((event) => event.source_kind),
@@ -3992,6 +4001,7 @@ export function DetailsPanel({
     ...alignedWorkflowHandoffs.map((handoff) => handoff.source_kind),
     ...alignedWorkflowReboots.map((reboot) => reboot.source_kind),
     ...alignedWorkflowTimeline.map((event) => event.source_kind),
+    ...(accountabilityWhatUsesInteractionProvenance ? [] : accountabilityInteractionSourceKinds),
     ...alignedWorkflowIncidentHistory.map((incident) => incident.source_kind),
     ...(alignedCorrelation?.incidents.map((incident) => incident.source_kind) ?? []),
     ...(alignedCorrelation?.timeline.map((event) => event.source_kind) ?? []),

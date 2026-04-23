@@ -8071,6 +8071,168 @@ describe('DetailsPanel accountability signals', () => {
     expect(within(section!).queryByText(/What · Waiting on review sign-off/)).not.toBeInTheDocument();
     expect(within(section!).queryByText(/What · Fix workflow issue/)).not.toBeInTheDocument();
   });
+
+  it('prioritizes interaction provenance in audit Source when interaction evidence drives audit What', () => {
+    const workflow: AgentWorkflow = {
+      ...buildWorkflow(),
+      correlation_ids: ['corr-interaction-source'],
+      interactions: [],
+      timeline: [
+        {
+          event_id: 'evt-workflow-timeline-source',
+          ts: '2026-03-16T08:57:30.000Z',
+          agent_id: 'app-engineering',
+          actor_id: 'controller',
+          event_type: 'timeline_note',
+          severity: 'yellow',
+          current_state: 'blocked',
+          location: 'delivery-desk',
+          summary: 'Timeline replay also captured the workflow evidence',
+          correlation_id: 'corr-interaction-source',
+          counterparty_agent_ids: ['team-lead'],
+          evidence_refs: ['/evidence/workflow-timeline.md'],
+          source_kind: 'timeline_replay'
+        }
+      ],
+      detail: {
+        ...buildWorkflow().detail,
+        open_peer_watch_alerts: [
+          {
+            alert_id: 'alert-interaction-source',
+            ts: '2026-03-16T08:59:30.000Z',
+            agent_id: 'app-engineering',
+            target_agent_id: 'team-lead',
+            actor_id: 'team-lead',
+            observer_agent_id: 'team-lead',
+            watcher_agent_ids: ['team-lead'],
+            severity: 'yellow',
+            status: 'open',
+            current_state: 'blocked',
+            active_task: 'Review the interaction evidence',
+            summary: 'Peer watch alert linked to interaction evidence',
+            evidence_refs: ['/evidence/open-alert.md'],
+            evidence_count: 1,
+            correlation_id: 'corr-interaction-source',
+            source_kind: 'peer_watch_alert',
+            metadata: {}
+          }
+        ],
+        recent_events: [],
+        recent_interactions: [
+          {
+            interaction_id: 'interaction:workflow-source',
+            interaction_type: 'review',
+            correlation_id: 'corr-interaction-source',
+            started_at: '2026-03-16T08:58:00.000Z',
+            participant_agent_ids: ['app-engineering', 'team-lead'],
+            trigger_event_id: 'evt-workflow-source',
+            severity: 'yellow',
+            evidence_refs: ['/evidence/workflow-interaction.md'],
+            source_kind: 'workflow_interaction',
+            summary: 'Workflow interaction supplied accountability evidence'
+          }
+        ],
+        recent_incidents: [
+          {
+            incident_id: 'incident-interaction-source',
+            kind: 'workflow_blocked',
+            ts: '2026-03-16T08:57:00.000Z',
+            agent_id: 'app-engineering',
+            actor_id: 'controller',
+            status: 'open',
+            severity: 'yellow',
+            summary: 'Workflow incident also references the evidence',
+            correlation_id: 'corr-interaction-source',
+            evidence_refs: ['/evidence/workflow-incident.md'],
+            counterparty_agent_ids: ['team-lead'],
+            source_kind: 'workflow_incident'
+          }
+        ],
+        recent_handoffs: [
+          {
+            handoff_id: 'handoff-interaction-source',
+            ts: '2026-03-16T08:56:00.000Z',
+            agent_id: 'app-engineering',
+            actor_id: 'team-lead',
+            phase: 'blocked',
+            status: 'pending',
+            severity: 'yellow',
+            summary: 'Handoff log also references the evidence',
+            counterparty_agent_ids: ['team-lead'],
+            evidence_refs: ['/evidence/workflow-handoff.md'],
+            correlation_id: 'corr-interaction-source',
+            source_kind: 'handoff_log'
+          }
+        ],
+        recent_reboots: [
+          {
+            reboot_id: 'reboot-interaction-source',
+            ts: '2026-03-16T08:55:00.000Z',
+            agent_id: 'app-engineering',
+            actor_id: 'controller',
+            phase: 'blocked',
+            status: 'recommended',
+            severity: 'yellow',
+            summary: 'Reboot recommendation also references the evidence',
+            counterparty_agent_ids: [],
+            evidence_refs: ['/evidence/workflow-reboot.md'],
+            correlation_id: 'corr-interaction-source',
+            source_kind: 'reboot_recommendation'
+          }
+        ]
+      }
+    };
+    const correlation: CorrelationDrilldown = {
+      ...buildCorrelation(),
+      correlation_id: 'corr-interaction-source',
+      evidence_refs: ['/evidence/correlation-interaction.md'],
+      incident_count: 0,
+      interaction_count: 1,
+      event_count: 0,
+      incidents: [],
+      interactions: [
+        {
+          interaction_id: 'interaction:correlation-source',
+          interaction_type: 'handoff',
+          correlation_id: 'corr-interaction-source',
+          started_at: '2026-03-16T08:59:00.000Z',
+          participant_agent_ids: ['app-engineering', 'growth-revenue'],
+          trigger_event_id: 'evt-correlation-source',
+          severity: 'yellow',
+          evidence_refs: ['/evidence/correlation-interaction.md'],
+          source_kind: 'correlation_interaction',
+          summary: 'Correlation interaction supplied accountability evidence'
+        }
+      ],
+      timeline: []
+    };
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          collectorSnapshot: null,
+          correlation,
+          memoryArtifacts: { generated_at: '2026-03-16T09:00:00.000Z', items: [] },
+          selectedCorrelationId: 'corr-interaction-source',
+          selectedOperation: null,
+          workflow
+        })}
+      />
+    );
+
+    const section = screen.getByRole('heading', { name: 'Audit Signals' }).closest('section');
+    expect(section).not.toBeNull();
+
+    expect(
+      within(section!).getByText('What · Workflow interaction supplied accountability evidence')
+    ).toBeVisible();
+    expect(section!).toHaveTextContent('Evidence · /evidence/open-alert.md, /evidence/workflow-interaction.md, /evidence/workflow-incident.md, /evidence/workflow-handoff.md');
+    expect(
+      within(section!).getByText(
+        'Source · workflow_interaction, correlation_interaction, peer_watch_alert, workflow_incident, handoff_log'
+      )
+    ).toBeVisible();
+  });
 });
 
 describe('DetailsPanel workflow peer-watch alerts', () => {

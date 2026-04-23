@@ -1578,7 +1578,8 @@ test.describe('operator shell smoke', () => {
 
     await forceViewportAgainstTopRightClamp(page);
     const before = await waitForViewportSettle(page);
-    const hotZoneButton = page.getByRole('button', {
+    const hotZoneFocusGroup = page.getByRole('group', { name: 'Hot zone focus' });
+    const hotZoneButton = hotZoneFocusGroup.getByRole('button', {
       name: /Meeting Zone.*Focus in world viewport/
     });
 

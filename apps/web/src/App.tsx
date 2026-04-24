@@ -1473,89 +1473,91 @@ function AppInner() {
               </div>
             </div>
           </header>
-          <div className="aitown-panel__topline">
-            <span>
-              <strong className="aitown-panel__topline-title">Live Focus</strong>
-              <span className="aitown-panel__topline-copy">{resolveLiveFocusSummaryLabel(liveFocusAgents.length)}</span>
-              {liveFocusAgents.length > 0 ? (
-                <span className="aitown-panel__focus-chips" aria-label="Live focus agents">
-                  {liveFocusAgents.slice(0, 3).map((agent) => (
-                    <button
-                      key={agent.agent_id}
-                      type="button"
-                      className={`aitown-focus-chip severity-${agent.severity}${selectedAgentId === agent.agent_id ? ' is-active' : ''}`}
-                      aria-label={`Inspect live focus agent ${agent.display_name}`}
-                      onClick={() => handleSceneSelectAgent(agent.agent_id)}
-                    >
-                      <strong>{agent.display_name}</strong>
-                      <span>{resolveLiveFocusAgentMeta(agent, projectedWorld)}</span>
-                    </button>
-                  ))}
-                </span>
-              ) : (
-                <span className="aitown-panel__topline-copy">Drag to pan. Wheel to zoom. Tap or click an agent to inspect.</span>
-              )}
-            </span>
-            <span>
-              <strong className="aitown-panel__topline-title">Viewport</strong>
-              <span className="aitown-panel__topline-copy">Drag to pan. Wheel to zoom. Tap or click an agent to inspect.</span>
-              {hotZones.length > 0 ? (
-                <>
-                  <span className="aitown-panel__topline-copy">Hot zones</span>
-                  <span
-                    className="aitown-panel__focus-chips aitown-panel__focus-chips--compact"
-                    role="group"
-                    aria-label="Hot zone focus"
-                  >
-                    {hotZones.map((zone) => (
+          <div className="aitown-panel__hud-top">
+            <div className="aitown-panel__topline">
+              <span>
+                <strong className="aitown-panel__topline-title">Live Focus</strong>
+                <span className="aitown-panel__topline-copy">{resolveLiveFocusSummaryLabel(liveFocusAgents.length)}</span>
+                {liveFocusAgents.length > 0 ? (
+                  <span className="aitown-panel__focus-chips" aria-label="Live focus agents">
+                    {liveFocusAgents.slice(0, 3).map((agent) => (
                       <button
-                        key={zone.zone_id}
+                        key={agent.agent_id}
                         type="button"
-                        className={`aitown-focus-chip aitown-focus-chip--hot-zone severity-${zone.highest_severity}`}
-                        aria-label={`${zone.label} · ${resolveHotZoneFocusMeta(zone)} · Focus in world viewport`}
-                        onClick={() => handleFocusWorldZone(zone.zone_id)}
+                        className={`aitown-focus-chip severity-${agent.severity}${selectedAgentId === agent.agent_id ? ' is-active' : ''}`}
+                        aria-label={`Inspect live focus agent ${agent.display_name}`}
+                        onClick={() => handleSceneSelectAgent(agent.agent_id)}
                       >
-                        <strong>{zone.label}</strong>
-                        <span>{resolveHotZoneFocusMeta(zone)}</span>
+                        <strong>{agent.display_name}</strong>
+                        <span>{resolveLiveFocusAgentMeta(agent, projectedWorld)}</span>
                       </button>
                     ))}
                   </span>
-                </>
-              ) : null}
-              <span className="aitown-panel__topline-copy">{viewportToplineStatus.status}</span>
-              <span className="aitown-panel__topline-copy">{viewportToplineStatus.snapshot}</span>
-            </span>
-          </div>
+                ) : (
+                  <span className="aitown-panel__topline-copy">Drag to pan. Wheel to zoom. Tap or click an agent to inspect.</span>
+                )}
+              </span>
+              <span>
+                <strong className="aitown-panel__topline-title">Viewport</strong>
+                <span className="aitown-panel__topline-copy">Drag to pan. Wheel to zoom. Tap or click an agent to inspect.</span>
+                {hotZones.length > 0 ? (
+                  <>
+                    <span className="aitown-panel__topline-copy">Hot zones</span>
+                    <span
+                      className="aitown-panel__focus-chips aitown-panel__focus-chips--compact"
+                      role="group"
+                      aria-label="Hot zone focus"
+                    >
+                      {hotZones.map((zone) => (
+                        <button
+                          key={zone.zone_id}
+                          type="button"
+                          className={`aitown-focus-chip aitown-focus-chip--hot-zone severity-${zone.highest_severity}`}
+                          aria-label={`${zone.label} · ${resolveHotZoneFocusMeta(zone)} · Focus in world viewport`}
+                          onClick={() => handleFocusWorldZone(zone.zone_id)}
+                        >
+                          <strong>{zone.label}</strong>
+                          <span>{resolveHotZoneFocusMeta(zone)}</span>
+                        </button>
+                      ))}
+                    </span>
+                  </>
+                ) : null}
+                <span className="aitown-panel__topline-copy">{viewportToplineStatus.status}</span>
+                <span className="aitown-panel__topline-copy">{viewportToplineStatus.snapshot}</span>
+              </span>
+            </div>
 
-          <div className="aitown-panel__toolbar">
-            <button
-              ref={hubTriggerRef}
-              type="button"
-              className="aitown-button"
-              aria-expanded={hubOpen}
-              aria-controls="aitown-hub"
-              aria-haspopup="dialog"
-              onClick={toggleHub}
-            >
-              {hubOpen ? 'Hide Hub' : 'Open Hub'}
-            </button>
-            {!hubOpen ? (
+            <div className="aitown-panel__toolbar">
               <button
+                ref={hubTriggerRef}
                 type="button"
                 className="aitown-button"
-                aria-keyshortcuts={RESET_VIEW_SHORTCUT_ARIA}
-                onClick={handleResetView}
+                aria-expanded={hubOpen}
+                aria-controls="aitown-hub"
+                aria-haspopup="dialog"
+                onClick={toggleHub}
               >
-                Reset view
+                {hubOpen ? 'Hide Hub' : 'Open Hub'}
               </button>
-            ) : null}
-            {selectedAgent ? (
-              <button type="button" className="aitown-button" onClick={() => selectAgent(null, null)}>
-                Clear Selection
-              </button>
-            ) : null}
+              {!hubOpen ? (
+                <button
+                  type="button"
+                  className="aitown-button"
+                  aria-keyshortcuts={RESET_VIEW_SHORTCUT_ARIA}
+                  onClick={handleResetView}
+                >
+                  Reset view
+                </button>
+              ) : null}
+              {selectedAgent ? (
+                <button type="button" className="aitown-button" onClick={() => selectAgent(null, null)}>
+                  Clear Selection
+                </button>
+              ) : null}
+            </div>
           </div>
-          <SceneStatusLegend onFocusWorldZone={handleFocusWorldZone} />
+          <SceneStatusLegend onFocusWorldZone={handleFocusWorldZone} world={projectedWorld} />
 
           {overviewRefreshWarning ? (
             <div className="aitown-world__placeholder aitown-world__placeholder--warning" role="status">

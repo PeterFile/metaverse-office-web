@@ -70,9 +70,11 @@ function makeWorldState(overrides: Partial<WorldState> = {}): WorldState {
 
 function WorldFixture({
   world,
+  providedWorld,
   onFocusWorldZone,
 }: {
   world: WorldState | null;
+  providedWorld?: WorldState | null;
   onFocusWorldZone?: (zoneId: string) => void;
 }) {
   const { setWorld } = useWorld();
@@ -81,13 +83,17 @@ function WorldFixture({
     setWorld(world);
   }, [setWorld, world]);
 
-  return <SceneStatusLegend onFocusWorldZone={onFocusWorldZone} />;
+  return <SceneStatusLegend onFocusWorldZone={onFocusWorldZone} world={providedWorld} />;
 }
 
-function renderLegend(world: WorldState | null, onFocusWorldZone?: (zoneId: string) => void) {
+function renderLegend(
+  world: WorldState | null,
+  onFocusWorldZone?: (zoneId: string) => void,
+  providedWorld?: WorldState | null
+) {
   return render(
     <WorldProvider>
-      <WorldFixture world={world} onFocusWorldZone={onFocusWorldZone} />
+      <WorldFixture world={world} providedWorld={providedWorld} onFocusWorldZone={onFocusWorldZone} />
     </WorldProvider>
   );
 }
@@ -227,6 +233,49 @@ describe('SceneStatusLegend', () => {
     await user.click(staleZoneButton);
 
     expect(onFocusWorldZone).toHaveBeenCalledWith('stale-pod');
+  });
+
+  it('prefers an explicitly provided world snapshot over lagging context world data', async () => {
+    const contextWorld = makeWorldState({
+      agents: new Map([
+        [
+          'context-agent',
+          makeWorldAgent({
+            agent_id: 'context-agent',
+            display_name: 'Context Agent',
+            zone: 'context-zone',
+            severity: 'red',
+            has_open_incidents: true,
+          }),
+        ],
+      ]),
+      zones: [
+        makeZoneSnapshot({ zone_id: 'context-zone', label: 'Context Zone', kind: 'shared', occupant_ids: ['context-agent'] }),
+      ],
+    });
+    const providedWorld = makeWorldState({
+      agents: new Map([
+        [
+          'provided-agent',
+          makeWorldAgent({
+            agent_id: 'provided-agent',
+            display_name: 'Provided Agent',
+            zone: 'provided-zone',
+            severity: 'orange',
+            has_open_incidents: true,
+          }),
+        ],
+      ]),
+      zones: [
+        makeZoneSnapshot({ zone_id: 'provided-zone', label: 'Provided Zone', kind: 'shared', occupant_ids: ['provided-agent'] }),
+      ],
+    });
+
+    renderLegend(contextWorld, undefined, providedWorld);
+
+    const hotZoneList = await screen.findByRole('list', { name: 'Hot zones legend' });
+    expect(within(hotZoneList).getByText('Provided Zone')).toBeVisible();
+    expect(within(hotZoneList).queryByText('Context Zone')).not.toBeInTheDocument();
   });
 
   it('renders a degraded data-quality section when evidence coverage is incomplete', async () => {

@@ -52,4 +52,11 @@ describe('AI Town shell styles', () => {
     expect(styles).toMatch(/\.aitown-world__host\s*\{[\s\S]*?touch-action:\s*pinch-zoom;/);
     expect(styles).toMatch(/\.aitown-world__host canvas\s*\{[\s\S]*?touch-action:\s*pinch-zoom;/);
   });
+
+  it('lays out topline chrome and toolbar in a shared hud lane so added hot-zone chips cannot overlap the toolbar', () => {
+    expect(styles).toContain(
+      '.aitown-panel__hud-top {\n  position: absolute;\n  top: 148px;\n  left: 18px;\n  right: 18px;\n  z-index: 8;\n  display: flex;\n  flex-direction: column;\n  align-items: stretch;\n  gap: 12px;\n  pointer-events: none;\n}'
+    );
+    expect(styles).toContain('.aitown-panel__toolbar {\n  display: flex;\n  flex: 0 0 auto;\n  gap: 10px;\n  justify-content: flex-end;\n  pointer-events: auto;\n}');
+  });
 });

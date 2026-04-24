@@ -71,6 +71,7 @@ type DetailsPanelProps = {
   selectedAgent: OfficeAgent | null;
   selectedCorrelationId: string | null;
   selectedCrewOpenSupervisionSeverity: Severity | null;
+  selectedAgentSupervisionHistorySeverity: Severity | null;
   selectedAgentReplaySeverity: Severity | null;
   selectedCrewReplaySeverity: Severity | null;
   selectedOperationsState: string | null;
@@ -92,6 +93,7 @@ type DetailsPanelProps = {
   onSelectCorrelation: SelectCorrelationHandler;
   onResetCorrelationOverride: () => void;
   onSelectCrewOpenSupervisionSeverity: (severity: Severity | null) => void;
+  onSelectSelectedAgentSupervisionHistorySeverity: (severity: Severity | null) => void;
   onSelectSelectedAgentReplaySeverity: (severity: Severity | null) => void;
   onSelectCrewReplaySeverity: (severity: Severity | null) => void;
   onSelectOperationsState: (state: string | null) => void;
@@ -1159,6 +1161,42 @@ function renderOpenSupervisionAlertsEmptyLabel(selectedSeverity: Severity | null
   return severityScope
     ? `No open supervision alerts at ${severityScope} in crew overview queue.`
     : 'No open supervision alerts in crew overview queue.';
+}
+
+function renderSelectedAgentSupervisionHistorySeverityScopeLabel(selectedSeverity: Severity | null) {
+  return selectedSeverity ? `${SEVERITY_LABELS[selectedSeverity]} severity` : null;
+}
+
+function renderSelectedAgentSupervisionHistoryLoadingLabel(selectedSeverity: Severity | null) {
+  const severityScope = renderSelectedAgentSupervisionHistorySeverityScopeLabel(selectedSeverity);
+  return severityScope ? `Loading supervision history at ${severityScope}...` : 'Loading supervision history...';
+}
+
+function renderSelectedAgentSupervisionHistoryErrorLabel(
+  selectedSeverity: Severity | null,
+  supervisionHistoryError: string
+) {
+  const severityScope = renderSelectedAgentSupervisionHistorySeverityScopeLabel(selectedSeverity);
+  return severityScope
+    ? `Unable to load supervision history at ${severityScope}. ${supervisionHistoryError}`
+    : `Unable to load supervision history. ${supervisionHistoryError}`;
+}
+
+function renderSelectedAgentSupervisionHistoryWarningLabel(
+  selectedSeverity: Severity | null,
+  supervisionHistoryError: string
+) {
+  const severityScope = renderSelectedAgentSupervisionHistorySeverityScopeLabel(selectedSeverity);
+  return severityScope
+    ? `Showing last supervision history at ${severityScope}. ${supervisionHistoryError}`
+    : `Showing last supervision history. ${supervisionHistoryError}`;
+}
+
+function renderSelectedAgentSupervisionHistoryEmptyLabel(selectedSeverity: Severity | null) {
+  const severityScope = renderSelectedAgentSupervisionHistorySeverityScopeLabel(selectedSeverity);
+  return severityScope
+    ? `No recent supervision history at ${severityScope}.`
+    : 'No recent supervision history.';
 }
 
 function renderActiveCorrelationQueueScopeLabel({
@@ -2896,6 +2934,7 @@ export function DetailsPanel({
   selectedAgent,
   selectedCorrelationId,
   selectedCrewOpenSupervisionSeverity,
+  selectedAgentSupervisionHistorySeverity,
   selectedAgentReplaySeverity,
   selectedCrewReplaySeverity,
   selectedOperationsState,
@@ -2917,6 +2956,7 @@ export function DetailsPanel({
   onSelectCorrelation,
   onResetCorrelationOverride,
   onSelectCrewOpenSupervisionSeverity,
+  onSelectSelectedAgentSupervisionHistorySeverity,
   onSelectSelectedAgentReplaySeverity,
   onSelectCrewReplaySeverity,
   onSelectOperationsState,
@@ -3127,7 +3167,10 @@ export function DetailsPanel({
       : null;
   const supervisionHistoryWarning =
     selectedAgentSupervisionHistoryError && selectedAgentSupervisionHistory
-      ? `Showing last supervision history. ${selectedAgentSupervisionHistoryError}`
+      ? renderSelectedAgentSupervisionHistoryWarningLabel(
+          selectedAgentSupervisionHistorySeverity,
+          selectedAgentSupervisionHistoryError
+        )
       : null;
   const workflowWarning = workflowError && workflow ? renderWorkflowWarningLabel(workflowError) : null;
   const workflowSummaryFacets = workflow ? selectWorkflowSummaryFacets(workflow.summary) : null;
@@ -4127,13 +4170,39 @@ export function DetailsPanel({
       <section className="aitown-details__section">
         <h3>Supervision History</h3>
         {supervisionHistoryWarning ? <p role="status">{supervisionHistoryWarning}</p> : null}
-        <p>{`Request scope · ${selectedAgentSupervisionHistoryRequestScopeLabel}`}</p>
+        <p>
+          <span>{`Request scope · ${selectedAgentSupervisionHistoryRequestScopeLabel}`}</span>{' '}
+          <label htmlFor="aitown-selected-agent-supervision-history-severity-filter">Severity filter</label>{' '}
+          <select
+            id="aitown-selected-agent-supervision-history-severity-filter"
+            aria-label="Filter supervision history by severity"
+            value={selectedAgentSupervisionHistorySeverity ?? ''}
+            onChange={(event) =>
+              onSelectSelectedAgentSupervisionHistorySeverity(
+                event.target.value ? (event.target.value as Severity) : null
+              )
+            }
+          >
+            <option value="">All severities</option>
+            <option value="normal">Normal</option>
+            <option value="yellow">Yellow</option>
+            <option value="orange">Orange</option>
+            <option value="red">Red</option>
+          </select>
+        </p>
         <ul className="aitown-records">
           {selectedAgentSupervisionHistoryState === 'loading' && !selectedAgentSupervisionHistory ? (
-            <li className="aitown-record">Loading supervision history...</li>
+            <li className="aitown-record">
+              {renderSelectedAgentSupervisionHistoryLoadingLabel(selectedAgentSupervisionHistorySeverity)}
+            </li>
           ) : null}
           {selectedAgentSupervisionHistoryError && !selectedAgentSupervisionHistory ? (
-            <li className="aitown-record">{`Unable to load supervision history. ${selectedAgentSupervisionHistoryError}`}</li>
+            <li className="aitown-record">
+              {renderSelectedAgentSupervisionHistoryErrorLabel(
+                selectedAgentSupervisionHistorySeverity,
+                selectedAgentSupervisionHistoryError
+              )}
+            </li>
           ) : null}
           {(selectedAgentSupervisionHistory?.items ?? []).map((alert) =>
             renderSelectedAgentSupervisionAlert({
@@ -4149,7 +4218,9 @@ export function DetailsPanel({
           )}
           {selectedAgentSupervisionHistoryState === 'ready' &&
           (selectedAgentSupervisionHistory?.items.length ?? 0) === 0 ? (
-            <li className="aitown-record">No recent supervision history.</li>
+            <li className="aitown-record">
+              {renderSelectedAgentSupervisionHistoryEmptyLabel(selectedAgentSupervisionHistorySeverity)}
+            </li>
           ) : null}
         </ul>
       </section>

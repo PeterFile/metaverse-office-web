@@ -117,6 +117,8 @@ const growthRevenueWorkflowUrl = '/agents/growth-revenue/workflow?limit=10&windo
 const appEngineeringSupervisionHistoryUrl = '/peer-watch/alerts?target_agent_id=app-engineering&limit=4';
 const appEngineeringScopedReviewSupervisionHistoryUrl =
   '/peer-watch/alerts?target_agent_id=app-engineering&correlation_id=corr-app-review&limit=4';
+const orangeAppEngineeringScopedReviewSupervisionHistoryUrl =
+  '/peer-watch/alerts?target_agent_id=app-engineering&correlation_id=corr-app-review&severity=orange&limit=4';
 const appEngineeringScopedSecondarySupervisionHistoryUrl =
   '/peer-watch/alerts?target_agent_id=app-engineering&correlation_id=corr-app-secondary&limit=4';
 const crewOpenSupervisionAlertsUrl = '/peer-watch/alerts?status=open&limit=4';
@@ -125,6 +127,8 @@ const teamLeadSupervisionHistoryUrl = '/peer-watch/alerts?target_agent_id=team-l
 const growthRevenueSupervisionHistoryUrl = '/peer-watch/alerts?target_agent_id=growth-revenue&limit=4';
 const growthRevenueScopedReviewSupervisionHistoryUrl =
   '/peer-watch/alerts?target_agent_id=growth-revenue&correlation_id=corr-app-review&limit=4';
+const orangeGrowthRevenueScopedReviewSupervisionHistoryUrl =
+  '/peer-watch/alerts?target_agent_id=growth-revenue&correlation_id=corr-app-review&severity=orange&limit=4';
 const growthRevenueScopedSecondarySupervisionHistoryUrl =
   '/peer-watch/alerts?target_agent_id=growth-revenue&correlation_id=corr-app-secondary&limit=4';
 const correlationUrl = '/correlations/corr-app-review?limit=10&window=60m';
@@ -9764,6 +9768,106 @@ afterEach(() => {
       crewOpenSupervisionAlertsUrl,
       appEngineeringScopedReviewSupervisionHistoryUrl
     ]);
+  });
+
+  it('refetches selected-agent supervision history with the selected severity filter and resets it across agent pivots', async () => {
+    let resolveOrangeSupervisionHistory: (() => void) | null = null;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === orangeAppEngineeringScopedReviewSupervisionHistoryUrl) {
+          return new Promise<Response>((resolve) => {
+            resolveOrangeSupervisionHistory = () =>
+              resolve(
+                jsonResponse({
+                  items: [
+                    {
+                      ...appEngineeringSupervisionHistoryFixture.items[0],
+                      alert_id: 'alert-history-orange',
+                      summary: 'Orange selected-agent supervision history remains visible'
+                    }
+                  ]
+                })
+              );
+          });
+        }
+
+        return resolveTestFetchResponse(url);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
+
+    const supervisionSection = within(details).getByRole('heading', { name: 'Supervision History' }).closest('section');
+    expect(supervisionSection).not.toBeNull();
+
+    const severityFilter = await within(supervisionSection!).findByRole('combobox', {
+      name: 'Filter supervision history by severity'
+    });
+    expect(severityFilter).toHaveValue('');
+    expect(within(severityFilter).getByRole('option', { name: 'All severities' })).toBeVisible();
+    await waitFor(() => {
+      expect(within(supervisionSection!).getByText('Peer watch recovered after evidence review')).toBeVisible();
+    });
+
+    await user.selectOptions(severityFilter, 'orange');
+
+    await waitFor(() => {
+      expect(within(supervisionSection!).getByText('Loading supervision history at Orange severity...')).toBeVisible();
+      expect(within(supervisionSection!).queryByText('Peer watch recovered after evidence review')).not.toBeInTheDocument();
+    });
+    expect(resolveOrangeSupervisionHistory).not.toBeNull();
+    await act(async () => {
+      resolveOrangeSupervisionHistory?.();
+    });
+
+    await waitFor(() => {
+      expect(
+        within(supervisionSection!).getByText('Orange selected-agent supervision history remains visible')
+      ).toBeVisible();
+      expect(within(supervisionSection!).queryByText('Peer watch recovered after evidence review')).not.toBeInTheDocument();
+    });
+    expect(
+      within(supervisionSection!).getByText(
+        'Request scope · Target agent · app-engineering · Active correlation · corr-app-review'
+      )
+    ).toBeVisible();
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      orangeAppEngineeringScopedReviewSupervisionHistoryUrl,
+      expect.anything()
+    );
+
+    await user.click(
+      within(supervisionSection!).getByRole('button', {
+        name: 'Select supervision history watcher from alert alert-history-orange growth-revenue'
+      })
+    );
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+      const pivotedSupervisionSection = within(details).getByRole('heading', { name: 'Supervision History' }).closest('section');
+      expect(pivotedSupervisionSection).not.toBeNull();
+      expect(
+        within(pivotedSupervisionSection!).getByRole('combobox', {
+          name: 'Filter supervision history by severity'
+        })
+      ).toHaveValue('');
+      expect(within(pivotedSupervisionSection!).getByText('No recent supervision history.')).toBeVisible();
+    });
+
+    const peerWatchRequests = vi
+      .mocked(globalThis.fetch)
+      .mock.calls.map(([input]) => (typeof input === 'string' ? input : input.toString()))
+      .filter((url) => url.startsWith('/peer-watch/alerts'));
+
+    expect(peerWatchRequests).toContain(growthRevenueScopedReviewSupervisionHistoryUrl);
+    expect(peerWatchRequests).not.toContain(orangeGrowthRevenueScopedReviewSupervisionHistoryUrl);
   });
 
   it('scopes selected-agent supervision history to the active selected correlation', async () => {

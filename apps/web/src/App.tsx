@@ -27,6 +27,7 @@ import type {
   OfficeAgent,
   OfficeOperation,
   OfficeOperations,
+  PeerWatchAlertsResponse,
   Severity,
   TimelineReplayResponse
 } from './types';
@@ -56,6 +57,13 @@ type CorrelationSpotlight = Pick<CorrelationDrilldown, 'correlation_id' | 'parti
 type SelectedAgentTimelineReplayPayload = {
   targetAgentId: string;
   timelineReplay: TimelineReplayResponse;
+};
+
+type SelectedAgentSupervisionHistoryPayload = {
+  targetAgentId: string;
+  correlationId: string | null;
+  severity: Severity | null;
+  peerWatchAlerts: PeerWatchAlertsResponse;
 };
 
 const CREW_TIMELINE_LIMIT = 4;
@@ -413,6 +421,14 @@ function AppInner() {
   const [selectedCrewReplaySeverity, setSelectedCrewReplaySeverity] = useState<Severity | null>(null);
   const [selectedCrewOpenSupervisionSeverity, setSelectedCrewOpenSupervisionSeverity] =
     useState<Severity | null>(null);
+  const [selectedAgentSupervisionHistoryFilter, setSelectedAgentSupervisionHistoryFilter] = useState<{
+    agentId: string;
+    severity: Severity | null;
+  } | null>(null);
+  const selectedAgentSupervisionHistorySeverity =
+    selectedAgentId !== null && selectedAgentSupervisionHistoryFilter?.agentId === selectedAgentId
+      ? selectedAgentSupervisionHistoryFilter.severity
+      : null;
   const [selectedAgentReplayFilter, setSelectedAgentReplayFilter] = useState<{
     agentId: string;
     severity: Severity | null;
@@ -881,22 +897,60 @@ function AppInner() {
     previousSelectedAgentTimelineReplayResourceKeyRef.current =
       selectedAgentTimelineReplayResourceKey;
   }, [selectedAgentTimelineReplayResourceKey]);
-  const selectedAgentSupervisionHistoryResource = usePolledResource({
+  const selectedAgentSupervisionHistoryResourceKey = selectedAgentId
+    ? `selected-agent-supervision-history:${selectedAgentId}:correlation=${selectedAgentScopedCorrelationId ?? '__all__'}:severity=${selectedAgentSupervisionHistorySeverity ?? '__all__'}`
+    : null;
+  const previousSelectedAgentSupervisionHistoryResourceKeyRef = useRef<string | null>(
+    selectedAgentSupervisionHistoryResourceKey
+  );
+  const selectedAgentSupervisionHistoryResource = usePolledResource<SelectedAgentSupervisionHistoryPayload>({
     enabled:
       hubOpen &&
       selectedAgentId !== null &&
       !selectedAgentSupervisionHistoryDefaultCorrelationPending,
-    load: (signal) =>
-      fetchPeerWatchAlerts({
+    load: async (signal) => ({
+      targetAgentId: selectedAgentId!,
+      correlationId: selectedAgentScopedCorrelationId,
+      severity: selectedAgentSupervisionHistorySeverity,
+      peerWatchAlerts: await fetchPeerWatchAlerts({
         targetAgentId: selectedAgentId!,
         correlationId: selectedAgentScopedCorrelationId ?? undefined,
+        severity: selectedAgentSupervisionHistorySeverity ?? undefined,
         limit: SELECTED_AGENT_SUPERVISION_HISTORY_LIMIT,
         signal
-      }),
-    resourceKey: selectedAgentId
-      ? `selected-agent-supervision-history:${selectedAgentId}:${selectedAgentScopedCorrelationId ?? '__all__'}`
-      : null
+      })
+    }),
+    resourceKey: selectedAgentSupervisionHistoryResourceKey
   });
+  const selectedAgentSupervisionHistorySelectionChanged =
+    selectedAgentId !== null &&
+    selectedAgentSupervisionHistoryResourceKey !== null &&
+    previousSelectedAgentSupervisionHistoryResourceKeyRef.current !==
+      selectedAgentSupervisionHistoryResourceKey;
+  const selectedAgentSupervisionHistoryPayloadMatches =
+    selectedAgentSupervisionHistoryResource.data?.targetAgentId === selectedAgentId &&
+    selectedAgentSupervisionHistoryResource.data?.correlationId === selectedAgentScopedCorrelationId &&
+    selectedAgentSupervisionHistoryResource.data?.severity === selectedAgentSupervisionHistorySeverity;
+  const selectedAgentSupervisionHistorySurfaceIsStale =
+    selectedAgentSupervisionHistorySelectionChanged ||
+    (selectedAgentSupervisionHistoryResource.data !== null &&
+      !selectedAgentSupervisionHistoryPayloadMatches);
+  const selectedAgentSupervisionHistory =
+    !selectedAgentSupervisionHistorySurfaceIsStale &&
+    selectedAgentSupervisionHistoryPayloadMatches &&
+    selectedAgentSupervisionHistoryResource.data !== null
+      ? selectedAgentSupervisionHistoryResource.data.peerWatchAlerts
+      : null;
+  const selectedAgentSupervisionHistoryError = selectedAgentSupervisionHistorySurfaceIsStale
+    ? null
+    : selectedAgentSupervisionHistoryResource.error;
+  const selectedAgentSupervisionHistoryState: LoadState = selectedAgentSupervisionHistorySurfaceIsStale
+    ? 'loading'
+    : selectedAgentSupervisionHistoryResource.state;
+  useEffect(() => {
+    previousSelectedAgentSupervisionHistoryResourceKeyRef.current =
+      selectedAgentSupervisionHistoryResourceKey;
+  }, [selectedAgentSupervisionHistoryResourceKey]);
   const selectedAgentSupervisionHistoryRequestScopeLabel =
     resolveSelectedAgentSupervisionHistoryRequestScopeLabel(
       selectedAgentId,
@@ -1232,6 +1286,7 @@ function AppInner() {
       setSelectedOperationSelection(operationSelection);
       if (agentId !== selectedAgentId) {
         setSelectedAgentReplayFilter(null);
+        setSelectedAgentSupervisionHistoryFilter(null);
       }
       setSelectedAgentId(agentId);
     },
@@ -1644,6 +1699,7 @@ function AppInner() {
               selectedAgent={selectedAgent}
               selectedCorrelationId={selectedCorrelationId}
               selectedCrewOpenSupervisionSeverity={selectedCrewOpenSupervisionSeverity}
+              selectedAgentSupervisionHistorySeverity={selectedAgentSupervisionHistorySeverity}
               selectedAgentReplaySeverity={selectedAgentReplaySeverity}
               selectedCrewReplaySeverity={selectedCrewReplaySeverity}
               selectedOperationsState={selectedOperationsState}
@@ -1669,9 +1725,9 @@ function AppInner() {
               selectedAgentSupervisionHistoryRequestScopeLabel={
                 selectedAgentSupervisionHistoryRequestScopeLabel
               }
-              selectedAgentSupervisionHistory={selectedAgentSupervisionHistoryResource.data}
-              selectedAgentSupervisionHistoryError={selectedAgentSupervisionHistoryResource.error}
-              selectedAgentSupervisionHistoryState={selectedAgentSupervisionHistoryResource.state}
+              selectedAgentSupervisionHistory={selectedAgentSupervisionHistory}
+              selectedAgentSupervisionHistoryError={selectedAgentSupervisionHistoryError}
+              selectedAgentSupervisionHistoryState={selectedAgentSupervisionHistoryState}
               onInspectAgent={(agentId) =>
                 selectAgentWithSnapshot(
                   agentId,
@@ -1701,6 +1757,16 @@ function AppInner() {
               onSelectCorrelation={handleSelectCorrelation}
               onResetCorrelationOverride={handleResetCorrelationOverride}
               onSelectCrewOpenSupervisionSeverity={setSelectedCrewOpenSupervisionSeverity}
+              onSelectSelectedAgentSupervisionHistorySeverity={(severity) =>
+                setSelectedAgentSupervisionHistoryFilter(
+                  selectedAgentId !== null
+                    ? {
+                        agentId: selectedAgentId,
+                        severity
+                      }
+                    : null
+                )
+              }
               onSelectSelectedAgentReplaySeverity={(severity) =>
                 setSelectedAgentReplayFilter(
                   selectedAgentId !== null

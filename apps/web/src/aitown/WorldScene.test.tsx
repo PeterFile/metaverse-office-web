@@ -2951,6 +2951,84 @@ describe('WorldScene watch overlay caption gating', () => {
     expect(onSelectAgent).not.toHaveBeenCalled();
   });
 
+  it('keeps focused zone anchors outside a tall split-topline viewport card by using the unobscured lane', async () => {
+    appInitMock.mockReset().mockResolvedValue(undefined);
+    vi.mocked(loadAiTownAssets).mockResolvedValue(makeAssets());
+
+    const baseScene = makeWideSelectedAgentScene();
+    const scene = {
+      ...baseScene,
+      selectedAgentId: null,
+      agents: baseScene.agents.map((agent) => ({
+        ...agent,
+        selected: false
+      })),
+      zones: [
+        ...baseScene.zones,
+        {
+          zoneId: 'review-zone',
+          label: 'Review Zone',
+          kind: 'shared',
+          anchor: { x: 70, y: 50 },
+          occupantIds: []
+        }
+      ]
+    } satisfies AiTownSceneModel;
+    const onSelectAgent = vi.fn();
+    const { container } = render(
+      <main className="aitown-shell">
+        <section className="aitown-panel aitown-panel--game">
+          <div className="aitown-panel__topline">
+            <span id="live-focus">Live Focus</span>
+            <span id="viewport">Viewport Hot zones Hot zones Hot zones</span>
+          </div>
+          <WorldScene
+            scene={scene}
+            onSelectAgent={onSelectAgent}
+            zoneFocusRequest={{ zoneId: 'review-zone', requestId: 1 }}
+          />
+        </section>
+      </main>
+    );
+
+    const host = container.querySelector('.aitown-world__host');
+    const liveFocus = container.querySelector('#live-focus');
+    const viewportCard = container.querySelector('#viewport');
+
+    expect(host).toBeInstanceOf(HTMLDivElement);
+    expect(liveFocus).toBeInstanceOf(HTMLElement);
+    expect(viewportCard).toBeInstanceOf(HTMLElement);
+
+    setElementRect(host as HTMLDivElement, { left: 0, top: 0, width: 1000, height: 800 });
+    setElementRect(liveFocus as HTMLElement, { left: 0, top: 148, width: 320, height: 144 });
+    setElementRect(viewportCard as HTMLElement, { left: 720, top: 148, width: 280, height: 460 });
+
+    await waitFor(() => {
+      const inspection = readViewportInspector()?.read();
+      expect(inspection).toBeDefined();
+      expect(inspection?.clampPadding).toEqual({
+        top: 0,
+        right: 280
+      });
+
+      const zoneAnchorX = 70 * scene.map.tileDim;
+      const zoneAnchorY = 50 * scene.map.tileDim;
+      const projectedAnchor = {
+        x: ((zoneAnchorX - (inspection?.left ?? 0)) / Math.max((inspection?.right ?? 0) - (inspection?.left ?? 0), Number.EPSILON)) * (inspection?.screenWidth ?? 0),
+        y: ((zoneAnchorY - (inspection?.top ?? 0)) / Math.max((inspection?.bottom ?? 0) - (inspection?.top ?? 0), Number.EPSILON)) * (inspection?.screenHeight ?? 0)
+      };
+      const liveFocusRect = (liveFocus as HTMLElement).getBoundingClientRect();
+      const viewportCardRect = (viewportCard as HTMLElement).getBoundingClientRect();
+
+      expect(projectedAnchor.x).toBeGreaterThan(liveFocusRect.right);
+      expect(projectedAnchor.x).toBeLessThan(viewportCardRect.left);
+      expect(projectedAnchor.y).toBeGreaterThan(viewportCardRect.top);
+      expect(projectedAnchor.y).toBeLessThan(viewportCardRect.bottom);
+    });
+
+    expect(onSelectAgent).not.toHaveBeenCalled();
+  });
+
   it('does not resync clamp padding for non-contributor text mutations under document.body', async () => {
     appInitMock.mockReset().mockResolvedValue(undefined);
     vi.mocked(loadAiTownAssets).mockResolvedValue(makeAssets());

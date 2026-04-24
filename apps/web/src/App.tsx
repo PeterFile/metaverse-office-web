@@ -1500,62 +1500,62 @@ function AppInner() {
               <span>
                 <strong className="aitown-panel__topline-title">Viewport</strong>
                 <span className="aitown-panel__topline-copy">Drag to pan. Wheel to zoom. Tap or click an agent to inspect.</span>
-                {hotZones.length > 0 ? (
-                  <>
-                    <span className="aitown-panel__topline-copy">Hot zones</span>
-                    <span
-                      className="aitown-panel__focus-chips aitown-panel__focus-chips--compact"
-                      role="group"
-                      aria-label="Hot zone focus"
-                    >
-                      {hotZones.map((zone) => (
-                        <button
-                          key={zone.zone_id}
-                          type="button"
-                          className={`aitown-focus-chip aitown-focus-chip--hot-zone severity-${zone.highest_severity}`}
-                          aria-label={`${zone.label} · ${resolveHotZoneFocusMeta(zone)} · Focus in world viewport`}
-                          onClick={() => handleFocusWorldZone(zone.zone_id)}
-                        >
-                          <strong>{zone.label}</strong>
-                          <span>{resolveHotZoneFocusMeta(zone)}</span>
-                        </button>
-                      ))}
-                    </span>
-                  </>
-                ) : null}
                 <span className="aitown-panel__topline-copy">{viewportToplineStatus.status}</span>
                 <span className="aitown-panel__topline-copy">{viewportToplineStatus.snapshot}</span>
               </span>
             </div>
+            {hotZones.length > 0 ? (
+              <div className="aitown-panel__hot-zone-focus">
+                <strong className="aitown-panel__topline-title">Hot zone focus</strong>
+                <span
+                  className="aitown-panel__focus-chips aitown-panel__focus-chips--compact"
+                  role="group"
+                  aria-label="Hot zone focus"
+                >
+                  {hotZones.map((zone) => (
+                    <button
+                      key={zone.zone_id}
+                      type="button"
+                      className={`aitown-focus-chip aitown-focus-chip--hot-zone severity-${zone.highest_severity}`}
+                      aria-label={`${zone.label} · ${resolveHotZoneFocusMeta(zone)} · Focus in world viewport`}
+                      onClick={() => handleFocusWorldZone(zone.zone_id)}
+                    >
+                      <strong>{zone.label}</strong>
+                      <span>{resolveHotZoneFocusMeta(zone)}</span>
+                    </button>
+                  ))}
+                </span>
+              </div>
+            ) : null}
 
-            <div className="aitown-panel__toolbar">
+          </div>
+          <div className="aitown-panel__toolbar">
+            <button
+              ref={hubTriggerRef}
+              type="button"
+              className="aitown-button"
+              aria-expanded={hubOpen}
+              aria-controls="aitown-hub"
+              aria-haspopup="dialog"
+              onClick={toggleHub}
+            >
+              {hubOpen ? 'Hide Hub' : 'Open Hub'}
+            </button>
+            {!hubOpen ? (
               <button
-                ref={hubTriggerRef}
                 type="button"
                 className="aitown-button"
-                aria-expanded={hubOpen}
-                aria-controls="aitown-hub"
-                aria-haspopup="dialog"
-                onClick={toggleHub}
+                aria-keyshortcuts={RESET_VIEW_SHORTCUT_ARIA}
+                onClick={handleResetView}
               >
-                {hubOpen ? 'Hide Hub' : 'Open Hub'}
+                Reset view
               </button>
-              {!hubOpen ? (
-                <button
-                  type="button"
-                  className="aitown-button"
-                  aria-keyshortcuts={RESET_VIEW_SHORTCUT_ARIA}
-                  onClick={handleResetView}
-                >
-                  Reset view
-                </button>
-              ) : null}
-              {selectedAgent ? (
-                <button type="button" className="aitown-button" onClick={() => selectAgent(null, null)}>
-                  Clear Selection
-                </button>
-              ) : null}
-            </div>
+            ) : null}
+            {selectedAgent ? (
+              <button type="button" className="aitown-button" onClick={() => selectAgent(null, null)}>
+                Clear Selection
+              </button>
+            ) : null}
           </div>
           <SceneStatusLegend onFocusWorldZone={handleFocusWorldZone} world={projectedWorld} />
 

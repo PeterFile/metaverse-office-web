@@ -2078,9 +2078,10 @@ afterEach(() => {
 
     const fetchCallCountBeforeFocus = vi.mocked(globalThis.fetch).mock.calls.length;
     const hotZoneFocus = await screen.findByRole('group', { name: 'Hot zone focus' });
-    const hotZoneTopline = hotZoneFocus.closest('.aitown-panel__topline');
+    const hotZoneFocusContainer = hotZoneFocus.closest('.aitown-panel__hot-zone-focus');
 
-    expect(hotZoneTopline).not.toBeNull();
+    expect(hotZoneFocusContainer).not.toBeNull();
+    expect(hotZoneFocus.closest('.aitown-panel__topline')).toBeNull();
 
     await user.click(
       within(hotZoneFocus).getByRole('button', {

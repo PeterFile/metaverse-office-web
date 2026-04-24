@@ -196,13 +196,23 @@ button {
   min-height: 0;
 }
 
-.aitown-panel__topline {
+.aitown-panel__hud-top {
   position: absolute;
   top: 148px;
   left: 18px;
   right: 18px;
   z-index: 5;
   display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+  pointer-events: none;
+}
+
+.aitown-panel__topline {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
   justify-content: space-between;
   gap: 12px;
   padding: 0;
@@ -246,6 +256,24 @@ button {
   gap: 8px;
 }
 
+.aitown-panel__focus-chips--compact {
+  gap: 6px;
+}
+
+.aitown-panel__hot-zone-focus {
+  display: flex;
+  max-width: min(52ch, 48%);
+  margin-left: auto;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  pointer-events: none;
+}
+
+.aitown-panel__hot-zone-focus .aitown-panel__focus-chips {
+  justify-content: flex-end;
+}
+
 .aitown-focus-chip {
   pointer-events: auto;
   display: flex;
@@ -264,6 +292,11 @@ button {
   color: inherit;
   text-align: left;
   cursor: pointer;
+}
+
+.aitown-focus-chip--hot-zone {
+  flex-basis: 128px;
+  padding: 3px 8px 6px;
 }
 
 .aitown-focus-chip:hover {
@@ -297,6 +330,8 @@ button {
   z-index: 8;
   display: flex;
   gap: 10px;
+  justify-content: flex-end;
+  pointer-events: auto;
 }
 
 .aitown-status-legend {
@@ -1007,16 +1042,31 @@ button {
     width: 100%;
   }
 
-  .aitown-panel__topline {
+  .aitown-panel__hud-top {
     top: 176px;
     left: 14px;
     right: 14px;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .aitown-panel__topline {
     flex-direction: column;
     align-items: flex-start;
   }
 
   .aitown-panel__topline > span {
     max-width: min(60ch, 100%);
+  }
+
+  .aitown-panel__hot-zone-focus {
+    max-width: 100%;
+    margin-left: 0;
+    align-items: stretch;
+  }
+
+  .aitown-panel__hot-zone-focus .aitown-panel__focus-chips {
+    justify-content: flex-start;
   }
 
   .aitown-panel__toolbar {
@@ -1113,15 +1163,29 @@ button {
     grid-template-columns: 1fr;
   }
 
-  .aitown-panel__topline {
+  .aitown-panel__hud-top {
     top: 204px;
     left: 10px;
     right: 10px;
   }
 
+  .aitown-panel__topline {
+    gap: 10px;
+  }
+
   .aitown-panel__topline > span {
     max-width: 100%;
     font-size: 0.76rem;
+  }
+
+  .aitown-panel__hot-zone-focus {
+    max-width: 100%;
+    margin-left: 0;
+    align-items: stretch;
+  }
+
+  .aitown-panel__hot-zone-focus .aitown-panel__focus-chips {
+    justify-content: flex-start;
   }
 
   .aitown-panel__toolbar {

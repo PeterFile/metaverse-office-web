@@ -52,4 +52,17 @@ describe('AI Town shell styles', () => {
     expect(styles).toMatch(/\.aitown-world__host\s*\{[\s\S]*?touch-action:\s*pinch-zoom;/);
     expect(styles).toMatch(/\.aitown-world__host canvas\s*\{[\s\S]*?touch-action:\s*pinch-zoom;/);
   });
+
+  it('keeps the hud lane below scene overlays while moving hot-zone focus below the topline row and outside toolbar overlap', () => {
+    expect(styles).toContain(
+      '.aitown-panel__hud-top {\n  position: absolute;\n  top: 148px;\n  left: 18px;\n  right: 18px;\n  z-index: 5;\n  display: flex;\n  flex-direction: column;\n  align-items: stretch;\n  gap: 12px;\n  pointer-events: none;\n}'
+    );
+    expect(styles).toContain(
+      '.aitown-panel__hot-zone-focus {\n  display: flex;\n  max-width: min(52ch, 48%);\n  margin-left: auto;\n  flex-direction: column;\n  align-items: flex-end;\n  gap: 6px;\n  pointer-events: none;\n}'
+    );
+    expect(styles).toContain('.aitown-panel__hot-zone-focus .aitown-panel__focus-chips {\n  justify-content: flex-end;\n}');
+    expect(styles).toMatch(
+      /\.aitown-panel__toolbar\s*\{[\s\S]*?position:\s*absolute;[\s\S]*?right:\s*18px;[\s\S]*?top:\s*156px;[\s\S]*?display:\s*flex;[\s\S]*?gap:\s*10px;[\s\S]*?justify-content:\s*flex-end;[\s\S]*?pointer-events:\s*auto;/
+    );
+  });
 });

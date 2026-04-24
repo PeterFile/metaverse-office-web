@@ -1,6 +1,6 @@
 import { useWorld } from '../context/WorldContext';
 import { SEVERITY_EMOJI, selectDataQualitySummary, selectHotZones } from '../world/selectors';
-import type { Severity } from '../world/types';
+import type { Severity, WorldState } from '../world/types';
 
 import { SCENE_AGENT_STATUS_LEGEND } from './agentStatusBadge';
 
@@ -61,10 +61,12 @@ function formatDataQualitySummary(degradedReasonCount: number, lastOverviewAt: s
 
 type SceneStatusLegendProps = {
   onFocusWorldZone?: (zoneId: string) => void;
+  world?: WorldState | null;
 };
 
-export function SceneStatusLegend({ onFocusWorldZone }: SceneStatusLegendProps) {
-  const { world } = useWorld();
+export function SceneStatusLegend({ onFocusWorldZone, world: providedWorld }: SceneStatusLegendProps) {
+  const { world: contextWorld } = useWorld();
+  const world = providedWorld ?? contextWorld;
   const hotZones = selectHotZones(world);
   const dataQualitySummary = selectDataQualitySummary(world);
 

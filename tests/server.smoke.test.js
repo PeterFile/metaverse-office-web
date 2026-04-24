@@ -1369,7 +1369,7 @@ test('GET /incidents exposes a descending normalized incident feed with read-onl
       summary: 'Lead completed the incident handoff',
       severity: 'normal',
       correlationId: 'corr-incident-feed',
-      counterpartyAgentIds: ['growth-revenue'],
+      counterpartyAgentIds: [],
       evidenceRefs: ['/tmp/incident-handoff-completed.md']
     })
   );
@@ -1477,7 +1477,6 @@ test('GET /incidents exposes a descending normalized incident feed with read-onl
     openActiveIncidents.body.items.map((item) => item.incident_id),
     [
       'evt_incident_reboot_requested',
-      'evt_incident_handoff_started',
       'evt_incident_alert_unresolved'
     ]
   );
@@ -1490,6 +1489,666 @@ test('GET /incidents exposes a descending normalized incident feed with read-onl
     completedIncidents.body.items.map((item) => item.incident_id),
     ['evt_incident_handoff_completed']
   );
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_incident_blank_reboot_one',
+      ts: '2026-03-09T18:15:00.000Z',
+      agentId: 'product-pmf',
+      actorId: 'team-lead',
+      eventType: 'agent_reboot_requested',
+      currentState: 'rebooting',
+      activeTask: 'Reset first blank-correlation reboot',
+      summary: 'Lead requested the first blank-correlation reboot',
+      severity: 'yellow',
+      correlationId: '',
+      evidenceRefs: ['/tmp/blank-reboot-one.md']
+    })
+  );
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_incident_blank_reboot_two',
+      ts: '2026-03-09T18:16:00.000Z',
+      agentId: 'product-pmf',
+      actorId: 'team-lead',
+      eventType: 'agent_reboot_requested',
+      currentState: 'rebooting',
+      activeTask: 'Reset second blank-correlation reboot',
+      summary: 'Lead requested the second blank-correlation reboot',
+      severity: 'orange',
+      correlationId: '',
+      evidenceRefs: ['/tmp/blank-reboot-two.md']
+    })
+  );
+
+  const concurrentBlankReboots = await requestJson(
+    `${baseUrl}/incidents?kind=reboot&agent_id=product-pmf&status=open&window=20m`
+  );
+  assert.equal(concurrentBlankReboots.response.status, 200);
+  assert.deepEqual(
+    concurrentBlankReboots.body.items.map((item) => item.incident_id),
+    ['evt_incident_blank_reboot_two', 'evt_incident_blank_reboot_one']
+  );
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_incident_correlated_reboot_one',
+      ts: '2026-03-09T18:17:00.000Z',
+      agentId: 'market-intel',
+      actorId: 'team-lead',
+      eventType: 'agent_reboot_requested',
+      currentState: 'rebooting',
+      activeTask: 'Reset first correlated reboot',
+      summary: 'Lead requested the first correlated reboot',
+      severity: 'yellow',
+      correlationId: 'corr-blank-completion-one',
+      evidenceRefs: ['/tmp/correlated-reboot-one.md']
+    })
+  );
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_incident_correlated_reboot_two',
+      ts: '2026-03-09T18:18:00.000Z',
+      agentId: 'market-intel',
+      actorId: 'team-lead',
+      eventType: 'agent_reboot_requested',
+      currentState: 'rebooting',
+      activeTask: 'Reset second correlated reboot',
+      summary: 'Lead requested the second correlated reboot',
+      severity: 'orange',
+      correlationId: 'corr-blank-completion-two',
+      evidenceRefs: ['/tmp/correlated-reboot-two.md']
+    })
+  );
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_incident_blank_correlation_reboot_completed',
+      ts: '2026-03-09T18:19:00.000Z',
+      agentId: 'market-intel',
+      actorId: 'team-lead',
+      eventType: 'agent_reboot_completed',
+      currentState: 'rebooting',
+      activeTask: 'Ignore ambiguous blank-correlation completion',
+      summary: 'Lead completed an ambiguous blank-correlation reboot',
+      severity: 'normal',
+      correlationId: '',
+      evidenceRefs: ['/tmp/blank-correlation-reboot-completed.md']
+    })
+  );
+
+  const blankCorrelationCompletionReboots = await requestJson(
+    `${baseUrl}/incidents?kind=reboot&agent_id=market-intel&status=open&correlation_id=corr-blank-completion-two&window=20m`
+  );
+  assert.equal(blankCorrelationCompletionReboots.response.status, 200);
+  assert.deepEqual(
+    blankCorrelationCompletionReboots.body.items.map((item) => item.incident_id),
+    ['evt_incident_correlated_reboot_two']
+  );
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_incident_ambiguous_handoff_one',
+      ts: '2026-03-09T18:17:00.000Z',
+      agentId: 'market-intel',
+      actorId: 'team-lead',
+      eventType: 'agent_handoff_started',
+      currentState: 'planning',
+      activeTask: 'Start first ambiguous handoff',
+      summary: 'Lead started the first ambiguous handoff',
+      severity: 'yellow',
+      correlationId: 'corr-ambiguous-handoff',
+      counterpartyAgentIds: ['growth-revenue'],
+      evidenceRefs: ['/tmp/ambiguous-handoff-one.md']
+    })
+  );
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_incident_ambiguous_handoff_two',
+      ts: '2026-03-09T18:18:00.000Z',
+      agentId: 'market-intel',
+      actorId: 'team-lead',
+      eventType: 'agent_handoff_started',
+      currentState: 'planning',
+      activeTask: 'Start second ambiguous handoff',
+      summary: 'Lead started the second ambiguous handoff',
+      severity: 'orange',
+      correlationId: 'corr-ambiguous-handoff',
+      counterpartyAgentIds: ['protocol-engineering'],
+      evidenceRefs: ['/tmp/ambiguous-handoff-two.md']
+    })
+  );
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_incident_ambiguous_handoff_completed',
+      ts: '2026-03-09T18:19:00.000Z',
+      agentId: 'market-intel',
+      actorId: 'team-lead',
+      eventType: 'agent_handoff_completed',
+      currentState: 'planning',
+      activeTask: 'Ignore ambiguous handoff completion',
+      summary: 'Lead completed an ambiguous handoff lifecycle',
+      severity: 'normal',
+      correlationId: 'corr-ambiguous-handoff',
+      counterpartyAgentIds: [],
+      evidenceRefs: ['/tmp/ambiguous-handoff-completed.md']
+    })
+  );
+
+  const ambiguousHandoffCompletion = await requestJson(
+    `${baseUrl}/incidents?kind=handoff&agent_id=market-intel&status=open&correlation_id=corr-ambiguous-handoff&window=20m`
+  );
+  assert.equal(ambiguousHandoffCompletion.response.status, 200);
+  assert.deepEqual(
+    ambiguousHandoffCompletion.body.items.map((item) => item.incident_id),
+    ['evt_incident_ambiguous_handoff_two', 'evt_incident_ambiguous_handoff_one']
+  );
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_incident_ambiguous_blank_correlation_handoff_one',
+      ts: '2026-03-09T18:14:00.000Z',
+      agentId: 'market-intel',
+      actorId: 'team-lead',
+      eventType: 'agent_handoff_started',
+      currentState: 'planning',
+      activeTask: 'Start first blank-correlation ambiguous handoff',
+      summary: 'Lead started the first blank-correlation ambiguous handoff',
+      severity: 'yellow',
+      correlationId: 'corr-ambiguous-blank-correlation-one',
+      counterpartyAgentIds: ['app-engineering'],
+      evidenceRefs: ['/tmp/ambiguous-blank-correlation-handoff-one.md']
+    })
+  );
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_incident_ambiguous_blank_correlation_handoff_two',
+      ts: '2026-03-09T18:15:00.000Z',
+      agentId: 'market-intel',
+      actorId: 'team-lead',
+      eventType: 'agent_handoff_started',
+      currentState: 'planning',
+      activeTask: 'Start second blank-correlation ambiguous handoff',
+      summary: 'Lead started the second blank-correlation ambiguous handoff',
+      severity: 'orange',
+      correlationId: 'corr-ambiguous-blank-correlation-two',
+      counterpartyAgentIds: ['app-engineering'],
+      evidenceRefs: ['/tmp/ambiguous-blank-correlation-handoff-two.md']
+    })
+  );
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_incident_ambiguous_blank_correlation_handoff_completed',
+      ts: '2026-03-09T18:16:00.000Z',
+      agentId: 'market-intel',
+      actorId: 'team-lead',
+      eventType: 'agent_handoff_completed',
+      currentState: 'planning',
+      activeTask: 'Ignore blank-correlation ambiguous completion',
+      summary: 'Lead completed a blank-correlation ambiguous handoff lifecycle',
+      severity: 'normal',
+      correlationId: '',
+      counterpartyAgentIds: ['app-engineering'],
+      evidenceRefs: ['/tmp/ambiguous-blank-correlation-handoff-completed.md']
+    })
+  );
+
+  const ambiguousBlankCorrelationCompletion = await requestJson(
+    `${baseUrl}/incidents?kind=handoff&agent_id=market-intel&status=open&window=20m`
+  );
+  assert.equal(ambiguousBlankCorrelationCompletion.response.status, 200);
+  assert.deepEqual(
+    ambiguousBlankCorrelationCompletion.body.items.map((item) => item.incident_id),
+    [
+      'evt_incident_ambiguous_handoff_two',
+      'evt_incident_ambiguous_handoff_one',
+      'evt_incident_ambiguous_blank_correlation_handoff_two',
+      'evt_incident_ambiguous_blank_correlation_handoff_one'
+    ]
+  );
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_incident_duplicate_reboot_requested_one',
+      ts: '2026-03-09T18:16:30.000Z',
+      agentId: 'app-engineering',
+      actorId: 'team-lead',
+      eventType: 'agent_reboot_requested',
+      currentState: 'rebooting',
+      activeTask: 'Retry reboot request for the same lifecycle',
+      summary: 'Lead requested a duplicate reboot lifecycle once',
+      severity: 'red',
+      correlationId: 'corr-duplicate-reboot-lifecycle',
+      evidenceRefs: ['/tmp/duplicate-reboot-request-one.md']
+    })
+  );
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_incident_duplicate_reboot_requested_two',
+      ts: '2026-03-09T18:17:00.000Z',
+      agentId: 'app-engineering',
+      actorId: 'team-lead',
+      eventType: 'agent_reboot_requested',
+      currentState: 'rebooting',
+      activeTask: 'Retry reboot request for the same lifecycle again',
+      summary: 'Lead requested a duplicate reboot lifecycle twice',
+      severity: 'red',
+      correlationId: 'corr-duplicate-reboot-lifecycle',
+      evidenceRefs: ['/tmp/duplicate-reboot-request-two.md']
+    })
+  );
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_incident_duplicate_reboot_completed',
+      ts: '2026-03-09T18:17:30.000Z',
+      agentId: 'app-engineering',
+      actorId: 'team-lead',
+      eventType: 'agent_reboot_completed',
+      currentState: 'rebooting',
+      activeTask: 'Complete the duplicate reboot lifecycle',
+      summary: 'Lead completed the duplicate reboot lifecycle',
+      severity: 'normal',
+      correlationId: 'corr-duplicate-reboot-lifecycle',
+      evidenceRefs: ['/tmp/duplicate-reboot-completed.md']
+    })
+  );
+
+  const duplicateRebootLifecycle = await requestJson(
+    `${baseUrl}/incidents?kind=reboot&agent_id=app-engineering&status=open&correlation_id=corr-duplicate-reboot-lifecycle&window=20m`
+  );
+  assert.equal(duplicateRebootLifecycle.response.status, 200);
+  assert.deepEqual(duplicateRebootLifecycle.body.items, []);
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_incident_retried_handoff_started_one',
+      ts: '2026-03-09T18:17:40.000Z',
+      agentId: 'market-intel',
+      actorId: 'team-lead',
+      eventType: 'agent_handoff_started',
+      currentState: 'planning',
+      activeTask: 'Retry a handoff before counterparty metadata is complete',
+      summary: 'Lead started a handoff before counterparty metadata was complete',
+      severity: 'yellow',
+      correlationId: 'corr-retried-handoff-open',
+      counterpartyAgentIds: [],
+      evidenceRefs: ['/tmp/retried-handoff-started-one.md']
+    })
+  );
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_incident_retried_handoff_started_two',
+      ts: '2026-03-09T18:17:50.000Z',
+      agentId: 'market-intel',
+      actorId: 'team-lead',
+      eventType: 'agent_handoff_started',
+      currentState: 'planning',
+      activeTask: 'Retry a handoff after counterparty metadata is known',
+      summary: 'Lead retried a handoff with richer counterparty metadata',
+      severity: 'yellow',
+      correlationId: 'corr-retried-handoff-open',
+      counterpartyAgentIds: ['growth-revenue'],
+      evidenceRefs: ['/tmp/retried-handoff-started-two.md']
+    })
+  );
+
+  const retriedOpenHandoff = await requestJson(
+    `${baseUrl}/incidents?kind=handoff&agent_id=market-intel&status=open&correlation_id=corr-retried-handoff-open&window=20m`
+  );
+  assert.equal(retriedOpenHandoff.response.status, 200);
+  assert.deepEqual(
+    retriedOpenHandoff.body.items.map((item) => item.incident_id),
+    ['evt_incident_retried_handoff_started_two']
+  );
+  assert.deepEqual(retriedOpenHandoff.body.items[0].counterparty_agent_ids, ['growth-revenue']);
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_incident_parallel_subset_handoff_one',
+      ts: '2026-03-09T18:17:52.000Z',
+      agentId: 'market-intel',
+      actorId: 'team-lead',
+      eventType: 'agent_handoff_started',
+      currentState: 'planning',
+      activeTask: 'Keep the first parallel handoff open',
+      summary: 'Lead started a parallel handoff with a subset counterparty set',
+      severity: 'yellow',
+      correlationId: 'corr-parallel-open-subset-handoff',
+      counterpartyAgentIds: ['growth-revenue'],
+      evidenceRefs: ['/tmp/parallel-subset-handoff-one.md']
+    })
+  );
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_incident_parallel_subset_handoff_two',
+      ts: '2026-03-09T18:17:53.000Z',
+      agentId: 'market-intel',
+      actorId: 'team-lead',
+      eventType: 'agent_handoff_started',
+      currentState: 'planning',
+      activeTask: 'Keep the second parallel handoff open',
+      summary: 'Lead started a parallel handoff with a superset counterparty set',
+      severity: 'orange',
+      correlationId: 'corr-parallel-open-subset-handoff',
+      counterpartyAgentIds: ['growth-revenue', 'protocol-engineering'],
+      evidenceRefs: ['/tmp/parallel-subset-handoff-two.md']
+    })
+  );
+
+  const parallelSubsetHandoffs = await requestJson(
+    `${baseUrl}/incidents?kind=handoff&agent_id=market-intel&status=open&correlation_id=corr-parallel-open-subset-handoff&window=20m`
+  );
+  assert.equal(parallelSubsetHandoffs.response.status, 200);
+  assert.deepEqual(
+    parallelSubsetHandoffs.body.items.map((item) => item.incident_id),
+    ['evt_incident_parallel_subset_handoff_two', 'evt_incident_parallel_subset_handoff_one']
+  );
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_incident_subset_counterparty_handoff_started',
+      ts: '2026-03-09T18:17:55.000Z',
+      agentId: 'product-pmf',
+      actorId: 'team-lead',
+      eventType: 'agent_handoff_started',
+      currentState: 'planning',
+      activeTask: 'Start a multi-party handoff before completion metadata shrinks',
+      summary: 'Lead started a multi-party handoff',
+      severity: 'orange',
+      correlationId: 'corr-subset-counterparty-handoff',
+      counterpartyAgentIds: ['app-engineering', 'growth-revenue'],
+      evidenceRefs: ['/tmp/subset-counterparty-handoff-started.md']
+    })
+  );
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_incident_subset_counterparty_handoff_completed',
+      ts: '2026-03-09T18:18:05.000Z',
+      agentId: 'product-pmf',
+      actorId: 'team-lead',
+      eventType: 'agent_handoff_completed',
+      currentState: 'planning',
+      activeTask: 'Complete a multi-party handoff with partial metadata',
+      summary: 'Lead completed a multi-party handoff after metadata shrank',
+      severity: 'normal',
+      correlationId: 'corr-subset-counterparty-handoff',
+      counterpartyAgentIds: ['growth-revenue'],
+      evidenceRefs: ['/tmp/subset-counterparty-handoff-completed.md']
+    })
+  );
+
+  const subsetCounterpartyHandoff = await requestJson(
+    `${baseUrl}/incidents?kind=handoff&agent_id=product-pmf&status=open&correlation_id=corr-subset-counterparty-handoff&window=20m`
+  );
+  assert.equal(subsetCounterpartyHandoff.response.status, 200);
+  assert.deepEqual(subsetCounterpartyHandoff.body.items, []);
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_incident_partial_counterparty_handoff',
+      ts: '2026-03-09T18:10:00.000Z',
+      agentId: 'product-pmf',
+      actorId: 'team-lead',
+      eventType: 'agent_handoff_started',
+      currentState: 'planning',
+      activeTask: 'Start handoff before counterparty metadata is complete',
+      summary: 'Lead started a handoff before counterparty metadata was complete',
+      severity: 'yellow',
+      correlationId: 'corr-partial-counterparty-handoff',
+      counterpartyAgentIds: [],
+      evidenceRefs: ['/tmp/partial-counterparty-handoff-started.md']
+    })
+  );
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_incident_partial_counterparty_handoff_completed',
+      ts: '2026-03-09T18:11:00.000Z',
+      agentId: 'product-pmf',
+      actorId: 'team-lead',
+      eventType: 'agent_handoff_completed',
+      currentState: 'planning',
+      activeTask: 'Complete handoff after counterparty metadata is known',
+      summary: 'Lead completed a handoff after counterparty metadata was known',
+      severity: 'normal',
+      correlationId: 'corr-partial-counterparty-handoff',
+      counterpartyAgentIds: ['growth-revenue'],
+      evidenceRefs: ['/tmp/partial-counterparty-handoff-completed.md']
+    })
+  );
+
+  const partialCounterpartyHandoff = await requestJson(
+    `${baseUrl}/incidents?kind=handoff&agent_id=product-pmf&status=open&correlation_id=corr-partial-counterparty-handoff&window=20m`
+  );
+  assert.equal(partialCounterpartyHandoff.response.status, 200);
+  assert.deepEqual(partialCounterpartyHandoff.body.items, []);
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_incident_correlation_drift_handoff',
+      ts: '2026-03-09T18:12:00.000Z',
+      agentId: 'product-pmf',
+      actorId: 'team-lead',
+      eventType: 'agent_handoff_started',
+      currentState: 'planning',
+      activeTask: 'Start handoff before correlation metadata is corrected',
+      summary: 'Lead started a handoff before correlation metadata was corrected',
+      severity: 'yellow',
+      correlationId: 'corr-drift-start-handoff',
+      counterpartyAgentIds: ['growth-revenue'],
+      evidenceRefs: ['/tmp/correlation-drift-handoff-started.md']
+    })
+  );
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_incident_correlation_drift_handoff_completed',
+      ts: '2026-03-09T18:13:00.000Z',
+      agentId: 'product-pmf',
+      actorId: 'team-lead',
+      eventType: 'agent_handoff_completed',
+      currentState: 'planning',
+      activeTask: 'Complete handoff after correlation metadata is corrected',
+      summary: 'Lead completed a handoff after correlation metadata was corrected',
+      severity: 'normal',
+      correlationId: '',
+      counterpartyAgentIds: ['growth-revenue'],
+      evidenceRefs: ['/tmp/correlation-drift-handoff-completed.md']
+    })
+  );
+
+  const correlationDriftHandoff = await requestJson(
+    `${baseUrl}/incidents?kind=handoff&agent_id=product-pmf&status=open&correlation_id=corr-drift-start-handoff&window=20m`
+  );
+  assert.equal(correlationDriftHandoff.response.status, 200);
+  assert.deepEqual(correlationDriftHandoff.body.items, []);
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_incident_window_ambiguous_reboot_old',
+      ts: '2026-03-09T17:50:00.000Z',
+      agentId: 'growth-revenue',
+      actorId: 'team-lead',
+      eventType: 'agent_reboot_requested',
+      currentState: 'rebooting',
+      activeTask: 'Keep an older reboot lifecycle open outside the request window',
+      summary: 'Lead requested an older reboot lifecycle outside the open window',
+      severity: 'yellow',
+      correlationId: 'corr-window-ambiguous-reboot-old',
+      evidenceRefs: ['/tmp/window-ambiguous-reboot-old.md']
+    })
+  );
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_incident_window_ambiguous_reboot_target',
+      ts: '2026-03-09T18:10:00.000Z',
+      agentId: 'growth-revenue',
+      actorId: 'team-lead',
+      eventType: 'agent_reboot_requested',
+      currentState: 'rebooting',
+      activeTask: 'Keep the in-window reboot lifecycle open',
+      summary: 'Lead requested an in-window reboot lifecycle',
+      severity: 'orange',
+      correlationId: 'corr-window-ambiguous-reboot-target',
+      evidenceRefs: ['/tmp/window-ambiguous-reboot-target.md']
+    })
+  );
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_incident_window_ambiguous_reboot_completed',
+      ts: '2026-03-09T18:15:00.000Z',
+      agentId: 'growth-revenue',
+      actorId: 'team-lead',
+      eventType: 'agent_reboot_completed',
+      currentState: 'rebooting',
+      activeTask: 'Ignore a blank-correlation reboot completion that is ambiguous across window boundaries',
+      summary: 'Lead completed an ambiguous blank-correlation reboot',
+      severity: 'normal',
+      correlationId: '',
+      evidenceRefs: ['/tmp/window-ambiguous-reboot-completed.md']
+    })
+  );
+
+  const windowedOpenReboot = await requestJson(
+    `${baseUrl}/incidents?kind=reboot&agent_id=growth-revenue&status=open&correlation_id=corr-window-ambiguous-reboot-target&window=20m`
+  );
+  assert.equal(windowedOpenReboot.response.status, 200);
+  assert.deepEqual(
+    windowedOpenReboot.body.items.map((item) => item.incident_id),
+    ['evt_incident_window_ambiguous_reboot_target']
+  );
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_incident_future_completion_handoff',
+      ts: '2026-03-09T18:18:00.000Z',
+      agentId: 'growth-revenue',
+      actorId: 'team-lead',
+      eventType: 'agent_handoff_started',
+      currentState: 'planning',
+      activeTask: 'Keep handoff open before future completion',
+      summary: 'Lead started a handoff that completes in the future',
+      severity: 'orange',
+      correlationId: 'corr-future-completion-handoff',
+      counterpartyAgentIds: ['app-engineering'],
+      evidenceRefs: ['/tmp/future-completion-handoff-started.md']
+    })
+  );
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_incident_future_completion_handoff_completed',
+      ts: '2026-03-09T18:25:00.000Z',
+      agentId: 'growth-revenue',
+      actorId: 'team-lead',
+      eventType: 'agent_handoff_completed',
+      currentState: 'planning',
+      activeTask: 'Complete handoff in the future',
+      summary: 'Lead completed a handoff after the request now time',
+      severity: 'normal',
+      correlationId: 'corr-future-completion-handoff',
+      counterpartyAgentIds: ['app-engineering'],
+      evidenceRefs: ['/tmp/future-completion-handoff-completed.md']
+    })
+  );
+
+  const futureCompletionHandoff = await requestJson(
+    `${baseUrl}/incidents?kind=handoff&agent_id=growth-revenue&status=open&correlation_id=corr-future-completion-handoff`
+  );
+  assert.equal(futureCompletionHandoff.response.status, 200);
+  assert.deepEqual(
+    futureCompletionHandoff.body.items.map((item) => item.incident_id),
+    ['evt_incident_future_completion_handoff']
+  );
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'z_incident_same_ts_reboot_requested',
+      ts: '2026-03-09T18:14:00.000Z',
+      agentId: 'protocol-engineering',
+      actorId: 'team-lead',
+      eventType: 'agent_reboot_requested',
+      currentState: 'rebooting',
+      activeTask: 'Reset same timestamp lifecycle',
+      summary: 'Lead requested a same timestamp reboot',
+      severity: 'red',
+      correlationId: 'corr-same-ts-reboot',
+      evidenceRefs: ['/tmp/same-ts-reboot-requested.md']
+    })
+  );
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'a_incident_same_ts_reboot_completed',
+      ts: '2026-03-09T18:14:00.000Z',
+      agentId: 'protocol-engineering',
+      actorId: 'team-lead',
+      eventType: 'agent_reboot_completed',
+      currentState: 'rebooting',
+      activeTask: 'Reset same timestamp lifecycle',
+      summary: 'Lead completed a same timestamp reboot',
+      severity: 'normal',
+      correlationId: 'corr-same-ts-reboot',
+      evidenceRefs: ['/tmp/same-ts-reboot-completed.md']
+    })
+  );
+
+  const sameTimestampReboot = await requestJson(
+    `${baseUrl}/incidents?kind=reboot&agent_id=protocol-engineering&status=open&correlation_id=corr-same-ts-reboot&window=20m`
+  );
+  assert.equal(sameTimestampReboot.response.status, 200);
+  assert.deepEqual(sameTimestampReboot.body.items, []);
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_incident_same_ts_completed_before_requested_completed',
+      ts: '2026-03-09T18:14:00.000Z',
+      agentId: 'protocol-engineering',
+      actorId: 'team-lead',
+      eventType: 'agent_reboot_completed',
+      currentState: 'rebooting',
+      activeTask: 'Complete same timestamp lifecycle before request append',
+      summary: 'Lead completed a same timestamp reboot before request append',
+      severity: 'normal',
+      correlationId: 'corr-same-ts-reboot-reversed',
+      evidenceRefs: ['/tmp/same-ts-reboot-reversed-completed.md']
+    })
+  );
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_incident_same_ts_completed_before_requested_requested',
+      ts: '2026-03-09T18:14:00.000Z',
+      agentId: 'protocol-engineering',
+      actorId: 'team-lead',
+      eventType: 'agent_reboot_requested',
+      currentState: 'rebooting',
+      activeTask: 'Request same timestamp lifecycle after completion append',
+      summary: 'Lead requested a same timestamp reboot after completion append',
+      severity: 'red',
+      correlationId: 'corr-same-ts-reboot-reversed',
+      evidenceRefs: ['/tmp/same-ts-reboot-reversed-requested.md']
+    })
+  );
+
+  const sameTimestampReversedReboot = await requestJson(
+    `${baseUrl}/incidents?kind=reboot&agent_id=protocol-engineering&status=open&correlation_id=corr-same-ts-reboot-reversed&window=20m`
+  );
+  assert.equal(sameTimestampReversedReboot.response.status, 200);
+  assert.deepEqual(sameTimestampReversedReboot.body.items, []);
 });
 
 test('GET /agents/:id/incidents reuses incident feed semantics with an implicit agent filter', async (t) => {
@@ -1550,6 +2209,23 @@ test('GET /agents/:id/incidents reuses incident feed semantics with an implicit 
 
   await store.appendEvent(
     createEvent({
+      eventId: 'evt_agent_incident_unmatched_handoff_completed',
+      ts: '2026-03-09T18:13:00.000Z',
+      agentId: 'app-engineering',
+      actorId: 'team-lead',
+      eventType: 'agent_handoff_completed',
+      currentState: 'planning',
+      activeTask: 'Ignore unrelated completion',
+      summary: 'Lead completed an unrelated handoff lifecycle',
+      severity: 'normal',
+      correlationId: 'corr-agent-unmatched-complete',
+      counterpartyAgentIds: ['growth-revenue'],
+      evidenceRefs: ['/tmp/agent-unmatched-handoff-complete.md']
+    })
+  );
+
+  await store.appendEvent(
+    createEvent({
       eventId: 'evt_agent_incident_reboot',
       ts: '2026-03-09T18:16:00.000Z',
       agentId: 'app-engineering',
@@ -1561,6 +2237,22 @@ test('GET /agents/:id/incidents reuses incident feed semantics with an implicit 
       severity: 'red',
       correlationId: 'corr-agent-open-reboot',
       evidenceRefs: ['/tmp/agent-incident-reboot.md']
+    })
+  );
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_agent_incident_reboot_completed',
+      ts: '2026-03-09T18:17:00.000Z',
+      agentId: 'app-engineering',
+      actorId: 'team-lead',
+      eventType: 'agent_reboot_completed',
+      currentState: 'rebooting',
+      activeTask: 'Reset agent incident context',
+      summary: 'Lead completed the agent incident reboot',
+      severity: 'normal',
+      correlationId: 'corr-agent-open-reboot',
+      evidenceRefs: ['/tmp/agent-incident-reboot-completed.md']
     })
   );
 
@@ -1617,12 +2309,23 @@ test('GET /agents/:id/incidents reuses incident feed semantics with an implicit 
   assert.equal(openActiveIncidents.response.status, 200);
   assert.deepEqual(
     openActiveIncidents.body.items.map((item) => item.incident_id),
-    [
-      'evt_agent_incident_reboot',
-      'evt_agent_incident_handoff',
-      'evt_agent_incident_alert'
-    ]
+    ['evt_agent_incident_handoff', 'evt_agent_incident_alert']
   );
+
+  const completedAgentReboot = await requestJson(
+    `${baseUrl}/agents/app-engineering/incidents?status=completed&correlation_id=corr-agent-open-reboot&window=20m`
+  );
+  assert.equal(completedAgentReboot.response.status, 200);
+  assert.deepEqual(
+    completedAgentReboot.body.items.map((item) => item.incident_id),
+    ['evt_agent_incident_reboot_completed']
+  );
+
+  const openRedAgentIncidents = await requestJson(
+    `${baseUrl}/agents/app-engineering/incidents?status=open&severity=red&window=20m`
+  );
+  assert.equal(openRedAgentIncidents.response.status, 200);
+  assert.deepEqual(openRedAgentIncidents.body.items, []);
 
   const missingAgent = await requestJson(`${baseUrl}/agents/missing-agent/incidents`);
   assert.equal(missingAgent.response.status, 404);

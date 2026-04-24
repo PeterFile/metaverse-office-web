@@ -27,6 +27,7 @@ const ACTIVE_INCIDENT_STATUSES_BY_KIND = Object.freeze({
   handoff: Object.freeze(['waiting', 'started']),
   reboot: Object.freeze(['waiting', 'started', 'requested'])
 });
+const LIFECYCLE_INCIDENT_KINDS = new Set(['handoff', 'reboot']);
 const INTERACTION_EVENT_DESCRIPTORS = Object.freeze({
   agent_asked_question: Object.freeze({
     interaction_type: 'question_reply',
@@ -469,26 +470,33 @@ class PrototypeStore {
   listIncidents(filters = {}) {
     const limit = parseOptionalLimit(filters.limit);
     const durationMs = filters.window ? parseWindow(filters.window) : null;
-    const nowMs = durationMs === null ? null : parseNowMs(filters.now);
+    const nowMs = filters.status === 'open' || durationMs !== null ? parseNowMs(filters.now) : null;
     const incidents = [];
 
     if (!filters.kind || filters.kind === 'peer_watch_alert') {
-      incidents.push(
-        ...this.listPeerWatchAlerts({
+      const peerWatchAlerts = filters.status === 'open'
+        ? this.listOpenPeerWatchAlerts({
+          agent_id: filters.agent_id,
+          severity: filters.severity,
+          correlation_id: filters.correlation_id,
+          limit: null
+        })
+        : this.listPeerWatchAlerts({
           agent_id: filters.agent_id,
           severity: filters.severity,
           status: filters.status,
           correlation_id: filters.correlation_id,
           limit: null
-        }).map(createIncidentFromPeerWatchAlert)
-      );
+        });
+
+      incidents.push(...peerWatchAlerts.map(createIncidentFromPeerWatchAlert));
     }
 
     if (!filters.kind || filters.kind === 'handoff') {
       incidents.push(
         ...this.listHandoffs({
           agent_id: filters.agent_id,
-          correlation_id: filters.correlation_id,
+          correlation_id: filters.status === 'open' ? null : filters.correlation_id,
           limit: null
         }).map(createIncidentFromHandoff)
       );
@@ -498,15 +506,22 @@ class PrototypeStore {
       incidents.push(
         ...this.listReboots({
           agent_id: filters.agent_id,
-          severity: filters.severity,
-          correlation_id: filters.correlation_id,
+          severity: filters.status === 'open' ? null : filters.severity,
+          correlation_id: filters.status === 'open' ? null : filters.correlation_id,
           limit: null
         }).map(createIncidentFromReboot)
       );
     }
 
+    const openLifecycleCandidates = filters.status === 'open'
+      ? incidents.filter((incident) => matchesIncidentOpenLifecycleWindow(incident, { nowMs }))
+      : incidents;
+    const incidentCandidates = filters.status === 'open'
+      ? selectOpenIncidentLifecycleItems(openLifecycleCandidates)
+      : incidents;
+
     return applyOptionalLimit(
-      incidents
+      incidentCandidates
         .filter((incident) => matchesIncidentFilters(incident, filters, { durationMs, nowMs }))
         .sort((left, right) => {
           const rightTs = getIncidentSortMs(right);
@@ -2149,6 +2164,183 @@ function matchesIncidentStatusFilter(incident, status) {
   }
 
   return activeStatuses.includes(incident.status);
+}
+
+function getOpenLifecycleIncidentTieRank(incident) {
+  return matchesIncidentStatusFilter(incident, 'open') ? 0 : 1;
+}
+
+function matchesIncidentOpenLifecycleWindow(incident, { durationMs = null, nowMs = null } = {}) {
+  if (nowMs === null) {
+    return true;
+  }
+
+  const incidentMs = getIncidentSortMs(incident);
+  if (!Number.isFinite(incidentMs) || incidentMs > nowMs) {
+    return false;
+  }
+
+  return durationMs === null || nowMs - incidentMs <= durationMs;
+}
+
+function selectOpenIncidentLifecycleItems(incidents) {
+  const openLifecycleIncidents = [];
+  const passthroughIncidents = [];
+  const orderedIncidents = incidents
+    .map((incident, index) => ({ incident, index }))
+    .sort((left, right) => {
+      const leftMs = getIncidentSortMs(left.incident);
+      const rightMs = getIncidentSortMs(right.incident);
+      if (leftMs !== rightMs) {
+        return leftMs - rightMs;
+      }
+
+      const leftRank = getOpenLifecycleIncidentTieRank(left.incident);
+      const rightRank = getOpenLifecycleIncidentTieRank(right.incident);
+      if (leftRank !== rightRank) {
+        return leftRank - rightRank;
+      }
+
+      return left.index - right.index;
+    });
+
+  for (const { incident } of orderedIncidents) {
+    if (!LIFECYCLE_INCIDENT_KINDS.has(incident.kind)) {
+      passthroughIncidents.push(incident);
+      continue;
+    }
+
+    if (matchesIncidentStatusFilter(incident, 'open')) {
+      const duplicateOpenIndex = findOpenLifecycleDuplicateIndex(openLifecycleIncidents, incident);
+      if (duplicateOpenIndex !== -1) {
+        openLifecycleIncidents.splice(duplicateOpenIndex, 1, incident);
+      } else {
+        openLifecycleIncidents.push(incident);
+      }
+      continue;
+    }
+
+    const openIndex = findLifecycleOpenIncidentIndex(openLifecycleIncidents, incident);
+    if (openIndex !== -1) {
+      openLifecycleIncidents.splice(openIndex, 1);
+    }
+  }
+
+  return [...passthroughIncidents, ...openLifecycleIncidents];
+}
+
+function findOpenLifecycleDuplicateIndex(openIncidents, nextIncident) {
+  const correlationKey = getIncidentCorrelationKey(nextIncident);
+  if (correlationKey.length === 0) {
+    return -1;
+  }
+
+  const counterpartyIds = getIncidentCounterpartyIds(nextIncident);
+  return openIncidents.findIndex((incident) => (
+    incident.kind === nextIncident.kind &&
+    incident.agent_id === nextIncident.agent_id &&
+    getIncidentCorrelationKey(incident) === correlationKey &&
+    areDuplicateOpenLifecycleCounterpartyIds(getIncidentCounterpartyIds(incident), counterpartyIds)
+  ));
+}
+
+function areDuplicateOpenLifecycleCounterpartyIds(left, right) {
+  return agentIdListsEqual(left, right) || left.length === 0 || right.length === 0;
+}
+
+function findLifecycleOpenIncidentIndex(openIncidents, closingIncident) {
+  const sameAgentKindCandidates = openIncidents
+    .map((incident, index) => ({ incident, index }))
+    .filter(({ incident }) => (
+      incident.kind === closingIncident.kind &&
+      incident.agent_id === closingIncident.agent_id
+    ));
+
+  if (sameAgentKindCandidates.length === 0) {
+    return -1;
+  }
+
+  const closingCorrelationKey = getIncidentCorrelationKey(closingIncident);
+  const matchingCorrelationCandidates = sameAgentKindCandidates.filter(
+    ({ incident }) => getIncidentCorrelationKey(incident) === closingCorrelationKey
+  );
+  if (matchingCorrelationCandidates.length > 0) {
+    return selectLifecycleCandidateIndex(matchingCorrelationCandidates, closingIncident);
+  }
+
+  const driftCorrelationCandidates = sameAgentKindCandidates.filter(({ incident }) => {
+    const candidateCorrelationKey = getIncidentCorrelationKey(incident);
+    return candidateCorrelationKey.length === 0 || closingCorrelationKey.length === 0;
+  });
+
+  return selectLifecycleCandidateIndex(driftCorrelationCandidates, closingIncident);
+}
+
+function selectLifecycleCandidateIndex(candidates, closingIncident) {
+  const closingCounterpartyIds = getIncidentCounterpartyIds(closingIncident);
+  if (closingCounterpartyIds.length > 0) {
+    const exactCounterpartyCandidates = candidates.filter(
+      ({ incident }) => agentIdListsEqual(getIncidentCounterpartyIds(incident), closingCounterpartyIds)
+    );
+    if (exactCounterpartyCandidates.length === 1) {
+      return exactCounterpartyCandidates[0].index;
+    }
+    if (exactCounterpartyCandidates.length > 1) {
+      return -1;
+    }
+
+    const compatibleCounterpartyCandidates = candidates.filter(({ incident }) => {
+      const candidateCounterpartyIds = getIncidentCounterpartyIds(incident);
+      return areLifecycleCounterpartyIdsCompatible(candidateCounterpartyIds, closingCounterpartyIds);
+    });
+    if (compatibleCounterpartyCandidates.length === 1) {
+      return compatibleCounterpartyCandidates[0].index;
+    }
+
+    return -1;
+  }
+
+  if (candidates.length !== 1) {
+    return -1;
+  }
+
+  return candidates[0].index;
+}
+
+function getIncidentCorrelationKey(incident) {
+  return typeof incident.correlation_id === 'string' && incident.correlation_id.length > 0
+    ? incident.correlation_id
+    : '';
+}
+
+function getIncidentCounterpartyKey(incident) {
+  return getIncidentCounterpartyIds(incident).join('|');
+}
+
+function getIncidentCounterpartyIds(incident) {
+  return normalizeAgentIds(incident.counterparty_agent_ids || []);
+}
+
+function agentIdListsEqual(left, right) {
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  return left.every((agentId, index) => agentId === right[index]);
+}
+
+function areLifecycleCounterpartyIdsCompatible(left, right) {
+  return (
+    left.length === 0 ||
+    right.length === 0 ||
+    isAgentIdSubset(left, right) ||
+    isAgentIdSubset(right, left)
+  );
+}
+
+function isAgentIdSubset(left, right) {
+  const rightIds = new Set(right);
+  return left.every((agentId) => rightIds.has(agentId));
 }
 
 function createPeerWatchAlertKey(event) {

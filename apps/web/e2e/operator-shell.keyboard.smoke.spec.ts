@@ -1168,37 +1168,72 @@ test.describe('operator shell smoke', () => {
     await expect(inspectButton).toBeVisible();
     await inspectButton.click();
 
-    const workflowSection = detailsPanel.locator('section').filter({
-      has: page.getByRole('heading', { name: 'Workflow' })
-    });
-    const operationSection = detailsPanel.locator('section').filter({
+    const drilldownRegion = page.getByRole('region', { name: 'Selected agent drilldown' });
+    const tablist = page.getByRole('tablist', { name: 'Selected agent drilldown' });
+    const nowTab = tablist.getByRole('tab', { name: 'Now' });
+    const evidenceTab = tablist.getByRole('tab', { name: 'Evidence' });
+    const replayTab = tablist.getByRole('tab', { name: 'Replay / Correlation' });
+
+    await expect(drilldownRegion).toBeVisible();
+    await expect(nowTab).toHaveAttribute('aria-selected', 'true');
+    await expect(detailsPanel).toHaveAttribute('data-selected-agent-drilldown-tab', 'now');
+
+    const nowPanel = page.getByRole('tabpanel', { name: 'Now' });
+    const operationSection = nowPanel.locator('section').filter({
       has: page.getByRole('heading', { name: 'Current Operation' })
     });
-    const incidentSection = detailsPanel.locator('section').filter({
-      has: page.getByRole('heading', { name: 'Incident Feed' })
-    });
-    const correlationSection = detailsPanel.locator('section').filter({
-      has: page.getByRole('heading', { name: 'Correlation Drilldown' })
-    });
-    const runContextSection = detailsPanel.locator('section').filter({
+
+    await expect(nowPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+    await expect(nowPanel.getByRole('heading', { name: 'Current Operation' })).toBeVisible();
+    await expect(nowPanel.getByRole('heading', { name: 'Run Context' })).toHaveCount(0);
+    await expect(nowPanel.getByRole('heading', { name: 'Workflow' })).toHaveCount(0);
+    await expect(nowPanel.locator('.aitown-details__head').getByText('Prepare handoff notes', { exact: true })).toBeVisible();
+    await expect(nowPanel.getByText('meeting-zone', { exact: true })).toBeVisible();
+    await expect(operationSection.getByText('planning · Prepare handoff notes')).toBeVisible();
+    expect(selectedOperationRequests).toContain('/office/operations?agent_id=growth-revenue');
+
+    await nowTab.focus();
+    await expect(nowTab).toBeFocused();
+    await page.keyboard.press('ArrowRight');
+    await expect(evidenceTab).toHaveAttribute('aria-selected', 'true');
+    await expect(evidenceTab).toBeFocused();
+    await expect(detailsPanel).toHaveAttribute('data-selected-agent-drilldown-tab', 'evidence');
+
+    const evidencePanel = page.getByRole('tabpanel', { name: 'Evidence' });
+    const runContextSection = evidencePanel.locator('section').filter({
       has: page.getByRole('heading', { name: 'Run Context' })
     });
+    const workflowSection = evidencePanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Workflow' })
+    });
+    const incidentSection = evidencePanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Incident Feed' })
+    });
 
-    await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
-    await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toBeVisible();
-    await expect(detailsPanel.getByRole('heading', { name: 'Run Context' })).toBeVisible();
-    await expect(detailsPanel.getByRole('heading', { name: 'Workflow' })).toBeVisible();
-    await expect(detailsPanel.locator('.aitown-details__head').getByText('Prepare handoff notes', { exact: true })).toBeVisible();
-    await expect(detailsPanel.getByText('meeting-zone', { exact: true })).toBeVisible();
-    await expect(operationSection.getByText('planning · Prepare handoff notes')).toBeVisible();
+    await expect(evidencePanel.getByRole('heading', { name: 'Run Context' })).toBeVisible();
+    await expect(evidencePanel.getByRole('heading', { name: 'Workflow' })).toBeVisible();
+    await expect(evidencePanel.getByRole('heading', { name: 'Incident Feed' })).toBeVisible();
+    await expect(evidencePanel.getByRole('heading', { name: 'Correlation Drilldown' })).toHaveCount(0);
     await expect(runContextSection.getByText(/Run blocker ·/)).toBeVisible();
     await expect(workflowSection.getByText('No open watch alerts.')).toBeVisible();
     const handoffIncidentRecord = incidentSection.getByText('Lead completed the revenue handoff').locator('..');
     await expect(handoffIncidentRecord.getByText('Lead completed the revenue handoff')).toBeVisible();
     await expect(handoffIncidentRecord.getByText('Incident · handoff · completed')).toBeVisible();
     await expect(handoffIncidentRecord.getByText('Severity · Yellow')).toBeVisible();
+
+    await page.keyboard.press('ArrowRight');
+    await expect(replayTab).toHaveAttribute('aria-selected', 'true');
+    await expect(replayTab).toBeFocused();
+    await expect(detailsPanel).toHaveAttribute('data-selected-agent-drilldown-tab', 'replay');
+
+    const replayPanel = page.getByRole('tabpanel', { name: 'Replay / Correlation' });
+    const correlationSection = replayPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Correlation Drilldown' })
+    });
+
+    await expect(replayPanel.getByRole('heading', { name: 'Timeline Replay' })).toBeVisible();
+    await expect(replayPanel.getByRole('heading', { name: 'Correlation Drilldown' })).toBeVisible();
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
-    expect(selectedOperationRequests).toContain('/office/operations?agent_id=growth-revenue');
 
     await page.getByRole('button', { name: 'Close Hub' }).click();
     await expect(page.getByRole('complementary', { name: 'Agent details' })).toHaveCount(0);
@@ -2042,29 +2077,45 @@ test.describe('operator shell smoke', () => {
     await page.getByRole('button', { name: 'Open Hub' }).click();
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
-    const operationSection = detailsPanel.locator('section').filter({
+    await detailsPanel.getByRole('button', { name: 'Inspect Growth Revenue Agent', exact: true }).click();
+
+    const tablist = page.getByRole('tablist', { name: 'Selected agent drilldown' });
+    const nowTab = tablist.getByRole('tab', { name: 'Now' });
+    const evidenceTab = tablist.getByRole('tab', { name: 'Evidence' });
+    const nowPanel = page.getByRole('tabpanel', { name: 'Now' });
+    const evidencePanel = page.getByRole('tabpanel', { name: 'Evidence' });
+    const operationSection = nowPanel.locator('section').filter({
       has: page.getByRole('heading', { name: 'Current Operation' })
     });
-    const runContextSection = detailsPanel.locator('section').filter({
+    const runContextSection = evidencePanel.locator('section').filter({
       has: page.getByRole('heading', { name: 'Run Context' })
     });
 
-    await detailsPanel.getByRole('button', { name: 'Inspect Growth Revenue Agent', exact: true }).click();
-
-    await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
-    await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toBeVisible();
-    await expect(detailsPanel.getByRole('heading', { name: 'Run Context' })).toBeVisible();
+    await expect(nowTab).toHaveAttribute('aria-selected', 'true');
+    await expect(detailsPanel).toHaveAttribute('data-selected-agent-drilldown-tab', 'now');
+    await expect(nowPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+    await expect(nowPanel.getByRole('heading', { name: 'Current Operation' })).toBeVisible();
+    await expect(nowPanel.getByRole('heading', { name: 'Run Context' })).toHaveCount(0);
     await expect(operationSection.getByText('planning · Prepare handoff notes')).toBeVisible();
-    await expect(runContextSection.getByText(/Run blocker ·/)).toBeVisible();
-    await expect(runContextSection.getByText(/Latest event type ·/)).toBeVisible();
     expect(selectedOperationRequests).toContain('/office/operations?agent_id=growth-revenue');
 
+    await evidenceTab.click();
+    await expect(evidenceTab).toHaveAttribute('aria-selected', 'true');
+    await expect(detailsPanel).toHaveAttribute('data-selected-agent-drilldown-tab', 'evidence');
+    await expect(evidencePanel.getByRole('heading', { name: 'Run Context' })).toBeVisible();
+    await expect(runContextSection.getByText(/Run blocker ·/)).toBeVisible();
+    await expect(runContextSection.getByText(/Latest event type ·/)).toBeVisible();
+
+    await nowTab.click();
+    await expect(nowTab).toHaveAttribute('aria-selected', 'true');
     await enableScenario(page, 'selected-operation-refresh-failure');
 
-    await expect(detailsPanel.getByText('Showing last operation snapshot. operations refresh failed')).toBeVisible({
+    await expect(operationSection.getByText('Showing last operation snapshot. operations refresh failed')).toBeVisible({
       timeout: POLL_DRIVEN_ASSERTION_TIMEOUT_MS
     });
     await expect(operationSection.getByText('planning · Prepare handoff notes')).toBeVisible();
+
+    await evidenceTab.click();
     await expect(runContextSection.getByText(/Run blocker ·/)).toBeVisible();
     await expect(runContextSection.getByText(/Latest event type ·/)).toBeVisible();
   });

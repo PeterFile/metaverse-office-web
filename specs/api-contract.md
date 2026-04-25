@@ -94,6 +94,7 @@
 - `GET /agents/:id/incidents` is read-only and reuses the existing incident feed normalization with `:id` applied as the implicit `agent_id` filter
 - supported filters are `kind`, `severity`, `status`, `correlation_id`, `limit`, and `window`
 - supported `kind` values are `peer_watch_alert`, `handoff`, and `reboot`
+- `status=open` follows the same active-status alias semantics as `GET /incidents`
 - `window` reuses the same normalized incident `ts` filtering semantics as `GET /incidents`
 - the route returns `404` when the agent id is unknown
 
@@ -238,8 +239,8 @@
 - supported `kind` values are `peer_watch_alert`, `handoff`, and `reboot`
 - supported filters are `kind`, `agent_id`, `severity`, `status`, `correlation_id`, `limit`, and `window`
 - output is always descending by incident timestamp
-- `status=open` for peer-watch incidents keeps the unresolved-alert semantics from `GET /peer-watch/alerts`
-- `status=started` / `completed` maps to handoff records, and `status=requested` / `completed` maps to reboot records
+- `status=open` is an active-status alias: unresolved peer-watch `open`, handoff `waiting` / `started`, and reboot `waiting` / `started` / `requested`
+- explicit closed status filters such as `status=completed` and `status=resolved` remain literal matches
 - `window` filters by normalized incident `ts` relative to request time without creating a new stored incident projection
 - each incident item exposes `incident_id`, `kind`, `ts`, `agent_id`, `actor_id`, `status`, `severity`, `summary`, `correlation_id`, `evidence_refs`, `counterparty_agent_ids`, and `source_kind`
 

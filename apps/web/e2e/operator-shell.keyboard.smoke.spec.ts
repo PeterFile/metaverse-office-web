@@ -134,7 +134,7 @@ function resolveSelectedAgentSupervisionHistoryPath(targetAgentId: string, corre
 
 const BENIGN_POST_JUMP_REQUESTS = new Set([
   '/office/overview',
-  '/incidents?limit=10&window=60m',
+  '/incidents?limit=200&window=8760h',
   '/collectors/controller-snapshot'
 ]);
 
@@ -1231,7 +1231,7 @@ test.describe('operator shell smoke', () => {
       '/correlations/corr-revenue-handoff'
     ]);
     const expectedOverviewSearch = '';
-    const expectedIncidentsSearch = '?limit=10&window=60m';
+    const expectedIncidentsSearch = '?limit=200&window=8760h';
     const expectedWorkflowSearch = '?limit=10&window=60m';
     const postCloseRequests: Array<{
       method: string;
@@ -1415,7 +1415,7 @@ test.describe('operator shell smoke', () => {
       '/correlations/corr-revenue-handoff'
     ]);
     const expectedOverviewSearch = '';
-    const expectedIncidentsSearch = '?limit=10&window=60m';
+    const expectedIncidentsSearch = '?limit=200&window=8760h';
     const expectedWorkflowSearch = '?limit=10&window=60m';
     const postCloseRequests: Array<{
       method: string;
@@ -1658,7 +1658,7 @@ test.describe('operator shell smoke', () => {
       '/correlations/corr-revenue-handoff'
     ]);
     const expectedOverviewSearch = '';
-    const expectedIncidentsSearch = '?limit=10&window=60m';
+    const expectedIncidentsSearch = '?limit=200&window=8760h';
     const expectedWorkflowSearch = '?limit=10&window=60m';
     const postCloseRequests: Array<{
       method: string;
@@ -1860,7 +1860,7 @@ test.describe('operator shell smoke', () => {
       '/correlations/corr-revenue-handoff'
     ]);
     const expectedOverviewSearch = '';
-    const expectedIncidentsSearch = '?limit=10&window=60m';
+    const expectedIncidentsSearch = '?limit=200&window=8760h';
     const expectedWorkflowSearch = '?limit=10&window=60m';
     const postCloseRequests: Array<{
       method: string;
@@ -4451,7 +4451,7 @@ test.describe('operator shell smoke', () => {
       }
     });
 
-    await page.route('**/incidents?limit=10&window=60m', async (route) => {
+    await page.route('**/incidents?limit=200&window=8760h', async (route) => {
       const response = await route.fetch();
       const incidents = (await response.json()) as {
         items: Array<{
@@ -4521,7 +4521,7 @@ test.describe('operator shell smoke', () => {
       }
     });
 
-    await page.route('**/incidents?limit=10&window=60m', async (route) => {
+    await page.route('**/incidents?limit=200&window=8760h', async (route) => {
       await route.fulfill({
         status: 500,
         contentType: 'application/json',
@@ -5268,7 +5268,7 @@ test.describe('operator shell smoke', () => {
       await route.continue();
     });
 
-    await page.route('**/incidents?limit=10&window=60m', async (route) => {
+    await page.route('**/incidents?limit=200&window=8760h', async (route) => {
       const response = await route.fetch();
       const incidents = (await response.json()) as { items: Array<Record<string, unknown>> };
 

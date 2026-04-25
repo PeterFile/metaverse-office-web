@@ -545,6 +545,95 @@ function buildProps(overrides: Partial<DetailsPanelProps> = {}): DetailsPanelPro
   };
 }
 
+describe('DetailsPanel incident-feed correlation gating', () => {
+  it('keeps the active correlation when pivoting from a stale incident row', async () => {
+    const user = userEvent.setup();
+    const onSelectAgent = vi.fn();
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          incidentFeed: {
+            items: [
+              {
+                incident_id: 'inc-stale-crew',
+                kind: 'peer_watch_alert',
+                ts: '2026-03-16T06:30:00.000Z',
+                agent_id: 'app-engineering',
+                actor_id: 'team-lead',
+                status: 'open',
+                severity: 'orange',
+                summary: 'Stale incident row should not clear the active correlation on pivots',
+                correlation_id: 'corr-stale-crew',
+                evidence_refs: ['/tmp/evidence.md'],
+                counterparty_agent_ids: ['growth-revenue'],
+                source_kind: 'controller_event'
+              }
+            ]
+          },
+          crewIncidentCorrelationSelectableIds: new Set(),
+          onSelectAgent,
+          selectedAgent: null,
+          selectedOperation: null,
+          workflow: null,
+          world: buildWorld()
+        })}
+      />
+    );
+
+    await user.click(
+      screen.getByRole('button', {
+        name: 'Select incident feed actor from incident inc-stale-crew team-lead'
+      })
+    );
+
+    expect(onSelectAgent).toHaveBeenCalledWith('team-lead', 'corr-app-review');
+  });
+
+  it('keeps workflow-backed selected-agent incident correlations selectable even when the crew incident slice omits them', async () => {
+    const user = userEvent.setup();
+    const onSelectCorrelation = vi.fn();
+    const workflow = buildWorkflow();
+    workflow.detail.recent_incidents = [
+      {
+        incident_id: 'workflow-only-incident',
+        kind: 'handoff',
+        ts: '2026-03-16T08:57:00.000Z',
+        agent_id: 'app-engineering',
+        actor_id: 'team-lead',
+        status: 'started',
+        severity: 'yellow',
+        summary: 'Workflow-only incident should keep its correlation pivot',
+        correlation_id: 'corr-workflow-only',
+        evidence_refs: ['/evidence/workflow-only.md'],
+        counterparty_agent_ids: ['team-lead'],
+        source_kind: 'controller_event'
+      }
+    ];
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          crewIncidentCorrelationSelectableIds: new Set(),
+          onSelectCorrelation,
+          selectedCorrelationId: 'corr-app-review',
+          workflow
+        })}
+      />
+    );
+
+    await user.click(
+      screen.getByRole('button', {
+        name: 'Open incident correlation corr-workflow-only'
+      })
+    );
+
+    expect(onSelectCorrelation).toHaveBeenCalledWith('corr-workflow-only', {
+      preserveAutoOnDefaultReselect: true
+    });
+  });
+});
+
 describe('DetailsPanel selected-agent workflow lifecycle', () => {
   it('shows explicit first-load copy while the selected-agent workflow is still loading', () => {
     render(

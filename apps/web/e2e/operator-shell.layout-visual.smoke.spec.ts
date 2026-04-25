@@ -124,4 +124,65 @@ test.describe('operator shell layout visual smoke', () => {
     await expect(hub).toHaveCount(0);
     await expectCanvasDragMovesViewport(page);
   });
+
+  test('keeps selected-agent inspect peek compact outside the world drag lane', async ({ page }) => {
+    await page.goto('/');
+
+    const worldHost = page.locator('.aitown-world__host');
+    await expect(worldHost).toBeVisible();
+    await page.waitForFunction(() => Boolean(window.__AITOWN_VIEWPORT__));
+
+    await page.getByRole('button', { name: 'Open Hub' }).click();
+
+    const hub = page.getByRole('dialog', { name: 'Hub' });
+    const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
+    const activeQueueSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Active Queue' })
+    });
+
+    await activeQueueSection
+      .getByRole('button', { name: 'Inspect Growth Revenue Agent from active queue' })
+      .click();
+    await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Selected agent inspect peek' })).toHaveCount(0);
+
+    await page.getByRole('button', { name: 'Close Hub' }).click();
+    await expect(hub).toHaveCount(0);
+
+    const inspectPeek = page.getByRole('region', { name: 'Selected agent inspect peek' });
+    await expect(inspectPeek).toBeVisible();
+    await expect(inspectPeek.getByText('Growth Revenue Agent')).toBeVisible();
+    await expect(inspectPeek.getByText(/Yellow .* planning/)).toBeVisible();
+    await expect(inspectPeek.getByText('Operation · Prepare handoff notes')).toBeVisible();
+    await expect(inspectPeek.getByText('Correlation · corr-revenue-handoff')).toBeVisible();
+    await expect(inspectPeek.getByText('Evidence · /tmp/revenue-handoff.md')).toBeVisible();
+
+    const [worldRect, peekRect] = await Promise.all([readRect(worldHost), readRect(inspectPeek)]);
+    expect(peekRect.width, 'Inspect peek should stay compact').toBeLessThanOrEqual(360);
+    expect(peekRect.height, 'Inspect peek should stay compact').toBeLessThanOrEqual(240);
+    expect(
+      resolveIntersectionArea(resolvePrimaryDragLane(worldRect), peekRect),
+      'Inspect peek should stay outside the primary world drag lane'
+    ).toBe(0);
+
+    const overflowPolicy = await inspectPeek.evaluate((element) => {
+      const peekStyle = getComputedStyle(element);
+      const facts = element.querySelector('.aitown-selected-agent-peek__facts');
+      const factsStyle = facts ? getComputedStyle(facts) : null;
+      return {
+        peekOverflow: peekStyle.overflow,
+        factsOverflowY: factsStyle?.overflowY ?? null
+      };
+    });
+    expect(overflowPolicy.peekOverflow, 'Inspect peek should clip long labels instead of painting outside').not.toBe(
+      'visible'
+    );
+    expect(overflowPolicy.factsOverflowY, 'Inspect peek facts should scroll or clip long evidence refs').not.toBe(
+      'visible'
+    );
+
+    await inspectPeek.getByRole('button', { name: 'Open selected agent in Hub' }).click();
+    await expect(page.getByRole('dialog', { name: 'Hub' })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Selected agent inspect peek' })).toHaveCount(0);
+  });
 });

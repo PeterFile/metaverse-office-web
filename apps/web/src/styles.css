@@ -428,6 +428,78 @@ button {
   text-align: center;
 }
 
+.aitown-selected-agent-peek {
+  position: absolute;
+  top: 222px;
+  right: 18px;
+  z-index: 7;
+  display: flex;
+  width: min(332px, calc(100% - 36px));
+  max-height: calc(100% - 258px);
+  flex-direction: column;
+  gap: 6px;
+  padding: 7px 10px 8px;
+  border-style: solid;
+  border-width: 14px;
+  border-image-source: url('/ai-town/assets/ui/box.svg');
+  border-image-repeat: stretch;
+  border-image-slice: 12.5%;
+  background: rgba(35, 45, 46, 0.91);
+  color: #edf7ed;
+  overflow: hidden;
+  pointer-events: auto;
+  backdrop-filter: blur(8px);
+}
+
+.aitown-selected-agent-peek__head,
+.aitown-selected-agent-peek__facts {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.aitown-selected-agent-peek__facts {
+  max-height: 92px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 2px;
+  scrollbar-width: thin;
+}
+
+.aitown-selected-agent-peek__eyebrow {
+  color: #8be9d5;
+  font-size: 0.74rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.aitown-selected-agent-peek__head strong {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  color: #fffdf3;
+  font-size: 0.88rem;
+  overflow-wrap: anywhere;
+}
+
+.aitown-selected-agent-peek__head span,
+.aitown-selected-agent-peek__facts span {
+  color: #d8eadf;
+  font-size: 0.74rem;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.aitown-selected-agent-peek__action {
+  align-self: flex-start;
+  min-width: 0;
+  padding: 5px 10px 6px;
+  font-size: 0.74rem;
+}
+
 .aitown-correlation-overlay {
   position: absolute;
   top: 222px;
@@ -1083,6 +1155,13 @@ button {
     max-width: min(420px, calc(100% - 28px));
   }
 
+  .aitown-selected-agent-peek {
+    top: 288px;
+    right: 14px;
+    width: min(300px, calc(100% - 28px));
+    max-height: calc(100% - 316px);
+  }
+
   .aitown-watch-overlay {
     right: 14px;
     bottom: 14px;
@@ -1202,6 +1281,10 @@ button {
     bottom: 10px;
     max-width: none;
     padding: 8px 10px;
+  }
+
+  .aitown-selected-agent-peek {
+    display: none;
   }
 
   .aitown-watch-overlay {

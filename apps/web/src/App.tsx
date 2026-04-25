@@ -833,6 +833,7 @@ function AppInner() {
     overviewResource.data?.agents,
     lastSelectedAgentRef.current
   );
+  const selectedWorldAgent = selectedAgentId ? projectedWorld.agents.get(selectedAgentId) ?? null : null;
 
   const liveSelectedOperation = useMemo(() => {
     if (!selectedOperationSelection) {
@@ -1627,6 +1628,32 @@ function AppInner() {
   );
   const manualCorrelationOverrideActive = selectedCorrelationId !== null && selectedCorrelationWasExplicit;
   const preserveWorkflowCounterpartyCorrelation = selectedCorrelationId !== null && selectedCorrelationCarryForward;
+  const selectedAgentPeekSeverity =
+    selectedOperation?.effective_severity ??
+    selectedWorldAgent?.severity ??
+    selectedAgent?.effective_severity ??
+    'normal';
+  const selectedAgentPeekStatus =
+    selectedOperation?.current_state ??
+    selectedWorldAgent?.raw_state ??
+    selectedAgent?.current_state ??
+    'unknown';
+  const selectedAgentPeekZone =
+    selectedWorldAgent
+      ? selectAgentZoneLabel(selectedWorldAgent, projectedWorld.zones)
+      : selectedOperation?.current_location ?? selectedAgent?.current_location ?? null;
+  const selectedAgentPeekOperation =
+    selectedOperation?.current_blocker ||
+    selectedOperation?.active_task ||
+    selectedWorldAgent?.active_task ||
+    selectedAgent?.active_task ||
+    null;
+  const selectedAgentPeekCorrelationId =
+    selectedOperation?.correlation_id ?? selectedCorrelationId ?? defaultCorrelationId;
+  const selectedAgentPeekEvidenceRef =
+    selectedOperation?.latest_event?.evidence_refs[0] ??
+    activeWorkflow?.detail.recent_events.find((event) => event.evidence_refs.length > 0)?.evidence_refs[0] ??
+    null;
 
   return (
     <main className="aitown-shell game-background">
@@ -1750,6 +1777,37 @@ function AppInner() {
             ) : null}
           </div>
           <SceneStatusLegend onFocusWorldZone={handleFocusWorldZone} world={projectedWorld} />
+
+          {selectedAgent && !hubOpen ? (
+            <aside
+              className={`aitown-selected-agent-peek severity-${selectedAgentPeekSeverity}`}
+              role="region"
+              aria-label="Selected agent inspect peek"
+            >
+              <div className="aitown-selected-agent-peek__head">
+                <span className="aitown-selected-agent-peek__eyebrow">Selected agent</span>
+                <strong>{selectedAgent.display_name}</strong>
+                <span>{`${HOT_ZONE_SEVERITY_LABELS[selectedAgentPeekSeverity]} · ${selectedAgentPeekStatus}`}</span>
+              </div>
+              <div className="aitown-selected-agent-peek__facts">
+                {selectedAgentPeekZone ? <span>{`Zone · ${selectedAgentPeekZone}`}</span> : null}
+                {selectedAgentPeekOperation ? <span>{`Operation · ${selectedAgentPeekOperation}`}</span> : null}
+                {selectedAgentPeekCorrelationId ? (
+                  <span>{`Correlation · ${selectedAgentPeekCorrelationId}`}</span>
+                ) : null}
+                {selectedAgentPeekEvidenceRef ? <span>{`Evidence · ${selectedAgentPeekEvidenceRef}`}</span> : null}
+              </div>
+              <button
+                type="button"
+                className="aitown-button aitown-selected-agent-peek__action"
+                aria-controls="aitown-hub"
+                aria-haspopup="dialog"
+                onClick={() => setHubOpen(true)}
+              >
+                Open selected agent in Hub
+              </button>
+            </aside>
+          ) : null}
 
           {overviewRefreshWarning ? (
             <div className="aitown-world__placeholder aitown-world__placeholder--warning" role="status">

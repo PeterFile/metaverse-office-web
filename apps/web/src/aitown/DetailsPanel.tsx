@@ -27,6 +27,26 @@ import { selectWorkflowSummaryFacets } from '../workflow/summary';
 import type { WorldState } from '../world/types';
 import { selectAgentBadge, selectAgentZoneLabel, selectAttentionQueue, selectWatchEdgeRisk } from '../world/selectors';
 import { collectInteractionSourceKinds } from './accountabilitySignals';
+
+export type SelectedAgentDrilldownTab = 'now' | 'evidence' | 'replay';
+
+export const SELECTED_AGENT_DRILLDOWN_TABS: ReadonlyArray<{
+  id: SelectedAgentDrilldownTab;
+  label: string;
+}> = [
+  { id: 'now', label: 'Now' },
+  { id: 'evidence', label: 'Evidence' },
+  { id: 'replay', label: 'Replay / Correlation' }
+];
+
+export function resolveSelectedAgentDrilldownTabId(tab: SelectedAgentDrilldownTab) {
+  return `aitown-selected-agent-drilldown-tab-${tab}`;
+}
+
+export function resolveSelectedAgentDrilldownPanelId(tab: SelectedAgentDrilldownTab) {
+  return `aitown-selected-agent-drilldown-panel-${tab}`;
+}
+
 type SharedMemoryJumpScope = {
   correlationId?: string | null;
   preserveNullCorrelation?: boolean;
@@ -79,6 +99,7 @@ type DetailsPanelProps = {
   selectedOperationsSeverity: Severity | null;
   selectedOperation: OfficeOperation | null;
   selectedOperationRequestActive?: boolean;
+  selectedAgentDrilldownTab?: SelectedAgentDrilldownTab | null;
   timelineReplay: TimelineReplayResponse | null;
   timelineReplayError: string | null;
   timelineReplayState: LoadState;
@@ -1979,6 +2000,7 @@ function renderReplaySummaryFacets(facets: ReplaySummaryFacets) {
 }
 
 function renderTimelineReplaySection({
+  sectionClassName = '',
   requestScopeLabel = null,
   scopedReplayCorrelationId = null,
   selectedSeverity = null,
@@ -2000,6 +2022,7 @@ function renderTimelineReplaySection({
   onSelectAgent,
   onSelectCorrelation
 }: {
+  sectionClassName?: string;
   requestScopeLabel?: string | null;
   scopedReplayCorrelationId?: string | null;
   selectedSeverity?: Severity | null;
@@ -2024,7 +2047,7 @@ function renderTimelineReplaySection({
   const replaySummaryFacets = hasReplaySnapshot ? selectReplaySummaryFacets(timelineReplayItems) : null;
 
   return (
-    <section className="aitown-details__section">
+    <section className={`aitown-details__section${sectionClassName ? ` ${sectionClassName}` : ''}`}>
       <h3>Timeline Replay</h3>
       {requestScopeLabel ? <p>{`Request scope · ${requestScopeLabel}`}</p> : null}
       {scopedReplayCorrelationId ? <span>{`Scoped replay · ${scopedReplayCorrelationId}`}</span> : null}
@@ -2573,6 +2596,7 @@ function renderFocusedSharedMemoryBacklinkLane({
 }
 
 function renderSharedMemorySection({
+  sectionClassName = '',
   memoryArtifacts,
   memoryArtifactsError,
   memoryArtifactsState,
@@ -2587,6 +2611,7 @@ function renderSharedMemorySection({
   onSelectAgent,
   onSelectCorrelation
 }: {
+  sectionClassName?: string;
   memoryArtifacts: MemoryArtifactIndex | null;
   memoryArtifactsError: string | null;
   memoryArtifactsState: LoadState;
@@ -2607,7 +2632,7 @@ function renderSharedMemorySection({
       : null;
 
   return (
-    <section className="aitown-details__section">
+    <section className={`aitown-details__section${sectionClassName ? ` ${sectionClassName}` : ''}`}>
       <h3>Shared Memory</h3>
       <span>{`Request scope · ${sharedMemoryRequestScopeLabel}`}</span>
       {focusedSharedMemoryArtifactRef ? (
@@ -2961,6 +2986,7 @@ export function DetailsPanel({
   selectedOperationsSeverity,
   selectedOperation,
   selectedOperationRequestActive,
+  selectedAgentDrilldownTab = null,
   timelineReplay,
   timelineReplayError,
   timelineReplayState,
@@ -3129,7 +3155,9 @@ export function DetailsPanel({
   const sharedMemoryActiveCorrelationId = selectedCorrelationId;
   const sharedMemoryArtifactRefs = new Set((memoryArtifacts?.items ?? []).map((artifact) => artifact.artifact_ref));
   const activeCorrelationQueueSection = shouldRenderActiveCorrelationQueueSection && activeCorrelationQueueCorrelation ? (
-    <section className="aitown-details__section">
+    <section
+      className={`aitown-details__section${selectedAgent ? ' aitown-details__section--selected-evidence' : ''}`}
+    >
       <h3>Active Correlation Queue</h3>
       {activeCorrelationQueueScopeLabel ? <p>{activeCorrelationQueueScopeLabel}</p> : null}
       <ul className="aitown-records">
@@ -4082,7 +4110,12 @@ export function DetailsPanel({
       : null;
 
   return (
-    <aside className="aitown-panel aitown-panel--details" role="complementary" aria-label="Agent details">
+    <aside
+      className="aitown-panel aitown-panel--details"
+      role="complementary"
+      aria-label="Agent details"
+      data-selected-agent-drilldown-tab={selectedAgentDrilldownTab ?? undefined}
+    >
       <div className="aitown-details__head">
         <div>
           <h2>{selectedAgent.display_name}</h2>
@@ -4119,7 +4152,7 @@ export function DetailsPanel({
         </div>
       </div>
 
-      <section className="aitown-details__section">
+      <section className="aitown-details__section aitown-details__section--selected-evidence">
         <h3>Collector Observation</h3>
         {collectorWarning ? <p role="status">{collectorWarning}</p> : null}
         <ul className="aitown-records">
@@ -4192,7 +4225,7 @@ export function DetailsPanel({
         </ul>
       </section>
 
-      <section className="aitown-details__section">
+      <section className="aitown-details__section aitown-details__section--selected-evidence">
         <h3>Supervision History</h3>
         {supervisionHistoryWarning ? <p role="status">{supervisionHistoryWarning}</p> : null}
         <p>
@@ -4252,7 +4285,7 @@ export function DetailsPanel({
 
       {selectedOperation || selectedOperationLoadingState || selectedOperationErrorState ? (
         <>
-          <section className="aitown-details__section">
+          <section className="aitown-details__section aitown-details__section--selected-now">
             <h3>Current Operation</h3>
             {currentOperationWarning ? <p role="status">{currentOperationWarning}</p> : null}
             <ul className="aitown-records">
@@ -4318,7 +4351,7 @@ export function DetailsPanel({
             </ul>
           </section>
           {selectedOperation ? (
-            <section className="aitown-details__section">
+            <section className="aitown-details__section aitown-details__section--selected-evidence">
               <h3>Run Context</h3>
               <ul className="aitown-records">
                 <li className={`aitown-record severity-${selectedOperation.effective_severity}`}>
@@ -4340,7 +4373,7 @@ export function DetailsPanel({
 
       {activeCorrelationQueueSection}
 
-      <section className="aitown-details__section">
+      <section className="aitown-details__section aitown-details__section--selected-now aitown-details__section--selected-evidence">
         <h3>Audit Signals</h3>
         <ul className="aitown-records">
           <li className={`aitown-record severity-${selectedAgent.effective_severity}`}>
@@ -4396,7 +4429,7 @@ export function DetailsPanel({
         </ul>
       </section>
 
-      <section className="aitown-details__section">
+      <section className="aitown-details__section aitown-details__section--selected-evidence">
         <h3>Workflow</h3>
         {workflowWarning ? <p role="status">{workflowWarning}</p> : null}
         <ul className="aitown-records">
@@ -4571,6 +4604,7 @@ export function DetailsPanel({
       </section>
 
       {renderSharedMemorySection({
+        sectionClassName: 'aitown-details__section--selected-evidence',
         memoryArtifacts,
         memoryArtifactsError,
         memoryArtifactsState,
@@ -4586,7 +4620,7 @@ export function DetailsPanel({
         onSelectCorrelation
       })}
 
-      <section className="aitown-details__section">
+      <section className="aitown-details__section aitown-details__section--selected-evidence">
         <h3>Incident Feed</h3>
         <ul className="aitown-records">
           {incidentFeedState === 'loading' && !incidentFeed ? (
@@ -4622,6 +4656,7 @@ export function DetailsPanel({
       </section>
 
       {renderTimelineReplaySection({
+        sectionClassName: 'aitown-details__section--selected-replay',
         requestScopeLabel: selectedAgentReplayScopeLabel,
         scopedReplayCorrelationId: selectedCorrelationId,
         selectedSeverity: selectedAgentReplaySeverity,
@@ -4652,7 +4687,7 @@ export function DetailsPanel({
         onSelectCorrelation
       })}
 
-      <section className="aitown-details__section">
+      <section className="aitown-details__section aitown-details__section--selected-replay">
         <h3>Correlation Drilldown</h3>
         <ul className="aitown-records">
           {correlationState === 'loading' && !correlation ? (

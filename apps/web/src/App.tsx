@@ -1,4 +1,13 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent
+} from 'react';
 
 import {
   DEFAULT_WORKFLOW_LIMIT,
@@ -14,7 +23,13 @@ import {
   fetchPeerWatchAlerts,
   fetchTimeline
 } from './api';
-import { DetailsPanel } from './aitown/DetailsPanel';
+import {
+  DetailsPanel,
+  SELECTED_AGENT_DRILLDOWN_TABS,
+  resolveSelectedAgentDrilldownPanelId,
+  resolveSelectedAgentDrilldownTabId,
+  type SelectedAgentDrilldownTab
+} from './aitown/DetailsPanel';
 import { SceneStatusLegend } from './aitown/SceneStatusLegend';
 import { adaptWorldToScene } from './aitown/sceneAdapter';
 import { WorldProvider, useWorld } from './context/WorldContext';
@@ -550,6 +565,8 @@ function AppInner() {
   const [focusedSharedMemoryArtifactRef, setFocusedSharedMemoryArtifactRef] = useState<string | null>(null);
   const [sharedMemoryJumpStatus, setSharedMemoryJumpStatus] = useState<string | null>(null);
   const [cachedCorrelationSpotlight, setCachedCorrelationSpotlight] = useState<CorrelationSpotlight | null>(null);
+  const [selectedAgentDrilldownTab, setSelectedAgentDrilldownTab] =
+    useState<SelectedAgentDrilldownTab>('now');
   const lastSelectedAgentRef = useRef<OfficeAgent | null>(null);
   const correlationSelectionModeRef = useRef<'auto' | 'manual' | 'preserved'>('auto');
   const lastCorrelationContextRef = useRef<string | null>(null);
@@ -1270,6 +1287,96 @@ function AppInner() {
   }, []);
 
   useEffect(() => {
+    if (hubOpen && selectedAgentId !== null) {
+      setSelectedAgentDrilldownTab('now');
+    }
+  }, [hubOpen, selectedAgentId]);
+
+  const handleSelectSelectedAgentDrilldownTab = useCallback((tab: SelectedAgentDrilldownTab) => {
+    setSelectedAgentDrilldownTab(tab);
+
+    if (typeof window === 'undefined' || typeof document === 'undefined') {
+      return;
+    }
+
+    const schedule =
+      typeof window.requestAnimationFrame === 'function'
+        ? window.requestAnimationFrame.bind(window)
+        : (callback: FrameRequestCallback) => window.setTimeout(() => callback(Date.now()), 0);
+
+    schedule(() => {
+      const dialog = hubDialogRef.current;
+      const panel = document.getElementById(resolveSelectedAgentDrilldownPanelId(tab));
+
+      if (!dialog || !panel) {
+        return;
+      }
+
+      const targetScrollTop = Math.max(0, panel.offsetTop - 4);
+      if (typeof dialog.scrollTo === 'function') {
+        dialog.scrollTo({ top: targetScrollTop, behavior: 'auto' });
+      } else {
+        dialog.scrollTop = targetScrollTop;
+      }
+    });
+  }, []);
+
+  const selectAndFocusSelectedAgentDrilldownTab = useCallback(
+    (tab: SelectedAgentDrilldownTab) => {
+      handleSelectSelectedAgentDrilldownTab(tab);
+
+      if (typeof document === 'undefined') {
+        return;
+      }
+
+      document.getElementById(resolveSelectedAgentDrilldownTabId(tab))?.focus();
+    },
+    [handleSelectSelectedAgentDrilldownTab]
+  );
+
+  const handleSelectedAgentDrilldownTabKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLButtonElement>) => {
+      const currentIndex = SELECTED_AGENT_DRILLDOWN_TABS.findIndex(
+        (tab) => tab.id === selectedAgentDrilldownTab
+      );
+
+      if (currentIndex === -1) {
+        return;
+      }
+
+      let nextIndex: number | null = null;
+
+      switch (event.key) {
+        case 'ArrowRight':
+        case 'ArrowDown':
+          nextIndex = (currentIndex + 1) % SELECTED_AGENT_DRILLDOWN_TABS.length;
+          break;
+        case 'ArrowLeft':
+        case 'ArrowUp':
+          nextIndex =
+            (currentIndex - 1 + SELECTED_AGENT_DRILLDOWN_TABS.length) %
+            SELECTED_AGENT_DRILLDOWN_TABS.length;
+          break;
+        case 'Home':
+          nextIndex = 0;
+          break;
+        case 'End':
+          nextIndex = SELECTED_AGENT_DRILLDOWN_TABS.length - 1;
+          break;
+        default:
+          return;
+      }
+
+      event.preventDefault();
+      const nextTab = SELECTED_AGENT_DRILLDOWN_TABS[nextIndex]?.id;
+      if (nextTab) {
+        selectAndFocusSelectedAgentDrilldownTab(nextTab);
+      }
+    },
+    [selectAndFocusSelectedAgentDrilldownTab, selectedAgentDrilldownTab]
+  );
+
+  useEffect(() => {
     if (typeof document === 'undefined') {
       return;
     }
@@ -1866,28 +1973,72 @@ function AppInner() {
               </div>
             </div>
             {selectedAgent ? (
-              <section
-                className={`aitown-hub-focus-ribbon severity-${selectedAgentPeekSeverity}`}
-                role="region"
-                aria-label="Hub focus ribbon"
-              >
-                <div className="aitown-hub-focus-ribbon__head">
-                  <span className="aitown-hub-focus-ribbon__eyebrow">Selected agent</span>
-                  <strong>{selectedAgent.display_name}</strong>
-                  <span>{`${HOT_ZONE_SEVERITY_LABELS[selectedAgentPeekSeverity]} · ${selectedAgentPeekStatus}`}</span>
-                </div>
-                <div className="aitown-hub-focus-ribbon__facts">
-                  {selectedAgentPeekZone ? <span>{`Zone · ${selectedAgentPeekZone}`}</span> : null}
-                  {selectedAgentPeekOperation ? <span>{`Operation · ${selectedAgentPeekOperation}`}</span> : null}
-                  {selectedAgentPeekCorrelationId ? (
-                    <span>{`Correlation · ${selectedAgentPeekCorrelationId}`}</span>
-                  ) : null}
-                  {selectedAgentPeekEvidenceRef ? <span>{`Evidence · ${selectedAgentPeekEvidenceRef}`}</span> : null}
-                </div>
-              </section>
+              <div className="aitown-hub-selected-agent-chrome">
+                <section
+                  className={`aitown-hub-focus-ribbon severity-${selectedAgentPeekSeverity}`}
+                  role="region"
+                  aria-label="Hub focus ribbon"
+                >
+                  <div className="aitown-hub-focus-ribbon__head">
+                    <span className="aitown-hub-focus-ribbon__eyebrow">Selected agent</span>
+                    <strong>{selectedAgent.display_name}</strong>
+                    <span>{`${HOT_ZONE_SEVERITY_LABELS[selectedAgentPeekSeverity]} · ${selectedAgentPeekStatus}`}</span>
+                  </div>
+                  <div className="aitown-hub-focus-ribbon__facts">
+                    {selectedAgentPeekZone ? <span>{`Zone · ${selectedAgentPeekZone}`}</span> : null}
+                    {selectedAgentPeekOperation ? <span>{`Operation · ${selectedAgentPeekOperation}`}</span> : null}
+                    {selectedAgentPeekCorrelationId ? (
+                      <span>{`Correlation · ${selectedAgentPeekCorrelationId}`}</span>
+                    ) : null}
+                    {selectedAgentPeekEvidenceRef ? <span>{`Evidence · ${selectedAgentPeekEvidenceRef}`}</span> : null}
+                  </div>
+                </section>
+                <section
+                  className="aitown-hub-drilldown"
+                  role="region"
+                  aria-label="Selected agent drilldown"
+                >
+                  <div className="aitown-hub-drilldown__tabs" role="tablist" aria-label="Selected agent drilldown">
+                    {SELECTED_AGENT_DRILLDOWN_TABS.map((tab) => {
+                      const selected = selectedAgentDrilldownTab === tab.id;
+
+                      return (
+                        <button
+                          key={tab.id}
+                          id={resolveSelectedAgentDrilldownTabId(tab.id)}
+                          type="button"
+                          role="tab"
+                          className={`aitown-hub-drilldown__tab${selected ? ' is-active' : ''}`}
+                          aria-selected={selected}
+                          aria-controls={selected ? resolveSelectedAgentDrilldownPanelId(tab.id) : undefined}
+                          tabIndex={selected ? 0 : -1}
+                          onClick={() => handleSelectSelectedAgentDrilldownTab(tab.id)}
+                          onKeyDown={handleSelectedAgentDrilldownTabKeyDown}
+                        >
+                          {tab.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </section>
+              </div>
             ) : null}
-            <DetailsPanel
-              collectorSnapshot={collectorSnapshotResource.data}
+            <div
+              id={
+                selectedAgent
+                  ? resolveSelectedAgentDrilldownPanelId(selectedAgentDrilldownTab)
+                  : undefined
+              }
+              className={selectedAgent ? 'aitown-hub-drilldown__panel' : undefined}
+              role={selectedAgent ? 'tabpanel' : undefined}
+              aria-labelledby={
+                selectedAgent
+                  ? resolveSelectedAgentDrilldownTabId(selectedAgentDrilldownTab)
+                  : undefined
+              }
+            >
+              <DetailsPanel
+                collectorSnapshot={collectorSnapshotResource.data}
               collectorSnapshotError={collectorSnapshotResource.error}
               collectorSnapshotState={collectorSnapshotResource.state}
               correlation={activeCorrelation}
@@ -1923,6 +2074,7 @@ function AppInner() {
               selectedOperationsSeverity={selectedOperationsSeverity}
               selectedOperation={selectedOperation}
               selectedOperationRequestActive={selectedOperationSelection !== null}
+              selectedAgentDrilldownTab={selectedAgent ? selectedAgentDrilldownTab : null}
               timelineReplay={timelineReplayResource.data}
               timelineReplayError={timelineReplayResource.error}
               timelineReplayState={timelineReplayResource.state}
@@ -2000,7 +2152,8 @@ function AppInner() {
               onSelectOperation={handleSelectOperation}
               onFocusSharedMemoryArtifact={handleFocusSharedMemoryArtifact}
               onFocusWorldZone={handleFocusWorldZone}
-            />
+              />
+            </div>
           </div>
         </div>
       ) : null}

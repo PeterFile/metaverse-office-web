@@ -333,6 +333,59 @@ describe('projectWorldState', () => {
     expect(edge?.risk_level).toBe('orange');
   });
 
+  it('does not backfill crew runtime risk from a saturated incident feed window', () => {
+    const feed: IncidentFeedResponse = {
+      items: [
+        {
+          incident_id: 'inc-alert-saturated',
+          kind: 'peer_watch_alert',
+          ts: '2026-03-14T10:00:00Z',
+          agent_id: 'app-engineering',
+          actor_id: 'team-lead',
+          status: 'open',
+          severity: 'orange',
+          summary: 'Feed window hit its limit before the crew-wide slice completed',
+          correlation_id: 'corr-saturated-alert',
+          evidence_refs: [],
+          counterparty_agent_ids: [],
+          source_kind: 'controller_event',
+        },
+        {
+          incident_id: 'inc-handoff-saturated',
+          kind: 'handoff',
+          ts: '2026-03-14T10:01:00Z',
+          agent_id: 'app-engineering',
+          actor_id: 'team-lead',
+          status: 'waiting',
+          severity: 'yellow',
+          summary: 'Handoff waiting inside a saturated global incident window',
+          correlation_id: 'corr-saturated-handoff',
+          evidence_refs: [],
+          counterparty_agent_ids: ['growth-revenue'],
+          source_kind: 'controller_event',
+        },
+      ],
+    };
+    const input: ProjectorInput = {
+      overview: makeOverview(),
+      workflows: new Map(),
+      incidentFeed: feed,
+      incidentFeedLimit: 2,
+      now: NOW,
+    };
+
+    const world = projectWorldState(input);
+    const agent = world.agents.get('app-engineering')!;
+
+    expect(agent.open_alert_count).toBe(0);
+    expect(agent.has_open_incidents).toBe(false);
+    expect(agent.phase).toBe('active');
+    expect(agent.zone).toBe('desk-app-engineering');
+    expect(agent.severity).toBe('normal');
+    expect(agent.severity_reason).toBe('reported (workflow unavailable)');
+    expect(world.data_quality.degraded_reasons).toContain('incident feed truncated');
+  });
+
   it('keeps workflow-derived runtime risk authoritative when incident feed also has active items', () => {
     const wf = makeWorkflow();
     const feed: IncidentFeedResponse = {
@@ -444,6 +497,860 @@ describe('projectWorldState', () => {
 
     expect(agent.open_alert_count).toBe(0);
     expect(agent.has_open_incidents).toBe(false);
+  });
+
+  it('closes a handoff lifecycle even when a later actor records the completion', () => {
+    const feed: IncidentFeedResponse = {
+      items: [
+        {
+          incident_id: 'handoff-1',
+          kind: 'handoff',
+          ts: '2026-03-14T10:00:00Z',
+          agent_id: 'app-engineering',
+          actor_id: 'team-lead',
+          status: 'waiting',
+          severity: 'yellow',
+          summary: 'Handoff waiting',
+          correlation_id: 'corr-actor-shift',
+          evidence_refs: [],
+          counterparty_agent_ids: ['growth-revenue'],
+          source_kind: 'controller_event',
+        },
+        {
+          incident_id: 'handoff-1',
+          kind: 'handoff',
+          ts: '2026-03-14T10:02:00Z',
+          agent_id: 'app-engineering',
+          actor_id: 'ops-lead',
+          status: 'completed',
+          severity: 'yellow',
+          summary: 'Different actor recorded the completion',
+          correlation_id: 'corr-actor-shift',
+          evidence_refs: [],
+          counterparty_agent_ids: ['growth-revenue'],
+          source_kind: 'controller_event',
+        },
+      ],
+    };
+    const input: ProjectorInput = {
+      overview: makeOverview(),
+      workflows: new Map(),
+      incidentFeed: feed,
+      now: NOW,
+    };
+
+    const world = projectWorldState(input);
+    const agent = world.agents.get('app-engineering')!;
+
+    expect(agent.phase).toBe('handoff_done');
+    expect(agent.has_open_incidents).toBe(false);
+    expect(agent.severity).toBe('normal');
+    expect(agent.severity_reason).toBe('reported (workflow unavailable)');
+  });
+
+  it('closes a handoff lifecycle even when the counterparty set changes before completion', () => {
+    const feed: IncidentFeedResponse = {
+      items: [
+        {
+          incident_id: 'handoff-counterparty-open',
+          kind: 'handoff',
+          ts: '2026-03-14T10:00:00Z',
+          agent_id: 'app-engineering',
+          actor_id: 'team-lead',
+          status: 'waiting',
+          severity: 'yellow',
+          summary: 'Handoff waiting with an earlier counterparty set',
+          correlation_id: 'corr-counterparty-drift',
+          evidence_refs: [],
+          counterparty_agent_ids: ['growth-revenue'],
+          source_kind: 'controller_event',
+        },
+        {
+          incident_id: 'handoff-counterparty-completed',
+          kind: 'handoff',
+          ts: '2026-03-14T10:02:00Z',
+          agent_id: 'app-engineering',
+          actor_id: 'team-lead',
+          status: 'completed',
+          severity: 'yellow',
+          summary: 'Same handoff completed after the counterparty set drifted',
+          correlation_id: 'corr-counterparty-drift',
+          evidence_refs: [],
+          counterparty_agent_ids: [],
+          source_kind: 'controller_event',
+        },
+      ],
+    };
+    const input: ProjectorInput = {
+      overview: makeOverview(),
+      workflows: new Map(),
+      incidentFeed: feed,
+      now: NOW,
+    };
+
+    const world = projectWorldState(input);
+    const agent = world.agents.get('app-engineering')!;
+
+    expect(agent.phase).toBe('handoff_done');
+    expect(agent.has_open_incidents).toBe(false);
+    expect(agent.severity).toBe('normal');
+    expect(agent.severity_reason).toBe('reported (workflow unavailable)');
+  });
+
+  it('keeps null-correlation handoff rows independent instead of collapsing unrelated lifecycle records', () => {
+    const feed: IncidentFeedResponse = {
+      items: [
+        {
+          incident_id: 'handoff-null-active',
+          kind: 'handoff',
+          ts: '2026-03-14T10:00:00Z',
+          agent_id: 'app-engineering',
+          actor_id: 'team-lead',
+          status: 'waiting',
+          severity: 'yellow',
+          summary: 'Null-correlation handoff is still waiting',
+          correlation_id: null,
+          evidence_refs: [],
+          counterparty_agent_ids: ['growth-revenue'],
+          source_kind: 'controller_event',
+        },
+        {
+          incident_id: 'handoff-null-completed-unrelated',
+          kind: 'handoff',
+          ts: '2026-03-14T10:03:00Z',
+          agent_id: 'app-engineering',
+          actor_id: 'team-lead',
+          status: 'completed',
+          severity: 'yellow',
+          summary: 'Unrelated null-correlation handoff completed later',
+          correlation_id: null,
+          evidence_refs: [],
+          counterparty_agent_ids: ['protocol-engineering'],
+          source_kind: 'controller_event',
+        },
+      ],
+    };
+    const input: ProjectorInput = {
+      overview: makeOverview(),
+      workflows: new Map(),
+      incidentFeed: feed,
+      now: NOW,
+    };
+
+    const world = projectWorldState(input);
+    const agent = world.agents.get('app-engineering')!;
+
+    expect(agent.phase).toBe('handoff_pending');
+    expect(agent.zone).toBe('meeting-zone');
+    expect(agent.has_open_incidents).toBe(true);
+    expect(agent.severity).toBe('yellow');
+    expect(agent.severity_reason).toBe('open incident (workflow unavailable)');
+  });
+
+  it('does not treat long-ago completed handoffs as recent phase backfill', () => {
+    const feed: IncidentFeedResponse = {
+      items: [
+        {
+          incident_id: 'handoff-completed-old',
+          kind: 'handoff',
+          ts: '2026-03-14T08:00:00Z',
+          agent_id: 'app-engineering',
+          actor_id: 'team-lead',
+          status: 'completed',
+          severity: 'yellow',
+          summary: 'Old handoff completion should not keep the agent in handoff_done',
+          correlation_id: 'corr-old-handoff',
+          evidence_refs: [],
+          counterparty_agent_ids: ['growth-revenue'],
+          source_kind: 'controller_event',
+        },
+      ],
+    };
+    const input: ProjectorInput = {
+      overview: makeOverview(),
+      workflows: new Map(),
+      incidentFeed: feed,
+      now: NOW,
+    };
+
+    const world = projectWorldState(input);
+    const agent = world.agents.get('app-engineering')!;
+
+    expect(agent.phase).toBe('active');
+    expect(agent.zone).toBe('desk-app-engineering');
+    expect(agent.has_open_incidents).toBe(false);
+    expect(agent.severity).toBe('normal');
+    expect(agent.severity_reason).toBe('reported (workflow unavailable)');
+  });
+
+  it('does not treat long-ago completed reboots as recent phase backfill', () => {
+    const feed: IncidentFeedResponse = {
+      items: [
+        {
+          incident_id: 'reboot-completed-old',
+          kind: 'reboot',
+          ts: '2026-03-14T08:00:00Z',
+          agent_id: 'app-engineering',
+          actor_id: 'team-lead',
+          status: 'completed',
+          severity: 'yellow',
+          summary: 'Old reboot completion should not keep the agent in recovered',
+          correlation_id: 'corr-old-reboot',
+          evidence_refs: [],
+          counterparty_agent_ids: [],
+          source_kind: 'controller_event',
+        },
+      ],
+    };
+    const input: ProjectorInput = {
+      overview: makeOverview(),
+      workflows: new Map(),
+      incidentFeed: feed,
+      now: NOW,
+    };
+
+    const world = projectWorldState(input);
+    const agent = world.agents.get('app-engineering')!;
+
+    expect(agent.phase).toBe('active');
+    expect(agent.zone).toBe('desk-app-engineering');
+    expect(agent.has_open_incidents).toBe(false);
+    expect(agent.severity).toBe('normal');
+    expect(agent.severity_reason).toBe('reported (workflow unavailable)');
+  });
+
+  it('prefers the completed handoff state when same-lifecycle records share a timestamp', () => {
+    const feed: IncidentFeedResponse = {
+      items: [
+        {
+          incident_id: 'handoff-same-ts-waiting',
+          kind: 'handoff',
+          ts: '2026-03-14T10:00:00Z',
+          agent_id: 'app-engineering',
+          actor_id: 'team-lead',
+          status: 'waiting',
+          severity: 'yellow',
+          summary: 'Waiting state recorded at coarse timestamp precision',
+          correlation_id: 'corr-same-ts-handoff',
+          evidence_refs: [],
+          counterparty_agent_ids: ['growth-revenue'],
+          source_kind: 'controller_event',
+        },
+        {
+          incident_id: 'handoff-same-ts-completed',
+          kind: 'handoff',
+          ts: '2026-03-14T10:00:00Z',
+          agent_id: 'app-engineering',
+          actor_id: 'team-lead',
+          status: 'completed',
+          severity: 'yellow',
+          summary: 'Completion landed in the same timestamp bucket',
+          correlation_id: 'corr-same-ts-handoff',
+          evidence_refs: [],
+          counterparty_agent_ids: ['growth-revenue'],
+          source_kind: 'controller_event',
+        },
+      ],
+    };
+    const input: ProjectorInput = {
+      overview: makeOverview(),
+      workflows: new Map(),
+      incidentFeed: feed,
+      now: NOW,
+    };
+
+    const world = projectWorldState(input);
+    const agent = world.agents.get('app-engineering')!;
+
+    expect(agent.phase).toBe('handoff_done');
+    expect(agent.has_open_incidents).toBe(false);
+    expect(agent.severity).toBe('normal');
+    expect(agent.severity_reason).toBe('reported (workflow unavailable)');
+  });
+
+  it('does not keep collector peer-watch alerts open after a later collector resolution event', () => {
+    const feed: IncidentFeedResponse = {
+      items: [
+        {
+          incident_id: 'collector-alert-open',
+          kind: 'peer_watch_alert',
+          ts: '2026-03-14T10:00:00Z',
+          agent_id: 'app-engineering',
+          actor_id: 'team-lead',
+          status: 'open',
+          severity: 'orange',
+          summary: 'Collector saw the agent blocked',
+          correlation_id: 'collector-snapshot:2026-03-14T10:00:00.000Z',
+          evidence_refs: [],
+          counterparty_agent_ids: ['team-lead'],
+          source_kind: 'controller_event',
+        },
+        {
+          incident_id: 'collector-alert-resolved',
+          kind: 'peer_watch_alert',
+          ts: '2026-03-14T10:05:00Z',
+          agent_id: 'app-engineering',
+          actor_id: 'team-lead',
+          status: 'resolved',
+          severity: 'orange',
+          summary: 'Collector saw the agent recover',
+          correlation_id: 'collector-snapshot:2026-03-14T10:05:00.000Z',
+          evidence_refs: [],
+          counterparty_agent_ids: ['team-lead'],
+          source_kind: 'controller_event',
+        },
+      ],
+    };
+    const input: ProjectorInput = {
+      overview: makeOverview(),
+      workflows: new Map(),
+      incidentFeed: feed,
+      now: NOW,
+    };
+
+    const world = projectWorldState(input);
+    const agent = world.agents.get('app-engineering')!;
+
+    expect(agent.open_alert_count).toBe(0);
+    expect(agent.has_open_incidents).toBe(false);
+    expect(agent.severity).toBe('normal');
+    expect(agent.severity_reason).toBe('reported (workflow unavailable)');
+  });
+
+  it('closes collector peer-watch alerts even when the watcher set changes before resolution', () => {
+    const feed: IncidentFeedResponse = {
+      items: [
+        {
+          incident_id: 'collector-alert-open-watcher-drift',
+          kind: 'peer_watch_alert',
+          ts: '2026-03-14T10:00:00Z',
+          agent_id: 'app-engineering',
+          actor_id: 'team-lead',
+          status: 'open',
+          severity: 'orange',
+          summary: 'Collector flagged the agent while lead was watching',
+          correlation_id: 'collector-snapshot:2026-03-14T10:00:00.000Z',
+          evidence_refs: [],
+          counterparty_agent_ids: ['team-lead'],
+          source_kind: 'controller_event',
+        },
+        {
+          incident_id: 'collector-alert-resolved-watcher-drift',
+          kind: 'peer_watch_alert',
+          ts: '2026-03-14T10:05:00Z',
+          agent_id: 'app-engineering',
+          actor_id: 'team-lead',
+          status: 'resolved',
+          severity: 'orange',
+          summary: 'Collector resolved the alert after watcher drift',
+          correlation_id: 'collector-snapshot:2026-03-14T10:05:00.000Z',
+          evidence_refs: [],
+          counterparty_agent_ids: ['protocol-engineering'],
+          source_kind: 'controller_event',
+        },
+      ],
+    };
+    const input: ProjectorInput = {
+      overview: makeOverview(),
+      workflows: new Map(),
+      incidentFeed: feed,
+      now: NOW,
+    };
+
+    const world = projectWorldState(input);
+    const agent = world.agents.get('app-engineering')!;
+
+    expect(agent.open_alert_count).toBe(0);
+    expect(agent.has_open_incidents).toBe(false);
+    expect(agent.severity).toBe('normal');
+    expect(agent.severity_reason).toBe('reported (workflow unavailable)');
+  });
+
+  it('closes collector peer-watch alerts even when the actor changes before resolution', () => {
+    const feed: IncidentFeedResponse = {
+      items: [
+        {
+          incident_id: 'collector-alert-open-actor-drift',
+          kind: 'peer_watch_alert',
+          ts: '2026-03-14T10:00:00Z',
+          agent_id: 'app-engineering',
+          actor_id: 'team-lead',
+          status: 'open',
+          severity: 'orange',
+          summary: 'Collector opened the alert under the original actor',
+          correlation_id: 'collector-snapshot:2026-03-14T10:00:00.000Z',
+          evidence_refs: [],
+          counterparty_agent_ids: ['team-lead'],
+          source_kind: 'controller_event',
+        },
+        {
+          incident_id: 'collector-alert-resolved-actor-drift',
+          kind: 'peer_watch_alert',
+          ts: '2026-03-14T10:05:00Z',
+          agent_id: 'app-engineering',
+          actor_id: 'ops-lead',
+          status: 'resolved',
+          severity: 'orange',
+          summary: 'Collector resolved the alert after actor rotation',
+          correlation_id: 'collector-snapshot:2026-03-14T10:05:00.000Z',
+          evidence_refs: [],
+          counterparty_agent_ids: ['team-lead'],
+          source_kind: 'controller_event',
+        },
+      ],
+    };
+    const input: ProjectorInput = {
+      overview: makeOverview(),
+      workflows: new Map(),
+      incidentFeed: feed,
+      now: NOW,
+    };
+
+    const world = projectWorldState(input);
+    const agent = world.agents.get('app-engineering')!;
+
+    expect(agent.open_alert_count).toBe(0);
+    expect(agent.has_open_incidents).toBe(false);
+    expect(agent.severity).toBe('normal');
+    expect(agent.severity_reason).toBe('reported (workflow unavailable)');
+  });
+
+  it('keeps non-collector peer-watch alerts open when another observer resolves the same correlation', () => {
+    const feed: IncidentFeedResponse = {
+      items: [
+        {
+          incident_id: 'peer-watch-open-actor-drift',
+          kind: 'peer_watch_alert',
+          ts: '2026-03-14T10:00:00Z',
+          agent_id: 'app-engineering',
+          actor_id: 'team-lead',
+          status: 'open',
+          severity: 'orange',
+          summary: 'Peer-watch alert opened under the original observer',
+          correlation_id: 'corr-actor-drift',
+          evidence_refs: [],
+          counterparty_agent_ids: ['growth-revenue'],
+          source_kind: 'controller_event',
+        },
+        {
+          incident_id: 'peer-watch-resolved-actor-drift',
+          kind: 'peer_watch_alert',
+          ts: '2026-03-14T10:05:00Z',
+          agent_id: 'app-engineering',
+          actor_id: 'ops-lead',
+          status: 'resolved',
+          severity: 'orange',
+          summary: 'A different observer resolved its matching alert',
+          correlation_id: 'corr-actor-drift',
+          evidence_refs: [],
+          counterparty_agent_ids: ['growth-revenue'],
+          source_kind: 'controller_event',
+        },
+      ],
+    };
+    const input: ProjectorInput = {
+      overview: makeOverview(),
+      workflows: new Map(),
+      incidentFeed: feed,
+      now: NOW,
+    };
+
+    const world = projectWorldState(input);
+    const agent = world.agents.get('app-engineering')!;
+
+    expect(agent.open_alert_count).toBe(1);
+    expect(agent.has_open_incidents).toBe(true);
+    expect(agent.severity).toBe('orange');
+    expect(agent.severity_reason).toBe('open incident (workflow unavailable)');
+  });
+
+  it('keeps distinct peer-watch alerts open when they share correlation metadata', () => {
+    const feed: IncidentFeedResponse = {
+      items: [
+        {
+          incident_id: 'alert-open-1',
+          kind: 'peer_watch_alert',
+          ts: '2026-03-14T10:00:00Z',
+          agent_id: 'app-engineering',
+          actor_id: 'team-lead',
+          status: 'open',
+          severity: 'orange',
+          summary: 'First open alert on the same correlation',
+          correlation_id: 'corr-shared-alert',
+          evidence_refs: ['/tmp/alert-1.md'],
+          counterparty_agent_ids: ['growth-revenue'],
+          source_kind: 'controller_event',
+        },
+        {
+          incident_id: 'alert-open-2',
+          kind: 'peer_watch_alert',
+          ts: '2026-03-14T10:01:00Z',
+          agent_id: 'app-engineering',
+          actor_id: 'team-lead',
+          status: 'open',
+          severity: 'red',
+          summary: 'Second open alert on the same correlation',
+          correlation_id: 'corr-shared-alert',
+          evidence_refs: ['/tmp/alert-2.md'],
+          counterparty_agent_ids: ['growth-revenue'],
+          source_kind: 'controller_event',
+        },
+      ],
+    };
+    const input: ProjectorInput = {
+      overview: makeOverview(),
+      workflows: new Map(),
+      incidentFeed: feed,
+      now: NOW,
+    };
+
+    const world = projectWorldState(input);
+    const agent = world.agents.get('app-engineering')!;
+
+    expect(agent.open_alert_count).toBe(2);
+    expect(agent.has_open_incidents).toBe(true);
+    expect(agent.severity).toBe('red');
+    expect(agent.severity_reason).toBe('open incident (workflow unavailable)');
+  });
+
+  it('resolves only one duplicate peer-watch alert per later resolution event', () => {
+    const feed: IncidentFeedResponse = {
+      items: [
+        {
+          incident_id: 'alert-open-1',
+          kind: 'peer_watch_alert',
+          ts: '2026-03-14T10:00:00Z',
+          agent_id: 'app-engineering',
+          actor_id: 'team-lead',
+          status: 'open',
+          severity: 'orange',
+          summary: 'First duplicate open alert',
+          correlation_id: 'corr-shared-alert',
+          evidence_refs: ['/tmp/alert-1.md'],
+          counterparty_agent_ids: ['growth-revenue'],
+          source_kind: 'controller_event',
+        },
+        {
+          incident_id: 'alert-open-2',
+          kind: 'peer_watch_alert',
+          ts: '2026-03-14T10:01:00Z',
+          agent_id: 'app-engineering',
+          actor_id: 'team-lead',
+          status: 'open',
+          severity: 'red',
+          summary: 'Second duplicate open alert',
+          correlation_id: 'corr-shared-alert',
+          evidence_refs: ['/tmp/alert-2.md'],
+          counterparty_agent_ids: ['growth-revenue'],
+          source_kind: 'controller_event',
+        },
+        {
+          incident_id: 'alert-resolved-1',
+          kind: 'peer_watch_alert',
+          ts: '2026-03-14T10:02:00Z',
+          agent_id: 'app-engineering',
+          actor_id: 'team-lead',
+          status: 'resolved',
+          severity: 'red',
+          summary: 'A later resolution should only close one duplicate alert',
+          correlation_id: 'corr-shared-alert',
+          evidence_refs: ['/tmp/alert-resolved.md'],
+          counterparty_agent_ids: ['growth-revenue'],
+          source_kind: 'controller_event',
+        },
+      ],
+    };
+    const input: ProjectorInput = {
+      overview: makeOverview(),
+      workflows: new Map(),
+      incidentFeed: feed,
+      now: NOW,
+    };
+
+    const world = projectWorldState(input);
+    const agent = world.agents.get('app-engineering')!;
+
+    expect(agent.open_alert_count).toBe(1);
+    expect(agent.has_open_incidents).toBe(true);
+    expect(agent.severity).not.toBe('normal');
+  });
+
+  it('does not project recovered when a completed reboot is followed by another active reboot incident', () => {
+    const feed: IncidentFeedResponse = {
+      items: [
+        {
+          incident_id: 'reboot-completed',
+          kind: 'reboot',
+          ts: '2026-03-14T10:00:00Z',
+          agent_id: 'app-engineering',
+          actor_id: 'team-lead',
+          status: 'completed',
+          severity: 'yellow',
+          summary: 'Earlier reboot finished',
+          correlation_id: 'corr-reboot-completed',
+          evidence_refs: [],
+          counterparty_agent_ids: [],
+          source_kind: 'controller_event',
+        },
+        {
+          incident_id: 'reboot-requested',
+          kind: 'reboot',
+          ts: '2026-03-14T10:04:00Z',
+          agent_id: 'app-engineering',
+          actor_id: 'team-lead',
+          status: 'requested',
+          severity: 'red',
+          summary: 'A later reboot is still pending',
+          correlation_id: 'corr-reboot-requested',
+          evidence_refs: [],
+          counterparty_agent_ids: [],
+          source_kind: 'controller_event',
+        },
+      ],
+    };
+    const input: ProjectorInput = {
+      overview: makeOverview(),
+      workflows: new Map(),
+      incidentFeed: feed,
+      now: NOW,
+    };
+
+    const world = projectWorldState(input);
+    const agent = world.agents.get('app-engineering')!;
+
+    expect(agent.phase).toBe('active');
+    expect(agent.zone).toBe('desk-app-engineering');
+    expect(agent.has_open_incidents).toBe(true);
+    expect(agent.severity).toBe('red');
+    expect(agent.severity_reason).toBe('open incident (workflow unavailable)');
+  });
+
+  it('keeps an older active handoff lifecycle authoritative over a newer completed handoff for the same agent', () => {
+    const feed: IncidentFeedResponse = {
+      items: [
+        {
+          incident_id: 'handoff-open',
+          kind: 'handoff',
+          ts: '2026-03-14T10:00:00Z',
+          agent_id: 'app-engineering',
+          actor_id: 'team-lead',
+          status: 'waiting',
+          severity: 'yellow',
+          summary: 'Older handoff still waiting',
+          correlation_id: 'corr-open-handoff',
+          evidence_refs: [],
+          counterparty_agent_ids: ['growth-revenue'],
+          source_kind: 'controller_event',
+        },
+        {
+          incident_id: 'handoff-completed',
+          kind: 'handoff',
+          ts: '2026-03-14T10:02:00Z',
+          agent_id: 'app-engineering',
+          actor_id: 'team-lead',
+          status: 'completed',
+          severity: 'yellow',
+          summary: 'Separate handoff already completed',
+          correlation_id: 'corr-completed-handoff',
+          evidence_refs: [],
+          counterparty_agent_ids: ['protocol-engineering'],
+          source_kind: 'controller_event',
+        },
+      ],
+    };
+    const input: ProjectorInput = {
+      overview: makeOverview(),
+      workflows: new Map(),
+      incidentFeed: feed,
+      now: NOW,
+    };
+
+    const world = projectWorldState(input);
+    const agent = world.agents.get('app-engineering')!;
+
+    expect(agent.phase).toBe('handoff_pending');
+    expect(agent.zone).toBe('meeting-zone');
+    expect(agent.has_open_incidents).toBe(true);
+    expect(agent.severity).toBe('yellow');
+    expect(agent.severity_reason).toBe('open incident (workflow unavailable)');
+  });
+
+  it('marks workflow coverage as partial when incident-feed backfill is the only runtime evidence for an agent', () => {
+    const feed: IncidentFeedResponse = {
+      items: [
+        {
+          incident_id: 'alert-coverage-gap',
+          kind: 'peer_watch_alert',
+          ts: '2026-03-14T10:01:00Z',
+          agent_id: 'app-engineering',
+          actor_id: 'team-lead',
+          status: 'open',
+          severity: 'orange',
+          summary: 'Backfilled from incident feed only',
+          correlation_id: 'corr-coverage-gap',
+          evidence_refs: [],
+          counterparty_agent_ids: [],
+          source_kind: 'controller_event',
+        },
+      ],
+    };
+    const input: ProjectorInput = {
+      overview: makeOverview(),
+      workflows: new Map(),
+      incidentFeed: feed,
+      now: NOW,
+    };
+
+    const world = projectWorldState(input);
+
+    expect(world.data_quality.degraded_reasons).toContain('workflow partial');
+  });
+
+  it('marks workflow coverage as partial when only one selected workflow is loaded and another agent relies on backfill', () => {
+    const appAgent = makeAgent();
+    const growthAgent = makeAgent({
+      agent_id: 'growth-revenue',
+      display_name: 'Growth Revenue Agent',
+      current_location: 'review-zone',
+    });
+    const feed: IncidentFeedResponse = {
+      items: [
+        {
+          incident_id: 'growth-alert-open',
+          kind: 'peer_watch_alert',
+          ts: '2026-03-14T10:01:00Z',
+          agent_id: 'growth-revenue',
+          actor_id: 'team-lead',
+          status: 'open',
+          severity: 'orange',
+          summary: 'Growth revenue still relies on incident-feed backfill',
+          correlation_id: 'corr-growth-open',
+          evidence_refs: [],
+          counterparty_agent_ids: ['team-lead'],
+          source_kind: 'controller_event',
+        },
+      ],
+    };
+    const input: ProjectorInput = {
+      overview: makeOverview([appAgent, growthAgent]),
+      workflows: new Map([['app-engineering', makeWorkflow()]]),
+      incidentFeed: feed,
+      now: NOW,
+    };
+
+    const world = projectWorldState(input);
+
+    expect(world.data_quality.degraded_reasons).toContain('workflow partial');
+  });
+
+  it('does not mark workflow partial during lazy selected-agent workflow loading', () => {
+    const appAgent = makeAgent();
+    const growthAgent = makeAgent({
+      agent_id: 'growth-revenue',
+      display_name: 'Growth Revenue Agent',
+      current_location: 'review-zone',
+    });
+    const feed: IncidentFeedResponse = {
+      items: [
+        {
+          incident_id: 'growth-alert-open',
+          kind: 'peer_watch_alert',
+          ts: '2026-03-14T10:01:00Z',
+          agent_id: 'growth-revenue',
+          actor_id: 'team-lead',
+          status: 'open',
+          severity: 'orange',
+          summary: 'Growth revenue is blocked while only the selected workflow is loaded',
+          correlation_id: 'corr-growth-open',
+          evidence_refs: [],
+          counterparty_agent_ids: ['team-lead'],
+          source_kind: 'controller_event',
+        },
+      ],
+    };
+    const input: ProjectorInput = {
+      overview: makeOverview([appAgent, growthAgent]),
+      workflows: new Map(),
+      incidentFeed: feed,
+      selectedAgentWorkflowPending: true,
+      now: NOW,
+    };
+
+    const world = projectWorldState(input);
+    const growthProjected = world.agents.get('growth-revenue')!;
+
+    expect(growthProjected.has_open_incidents).toBe(true);
+    expect(growthProjected.severity).toBe('orange');
+    expect(world.data_quality.degraded_reasons).not.toContain('workflow partial');
+  });
+
+  it('does not mark workflow partial when unresolved runtime backfill is absent', () => {
+    const feed: IncidentFeedResponse = {
+      items: [
+        {
+          incident_id: 'alert-resolved-only',
+          kind: 'peer_watch_alert',
+          ts: '2026-03-14T10:02:00Z',
+          agent_id: 'app-engineering',
+          actor_id: 'team-lead',
+          status: 'resolved',
+          severity: 'orange',
+          summary: 'Resolved alert should not degrade runtime coverage by itself',
+          correlation_id: 'corr-resolved-only',
+          evidence_refs: [],
+          counterparty_agent_ids: [],
+          source_kind: 'controller_event',
+        },
+      ],
+    };
+    const input: ProjectorInput = {
+      overview: makeOverview(),
+      workflows: new Map(),
+      incidentFeed: feed,
+      now: NOW,
+    };
+
+    const world = projectWorldState(input);
+    const agent = world.agents.get('app-engineering')!;
+
+    expect(agent.has_open_incidents).toBe(false);
+    expect(agent.severity).toBe('normal');
+    expect(world.data_quality.degraded_reasons).not.toContain('workflow partial');
+  });
+
+  it('does not mark workflow partial when only historical completed lifecycle backfill remains', () => {
+    const feed: IncidentFeedResponse = {
+      items: [
+        {
+          incident_id: 'handoff-completed-old',
+          kind: 'handoff',
+          ts: '2026-03-14T08:00:00Z',
+          agent_id: 'app-engineering',
+          actor_id: 'team-lead',
+          status: 'completed',
+          severity: 'yellow',
+          summary: 'Historical handoff completed well before the recent lookback window',
+          correlation_id: 'corr-old-handoff',
+          evidence_refs: [],
+          counterparty_agent_ids: ['growth-revenue'],
+          source_kind: 'controller_event',
+        },
+      ],
+    };
+    const input: ProjectorInput = {
+      overview: makeOverview(),
+      workflows: new Map(),
+      incidentFeed: feed,
+      now: NOW,
+    };
+
+    const world = projectWorldState(input);
+    const agent = world.agents.get('app-engineering')!;
+
+    expect(agent.phase).toBe('active');
+    expect(agent.has_open_incidents).toBe(false);
+    expect(agent.severity).toBe('normal');
+    expect(world.data_quality.degraded_reasons).not.toContain('workflow partial');
   });
 
   it('derives handoff_active phase from workflow', () => {

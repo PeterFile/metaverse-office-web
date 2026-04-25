@@ -89,7 +89,7 @@ const reviewingOperationsUrl = '/office/operations?limit=4&state=reviewing';
 const selectedOperationUrl = '/office/operations?agent_id=app-engineering';
 const teamLeadSelectedOperationUrl = '/office/operations?agent_id=team-lead';
 const growthRevenueSelectedOperationUrl = '/office/operations?agent_id=growth-revenue';
-const incidentsUrl = '/incidents?limit=10&window=60m';
+const incidentsUrl = '/incidents?limit=200&window=8760h';
 const selectedAgentIncidentsUrl = '/agents/app-engineering/incidents?limit=10&window=60m';
 const timelineUrl = '/timeline?limit=4&window=60m';
 const orangeTimelineUrl = '/timeline?limit=4&window=60m&severity=orange';
@@ -1623,6 +1623,135 @@ afterEach(() => {
     expect(screen.getByRole('button', { name: 'Open Hub' })).toBeVisible();
     expect(screen.queryByRole('complementary', { name: 'Agent details' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Inspect App Engineering Agent' })).not.toBeInTheDocument();
+  });
+
+  it('does not auto-request a stale crew correlation that is outside the drilldown window', async () => {
+    const user = userEvent.setup();
+    const staleCorrelationUrl = '/correlations/corr-stale-crew?limit=10&window=60m';
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString();
+
+      if (url === incidentsUrl) {
+        return jsonResponse({
+          items: [
+            {
+              ...incidentFeedFixture.items[0],
+              incident_id: 'inc-stale-crew',
+              ts: '2026-03-16T06:30:00.000Z',
+              correlation_id: 'corr-stale-crew',
+            },
+          ],
+        });
+      }
+
+      return resolveTestFetchResponse(url);
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<App />);
+
+    const details = await openHub(user);
+    const incidentSection = within(details).getByRole('heading', { name: 'Incident Feed' }).closest('section');
+    expect(details).toBeVisible();
+    expect(incidentSection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(incidentSection!).getByText('Lead is still waiting on workflow evidence')).toBeVisible();
+      expect(
+        within(incidentSection!).queryByRole('button', { name: 'Open incident correlation corr-stale-crew' })
+      ).not.toBeInTheDocument();
+      expect(fetchMock.mock.calls.map(([request]) => String(request))).not.toContain(staleCorrelationUrl);
+    });
+  });
+
+  it('keeps a newer incident-feed crew correlation selectable before overview catches up', async () => {
+    const user = userEvent.setup();
+    const freshCorrelationUrl = '/correlations/corr-app-review?limit=10&window=60m';
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString();
+
+      if (url === incidentsUrl) {
+        return jsonResponse({
+          items: [
+            {
+              ...incidentFeedFixture.items[0],
+              incident_id: 'inc-fresh-crew',
+              ts: '2026-03-16T09:00:30.000Z',
+              correlation_id: 'corr-app-review',
+            },
+          ],
+        });
+      }
+
+      return resolveTestFetchResponse(url);
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<App />);
+
+    const details = await openHub(user);
+    const incidentSection = within(details).getByRole('heading', { name: 'Incident Feed' }).closest('section');
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    expect(incidentSection).not.toBeNull();
+    expect(correlationSection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(
+        within(incidentSection!).getByRole('button', { name: 'Open incident correlation corr-app-review, currently selected' })
+      ).toBeVisible();
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+      expect(fetchMock.mock.calls.map(([request]) => String(request))).toContain(freshCorrelationUrl);
+    });
+  });
+
+  it('drops crew incident correlations once the current poll time ages past the drilldown window', async () => {
+    const user = userEvent.setup();
+    const staleByNowCorrelationUrl = '/correlations/corr-app-review?limit=10&window=60m';
+    const now = Date.now();
+    const incidentTs = new Date(now - 90 * 60 * 1000).toISOString();
+    const overviewGeneratedAt = new Date(now - 30 * 60 * 1000).toISOString();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString();
+
+      if (url === '/office/overview') {
+        return jsonResponse({
+          ...overviewFixture,
+          generated_at: overviewGeneratedAt,
+        });
+      }
+
+      if (url === incidentsUrl) {
+        return jsonResponse({
+          items: [
+            {
+              ...incidentFeedFixture.items[0],
+              incident_id: 'inc-now-stale-crew',
+              ts: incidentTs,
+              correlation_id: 'corr-app-review',
+            },
+          ],
+        });
+      }
+
+      return resolveTestFetchResponse(url);
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<App />);
+
+    const details = await openHub(user);
+    const incidentSection = within(details).getByRole('heading', { name: 'Incident Feed' }).closest('section');
+    expect(incidentSection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(
+        within(incidentSection!).queryByRole('button', { name: 'Open incident correlation corr-app-review' })
+      ).not.toBeInTheDocument();
+      expect(fetchMock.mock.calls.map(([request]) => String(request))).not.toContain(staleByNowCorrelationUrl);
+    });
   });
 
   it('renders an accessible scene status legend for the canvas badge markers', async () => {

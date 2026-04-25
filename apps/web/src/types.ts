@@ -287,6 +287,7 @@ export interface WorkflowIncident {
   severity: Severity;
   summary: string;
   correlation_id: string | null;
+  correlation_latest_activity_at?: string | null;
   evidence_refs: string[];
   counterparty_agent_ids: string[];
   source_kind: string;

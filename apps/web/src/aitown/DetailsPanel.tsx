@@ -42,6 +42,7 @@ type DetailsPanelProps = {
   incidentFeed: IncidentFeedResponse | null;
   incidentFeedError: string | null;
   incidentFeedState: LoadState;
+  crewIncidentCorrelationSelectableIds?: ReadonlySet<string>;
   openSupervisionAlerts?: PeerWatchAlertsResponse | null;
   openSupervisionAlertsError?: string | null;
   openSupervisionAlertsState?: LoadState;
@@ -2646,6 +2647,21 @@ function renderSharedMemorySection({
   );
 }
 
+function resolveSelectableIncidentCorrelationId(
+  incident: WorkflowIncident,
+  selectableIds?: ReadonlySet<string>
+): string | null {
+  if (!incident.correlation_id) {
+    return null;
+  }
+
+  if (!selectableIds) {
+    return incident.correlation_id;
+  }
+
+  return selectableIds.has(incident.incident_id) ? incident.correlation_id : null;
+}
+
 function renderIncidentRecord({
   incident,
   activeCorrelationId,
@@ -2661,7 +2677,8 @@ function renderIncidentRecord({
   actorPivotAriaLabelPrefix = 'Select incident feed actor from incident',
   includeCounterpartyPivots = false,
   counterpartyPivotAriaLabelPrefix = 'Select correlation incident counterparty agent',
-  includeCorrelationPivot = true
+  includeCorrelationPivot = true,
+  selectableCorrelationId = incident.correlation_id
 }: {
   incident: WorkflowIncident;
   activeCorrelationId: string | null;
@@ -2678,8 +2695,10 @@ function renderIncidentRecord({
   includeCounterpartyPivots?: boolean;
   counterpartyPivotAriaLabelPrefix?: string;
   includeCorrelationPivot?: boolean;
+  selectableCorrelationId?: string | null;
 }) {
   const { onJump, allowExactFallback } = resolveSharedMemoryEvidenceJumpBehavior(onFocusSharedMemoryArtifact);
+  const pivotCorrelationId = selectableCorrelationId ?? activeCorrelationId;
 
   return (
     <li key={incident.incident_id} className={`aitown-record severity-${incident.severity}`}>
@@ -2691,7 +2710,7 @@ function renderIncidentRecord({
             ? renderAgentPivotButton({
                 agentId: incident.agent_id,
                 ariaLabel: `Select incident agent ${incident.agent_id} from incident ${incident.incident_id}`,
-                correlationId: incident.correlation_id,
+                correlationId: pivotCorrelationId,
                 onSelectAgent
               })
             : incident.agent_id}
@@ -2699,7 +2718,7 @@ function renderIncidentRecord({
       ) : null}
       {includeCorrelationPivot
         ? renderCorrelationButton({
-            correlationId: incident.correlation_id,
+            correlationId: selectableCorrelationId,
             label: incident.correlation_id ?? 'No correlation id',
             buttonLabel: 'Open incident correlation',
             activeCorrelationId,
@@ -2714,7 +2733,7 @@ function renderIncidentRecord({
           ? renderAgentPivotButton({
               agentId: incident.actor_id,
               ariaLabel: `${actorPivotAriaLabelPrefix} ${incident.incident_id} ${incident.actor_id}`,
-              correlationId: incident.correlation_id,
+              correlationId: pivotCorrelationId,
               onSelectAgent
             })
           : incident.actor_id}
@@ -2730,7 +2749,7 @@ function renderIncidentRecord({
               navigableAgentIds,
               emptyLabel: 'No counterparties',
               ariaLabelPrefix: counterpartyPivotAriaLabelPrefix,
-              correlationId: incident.correlation_id,
+              correlationId: pivotCorrelationId,
               onSelectAgent
             })
           : renderCounterparties(incident.counterparty_agent_ids)}
@@ -2905,6 +2924,7 @@ export function DetailsPanel({
   incidentFeed,
   incidentFeedError,
   incidentFeedState,
+  crewIncidentCorrelationSelectableIds,
   openSupervisionAlerts = null,
   openSupervisionAlertsError = null,
   openSupervisionAlertsState = 'ready',
@@ -3717,7 +3737,11 @@ export function DetailsPanel({
                 includeAgentPivot: true,
                 includeActorPivot: true,
                 includeCounterpartyPivots: true,
-                counterpartyPivotAriaLabelPrefix: `Select incident feed counterparty agent from incident ${incident.incident_id}`
+                counterpartyPivotAriaLabelPrefix: `Select incident feed counterparty agent from incident ${incident.incident_id}`,
+                selectableCorrelationId: resolveSelectableIncidentCorrelationId(
+                  incident,
+                  crewIncidentCorrelationSelectableIds
+                )
               })
             )}
             {incidentFeedState === 'ready' && !incidentFeedError && !incidentFeed?.items.length ? (
@@ -3872,7 +3896,8 @@ export function DetailsPanel({
     ...(workflow?.incidents ?? []),
     ...(workflow?.detail.recent_incidents ?? [])
   ]);
-  const relatedIncidents = workflowIncidents.length
+  const relatedIncidentsFromWorkflow = workflowIncidents.length > 0;
+  const relatedIncidents = relatedIncidentsFromWorkflow
     ? workflowIncidents
     : dedupeIncidents(
         (incidentFeed?.items ?? []).filter((incident) => incident.agent_id === selectedAgent.agent_id)
@@ -4584,7 +4609,10 @@ export function DetailsPanel({
               includeAgentPivot: false,
               includeActorPivot: true,
               includeCounterpartyPivots: true,
-              counterpartyPivotAriaLabelPrefix: `Select incident feed counterparty agent from incident ${incident.incident_id}`
+              counterpartyPivotAriaLabelPrefix: `Select incident feed counterparty agent from incident ${incident.incident_id}`,
+              selectableCorrelationId: relatedIncidentsFromWorkflow
+                ? incident.correlation_id
+                : resolveSelectableIncidentCorrelationId(incident, crewIncidentCorrelationSelectableIds)
             })
           )}
           {incidentFeedState === 'ready' && !incidentFeedError && relatedIncidents.length === 0 ? (

@@ -39,6 +39,9 @@ import {
   selectHotZones,
   type HotZoneSummary
 } from './world/selectors';
+
+const CREW_INCIDENT_FEED_LIMIT = 200;
+const CREW_INCIDENT_FEED_WINDOW = '8760h';
 import type { WorldAgent, WorldState } from './world/types';
 
 const LazyWorldScene = lazy(() => import('./aitown/WorldScene'));
@@ -375,19 +378,104 @@ function resolveCrewReplayCorrelationId(
   return selectedCorrelationId;
 }
 
+function parseLookbackWindowMs(window: string): number | null {
+  const match = /^(\d+)([smhd])$/.exec(window.trim());
+  if (!match) {
+    return null;
+  }
+
+  const value = Number.parseInt(match[1] ?? '', 10);
+  if (!Number.isFinite(value)) {
+    return null;
+  }
+
+  const unit = match[2];
+  const unitMs =
+    unit === 's'
+      ? 1000
+      : unit === 'm'
+        ? 60 * 1000
+        : unit === 'h'
+          ? 60 * 60 * 1000
+          : 24 * 60 * 60 * 1000;
+
+  return value * unitMs;
+}
+
+const CREW_DEFAULT_CORRELATION_WINDOW_MS = parseLookbackWindowMs(DEFAULT_WORKFLOW_WINDOW) ?? 60 * 60 * 1000;
+const CREW_DEFAULT_CORRELATION_LIVE_CLOCK_SKEW_MS = 24 * 60 * 60 * 1000;
+
+function isIncidentInsideLookbackWindow(ts: string, referenceTs: string, windowMs: number) {
+  const incidentTs = Date.parse(ts);
+  const referenceTime = Date.parse(referenceTs);
+
+  if (!Number.isFinite(incidentTs) || !Number.isFinite(referenceTime)) {
+    return false;
+  }
+
+  return referenceTime >= incidentTs && referenceTime - incidentTs <= windowMs;
+}
+
+function resolveIncidentCorrelationActivityTs(incident: {
+  ts: string;
+  correlation_latest_activity_at?: string | null;
+}) {
+  const latestActivityTs = incident.correlation_latest_activity_at ?? null;
+  return latestActivityTs && Number.isFinite(Date.parse(latestActivityTs)) ? latestActivityTs : incident.ts;
+}
+
+function resolveCrewDefaultCorrelationReferenceTs(
+  incidentFeed: { items: Array<{ ts: string }> } | null,
+  overviewGeneratedAt: string | null,
+  currentTs: string | null
+) {
+  const overviewTs = overviewGeneratedAt && Number.isFinite(Date.parse(overviewGeneratedAt)) ? overviewGeneratedAt : null;
+  const latestIncidentTs = incidentFeed?.items[0]?.ts ?? null;
+  const incidentTs = latestIncidentTs && Number.isFinite(Date.parse(latestIncidentTs)) ? latestIncidentTs : null;
+  const freshestSnapshotTs = !overviewTs
+    ? incidentTs
+    : !incidentTs
+      ? overviewTs
+      : Date.parse(incidentTs) > Date.parse(overviewTs)
+        ? incidentTs
+        : overviewTs;
+
+  if (!freshestSnapshotTs) {
+    return null;
+  }
+
+  const currentReferenceTs = currentTs && Number.isFinite(Date.parse(currentTs)) ? currentTs : null;
+  if (!currentReferenceTs) {
+    return freshestSnapshotTs;
+  }
+
+  const currentReferenceMs = Date.parse(currentReferenceTs);
+  const freshestSnapshotMs = Date.parse(freshestSnapshotTs);
+  if (
+    currentReferenceMs >= freshestSnapshotMs &&
+    currentReferenceMs - freshestSnapshotMs <= CREW_DEFAULT_CORRELATION_LIVE_CLOCK_SKEW_MS
+  ) {
+    return currentReferenceTs;
+  }
+
+  return freshestSnapshotTs;
+}
+
 function selectDefaultCorrelationId({
   incidentFeed,
   selectedOperation,
   workflow,
-  selectedAgentId
+  selectedAgentId,
+  referenceTs
 }: {
-  incidentFeed: { items: Array<{ correlation_id: string | null }> } | null;
+  incidentFeed: { items: Array<{ correlation_id: string | null; ts: string; correlation_latest_activity_at?: string | null }> } | null;
   selectedOperation: OfficeOperation | null;
   workflow: {
     detail: { open_peer_watch_alerts: Array<{ correlation_id: string | null }> };
     correlation_ids: string[];
   } | null;
   selectedAgentId: string | null;
+  referenceTs: string | null;
 }) {
   if (selectedAgentId) {
     if (selectedOperation?.correlation_id) {
@@ -407,7 +495,21 @@ function selectDefaultCorrelationId({
     return null;
   }
 
-  return incidentFeed?.items.find((incident) => incident.correlation_id)?.correlation_id ?? null;
+  if (!referenceTs) {
+    return incidentFeed?.items.find((incident) => incident.correlation_id)?.correlation_id ?? null;
+  }
+
+  return (
+    incidentFeed?.items.find(
+      (incident) =>
+        incident.correlation_id &&
+        isIncidentInsideLookbackWindow(
+          resolveIncidentCorrelationActivityTs(incident),
+          referenceTs,
+          CREW_DEFAULT_CORRELATION_WINDOW_MS
+        )
+    )?.correlation_id ?? null
+  );
 }
 
 function AppInner() {
@@ -468,8 +570,8 @@ function AppInner() {
   const incidentFeedResource = usePolledResource({
     load: (signal) =>
       fetchIncidents({
-        limit: DEFAULT_WORKFLOW_LIMIT,
-        window: DEFAULT_WORKFLOW_WINDOW,
+        limit: CREW_INCIDENT_FEED_LIMIT,
+        window: CREW_INCIDENT_FEED_WINDOW,
         signal
       }),
     resourceKey: 'incident-feed'
@@ -702,9 +804,11 @@ function AppInner() {
         overview: overviewResource.data,
         workflows: activeWorkflow && selectedAgentId ? new Map([[selectedAgentId, activeWorkflow]]) : new Map(),
         incidentFeed: incidentFeedResource.data,
-        now: new Date().toISOString()
+        incidentFeedLimit: CREW_INCIDENT_FEED_LIMIT,
+        selectedAgentWorkflowPending: selectedAgentId !== null && workflowState === 'loading',
+        now: new Date().toISOString(),
       }),
-    [activeWorkflow, incidentFeedResource.data, overviewResource.data, selectedAgentId]
+    [activeWorkflow, incidentFeedResource.data, overviewResource.data, selectedAgentId, workflowState]
   );
 
   useEffect(() => {
@@ -810,15 +914,48 @@ function AppInner() {
       ? null
       : selectedOperationForCorrelationSelection;
   }, [invalidSelectedOperationCorrelationId, selectedOperationForCorrelationSelection]);
+  const crewCorrelationReferenceNow = new Date().toISOString();
+  const crewIncidentCorrelationReferenceTs = useMemo(
+    () =>
+      resolveCrewDefaultCorrelationReferenceTs(
+        incidentFeedResource.data,
+        overviewResource.data?.generated_at ?? null,
+        crewCorrelationReferenceNow
+      ),
+    [crewCorrelationReferenceNow, incidentFeedResource.data, overviewResource.data?.generated_at]
+  );
+  const crewIncidentCorrelationSelectableIds = useMemo(() => {
+    const selectableIds = new Set<string>();
+
+    for (const incident of incidentFeedResource.data?.items ?? []) {
+      if (!incident.correlation_id) {
+        continue;
+      }
+
+      if (
+        !crewIncidentCorrelationReferenceTs ||
+        isIncidentInsideLookbackWindow(
+          resolveIncidentCorrelationActivityTs(incident),
+          crewIncidentCorrelationReferenceTs,
+          CREW_DEFAULT_CORRELATION_WINDOW_MS
+        )
+      ) {
+        selectableIds.add(incident.incident_id);
+      }
+    }
+
+    return selectableIds;
+  }, [crewIncidentCorrelationReferenceTs, incidentFeedResource.data]);
   const defaultCorrelationId = useMemo(
     () =>
       selectDefaultCorrelationId({
         incidentFeed: incidentFeedResource.data,
         selectedOperation: selectedOperationForAutoCorrelation,
         workflow: activeWorkflow,
-        selectedAgentId
+        selectedAgentId,
+        referenceTs: crewIncidentCorrelationReferenceTs
       }),
-    [activeWorkflow, incidentFeedResource.data, selectedAgentId, selectedOperationForAutoCorrelation]
+    [activeWorkflow, crewIncidentCorrelationReferenceTs, incidentFeedResource.data, selectedAgentId, selectedOperationForAutoCorrelation]
   );
   const selectedAgentPreservesNullCorrelation =
     selectedAgentId !== null &&
@@ -1680,6 +1817,7 @@ function AppInner() {
               incidentFeed={incidentFeedResource.data}
               incidentFeedError={incidentFeedResource.error}
               incidentFeedState={incidentFeedResource.state}
+              crewIncidentCorrelationSelectableIds={crewIncidentCorrelationSelectableIds}
               openSupervisionAlerts={crewOpenSupervisionAlertsResource.data}
               openSupervisionAlertsError={crewOpenSupervisionAlertsResource.error}
               openSupervisionAlertsState={crewOpenSupervisionAlertsResource.state}

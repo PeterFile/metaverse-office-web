@@ -3252,6 +3252,105 @@ export function DetailsPanel({
         </div>
 
         <section className="aitown-details__section">
+          <h3>Active Queue</h3>
+          {activeQueueStateBucketsStatus ? <p role="status">{activeQueueStateBucketsStatus}</p> : null}
+          <div>
+            <label htmlFor="aitown-active-queue-state-filter">State filter</label>{' '}
+            <select
+              id="aitown-active-queue-state-filter"
+              aria-label="Filter active queue by state"
+              value={selectedOperationsState ?? ''}
+              onChange={(event) => onSelectOperationsState(event.target.value || null)}
+            >
+              <option value="">
+                {renderActiveQueueAllStatesLabel({
+                  activeQueueStateCount
+                })}
+              </option>
+              {activeQueueStateOptions.map(([state, count]) => (
+                <option key={state} value={state}>
+                  {renderActiveQueueStateOptionLabel({
+                    count,
+                    state
+                  })}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label htmlFor="aitown-active-queue-severity-filter">Severity filter</label>{' '}
+            <select
+              id="aitown-active-queue-severity-filter"
+              aria-label="Filter active queue by severity"
+              value={selectedOperationsSeverity ?? ''}
+              onChange={(event) =>
+                onSelectOperationsSeverity((event.target.value || null) as Severity | null)
+              }
+            >
+              <option value="">
+                {renderActiveQueueAllSeveritiesLabel({
+                  activeQueueSeverityCount
+                })}
+              </option>
+              {activeQueueSeverityOptions.map(([severity, count]) => (
+                <option key={severity} value={severity}>
+                  {renderActiveQueueSeverityOptionLabel({
+                    count,
+                    severity
+                  })}
+                </option>
+              ))}
+            </select>
+          </div>
+          <ul className="aitown-records">
+            {operationsState === 'loading' && !operations ? (
+              <li className="aitown-record">
+                {renderActiveQueueLoadingLabel(selectedOperationsState, selectedOperationsSeverity)}
+              </li>
+            ) : null}
+            {operationsError && !operations ? (
+              <li className="aitown-record">
+                {renderActiveQueueErrorLabel(
+                  selectedOperationsState,
+                  selectedOperationsSeverity,
+                  operationsError
+                )}
+              </li>
+            ) : null}
+            {operationsError && operations ? (
+              <li className="aitown-record">
+                {renderActiveQueueWarningLabel(
+                  selectedOperationsState,
+                  selectedOperationsSeverity,
+                  operationsError
+                )}
+              </li>
+            ) : null}
+            {(operations?.items ?? []).slice(0, 4).map((operation) =>
+              renderOperationsQueueRecord({
+                operation,
+                activeCorrelationId: selectedCorrelationId,
+                pivotCorrelationId: selectedCorrelationId,
+                queueScopeLabel: 'active queue',
+                domIdPrefix: 'active-queue',
+                navigableAgentIds,
+                sharedMemoryArtifactRefs,
+                onJumpToSharedMemoryArtifact: sharedMemoryEvidenceJump.onJump,
+                allowExactSharedMemoryFallback: sharedMemoryEvidenceJump.allowExactFallback,
+                onSelectAgent,
+                onSelectCorrelation,
+                onSelectOperation
+              })
+            )}
+            {operationsState === 'ready' && !operationsError && !operations?.items.length ? (
+              <li className="aitown-record">
+                {renderActiveQueueEmptyLabel(selectedOperationsState, selectedOperationsSeverity)}
+              </li>
+            ) : null}
+          </ul>
+        </section>
+
+        <section className="aitown-details__section">
           <h3>Collector Supervision</h3>
           {collectorWarning ? <p role="status">{collectorWarning}</p> : null}
           <ul className="aitown-records">
@@ -3542,105 +3641,6 @@ export function DetailsPanel({
         </section>
 
         {activeCorrelationQueueSection}
-
-        <section className="aitown-details__section">
-          <h3>Active Queue</h3>
-          {activeQueueStateBucketsStatus ? <p role="status">{activeQueueStateBucketsStatus}</p> : null}
-          <div>
-            <label htmlFor="aitown-active-queue-state-filter">State filter</label>{' '}
-            <select
-              id="aitown-active-queue-state-filter"
-              aria-label="Filter active queue by state"
-              value={selectedOperationsState ?? ''}
-              onChange={(event) => onSelectOperationsState(event.target.value || null)}
-            >
-              <option value="">
-                {renderActiveQueueAllStatesLabel({
-                  activeQueueStateCount
-                })}
-              </option>
-              {activeQueueStateOptions.map(([state, count]) => (
-                <option key={state} value={state}>
-                  {renderActiveQueueStateOptionLabel({
-                    count,
-                    state
-                  })}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label htmlFor="aitown-active-queue-severity-filter">Severity filter</label>{' '}
-            <select
-              id="aitown-active-queue-severity-filter"
-              aria-label="Filter active queue by severity"
-              value={selectedOperationsSeverity ?? ''}
-              onChange={(event) =>
-                onSelectOperationsSeverity((event.target.value || null) as Severity | null)
-              }
-            >
-              <option value="">
-                {renderActiveQueueAllSeveritiesLabel({
-                  activeQueueSeverityCount
-                })}
-              </option>
-              {activeQueueSeverityOptions.map(([severity, count]) => (
-                <option key={severity} value={severity}>
-                  {renderActiveQueueSeverityOptionLabel({
-                    count,
-                    severity
-                  })}
-                </option>
-              ))}
-            </select>
-          </div>
-          <ul className="aitown-records">
-            {operationsState === 'loading' && !operations ? (
-              <li className="aitown-record">
-                {renderActiveQueueLoadingLabel(selectedOperationsState, selectedOperationsSeverity)}
-              </li>
-            ) : null}
-            {operationsError && !operations ? (
-              <li className="aitown-record">
-                {renderActiveQueueErrorLabel(
-                  selectedOperationsState,
-                  selectedOperationsSeverity,
-                  operationsError
-                )}
-              </li>
-            ) : null}
-            {operationsError && operations ? (
-              <li className="aitown-record">
-                {renderActiveQueueWarningLabel(
-                  selectedOperationsState,
-                  selectedOperationsSeverity,
-                  operationsError
-                )}
-              </li>
-            ) : null}
-            {(operations?.items ?? []).slice(0, 4).map((operation) =>
-              renderOperationsQueueRecord({
-                operation,
-                activeCorrelationId: selectedCorrelationId,
-                pivotCorrelationId: selectedCorrelationId,
-                queueScopeLabel: 'active queue',
-                domIdPrefix: 'active-queue',
-                navigableAgentIds,
-                sharedMemoryArtifactRefs,
-                onJumpToSharedMemoryArtifact: sharedMemoryEvidenceJump.onJump,
-                allowExactSharedMemoryFallback: sharedMemoryEvidenceJump.allowExactFallback,
-                onSelectAgent,
-                onSelectCorrelation,
-                onSelectOperation
-              })
-            )}
-            {operationsState === 'ready' && !operationsError && !operations?.items.length ? (
-              <li className="aitown-record">
-                {renderActiveQueueEmptyLabel(selectedOperationsState, selectedOperationsSeverity)}
-              </li>
-            ) : null}
-          </ul>
-        </section>
 
         <section className="aitown-details__section">
           <h3>Open Supervision Alerts</h3>

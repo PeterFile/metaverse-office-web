@@ -1084,6 +1084,70 @@ button {
   gap: 8px;
 }
 
+.aitown-hub-focus-ribbon {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  max-height: 132px;
+  min-width: 0;
+  flex-direction: column;
+  gap: 5px;
+  margin-bottom: 10px;
+  padding: 6px 10px 7px;
+  border-style: solid;
+  border-width: 12px;
+  border-image-source: url('/ai-town/assets/ui/box.svg');
+  border-image-repeat: stretch;
+  border-image-slice: 12.5%;
+  background: rgba(35, 45, 46, 0.96);
+  color: #edf7ed;
+  overflow: hidden;
+}
+
+.aitown-hub-focus-ribbon__head,
+.aitown-hub-focus-ribbon__facts {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.aitown-hub-focus-ribbon__facts {
+  max-height: 58px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 2px;
+  scrollbar-width: thin;
+}
+
+.aitown-hub-focus-ribbon__eyebrow {
+  color: #8be9d5;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.aitown-hub-focus-ribbon__head strong {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  color: #fffdf3;
+  font-size: 0.82rem;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.aitown-hub-focus-ribbon__head span,
+.aitown-hub-focus-ribbon__facts span {
+  color: #d8eadf;
+  font-size: 0.72rem;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
 .aitown-hub-sheet .aitown-panel--details {
   min-height: calc(100dvh - 96px);
 }

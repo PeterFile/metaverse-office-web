@@ -1865,6 +1865,27 @@ function AppInner() {
                 </button>
               </div>
             </div>
+            {selectedAgent ? (
+              <section
+                className={`aitown-hub-focus-ribbon severity-${selectedAgentPeekSeverity}`}
+                role="region"
+                aria-label="Hub focus ribbon"
+              >
+                <div className="aitown-hub-focus-ribbon__head">
+                  <span className="aitown-hub-focus-ribbon__eyebrow">Selected agent</span>
+                  <strong>{selectedAgent.display_name}</strong>
+                  <span>{`${HOT_ZONE_SEVERITY_LABELS[selectedAgentPeekSeverity]} · ${selectedAgentPeekStatus}`}</span>
+                </div>
+                <div className="aitown-hub-focus-ribbon__facts">
+                  {selectedAgentPeekZone ? <span>{`Zone · ${selectedAgentPeekZone}`}</span> : null}
+                  {selectedAgentPeekOperation ? <span>{`Operation · ${selectedAgentPeekOperation}`}</span> : null}
+                  {selectedAgentPeekCorrelationId ? (
+                    <span>{`Correlation · ${selectedAgentPeekCorrelationId}`}</span>
+                  ) : null}
+                  {selectedAgentPeekEvidenceRef ? <span>{`Evidence · ${selectedAgentPeekEvidenceRef}`}</span> : null}
+                </div>
+              </section>
+            ) : null}
             <DetailsPanel
               collectorSnapshot={collectorSnapshotResource.data}
               collectorSnapshotError={collectorSnapshotResource.error}

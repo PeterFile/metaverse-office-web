@@ -2171,6 +2171,38 @@ afterEach(() => {
     expect(screen.getByRole('button', { name: 'Open Hub' })).toBeVisible();
   });
 
+  it('renders the selected-agent Hub focus ribbon only while the selected-agent Hub is open', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    expect(within(details).getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
+    expect(screen.queryByRole('region', { name: 'Hub focus ribbon' })).not.toBeInTheDocument();
+
+    await user.click(
+      within(details).getByRole('button', { name: 'Inspect App Engineering Agent from active queue' })
+    );
+
+    const focusRibbon = await screen.findByRole('region', { name: 'Hub focus ribbon' });
+    expect(within(focusRibbon).getByText('App Engineering Agent')).toBeVisible();
+    expect(within(focusRibbon).getByText('Orange · blocked')).toBeVisible();
+    expect(within(focusRibbon).getByText('Operation · Workflow evidence is still incomplete')).toBeVisible();
+    expect(within(focusRibbon).getByText('Correlation · corr-app-review')).toBeVisible();
+    expect(within(focusRibbon).getByText('Evidence · /tmp/evidence.md')).toBeVisible();
+
+    await user.click(screen.getByRole('button', { name: 'Close Hub' }));
+
+    expect(screen.queryByRole('dialog', { name: 'Hub' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Hub focus ribbon' })).not.toBeInTheDocument();
+    const inspectPeek = screen.getByRole('region', { name: 'Selected agent inspect peek' });
+    expect(within(inspectPeek).getByText('App Engineering Agent')).toBeVisible();
+
+    await user.click(within(inspectPeek).getByRole('button', { name: 'Open selected agent in Hub' }));
+
+    expect(screen.queryByRole('region', { name: 'Selected agent inspect peek' })).not.toBeInTheDocument();
+    expect(await screen.findByRole('region', { name: 'Hub focus ribbon' })).toBeVisible();
+  });
+
   it('surfaces live focus agents on the world shell before Hub opens and lets operators inspect them directly', async () => {
     const user = userEvent.setup();
     render(<App />);

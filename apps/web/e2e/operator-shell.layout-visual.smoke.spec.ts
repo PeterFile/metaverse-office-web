@@ -56,6 +56,24 @@ async function expectLocatorWithinScrollport(locator: Locator, scrollport: Locat
   );
 }
 
+async function expectLocatorInsideRect(locator: Locator, container: Locator, label: string) {
+  const [locatorRect, containerRect] = await Promise.all([readRect(locator), readRect(container)]);
+  const epsilon = 1;
+
+  expect(locatorRect.left, `${label} should stay inside the Hub sheet`).toBeGreaterThanOrEqual(
+    containerRect.left - epsilon
+  );
+  expect(locatorRect.right, `${label} should stay inside the Hub sheet`).toBeLessThanOrEqual(
+    containerRect.right + epsilon
+  );
+  expect(locatorRect.top, `${label} should stay inside the Hub sheet`).toBeGreaterThanOrEqual(
+    containerRect.top - epsilon
+  );
+  expect(locatorRect.bottom, `${label} should stay inside the Hub sheet`).toBeLessThanOrEqual(
+    containerRect.bottom + epsilon
+  );
+}
+
 async function expectCanvasDragMovesViewport(page: Page) {
   const canvas = page.locator('.aitown-world__host canvas');
   await expect(canvas).toBeVisible();
@@ -184,5 +202,110 @@ test.describe('operator shell layout visual smoke', () => {
     await inspectPeek.getByRole('button', { name: 'Open selected agent in Hub' }).click();
     await expect(page.getByRole('dialog', { name: 'Hub' })).toBeVisible();
     await expect(page.getByRole('region', { name: 'Selected agent inspect peek' })).toHaveCount(0);
+  });
+
+  test('keeps the selected-agent Hub focus ribbon compact and sticky inside the Hub sheet', async ({ page }) => {
+    await page.goto('/');
+
+    const worldHost = page.locator('.aitown-world__host');
+    await expect(worldHost).toBeVisible();
+    await page.waitForFunction(() => Boolean(window.__AITOWN_VIEWPORT__));
+
+    await page.getByRole('button', { name: 'Open Hub' }).click();
+
+    const hub = page.getByRole('dialog', { name: 'Hub' });
+    const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
+    const activeQueueSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Active Queue' })
+    });
+
+    await expect(hub).toBeVisible();
+    await expect(detailsPanel.getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Hub focus ribbon' })).toHaveCount(0);
+    await expectLocatorWithinScrollport(
+      activeQueueSection.getByRole('heading', { name: 'Active Queue' }),
+      hub,
+      'Active Queue heading'
+    );
+    await expectLocatorWithinScrollport(
+      activeQueueSection.getByRole('button', { name: 'Inspect Growth Revenue Agent from active queue' }),
+      hub,
+      'first active queue action'
+    );
+
+    await activeQueueSection
+      .getByRole('button', { name: 'Inspect Growth Revenue Agent from active queue' })
+      .click();
+    await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+
+    const focusRibbon = page.getByRole('region', { name: 'Hub focus ribbon' });
+    await expect(focusRibbon).toBeVisible();
+    await expect(focusRibbon.getByText('Growth Revenue Agent')).toBeVisible();
+    await expect(focusRibbon.getByText(/Yellow .* planning/)).toBeVisible();
+    await expect(focusRibbon.getByText('Operation · Prepare handoff notes')).toBeVisible();
+    await expect(focusRibbon.getByText('Correlation · corr-revenue-handoff')).toBeVisible();
+    await expect(focusRibbon.getByText('Evidence · /tmp/revenue-handoff.md')).toBeVisible();
+
+    const [worldRect, hubRect, ribbonRect] = await Promise.all([
+      readRect(worldHost),
+      readRect(hub),
+      readRect(focusRibbon)
+    ]);
+    expect(ribbonRect.height, 'Hub focus ribbon should stay compact').toBeLessThanOrEqual(132);
+    expect(ribbonRect.width, 'Hub focus ribbon should stay bounded by the Hub sheet').toBeLessThanOrEqual(
+      hubRect.width
+    );
+    expect(
+      resolveIntersectionArea(resolvePrimaryDragLane(worldRect), ribbonRect),
+      'Hub focus ribbon should not cover the primary world drag lane'
+    ).toBe(0);
+    await expectLocatorInsideRect(focusRibbon, hub, 'Hub focus ribbon');
+
+    const overflowPolicy = await focusRibbon.evaluate((element) => {
+      const ribbonStyle = getComputedStyle(element);
+      const facts = element.querySelector('.aitown-hub-focus-ribbon__facts');
+      const factsStyle = facts ? getComputedStyle(facts) : null;
+      const fact = element.querySelector('.aitown-hub-focus-ribbon__facts span');
+      const factStyle = fact ? getComputedStyle(fact) : null;
+      return {
+        ribbonOverflow: ribbonStyle.overflow,
+        factsOverflowX: factsStyle?.overflowX ?? null,
+        factsOverflowY: factsStyle?.overflowY ?? null,
+        factOverflowWrap: factStyle?.overflowWrap ?? null
+      };
+    });
+    expect(overflowPolicy.ribbonOverflow, 'Hub focus ribbon should clip long labels').not.toBe('visible');
+    expect(overflowPolicy.factsOverflowX, 'Hub focus ribbon facts should not paint sideways').not.toBe(
+      'visible'
+    );
+    expect(overflowPolicy.factsOverflowY, 'Hub focus ribbon facts should clip or scroll vertically').not.toBe(
+      'visible'
+    );
+    expect(overflowPolicy.factOverflowWrap, 'Hub focus ribbon facts should wrap long tokens').toBe('anywhere');
+
+    await hub.evaluate((element) => {
+      element.scrollTop = 720;
+    });
+    await expect.poll(() => hub.evaluate((element) => element.scrollTop)).toBeGreaterThan(100);
+    await expect(focusRibbon).toBeVisible();
+    const scrolledRibbonRect = await readRect(focusRibbon);
+    expect(scrolledRibbonRect.top, 'Hub focus ribbon should remain sticky in the Hub sheet').toBeGreaterThanOrEqual(
+      hubRect.top - 1
+    );
+    expect(scrolledRibbonRect.bottom, 'Hub focus ribbon should remain visible in the Hub sheet').toBeLessThanOrEqual(
+      hubRect.bottom + 1
+    );
+
+    await page.getByRole('button', { name: 'Close Hub' }).click();
+    await expect(hub).toHaveCount(0);
+    await expect(page.getByRole('region', { name: 'Hub focus ribbon' })).toHaveCount(0);
+    const inspectPeek = page.getByRole('region', { name: 'Selected agent inspect peek' });
+    await expect(inspectPeek).toBeVisible();
+    await expect(inspectPeek.getByText('Growth Revenue Agent')).toBeVisible();
+
+    await inspectPeek.getByRole('button', { name: 'Open selected agent in Hub' }).click();
+    await expect(page.getByRole('region', { name: 'Selected agent inspect peek' })).toHaveCount(0);
+    await expect(page.getByRole('dialog', { name: 'Hub' })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Hub focus ribbon' })).toBeVisible();
   });
 });

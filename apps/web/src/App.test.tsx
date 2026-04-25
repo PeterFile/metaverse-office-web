@@ -1768,7 +1768,9 @@ afterEach(() => {
       const correlationRequestsBeforeClose = countCorrelationRequests();
       expect(correlationRequestsBeforeClose).toBeGreaterThan(0);
 
-      await user.click(screen.getByRole('button', { name: 'Close Hub' }));
+      await act(async () => {
+        screen.getByRole('button', { name: 'Close Hub' }).click();
+      });
 
       expect(screen.queryByRole('dialog', { name: 'Hub' })).not.toBeInTheDocument();
       expect(screen.queryByRole('region', { name: 'Active correlation' })).not.toBeInTheDocument();

@@ -26,7 +26,10 @@ import { buildZoneLayoutModels } from '../layout';
 import { selectWorkflowSummaryFacets } from '../workflow/summary';
 import type { WorldState } from '../world/types';
 import { selectAgentBadge, selectAgentZoneLabel, selectAttentionQueue, selectWatchEdgeRisk } from '../world/selectors';
-import { collectInteractionSourceKinds } from './accountabilitySignals';
+import {
+  collectInteractionSourceKinds,
+  formatCollectorDerivedPeerWatchMetadata
+} from './accountabilitySignals';
 
 export type SelectedAgentDrilldownTab = 'now' | 'evidence' | 'replay';
 
@@ -969,6 +972,10 @@ function renderTimestamp(value: string | null | undefined, fallback: string) {
 
 function renderOperationBlocker(blocker: string) {
   return blocker || 'No current blocker';
+}
+
+function renderCollectorDerivedPeerWatchMetadata(metadata: unknown) {
+  return formatCollectorDerivedPeerWatchMetadata(metadata)?.map((line) => <span key={line}>{line}</span>) ?? null;
 }
 
 function renderOperationStaleness(operation: OfficeOperation) {
@@ -2298,6 +2305,7 @@ function renderWorkflowPeerWatchAlert({
       <span>{`Status · ${alert.status}`}</span>
       <span>{`Workflow status · ${alert.current_state}`}</span>
       <span>{`Task · ${alert.active_task}`}</span>
+      {renderCollectorDerivedPeerWatchMetadata(alert.metadata)}
       <span>
         Evidence ·{' '}
         {renderSharedMemoryEvidenceRefs({
@@ -2354,6 +2362,7 @@ function renderSelectedAgentSupervisionAlert({
       <span>{`Status · ${alert.status}`}</span>
       <span>{`Workflow status · ${alert.current_state}`}</span>
       <span>{`Task · ${alert.active_task}`}</span>
+      {renderCollectorDerivedPeerWatchMetadata(alert.metadata)}
       <span>
         Actor ·{' '}
         {canNavigateToActor
@@ -2458,6 +2467,7 @@ function renderCrewOpenSupervisionAlert({
       <span>{`Status · ${alert.status}`}</span>
       <span>{`Workflow status · ${alert.current_state}`}</span>
       <span>{`Task · ${alert.active_task}`}</span>
+      {renderCollectorDerivedPeerWatchMetadata(alert.metadata)}
       <span>
         Target ·{' '}
         {canNavigateToTarget

@@ -11,6 +11,7 @@ import type {
   OfficeOperation,
   OfficeOperations,
   PeerWatchAlertsResponse,
+  WorkflowPeerWatchAlert,
   WorkflowInteraction,
   WorkflowTimelineEvent
 } from '../types';
@@ -544,6 +545,155 @@ function buildProps(overrides: Partial<DetailsPanelProps> = {}): DetailsPanelPro
     ...overrides
   };
 }
+
+const COLLECTOR_PROVENANCE_LINE =
+  'Provenance · Collector snapshot · blocked · collected 2026-03-09T18:59:00.000Z';
+const COLLECTOR_BASIS_LINE =
+  'Basis · Last output 2026-03-09T18:20:00.000Z · Staleness Orange · Blocker Waiting on evidence · Reboot Recommended · Signature collector:block:app-engineering:orange';
+
+function buildCollectorDerivedPeerWatchAlert(
+  overrides: Partial<WorkflowPeerWatchAlert> = {}
+): WorkflowPeerWatchAlert {
+  return {
+    alert_id: 'alert-collector-derived',
+    ts: '2026-03-09T18:59:00.000Z',
+    agent_id: 'app-engineering',
+    target_agent_id: 'app-engineering',
+    actor_id: 'team-lead',
+    observer_agent_id: 'team-lead',
+    watcher_agent_ids: ['growth-revenue', 'team-lead'],
+    severity: 'orange',
+    status: 'open',
+    current_state: 'blocked',
+    active_task: 'Fix workflow issue',
+    summary: 'Collector observed blocked app engineering work',
+    evidence_refs: ['/evidence/review.md'],
+    evidence_count: 1,
+    correlation_id: 'collector-snapshot:2026-03-09T18:59:00.000Z',
+    source_kind: 'controller_event',
+    metadata: {
+      collector_derived: true,
+      collector_source: 'controller_snapshot',
+      collector_alert_family: 'blocked',
+      collector_alert_signature: 'collector:block:app-engineering:orange',
+      collected_at: '2026-03-09T18:59:00.000Z',
+      last_meaningful_output_at: '2026-03-09T18:20:00.000Z',
+      current_blocker: 'Waiting on evidence',
+      reboot_recommended: true,
+      derived_staleness: {
+        severity: 'orange'
+      }
+    },
+    ...overrides
+  };
+}
+
+describe('DetailsPanel collector-derived peer-watch provenance', () => {
+  it('renders compact provenance and basis copy in peer-watch supervision surfaces', () => {
+    const collectorAlert = buildCollectorDerivedPeerWatchAlert();
+    const { unmount } = render(
+      <DetailsPanel
+        {...buildProps({
+          selectedAgent: null,
+          selectedCorrelationId: null,
+          selectedOperation: null,
+          workflow: null,
+          openSupervisionAlerts: {
+            items: [collectorAlert]
+          }
+        })}
+      />
+    );
+
+    const openSupervisionSection = screen.getByRole('heading', { name: 'Open Supervision Alerts' }).closest('section');
+    expect(openSupervisionSection).not.toBeNull();
+    const openSupervisionRecord = within(openSupervisionSection!)
+      .getByText('Collector observed blocked app engineering work')
+      .closest('li');
+    expect(openSupervisionRecord).not.toBeNull();
+    expect(within(openSupervisionRecord!).getByText(COLLECTOR_PROVENANCE_LINE)).toBeVisible();
+    expect(within(openSupervisionRecord!).getByText(COLLECTOR_BASIS_LINE)).toBeVisible();
+
+    unmount();
+
+    const supervisionHistoryRender = render(
+      <DetailsPanel
+        {...buildProps({
+          selectedAgentSupervisionHistory: {
+            items: [collectorAlert]
+          }
+        })}
+      />
+    );
+
+    const supervisionHistorySection = screen.getByRole('heading', { name: 'Supervision History' }).closest('section');
+    expect(supervisionHistorySection).not.toBeNull();
+    const supervisionHistoryRecord = within(supervisionHistorySection!)
+      .getByText('Collector observed blocked app engineering work')
+      .closest('li');
+    expect(supervisionHistoryRecord).not.toBeNull();
+    expect(within(supervisionHistoryRecord!).getByText(COLLECTOR_PROVENANCE_LINE)).toBeVisible();
+    expect(within(supervisionHistoryRecord!).getByText(COLLECTOR_BASIS_LINE)).toBeVisible();
+
+    supervisionHistoryRender.unmount();
+
+    const workflow: AgentWorkflow = {
+      ...buildWorkflow(),
+      detail: {
+        ...buildWorkflow().detail,
+        open_peer_watch_alerts: [collectorAlert]
+      }
+    };
+
+    render(<DetailsPanel {...buildProps({ workflow })} />);
+
+    const workflowSection = screen.getByRole('heading', { name: 'Workflow' }).closest('section');
+    expect(workflowSection).not.toBeNull();
+    const workflowRecord = within(workflowSection!).getByText('Collector observed blocked app engineering work').closest('li');
+    expect(workflowRecord).not.toBeNull();
+    expect(within(workflowRecord!).getByText(COLLECTOR_PROVENANCE_LINE)).toBeVisible();
+    expect(within(workflowRecord!).getByText(COLLECTOR_BASIS_LINE)).toBeVisible();
+  });
+
+  it('does not show collector provenance for non-collector or malformed metadata', () => {
+    const nonCollectorAlert = buildCollectorDerivedPeerWatchAlert({
+      alert_id: 'alert-non-collector',
+      summary: 'Controller event without collector provenance',
+      metadata: {
+        escalation: 'release-review'
+      }
+    });
+    const malformedAlert = buildCollectorDerivedPeerWatchAlert({
+      alert_id: 'alert-malformed-collector',
+      summary: 'Malformed collector metadata stays quiet',
+      metadata: {
+        collector_derived: 'true',
+        collector_source: ['controller_snapshot']
+      } as unknown as Record<string, unknown>
+    });
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          selectedAgent: null,
+          selectedCorrelationId: null,
+          selectedOperation: null,
+          workflow: null,
+          openSupervisionAlerts: {
+            items: [nonCollectorAlert, malformedAlert]
+          }
+        })}
+      />
+    );
+
+    const section = screen.getByRole('heading', { name: 'Open Supervision Alerts' }).closest('section');
+    expect(section).not.toBeNull();
+    expect(within(section!).getByText('Controller event without collector provenance')).toBeVisible();
+    expect(within(section!).getByText('Malformed collector metadata stays quiet')).toBeVisible();
+    expect(within(section!).queryByText(/Provenance · Collector snapshot/)).not.toBeInTheDocument();
+    expect(within(section!).queryByText(/Basis · Last output/)).not.toBeInTheDocument();
+  });
+});
 
 describe('DetailsPanel incident-feed correlation gating', () => {
   it('keeps the active correlation when pivoting from a stale incident row', async () => {

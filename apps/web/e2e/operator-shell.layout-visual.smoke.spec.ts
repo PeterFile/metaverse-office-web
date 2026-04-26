@@ -57,15 +57,14 @@ async function expectLocatorWithinScrollport(locator: Locator, scrollport: Locat
 }
 
 async function expectLocatorTopInsideScrollport(locator: Locator, scrollport: Locator, label: string) {
-  const [locatorRect, scrollportRect] = await Promise.all([readRect(locator), readRect(scrollport)]);
-  const epsilon = 1;
+  await expect
+    .poll(async () => {
+      const [locatorRect, scrollportRect] = await Promise.all([readRect(locator), readRect(scrollport)]);
+      const epsilon = 1;
 
-  expect(locatorRect.top, `${label} top should be visible in the Hub scrollport`).toBeGreaterThanOrEqual(
-    scrollportRect.top - epsilon
-  );
-  expect(locatorRect.top, `${label} top should not remain below the Hub fold`).toBeLessThanOrEqual(
-    scrollportRect.bottom + epsilon
-  );
+      return locatorRect.top >= scrollportRect.top - epsilon && locatorRect.top <= scrollportRect.bottom + epsilon;
+    }, `${label} top should be visible in the Hub scrollport`)
+    .toBe(true);
 }
 
 async function expectLocatorInsideRect(locator: Locator, container: Locator, label: string) {

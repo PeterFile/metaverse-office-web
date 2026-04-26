@@ -34,7 +34,7 @@ import { SceneStatusLegend } from './aitown/SceneStatusLegend';
 import { adaptWorldToScene } from './aitown/sceneAdapter';
 import { WorldProvider, useWorld } from './context/WorldContext';
 import { usePolledResource, type LoadState } from './hooks/usePolledResource';
-import { getHubFocusableElements } from './hubFocus';
+import { getHubFocusableElements, isHubElementVisible } from './hubFocus';
 import type {
   CorrelationDrilldown,
   MemoryArtifact,
@@ -326,6 +326,10 @@ function focusSharedMemoryArtifactInDom(artifactRef: string) {
 
   const target = document.getElementById(resolveSharedMemoryArtifactDomId(artifactRef));
   if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+
+  if (!isHubElementVisible(target)) {
     return false;
   }
 
@@ -752,7 +756,7 @@ function AppInner() {
     if (focusSharedMemoryArtifactInDom(artifactRef)) {
       pendingSharedMemoryFocusRef.current = null;
     }
-  }, [hubOpen, memoryArtifacts]);
+  }, [hubOpen, memoryArtifacts, selectedAgentDrilldownTab]);
 
   const correlationResource = usePolledResource({
     enabled: hubOpen && selectedCorrelationId !== null,
@@ -1411,18 +1415,21 @@ function AppInner() {
     }
 
     const activeElement = document.activeElement;
-    if (activeElement instanceof HTMLElement && activeElement.isConnected && dialog.contains(activeElement)) {
-      return;
-    }
-
     const detailsPanel = dialog.querySelector<HTMLElement>('[role="complementary"][aria-label="Agent details"]');
     if (!detailsPanel) {
       return;
     }
 
-    const [firstDetailsFocusable] = getHubFocusableElements(detailsPanel);
+    const focusableDetailsElements = getHubFocusableElements(detailsPanel);
+    if (activeElement instanceof HTMLElement && activeElement.isConnected && dialog.contains(activeElement)) {
+      if (!detailsPanel.contains(activeElement) || isHubElementVisible(activeElement)) {
+        return;
+      }
+    }
+
+    const [firstDetailsFocusable] = focusableDetailsElements;
     (firstDetailsFocusable ?? dialog).focus();
-  }, [hubOpen, selectedAgentId, selectedCorrelationId, selectedCorrelationWasExplicit]);
+  }, [hubOpen, selectedAgentDrilldownTab, selectedAgentId, selectedCorrelationId, selectedCorrelationWasExplicit]);
 
   useEffect(() => {
     if (typeof document === 'undefined') {
@@ -1639,6 +1646,10 @@ function AppInner() {
         preserveNullCorrelation?: boolean;
       }
     ) => {
+      if (selectedAgentId !== null) {
+        setSelectedAgentDrilldownTab('evidence');
+      }
+
       setSharedMemoryJumpStatus(null);
 
       const hasScopeOverride = Boolean(scope?.preserveNullCorrelation) || scope?.correlationId !== undefined;

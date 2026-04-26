@@ -1508,6 +1508,17 @@ async function openHub(user: ReturnType<typeof userEvent.setup>) {
   return screen.findByRole('complementary', { name: 'Agent details' });
 }
 
+async function selectSelectedAgentDrilldownTab(
+  user: ReturnType<typeof userEvent.setup>,
+  name: 'Now' | 'Evidence' | 'Replay / Correlation'
+) {
+  const tablist = await screen.findByRole('tablist', { name: 'Selected agent drilldown' });
+  const tab = within(tablist).getByRole('tab', { name });
+  await user.click(tab);
+  await waitFor(() => expect(tab).toHaveAttribute('aria-selected', 'true'));
+  return screen.getByRole('tabpanel', { name });
+}
+
 function getFeedStat(): HTMLElement {
   const feedStat = within(screen.getByLabelText('Office summary')).getByText('Feed').closest('.aitown-shell__stat');
   expect(feedStat).not.toBeNull();
@@ -2301,6 +2312,38 @@ afterEach(() => {
     expect(nowTab).toHaveFocus();
     expect(nowTab).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByRole('tabpanel', { name: 'Now' })).toBeVisible();
+  });
+
+  it('moves focus out of hidden selected-agent drilldown content after a non-focused tab reset', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    const queueSection = within(details).getByRole('heading', { name: 'Active Queue' }).closest('section');
+    expect(queueSection).not.toBeNull();
+    await user.click(within(queueSection!).getByRole('button', { name: 'Inspect App Engineering Agent from active queue' }));
+
+    const evidencePanel = await selectSelectedAgentDrilldownTab(user, 'Evidence');
+    const severityFilter = within(evidencePanel).getByRole('combobox', {
+      name: 'Filter supervision history by severity'
+    });
+    severityFilter.focus();
+    expect(severityFilter).toHaveFocus();
+
+    const nowTab = screen.getByRole('tab', { name: 'Now' });
+    await act(async () => {
+      nowTab.click();
+    });
+
+    const currentDetails = screen.getByRole('complementary', { name: 'Agent details' });
+    await waitFor(() => expect(nowTab).toHaveAttribute('aria-selected', 'true'));
+    await waitFor(() => expect(currentDetails).toHaveAttribute('data-selected-agent-drilldown-tab', 'now'));
+    await waitFor(() => expect(severityFilter).not.toHaveFocus());
+
+    const activeElement = document.activeElement;
+    expect(activeElement).toBeInstanceOf(HTMLElement);
+    expect(currentDetails).toContainElement(activeElement as HTMLElement);
+    expect(activeElement as HTMLElement).toBeVisible();
   });
 
   it('surfaces live focus agents on the world shell before Hub opens and lets operators inspect them directly', async () => {
@@ -8537,14 +8580,17 @@ afterEach(() => {
     const details = await openHub(user);
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
 
-    const incidentSection = within(details).getByRole('heading', { name: 'Incident Feed' }).closest('section');
-    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    const evidencePanel = await selectSelectedAgentDrilldownTab(user, 'Evidence');
+    const incidentSection = within(evidencePanel).getByRole('heading', { name: 'Incident Feed' }).closest('section');
     expect(incidentSection).not.toBeNull();
-    expect(correlationSection).not.toBeNull();
 
     await user.click(
       within(incidentSection!).getByRole('button', { name: 'Open incident correlation corr-app-secondary' })
     );
+
+    const replayPanel = await selectSelectedAgentDrilldownTab(user, 'Replay / Correlation');
+    const correlationSection = within(replayPanel).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    expect(correlationSection).not.toBeNull();
     await waitFor(() => {
       expect(within(correlationSection!).getByText('corr-app-secondary')).toBeVisible();
     });
@@ -8562,7 +8608,7 @@ afterEach(() => {
       expect(within(reopenedCorrelationSection!).getByText('corr-app-review')).toBeVisible();
     });
     expect(within(reopenedCorrelationSection!).queryByText('corr-app-secondary')).not.toBeInTheDocument();
-  });
+  }, 10000);
 
   it('shows operations queue loading state explicitly while the overview queue is still pending', async () => {
     let resolveOperations: ((response: Response) => void) | null = null;

@@ -4777,7 +4777,12 @@ afterEach(() => {
     expect(replayEvent).not.toBeNull();
     expect(within(replayEvent!).getByText('Replay captured missing workflow evidence')).toBeVisible();
     expect(within(replayEvent!).getByText('Event type · peer_watch_alert_raised')).toBeVisible();
-    expect(within(replayEvent!).getByText('Location · meeting-zone')).toBeVisible();
+    expect(replayEvent).toHaveTextContent('Location · Meeting Zone');
+    expect(
+      within(replayEvent!).getByRole('button', {
+        name: 'Focus Meeting Zone in world viewport from replay event evt-timeline-1'
+      })
+    ).toBeVisible();
     expect(within(replayEvent!).getByText('Severity · Orange')).toBeVisible();
     expect(replayEvent).toHaveTextContent('Counterparties · team-lead');
     expect(

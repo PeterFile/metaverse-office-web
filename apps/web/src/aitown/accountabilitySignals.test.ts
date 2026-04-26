@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import { collectInteractionSourceKinds } from './accountabilitySignals';
+import {
+  collectInteractionSourceKinds,
+  formatCollectorDerivedPeerWatchMetadata
+} from './accountabilitySignals';
 import type { WorkflowInteraction } from '../types';
 
 function buildInteraction(overrides: Partial<WorkflowInteraction> = {}): WorkflowInteraction {
@@ -33,5 +36,43 @@ describe('accountability signal provenance', () => {
         ]
       })
     ).toEqual(['workflow_interaction', 'correlation_interaction']);
+  });
+
+  it('formats collector-derived peer-watch metadata into compact provenance and basis lines', () => {
+    expect(
+      formatCollectorDerivedPeerWatchMetadata({
+        collector_derived: true,
+        collector_source: 'controller_snapshot',
+        collector_alert_family: 'blocked',
+        collector_alert_signature: 'collector:block:app-engineering:orange',
+        collected_at: '2026-03-09T18:59:00.000Z',
+        last_meaningful_output_at: '2026-03-09T18:20:00.000Z',
+        current_blocker: 'Waiting on evidence',
+        reboot_recommended: true,
+        derived_staleness: {
+          severity: 'orange'
+        }
+      })
+    ).toEqual([
+      'Provenance · Collector snapshot · blocked · collected 2026-03-09T18:59:00.000Z',
+      'Basis · Last output 2026-03-09T18:20:00.000Z · Staleness Orange · Blocker Waiting on evidence · Reboot Recommended · Signature collector:block:app-engineering:orange'
+    ]);
+  });
+
+  it('ignores non-collector and malformed peer-watch metadata without false provenance', () => {
+    expect(
+      formatCollectorDerivedPeerWatchMetadata({
+        escalation: 'release-review'
+      })
+    ).toBeNull();
+    expect(
+      formatCollectorDerivedPeerWatchMetadata({
+        collector_derived: true,
+        collector_source: ['controller_snapshot'],
+        collected_at: 17,
+        derived_staleness: 'orange',
+        current_blocker: ['Waiting on evidence']
+      })
+    ).toEqual(['Provenance · Collector snapshot']);
   });
 });

@@ -1084,6 +1084,16 @@ button {
   gap: 8px;
 }
 
+.aitown-hub-selected-agent-chrome {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
 .aitown-hub-focus-ribbon {
   position: sticky;
   top: 0;
@@ -1103,6 +1113,50 @@ button {
   background: rgba(35, 45, 46, 0.96);
   color: #edf7ed;
   overflow: hidden;
+}
+
+.aitown-hub-selected-agent-chrome .aitown-hub-focus-ribbon {
+  position: static;
+  margin-bottom: 0;
+}
+
+.aitown-hub-drilldown {
+  min-width: 0;
+  border-style: solid;
+  border-width: 10px;
+  border-image-source: url('/ai-town/assets/ui/box.svg');
+  border-image-repeat: stretch;
+  border-image-slice: 12.5%;
+  background: rgba(35, 38, 48, 0.96);
+  overflow: hidden;
+}
+
+.aitown-hub-drilldown__tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  min-width: 0;
+}
+
+.aitown-hub-drilldown__tab {
+  min-width: 0;
+  padding: 5px 4px 6px;
+  border: 1px solid rgba(139, 233, 213, 0.28);
+  background: rgba(63, 41, 52, 0.74);
+  color: #d8eadf;
+  font-size: 0.68rem;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.aitown-hub-drilldown__tab.is-active {
+  border-color: rgba(247, 213, 123, 0.82);
+  background: rgba(91, 58, 57, 0.94);
+  color: #fff9df;
+}
+
+.aitown-hub-drilldown__panel {
+  min-width: 0;
 }
 
 .aitown-hub-focus-ribbon__head,
@@ -1150,6 +1204,21 @@ button {
 
 .aitown-hub-sheet .aitown-panel--details {
   min-height: calc(100dvh - 96px);
+}
+
+.aitown-panel--details[data-selected-agent-drilldown-tab='now']
+  .aitown-details__section:not(.aitown-details__section--selected-now),
+.aitown-panel--details[data-selected-agent-drilldown-tab='evidence']
+  .aitown-details__section:not(.aitown-details__section--selected-evidence),
+.aitown-panel--details[data-selected-agent-drilldown-tab='replay']
+  .aitown-details__section:not(.aitown-details__section--selected-replay),
+.aitown-panel--details[data-selected-agent-drilldown-tab='evidence'] > .aitown-details__head,
+.aitown-panel--details[data-selected-agent-drilldown-tab='evidence'] > .aitown-details__summary,
+.aitown-panel--details[data-selected-agent-drilldown-tab='evidence'] > .aitown-details__grid,
+.aitown-panel--details[data-selected-agent-drilldown-tab='replay'] > .aitown-details__head,
+.aitown-panel--details[data-selected-agent-drilldown-tab='replay'] > .aitown-details__summary,
+.aitown-panel--details[data-selected-agent-drilldown-tab='replay'] > .aitown-details__grid {
+  display: none;
 }
 
 @media (max-width: 1080px) {

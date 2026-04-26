@@ -56,6 +56,17 @@ async function expectLocatorWithinScrollport(locator: Locator, scrollport: Locat
   );
 }
 
+async function expectLocatorTopInsideScrollport(locator: Locator, scrollport: Locator, label: string) {
+  await expect
+    .poll(async () => {
+      const [locatorRect, scrollportRect] = await Promise.all([readRect(locator), readRect(scrollport)]);
+      const epsilon = 1;
+
+      return locatorRect.top >= scrollportRect.top - epsilon && locatorRect.top <= scrollportRect.bottom + epsilon;
+    }, `${label} top should be visible in the Hub scrollport`)
+    .toBe(true);
+}
+
 async function expectLocatorInsideRect(locator: Locator, container: Locator, label: string) {
   const [locatorRect, containerRect] = await Promise.all([readRect(locator), readRect(container)]);
   const epsilon = 1;
@@ -307,5 +318,118 @@ test.describe('operator shell layout visual smoke', () => {
     await expect(page.getByRole('region', { name: 'Selected agent inspect peek' })).toHaveCount(0);
     await expect(page.getByRole('dialog', { name: 'Hub' })).toBeVisible();
     await expect(page.getByRole('region', { name: 'Hub focus ribbon' })).toBeVisible();
+  });
+
+  test('selected-agent Hub drilldown tabs split Now Evidence and Replay Correlation without widening the Hub', async ({
+    page
+  }) => {
+    await page.goto('/');
+
+    const worldHost = page.locator('.aitown-world__host');
+    await expect(worldHost).toBeVisible();
+    await page.waitForFunction(() => Boolean(window.__AITOWN_VIEWPORT__));
+
+    await page.getByRole('button', { name: 'Open Hub' }).click();
+
+    const hub = page.getByRole('dialog', { name: 'Hub' });
+    const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
+    const activeQueueSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Active Queue' })
+    });
+
+    await expect(hub).toBeVisible();
+    await expect(detailsPanel.getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
+    await expect(activeQueueSection.getByRole('heading', { name: 'Active Queue' })).toBeVisible();
+    await expect(page.getByRole('tablist', { name: 'Selected agent drilldown' })).toHaveCount(0);
+
+    await activeQueueSection
+      .getByRole('button', { name: 'Inspect Growth Revenue Agent from active queue' })
+      .click();
+
+    await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+    const focusRibbon = page.getByRole('region', { name: 'Hub focus ribbon' });
+    const drilldown = page.getByRole('region', { name: 'Selected agent drilldown' });
+    const tablist = page.getByRole('tablist', { name: 'Selected agent drilldown' });
+    const nowTab = tablist.getByRole('tab', { name: 'Now' });
+    const evidenceTab = tablist.getByRole('tab', { name: 'Evidence' });
+    const replayTab = tablist.getByRole('tab', { name: 'Replay / Correlation' });
+
+    await expect(focusRibbon).toBeVisible();
+    await expect(tablist).toBeVisible();
+    await expect(nowTab).toHaveAttribute('aria-selected', 'true');
+    await expect(evidenceTab).toHaveAttribute('aria-selected', 'false');
+    await expect(replayTab).toHaveAttribute('aria-selected', 'false');
+
+    const nowPanel = page.getByRole('tabpanel', { name: 'Now' });
+    const nowOperationSection = nowPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Current Operation' })
+    });
+    await expect(nowPanel).toBeVisible();
+    await expect(nowPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+    await expect(nowOperationSection.getByRole('heading', { name: 'Current Operation' })).toBeVisible();
+    await expect(nowOperationSection.getByText('planning · Prepare handoff notes')).toBeVisible();
+    await expect(
+      nowOperationSection.getByRole('button', { name: /Open operation correlation corr-revenue-handoff/ })
+    ).toBeVisible();
+    await expect(
+      nowOperationSection.getByRole('button', { name: 'Jump to shared memory artifact /tmp/revenue-handoff.md' })
+    ).toBeVisible();
+    await expect(nowPanel.getByRole('heading', { name: 'Timeline Replay' })).toHaveCount(0);
+    await expect(nowPanel.getByRole('heading', { name: 'Correlation Drilldown' })).toHaveCount(0);
+
+    const [worldRect, hubRect, focusRibbonRect, drilldownRect] = await Promise.all([
+      readRect(worldHost),
+      readRect(hub),
+      readRect(focusRibbon),
+      readRect(drilldown)
+    ]);
+    expect(hubRect.width, 'Hub width should remain unchanged').toBeLessThanOrEqual(430);
+    expect(
+      focusRibbonRect.height + drilldownRect.height,
+      'Hub focus ribbon plus drilldown tabs should stay compact'
+    ).toBeLessThanOrEqual(198);
+    expect(
+      resolveIntersectionArea(resolvePrimaryDragLane(worldRect), drilldownRect),
+      'Selected-agent drilldown tabs should not cover the primary world drag lane'
+    ).toBe(0);
+    await expectLocatorInsideRect(drilldown, hub, 'Selected-agent drilldown tabs');
+
+    await hub.evaluate((element) => {
+      element.scrollTop = 720;
+    });
+    await expect.poll(() => hub.evaluate((element) => element.scrollTop)).toBeGreaterThan(100);
+    await evidenceTab.click();
+    const evidencePanel = page.getByRole('tabpanel', { name: 'Evidence' });
+    await expect(evidencePanel).toBeVisible();
+    await expectLocatorTopInsideScrollport(evidencePanel, hub, 'Evidence tab panel');
+    await expect(evidencePanel.getByRole('heading', { name: 'Collector Observation' })).toBeVisible();
+    await expect(evidencePanel.getByRole('heading', { name: 'Audit Signals' })).toBeVisible();
+    const evidenceWorkflowSection = evidencePanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Workflow' })
+    });
+    await expect(evidenceWorkflowSection.getByRole('heading', { name: 'Workflow' })).toBeVisible();
+    await expect(
+      evidenceWorkflowSection
+        .getByRole('button', { name: 'Jump to shared memory artifact /tmp/revenue-handoff.md' })
+        .first()
+    ).toBeVisible();
+
+    await replayTab.click();
+    const replayPanel = page.getByRole('tabpanel', { name: 'Replay / Correlation' });
+    await expect(replayPanel).toBeVisible();
+    await expectLocatorTopInsideScrollport(replayPanel, hub, 'Replay / Correlation tab panel');
+    await expect(replayPanel.getByRole('heading', { name: 'Timeline Replay' })).toBeVisible();
+    await expect(replayPanel.getByRole('heading', { name: 'Correlation Drilldown' })).toBeVisible();
+
+    await page.getByRole('button', { name: 'Close Hub' }).click();
+    await expect(hub).toHaveCount(0);
+    await expect(page.getByRole('tablist', { name: 'Selected agent drilldown' })).toHaveCount(0);
+    const inspectPeek = page.getByRole('region', { name: 'Selected agent inspect peek' });
+    await expect(inspectPeek).toBeVisible();
+
+    await inspectPeek.getByRole('button', { name: 'Open selected agent in Hub' }).click();
+    await expect(page.getByRole('dialog', { name: 'Hub' })).toBeVisible();
+    await expect(page.getByRole('tablist', { name: 'Selected agent drilldown' })).toBeVisible();
+    await expect(page.getByRole('tab', { name: 'Now' })).toHaveAttribute('aria-selected', 'true');
   });
 });

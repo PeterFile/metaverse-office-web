@@ -1508,6 +1508,17 @@ async function openHub(user: ReturnType<typeof userEvent.setup>) {
   return screen.findByRole('complementary', { name: 'Agent details' });
 }
 
+async function selectSelectedAgentDrilldownTab(
+  user: ReturnType<typeof userEvent.setup>,
+  name: 'Now' | 'Evidence' | 'Replay / Correlation'
+) {
+  const tablist = await screen.findByRole('tablist', { name: 'Selected agent drilldown' });
+  const tab = within(tablist).getByRole('tab', { name });
+  await user.click(tab);
+  await waitFor(() => expect(tab).toHaveAttribute('aria-selected', 'true'));
+  return screen.getByRole('tabpanel', { name });
+}
+
 function getFeedStat(): HTMLElement {
   const feedStat = within(screen.getByLabelText('Office summary')).getByText('Feed').closest('.aitown-shell__stat');
   expect(feedStat).not.toBeNull();
@@ -2201,6 +2212,138 @@ afterEach(() => {
 
     expect(screen.queryByRole('region', { name: 'Selected agent inspect peek' })).not.toBeInTheDocument();
     expect(await screen.findByRole('region', { name: 'Hub focus ribbon' })).toBeVisible();
+  });
+
+  it('selected-agent Hub drilldown tabs expose Now Evidence and Replay Correlation panels', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    expect(within(details).getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
+    expect(screen.queryByRole('tablist', { name: 'Selected agent drilldown' })).not.toBeInTheDocument();
+
+    const queueSection = within(details).getByRole('heading', { name: 'Active Queue' }).closest('section');
+    expect(queueSection).not.toBeNull();
+    await user.click(within(queueSection!).getByRole('button', { name: 'Inspect App Engineering Agent from active queue' }));
+
+    const tablist = await screen.findByRole('tablist', { name: 'Selected agent drilldown' });
+    const nowTab = within(tablist).getByRole('tab', { name: 'Now' });
+    const evidenceTab = within(tablist).getByRole('tab', { name: 'Evidence' });
+    const replayTab = within(tablist).getByRole('tab', { name: 'Replay / Correlation' });
+
+    expect(nowTab).toHaveAttribute('aria-selected', 'true');
+    expect(evidenceTab).toHaveAttribute('aria-selected', 'false');
+    expect(replayTab).toHaveAttribute('aria-selected', 'false');
+
+    const nowPanel = screen.getByRole('tabpanel', { name: 'Now' });
+    expect(within(nowPanel).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+    expect(within(nowPanel).getByRole('heading', { name: 'Current Operation' })).toBeVisible();
+    const operationSection = within(nowPanel).getByRole('heading', { name: 'Current Operation' }).closest('section');
+    expect(operationSection).not.toBeNull();
+    expect(within(operationSection!).getByText('blocked · Workflow evidence is still incomplete')).toBeVisible();
+    expect(
+      within(operationSection!).getByRole('button', { name: /Open operation correlation corr-app-review/ })
+    ).toBeVisible();
+    expect(
+      within(operationSection!).getByRole('button', { name: 'Jump to shared memory artifact /tmp/evidence.md' })
+    ).toBeVisible();
+    expect(within(nowPanel).getByRole('complementary', { name: 'Agent details' })).toHaveAttribute(
+      'data-selected-agent-drilldown-tab',
+      'now'
+    );
+
+    await user.click(evidenceTab);
+    const evidencePanel = screen.getByRole('tabpanel', { name: 'Evidence' });
+    expect(evidenceTab).toHaveAttribute('aria-selected', 'true');
+    expect(within(evidencePanel).getByRole('complementary', { name: 'Agent details' })).toHaveAttribute(
+      'data-selected-agent-drilldown-tab',
+      'evidence'
+    );
+    expect(within(evidencePanel).getByRole('heading', { name: 'Collector Observation' })).toBeVisible();
+    expect(within(evidencePanel).getByRole('heading', { name: 'Audit Signals' })).toBeVisible();
+    expect(within(evidencePanel).getByRole('heading', { name: 'Workflow' })).toBeVisible();
+
+    await user.click(replayTab);
+    const replayPanel = screen.getByRole('tabpanel', { name: 'Replay / Correlation' });
+    expect(replayTab).toHaveAttribute('aria-selected', 'true');
+    expect(within(replayPanel).getByRole('complementary', { name: 'Agent details' })).toHaveAttribute(
+      'data-selected-agent-drilldown-tab',
+      'replay'
+    );
+    expect(within(replayPanel).getByRole('heading', { name: 'Timeline Replay' })).toBeVisible();
+    expect(within(replayPanel).getByRole('heading', { name: 'Correlation Drilldown' })).toBeVisible();
+
+    await user.click(screen.getByRole('button', { name: 'Close Hub' }));
+    expect(screen.queryByRole('tablist', { name: 'Selected agent drilldown' })).not.toBeInTheDocument();
+    const inspectPeek = screen.getByRole('region', { name: 'Selected agent inspect peek' });
+    await user.click(within(inspectPeek).getByRole('button', { name: 'Open selected agent in Hub' }));
+    expect(await screen.findByRole('tablist', { name: 'Selected agent drilldown' })).toBeVisible();
+    expect(screen.getByRole('tab', { name: 'Now' })).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('supports keyboard navigation across selected-agent Hub drilldown tabs', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    const queueSection = within(details).getByRole('heading', { name: 'Active Queue' }).closest('section');
+    expect(queueSection).not.toBeNull();
+    await user.click(within(queueSection!).getByRole('button', { name: 'Inspect App Engineering Agent from active queue' }));
+
+    const tablist = await screen.findByRole('tablist', { name: 'Selected agent drilldown' });
+    const nowTab = within(tablist).getByRole('tab', { name: 'Now' });
+    const evidenceTab = within(tablist).getByRole('tab', { name: 'Evidence' });
+    const replayTab = within(tablist).getByRole('tab', { name: 'Replay / Correlation' });
+
+    nowTab.focus();
+    expect(nowTab).toHaveFocus();
+
+    await user.keyboard('{ArrowRight}');
+    expect(evidenceTab).toHaveFocus();
+    expect(evidenceTab).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tabpanel', { name: 'Evidence' })).toBeVisible();
+
+    await user.keyboard('{End}');
+    expect(replayTab).toHaveFocus();
+    expect(replayTab).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tabpanel', { name: 'Replay / Correlation' })).toBeVisible();
+
+    await user.keyboard('{Home}');
+    expect(nowTab).toHaveFocus();
+    expect(nowTab).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tabpanel', { name: 'Now' })).toBeVisible();
+  });
+
+  it('moves focus out of hidden selected-agent drilldown content after a non-focused tab reset', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    const queueSection = within(details).getByRole('heading', { name: 'Active Queue' }).closest('section');
+    expect(queueSection).not.toBeNull();
+    await user.click(within(queueSection!).getByRole('button', { name: 'Inspect App Engineering Agent from active queue' }));
+
+    const evidencePanel = await selectSelectedAgentDrilldownTab(user, 'Evidence');
+    const severityFilter = within(evidencePanel).getByRole('combobox', {
+      name: 'Filter supervision history by severity'
+    });
+    severityFilter.focus();
+    expect(severityFilter).toHaveFocus();
+
+    const nowTab = screen.getByRole('tab', { name: 'Now' });
+    await act(async () => {
+      nowTab.click();
+    });
+
+    const currentDetails = screen.getByRole('complementary', { name: 'Agent details' });
+    await waitFor(() => expect(nowTab).toHaveAttribute('aria-selected', 'true'));
+    await waitFor(() => expect(currentDetails).toHaveAttribute('data-selected-agent-drilldown-tab', 'now'));
+    await waitFor(() => expect(severityFilter).not.toHaveFocus());
+
+    const activeElement = document.activeElement;
+    expect(activeElement).toBeInstanceOf(HTMLElement);
+    expect(currentDetails).toContainElement(activeElement as HTMLElement);
+    expect(activeElement as HTMLElement).toBeVisible();
   });
 
   it('surfaces live focus agents on the world shell before Hub opens and lets operators inspect them directly', async () => {
@@ -8437,14 +8580,17 @@ afterEach(() => {
     const details = await openHub(user);
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
 
-    const incidentSection = within(details).getByRole('heading', { name: 'Incident Feed' }).closest('section');
-    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    const evidencePanel = await selectSelectedAgentDrilldownTab(user, 'Evidence');
+    const incidentSection = within(evidencePanel).getByRole('heading', { name: 'Incident Feed' }).closest('section');
     expect(incidentSection).not.toBeNull();
-    expect(correlationSection).not.toBeNull();
 
     await user.click(
       within(incidentSection!).getByRole('button', { name: 'Open incident correlation corr-app-secondary' })
     );
+
+    const replayPanel = await selectSelectedAgentDrilldownTab(user, 'Replay / Correlation');
+    const correlationSection = within(replayPanel).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    expect(correlationSection).not.toBeNull();
     await waitFor(() => {
       expect(within(correlationSection!).getByText('corr-app-secondary')).toBeVisible();
     });
@@ -8462,7 +8608,7 @@ afterEach(() => {
       expect(within(reopenedCorrelationSection!).getByText('corr-app-review')).toBeVisible();
     });
     expect(within(reopenedCorrelationSection!).queryByText('corr-app-secondary')).not.toBeInTheDocument();
-  });
+  }, 10000);
 
   it('shows operations queue loading state explicitly while the overview queue is still pending', async () => {
     let resolveOperations: ((response: Response) => void) | null = null;

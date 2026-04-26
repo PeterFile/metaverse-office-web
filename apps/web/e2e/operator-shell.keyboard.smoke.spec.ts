@@ -42,6 +42,71 @@ function resolveViewportSafeAreaTarget(
   };
 }
 
+type SelectedAgentDrilldownTabLabel = 'Now' | 'Evidence' | 'Replay / Correlation';
+
+const SELECTED_AGENT_DRILLDOWN_TAB_LABELS: SelectedAgentDrilldownTabLabel[] = [
+  'Now',
+  'Evidence',
+  'Replay / Correlation'
+];
+
+const SELECTED_AGENT_DRILLDOWN_TAB_ATTRIBUTE_BY_LABEL: Record<SelectedAgentDrilldownTabLabel, string> = {
+  Now: 'now',
+  Evidence: 'evidence',
+  'Replay / Correlation': 'replay'
+};
+
+async function selectSelectedAgentDrilldownTabIfPresent(
+  page: Page,
+  detailsPanel: Locator,
+  tabLabel: SelectedAgentDrilldownTabLabel,
+  options: { required?: boolean } = {}
+) {
+  const tablist = page.getByRole('tablist', { name: 'Selected agent drilldown' });
+  if ((await tablist.count()) === 0 || !(await tablist.isVisible())) {
+    if (options.required) {
+      await expect(tablist).toBeVisible();
+    }
+    return;
+  }
+
+  const tab = tablist.getByRole('tab', { name: tabLabel });
+  await expect(tab).toBeVisible();
+
+  if ((await tab.getAttribute('aria-selected')) !== 'true') {
+    await tab.click();
+  }
+
+  await expect(tab).toHaveAttribute('aria-selected', 'true');
+  await expect(detailsPanel).toHaveAttribute(
+    'data-selected-agent-drilldown-tab',
+    SELECTED_AGENT_DRILLDOWN_TAB_ATTRIBUTE_BY_LABEL[tabLabel]
+  );
+}
+
+async function revealSelectedAgentDrilldownControlIfNeeded(page: Page, locator: Locator, detailsPanel?: Locator) {
+  if (await locator.isVisible()) {
+    return;
+  }
+
+  const tablist = page.getByRole('tablist', { name: 'Selected agent drilldown' });
+  if ((await tablist.count()) === 0 || !(await tablist.isVisible())) {
+    return;
+  }
+
+  const resolvedDetailsPanel = detailsPanel ?? page.getByRole('complementary', { name: 'Agent details' });
+  if ((await resolvedDetailsPanel.count()) === 0 || !(await resolvedDetailsPanel.isVisible())) {
+    return;
+  }
+
+  for (const tabLabel of SELECTED_AGENT_DRILLDOWN_TAB_LABELS) {
+    await selectSelectedAgentDrilldownTabIfPresent(page, resolvedDetailsPanel, tabLabel);
+    if (await locator.isVisible()) {
+      return;
+    }
+  }
+}
+
 async function focusHubControlWithTab(
   page: Page,
   locator: Locator,
@@ -49,9 +114,17 @@ async function focusHubControlWithTab(
   options: {
     maxTabs?: number;
     reverse?: boolean;
+    detailsPanel?: Locator;
+    selectedAgentDrilldownTab?: SelectedAgentDrilldownTabLabel;
   } = {}
 ) {
-  const { maxTabs = 128, reverse = false } = options;
+  const { maxTabs = 128, reverse = false, detailsPanel, selectedAgentDrilldownTab } = options;
+  if (detailsPanel && selectedAgentDrilldownTab) {
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, selectedAgentDrilldownTab, { required: true });
+  } else {
+    await revealSelectedAgentDrilldownControlIfNeeded(page, locator, detailsPanel);
+  }
+
   await expect(locator).toBeVisible();
 
   for (let step = 0; step < maxTabs; step += 1) {
@@ -65,6 +138,35 @@ async function focusHubControlWithTab(
   throw new Error(
     `could not focus ${accessibleName} with ${reverse ? 'Shift+Tab' : 'Tab'} within ${maxTabs} steps`
   );
+}
+
+async function expectFocusedElementVisible(page: Page) {
+  await expect
+    .poll(async () =>
+      page.evaluate(() => {
+        const activeElement = document.activeElement;
+        if (!(activeElement instanceof HTMLElement) || activeElement === document.body) {
+          return 'missing-active-element';
+        }
+
+        let current: HTMLElement | null = activeElement;
+        while (current) {
+          if (current.hidden || current.getAttribute('aria-hidden') === 'true') {
+            return `hidden:${current.tagName.toLowerCase()}`;
+          }
+
+          const style = window.getComputedStyle(current);
+          if (style.display === 'none' || style.visibility === 'hidden' || style.visibility === 'collapse') {
+            return `css-hidden:${current.tagName.toLowerCase()}`;
+          }
+
+          current = current.parentElement;
+        }
+
+        return 'visible';
+      })
+    )
+    .toBe('visible');
 }
 
 function expectViewportBoundsWithinClampBudget(
@@ -1168,37 +1270,72 @@ test.describe('operator shell smoke', () => {
     await expect(inspectButton).toBeVisible();
     await inspectButton.click();
 
-    const workflowSection = detailsPanel.locator('section').filter({
-      has: page.getByRole('heading', { name: 'Workflow' })
-    });
-    const operationSection = detailsPanel.locator('section').filter({
+    const drilldownRegion = page.getByRole('region', { name: 'Selected agent drilldown' });
+    const tablist = page.getByRole('tablist', { name: 'Selected agent drilldown' });
+    const nowTab = tablist.getByRole('tab', { name: 'Now' });
+    const evidenceTab = tablist.getByRole('tab', { name: 'Evidence' });
+    const replayTab = tablist.getByRole('tab', { name: 'Replay / Correlation' });
+
+    await expect(drilldownRegion).toBeVisible();
+    await expect(nowTab).toHaveAttribute('aria-selected', 'true');
+    await expect(detailsPanel).toHaveAttribute('data-selected-agent-drilldown-tab', 'now');
+
+    const nowPanel = page.getByRole('tabpanel', { name: 'Now' });
+    const operationSection = nowPanel.locator('section').filter({
       has: page.getByRole('heading', { name: 'Current Operation' })
     });
-    const incidentSection = detailsPanel.locator('section').filter({
-      has: page.getByRole('heading', { name: 'Incident Feed' })
-    });
-    const correlationSection = detailsPanel.locator('section').filter({
-      has: page.getByRole('heading', { name: 'Correlation Drilldown' })
-    });
-    const runContextSection = detailsPanel.locator('section').filter({
+
+    await expect(nowPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+    await expect(nowPanel.getByRole('heading', { name: 'Current Operation' })).toBeVisible();
+    await expect(nowPanel.getByRole('heading', { name: 'Run Context' })).toHaveCount(0);
+    await expect(nowPanel.getByRole('heading', { name: 'Workflow' })).toHaveCount(0);
+    await expect(nowPanel.locator('.aitown-details__head').getByText('Prepare handoff notes', { exact: true })).toBeVisible();
+    await expect(nowPanel.getByText('meeting-zone', { exact: true })).toBeVisible();
+    await expect(operationSection.getByText('planning · Prepare handoff notes')).toBeVisible();
+    expect(selectedOperationRequests).toContain('/office/operations?agent_id=growth-revenue');
+
+    await nowTab.focus();
+    await expect(nowTab).toBeFocused();
+    await page.keyboard.press('ArrowRight');
+    await expect(evidenceTab).toHaveAttribute('aria-selected', 'true');
+    await expect(evidenceTab).toBeFocused();
+    await expect(detailsPanel).toHaveAttribute('data-selected-agent-drilldown-tab', 'evidence');
+
+    const evidencePanel = page.getByRole('tabpanel', { name: 'Evidence' });
+    const runContextSection = evidencePanel.locator('section').filter({
       has: page.getByRole('heading', { name: 'Run Context' })
     });
+    const workflowSection = evidencePanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Workflow' })
+    });
+    const incidentSection = evidencePanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Incident Feed' })
+    });
 
-    await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
-    await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toBeVisible();
-    await expect(detailsPanel.getByRole('heading', { name: 'Run Context' })).toBeVisible();
-    await expect(detailsPanel.getByRole('heading', { name: 'Workflow' })).toBeVisible();
-    await expect(detailsPanel.locator('.aitown-details__head').getByText('Prepare handoff notes', { exact: true })).toBeVisible();
-    await expect(detailsPanel.getByText('meeting-zone', { exact: true })).toBeVisible();
-    await expect(operationSection.getByText('planning · Prepare handoff notes')).toBeVisible();
+    await expect(evidencePanel.getByRole('heading', { name: 'Run Context' })).toBeVisible();
+    await expect(evidencePanel.getByRole('heading', { name: 'Workflow' })).toBeVisible();
+    await expect(evidencePanel.getByRole('heading', { name: 'Incident Feed' })).toBeVisible();
+    await expect(evidencePanel.getByRole('heading', { name: 'Correlation Drilldown' })).toHaveCount(0);
     await expect(runContextSection.getByText(/Run blocker ·/)).toBeVisible();
     await expect(workflowSection.getByText('No open watch alerts.')).toBeVisible();
     const handoffIncidentRecord = incidentSection.getByText('Lead completed the revenue handoff').locator('..');
     await expect(handoffIncidentRecord.getByText('Lead completed the revenue handoff')).toBeVisible();
     await expect(handoffIncidentRecord.getByText('Incident · handoff · completed')).toBeVisible();
     await expect(handoffIncidentRecord.getByText('Severity · Yellow')).toBeVisible();
+
+    await page.keyboard.press('ArrowRight');
+    await expect(replayTab).toHaveAttribute('aria-selected', 'true');
+    await expect(replayTab).toBeFocused();
+    await expect(detailsPanel).toHaveAttribute('data-selected-agent-drilldown-tab', 'replay');
+
+    const replayPanel = page.getByRole('tabpanel', { name: 'Replay / Correlation' });
+    const correlationSection = replayPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Correlation Drilldown' })
+    });
+
+    await expect(replayPanel.getByRole('heading', { name: 'Timeline Replay' })).toBeVisible();
+    await expect(replayPanel.getByRole('heading', { name: 'Correlation Drilldown' })).toBeVisible();
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
-    expect(selectedOperationRequests).toContain('/office/operations?agent_id=growth-revenue');
 
     await page.getByRole('button', { name: 'Close Hub' }).click();
     await expect(page.getByRole('complementary', { name: 'Agent details' })).toHaveCount(0);
@@ -1914,6 +2051,7 @@ test.describe('operator shell smoke', () => {
       await expect(dialog).toBeVisible();
       await expect(selectedAgentHeading).toBeVisible();
       await expect(detailsPanel.getByRole('button', { name: 'Clear' })).toBeVisible();
+      await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
       await expect(detailsPanel.getByRole('heading', { name: 'Supervision History' })).toBeVisible();
       await workflowResponsePromise;
       await supervisionHistoryResponsePromise;
@@ -2042,29 +2180,45 @@ test.describe('operator shell smoke', () => {
     await page.getByRole('button', { name: 'Open Hub' }).click();
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
-    const operationSection = detailsPanel.locator('section').filter({
+    await detailsPanel.getByRole('button', { name: 'Inspect Growth Revenue Agent', exact: true }).click();
+
+    const tablist = page.getByRole('tablist', { name: 'Selected agent drilldown' });
+    const nowTab = tablist.getByRole('tab', { name: 'Now' });
+    const evidenceTab = tablist.getByRole('tab', { name: 'Evidence' });
+    const nowPanel = page.getByRole('tabpanel', { name: 'Now' });
+    const evidencePanel = page.getByRole('tabpanel', { name: 'Evidence' });
+    const operationSection = nowPanel.locator('section').filter({
       has: page.getByRole('heading', { name: 'Current Operation' })
     });
-    const runContextSection = detailsPanel.locator('section').filter({
+    const runContextSection = evidencePanel.locator('section').filter({
       has: page.getByRole('heading', { name: 'Run Context' })
     });
 
-    await detailsPanel.getByRole('button', { name: 'Inspect Growth Revenue Agent', exact: true }).click();
-
-    await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
-    await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toBeVisible();
-    await expect(detailsPanel.getByRole('heading', { name: 'Run Context' })).toBeVisible();
+    await expect(nowTab).toHaveAttribute('aria-selected', 'true');
+    await expect(detailsPanel).toHaveAttribute('data-selected-agent-drilldown-tab', 'now');
+    await expect(nowPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+    await expect(nowPanel.getByRole('heading', { name: 'Current Operation' })).toBeVisible();
+    await expect(nowPanel.getByRole('heading', { name: 'Run Context' })).toHaveCount(0);
     await expect(operationSection.getByText('planning · Prepare handoff notes')).toBeVisible();
-    await expect(runContextSection.getByText(/Run blocker ·/)).toBeVisible();
-    await expect(runContextSection.getByText(/Latest event type ·/)).toBeVisible();
     expect(selectedOperationRequests).toContain('/office/operations?agent_id=growth-revenue');
 
+    await evidenceTab.click();
+    await expect(evidenceTab).toHaveAttribute('aria-selected', 'true');
+    await expect(detailsPanel).toHaveAttribute('data-selected-agent-drilldown-tab', 'evidence');
+    await expect(evidencePanel.getByRole('heading', { name: 'Run Context' })).toBeVisible();
+    await expect(runContextSection.getByText(/Run blocker ·/)).toBeVisible();
+    await expect(runContextSection.getByText(/Latest event type ·/)).toBeVisible();
+
+    await nowTab.click();
+    await expect(nowTab).toHaveAttribute('aria-selected', 'true');
     await enableScenario(page, 'selected-operation-refresh-failure');
 
-    await expect(detailsPanel.getByText('Showing last operation snapshot. operations refresh failed')).toBeVisible({
+    await expect(operationSection.getByText('Showing last operation snapshot. operations refresh failed')).toBeVisible({
       timeout: POLL_DRIVEN_ASSERTION_TIMEOUT_MS
     });
     await expect(operationSection.getByText('planning · Prepare handoff notes')).toBeVisible();
+
+    await evidenceTab.click();
     await expect(runContextSection.getByText(/Run blocker ·/)).toBeVisible();
     await expect(runContextSection.getByText(/Latest event type ·/)).toBeVisible();
   });
@@ -2227,12 +2381,14 @@ test.describe('operator shell smoke', () => {
 
     await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
     await expect(detailsPanel.getByRole('button', { name: 'Clear' })).toBeFocused();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
     await expect(detailsPanel.getByRole('heading', { name: 'Run Context' })).toBeVisible();
     await expect(runContextSection.getByText(/Run blocker ·/)).toBeVisible();
     await expect(runContextSection.getByText(/Latest event type ·/)).toBeVisible();
     await expect(runContextSection.getByText(/Last heartbeat ·/)).toBeVisible();
     await expect(runContextSection.getByText(/Staleness ·/)).toBeVisible();
     await expect(runContextSection.getByText(/Reboot recommendation ·/)).toBeVisible();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
   });
@@ -2296,6 +2452,7 @@ test.describe('operator shell smoke', () => {
     await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
     await expect(detailsPanel.getByRole('button', { name: 'Clear' })).toBeFocused();
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toHaveCount(0);
   });
@@ -2990,8 +3147,10 @@ test.describe('operator shell smoke', () => {
     await page.keyboard.press('Enter');
 
     await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
-    await expect(clearButton).toBeFocused();
+    await expect(clearButton).toBeVisible();
+    await expectFocusedElementVisible(page);
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('Counts · 0 incidents · 1 interactions · 2 events')).toBeVisible();
     await expect(correlationSection.getByText('corr-revenue-secondary', { exact: true })).toHaveCount(0);
@@ -3000,6 +3159,8 @@ test.describe('operator shell smoke', () => {
   test('keeps the active crew-overview correlation when opening an active-queue actor pivot via keyboard traversal', async ({
     page
   }) => {
+    test.setTimeout(45_000);
+
     const requestedUrls: string[] = [];
     page.on('request', (request) => {
       try {
@@ -3073,8 +3234,10 @@ test.describe('operator shell smoke', () => {
     await page.keyboard.press('Enter');
 
     await expect(detailsPanel.getByRole('heading', { name: 'Team Lead' })).toBeVisible();
-    await expect(clearButton).toBeFocused();
+    await expect(clearButton).toBeVisible();
+    await expectFocusedElementVisible(page);
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('Counts · 0 incidents · 1 interactions · 2 events')).toBeVisible();
     await expect(correlationSection.getByText('corr-revenue-secondary', { exact: true })).toHaveCount(0);
@@ -3148,9 +3311,14 @@ test.describe('operator shell smoke', () => {
 
     await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
     await expect(clearButton).toBeFocused();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Now');
     await expect(operationCounterpartyButton).toBeVisible();
-    await focusHubControlWithTab(page, operationCounterpartyButton, 'Select operation counterparty agent app-engineering');
+    await focusHubControlWithTab(page, operationCounterpartyButton, 'Select operation counterparty agent app-engineering', {
+      detailsPanel,
+      selectedAgentDrilldownTab: 'Now'
+    });
     await expect(operationCounterpartyButton).toBeFocused();
 
     trackForbiddenRequests = true;
@@ -3169,8 +3337,10 @@ test.describe('operator shell smoke', () => {
     await scopedArtifactsResponse;
 
     await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
-    await expect(clearButton).toBeFocused();
+    await expect(clearButton).toBeVisible();
+    await expectFocusedElementVisible(page);
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
     await expect(correlationSection.getByText('corr-app-review', { exact: true })).toHaveCount(0);
@@ -3297,24 +3467,32 @@ test.describe('operator shell smoke', () => {
     await expect(clearButton).toBeFocused();
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toBeVisible();
     await expect(operationSection.getByText('planning · Prepare handoff notes')).toBeVisible();
-    await expect(workflowCorrelationButton).toBeVisible();
     await expect(operationCorrelationButton).toBeVisible();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
+    await expect(workflowCorrelationButton).toBeVisible();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toHaveCount(0);
-    await focusHubControlWithTab(page, workflowCorrelationButton, 'Open workflow correlation corr-revenue-handoff');
+    await focusHubControlWithTab(page, workflowCorrelationButton, 'Open workflow correlation corr-revenue-handoff', {
+      detailsPanel,
+      selectedAgentDrilldownTab: 'Evidence'
+    });
     await expect(workflowCorrelationButton).toBeFocused();
     await page.keyboard.press('Enter');
 
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Now');
     await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toBeVisible();
     await expect(operationSection.getByText('planning · Prepare handoff notes')).toBeVisible();
     await expect(operationCorrelationButton).toBeVisible();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toHaveCount(0);
     await focusHubControlWithTab(
       page,
       operationCorrelationButton,
-      'Open operation correlation corr-growth-lead-review'
+      'Open operation correlation corr-growth-lead-review',
+      { detailsPanel, selectedAgentDrilldownTab: 'Now' }
     );
     await expect(operationCorrelationButton).toBeFocused();
 
@@ -3325,6 +3503,7 @@ test.describe('operator shell smoke', () => {
     await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toBeVisible();
     await expect(operationSection.getByText('planning · Prepare handoff notes')).toBeVisible();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('Counts · 0 incidents · 1 interactions · 2 events')).toBeVisible();
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toHaveCount(0);
@@ -3385,19 +3564,23 @@ test.describe('operator shell smoke', () => {
 
     await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
     await expect(clearButton).toBeFocused();
-    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
     await expect(operationActorButton).toBeVisible();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
+    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
     await focusHubControlWithTab(
       page,
       operationActorButton,
-      'Select current operation actor from event evt_revenue_handoff_completed team-lead'
+      'Select current operation actor from event evt_revenue_handoff_completed team-lead',
+      { detailsPanel, selectedAgentDrilldownTab: 'Now' }
     );
     await expect(operationActorButton).toBeFocused();
     await page.keyboard.press('Enter');
 
     await expect(detailsPanel.getByRole('heading', { name: 'Team Lead' })).toBeVisible();
-    await expect(clearButton).toBeFocused();
+    await expect(clearButton).toBeVisible();
+    await expectFocusedElementVisible(page);
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
     await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toHaveCount(0);
@@ -3444,29 +3627,37 @@ test.describe('operator shell smoke', () => {
     const focusedSharedMemoryRecord = detailsPanel.locator('li[data-shared-memory-target]:focus');
 
     await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Now');
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toBeVisible();
     await expect(operationSection.getByText('planning · Prepare handoff notes')).toBeVisible();
     await expect(operationSection.getByText('Evidence · /tmp/revenue-handoff.md')).toBeVisible();
-    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
-    await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
     await expect(evidenceJumpButton).toBeVisible();
     await expect(focusedSharedMemoryRecord).toHaveCount(0);
-    await focusHubControlWithTab(page, evidenceJumpButton, 'Jump to shared memory artifact /tmp/revenue-handoff.md');
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
+    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
+    await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
+    await focusHubControlWithTab(page, evidenceJumpButton, 'Jump to shared memory artifact /tmp/revenue-handoff.md', {
+      detailsPanel,
+      selectedAgentDrilldownTab: 'Now'
+    });
     await expect(evidenceJumpButton).toBeFocused();
 
     const requestCountBeforeJump = requestedUrls.length;
 
     await page.keyboard.press('Enter');
 
-    await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Hub focus ribbon' }).getByText('Growth Revenue Agent')).toBeVisible();
+    await expect(detailsPanel).toHaveAttribute('data-selected-agent-drilldown-tab', 'evidence');
+    await expect(focusedSharedMemoryRecord).toHaveCount(1);
+    await expect(focusedSharedMemoryRecord).toContainText('Ref · /tmp/revenue-handoff.md');
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Now');
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toBeVisible();
     await expect(operationSection.getByText('planning · Prepare handoff notes')).toBeVisible();
     await expect(operationSection.getByText('Evidence · /tmp/revenue-handoff.md')).toBeVisible();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
     await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toHaveCount(0);
-    await expect(focusedSharedMemoryRecord).toHaveCount(1);
-    await expect(focusedSharedMemoryRecord).toContainText('Ref · /tmp/revenue-handoff.md');
 
     await page.waitForTimeout(150);
 
@@ -3567,28 +3758,37 @@ test.describe('operator shell smoke', () => {
     const focusedSharedMemoryRecord = detailsPanel.locator('li[data-shared-memory-target]:focus');
 
     await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Now');
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toBeVisible();
     await expect(operationSection.getByText('planning · Prepare handoff notes')).toBeVisible();
     await expect(operationSection.getByText('Evidence · /tmp/revenue-handoff.md')).toBeVisible();
+    await expect(evidenceJumpButton).toBeVisible();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
     await expect(memorySection.getByText('Request scope · growth-revenue · corr-revenue-handoff')).toBeVisible();
     await expect(memorySection.getByText('Ref · /tmp/revenue-handoff.md')).toHaveCount(0);
-    await expect(evidenceJumpButton).toBeVisible();
-    await focusHubControlWithTab(page, evidenceJumpButton, 'Jump to shared memory artifact /tmp/revenue-handoff.md');
+    await focusHubControlWithTab(page, evidenceJumpButton, 'Jump to shared memory artifact /tmp/revenue-handoff.md', {
+      detailsPanel,
+      selectedAgentDrilldownTab: 'Now'
+    });
     await expect(evidenceJumpButton).toBeFocused();
 
     const requestCountBeforeJump = requestedUrls.length;
 
     await page.keyboard.press('Enter');
 
-    await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
-    await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toBeVisible();
-    await expect(operationSection.getByText('planning · Prepare handoff notes')).toBeVisible();
-    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Hub focus ribbon' }).getByText('Growth Revenue Agent')).toBeVisible();
+    await expect(detailsPanel).toHaveAttribute('data-selected-agent-drilldown-tab', 'evidence');
     await expect(memorySection.getByText('Request scope · growth-revenue · corr-revenue-handoff')).toBeVisible();
     await expect(memorySection.getByText('Exact artifact fallback stayed inside the growth handoff scope')).toBeVisible();
     await expect(focusedSharedMemoryRecord).toHaveCount(1);
     await expect(focusedSharedMemoryRecord).toContainText('Ref · /tmp/revenue-handoff.md');
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Now');
+    await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toBeVisible();
+    await expect(operationSection.getByText('planning · Prepare handoff notes')).toBeVisible();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
+    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
 
     await page.waitForTimeout(150);
 
@@ -3636,7 +3836,9 @@ test.describe('operator shell smoke', () => {
     const focusedSharedMemoryRecord = detailsPanel.locator('li[data-shared-memory-target]:focus');
 
     await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Now');
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toBeVisible();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationRecord.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
     await expect(correlationRecord.getByText('Evidence · /tmp/revenue-handoff.md')).toBeVisible();
     await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
@@ -3647,7 +3849,11 @@ test.describe('operator shell smoke', () => {
     await focusHubControlWithTab(
       page,
       evidenceJumpButton,
-      'Jump to shared memory artifact /tmp/revenue-handoff.md'
+      'Jump to shared memory artifact /tmp/revenue-handoff.md',
+      {
+        detailsPanel,
+        selectedAgentDrilldownTab: 'Replay / Correlation'
+      }
     );
     await expect(evidenceJumpButton).toBeFocused();
 
@@ -3655,15 +3861,18 @@ test.describe('operator shell smoke', () => {
 
     await page.keyboard.press('Enter');
 
-    await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Hub focus ribbon' }).getByText('Growth Revenue Agent')).toBeVisible();
+    await expect(detailsPanel).toHaveAttribute('data-selected-agent-drilldown-tab', 'evidence');
+    await expect(focusedSharedMemoryRecord).toHaveCount(1);
+    await expect(focusedSharedMemoryRecord).toContainText('Ref · /tmp/revenue-handoff.md');
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Now');
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toBeVisible();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationRecord.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
     await expect(correlationRecord.getByText('Evidence · /tmp/revenue-handoff.md')).toBeVisible();
     await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
     await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toHaveCount(0);
     await expect(detailsPanel.getByRole('button', { name: 'Return to current scope' })).toHaveCount(0);
-    await expect(focusedSharedMemoryRecord).toHaveCount(1);
-    await expect(focusedSharedMemoryRecord).toContainText('Ref · /tmp/revenue-handoff.md');
 
     await page.waitForTimeout(150);
 
@@ -3736,12 +3945,17 @@ test.describe('operator shell smoke', () => {
     const focusedSharedMemoryRecord = detailsPanel.locator('li[data-shared-memory-target]:focus');
 
     await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
     await expect(artifactJumpButton).toBeVisible();
-    await focusHubControlWithTab(page, artifactJumpButton, 'Jump to shared memory artifact /tmp/revenue-handoff.md');
+    await focusHubControlWithTab(page, artifactJumpButton, 'Jump to shared memory artifact /tmp/revenue-handoff.md', {
+      detailsPanel,
+      selectedAgentDrilldownTab: 'Evidence'
+    });
     await expect(artifactJumpButton).toBeFocused();
     await page.keyboard.press('Enter');
 
-    await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Hub focus ribbon' }).getByText('App Engineering Agent')).toBeVisible();
+    await expect(detailsPanel).toHaveAttribute('data-selected-agent-drilldown-tab', 'evidence');
     await expect(focusedSharedMemoryRecord).toHaveCount(1);
     await expect(focusedSharedMemoryRecord).toContainText('Ref · /tmp/revenue-handoff.md');
   });
@@ -3769,12 +3983,17 @@ test.describe('operator shell smoke', () => {
     const focusedSharedMemoryRecord = detailsPanel.locator('li[data-shared-memory-target]:focus');
 
     await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
     await expect(evidenceJumpButton).toBeVisible();
-    await focusHubControlWithTab(page, evidenceJumpButton, 'Jump to accountability evidence ref /tmp/revenue-handoff.md');
+    await focusHubControlWithTab(page, evidenceJumpButton, 'Jump to accountability evidence ref /tmp/revenue-handoff.md', {
+      detailsPanel,
+      selectedAgentDrilldownTab: 'Evidence'
+    });
     await expect(evidenceJumpButton).toBeFocused();
     await page.keyboard.press('Enter');
 
-    await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Hub focus ribbon' }).getByText('App Engineering Agent')).toBeVisible();
+    await expect(detailsPanel).toHaveAttribute('data-selected-agent-drilldown-tab', 'evidence');
     await expect(focusedSharedMemoryRecord).toHaveCount(1);
     await expect(focusedSharedMemoryRecord).toContainText('Ref · /tmp/revenue-handoff.md');
   });
@@ -3848,17 +4067,21 @@ test.describe('operator shell smoke', () => {
 
     await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
     await expect(clearButton).toBeFocused();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
     await expect(
       auditSection.getByRole('button', {
         name: `Open accountability correlation ${accountabilityCorrelationId}, currently selected`
       })
     ).toBeVisible();
-    await expect(correlationSection.getByText(accountabilityCorrelationId, { exact: true })).toBeVisible();
     await expect(responsibilityChainButton).toBeVisible();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
+    await expect(correlationSection.getByText(accountabilityCorrelationId, { exact: true })).toBeVisible();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
     await focusHubControlWithTab(
       page,
       responsibilityChainButton,
-      'Select responsibility chain agent team-lead'
+      'Select responsibility chain agent team-lead',
+      { detailsPanel, selectedAgentDrilldownTab: 'Evidence' }
     );
     await expect(responsibilityChainButton).toBeFocused();
 
@@ -3880,8 +4103,10 @@ test.describe('operator shell smoke', () => {
     await scopedArtifactsResponse;
 
     await expect(detailsPanel.getByRole('heading', { name: 'Team Lead' })).toBeVisible();
-    await expect(clearButton).toBeFocused();
+    await expect(clearButton).toBeVisible();
+    await expectFocusedElementVisible(page);
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText(accountabilityCorrelationId, { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('Counts · 0 incidents · 0 interactions · 1 events')).toBeVisible();
     await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toHaveCount(0);
@@ -4014,19 +4239,26 @@ test.describe('operator shell smoke', () => {
 
     await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
     await expect(clearButton).toBeFocused();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
     await expect(reopenAccountabilityButton).toBeVisible();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText(accountabilityCorrelationId, { exact: true })).toBeVisible();
     await focusHubControlWithTab(
       page,
       reopenAccountabilityButton,
-      `Open accountability correlation ${accountabilityCorrelationId}, currently selected`
+      `Open accountability correlation ${accountabilityCorrelationId}, currently selected`,
+      { detailsPanel, selectedAgentDrilldownTab: 'Evidence' }
     );
     await expect(reopenAccountabilityButton).toBeFocused();
     await page.keyboard.press('Enter');
 
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText(accountabilityCorrelationId, { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('Counts · 0 incidents · 0 interactions · 1 events')).toBeVisible();
-    await focusHubControlWithTab(page, workflowCounterpartyButton, 'Select workflow counterparty agent team-lead');
+    await focusHubControlWithTab(page, workflowCounterpartyButton, 'Select workflow counterparty agent team-lead', {
+      detailsPanel,
+      selectedAgentDrilldownTab: 'Evidence'
+    });
     await expect(workflowCounterpartyButton).toBeFocused();
 
     trackForbiddenRequests = true;
@@ -4047,8 +4279,10 @@ test.describe('operator shell smoke', () => {
     await scopedArtifactsResponse;
 
     await expect(detailsPanel.getByRole('heading', { name: 'Team Lead' })).toBeVisible();
-    await expect(clearButton).toBeFocused();
+    await expect(clearButton).toBeVisible();
+    await expectFocusedElementVisible(page);
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText(accountabilityCorrelationId, { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('Counts · 0 incidents · 0 interactions · 1 events')).toBeVisible();
     await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toHaveCount(0);
@@ -4115,12 +4349,17 @@ test.describe('operator shell smoke', () => {
     const focusedSharedMemoryRecord = detailsPanel.locator('li[data-shared-memory-target]:focus');
 
     await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
     await expect(evidenceJumpButton).toBeVisible();
-    await focusHubControlWithTab(page, evidenceJumpButton, 'Jump to collector evidence ref /tmp/revenue-handoff.md');
+    await focusHubControlWithTab(page, evidenceJumpButton, 'Jump to collector evidence ref /tmp/revenue-handoff.md', {
+      detailsPanel,
+      selectedAgentDrilldownTab: 'Evidence'
+    });
     await expect(evidenceJumpButton).toBeFocused();
     await page.keyboard.press('Enter');
 
-    await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Hub focus ribbon' }).getByText('App Engineering Agent')).toBeVisible();
+    await expect(detailsPanel).toHaveAttribute('data-selected-agent-drilldown-tab', 'evidence');
     await expect(focusedSharedMemoryRecord).toHaveCount(1);
     await expect(focusedSharedMemoryRecord).toContainText('Ref · /tmp/revenue-handoff.md');
   });
@@ -4288,9 +4527,14 @@ test.describe('operator shell smoke', () => {
     const focusedSharedMemoryRecord = detailsPanel.locator('li[data-shared-memory-target]:focus');
 
     await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Now');
     await expect(operationCounterpartyButton).toBeVisible();
-    await focusHubControlWithTab(page, operationCounterpartyButton, 'Select operation counterparty agent app-engineering');
+    await focusHubControlWithTab(page, operationCounterpartyButton, 'Select operation counterparty agent app-engineering', {
+      detailsPanel,
+      selectedAgentDrilldownTab: 'Now'
+    });
     await expect(operationCounterpartyButton).toBeFocused();
 
     const workflowResponse = page.waitForResponse(
@@ -4308,18 +4552,21 @@ test.describe('operator shell smoke', () => {
 
     await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
     await expect(collectorObservationSection).toContainText(`Tmux preview · ${tmuxPreviewLabel}`);
-    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
-    await expect(correlationSection.getByText('corr-app-review', { exact: true })).toHaveCount(0);
     await expect(memorySection.getByText('Request scope · app-engineering · corr-revenue-handoff')).toBeVisible();
     await expect(memorySection.getByText(`Ref · ${tmuxArtifactRef}`)).toBeVisible();
     await expect(workspacePreviewButton).toBeVisible();
     await expect(tmuxPreviewButton).toBeVisible();
     await expect(focusedSharedMemoryRecord).toHaveCount(0);
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
+    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
+    await expect(correlationSection.getByText('corr-app-review', { exact: true })).toHaveCount(0);
     await focusHubControlWithTab(
       page,
       workspacePreviewButton,
-      'Jump to shared memory artifact /tmp/revenue-handoff.md revenue-handoff.md · 2026-03-10T23:39:00.000Z'
+      'Jump to shared memory artifact /tmp/revenue-handoff.md revenue-handoff.md · 2026-03-10T23:39:00.000Z',
+      { detailsPanel, selectedAgentDrilldownTab: 'Evidence' }
     );
     await expect(workspacePreviewButton).toBeFocused();
     await page.keyboard.press('Tab');
@@ -4329,13 +4576,15 @@ test.describe('operator shell smoke', () => {
 
     await page.keyboard.press('Enter');
 
-    await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Hub focus ribbon' }).getByText('App Engineering Agent')).toBeVisible();
+    await expect(detailsPanel).toHaveAttribute('data-selected-agent-drilldown-tab', 'evidence');
     await expect(collectorObservationSection).toContainText(`Tmux preview · ${tmuxPreviewLabel}`);
-    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
-    await expect(correlationSection.getByText('corr-app-review', { exact: true })).toHaveCount(0);
     await expect(memorySection.getByText('Request scope · app-engineering · corr-revenue-handoff')).toBeVisible();
     await expect(focusedSharedMemoryRecord).toHaveCount(1);
     await expect(focusedSharedMemoryRecord).toContainText(`Ref · ${tmuxArtifactRef}`);
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
+    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
+    await expect(correlationSection.getByText('corr-app-review', { exact: true })).toHaveCount(0);
 
     await page.waitForTimeout(150);
 
@@ -4379,8 +4628,10 @@ test.describe('operator shell smoke', () => {
     await page.keyboard.press('Enter');
 
     await expect(detailsPanel.getByRole('heading', { name: 'Team Lead' })).toBeVisible();
-    await expect(clearButton).toBeFocused();
+    await expect(clearButton).toBeVisible();
+    await expectFocusedElementVisible(page);
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
     await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toHaveCount(0);
@@ -4428,8 +4679,10 @@ test.describe('operator shell smoke', () => {
 
     await expect(detailsPanel.getByRole('heading', { name: 'Team Lead' })).toBeVisible();
     await expect(clearButton).toBeFocused();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
     await expect(detailsPanel.getByRole('heading', { name: 'Workflow' })).toBeVisible();
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
     await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toHaveCount(0);
@@ -4499,8 +4752,10 @@ test.describe('operator shell smoke', () => {
 
     await expect(detailsPanel.getByRole('heading', { name: 'Team Lead' })).toBeVisible();
     await expect(clearButton).toBeFocused();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
     await expect(detailsPanel.getByRole('heading', { name: 'Workflow' })).toBeVisible();
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('No correlation selected.')).toBeVisible();
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toHaveCount(0);
     await expect.poll(() => requestedUrls.includes(unscopedArtifactsUrl)).toBe(true);
@@ -4562,8 +4817,10 @@ test.describe('operator shell smoke', () => {
 
     await expect(detailsPanel.getByRole('heading', { name: 'Team Lead' })).toBeVisible();
     await expect(clearButton).toBeFocused();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
     await expect(detailsPanel.getByRole('heading', { name: 'Workflow' })).toBeVisible();
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('Counts · 0 incidents · 1 interactions · 2 events')).toBeVisible();
     await expect(correlationSection.getByText('No correlation selected.')).toHaveCount(0);
@@ -4598,8 +4855,10 @@ test.describe('operator shell smoke', () => {
 
     await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
     await expect(clearButton).toBeFocused();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
     await expect(detailsPanel.getByRole('heading', { name: 'Workflow' })).toBeVisible();
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
     await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toHaveCount(0);
@@ -4626,8 +4885,10 @@ test.describe('operator shell smoke', () => {
     await page.keyboard.press('Enter');
 
     await expect(detailsPanel.getByRole('heading', { name: 'Team Lead' })).toBeVisible();
-    await expect(clearButton).toBeFocused();
+    await expect(clearButton).toBeVisible();
+    await expectFocusedElementVisible(page);
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
   });
@@ -4657,8 +4918,10 @@ test.describe('operator shell smoke', () => {
     await page.keyboard.press('Enter');
 
     await expect(detailsPanel.getByRole('heading', { name: 'Team Lead' })).toBeVisible();
-    await expect(clearButton).toBeFocused();
+    await expect(clearButton).toBeVisible();
+    await expectFocusedElementVisible(page);
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
   });
@@ -4703,8 +4966,10 @@ test.describe('operator shell smoke', () => {
 
     await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
     await expect(clearButton).toBeFocused();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
     await expect(detailsPanel.getByRole('heading', { name: 'Workflow' })).toBeVisible();
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
     await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toHaveCount(0);
@@ -4743,13 +5008,18 @@ test.describe('operator shell smoke', () => {
 
     await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
     await expect(clearButton).toBeFocused();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
 
-    await focusHubControlWithTab(page, incidentCorrelationButton, 'Open incident correlation corr-revenue-handoff');
+    await focusHubControlWithTab(page, incidentCorrelationButton, 'Open incident correlation corr-revenue-handoff', {
+      detailsPanel,
+      selectedAgentDrilldownTab: 'Evidence'
+    });
     await expect(incidentCorrelationButton).toBeFocused();
     await page.keyboard.press('Enter');
 
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
   });
@@ -4785,24 +5055,31 @@ test.describe('operator shell smoke', () => {
     await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
     await expect(clearButton).toBeFocused();
 
-    await focusHubControlWithTab(page, incidentCorrelationButton, 'Open incident correlation corr-revenue-handoff');
+    await focusHubControlWithTab(page, incidentCorrelationButton, 'Open incident correlation corr-revenue-handoff', {
+      detailsPanel,
+      selectedAgentDrilldownTab: 'Evidence'
+    });
     await expect(incidentCorrelationButton).toBeFocused();
     await page.keyboard.press('Enter');
 
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
 
     await focusHubControlWithTab(
       page,
       incidentActorButton,
-      'Select correlation incident actor from incident evt_revenue_handoff_completed team-lead'
+      'Select correlation incident actor from incident evt_revenue_handoff_completed team-lead',
+      { detailsPanel, selectedAgentDrilldownTab: 'Replay / Correlation' }
     );
     await expect(incidentActorButton).toBeFocused();
     await page.keyboard.press('Enter');
 
     await expect(detailsPanel.getByRole('heading', { name: 'Team Lead' })).toBeVisible();
-    await expect(clearButton).toBeFocused();
+    await expect(clearButton).toBeVisible();
+    await expectFocusedElementVisible(page);
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
     await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toHaveCount(0);
@@ -4838,25 +5115,33 @@ test.describe('operator shell smoke', () => {
 
     await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
     await expect(clearButton).toBeFocused();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
-    await focusHubControlWithTab(page, workflowCorrelationButton, 'Open workflow correlation corr-growth-lead-review');
+    await focusHubControlWithTab(page, workflowCorrelationButton, 'Open workflow correlation corr-growth-lead-review', {
+      detailsPanel,
+      selectedAgentDrilldownTab: 'Evidence'
+    });
     await expect(workflowCorrelationButton).toBeFocused();
     await page.keyboard.press('Enter');
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('Counts · 0 incidents · 1 interactions · 2 events')).toBeVisible();
 
     await focusHubControlWithTab(
       page,
       timelineActorButton,
-      'Select correlation timeline actor from event evt_growth_review_started team-lead'
+      'Select correlation timeline actor from event evt_growth_review_started team-lead',
+      { detailsPanel, selectedAgentDrilldownTab: 'Replay / Correlation' }
     );
     await expect(timelineActorButton).toBeFocused();
     await page.keyboard.press('Enter');
 
     await expect(detailsPanel.getByRole('heading', { name: 'Team Lead' })).toBeVisible();
-    await expect(clearButton).toBeFocused();
+    await expect(clearButton).toBeVisible();
+    await expectFocusedElementVisible(page);
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('Counts · 0 incidents · 1 interactions · 2 events')).toBeVisible();
   });
@@ -4923,7 +5208,9 @@ test.describe('operator shell smoke', () => {
 
     await expect(detailsPanel.getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
 
-    await focusHubControlWithTab(page, replayCorrelationButton, 'Open replay correlation corr-growth-lead-review');
+    await focusHubControlWithTab(page, replayCorrelationButton, 'Open replay correlation corr-growth-lead-review', {
+      detailsPanel
+    });
     await expect(replayCorrelationButton).toBeFocused();
     await page.keyboard.press('Enter');
 
@@ -4932,7 +5219,8 @@ test.describe('operator shell smoke', () => {
     await focusHubControlWithTab(
       page,
       replayAgentButton,
-      'Select replay agent growth-revenue from event evt_growth_review_started'
+      'Select replay agent growth-revenue from event evt_growth_review_started',
+      { detailsPanel }
     );
     await expect(replayAgentButton).toBeFocused();
 
@@ -4955,8 +5243,10 @@ test.describe('operator shell smoke', () => {
 
     await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
     await expect(clearButton).toBeFocused();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
     await expect(detailsPanel.getByRole('heading', { name: 'Workflow' })).toBeVisible();
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('Counts · 0 incidents · 1 interactions · 2 events')).toBeVisible();
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toHaveCount(0);
@@ -5023,7 +5313,9 @@ test.describe('operator shell smoke', () => {
 
     await expect(detailsPanel.getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
 
-    await focusHubControlWithTab(page, replayCorrelationButton, 'Open replay correlation corr-growth-lead-review');
+    await focusHubControlWithTab(page, replayCorrelationButton, 'Open replay correlation corr-growth-lead-review', {
+      detailsPanel
+    });
     await expect(replayCorrelationButton).toBeFocused();
     await page.keyboard.press('Enter');
 
@@ -5034,14 +5326,16 @@ test.describe('operator shell smoke', () => {
       page,
       replayActorButton,
       'Select replay actor from event evt_growth_review_started team-lead',
-      { reverse: true }
+      { reverse: true, detailsPanel }
     );
     await expect(replayActorButton).toBeFocused();
     await page.keyboard.press('Enter');
 
     await expect(detailsPanel.getByRole('heading', { name: 'Team Lead' })).toBeVisible();
-    await expect(clearButton).toBeFocused();
+    await expect(clearButton).toBeVisible();
+    await expectFocusedElementVisible(page);
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('Counts · 0 incidents · 1 interactions · 2 events')).toBeVisible();
   });
@@ -5210,7 +5504,9 @@ test.describe('operator shell smoke', () => {
 
     await expect(detailsPanel.getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
 
-    await focusHubControlWithTab(page, replayCorrelationButton, 'Open replay correlation corr-growth-lead-review');
+    await focusHubControlWithTab(page, replayCorrelationButton, 'Open replay correlation corr-growth-lead-review', {
+      detailsPanel
+    });
     await expect(replayCorrelationButton).toBeFocused();
     await page.keyboard.press('Enter');
 
@@ -5227,8 +5523,10 @@ test.describe('operator shell smoke', () => {
     await page.keyboard.press('Enter');
 
     await expect(detailsPanel.getByRole('heading', { name: 'Team Lead' })).toBeVisible();
-    await expect(clearButton).toBeFocused();
+    await expect(clearButton).toBeVisible();
+    await expectFocusedElementVisible(page);
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('Counts · 0 incidents · 1 interactions · 2 events')).toBeVisible();
   });
@@ -5429,8 +5727,10 @@ test.describe('operator shell smoke', () => {
     await artifactsResponse;
 
     await expect(detailsPanel.getByRole('heading', { name: 'Team Lead' })).toBeVisible();
-    await expect(clearButton).toBeFocused();
+    await expect(clearButton).toBeVisible();
+    await expectFocusedElementVisible(page);
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText(fallbackCorrelationId, { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('Counts · 0 incidents · 0 interactions · 1 events')).toBeVisible();
     await expect(correlationSection.getByText('No correlation selected.')).toHaveCount(0);
@@ -5500,20 +5800,24 @@ test.describe('operator shell smoke', () => {
 
     await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
     await expect(clearButton).toBeFocused();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
 
     await focusHubControlWithTab(
       page,
       incidentCounterpartyButton,
-      'Select incident feed counterparty agent from incident evt_revenue_handoff_completed app-engineering'
+      'Select incident feed counterparty agent from incident evt_revenue_handoff_completed app-engineering',
+      { detailsPanel, selectedAgentDrilldownTab: 'Evidence' }
     );
     await expect(incidentCounterpartyButton).toBeFocused();
     await page.keyboard.press('Enter');
 
     await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
-    await expect(clearButton).toBeFocused();
+    await expect(clearButton).toBeVisible();
+    await expectFocusedElementVisible(page);
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
     await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toHaveCount(0);
@@ -5546,20 +5850,24 @@ test.describe('operator shell smoke', () => {
 
     await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
     await expect(clearButton).toBeFocused();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
 
     await focusHubControlWithTab(
       page,
       incidentActorButton,
-      'Select incident feed actor from incident evt_revenue_handoff_completed team-lead'
+      'Select incident feed actor from incident evt_revenue_handoff_completed team-lead',
+      { detailsPanel, selectedAgentDrilldownTab: 'Evidence' }
     );
     await expect(incidentActorButton).toBeFocused();
     await page.keyboard.press('Enter');
 
     await expect(detailsPanel.getByRole('heading', { name: 'Team Lead' })).toBeVisible();
-    await expect(clearButton).toBeFocused();
+    await expect(clearButton).toBeVisible();
+    await expectFocusedElementVisible(page);
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
     await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toHaveCount(0);
@@ -5629,13 +5937,17 @@ test.describe('operator shell smoke', () => {
         await detailsPanel.getByRole('button', { name: 'Inspect Growth Revenue Agent', exact: true }).click();
 
         await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+        await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
         await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
 
+        await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
         await incidentSection.getByRole('button', { name: 'Open incident correlation corr-revenue-handoff' }).click();
 
+        await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
         await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
         await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
         await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toHaveCount(0);
+        await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
         await expect(selectedIncidentCorrelationButton).toBeVisible();
 
         const refreshResponse = page.waitForResponse(
@@ -5652,8 +5964,11 @@ test.describe('operator shell smoke', () => {
           })
           .toBeGreaterThan(1);
 
-        await expect(detailsPanel.getByText(refreshedActiveTask)).toBeVisible();
+        await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Now');
+        await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+        await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
         await expect(selectedIncidentCorrelationButton).toBeVisible();
+        await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
         await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
         await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
         await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toHaveCount(0);
@@ -5690,11 +6005,16 @@ test.describe('operator shell smoke', () => {
     });
 
     await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
-    await expect(clearButton).toBeFocused();
-    await focusHubControlWithTab(page, workflowCorrelationButton, 'Open workflow correlation corr-revenue-handoff');
+    await expect(clearButton).toBeVisible();
+    await expectFocusedElementVisible(page);
+    await focusHubControlWithTab(page, workflowCorrelationButton, 'Open workflow correlation corr-revenue-handoff', {
+      detailsPanel,
+      selectedAgentDrilldownTab: 'Evidence'
+    });
     await expect(workflowCorrelationButton).toBeFocused();
     await page.keyboard.press('Enter');
 
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
   });
@@ -5763,17 +6083,24 @@ test.describe('operator shell smoke', () => {
     });
 
     await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
     await focusHubControlWithTab(
       page,
       workflowInteractionCorrelationButton,
-      'Open workflow interaction correlation from interaction interaction-browser-workflow-correlation corr-revenue-handoff'
+      'Open workflow interaction correlation from interaction interaction-browser-workflow-correlation corr-revenue-handoff',
+      {
+        detailsPanel,
+        selectedAgentDrilldownTab: 'Evidence'
+      }
     );
     await expect(workflowInteractionCorrelationButton).toBeFocused();
     await page.keyboard.press('Enter');
 
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Now');
     await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toBeVisible();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
     await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toHaveCount(0);
@@ -5857,26 +6184,34 @@ test.describe('operator shell smoke', () => {
     const focusedSharedMemoryRecord = detailsPanel.locator('li[data-shared-memory-target]:focus');
 
     await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
     await expect(workflowInteractionRecord.getByText('Workflow interaction evidence jump stays in shared memory')).toBeVisible();
     await expect(workflowInteractionRecord.getByText('Evidence · /tmp/revenue-handoff.md')).toBeVisible();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toHaveCount(0);
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
     await expect(evidenceJumpButton).toBeVisible();
     await expect(focusedSharedMemoryRecord).toHaveCount(0);
-    await focusHubControlWithTab(page, evidenceJumpButton, 'Jump to shared memory artifact /tmp/revenue-handoff.md');
+    await focusHubControlWithTab(page, evidenceJumpButton, 'Jump to shared memory artifact /tmp/revenue-handoff.md', {
+      detailsPanel,
+      selectedAgentDrilldownTab: 'Evidence'
+    });
     await expect(evidenceJumpButton).toBeFocused();
 
     const requestCountBeforeJump = requestedUrls.length;
 
     await page.keyboard.press('Enter');
 
-    await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Hub focus ribbon' }).getByText('Growth Revenue Agent')).toBeVisible();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
     await expect(workflowInteractionRecord.getByText('Workflow interaction evidence jump stays in shared memory')).toBeVisible();
     await expect(workflowInteractionRecord.getByText('Evidence · /tmp/revenue-handoff.md')).toBeVisible();
-    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
-    await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toHaveCount(0);
     await expect(focusedSharedMemoryRecord).toHaveCount(1);
     await expect(focusedSharedMemoryRecord).toContainText('Ref · /tmp/revenue-handoff.md');
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
+    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
+    await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toHaveCount(0);
 
     await page.waitForTimeout(150);
 
@@ -5954,19 +6289,27 @@ test.describe('operator shell smoke', () => {
     });
 
     await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
-    await expect(clearButton).toBeFocused();
+    await expect(clearButton).toBeVisible();
+    await expectFocusedElementVisible(page);
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
     await focusHubControlWithTab(
       page,
       workflowInteractionParticipantButton,
-      'Select workflow interaction participant from interaction interaction-browser-workflow-participant app-engineering'
+      'Select workflow interaction participant from interaction interaction-browser-workflow-participant app-engineering',
+      {
+        detailsPanel,
+        selectedAgentDrilldownTab: 'Evidence'
+      }
     );
     await expect(workflowInteractionParticipantButton).toBeFocused();
     await page.keyboard.press('Enter');
 
     await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
-    await expect(clearButton).toBeFocused();
+    await expect(clearButton).toBeVisible();
+    await expectFocusedElementVisible(page);
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
     await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toHaveCount(0);
@@ -6146,8 +6489,11 @@ test.describe('operator shell smoke', () => {
     await page.keyboard.press('Enter');
 
     await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
-    await expect(clearButton).toBeFocused();
+    await expect(clearButton).toBeVisible();
+    await expectFocusedElementVisible(page);
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('No correlation selected.')).toBeVisible();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
     await expect(workflowInteractionRecord).toHaveCount(1);
     await expect(workflowInteractionRecord).toContainText('Participants · app-engineering, team-lead, ghost-agent');
     await expect(
@@ -6159,14 +6505,20 @@ test.describe('operator shell smoke', () => {
     await focusHubControlWithTab(
       page,
       workflowInteractionParticipantButton,
-      'Select workflow interaction participant from interaction interaction-browser-workflow-participant-fallback team-lead'
+      'Select workflow interaction participant from interaction interaction-browser-workflow-participant-fallback team-lead',
+      {
+        detailsPanel,
+        selectedAgentDrilldownTab: 'Evidence'
+      }
     );
     await expect(workflowInteractionParticipantButton).toBeFocused();
     await page.keyboard.press('Enter');
 
     await expect(detailsPanel.getByRole('heading', { name: 'Team Lead' })).toBeVisible();
-    await expect(clearButton).toBeFocused();
+    await expect(clearButton).toBeVisible();
+    await expectFocusedElementVisible(page);
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('corr-app-review', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
     await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toHaveCount(0);
@@ -6205,21 +6557,32 @@ test.describe('operator shell smoke', () => {
     });
 
     await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
-    await expect(clearButton).toBeFocused();
+    await expect(clearButton).toBeVisible();
+    await expectFocusedElementVisible(page);
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
-    await focusHubControlWithTab(page, workflowCorrelationButton, 'Open workflow correlation corr-revenue-handoff');
+    await focusHubControlWithTab(page, workflowCorrelationButton, 'Open workflow correlation corr-revenue-handoff', {
+      detailsPanel,
+      selectedAgentDrilldownTab: 'Evidence'
+    });
     await expect(workflowCorrelationButton).toBeFocused();
     await page.keyboard.press('Enter');
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
 
-    await focusHubControlWithTab(page, workflowCounterpartyButton, 'Select workflow counterparty agent app-engineering');
+    await focusHubControlWithTab(page, workflowCounterpartyButton, 'Select workflow counterparty agent app-engineering', {
+      detailsPanel,
+      selectedAgentDrilldownTab: 'Evidence'
+    });
     await expect(workflowCounterpartyButton).toBeFocused();
     await page.keyboard.press('Enter');
 
     await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
-    await expect(clearButton).toBeFocused();
+    await expect(clearButton).toBeVisible();
+    await expectFocusedElementVisible(page);
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
     await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toHaveCount(0);
@@ -6262,23 +6625,33 @@ test.describe('operator shell smoke', () => {
     });
 
     await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Now');
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toBeVisible();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
     await expect(selectedWorkflowStatusCorrelationButton).toBeVisible();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
     await expect(detailsPanel.getByRole('button', { name: 'Return to current scope' })).toHaveCount(0);
     await focusHubControlWithTab(
       page,
       selectedWorkflowStatusCorrelationButton,
-      'Open workflow status correlation corr-revenue-handoff, currently selected'
+      'Open workflow status correlation corr-revenue-handoff, currently selected',
+      {
+        detailsPanel,
+        selectedAgentDrilldownTab: 'Evidence'
+      }
     );
     await expect(selectedWorkflowStatusCorrelationButton).toBeFocused();
 
     const requestCountBeforeReselect = requestedUrls.length;
     await page.keyboard.press('Enter');
 
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Now');
     await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toBeVisible();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
     await expect(selectedWorkflowStatusCorrelationButton).toBeVisible();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
     await expect(detailsPanel.getByRole('button', { name: 'Return to current scope' })).toHaveCount(0);
 
@@ -6397,14 +6770,20 @@ test.describe('operator shell smoke', () => {
     });
 
     await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Now');
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toBeVisible();
     await expect(operationSection.getByText('planning · Prepare handoff notes')).toBeVisible();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toHaveCount(0);
     await focusHubControlWithTab(
       page,
       workflowStatusCorrelationButton,
-      'Open workflow status correlation corr-growth-lead-review'
+      'Open workflow status correlation corr-growth-lead-review',
+      {
+        detailsPanel,
+        selectedAgentDrilldownTab: 'Evidence'
+      }
     );
     await expect(workflowStatusCorrelationButton).toBeFocused();
 
@@ -6427,10 +6806,13 @@ test.describe('operator shell smoke', () => {
     await selectedCorrelationResponse;
     await scopedArtifactsResponse;
 
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Now');
     await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toBeVisible();
     await expect(operationSection.getByText('planning · Prepare handoff notes')).toBeVisible();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
     await expect(selectedWorkflowStatusCorrelationButton).toBeVisible();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('Counts · 0 incidents · 1 interactions · 2 events')).toBeVisible();
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toHaveCount(0);
@@ -6515,28 +6897,35 @@ test.describe('operator shell smoke', () => {
     const focusedSharedMemoryRecord = detailsPanel.locator('li[data-shared-memory-target]:focus');
 
     await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
     await expect(detailsPanel.getByRole('heading', { name: 'Workflow' })).toBeVisible();
     await expect(handoffRecord.getByText('Lead completed the revenue handoff', { exact: true })).toBeVisible();
     await expect(handoffRecord.getByText('Evidence · /tmp/revenue-handoff.md')).toBeVisible();
-    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
-    await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toHaveCount(0);
     await expect(evidenceJumpButton).toBeVisible();
     await expect(focusedSharedMemoryRecord).toHaveCount(0);
-    await focusHubControlWithTab(page, evidenceJumpButton, 'Jump to shared memory artifact /tmp/revenue-handoff.md');
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
+    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
+    await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toHaveCount(0);
+    await focusHubControlWithTab(page, evidenceJumpButton, 'Jump to shared memory artifact /tmp/revenue-handoff.md', {
+      detailsPanel,
+      selectedAgentDrilldownTab: 'Evidence'
+    });
     await expect(evidenceJumpButton).toBeFocused();
 
     const requestCountBeforeJump = requestedUrls.length;
 
     await page.keyboard.press('Enter');
 
-    await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Hub focus ribbon' }).getByText('Growth Revenue Agent')).toBeVisible();
+    await expect(detailsPanel).toHaveAttribute('data-selected-agent-drilldown-tab', 'evidence');
     await expect(detailsPanel.getByRole('heading', { name: 'Workflow' })).toBeVisible();
     await expect(handoffRecord.getByText('Lead completed the revenue handoff', { exact: true })).toBeVisible();
     await expect(handoffRecord.getByText('Evidence · /tmp/revenue-handoff.md')).toBeVisible();
-    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
-    await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toHaveCount(0);
     await expect(focusedSharedMemoryRecord).toHaveCount(1);
     await expect(focusedSharedMemoryRecord).toContainText('Ref · /tmp/revenue-handoff.md');
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
+    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
+    await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toHaveCount(0);
 
     await page.waitForTimeout(150);
 
@@ -6578,18 +6967,25 @@ test.describe('operator shell smoke', () => {
 
     await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
     await expect(clearButton).toBeFocused();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
     await focusHubControlWithTab(
       page,
       workflowStatusActorButton,
-      'Select workflow status actor from handoff evt_revenue_handoff_completed team-lead'
+      'Select workflow status actor from handoff evt_revenue_handoff_completed team-lead',
+      {
+        detailsPanel,
+        selectedAgentDrilldownTab: 'Evidence'
+      }
     );
     await expect(workflowStatusActorButton).toBeFocused();
     await page.keyboard.press('Enter');
 
     await expect(detailsPanel.getByRole('heading', { name: 'Team Lead' })).toBeVisible();
-    await expect(clearButton).toBeFocused();
+    await expect(clearButton).toBeVisible();
+    await expectFocusedElementVisible(page);
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
     await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toHaveCount(0);
@@ -6624,18 +7020,25 @@ test.describe('operator shell smoke', () => {
 
     await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
     await expect(clearButton).toBeFocused();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
     await focusHubControlWithTab(
       page,
       workflowStatusCounterpartyButton,
-      'Select workflow status counterparty from handoff evt_revenue_handoff_completed app-engineering'
+      'Select workflow status counterparty from handoff evt_revenue_handoff_completed app-engineering',
+      {
+        detailsPanel,
+        selectedAgentDrilldownTab: 'Evidence'
+      }
     );
     await expect(workflowStatusCounterpartyButton).toBeFocused();
     await page.keyboard.press('Enter');
 
     await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
-    await expect(clearButton).toBeFocused();
+    await expect(clearButton).toBeVisible();
+    await expectFocusedElementVisible(page);
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
     await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toHaveCount(0);
@@ -6876,13 +7279,19 @@ test.describe('operator shell smoke', () => {
 
     await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
     await expect(clearButton).toBeFocused();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
     await expect(workflowSection.getByText('Workflow status counterparty fallback uses the record correlation')).toBeVisible();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('No correlation selected.')).toBeVisible();
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toHaveCount(0);
     await focusHubControlWithTab(
       page,
       workflowStatusCounterpartyButton,
-      'Select workflow status counterparty from handoff evt_revenue_handoff_completed app-engineering'
+      'Select workflow status counterparty from handoff evt_revenue_handoff_completed app-engineering',
+      {
+        detailsPanel,
+        selectedAgentDrilldownTab: 'Evidence'
+      }
     );
     await expect(workflowStatusCounterpartyButton).toBeFocused();
 
@@ -6911,8 +7320,10 @@ test.describe('operator shell smoke', () => {
     await scopedArtifactsResponse;
 
     await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
-    await expect(clearButton).toBeFocused();
+    await expect(clearButton).toBeVisible();
+    await expectFocusedElementVisible(page);
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('corr-browser-workflow-status-counterparty-fallback', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toHaveCount(0);
@@ -6987,7 +7398,9 @@ test.describe('operator shell smoke', () => {
 
     await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
     await expect(clearButton).toBeFocused();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
     await focusHubControlWithTab(
       page,
       workflowRecentEventActorButton,
@@ -6997,8 +7410,10 @@ test.describe('operator shell smoke', () => {
     await page.keyboard.press('Enter');
 
     await expect(detailsPanel.getByRole('heading', { name: 'Team Lead' })).toBeVisible();
-    await expect(clearButton).toBeFocused();
+    await expect(clearButton).toBeVisible();
+    await expectFocusedElementVisible(page);
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
     await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toHaveCount(0);
@@ -7112,8 +7527,11 @@ test.describe('operator shell smoke', () => {
 
     await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
     await expect(clearButton).toBeFocused();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
     await expect(workflowSection.getByText('Workflow recent event counterparty pivot keeps the active correlation')).toBeVisible();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
     await focusHubControlWithTab(
       page,
       workflowRecentEventCounterpartyButton,
@@ -7139,8 +7557,10 @@ test.describe('operator shell smoke', () => {
     await scopedArtifactsResponse;
 
     await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
-    await expect(clearButton).toBeFocused();
+    await expect(clearButton).toBeVisible();
+    await expectFocusedElementVisible(page);
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
     await expect(correlationSection.getByText('corr-app-review', { exact: true })).toHaveCount(0);
@@ -7413,9 +7833,12 @@ test.describe('operator shell smoke', () => {
 
     await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
     await expect(clearButton).toBeFocused();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
     await expect(workflowSection.getByText('Workflow recent-event counterparty fallback uses the event correlation')).toBeVisible();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('No correlation selected.')).toBeVisible();
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toHaveCount(0);
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
     await focusHubControlWithTab(
       page,
       workflowRecentEventCounterpartyButton,
@@ -7448,8 +7871,10 @@ test.describe('operator shell smoke', () => {
     await scopedArtifactsResponse;
 
     await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
-    await expect(clearButton).toBeFocused();
+    await expect(clearButton).toBeVisible();
+    await expectFocusedElementVisible(page);
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('corr-browser-workflow-recent-counterparty-fallback', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toHaveCount(0);
@@ -7601,12 +8026,15 @@ test.describe('operator shell smoke', () => {
 
     await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
     await expect(clearButton).toBeFocused();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
     await expect(workflowSection.getByText('Workflow recent event subject pivot keeps the active correlation')).toBeVisible();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
     await focusHubControlWithTab(
       page,
       workflowRecentEventSubjectButton,
-      'Select workflow recent event subject agent from event evt_browser_workflow_recent_subject app-engineering'
+      'Select workflow recent event subject agent from event evt_browser_workflow_recent_subject app-engineering',
+      { detailsPanel, selectedAgentDrilldownTab: 'Evidence' }
     );
     await expect(workflowRecentEventSubjectButton).toBeFocused();
 
@@ -7628,8 +8056,10 @@ test.describe('operator shell smoke', () => {
     await scopedArtifactsResponse;
 
     await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
-    await expect(clearButton).toBeFocused();
+    await expect(clearButton).toBeVisible();
+    await expectFocusedElementVisible(page);
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
     await expect(correlationSection.getByText('corr-app-review', { exact: true })).toHaveCount(0);
@@ -7714,28 +8144,36 @@ test.describe('operator shell smoke', () => {
     const focusedSharedMemoryRecord = detailsPanel.locator('li[data-shared-memory-target]:focus');
 
     await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
     await expect(detailsPanel.getByRole('heading', { name: 'Workflow' })).toBeVisible();
     await expect(recentEventRecord.getByText('Lead completed the revenue handoff', { exact: true })).toBeVisible();
     await expect(recentEventRecord.getByText('Evidence · /tmp/revenue-handoff.md')).toBeVisible();
+    await expect(evidenceJumpButton).toBeVisible();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toHaveCount(0);
-    await expect(evidenceJumpButton).toBeVisible();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
     await expect(focusedSharedMemoryRecord).toHaveCount(0);
-    await focusHubControlWithTab(page, evidenceJumpButton, 'Jump to shared memory artifact /tmp/revenue-handoff.md');
+    await focusHubControlWithTab(page, evidenceJumpButton, 'Jump to shared memory artifact /tmp/revenue-handoff.md', {
+      detailsPanel,
+      selectedAgentDrilldownTab: 'Evidence'
+    });
     await expect(evidenceJumpButton).toBeFocused();
 
     const requestCountBeforeJump = requestedUrls.length;
 
     await page.keyboard.press('Enter');
 
-    await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Hub focus ribbon' }).getByText('Growth Revenue Agent')).toBeVisible();
+    await expect(detailsPanel).toHaveAttribute('data-selected-agent-drilldown-tab', 'evidence');
     await expect(detailsPanel.getByRole('heading', { name: 'Workflow' })).toBeVisible();
     await expect(recentEventRecord.getByText('Lead completed the revenue handoff', { exact: true })).toBeVisible();
     await expect(recentEventRecord.getByText('Evidence · /tmp/revenue-handoff.md')).toBeVisible();
-    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
-    await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toHaveCount(0);
     await expect(focusedSharedMemoryRecord).toHaveCount(1);
     await expect(focusedSharedMemoryRecord).toContainText('Ref · /tmp/revenue-handoff.md');
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
+    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
+    await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toHaveCount(0);
 
     await page.waitForTimeout(150);
 
@@ -7820,22 +8258,27 @@ test.describe('operator shell smoke', () => {
     await focusHubControlWithTab(
       page,
       workflowCorrelationButton,
-      'Open workflow correlation collector-snapshot:2026-03-10T23:59:40.000Z'
+      'Open workflow correlation collector-snapshot:2026-03-10T23:59:40.000Z',
+      { detailsPanel, selectedAgentDrilldownTab: 'Evidence' }
     );
     await expect(workflowCorrelationButton).toBeFocused();
     await page.keyboard.press('Enter');
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('collector-snapshot:2026-03-10T23:59:40.000Z', { exact: true })).toBeVisible();
     await focusHubControlWithTab(
       page,
       observerButton,
-      'Select workflow peer-watch observer from alert alert-browser-peer-watch-observer team-lead'
+      'Select workflow peer-watch observer from alert alert-browser-peer-watch-observer team-lead',
+      { detailsPanel, selectedAgentDrilldownTab: 'Evidence' }
     );
     await expect(observerButton).toBeFocused();
     await page.keyboard.press('Enter');
 
     await expect(detailsPanel.getByRole('heading', { name: 'Team Lead' })).toBeVisible();
-    await expect(clearButton).toBeFocused();
+    await expect(clearButton).toBeVisible();
+    await expectFocusedElementVisible(page);
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('collector-snapshot:2026-03-10T23:59:40.000Z', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('No correlation selected.')).toHaveCount(0);
   });
@@ -7917,22 +8360,27 @@ test.describe('operator shell smoke', () => {
     await focusHubControlWithTab(
       page,
       workflowCorrelationButton,
-      'Open workflow correlation collector-snapshot:2026-03-10T23:59:40.000Z'
+      'Open workflow correlation collector-snapshot:2026-03-10T23:59:40.000Z',
+      { detailsPanel, selectedAgentDrilldownTab: 'Evidence' }
     );
     await expect(workflowCorrelationButton).toBeFocused();
     await page.keyboard.press('Enter');
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('collector-snapshot:2026-03-10T23:59:40.000Z', { exact: true })).toBeVisible();
     await focusHubControlWithTab(
       page,
       targetButton,
-      'Select workflow peer-watch target from alert alert-browser-peer-watch-target growth-revenue'
+      'Select workflow peer-watch target from alert alert-browser-peer-watch-target growth-revenue',
+      { detailsPanel, selectedAgentDrilldownTab: 'Evidence' }
     );
     await expect(targetButton).toBeFocused();
     await page.keyboard.press('Enter');
 
     await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
-    await expect(clearButton).toBeFocused();
+    await expect(clearButton).toBeVisible();
+    await expectFocusedElementVisible(page);
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('collector-snapshot:2026-03-10T23:59:40.000Z', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('No correlation selected.')).toHaveCount(0);
   });
@@ -8018,7 +8466,9 @@ test.describe('operator shell smoke', () => {
     );
     await expect(workflowCorrelationButton).toBeFocused();
     await page.keyboard.press('Enter');
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('collector-snapshot:2026-03-10T23:59:40.000Z', { exact: true })).toBeVisible();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
     await focusHubControlWithTab(
       page,
       watcherButton,
@@ -8028,8 +8478,10 @@ test.describe('operator shell smoke', () => {
     await page.keyboard.press('Enter');
 
     await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
-    await expect(clearButton).toBeFocused();
+    await expect(clearButton).toBeVisible();
+    await expectFocusedElementVisible(page);
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('collector-snapshot:2026-03-10T23:59:40.000Z', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('No correlation selected.')).toHaveCount(0);
   });
@@ -8122,6 +8574,7 @@ test.describe('operator shell smoke', () => {
 
     await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
     const baselineCorrelationIdPattern = /(?:corr-[A-Za-z0-9:_-]+|collector-snapshot:\d{4}-\d{2}-\d{2}T[0-9:.]+Z)/;
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect
       .poll(async () => {
         const text = await correlationSection.textContent();
@@ -8131,6 +8584,7 @@ test.describe('operator shell smoke', () => {
     const baselineCorrelationId = ((await correlationSection.textContent()) ?? '').match(baselineCorrelationIdPattern)?.[0] ?? null;
     expect(baselineCorrelationId).not.toBeNull();
 
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
     await expect(alertRecord.getByText('Workflow peer-watch evidence jump stays in shared memory')).toBeVisible();
     await expect(alertRecord.getByText('Evidence · /tmp/revenue-handoff.md, /tmp/missing.md')).toBeVisible();
     await expect(alertRecord.getByText('Watchers · growth-revenue')).toBeVisible();
@@ -8149,12 +8603,14 @@ test.describe('operator shell smoke', () => {
 
     await page.keyboard.press('Enter');
 
-    await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
-    await expect(correlationSection.getByText(baselineCorrelationId!, { exact: true })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Hub focus ribbon' }).getByText('App Engineering Agent')).toBeVisible();
+    await expect(detailsPanel).toHaveAttribute('data-selected-agent-drilldown-tab', 'evidence');
     await expect(alertRecord.getByText('Workflow peer-watch evidence jump stays in shared memory')).toBeVisible();
     await expect(detailsPanel.getByRole('button', { name: 'Return to current scope' })).toHaveCount(0);
     await expect(focusedSharedMemoryRecord).toHaveCount(1);
     await expect(focusedSharedMemoryRecord).toContainText('Ref · /tmp/revenue-handoff.md');
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
+    await expect(correlationSection.getByText(baselineCorrelationId!, { exact: true })).toBeVisible();
 
     await page.waitForTimeout(150);
 
@@ -8235,6 +8691,7 @@ test.describe('operator shell smoke', () => {
     });
 
     await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
     await expect(supervisionSection.getByText('Loading supervision history...')).toBeVisible();
     await expect(supervisionSection.getByText('No recent supervision history.')).toHaveCount(0);
     await expect(supervisionSection.getByText(/Unable to load supervision history\./)).toHaveCount(0);
@@ -8301,6 +8758,7 @@ test.describe('operator shell smoke', () => {
     });
 
     await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
     await expect(
       supervisionSection.getByText('Unable to load supervision history. peer-watch refresh failed')
     ).toBeVisible();
@@ -8394,32 +8852,37 @@ test.describe('operator shell smoke', () => {
     });
 
     await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
     await expect(supervisionSection.getByText('Supervision history default correlation stays auto')).toBeVisible();
     await expect(selectedSupervisionCorrelationButton).toBeVisible();
-    await expect(correlationSection.getByText(accountabilityCorrelationId, { exact: true })).toBeVisible();
-    await expect(replaySection.getByRole('heading', { name: 'Timeline Replay' })).toBeVisible();
-    await expect(replaySection.getByText(`Scoped replay · ${accountabilityCorrelationId}`)).toBeVisible();
     await expect(memorySection.getByText('Collector observed workspace write to revenue-handoff.md')).toBeVisible();
     await expect(selectedSharedMemoryCorrelationButton).toBeVisible();
     await expect(detailsPanel.getByRole('button', { name: 'Return to current scope' })).toHaveCount(0);
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
+    await expect(correlationSection.getByText(accountabilityCorrelationId, { exact: true })).toBeVisible();
+    await expect(replaySection.getByRole('heading', { name: 'Timeline Replay' })).toBeVisible();
+    await expect(replaySection.getByText(`Scoped replay · ${accountabilityCorrelationId}`)).toBeVisible();
     await focusHubControlWithTab(
       page,
       selectedSupervisionCorrelationButton,
-      `Open supervision history correlation ${accountabilityCorrelationId}, currently selected`
+      `Open supervision history correlation ${accountabilityCorrelationId}, currently selected`,
+      { detailsPanel, selectedAgentDrilldownTab: 'Evidence' }
     );
     await expect(selectedSupervisionCorrelationButton).toBeFocused();
 
     const requestCountBeforeReselect = requestedUrls.length;
     await page.keyboard.press('Enter');
 
-    await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Hub focus ribbon' }).getByText('App Engineering Agent')).toBeVisible();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
     await expect(selectedSupervisionCorrelationButton).toBeVisible();
-    await expect(correlationSection.getByText(accountabilityCorrelationId, { exact: true })).toBeVisible();
-    await expect(replaySection.getByRole('heading', { name: 'Timeline Replay' })).toBeVisible();
-    await expect(replaySection.getByText(`Scoped replay · ${accountabilityCorrelationId}`)).toBeVisible();
     await expect(memorySection.getByText('Collector observed workspace write to revenue-handoff.md')).toBeVisible();
     await expect(selectedSharedMemoryCorrelationButton).toBeVisible();
     await expect(detailsPanel.getByRole('button', { name: 'Return to current scope' })).toHaveCount(0);
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
+    await expect(correlationSection.getByText(accountabilityCorrelationId, { exact: true })).toBeVisible();
+    await expect(replaySection.getByRole('heading', { name: 'Timeline Replay' })).toBeVisible();
+    await expect(replaySection.getByText(`Scoped replay · ${accountabilityCorrelationId}`)).toBeVisible();
 
     await page.waitForTimeout(150);
 
@@ -8522,58 +8985,77 @@ test.describe('operator shell smoke', () => {
       const focusedSharedMemoryRecord = detailsPanel.locator('li[data-shared-memory-target]:focus');
 
       await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+      await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
       await expect(
         supervisionSection.getByText('Supervision history manual evidence jump stays in shared memory')
       ).toBeVisible();
       await expect(selectedSupervisionCorrelationButton).toBeVisible();
-      await expect(correlationSection.getByText(accountabilityCorrelationId, { exact: true })).toBeVisible();
       await expect(sharedMemoryRecord).toContainText('Collector observed workspace write to revenue-handoff.md');
       await expect(selectedSharedMemoryCorrelationButton).toBeVisible();
       await expect(returnToCurrentScopeButton).toHaveCount(0);
+      await expect(workflowCorrelationButton).toBeVisible();
+      await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
+      await expect(correlationSection.getByText(accountabilityCorrelationId, { exact: true })).toBeVisible();
 
-      await focusHubControlWithTab(page, workflowCorrelationButton, 'Open workflow correlation corr-revenue-handoff');
+      await focusHubControlWithTab(page, workflowCorrelationButton, 'Open workflow correlation corr-revenue-handoff', {
+        detailsPanel,
+        selectedAgentDrilldownTab: 'Evidence'
+      });
       await expect(workflowCorrelationButton).toBeFocused();
       await page.keyboard.press('Enter');
 
+      await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
       await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
       await expect(correlationSection.getByText(accountabilityCorrelationId, { exact: true })).toHaveCount(0);
+      await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Now');
       await expect(returnToCurrentScopeButton).toBeVisible();
+      await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
       await expect(reopenDefaultSupervisionCorrelationButton).toHaveCount(0);
       await expect(
         supervisionSection.getByText('Supervision history manual evidence jump stays in shared memory')
       ).toHaveCount(0);
       await expect(evidenceJumpButton).toHaveCount(0);
 
-      await focusHubControlWithTab(page, returnToCurrentScopeButton, 'Return to current scope');
+      await focusHubControlWithTab(page, returnToCurrentScopeButton, 'Return to current scope', {
+        detailsPanel,
+        selectedAgentDrilldownTab: 'Now'
+      });
       await expect(returnToCurrentScopeButton).toBeFocused();
       await page.keyboard.press('Enter');
 
+      await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
       await expect(selectedSupervisionCorrelationButton).toBeVisible();
-      await expect(correlationSection.getByText(accountabilityCorrelationId, { exact: true })).toBeVisible();
-      await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toHaveCount(0);
       await expect(sharedMemoryRecord).toContainText('Collector observed workspace write to revenue-handoff.md');
       await expect(selectedSharedMemoryCorrelationButton).toBeVisible();
       await expect(returnToCurrentScopeButton).toHaveCount(0);
       await expect(evidenceJumpButton).toBeVisible();
       await expect(focusedSharedMemoryRecord).toHaveCount(0);
+      await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
+      await expect(correlationSection.getByText(accountabilityCorrelationId, { exact: true })).toBeVisible();
+      await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toHaveCount(0);
 
-      await focusHubControlWithTab(page, evidenceJumpButton, 'Jump to shared memory artifact /tmp/revenue-handoff.md');
+      await focusHubControlWithTab(page, evidenceJumpButton, 'Jump to shared memory artifact /tmp/revenue-handoff.md', {
+        detailsPanel,
+        selectedAgentDrilldownTab: 'Evidence'
+      });
       await expect(evidenceJumpButton).toBeFocused();
 
       const requestCountBeforeJump = requestedUrls.length;
       await page.keyboard.press('Enter');
 
-      await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+      await expect(page.getByRole('region', { name: 'Hub focus ribbon' }).getByText('App Engineering Agent')).toBeVisible();
+      await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
       await expect(
         supervisionSection.getByText('Supervision history manual evidence jump stays in shared memory')
       ).toBeVisible();
       await expect(selectedSupervisionCorrelationButton).toBeVisible();
-      await expect(correlationSection.getByText(accountabilityCorrelationId, { exact: true })).toBeVisible();
       await expect(sharedMemoryRecord).toContainText('Collector observed workspace write to revenue-handoff.md');
       await expect(selectedSharedMemoryCorrelationButton).toBeVisible();
       await expect(returnToCurrentScopeButton).toHaveCount(0);
       await expect(focusedSharedMemoryRecord).toHaveCount(1);
       await expect(focusedSharedMemoryRecord).toContainText('Ref · /tmp/revenue-handoff.md');
+      await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
+      await expect(correlationSection.getByText(accountabilityCorrelationId, { exact: true })).toBeVisible();
 
       await page.waitForTimeout(150);
 
@@ -8667,30 +9149,37 @@ test.describe('operator shell smoke', () => {
     const focusedSharedMemoryRecord = detailsPanel.locator('li[data-shared-memory-target]:focus');
 
     await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
     await expect(supervisionSection.getByText('Supervision history evidence jump stays in shared memory')).toBeVisible();
     await expect(selectedSupervisionCorrelationButton).toBeVisible();
-    await expect(correlationSection.getByText(accountabilityCorrelationId, { exact: true })).toBeVisible();
     await expect(sharedMemoryRecord).toContainText('Collector observed workspace write to revenue-handoff.md');
     await expect(selectedSharedMemoryCorrelationButton).toBeVisible();
     await expect(detailsPanel.getByRole('button', { name: 'Return to current scope' })).toHaveCount(0);
     await expect(evidenceJumpButton).toBeVisible();
     await expect(focusedSharedMemoryRecord).toHaveCount(0);
-    await focusHubControlWithTab(page, evidenceJumpButton, 'Jump to shared memory artifact /tmp/revenue-handoff.md');
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
+    await expect(correlationSection.getByText(accountabilityCorrelationId, { exact: true })).toBeVisible();
+    await focusHubControlWithTab(page, evidenceJumpButton, 'Jump to shared memory artifact /tmp/revenue-handoff.md', {
+      detailsPanel,
+      selectedAgentDrilldownTab: 'Evidence'
+    });
     await expect(evidenceJumpButton).toBeFocused();
 
     const requestCountBeforeJump = requestedUrls.length;
 
     await page.keyboard.press('Enter');
 
-    await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Hub focus ribbon' }).getByText('App Engineering Agent')).toBeVisible();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
     await expect(supervisionSection.getByText('Supervision history evidence jump stays in shared memory')).toBeVisible();
     await expect(selectedSupervisionCorrelationButton).toBeVisible();
-    await expect(correlationSection.getByText(accountabilityCorrelationId, { exact: true })).toBeVisible();
     await expect(sharedMemoryRecord).toContainText('Collector observed workspace write to revenue-handoff.md');
     await expect(selectedSharedMemoryCorrelationButton).toBeVisible();
     await expect(detailsPanel.getByRole('button', { name: 'Return to current scope' })).toHaveCount(0);
     await expect(focusedSharedMemoryRecord).toHaveCount(1);
     await expect(focusedSharedMemoryRecord).toContainText('Ref · /tmp/revenue-handoff.md');
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
+    await expect(correlationSection.getByText(accountabilityCorrelationId, { exact: true })).toBeVisible();
 
     await page.waitForTimeout(150);
 
@@ -8803,13 +9292,16 @@ test.describe('operator shell smoke', () => {
 
     await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
     await expect(clearButton).toBeFocused();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
     await expect(supervisionSection.getByText('Supervision history actor keeps the active correlation')).toBeVisible();
-    await expect(correlationSection.getByText(accountabilityCorrelationId, { exact: true })).toBeVisible();
     await expect(supervisionActorButton).toBeVisible();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
+    await expect(correlationSection.getByText(accountabilityCorrelationId, { exact: true })).toBeVisible();
     await focusHubControlWithTab(
       page,
       supervisionActorButton,
-      'Select supervision history actor from alert alert-browser-supervision-history-actor growth-revenue'
+      'Select supervision history actor from alert alert-browser-supervision-history-actor growth-revenue',
+      { detailsPanel, selectedAgentDrilldownTab: 'Evidence' }
     );
     await expect(supervisionActorButton).toBeFocused();
 
@@ -8829,8 +9321,10 @@ test.describe('operator shell smoke', () => {
     await scopedArtifactsResponse;
 
     await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
-    await expect(clearButton).toBeFocused();
+    await expect(clearButton).toBeVisible();
+    await expectFocusedElementVisible(page);
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText(accountabilityCorrelationId, { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('Counts · 0 incidents · 0 interactions · 1 events')).toBeVisible();
     await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toHaveCount(0);
@@ -8970,6 +9464,7 @@ test.describe('operator shell smoke', () => {
     });
 
     await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
     await expect(supervisionSection.getByText('Current supervision-history actor stays plain text')).toBeVisible();
     await expect(supervisionSection.getByText('Unknown supervision-history actor stays plain text')).toBeVisible();
     await expect(currentRecord).toContainText('Actor · app-engineering');
@@ -9106,6 +9601,7 @@ test.describe('operator shell smoke', () => {
     });
 
     await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
     await expect(supervisionSection.getByText('Current supervision-history observer stays plain text')).toBeVisible();
     await expect(supervisionSection.getByText('Unknown supervision-history observer stays plain text')).toBeVisible();
     await expect(currentRecord).toContainText('Observer · app-engineering');
@@ -9254,13 +9750,16 @@ test.describe('operator shell smoke', () => {
 
     await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
     await expect(clearButton).toBeFocused();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
     await expect(supervisionSection.getByText('Supervision history observer keeps the active correlation')).toBeVisible();
-    await expect(correlationSection.getByText(accountabilityCorrelationId, { exact: true })).toBeVisible();
     await expect(supervisionObserverButton).toBeVisible();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
+    await expect(correlationSection.getByText(accountabilityCorrelationId, { exact: true })).toBeVisible();
     await focusHubControlWithTab(
       page,
       supervisionObserverButton,
-      'Select supervision history observer from alert alert-browser-supervision-history-observer growth-revenue'
+      'Select supervision history observer from alert alert-browser-supervision-history-observer growth-revenue',
+      { detailsPanel, selectedAgentDrilldownTab: 'Evidence' }
     );
     await expect(supervisionObserverButton).toBeFocused();
 
@@ -9285,8 +9784,10 @@ test.describe('operator shell smoke', () => {
     await scopedArtifactsResponse;
 
     await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
-    await expect(clearButton).toBeFocused();
+    await expect(clearButton).toBeVisible();
+    await expectFocusedElementVisible(page);
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText(accountabilityCorrelationId, { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('Counts · 0 incidents · 0 interactions · 1 events')).toBeVisible();
     await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toHaveCount(0);
@@ -9439,13 +9940,16 @@ test.describe('operator shell smoke', () => {
 
     await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
     await expect(clearButton).toBeFocused();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
     await expect(supervisionSection.getByText('Supervision history watcher keeps the active correlation')).toBeVisible();
-    await expect(correlationSection.getByText(accountabilityCorrelationId, { exact: true })).toBeVisible();
     await expect(supervisionWatcherButton).toBeVisible();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
+    await expect(correlationSection.getByText(accountabilityCorrelationId, { exact: true })).toBeVisible();
     await focusHubControlWithTab(
       page,
       supervisionWatcherButton,
-      'Select supervision history watcher from alert alert-browser-supervision-history-watcher growth-revenue'
+      'Select supervision history watcher from alert alert-browser-supervision-history-watcher growth-revenue',
+      { detailsPanel, selectedAgentDrilldownTab: 'Evidence' }
     );
     await expect(supervisionWatcherButton).toBeFocused();
 
@@ -9470,8 +9974,10 @@ test.describe('operator shell smoke', () => {
     await scopedArtifactsResponse;
 
     await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
-    await expect(clearButton).toBeFocused();
+    await expect(clearButton).toBeVisible();
+    await expectFocusedElementVisible(page);
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText(accountabilityCorrelationId, { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('Counts · 0 incidents · 0 interactions · 1 events')).toBeVisible();
     await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toHaveCount(0);
@@ -9538,14 +10044,21 @@ test.describe('operator shell smoke', () => {
     });
 
     await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
-    await expect(clearButton).toBeFocused();
+    await expect(clearButton).toBeVisible();
+    await expectFocusedElementVisible(page);
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
-    await focusHubControlWithTab(page, correlationParticipantButton, 'Select correlation participant agent team-lead');
+    await focusHubControlWithTab(page, correlationParticipantButton, 'Select correlation participant agent team-lead', {
+      detailsPanel,
+      selectedAgentDrilldownTab: 'Replay / Correlation'
+    });
     await expect(correlationParticipantButton).toBeFocused();
     await page.keyboard.press('Enter');
 
-    await expect(detailsPanel.getByRole('heading', { name: 'Team Lead' })).toBeVisible();
-    await expect(clearButton).toBeFocused();
+    await expect(page.getByRole('region', { name: 'Hub focus ribbon' }).getByText('Team Lead')).toBeVisible();
+    await expect(clearButton).toBeVisible();
+    await expectFocusedElementVisible(page);
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('Counts · 0 incidents · 1 interactions · 2 events')).toBeVisible();
   });
@@ -9597,6 +10110,7 @@ test.describe('operator shell smoke', () => {
 
     await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
     await expect(page.getByText('Metaverse Office operator shell')).toBeVisible();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
     await expect(workflowSection.getByText('Loading workflow...')).toBeVisible();
     await expect(workflowSection.getByText(/Unable to load workflow\./)).toHaveCount(0);
     await expect(workflowSection.getByText('No open watch alerts.')).toHaveCount(0);
@@ -9606,8 +10120,9 @@ test.describe('operator shell smoke', () => {
     expect(releaseSelectedWorkflow).not.toBeNull();
     releaseSelectedWorkflow!();
 
-    await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Hub focus ribbon' }).getByText('App Engineering Agent')).toBeVisible();
     await expect(page.getByText('Metaverse Office operator shell')).toBeVisible();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
     await expect(workflowSection.getByText('Unable to load workflow. workflow request failed')).toBeVisible();
     await expect(workflowSection.getByText('Loading workflow...')).toHaveCount(0);
     await expect(workflowSection.getByText('No open watch alerts.')).toHaveCount(0);
@@ -9641,9 +10156,13 @@ test.describe('operator shell smoke', () => {
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     await detailsPanel.getByRole('button', { name: 'Inspect App Engineering Agent', exact: true }).click();
     await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+    const workflowSection = detailsPanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Workflow' })
+    });
 
-    await expect(detailsPanel.getByText('unknown agent app-engineering')).toBeVisible();
-    await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
+    await expect(workflowSection.getByText('unknown agent app-engineering')).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Hub focus ribbon' }).getByText('App Engineering Agent')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Clear Selection' })).toBeVisible();
   });
 
@@ -9690,18 +10209,23 @@ test.describe('operator shell smoke', () => {
 
     await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
     await expect(operationSection.getByText('planning · Prepare handoff notes')).toBeVisible();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
     await expect(runContextSection.getByText(/Run blocker ·/)).toBeVisible();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
 
     await enableScenario(page, 'selected-operation-refresh-failure');
 
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Now');
     await expect(detailsPanel.getByText('Showing last operation snapshot. operations refresh failed')).toBeVisible({
       timeout: POLL_DRIVEN_ASSERTION_TIMEOUT_MS
     });
     await expect(operationSection.getByText('planning · Prepare handoff notes')).toBeVisible();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
     await expect(runContextSection.getByText(/Run blocker ·/)).toBeVisible();
     await expect(runContextSection.getByText(/Last heartbeat ·/)).toBeVisible();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('Counts · 0 incidents · 1 interactions · 2 events')).toBeVisible();
     await expect(correlationSection.getByText('Participants · growth-revenue, team-lead')).toHaveCount(2);
@@ -9734,11 +10258,14 @@ test.describe('operator shell smoke', () => {
     await expect(
       operationSection.getByRole('button', { name: 'Open operation correlation corr-revenue-handoff' })
     ).toBeVisible();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
     await expect(runContextSection.getByText(/Run blocker ·/)).toBeVisible();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
 
     await enableScenario(page, 'selected-operation-queue-drop');
 
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Now');
     await expect(
       detailsPanel.getByText('Showing last operation snapshot. Operation is no longer in the active queue.')
     ).toBeVisible({
@@ -9748,8 +10275,10 @@ test.describe('operator shell smoke', () => {
     await expect(
       operationSection.getByRole('button', { name: 'Open operation correlation corr-revenue-handoff' })
     ).toHaveCount(0);
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
     await expect(runContextSection.getByText(/Run blocker ·/)).toBeVisible();
     await expect(runContextSection.getByText(/Last heartbeat ·/)).toBeVisible();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('Counts · 0 incidents · 1 interactions · 2 events')).toBeVisible();
     await expect(correlationSection.getByText('Participants · growth-revenue, team-lead')).toHaveCount(2);
@@ -9878,6 +10407,7 @@ test.describe('operator shell smoke', () => {
       await detailsPanel.getByRole('button', { name: 'Inspect App Engineering Agent', exact: true }).click();
 
       await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+      await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
       await expect(
         detailsPanel.getByText(
           `Request scope · Target agent · app-engineering · Active correlation · ${accountabilityCorrelationId}`
@@ -10000,7 +10530,9 @@ test.describe('operator shell smoke', () => {
     await detailsPanel.getByRole('button', { name: 'Inspect App Engineering Agent', exact: true }).click();
 
     await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText(accountabilityCorrelationId, { exact: true })).toBeVisible();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
     await expect(
       supervisionSection.getByText('Supervision History stays aligned with the active selected correlation')
     ).toBeVisible();
@@ -10456,6 +10988,7 @@ test.describe('operator shell smoke', () => {
 
     await detailsPanel.getByRole('button', { name: 'Inspect App Engineering Agent', exact: true }).click();
     await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     const correlationIdPattern = /(?:corr-[A-Za-z0-9:_-]+|collector-snapshot:\d{4}-\d{2}-\d{2}T[0-9:.]+Z)/;
     await expect
       .poll(async () => {
@@ -10492,7 +11025,8 @@ test.describe('operator shell smoke', () => {
 
     await expect(page.getByRole('button', { name: 'Hide Hub' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Clear Selection' })).toBeVisible();
-    await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Hub focus ribbon' }).getByText('App Engineering Agent')).toBeVisible();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText(baselineCorrelationId!, { exact: true })).toBeVisible();
 
     await expect
@@ -10529,6 +11063,7 @@ test.describe('operator shell smoke', () => {
 
     await detailsPanel.getByRole('button', { name: 'Inspect App Engineering Agent', exact: true }).click();
     await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     const correlationIdPattern = /(?:corr-[A-Za-z0-9:_-]+|collector-snapshot:\d{4}-\d{2}-\d{2}T[0-9:.]+Z)/;
     await expect
       .poll(async () => {
@@ -10564,7 +11099,8 @@ test.describe('operator shell smoke', () => {
 
     await expect(page.getByRole('button', { name: 'Hide Hub' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Clear Selection' })).toBeVisible();
-    await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Hub focus ribbon' }).getByText('App Engineering Agent')).toBeVisible();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText(baselineCorrelationId!, { exact: true })).toBeVisible();
 
     await expect

@@ -4289,6 +4289,103 @@ describe('DetailsPanel accountability signals', () => {
     ).toBeVisible();
   });
 
+  it('focuses known replay event locations in the world viewport and leaves unknown locations plain', async () => {
+    const user = userEvent.setup();
+    const baseWorld = buildWorld();
+    const onFocusWorldZone = vi.fn();
+    const onSelectAgent = vi.fn();
+    const onSelectCorrelation = vi.fn();
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          onFocusWorldZone,
+          onSelectAgent,
+          onSelectCorrelation,
+          selectedAgent: null,
+          selectedOperation: null,
+          timelineReplay: {
+            items: [
+              {
+                event_id: 'evt-replay-review',
+                ts: '2026-03-16T08:59:00.000Z',
+                agent_id: 'app-engineering',
+                actor_id: 'team-lead',
+                event_type: 'peer_watch_alert_raised',
+                severity: 'orange',
+                current_state: 'blocked',
+                location: 'review-zone',
+                summary: 'Replay event with a known office zone',
+                correlation_id: 'corr-app-review',
+                counterparty_agent_ids: ['growth-revenue'],
+                evidence_refs: ['/evidence/replay.md'],
+                source_kind: 'controller_event'
+              },
+              {
+                event_id: 'evt-replay-unknown-location',
+                ts: '2026-03-16T08:58:00.000Z',
+                agent_id: 'app-engineering',
+                actor_id: 'team-lead',
+                event_type: 'agent_noted',
+                severity: 'yellow',
+                current_state: 'blocked',
+                location: 'unknown-zone',
+                summary: 'Replay event with an unknown office zone',
+                correlation_id: 'corr-app-review',
+                counterparty_agent_ids: [],
+                evidence_refs: ['/evidence/replay-unknown.md'],
+                source_kind: 'workspace_snapshot'
+              }
+            ]
+          },
+          world: {
+            ...baseWorld,
+            zones: [
+              ...baseWorld.zones,
+              {
+                zone_id: 'review-zone',
+                label: 'Review Zone',
+                kind: 'desk',
+                grid_x: 1,
+                grid_y: 0,
+                grid_w: 1,
+                grid_h: 1,
+                home_agent_id: 'team-lead',
+                occupant_ids: ['team-lead']
+              }
+            ]
+          }
+        })}
+      />
+    );
+
+    const section = screen.getByRole('heading', { name: 'Timeline Replay' }).closest('section');
+    expect(section).not.toBeNull();
+
+    const knownRecord = within(section!).getByText('Replay event with a known office zone').closest('li');
+    const unknownRecord = within(section!).getByText('Replay event with an unknown office zone').closest('li');
+    expect(knownRecord).not.toBeNull();
+    expect(unknownRecord).not.toBeNull();
+
+    const focusButton = within(knownRecord!).getByRole('button', {
+      name: 'Focus Review Zone in world viewport from replay event evt-replay-review'
+    });
+    expect(focusButton).toBeVisible();
+    expect(unknownRecord).toHaveTextContent('Location · unknown-zone');
+    expect(
+      within(unknownRecord!).queryByRole('button', {
+        name: /Focus .* in world viewport from replay event evt-replay-unknown-location/
+      })
+    ).not.toBeInTheDocument();
+
+    await user.click(focusButton);
+
+    expect(onFocusWorldZone).toHaveBeenCalledWith('review-zone');
+    expect(onFocusWorldZone).toHaveBeenCalledTimes(1);
+    expect(onSelectAgent).not.toHaveBeenCalled();
+    expect(onSelectCorrelation).not.toHaveBeenCalled();
+  });
+
   it('renders replay actors as pivots when navigable, preserves the active correlation, and leaves unknown actors as plain text', async () => {
     const user = userEvent.setup();
     const onSelectAgent = vi.fn();

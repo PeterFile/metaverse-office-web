@@ -1709,8 +1709,10 @@ function renderReplayTimelineEvent({
   agentLabel,
   currentAgentId,
   navigableAgentIds,
+  zoneLabelById,
   sharedMemoryArtifactRefs,
   onFocusSharedMemoryArtifact,
+  onFocusWorldZone,
   onSelectAgent,
   onSelectCorrelation
 }: {
@@ -1719,8 +1721,10 @@ function renderReplayTimelineEvent({
   agentLabel: string;
   currentAgentId: string | null;
   navigableAgentIds: Set<string>;
+  zoneLabelById: ReadonlyMap<string, string>;
   sharedMemoryArtifactRefs: ReadonlySet<string>;
   onFocusSharedMemoryArtifact?: (artifactRef: string, scope?: SharedMemoryJumpScope) => void;
+  onFocusWorldZone?: (zoneId: string) => void;
   onSelectAgent: SelectAgentHandler;
   onSelectCorrelation: SelectCorrelationHandler;
 }) {
@@ -1728,6 +1732,7 @@ function renderReplayTimelineEvent({
   const preservedCorrelationId = activeCorrelationId ?? event.correlation_id;
   const canNavigateToActor = event.actor_id !== currentAgentId && navigableAgentIds.has(event.actor_id);
   const currentReplayAgentId = currentAgentId ?? event.agent_id;
+  const zoneLabel = zoneLabelById.get(event.location);
   const { onJump, allowExactFallback } = resolveSharedMemoryEvidenceJumpBehavior(onFocusSharedMemoryArtifact);
 
   return (
@@ -1746,7 +1751,21 @@ function renderReplayTimelineEvent({
           : event.actor_id}
       </span>
       <span>{`Event type · ${event.event_type}`}</span>
-      <span>{`Location · ${event.location}`}</span>
+      <span>
+        Location ·{' '}
+        {zoneLabel && onFocusWorldZone ? (
+          <button
+            type="button"
+            className="aitown-link-button"
+            aria-label={`Focus ${zoneLabel} in world viewport from replay event ${event.event_id}`}
+            onClick={() => onFocusWorldZone(event.location)}
+          >
+            {zoneLabel}
+          </button>
+        ) : (
+          event.location
+        )}
+      </span>
       <span>{`State · ${event.current_state}`}</span>
       <span>{`Severity · ${SEVERITY_LABELS[event.severity]}`}</span>
       <span>
@@ -2016,9 +2035,11 @@ function renderTimelineReplaySection({
   currentAgentId,
   navigableAgentIds,
   agentNameById,
+  zoneLabelById,
   sharedMemoryArtifactRefs,
   onSelectSeverity,
   onFocusSharedMemoryArtifact,
+  onFocusWorldZone,
   onSelectAgent,
   onSelectCorrelation
 }: {
@@ -2038,9 +2059,11 @@ function renderTimelineReplaySection({
   currentAgentId: string | null;
   navigableAgentIds: Set<string>;
   agentNameById: Map<string, string>;
+  zoneLabelById: ReadonlyMap<string, string>;
   sharedMemoryArtifactRefs: ReadonlySet<string>;
   onSelectSeverity?: (severity: Severity | null) => void;
   onFocusSharedMemoryArtifact?: (artifactRef: string, scope?: SharedMemoryJumpScope) => void;
+  onFocusWorldZone?: (zoneId: string) => void;
   onSelectAgent: SelectAgentHandler;
   onSelectCorrelation: SelectCorrelationHandler;
 }) {
@@ -2085,8 +2108,10 @@ function renderTimelineReplaySection({
             agentLabel: agentNameById.get(event.agent_id) ?? event.agent_id,
             currentAgentId,
             navigableAgentIds,
+            zoneLabelById,
             sharedMemoryArtifactRefs,
             onFocusSharedMemoryArtifact,
+            onFocusWorldZone,
             onSelectAgent,
             onSelectCorrelation
           })
@@ -3051,6 +3076,7 @@ export function DetailsPanel({
         home_agent_id: zone.home_agent_id ?? null,
         occupants: []
       }));
+  const zoneLabelById = new Map(zoneSource.map((zone) => [zone.zone_id, zone.label]));
   const officeGrid = buildZoneLayoutModels(zoneSource).map((layoutModel) => {
     const zone = layoutModel.zone;
     const overviewZone = overviewZones?.find((candidate) => candidate.zone_id === zone.zone_id) ?? null;
@@ -3807,9 +3833,11 @@ export function DetailsPanel({
           currentAgentId: null,
           navigableAgentIds,
           agentNameById,
+          zoneLabelById,
           sharedMemoryArtifactRefs,
           onSelectSeverity: onSelectCrewReplaySeverity,
           onFocusSharedMemoryArtifact,
+          onFocusWorldZone,
           onSelectAgent,
           onSelectCorrelation
         })}
@@ -4680,9 +4708,11 @@ export function DetailsPanel({
         currentAgentId: selectedAgent.agent_id,
         navigableAgentIds,
         agentNameById,
+        zoneLabelById,
         sharedMemoryArtifactRefs,
         onSelectSeverity: onSelectSelectedAgentReplaySeverity,
         onFocusSharedMemoryArtifact,
+        onFocusWorldZone,
         onSelectAgent,
         onSelectCorrelation
       })}

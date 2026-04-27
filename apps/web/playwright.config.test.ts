@@ -50,6 +50,10 @@ describe('browser smoke Playwright config', () => {
     expect(packageJson.scripts?.['install:browsers:ci']).toBe('playwright install --with-deps chromium');
   });
 
+  it('emits GitHub annotations for CI browser-smoke failures without requiring log or artifact access', () => {
+    expect(configSource).toContain("['github']");
+  });
+
   it('runs browser smoke through the managed wrapper script', () => {
     expect(packageJson.scripts?.['test:browser-smoke']).toBe(
       'node ./scripts/run-browser-smoke.mjs'

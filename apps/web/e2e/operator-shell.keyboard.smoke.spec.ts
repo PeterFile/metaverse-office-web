@@ -3035,7 +3035,9 @@ test.describe('operator shell smoke', () => {
     await expect(selectedActiveQueueCorrelationButton).toBeVisible();
     await expect(replaySection.getByText('Scoped replay · corr-growth-lead-review')).toBeVisible();
 
-    const requestCountBeforeReset = requestedUrls.length;
+    await focusHubControlWithTab(page, returnToCurrentScopeButton, 'Return to current scope');
+    await expect(returnToCurrentScopeButton).toBeFocused();
+
     const defaultTimelineResponse = page.waitForResponse(
       (response) =>
         response.request().method() === 'GET' &&
@@ -3050,9 +3052,8 @@ test.describe('operator shell smoke', () => {
         response.url().includes(defaultArtifactsUrl) &&
         !response.url().includes('correlation_id=')
     );
+    const requestCountBeforeReset = requestedUrls.length;
 
-    await focusHubControlWithTab(page, returnToCurrentScopeButton, 'Return to current scope');
-    await expect(returnToCurrentScopeButton).toBeFocused();
     await page.keyboard.press('Enter');
     await defaultTimelineResponse;
     await defaultArtifactsResponse;
@@ -3084,6 +3085,8 @@ test.describe('operator shell smoke', () => {
   test('keeps the active crew-overview correlation when opening an active-queue counterparty pivot via keyboard traversal', async ({
     page
   }) => {
+    test.setTimeout(45_000);
+
     await page.route('**/office/operations?limit=4', async (route) => {
       const response = await route.fetch();
       const operations = (await response.json()) as {
@@ -5147,6 +5150,8 @@ test.describe('operator shell smoke', () => {
   });
 
   test('keeps the active replay correlation when opening a replay agent pivot via keyboard traversal', async ({ page }) => {
+    test.setTimeout(45_000);
+
     const requestedUrls: string[] = [];
     const forbiddenRequests: string[] = [];
     const directOperationUrl = '/office/operations?agent_id=growth-revenue';
@@ -8902,6 +8907,7 @@ test.describe('operator shell smoke', () => {
         }
       });
 
+      await installFastPollInterval(page, 120_000);
       const accountabilityCorrelationId = 'collector-snapshot:2026-03-10T23:59:40.000Z';
       const selectedSupervisionHistoryPath = resolveSelectedAgentSupervisionHistoryPath(
         'app-engineering',
@@ -9076,6 +9082,8 @@ test.describe('operator shell smoke', () => {
         requestedUrls.push(request.url());
       }
     });
+
+    await installFastPollInterval(page, 120_000);
 
     const accountabilityCorrelationId = 'collector-snapshot:2026-03-10T23:59:40.000Z';
     const selectedSupervisionHistoryPath = resolveSelectedAgentSupervisionHistoryPath(

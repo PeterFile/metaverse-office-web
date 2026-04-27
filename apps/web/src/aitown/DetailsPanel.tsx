@@ -1553,6 +1553,11 @@ function renderCorrelationInteraction({
     interaction.before_state && interaction.after_state
       ? `${interaction.before_state} -> ${interaction.after_state}`
       : interaction.before_state ?? interaction.after_state ?? null;
+  const sourceKind = findFirstNonEmptyString([interaction.source_kind]);
+  const triggerEventId = interaction.trigger_event_id.trim();
+  const relatedEventIds = (interaction.related_event_ids ?? [])
+    .map((eventId) => eventId.trim())
+    .filter((eventId) => eventId.length > 0 && eventId !== triggerEventId);
 
   return (
     <li key={interaction.interaction_id} className={`aitown-record severity-${interaction.severity ?? 'normal'}`}>
@@ -1561,6 +1566,8 @@ function renderCorrelationInteraction({
       <span>{`Started · ${interaction.started_at}`}</span>
       {interaction.ended_at ? <span>{`Ended · ${interaction.ended_at}`}</span> : null}
       <span>{`Trigger · ${interaction.trigger_event_id}`}</span>
+      {sourceKind ? <span>{`Source · ${sourceKind}`}</span> : null}
+      {relatedEventIds.length > 0 ? <span>{`Related events · ${relatedEventIds.join(', ')}`}</span> : null}
       {stateTransition ? <span>{`State · ${stateTransition}`}</span> : null}
       <span>
         Participants ·{' '}
@@ -1652,6 +1659,7 @@ function renderCorrelationTimelineEvent(
   return (
     <li key={event.event_id} className={`aitown-record severity-${event.severity}`}>
       <strong>{event.summary}</strong>
+      <span>{`Event id · ${event.event_id}`}</span>
       <span>{`At · ${renderTimestamp(event.ts, 'No event timestamp')}`}</span>
       <span>
         Subject ·{' '}
@@ -1745,6 +1753,7 @@ function renderReplayTimelineEvent({
   return (
     <li key={event.event_id} className={`aitown-record severity-${event.severity}`}>
       <strong>{event.summary}</strong>
+      <span>{`Event id · ${event.event_id}`}</span>
       <span>{`At · ${renderTimestamp(event.ts, 'No event timestamp')}`}</span>
       <span>
         Actor ·{' '}

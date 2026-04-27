@@ -4420,10 +4420,12 @@ describe('DetailsPanel accountability signals', () => {
     expect(correlationCard).not.toBeNull();
     expect(replayCard).not.toBeNull();
 
+    expect(within(correlationCard!).getByText('Event id · evt-3')).toBeVisible();
     expect(within(correlationCard!).getByText('At · 2026-03-16T08:56:00.000Z')).toBeVisible();
     expect(within(correlationCard!).getByText('Actor · controller')).toBeVisible();
     expect(within(correlationCard!).getByText('State · blocked')).toBeVisible();
 
+    expect(within(replayCard!).getByText('Event id · evt-replay')).toBeVisible();
     expect(within(replayCard!).getByText('At · 2026-03-16T08:59:00.000Z')).toBeVisible();
     expect(replayCard).toHaveTextContent('Actor · growth-revenue');
     expect(within(replayCard!).getByText('State · planning')).toBeVisible();
@@ -4437,6 +4439,50 @@ describe('DetailsPanel accountability signals', () => {
         name: 'Select replay agent growth-revenue from event evt-replay'
       })
     ).toBeVisible();
+  });
+
+  it('surfaces workflow interaction source chain fields when the read model provides them', () => {
+    const correlation = buildCorrelation();
+    render(
+      <DetailsPanel
+        {...buildProps({
+          correlation: {
+            ...correlation,
+            interactions: [
+              {
+                ...correlation.interactions[0],
+                interaction_id: 'int-source-chain',
+                source_kind: 'controller_event',
+                related_event_ids: ['evt-start', 'evt-end'],
+                summary: 'Controller event interaction provenance'
+              }
+            ]
+          }
+        })}
+      />
+    );
+
+    const section = screen.getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    expect(section).not.toBeNull();
+
+    const card = within(section!).getByText('Controller event interaction provenance').closest('li');
+    expect(card).not.toBeNull();
+    expect(within(card!).getByText('Trigger · evt-1')).toBeVisible();
+    expect(within(card!).getByText('Source · controller_event')).toBeVisible();
+    expect(within(card!).getByText('Related events · evt-start, evt-end')).toBeVisible();
+  });
+
+  it('does not fabricate workflow interaction source chain fields when the read model omits them', () => {
+    render(<DetailsPanel {...buildProps()} />);
+
+    const section = screen.getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    expect(section).not.toBeNull();
+
+    const card = within(section!).getByText('Reviewed the missing workflow package').closest('li');
+    expect(card).not.toBeNull();
+    expect(within(card!).getByText('Trigger · evt-1')).toBeVisible();
+    expect(within(card!).queryByText(/^Source ·/)).not.toBeInTheDocument();
+    expect(within(card!).queryByText(/^Related events ·/)).not.toBeInTheDocument();
   });
 
   it('focuses known replay event locations in the world viewport and leaves unknown locations plain', async () => {

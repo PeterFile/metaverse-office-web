@@ -359,6 +359,7 @@ describe('read-only frontend/backend contract smoke', () => {
           source_kinds: ['controller_event'],
           latest_summary: 'Protocol engineering flagged the contract drift',
           latest_event_type: 'peer_watch_alert_raised',
+          latest_event_id: 'evt_contract_peer_watch',
           collector_last_modified_at: null
         }
       ]
@@ -419,6 +420,7 @@ describe('read-only frontend/backend contract smoke', () => {
           source_kinds: ['controller_event'],
           latest_summary: 'Protocol engineering flagged the contract drift',
           latest_event_type: 'peer_watch_alert_raised',
+          latest_event_id: 'evt_contract_peer_watch',
           collector_last_modified_at: null
         }
       ]
@@ -1503,6 +1505,7 @@ function expectMemoryArtifactContract(memoryArtifacts: MemoryArtifactIndex) {
       source_kinds: ['controller_event'],
       latest_summary: 'Lead completed the contract handoff',
       latest_event_type: 'agent_handoff_completed',
+      latest_event_id: 'evt_contract_handoff_completed',
       collector_last_modified_at: null
     },
     {
@@ -1517,6 +1520,7 @@ function expectMemoryArtifactContract(memoryArtifacts: MemoryArtifactIndex) {
       source_kinds: ['controller_event'],
       latest_summary: 'Protocol engineering flagged the contract drift',
       latest_event_type: 'peer_watch_alert_raised',
+      latest_event_id: 'evt_contract_peer_watch',
       collector_last_modified_at: null
     },
     {
@@ -1531,6 +1535,7 @@ function expectMemoryArtifactContract(memoryArtifacts: MemoryArtifactIndex) {
       source_kinds: ['controller_event'],
       latest_summary: 'Lead completed the contract review',
       latest_event_type: 'review_completed',
+      latest_event_id: 'evt_contract_review_completed',
       collector_last_modified_at: null
     },
     {
@@ -1545,6 +1550,7 @@ function expectMemoryArtifactContract(memoryArtifacts: MemoryArtifactIndex) {
       source_kinds: ['controller_event'],
       latest_summary: 'Lead started the contract review',
       latest_event_type: 'review_started',
+      latest_event_id: 'evt_contract_review_started',
       collector_last_modified_at: null
     }
   ]);

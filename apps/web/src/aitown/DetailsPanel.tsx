@@ -2600,6 +2600,9 @@ function renderSharedMemoryArtifact({
         })}
       </span>
       {artifact.latest_event_type ? <span>{`Latest event type · ${artifact.latest_event_type}`}</span> : null}
+      {artifact.latest_event_id ? (
+        <span>{`Latest event · ${artifact.latest_event_id} · ${artifact.latest_event_type ?? 'unknown'}`}</span>
+      ) : null}
       {artifact.source_kinds.length > 0 ? (
         <span>{`Source kinds · ${renderNamedList(dedupeNonEmptyStrings(artifact.source_kinds), 'No source kinds')}`}</span>
       ) : null}

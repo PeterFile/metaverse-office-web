@@ -10390,6 +10390,41 @@ describe('DetailsPanel workflow peer-watch alerts', () => {
 });
 
 describe('DetailsPanel shared memory', () => {
+  it('shows latest event anchors only when shared-memory artifacts provide event ids', () => {
+    render(
+      <DetailsPanel
+        {...buildProps({
+          memoryArtifacts: {
+            generated_at: '2026-03-16T09:00:00.000Z',
+            items: [
+              {
+                ...buildMemoryArtifacts().items[0],
+                latest_event_id: 'evt-memory-replay-anchor',
+                latest_event_type: 'timeline_note'
+              },
+              {
+                ...buildMemoryArtifacts().items[1],
+                latest_event_type: 'workflow_event'
+              }
+            ]
+          }
+        })}
+      />
+    );
+
+    const section = screen.getByRole('heading', { name: 'Shared Memory' }).closest('section');
+    expect(section).not.toBeNull();
+
+    const replayRecord = within(section!).getByText('Ref · artifact/replay-bundle').closest('li');
+    const reviewRecord = within(section!).getByText('Ref · artifact/review-note').closest('li');
+    expect(replayRecord).not.toBeNull();
+    expect(reviewRecord).not.toBeNull();
+
+    expect(within(replayRecord!).getByText('Latest event · evt-memory-replay-anchor · timeline_note')).toBeVisible();
+    expect(within(reviewRecord!).queryByText(/^Latest event ·/)).not.toBeInTheDocument();
+    expect(within(reviewRecord!).getByText('Latest event type · workflow_event')).toBeVisible();
+  });
+
   it('renders shared-memory agent pivots and preserves the active correlation when pivoting', async () => {
     const user = userEvent.setup();
     const onSelectAgent = vi.fn();

@@ -2570,6 +2570,7 @@ function listMemoryArtifactItems({ events = [], latestCollectorReport = null, fi
         source_kinds: new Set(),
         latest_summary: event.summary,
         latest_event_type: event.event_type,
+        latest_event_id: event.event_id,
         latest_event_ts: event.ts,
         collector_last_modified_at: collectorLastModifiedAt
       };
@@ -2604,6 +2605,7 @@ function listMemoryArtifactItems({ events = [], latestCollectorReport = null, fi
         existing.latest_event_ts = event.ts;
         existing.latest_summary = event.summary;
         existing.latest_event_type = event.event_type;
+        existing.latest_event_id = event.event_id;
       }
       if (!existing.collector_last_modified_at && collectorLastModifiedAt) {
         existing.collector_last_modified_at = collectorLastModifiedAt;
@@ -2700,6 +2702,7 @@ function listMemoryArtifactItems({ events = [], latestCollectorReport = null, fi
       source_kinds: Array.from(artifact.source_kinds).sort(),
       latest_summary: artifact.latest_summary,
       latest_event_type: artifact.latest_event_type,
+      ...(artifact.latest_event_id ? { latest_event_id: artifact.latest_event_id } : {}),
       collector_last_modified_at: artifact.collector_last_modified_at
     }))
     .sort((left, right) => {

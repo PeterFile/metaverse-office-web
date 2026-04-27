@@ -263,7 +263,8 @@
 - `agent_id`, when present, matches artifacts mentioned by that agent, actor, or listed counterparties; collector-only observations stay agent-scoped instead of leaking other observed agents
 - `correlation_id`, when present, narrows to artifacts referenced by events inside that correlation slice or the matching latest collector snapshot correlation when no derived activity event exists
 - `event_type`, `severity`, and `artifact_kind` are additive read-only facets; event-backed artifacts may still be extended by matching collector observations, but event-facet queries do not materialize unrelated collector-only artifacts
-- collector-only observations may expose `latest_summary` and `latest_event_type` as `null` when the latest snapshot did not materialize a canonical activity event for that artifact
+- collector-only observations may expose `latest_summary`, `latest_event_type`, and `latest_event_id` as `null`/omitted when the latest snapshot did not materialize a canonical activity event for that artifact
+- event-backed artifacts expose optional `latest_event_id` from the same newest event that supplies `latest_summary` and `latest_event_type`; collector-only artifacts do not fabricate event ids
 - item ordering is newest `last_seen_at` first, then highest `mention_count`, then stable `artifact_ref`
 
 ## Peer-watch alert response shape
@@ -329,6 +330,7 @@
       "source_kinds": ["controller_event", "workspace_file"],
       "latest_summary": "Lead requested a reboot after the evidence review",
       "latest_event_type": "agent_reboot_requested",
+      "latest_event_id": "evt_incident_reboot_requested",
       "collector_last_modified_at": "2026-03-09T18:58:30.000Z"
     },
     {

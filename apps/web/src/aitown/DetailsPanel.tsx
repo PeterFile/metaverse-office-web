@@ -1554,7 +1554,10 @@ function renderCorrelationInteraction({
       ? `${interaction.before_state} -> ${interaction.after_state}`
       : interaction.before_state ?? interaction.after_state ?? null;
   const sourceKind = findFirstNonEmptyString([interaction.source_kind]);
-  const relatedEventIds = (interaction.related_event_ids ?? []).filter((eventId) => eventId.trim());
+  const triggerEventId = interaction.trigger_event_id.trim();
+  const relatedEventIds = (interaction.related_event_ids ?? [])
+    .map((eventId) => eventId.trim())
+    .filter((eventId) => eventId.length > 0 && eventId !== triggerEventId);
 
   return (
     <li key={interaction.interaction_id} className={`aitown-record severity-${interaction.severity ?? 'normal'}`}>

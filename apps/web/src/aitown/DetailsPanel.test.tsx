@@ -4452,6 +4452,7 @@ describe('DetailsPanel accountability signals', () => {
               {
                 ...correlation.interactions[0],
                 interaction_id: 'int-source-chain',
+                trigger_event_id: 'evt-start',
                 source_kind: 'controller_event',
                 related_event_ids: ['evt-start', 'evt-end'],
                 summary: 'Controller event interaction provenance'
@@ -4467,9 +4468,10 @@ describe('DetailsPanel accountability signals', () => {
 
     const card = within(section!).getByText('Controller event interaction provenance').closest('li');
     expect(card).not.toBeNull();
-    expect(within(card!).getByText('Trigger · evt-1')).toBeVisible();
+    expect(within(card!).getByText('Trigger · evt-start')).toBeVisible();
     expect(within(card!).getByText('Source · controller_event')).toBeVisible();
-    expect(within(card!).getByText('Related events · evt-start, evt-end')).toBeVisible();
+    expect(within(card!).getByText('Related events · evt-end')).toBeVisible();
+    expect(within(card!).queryByText('Related events · evt-start, evt-end')).not.toBeInTheDocument();
   });
 
   it('does not fabricate workflow interaction source chain fields when the read model omits them', () => {

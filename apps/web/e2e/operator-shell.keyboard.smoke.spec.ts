@@ -8907,6 +8907,7 @@ test.describe('operator shell smoke', () => {
         }
       });
 
+      await installFastPollInterval(page, 120_000);
       const accountabilityCorrelationId = 'collector-snapshot:2026-03-10T23:59:40.000Z';
       const selectedSupervisionHistoryPath = resolveSelectedAgentSupervisionHistoryPath(
         'app-engineering',
@@ -9081,6 +9082,8 @@ test.describe('operator shell smoke', () => {
         requestedUrls.push(request.url());
       }
     });
+
+    await installFastPollInterval(page, 120_000);
 
     const accountabilityCorrelationId = 'collector-snapshot:2026-03-10T23:59:40.000Z';
     const selectedSupervisionHistoryPath = resolveSelectedAgentSupervisionHistoryPath(

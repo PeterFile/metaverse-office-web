@@ -2370,16 +2370,33 @@ test('GET /memory/artifacts materializes actor and counterparty evidence plus co
     })
   );
 
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_memory_latest_artifact',
+      ts: '2026-03-09T18:08:00.000Z',
+      agentId: 'app-engineering',
+      actorId: 'team-lead',
+      eventType: 'review_completed',
+      currentState: 'reviewing',
+      activeTask: 'Refresh shared artifact anchor',
+      summary: 'Newer event updated the shared artifact anchor',
+      severity: 'normal',
+      correlationId: 'corr-memory-shared-latest',
+      counterpartyAgentIds: [],
+      evidenceRefs: ['/tmp/shared.md']
+    })
+  );
+
   await store.appendCollectorReport({
     collected_at: '2026-03-09T18:18:00.000Z',
     actor_id: 'team-lead',
-    summary: {
-      agent_count: 1,
-      heartbeat_count: 1,
-      tmux_observed_count: 1,
-      workspace_observed_count: 1,
-      reboot_recommended_count: 0
-    },
+      summary: {
+        agent_count: 1,
+        heartbeat_count: 1,
+        tmux_observed_count: 1,
+        workspace_observed_count: 3,
+        reboot_recommended_count: 0
+      },
     items: [
       {
         agent_id: 'app-engineering',
@@ -2392,6 +2409,12 @@ test('GET /memory/artifacts materializes actor and counterparty evidence plus co
             file_name: 'collector-only.md',
             kind: 'workspace_file',
             last_modified_at: '2026-03-09T18:17:00.000Z'
+          },
+          {
+            path: '/tmp/passive-only.md',
+            file_name: 'passive-only.md',
+            kind: 'workspace_file',
+            last_modified_at: '2026-03-09T18:15:00.000Z'
           },
           {
             path: '/tmp/shared.md',
@@ -2455,6 +2478,7 @@ test('GET /memory/artifacts materializes actor and counterparty evidence plus co
         source_kinds: ['controller_event'],
         latest_summary: 'Lead started review with app-engineering as counterparty',
         latest_event_type: 'review_started',
+        latest_event_id: 'evt_memory_counterparty',
         collector_last_modified_at: null
       }
     ]
@@ -2473,8 +2497,9 @@ test('GET /memory/artifacts materializes actor and counterparty evidence plus co
       agent_ids: ['app-engineering', 'team-lead'],
       correlation_ids: ['collector-snapshot:2026-03-09T18:18:00.000Z'],
       source_kinds: ['tmux_observation'],
-      latest_summary: 'Collector observed state change idle -> coding',
+      latest_summary: 'Collector observed state change reviewing -> coding',
       latest_event_type: 'agent_state_changed',
+      latest_event_id: 'evt_collector_app-engineering_state_change_observed_normal_2026-03-09T18_18_00_000Z',
       collector_last_modified_at: '2026-03-09T18:18:30.000Z'
     },
     {
@@ -2489,9 +2514,27 @@ test('GET /memory/artifacts materializes actor and counterparty evidence plus co
       source_kinds: ['workspace_file'],
       latest_summary: 'Collector observed workspace write to collector-only.md',
       latest_event_type: 'agent_wrote_file',
+      latest_event_id: 'evt_collector_app-engineering_file_write_observed_normal_2026-03-09T18_18_00_000Z',
       collector_last_modified_at: '2026-03-09T18:17:00.000Z'
     }
   ]);
+
+  const passiveOnlyArtifact = collectorOnlyResponse.body.items.find((item) => item.artifact_ref === '/tmp/passive-only.md');
+  assert.deepEqual(passiveOnlyArtifact, {
+    artifact_ref: '/tmp/passive-only.md',
+    artifact_kind: 'workspace_file',
+    file_name: 'passive-only.md',
+    first_seen_at: '2026-03-09T18:15:00.000Z',
+    last_seen_at: '2026-03-09T18:15:00.000Z',
+    mention_count: 1,
+    agent_ids: ['app-engineering', 'team-lead'],
+    correlation_ids: ['collector-snapshot:2026-03-09T18:18:00.000Z'],
+    source_kinds: ['workspace_file'],
+    latest_summary: null,
+    latest_event_type: null,
+    collector_last_modified_at: '2026-03-09T18:15:00.000Z'
+  });
+  assert.equal(Object.prototype.hasOwnProperty.call(passiveOnlyArtifact, 'latest_event_id'), false);
 
   const sharedArtifact = collectorOnlyResponse.body.items.find((item) => item.artifact_ref === '/tmp/shared.md');
   assert.deepEqual(sharedArtifact, {
@@ -2500,12 +2543,17 @@ test('GET /memory/artifacts materializes actor and counterparty evidence plus co
     file_name: 'shared.md',
     first_seen_at: '2026-03-09T18:04:00.000Z',
     last_seen_at: '2026-03-09T18:16:30.000Z',
-    mention_count: 2,
+    mention_count: 3,
     agent_ids: ['app-engineering', 'team-lead'],
-    correlation_ids: ['collector-snapshot:2026-03-09T18:18:00.000Z', 'corr-memory-shared'],
+    correlation_ids: [
+      'collector-snapshot:2026-03-09T18:18:00.000Z',
+      'corr-memory-shared',
+      'corr-memory-shared-latest'
+    ],
     source_kinds: ['controller_event', 'workspace_file'],
-    latest_summary: 'Existing event already referenced the shared artifact',
-    latest_event_type: 'review_started',
+    latest_summary: 'Newer event updated the shared artifact anchor',
+    latest_event_type: 'review_completed',
+    latest_event_id: 'evt_memory_latest_artifact',
     collector_last_modified_at: '2026-03-09T18:16:30.000Z'
   });
 
@@ -2520,12 +2568,17 @@ test('GET /memory/artifacts materializes actor and counterparty evidence plus co
       file_name: 'shared.md',
       first_seen_at: '2026-03-09T18:04:00.000Z',
       last_seen_at: '2026-03-09T18:16:30.000Z',
-      mention_count: 2,
+      mention_count: 3,
       agent_ids: ['app-engineering', 'team-lead'],
-      correlation_ids: ['collector-snapshot:2026-03-09T18:18:00.000Z', 'corr-memory-shared'],
+      correlation_ids: [
+        'collector-snapshot:2026-03-09T18:18:00.000Z',
+        'corr-memory-shared',
+        'corr-memory-shared-latest'
+      ],
       source_kinds: ['controller_event', 'workspace_file'],
-      latest_summary: 'Existing event already referenced the shared artifact',
-      latest_event_type: 'review_started',
+      latest_summary: 'Newer event updated the shared artifact anchor',
+      latest_event_type: 'review_completed',
+      latest_event_id: 'evt_memory_latest_artifact',
       collector_last_modified_at: '2026-03-09T18:16:30.000Z'
     }
   ]);
@@ -2646,6 +2699,7 @@ test('GET /memory/artifacts narrows evidence facets without leaking unrelated co
       source_kinds: ['controller_event', 'workspace_file'],
       latest_summary: 'Facet event referenced the shared workspace artifact',
       latest_event_type: 'review_started',
+      latest_event_id: 'evt_memory_facet_match',
       collector_last_modified_at: '2026-03-09T18:16:30.000Z'
     }
   ]);
@@ -2867,6 +2921,7 @@ test('GET /memory/artifacts does not leak collector_last_modified_at from filter
       source_kinds: ['controller_event'],
       latest_summary: 'Lead reviewed shared evidence with app engineering',
       latest_event_type: 'review_started',
+      latest_event_id: 'evt_memory_event_only_for_app',
       collector_last_modified_at: null
     }
   ]);
@@ -3001,6 +3056,7 @@ test('GET /memory/artifacts keeps stable tmux refs when later collector snapshot
       source_kinds: ['tmux_observation'],
       latest_summary: 'Collector observed state change coding -> reviewing',
       latest_event_type: 'agent_state_changed',
+      latest_event_id: 'evt_collector_app-engineering_state_change_observed_normal_2026-03-09T18_19_00_000Z',
       collector_last_modified_at: '2026-03-09T18:19:30.000Z'
     }
   ]);
@@ -3090,6 +3146,7 @@ test('GET /memory/artifacts exposes multiple tmux panes as distinct artifacts', 
       source_kinds: ['tmux_observation'],
       latest_summary: 'Collector observed state change idle -> coding',
       latest_event_type: 'agent_state_changed',
+      latest_event_id: 'evt_collector_app-engineering_state_change_observed_normal_2026-03-09T18_18_00_000Z',
       collector_last_modified_at: '2026-03-09T18:18:30.000Z'
     },
     {
@@ -3194,6 +3251,7 @@ test('GET /memory/artifacts binds collector state-change evidence to the active 
     source_kinds: ['tmux_observation'],
     latest_summary: 'Collector observed state change idle -> coding',
     latest_event_type: 'agent_state_changed',
+    latest_event_id: 'evt_collector_app-engineering_state_change_observed_normal_2026-03-09T18_18_00_000Z',
     collector_last_modified_at: '2026-03-09T18:18:30.000Z'
   });
 });

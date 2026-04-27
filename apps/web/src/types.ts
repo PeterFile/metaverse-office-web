@@ -400,6 +400,7 @@ export interface MemoryArtifact {
   source_kinds: string[];
   latest_summary: string | null;
   latest_event_type: string | null;
+  latest_event_id?: string | null;
   collector_last_modified_at: string | null;
 }
 

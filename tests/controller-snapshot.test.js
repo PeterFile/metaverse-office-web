@@ -253,6 +253,58 @@ test('store appends collector heartbeats and exposes the latest collector report
   assert.equal(JSON.parse(lines[2]).kind, 'heartbeat');
 });
 
+test('store appends collector report with pane-id-only tmux observation', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'metaverse-office-store-'));
+  const storeFile = path.join(root, 'prototype-store.jsonl');
+  const store = await createPrototypeStore({ filePath: storeFile });
+
+  await assert.doesNotReject(() =>
+    store.appendCollectorReport(
+      createCollectorReport({
+        collectedAt: '2026-03-09T18:05:00.000Z',
+        items: [
+          {
+            agent_id: 'app-engineering',
+            evidence_refs: [],
+            workspace_observations: [],
+            tmux_observations: [
+              {
+                pane_id: '%11',
+                pane_title: 'Implement HTTP handlers',
+                pane_current_command: 'nvim',
+                pane_active: true,
+                pane_dead: false,
+                pane_activity_at: '2026-03-09T18:04:30.000Z'
+              }
+            ],
+            supervision: {
+              watch_target: 'growth-revenue',
+              watched_by: ['protocol-engineering', 'team-lead'],
+              needs_attention: false
+            },
+            heartbeat: {
+              agent_id: 'app-engineering',
+              actor_id: 'team-lead',
+              received_at: '2026-03-09T18:05:00.000Z',
+              current_state: 'coding',
+              active_task: 'Implement HTTP handlers',
+              last_meaningful_output_at: '2026-03-09T18:04:30.000Z',
+              last_file_write_at: '2026-03-09T18:04:00.000Z',
+              current_blocker: '',
+              confidence_level: 'high',
+              reboot_recommended: false
+            }
+          }
+        ]
+      })
+    )
+  );
+
+  assert.deepEqual(store.listEvents({ agent_id: 'app-engineering' })[0].evidence_refs, [
+    'tmux://%11'
+  ]);
+});
+
 test('store derives shared snapshot artifacts from appended collector report items', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'metaverse-office-store-'));
   const storeFile = path.join(root, 'prototype-store.jsonl');

@@ -33,6 +33,7 @@
 - `POST /collectors/controller-snapshot` is controller-only and must send `x-actor-id: team-lead`
 - event location is system-derived from event/state mapping; callers must not control office placement
 - `agent_received_task` remains queryable through the existing read models but does not advance `last_meaningful_output_at`; staleness still derives from real agent output/heartbeat evidence
+- `POST /events` validates source provenance at the write boundary: `controller_event` requires the team lead actor, `workspace_file` requires non-empty non-`tmux://` `evidence_ref` values and rejects `tmux://` refs, `tmux_observation` requires canonical `tmux://` `evidence_ref` values without boundary whitespace and rejects non-tmux refs, and `raw_transcript` requires a non-empty `evidence_ref`; refs are never inferred from metadata
 
 ## Collector snapshot semantics
 - `GET /collectors/controller-snapshot` is read-only and returns `{ "item": null }` until a snapshot has been collected

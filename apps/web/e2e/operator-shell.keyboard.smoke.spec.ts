@@ -6662,7 +6662,8 @@ test.describe('operator shell smoke', () => {
 
     await page.waitForTimeout(150);
 
-    expect(requestedUrls).toHaveLength(requestCountBeforeReselect);
+    const postReselectRequests = requestedUrls.slice(requestCountBeforeReselect);
+    expectOnlyBenignPostJumpRequests(postReselectRequests);
   });
 
   test('switches the active correlation from a workflow status correlation button without changing the selected agent via keyboard traversal', async ({

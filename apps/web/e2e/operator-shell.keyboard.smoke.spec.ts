@@ -2219,8 +2219,8 @@ test.describe('operator shell smoke', () => {
     await expect(operationSection.getByText('planning · Prepare handoff notes')).toBeVisible();
 
     await evidenceTab.click();
-    await expect(runContextSection.getByText(/Run blocker ·/)).toBeVisible();
-    await expect(runContextSection.getByText(/Latest event type ·/)).toBeVisible();
+    await expect(runContextSection.getByText(/Operation snapshot blocker ·/)).toBeVisible();
+    await expect(runContextSection.getByText(/Operation snapshot latest event type ·/)).toBeVisible();
   });
 
   test('shows the selected-agent Current Operation first-load loading and failure states explicitly instead of widening into another surface', async ({
@@ -10227,13 +10227,13 @@ test.describe('operator shell smoke', () => {
     await enableScenario(page, 'selected-operation-refresh-failure');
 
     await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Now');
-    await expect(detailsPanel.getByText('Showing last operation snapshot. operations refresh failed')).toBeVisible({
+    await expect(operationSection.getByText('Showing last operation snapshot. operations refresh failed', { exact: true })).toBeVisible({
       timeout: POLL_DRIVEN_ASSERTION_TIMEOUT_MS
     });
     await expect(operationSection.getByText('planning · Prepare handoff notes')).toBeVisible();
     await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
-    await expect(runContextSection.getByText(/Run blocker ·/)).toBeVisible();
-    await expect(runContextSection.getByText(/Last heartbeat ·/)).toBeVisible();
+    await expect(runContextSection.getByText(/Operation snapshot blocker ·/)).toBeVisible();
+    await expect(runContextSection.getByText(/Operation snapshot heartbeat ·/)).toBeVisible();
     await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('Counts · 0 incidents · 1 interactions · 2 events')).toBeVisible();
@@ -10276,7 +10276,9 @@ test.describe('operator shell smoke', () => {
 
     await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Now');
     await expect(
-      detailsPanel.getByText('Showing last operation snapshot. Operation is no longer in the active queue.')
+      operationSection.getByText('Showing last operation snapshot. Operation is no longer in the active queue.', {
+        exact: true
+      })
     ).toBeVisible({
       timeout: POLL_DRIVEN_ASSERTION_TIMEOUT_MS
     });
@@ -10285,8 +10287,8 @@ test.describe('operator shell smoke', () => {
       operationSection.getByRole('button', { name: 'Open operation correlation corr-revenue-handoff' })
     ).toHaveCount(0);
     await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
-    await expect(runContextSection.getByText(/Run blocker ·/)).toBeVisible();
-    await expect(runContextSection.getByText(/Last heartbeat ·/)).toBeVisible();
+    await expect(runContextSection.getByText(/Operation snapshot blocker ·/)).toBeVisible();
+    await expect(runContextSection.getByText(/Operation snapshot heartbeat ·/)).toBeVisible();
     await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('Counts · 0 incidents · 1 interactions · 2 events')).toBeVisible();

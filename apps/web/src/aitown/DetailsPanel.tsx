@@ -982,6 +982,277 @@ function renderOperationStaleness(operation: OfficeOperation) {
   return `${SEVERITY_LABELS[operation.derived_staleness.severity]} · ${operation.derived_staleness.stale_for_minutes ?? 0}m`;
 }
 
+function parseTimestampMs(value: string) {
+  const timestampMs = Date.parse(value);
+
+  return Number.isFinite(timestampMs) ? timestampMs : null;
+}
+
+function selectTimestampEvidence(candidates: Array<{ label: string; value: string | null | undefined }>) {
+  const matches = candidates.flatMap((candidate) => {
+    const value = findFirstNonEmptyString([candidate.value]);
+
+    return value ? [{ label: candidate.label, value }] : [];
+  });
+
+  if (matches.length === 0) {
+    return null;
+  }
+
+  return matches.reduce((selected, candidate) => {
+    const selectedMs = parseTimestampMs(selected.value);
+    const candidateMs = parseTimestampMs(candidate.value);
+
+    if (candidateMs === null) {
+      return selected;
+    }
+
+    return selectedMs === null || candidateMs > selectedMs ? candidate : selected;
+  });
+}
+
+function isTimestampAfter(value: string, reference: string) {
+  const valueMs = parseTimestampMs(value);
+  const referenceMs = parseTimestampMs(reference);
+
+  return valueMs !== null && referenceMs !== null && valueMs > referenceMs;
+}
+
+function selectOperationOutputEvidence(operation: OfficeOperation) {
+  return selectTimestampEvidence([
+    { label: 'operation last output', value: operation.last_meaningful_output_at },
+    { label: 'operation staleness output', value: operation.derived_staleness.last_meaningful_output_at }
+  ]);
+}
+
+function selectOperationSnapshotTimestampEvidence(operation: OfficeOperation) {
+  return selectTimestampEvidence([
+    { label: 'operation latest event', value: operation.latest_event?.ts },
+    { label: 'operation last event', value: operation.last_event_at },
+    { label: 'operation heartbeat', value: operation.last_heartbeat_at },
+    { label: 'operation last output', value: operation.last_meaningful_output_at },
+    { label: 'operation staleness output', value: operation.derived_staleness.last_meaningful_output_at }
+  ]);
+}
+
+function resolveRetainedCollectorSourceWarning(
+  collectorSnapshot: CollectorSnapshot | null,
+  collectorSnapshotError: string | null,
+  collectorSnapshotState: LoadState
+) {
+  if (!collectorSnapshot) {
+    return null;
+  }
+
+  if (collectorSnapshotError) {
+    return collectorSnapshotError;
+  }
+
+  if (collectorSnapshotState === 'error') {
+    return 'Collector snapshot unavailable';
+  }
+
+  return collectorSnapshotState === 'loading' ? 'Collector snapshot loading' : null;
+}
+
+function appendCollectorFreshnessEvidence(
+  parts: string[],
+  operation: OfficeOperation,
+  collectorSnapshot: CollectorSnapshot | null,
+  collectorSnapshotError: string | null,
+  collectorSnapshotState: LoadState,
+  selectedCollectorItem: CollectorItem | null,
+  retainedCollectorSourceWarning: string | null
+) {
+  if (retainedCollectorSourceWarning) {
+    parts.push(`Data gap · Stale collector source (${retainedCollectorSourceWarning})`);
+
+    return;
+  }
+
+  if (collectorSnapshot && selectedCollectorItem) {
+    const collectorHeartbeat = findFirstNonEmptyString([selectedCollectorItem.heartbeat.received_at]);
+    parts.push(
+      collectorHeartbeat
+        ? `Collector evidence (${collectorSnapshot.actor_id} collected ${collectorSnapshot.collected_at}, heartbeat ${collectorHeartbeat})`
+        : `Data gap · No collector heartbeat timestamp in snapshot ${collectorSnapshot.collected_at}`
+    );
+  } else if (collectorSnapshot) {
+    parts.push(`Data gap · No collector evidence for ${operation.agent_id} in snapshot ${collectorSnapshot.collected_at}`);
+  } else if (collectorSnapshotState === 'loading') {
+    parts.push('Data gap · Collector snapshot loading');
+  } else if (collectorSnapshotError) {
+    parts.push(`Data gap · Collector snapshot unavailable (${collectorSnapshotError})`);
+  } else {
+    parts.push('Data gap · No collector snapshot available');
+  }
+}
+
+function isCollectorHeartbeatFresherThanOperationSnapshot(
+  operation: OfficeOperation,
+  selectedCollectorItem: CollectorItem | null
+) {
+  const collectorHeartbeat = findFirstNonEmptyString([selectedCollectorItem?.heartbeat.received_at]);
+
+  if (!collectorHeartbeat || selectedCollectorItem?.agent_id !== operation.agent_id) {
+    return false;
+  }
+
+  const collectorHeartbeatMs = parseTimestampMs(collectorHeartbeat);
+
+  if (collectorHeartbeatMs === null) {
+    return false;
+  }
+
+  const operationTimestamp = selectOperationSnapshotTimestampEvidence(operation);
+
+  if (operationTimestamp === null) {
+    return true;
+  }
+
+  const operationTimestampMs = parseTimestampMs(operationTimestamp.value);
+
+  return operationTimestampMs === null || collectorHeartbeatMs > operationTimestampMs;
+}
+
+function isCollectorHeartbeatOlderThanOperationSnapshot(
+  operation: OfficeOperation,
+  selectedCollectorItem: CollectorItem | null
+) {
+  const collectorHeartbeat = findFirstNonEmptyString([selectedCollectorItem?.heartbeat.received_at]);
+
+  if (!collectorHeartbeat || selectedCollectorItem?.agent_id !== operation.agent_id) {
+    return false;
+  }
+
+  const collectorHeartbeatMs = parseTimestampMs(collectorHeartbeat);
+  const operationTimestamp = selectOperationSnapshotTimestampEvidence(operation);
+  const operationTimestampMs = operationTimestamp ? parseTimestampMs(operationTimestamp.value) : null;
+
+  return collectorHeartbeatMs !== null && operationTimestampMs !== null && collectorHeartbeatMs < operationTimestampMs;
+}
+
+function renderFreshnessCause({
+  operation,
+  collectorSnapshot,
+  collectorSnapshotError,
+  collectorSnapshotState,
+  operationSourceWarning,
+  selectedCollectorItem,
+  workflow,
+  workflowHeartbeatTrusted
+}: {
+  operation: OfficeOperation;
+  collectorSnapshot: CollectorSnapshot | null;
+  collectorSnapshotError: string | null;
+  collectorSnapshotState: LoadState;
+  operationSourceWarning: string | null;
+  selectedCollectorItem: CollectorItem | null;
+  workflow: AgentWorkflow | null;
+  workflowHeartbeatTrusted: boolean;
+}) {
+  const operationSourceIsRetained = operationSourceWarning !== null;
+  const retainedCollectorSourceWarning = resolveRetainedCollectorSourceWarning(
+    collectorSnapshot,
+    collectorSnapshotError,
+    collectorSnapshotState
+  );
+  const trustedOperationHeartbeat = operationSourceIsRetained ? null : operation.last_heartbeat_at;
+  const trustedOperationOutput = operationSourceIsRetained ? null : operation.last_meaningful_output_at;
+  const trustedOperationStalenessOutput = operationSourceIsRetained
+    ? null
+    : operation.derived_staleness.last_meaningful_output_at;
+  const trustedCollectorHeartbeat = retainedCollectorSourceWarning ? null : selectedCollectorItem?.heartbeat.received_at;
+  const trustedCollectorOutput = retainedCollectorSourceWarning
+    ? null
+    : selectedCollectorItem?.heartbeat.last_meaningful_output_at;
+  const trustedCollectorBlocker = retainedCollectorSourceWarning
+    ? null
+    : selectedCollectorItem?.heartbeat.current_blocker;
+  const trustedWorkflowHeartbeat = workflowHeartbeatTrusted ? workflow?.detail.latest_heartbeat?.received_at : null;
+  const heartbeatEvidence = selectTimestampEvidence([
+    { label: 'operation heartbeat', value: trustedOperationHeartbeat },
+    { label: 'collector heartbeat', value: trustedCollectorHeartbeat },
+    { label: 'workflow heartbeat', value: trustedWorkflowHeartbeat }
+  ]);
+  const outputEvidence = selectTimestampEvidence([
+    { label: 'operation last output', value: trustedOperationOutput },
+    { label: 'collector last output', value: trustedCollectorOutput },
+    { label: 'operation staleness output', value: trustedOperationStalenessOutput }
+  ]);
+  const parts = ['Freshness cause'];
+  const operationOutputEvidence = operationSourceIsRetained ? null : selectOperationOutputEvidence(operation);
+  const collectorPriorityIsFresher =
+    !operationSourceIsRetained &&
+    !retainedCollectorSourceWarning &&
+    isCollectorHeartbeatFresherThanOperationSnapshot(operation, selectedCollectorItem);
+  const collectorCauseIsOlderThanOperation =
+    !operationSourceIsRetained &&
+    !retainedCollectorSourceWarning &&
+    isCollectorHeartbeatOlderThanOperationSnapshot(operation, selectedCollectorItem);
+  const collectorCanProvideLiveCause = !retainedCollectorSourceWarning && !collectorCauseIsOlderThanOperation;
+
+  if (operationSourceWarning) {
+    parts.push(`Data gap · Stale operation source (${operationSourceWarning})`);
+  }
+
+  const rebootSources = [
+    !operationSourceIsRetained && !collectorPriorityIsFresher && operation.reboot_recommended
+      ? 'operation snapshot'
+      : null,
+    collectorCanProvideLiveCause && selectedCollectorItem?.heartbeat.reboot_recommended ? 'collector heartbeat' : null
+  ].filter((source): source is string => source !== null);
+  const operationBlocker =
+    operationSourceIsRetained || collectorPriorityIsFresher ? null : findFirstNonEmptyString([operation.current_blocker]);
+  const collectorBlocker = collectorCanProvideLiveCause ? findFirstNonEmptyString([trustedCollectorBlocker]) : null;
+  const blocker = collectorPriorityIsFresher ? collectorBlocker : operationBlocker ?? collectorBlocker;
+  const hasPriorityCause = rebootSources.length > 0 || blocker !== null;
+
+  if (rebootSources.length > 0) {
+    parts.push(`Reboot recommended (${rebootSources.join(', ')})`);
+  }
+
+  if (blocker) {
+    parts.push(`Blocked by ${blocker} (${operationBlocker ? 'operation current blocker' : 'collector current blocker'})`);
+  }
+
+  if (!heartbeatEvidence && !retainedCollectorSourceWarning) {
+    parts.push('No heartbeat evidence');
+  } else if (!operationSourceIsRetained && !hasPriorityCause && operation.derived_staleness.severity !== 'normal') {
+    const staleForMinutes = operation.derived_staleness.stale_for_minutes ?? 0;
+    const outputLabel = operationOutputEvidence
+      ? `${operationOutputEvidence.label} ${operationOutputEvidence.value}, ${SEVERITY_LABELS[operation.derived_staleness.severity]} ${staleForMinutes}m`
+      : `${SEVERITY_LABELS[operation.derived_staleness.severity]} ${staleForMinutes}m, no operation output timestamp evidence`;
+    parts.push(`Output stale (${outputLabel})`);
+  } else if (!hasPriorityCause) {
+    parts.push(outputEvidence ? `Output evidence (${outputEvidence.label} ${outputEvidence.value})` : 'No output timestamp evidence');
+  }
+
+  if (!heartbeatEvidence && retainedCollectorSourceWarning) {
+    parts.push('No trusted heartbeat evidence');
+  }
+
+  if (heartbeatEvidence) {
+    const heartbeatLabel =
+      outputEvidence && isTimestampAfter(heartbeatEvidence.value, outputEvidence.value)
+        ? 'Heartbeat fresh'
+        : 'Heartbeat evidence';
+    parts.push(`${heartbeatLabel} (${heartbeatEvidence.label} ${heartbeatEvidence.value})`);
+  }
+
+  appendCollectorFreshnessEvidence(
+    parts,
+    operation,
+    collectorSnapshot,
+    collectorSnapshotError,
+    collectorSnapshotState,
+    selectedCollectorItem,
+    retainedCollectorSourceWarning
+  );
+
+  return parts.join(' · ');
+}
+
 function renderActiveQueueRunContextPreview(operation: OfficeOperation) {
   return [
     `Event · ${findFirstNonEmptyString([operation.latest_event?.summary]) ?? 'No latest event yet'}`,
@@ -4406,14 +4677,29 @@ export function DetailsPanel({
               <ul className="aitown-records">
                 <li className={`aitown-record severity-${selectedOperation.effective_severity}`}>
                   <strong>{selectedOperation.display_name}</strong>
-                  <span>{`Run blocker · ${renderOperationBlocker(selectedOperation.current_blocker)}`}</span>
-                  <span>{`Latest event type · ${selectedOperation.latest_event?.event_type ?? 'No latest event type'}`}</span>
-                  <span>{`Latest event at · ${renderTimestamp(selectedOperation.latest_event?.ts ?? null, 'No latest event timestamp')}`}</span>
-                  <span>{`Last event at · ${renderTimestamp(selectedOperation.last_event_at, 'No last event timestamp')}`}</span>
-                  <span>{`Last heartbeat · ${renderTimestamp(selectedOperation.last_heartbeat_at, 'No heartbeat yet')}`}</span>
-                  <span>{`Last output · ${renderTimestamp(selectedOperation.last_meaningful_output_at, 'No last output timestamp')}`}</span>
-                  <span>{`Staleness · ${renderOperationStaleness(selectedOperation)}`}</span>
-                  <span>{`Reboot recommendation · ${selectedOperation.reboot_recommended ? 'Recommended' : 'No'}`}</span>
+                  {currentOperationWarning ? (
+                    <span>{`Operation source · Retained snapshot (${currentOperationWarning})`}</span>
+                  ) : null}
+                  <span>{`${currentOperationWarning ? 'Operation snapshot blocker' : 'Run blocker'} · ${renderOperationBlocker(selectedOperation.current_blocker)}`}</span>
+                  <span>{`${currentOperationWarning ? 'Operation snapshot latest event type' : 'Latest event type'} · ${selectedOperation.latest_event?.event_type ?? 'No latest event type'}`}</span>
+                  <span>{`${currentOperationWarning ? 'Operation snapshot latest event' : 'Latest event at'} · ${renderTimestamp(selectedOperation.latest_event?.ts ?? null, 'No latest event timestamp')}`}</span>
+                  <span>{`${currentOperationWarning ? 'Operation snapshot last event' : 'Last event at'} · ${renderTimestamp(selectedOperation.last_event_at, 'No last event timestamp')}`}</span>
+                  <span>{`${currentOperationWarning ? 'Operation snapshot heartbeat' : 'Last heartbeat'} · ${renderTimestamp(selectedOperation.last_heartbeat_at, 'No heartbeat yet')}`}</span>
+                  <span>{`${currentOperationWarning ? 'Operation snapshot output' : 'Last output'} · ${renderTimestamp(selectedOperation.last_meaningful_output_at, 'No last output timestamp')}`}</span>
+                  <span>{`${currentOperationWarning ? 'Operation snapshot staleness' : 'Staleness'} · ${renderOperationStaleness(selectedOperation)}`}</span>
+                  <span>{`${currentOperationWarning ? 'Operation snapshot reboot' : 'Reboot recommendation'} · ${selectedOperation.reboot_recommended ? 'Recommended' : 'No'}`}</span>
+                  <span>
+                    {renderFreshnessCause({
+                      operation: selectedOperation,
+                      collectorSnapshot,
+                      collectorSnapshotError,
+                      collectorSnapshotState,
+                      operationSourceWarning: currentOperationWarning,
+                      selectedCollectorItem,
+                      workflow,
+                      workflowHeartbeatTrusted: workflowError === null && workflowState === 'ready'
+                    })}
+                  </span>
                 </li>
               </ul>
             </section>

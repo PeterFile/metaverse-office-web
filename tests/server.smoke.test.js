@@ -677,6 +677,151 @@ test('GET /timeline supports replay filters, evidence fields, and ascending limi
   assert.ok(Date.parse(limited.body.items[0].ts) < Date.parse(limited.body.items[1].ts));
 });
 
+test('GET replay event endpoints support exact source_kind filters', async (t) => {
+  const { baseUrl, store } = await createHarness(t, {
+    now: () => '2026-03-09T18:30:00.000Z'
+  });
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_source_workspace_old',
+      ts: '2026-03-09T18:05:00.000Z',
+      agentId: 'app-engineering',
+      eventType: 'agent_wrote_file',
+      currentState: 'coding',
+      activeTask: 'Write provenance notes',
+      location: 'desk-app-engineering',
+      summary: 'Wrote workspace provenance notes',
+      severity: 'yellow',
+      correlationId: 'corr-source-agent',
+      evidenceRefs: ['/tmp/source-workspace-old.md'],
+      sourceKind: 'workspace_file'
+    })
+  );
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_source_controller_old',
+      ts: '2026-03-09T18:07:00.000Z',
+      agentId: 'app-engineering',
+      actorId: 'team-lead',
+      eventType: 'peer_watch_alert_raised',
+      currentState: 'blocked',
+      activeTask: 'Review source-kind filter',
+      location: 'review-zone',
+      summary: 'Controller raised an older source-kind alert',
+      severity: 'orange',
+      correlationId: 'corr-source-agent',
+      counterpartyAgentIds: ['protocol-engineering'],
+      evidenceRefs: ['/tmp/source-controller-old.md'],
+      sourceKind: 'controller_event'
+    })
+  );
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_source_controller_new',
+      ts: '2026-03-09T18:11:00.000Z',
+      agentId: 'app-engineering',
+      actorId: 'team-lead',
+      eventType: 'peer_watch_alert_raised',
+      currentState: 'blocked',
+      activeTask: 'Review source-kind filter',
+      location: 'review-zone',
+      summary: 'Controller raised the newest source-kind alert',
+      severity: 'orange',
+      correlationId: 'corr-source-agent',
+      counterpartyAgentIds: ['protocol-engineering'],
+      evidenceRefs: ['/tmp/source-controller-new.md'],
+      sourceKind: 'controller_event'
+    })
+  );
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_source_tmux_old',
+      ts: '2026-03-09T18:12:00.000Z',
+      agentId: 'growth-revenue',
+      eventType: 'agent_noted',
+      currentState: 'researching',
+      activeTask: 'Inspect earlier tmux observation',
+      location: 'desk-growth-revenue',
+      summary: 'Observed earlier replay state from tmux',
+      severity: 'yellow',
+      correlationId: 'corr-source-tmux',
+      evidenceRefs: ['tmux://growth-revenue/0.0'],
+      sourceKind: 'tmux_observation'
+    })
+  );
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_source_tmux',
+      ts: '2026-03-09T18:13:00.000Z',
+      agentId: 'growth-revenue',
+      eventType: 'agent_noted',
+      currentState: 'researching',
+      activeTask: 'Inspect tmux observation',
+      location: 'desk-growth-revenue',
+      summary: 'Observed replay state from tmux',
+      severity: 'yellow',
+      correlationId: 'corr-source-tmux',
+      evidenceRefs: ['tmux://growth-revenue/0.1'],
+      sourceKind: 'tmux_observation'
+    })
+  );
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_source_workspace_new',
+      ts: '2026-03-09T18:16:00.000Z',
+      agentId: 'app-engineering',
+      eventType: 'agent_wrote_file',
+      currentState: 'coding',
+      activeTask: 'Write provenance notes',
+      location: 'desk-app-engineering',
+      summary: 'Wrote newer workspace provenance notes',
+      severity: 'yellow',
+      correlationId: 'corr-source-agent',
+      evidenceRefs: ['/tmp/source-workspace-new.md'],
+      sourceKind: 'workspace_file'
+    })
+  );
+
+  const timeline = await requestJson(`${baseUrl}/timeline?window=30m&source_kind=tmux_observation`);
+  assert.equal(timeline.response.status, 200);
+  assert.deepEqual(
+    timeline.body.items.map((item) => item.event_id),
+    ['evt_source_tmux_old', 'evt_source_tmux']
+  );
+  assert.ok(timeline.body.items.every((item) => item.source_kind === 'tmux_observation'));
+  assert.ok(Date.parse(timeline.body.items[0].ts) < Date.parse(timeline.body.items[1].ts));
+
+  const events = await requestJson(
+    `${baseUrl}/events?event_type=peer_watch_alert_raised&source_kind=controller_event`
+  );
+  assert.equal(events.response.status, 200);
+  assert.deepEqual(
+    events.body.items.map((item) => item.event_id),
+    ['evt_source_controller_new', 'evt_source_controller_old']
+  );
+  assert.ok(events.body.items.every((item) => item.source_kind === 'controller_event'));
+
+  const agentEvents = await requestJson(
+    `${baseUrl}/agents/app-engineering/events?source_kind=workspace_file&event_type=agent_wrote_file&severity=yellow&correlation_id=corr-source-agent&limit=1`
+  );
+  assert.equal(agentEvents.response.status, 200);
+  assert.deepEqual(
+    agentEvents.body.items.map((item) => item.event_id),
+    ['evt_source_workspace_new']
+  );
+  assert.ok(agentEvents.body.items.every((item) => item.source_kind === 'workspace_file'));
+
+  const unknownAgent = await requestJson(`${baseUrl}/agents/unknown-agent/events?source_kind=workspace_file`);
+  assert.equal(unknownAgent.response.status, 404);
+  assert.equal(unknownAgent.body.details, 'unknown agent unknown-agent');
+});
+
 test('GET interaction endpoints expose derived read models and filters', async (t) => {
   const { baseUrl, store } = await createHarness(t, {
     now: () => '2026-03-09T18:20:00.000Z'

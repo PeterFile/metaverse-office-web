@@ -262,7 +262,7 @@ describe('read-only frontend/backend contract smoke', () => {
     });
   });
 
-  it('passes timeline agent_id, event_type, severity, and correlation_id filters through to the real backend together', async () => {
+  it('passes timeline agent_id, event_type, severity, source_kind, and correlation_id filters through to the real backend together', async () => {
     harness = await createHarness(() => '2026-03-09T19:00:00.000Z');
     await seedContractSlice(harness.store);
 
@@ -281,6 +281,7 @@ describe('read-only frontend/backend contract smoke', () => {
       agentId: 'app-engineering',
       eventType: 'peer_watch_alert_raised',
       severity: 'orange',
+      sourceKind: 'controller_event',
       correlationId: 'corr-contract'
     });
 
@@ -295,6 +296,7 @@ describe('read-only frontend/backend contract smoke', () => {
           ['event_type', 'peer_watch_alert_raised'],
           ['limit', '10'],
           ['severity', 'orange'],
+          ['source_kind', 'controller_event'],
           ['window', '60m']
         ]
       }
@@ -499,6 +501,7 @@ describe('read-only frontend/backend contract smoke', () => {
         limit: 2,
         eventType: 'peer_watch_alert_raised',
         severity: 'orange',
+        sourceKind: 'controller_event',
         correlationId: 'corr-contract'
       }),
       api.fetchAgentInteractions('app-engineering', {
@@ -529,7 +532,8 @@ describe('read-only frontend/backend contract smoke', () => {
           ['correlation_id', 'corr-contract'],
           ['event_type', 'peer_watch_alert_raised'],
           ['limit', '2'],
-          ['severity', 'orange']
+          ['severity', 'orange'],
+          ['source_kind', 'controller_event']
         ]
       },
       {

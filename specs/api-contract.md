@@ -4,16 +4,16 @@
 - `GET /health`
 - `GET /agents`
 - `GET /agents/:id?limit=`
-- `GET /agents/:id/events?limit=&event_type=&severity=&correlation_id=`
+- `GET /agents/:id/events?limit=&event_type=&severity=&source_kind=&correlation_id=`
 - `GET /agents/:id/incidents?kind=&severity=&status=&correlation_id=&limit=&window=`
 - `GET /agents/:id/interactions?interaction_type=&counterparty_agent_id=&severity=&correlation_id=&limit=&window=`
 - `GET /agents/:id/workflow?limit=&window=`
 - `GET /collectors/controller-snapshot`
-- `GET /events?agent_id=&event_type=&severity=&correlation_id=&limit=`
+- `GET /events?agent_id=&event_type=&severity=&source_kind=&correlation_id=&limit=`
 - `GET /interactions?interaction_type=&counterparty_agent_id=&severity=&correlation_id=&limit=&window=`
 - `GET /office/overview`
 - `GET /office/operations?limit=&state=&agent_id=&severity=`
-- `GET /timeline?window=&agent_id=&event_type=&severity=&correlation_id=&limit=`
+- `GET /timeline?window=&agent_id=&event_type=&severity=&source_kind=&correlation_id=&limit=`
 - `GET /peer-watch/alerts?status=&target_agent_id=&agent_id=&watcher_agent_id=&observer_agent_id=&correlation_id=&severity=&limit=`
 - `GET /incidents?kind=&agent_id=&severity=&status=&correlation_id=&limit=&window=`
 - `GET /correlations/:correlation_id?limit=&window=`
@@ -189,7 +189,8 @@
 
 ## Timeline query semantics
 - timeline replay is read-only and derived directly from the append-only event log
-- `GET /timeline` supports `window`, `agent_id`, `event_type`, `severity`, `correlation_id`, and `limit`
+- `GET /timeline` supports `window`, `agent_id`, `event_type`, `severity`, `source_kind`, `correlation_id`, and `limit`
+- `source_kind` is a read-only exact-match provenance filter over `event.source_kind`
 - the default `window` remains `60m`
 - output is always chronological ascending for replay readability
 - when `limit` is provided, the server selects the most recent matching events inside the filtered window and returns that slice ascending

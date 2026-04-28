@@ -94,6 +94,7 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
       items: store.listAgentEvents(agentId, {
         event_type: url.searchParams.get('event_type'),
         severity: url.searchParams.get('severity'),
+        source_kind: url.searchParams.get('source_kind'),
         correlation_id: url.searchParams.get('correlation_id'),
         limit: url.searchParams.get('limit')
       })
@@ -203,6 +204,7 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
         agent_id: url.searchParams.get('agent_id'),
         event_type: url.searchParams.get('event_type'),
         severity: url.searchParams.get('severity'),
+        source_kind: url.searchParams.get('source_kind'),
         correlation_id: url.searchParams.get('correlation_id'),
         limit: url.searchParams.get('limit')
       })
@@ -232,6 +234,7 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
         agent_id: url.searchParams.get('agent_id'),
         event_type: url.searchParams.get('event_type'),
         severity: url.searchParams.get('severity'),
+        source_kind: url.searchParams.get('source_kind'),
         correlation_id: url.searchParams.get('correlation_id'),
         limit: url.searchParams.get('limit'),
         now: now()

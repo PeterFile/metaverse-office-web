@@ -2365,6 +2365,10 @@ function matchesEventFilters(event, filters = {}) {
     return false;
   }
 
+  if (filters.source_kind && event.source_kind !== filters.source_kind) {
+    return false;
+  }
+
   if (filters.correlation_id && event.correlation_id !== filters.correlation_id) {
     return false;
   }

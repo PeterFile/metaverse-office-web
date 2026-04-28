@@ -129,6 +129,7 @@ export async function fetchAgentEvents(
     limit?: number;
     eventType?: string;
     severity?: string;
+    sourceKind?: string;
     correlationId?: string;
     signal?: AbortSignal;
   } = {}
@@ -142,6 +143,9 @@ export async function fetchAgentEvents(
   }
   if (options.severity) {
     params.set('severity', options.severity);
+  }
+  if (options.sourceKind) {
+    params.set('source_kind', options.sourceKind);
   }
   if (options.correlationId) {
     params.set('correlation_id', options.correlationId);
@@ -279,6 +283,7 @@ export async function fetchTimeline(
     agentId?: string;
     eventType?: string;
     severity?: string;
+    sourceKind?: string;
     correlationId?: string;
     signal?: AbortSignal;
   } = {}
@@ -296,6 +301,9 @@ export async function fetchTimeline(
   }
   if (options.severity) {
     params.set('severity', options.severity);
+  }
+  if (options.sourceKind) {
+    params.set('source_kind', options.sourceKind);
   }
   if (options.correlationId) {
     params.set('correlation_id', options.correlationId);

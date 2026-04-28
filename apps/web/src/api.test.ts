@@ -121,7 +121,7 @@ describe('fetchOfficeOperations', () => {
 });
 
 describe('fetchTimeline', () => {
-  it('passes limit, window, agent_id, event_type, severity, and correlation_id filters through to the backend query string', async () => {
+  it('passes limit, window, agent_id, event_type, severity, source_kind, and correlation_id filters through to the backend query string', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue(
@@ -142,11 +142,12 @@ describe('fetchTimeline', () => {
       agentId: 'app-engineering',
       eventType: 'peer_watch_alert_raised',
       severity: 'orange',
+      sourceKind: 'controller_event',
       correlationId: 'corr-app-review'
     });
 
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      '/timeline?limit=4&window=30m&agent_id=app-engineering&event_type=peer_watch_alert_raised&severity=orange&correlation_id=corr-app-review',
+      '/timeline?limit=4&window=30m&agent_id=app-engineering&event_type=peer_watch_alert_raised&severity=orange&source_kind=controller_event&correlation_id=corr-app-review',
       expect.objectContaining({ signal: undefined })
     );
   });
@@ -272,7 +273,7 @@ describe('fetchAgentEvents', () => {
     );
   });
 
-  it('passes limit, event_type, severity, and correlation_id filters through to the backend query string', async () => {
+  it('passes limit, event_type, severity, source_kind, and correlation_id filters through to the backend query string', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue(
@@ -292,11 +293,12 @@ describe('fetchAgentEvents', () => {
       limit: 2,
       eventType: 'peer_watch_alert_raised',
       severity: 'orange',
+      sourceKind: 'controller_event',
       correlationId: 'corr-app-review'
     });
 
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      '/agents/app-engineering/events?limit=2&event_type=peer_watch_alert_raised&severity=orange&correlation_id=corr-app-review',
+      '/agents/app-engineering/events?limit=2&event_type=peer_watch_alert_raised&severity=orange&source_kind=controller_event&correlation_id=corr-app-review',
       expect.objectContaining({ signal: undefined })
     );
   });

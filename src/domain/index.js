@@ -351,6 +351,7 @@ const SEVERITY_SET = new Set(SEVERITY_LEVELS);
 const CONFIDENCE_SET = new Set(CONFIDENCE_LEVELS);
 const SOURCE_KIND_SET = new Set(SOURCE_KINDS);
 const AGENT_INDEX = new Map(SEED_AGENTS.map((agent) => [agent.agent_id, agent]));
+const TMUX_EVIDENCE_REF_PATTERN = /^tmux:\/\/(?:[^/\s]+\/\d+(?:\.\d+)?|%\d+)$/;
 
 function isPlainObject(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -362,6 +363,60 @@ function isIsoTimestamp(value) {
   }
 
   return !Number.isNaN(Date.parse(value));
+}
+
+function isNonEmptyEvidenceRef(ref) {
+  return typeof ref === 'string' && ref.trim().length > 0;
+}
+
+function isBlankEvidenceRef(ref) {
+  return typeof ref === 'string' && ref.trim().length === 0;
+}
+
+function hasEvidenceRefBoundaryWhitespace(ref) {
+  return typeof ref === 'string' && ref !== ref.trim();
+}
+
+function isNonStringEvidenceRef(ref) {
+  return typeof ref !== 'string';
+}
+
+function isTmuxEvidenceRef(ref) {
+  return typeof ref === 'string' && TMUX_EVIDENCE_REF_PATTERN.test(ref);
+}
+
+function isTmuxLikeEvidenceRef(ref) {
+  return isNonEmptyEvidenceRef(ref) && ref.trim().startsWith('tmux://');
+}
+
+function validateSourceEvidenceRefs(sourceKind, evidenceRefs) {
+  if (sourceKind === 'workspace_file') {
+    if (!evidenceRefs.some((ref) => isNonEmptyEvidenceRef(ref) && !isTmuxEvidenceRef(ref))) {
+      return ['workspace_file source_kind requires a non-tmux evidence_ref'];
+    }
+
+    if (evidenceRefs.some(isTmuxLikeEvidenceRef)) {
+      return ['workspace_file source_kind accepts only non-tmux evidence_ref values'];
+    }
+  }
+
+  if (sourceKind === 'tmux_observation') {
+    if (!evidenceRefs.some(isTmuxEvidenceRef)) {
+      return ['tmux_observation source_kind requires a canonical tmux:// evidence_ref pane shape'];
+    }
+
+    if (evidenceRefs.some((ref) => isNonEmptyEvidenceRef(ref) && !isTmuxEvidenceRef(ref))) {
+      return ['tmux_observation source_kind accepts only canonical tmux:// evidence_ref values'];
+    }
+  }
+
+  if (sourceKind === 'raw_transcript') {
+    if (!evidenceRefs.some(isNonEmptyEvidenceRef)) {
+      return ['raw_transcript source_kind requires a non-empty evidence_ref'];
+    }
+  }
+
+  return [];
 }
 
 function isCanonicalState(value) {
@@ -560,6 +615,25 @@ function validateEventPayload(payload, options = {}) {
     errors.push('evidence_refs must be an array');
   }
 
+  const hasOnlyStringEvidenceRefs =
+    Array.isArray(payload.evidence_refs) && !payload.evidence_refs.some(isNonStringEvidenceRef);
+
+  if (Array.isArray(payload.evidence_refs) && !hasOnlyStringEvidenceRefs) {
+    errors.push('evidence_refs must contain only strings');
+  }
+
+  if (Array.isArray(payload.evidence_refs) && payload.evidence_refs.some(isBlankEvidenceRef)) {
+    errors.push('evidence_refs must not contain blank entries');
+  }
+
+  if (Array.isArray(payload.evidence_refs) && payload.evidence_refs.some(hasEvidenceRefBoundaryWhitespace)) {
+    errors.push('evidence_refs must not contain leading or trailing whitespace');
+  }
+
+  if (SOURCE_KIND_SET.has(payload.source_kind) && hasOnlyStringEvidenceRefs) {
+    errors.push(...validateSourceEvidenceRefs(payload.source_kind, payload.evidence_refs));
+  }
+
   if (!isPlainObject(payload.metadata)) {
     errors.push('metadata must be an object');
   }
@@ -592,6 +666,10 @@ function validateEventPayload(payload, options = {}) {
 
     if (actorAgent.kind === 'employee' && CONTROLLER_EVENT_TYPES.has(payload.event_type)) {
       errors.push('controller-only event_type requires the team lead');
+    }
+
+    if (actorAgent.kind !== 'lead' && payload.source_kind === 'controller_event') {
+      errors.push('controller_event source_kind requires the team lead actor');
     }
 
     if (isCollectorDerivedActivity && actorAgent.kind !== 'lead') {

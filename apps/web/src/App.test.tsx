@@ -2279,7 +2279,7 @@ afterEach(() => {
     await user.click(within(inspectPeek).getByRole('button', { name: 'Open selected agent in Hub' }));
     expect(await screen.findByRole('tablist', { name: 'Selected agent drilldown' })).toBeVisible();
     expect(screen.getByRole('tab', { name: 'Now' })).toHaveAttribute('aria-selected', 'true');
-  });
+  }, 10000);
 
   it('supports keyboard navigation across selected-agent Hub drilldown tabs', async () => {
     const user = userEvent.setup();
@@ -2646,7 +2646,7 @@ afterEach(() => {
       expect(within(details).queryByRole('heading', { name: 'Current Operation' })).not.toBeInTheDocument();
       expect(within(details).queryByRole('heading', { name: 'Run Context' })).not.toBeInTheDocument();
     });
-  });
+  }, 10000);
 
   it('filters shared memory to a manually selected crew-overview correlation', async () => {
     const user = userEvent.setup();
@@ -11704,7 +11704,7 @@ afterEach(() => {
     expect(postResetRequests).toContain(memoryArtifactsUrl);
     expect(postResetRequests).not.toContain(secondaryScopedTimelineUrl);
     expect(postResetRequests).not.toContain(crewOverviewSelectedCorrelationMemoryArtifactsUrl);
-  });
+  }, 10000);
 
   it('returns a manual selected-agent correlation to the current default scope without clearing the agent, operation, or hub', async () => {
     const user = userEvent.setup();

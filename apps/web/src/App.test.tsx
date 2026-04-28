@@ -2546,14 +2546,14 @@ afterEach(() => {
       expect(
         within(operationSection!).getByText('Latest event · Controller assigned the direct-selection snapshot task')
       ).toBeVisible();
-      expect(within(runContextSection!).getByText('Latest event type · agent_received_task')).toBeVisible();
+      expect(within(runContextSection!).getByText('Operation snapshot latest event type · agent_received_task')).toBeVisible();
     });
 
     await waitFor(() => {
       expect(selectedOperationRequests).toBeGreaterThan(1);
       expect(within(details).getByText('Showing last operation snapshot. operations refresh failed')).toBeVisible();
       expect(within(operationSection!).getByText('working · Load current operation snapshot')).toBeVisible();
-      expect(within(runContextSection!).getByText('Latest event type · agent_received_task')).toBeVisible();
+      expect(within(runContextSection!).getByText('Operation snapshot latest event type · agent_received_task')).toBeVisible();
     });
   });
 

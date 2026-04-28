@@ -5248,6 +5248,605 @@ describe('DetailsPanel accountability signals', () => {
     ).not.toBeInTheDocument();
   });
 
+  it('explains stale output with a fresh heartbeat in selected-agent run context', () => {
+    const selectedOperation: OfficeOperation = {
+      ...buildSelectedOperation(),
+      current_blocker: '',
+      reboot_recommended: false,
+      effective_severity: 'orange',
+      derived_staleness: {
+        severity: 'orange',
+        stale_for_ms: 2700000,
+        stale_for_minutes: 45,
+        last_meaningful_output_at: '2026-03-16T08:10:00.000Z'
+      },
+      last_heartbeat_at: '2026-03-16T08:59:50.000Z',
+      last_meaningful_output_at: '2026-03-16T08:10:00.000Z'
+    };
+    const collectorSnapshot: CollectorSnapshot = {
+      ...buildCollectorSnapshot(),
+      items: [
+        {
+          ...buildCollectorSnapshot().items[0],
+          supervision: {
+            watch_target: null,
+            watched_by: [],
+            needs_attention: false
+          },
+          heartbeat: {
+            ...buildCollectorSnapshot().items[0].heartbeat,
+            received_at: '2026-03-16T08:59:50.000Z',
+            last_meaningful_output_at: '2026-03-16T08:10:00.000Z',
+            current_blocker: '',
+            reboot_recommended: false
+          }
+        }
+      ]
+    };
+
+    render(<DetailsPanel {...buildProps({ collectorSnapshot, selectedOperation })} />);
+
+    const runContextSection = screen.getByRole('heading', { name: 'Run Context' }).closest('section');
+    expect(runContextSection).not.toBeNull();
+    expect(
+      within(runContextSection!).getByText(
+        'Freshness cause · Output stale (operation last output 2026-03-16T08:10:00.000Z, Orange 45m) · Heartbeat fresh (operation heartbeat 2026-03-16T08:59:50.000Z) · Collector evidence (collector-watch collected 2026-03-16T09:00:00.000Z, heartbeat 2026-03-16T08:59:50.000Z)'
+      )
+    ).toBeVisible();
+  });
+
+  it('uses the freshest collector heartbeat when the operation heartbeat predates the latest output', () => {
+    const selectedOperation: OfficeOperation = {
+      ...buildSelectedOperation(),
+      current_blocker: '',
+      reboot_recommended: false,
+      effective_severity: 'orange',
+      derived_staleness: {
+        severity: 'orange',
+        stale_for_ms: 120000,
+        stale_for_minutes: 2,
+        last_meaningful_output_at: '2026-03-16T08:58:00.000Z'
+      },
+      last_heartbeat_at: '2026-03-16T08:10:00.000Z',
+      last_meaningful_output_at: '2026-03-16T08:58:00.000Z'
+    };
+    const collectorSnapshot: CollectorSnapshot = {
+      ...buildCollectorSnapshot(),
+      items: [
+        {
+          ...buildCollectorSnapshot().items[0],
+          supervision: {
+            watch_target: null,
+            watched_by: [],
+            needs_attention: false
+          },
+          heartbeat: {
+            ...buildCollectorSnapshot().items[0].heartbeat,
+            received_at: '2026-03-16T08:59:30.000Z',
+            last_meaningful_output_at: '2026-03-16T08:58:00.000Z',
+            current_blocker: '',
+            reboot_recommended: false
+          }
+        }
+      ]
+    };
+
+    render(<DetailsPanel {...buildProps({ collectorSnapshot, selectedOperation })} />);
+
+    const runContextSection = screen.getByRole('heading', { name: 'Run Context' }).closest('section');
+    expect(runContextSection).not.toBeNull();
+    expect(
+      within(runContextSection!).getByText(
+        'Freshness cause · Output stale (operation last output 2026-03-16T08:58:00.000Z, Orange 2m) · Heartbeat fresh (collector heartbeat 2026-03-16T08:59:30.000Z) · Collector evidence (collector-watch collected 2026-03-16T09:00:00.000Z, heartbeat 2026-03-16T08:59:30.000Z)'
+      )
+    ).toBeVisible();
+  });
+
+  it('reports missing heartbeat evidence as a selected-agent run-context data gap', () => {
+    const selectedOperation: OfficeOperation = {
+      ...buildSelectedOperation(),
+      current_blocker: '',
+      reboot_recommended: false,
+      last_heartbeat_at: null
+    };
+    const workflow: AgentWorkflow = {
+      ...buildWorkflow(),
+      detail: {
+        ...buildWorkflow().detail,
+        latest_heartbeat: null
+      }
+    };
+    const collectorSnapshot: CollectorSnapshot = {
+      ...buildCollectorSnapshot(),
+      items: [
+        {
+          ...buildCollectorSnapshot().items[0],
+          supervision: {
+            watch_target: null,
+            watched_by: [],
+            needs_attention: false
+          },
+          heartbeat: {
+            ...buildCollectorSnapshot().items[0].heartbeat,
+            received_at: '',
+            current_blocker: '',
+            reboot_recommended: false
+          }
+        }
+      ]
+    };
+
+    render(<DetailsPanel {...buildProps({ collectorSnapshot, selectedOperation, workflow })} />);
+
+    const runContextSection = screen.getByRole('heading', { name: 'Run Context' }).closest('section');
+    expect(runContextSection).not.toBeNull();
+    expect(within(runContextSection!).getByText(/Freshness cause · No heartbeat evidence/)).toBeVisible();
+  });
+
+  it('prioritizes blocker and reboot evidence over generic stale output in selected-agent run context', () => {
+    const selectedOperation: OfficeOperation = {
+      ...buildSelectedOperation(),
+      derived_staleness: {
+        severity: 'red',
+        stale_for_ms: 7200000,
+        stale_for_minutes: 120,
+        last_meaningful_output_at: '2026-03-16T07:00:00.000Z'
+      },
+      last_meaningful_output_at: '2026-03-16T07:00:00.000Z'
+    };
+
+    render(<DetailsPanel {...buildProps({ selectedOperation })} />);
+
+    const runContextSection = screen.getByRole('heading', { name: 'Run Context' }).closest('section');
+    expect(runContextSection).not.toBeNull();
+    expect(
+      within(runContextSection!).getByText(
+        'Freshness cause · Reboot recommended (operation snapshot, collector heartbeat) · Blocked by Waiting on review sign-off (operation current blocker) · Heartbeat fresh (operation heartbeat 2026-03-16T08:59:30.000Z) · Collector evidence (collector-watch collected 2026-03-16T09:00:00.000Z, heartbeat 2026-03-16T08:59:30.000Z)'
+      )
+    ).toBeVisible();
+    expect(within(runContextSection!).queryByText(/Freshness cause · Output stale/)).not.toBeInTheDocument();
+  });
+
+  it('does not blame stale operation blocker or reboot when a fresher collector heartbeat is clear', () => {
+    const selectedOperation: OfficeOperation = {
+      ...buildSelectedOperation(),
+      current_blocker: 'Stale blocker from retained operation',
+      reboot_recommended: true,
+      effective_severity: 'normal',
+      derived_staleness: {
+        severity: 'normal',
+        stale_for_ms: 60000,
+        stale_for_minutes: 1,
+        last_meaningful_output_at: '2026-03-16T08:20:00.000Z'
+      },
+      last_heartbeat_at: '2026-03-16T08:20:00.000Z',
+      last_meaningful_output_at: '2026-03-16T08:20:00.000Z'
+    };
+    const collectorSnapshot: CollectorSnapshot = {
+      ...buildCollectorSnapshot(),
+      items: [
+        {
+          ...buildCollectorSnapshot().items[0],
+          supervision: {
+            watch_target: null,
+            watched_by: [],
+            needs_attention: false
+          },
+          heartbeat: {
+            ...buildCollectorSnapshot().items[0].heartbeat,
+            received_at: '2026-03-16T08:59:30.000Z',
+            last_meaningful_output_at: '2026-03-16T08:58:00.000Z',
+            current_blocker: '',
+            reboot_recommended: false
+          }
+        }
+      ]
+    };
+
+    render(<DetailsPanel {...buildProps({ collectorSnapshot, selectedOperation })} />);
+
+    const runContextSection = screen.getByRole('heading', { name: 'Run Context' }).closest('section');
+    expect(runContextSection).not.toBeNull();
+    const freshnessCause = within(runContextSection!).getByText(
+      'Freshness cause · Output evidence (collector last output 2026-03-16T08:58:00.000Z) · Heartbeat fresh (collector heartbeat 2026-03-16T08:59:30.000Z) · Collector evidence (collector-watch collected 2026-03-16T09:00:00.000Z, heartbeat 2026-03-16T08:59:30.000Z)'
+    );
+    expect(freshnessCause).toBeVisible();
+    expect(freshnessCause).not.toHaveTextContent(/Reboot recommended \(operation snapshot/);
+    expect(freshnessCause).not.toHaveTextContent(/Stale blocker from retained operation/);
+  });
+
+  it('does not blame older collector blocker or reboot when the operation snapshot is fresher and clear', () => {
+    const selectedOperation: OfficeOperation = {
+      ...buildSelectedOperation(),
+      current_blocker: '',
+      reboot_recommended: false,
+      effective_severity: 'normal',
+      derived_staleness: {
+        severity: 'normal',
+        stale_for_ms: 0,
+        stale_for_minutes: 0,
+        last_meaningful_output_at: '2026-03-16T09:00:00.000Z'
+      },
+      latest_event: {
+        ...buildSelectedOperation().latest_event!,
+        ts: '2026-03-16T09:01:00.000Z'
+      },
+      last_event_at: '2026-03-16T09:01:00.000Z',
+      last_heartbeat_at: '2026-03-16T09:01:00.000Z',
+      last_meaningful_output_at: '2026-03-16T09:00:00.000Z'
+    };
+    const collectorSnapshot: CollectorSnapshot = {
+      ...buildCollectorSnapshot(),
+      items: [
+        {
+          ...buildCollectorSnapshot().items[0],
+          supervision: {
+            watch_target: null,
+            watched_by: [],
+            needs_attention: false
+          },
+          heartbeat: {
+            ...buildCollectorSnapshot().items[0].heartbeat,
+            received_at: '2026-03-16T08:50:00.000Z',
+            last_meaningful_output_at: '2026-03-16T08:45:00.000Z',
+            current_blocker: 'Older collector blocker',
+            reboot_recommended: true
+          }
+        }
+      ]
+    };
+
+    render(<DetailsPanel {...buildProps({ collectorSnapshot, selectedOperation })} />);
+
+    const runContextSection = screen.getByRole('heading', { name: 'Run Context' }).closest('section');
+    expect(runContextSection).not.toBeNull();
+    const freshnessCause = within(runContextSection!).getByText(/Freshness cause/);
+    expect(freshnessCause).toBeVisible();
+    expect(freshnessCause).not.toHaveTextContent(/Reboot recommended/);
+    expect(freshnessCause).not.toHaveTextContent(/Blocked by Older collector blocker/);
+    expect(freshnessCause).toHaveTextContent(
+      'Output evidence (operation last output 2026-03-16T09:00:00.000Z)'
+    );
+    expect(freshnessCause).toHaveTextContent(
+      'Heartbeat fresh (operation heartbeat 2026-03-16T09:01:00.000Z)'
+    );
+  });
+
+  it('downgrades freshness cause copy when the current operation is a retained stale snapshot', () => {
+    const selectedOperation: OfficeOperation = {
+      ...buildSelectedOperation(),
+      current_blocker: 'Stale blocker from retained operation',
+      reboot_recommended: true,
+      effective_severity: 'red',
+      derived_staleness: {
+        severity: 'red',
+        stale_for_ms: 7200000,
+        stale_for_minutes: 120,
+        last_meaningful_output_at: '2026-03-16T07:00:00.000Z'
+      },
+      last_heartbeat_at: '2026-03-16T07:10:00.000Z',
+      last_meaningful_output_at: '2026-03-16T07:00:00.000Z'
+    };
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          operationsError: 'operation refresh failed',
+          operationsState: 'error',
+          selectedOperation
+        })}
+      />
+    );
+
+    const runContextSection = screen.getByRole('heading', { name: 'Run Context' }).closest('section');
+    expect(runContextSection).not.toBeNull();
+    const freshnessCause = within(runContextSection!).getByText(
+      'Freshness cause · Data gap · Stale operation source (Showing last operation snapshot. operation refresh failed) · Reboot recommended (collector heartbeat) · Blocked by Waiting on review sign-off (collector current blocker) · Heartbeat fresh (collector heartbeat 2026-03-16T08:59:30.000Z) · Collector evidence (collector-watch collected 2026-03-16T09:00:00.000Z, heartbeat 2026-03-16T08:59:30.000Z)'
+    );
+    expect(freshnessCause).toBeVisible();
+    expect(freshnessCause).not.toHaveTextContent(/Reboot recommended \(operation snapshot/);
+    expect(freshnessCause).not.toHaveTextContent(/Blocked by Stale blocker from retained operation/);
+    expect(
+      within(runContextSection!).getByText(
+        'Operation source · Retained snapshot (Showing last operation snapshot. operation refresh failed)'
+      )
+    ).toBeVisible();
+    expect(
+      within(runContextSection!).getByText('Operation snapshot blocker · Stale blocker from retained operation')
+    ).toBeVisible();
+    expect(within(runContextSection!).getByText('Operation snapshot heartbeat · 2026-03-16T07:10:00.000Z')).toBeVisible();
+    expect(within(runContextSection!).getByText('Operation snapshot staleness · Red · 120m')).toBeVisible();
+    expect(within(runContextSection!).getByText('Operation snapshot reboot · Recommended')).toBeVisible();
+    expect(within(runContextSection!).queryByText('Run blocker · Stale blocker from retained operation')).not.toBeInTheDocument();
+    expect(within(runContextSection!).queryByText('Last heartbeat · 2026-03-16T07:10:00.000Z')).not.toBeInTheDocument();
+    expect(within(runContextSection!).queryByText('Staleness · Red · 120m')).not.toBeInTheDocument();
+    expect(within(runContextSection!).queryByText('Reboot recommendation · Recommended')).not.toBeInTheDocument();
+  });
+
+  it('keeps fresh collector and workflow evidence when only the operation source is retained', () => {
+    const selectedOperation: OfficeOperation = {
+      ...buildSelectedOperation(),
+      current_blocker: 'Stale blocker from retained operation',
+      reboot_recommended: true,
+      effective_severity: 'red',
+      derived_staleness: {
+        severity: 'red',
+        stale_for_ms: 7200000,
+        stale_for_minutes: 120,
+        last_meaningful_output_at: '2026-03-16T07:00:00.000Z'
+      },
+      last_heartbeat_at: '2026-03-16T07:10:00.000Z',
+      last_meaningful_output_at: '2026-03-16T07:00:00.000Z'
+    };
+    const collectorSnapshot: CollectorSnapshot = {
+      ...buildCollectorSnapshot(),
+      items: [
+        {
+          ...buildCollectorSnapshot().items[0],
+          supervision: {
+            watch_target: null,
+            watched_by: [],
+            needs_attention: false
+          },
+          heartbeat: {
+            ...buildCollectorSnapshot().items[0].heartbeat,
+            received_at: '2026-03-16T08:59:30.000Z',
+            last_meaningful_output_at: '2026-03-16T08:58:00.000Z',
+            current_blocker: 'Fresh collector blocker',
+            reboot_recommended: false
+          }
+        }
+      ]
+    };
+    const workflow: AgentWorkflow = {
+      ...buildWorkflow(),
+      detail: {
+        ...buildWorkflow().detail,
+        latest_heartbeat: {
+          agent_id: 'app-engineering',
+          received_at: '2026-03-16T09:01:00.000Z'
+        }
+      }
+    };
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          collectorSnapshot,
+          operationsError: 'operation refresh failed',
+          operationsState: 'error',
+          selectedOperation,
+          workflow
+        })}
+      />
+    );
+
+    const runContextSection = screen.getByRole('heading', { name: 'Run Context' }).closest('section');
+    expect(runContextSection).not.toBeNull();
+    const freshnessCause = within(runContextSection!).getByText(/Freshness cause/);
+    expect(freshnessCause).toBeVisible();
+    expect(freshnessCause).toHaveTextContent(
+      'Data gap · Stale operation source (Showing last operation snapshot. operation refresh failed)'
+    );
+    expect(freshnessCause).toHaveTextContent('Blocked by Fresh collector blocker (collector current blocker)');
+    expect(freshnessCause).toHaveTextContent(
+      'Heartbeat fresh (workflow heartbeat 2026-03-16T09:01:00.000Z)'
+    );
+    expect(freshnessCause).toHaveTextContent(
+      'Collector evidence (collector-watch collected 2026-03-16T09:00:00.000Z, heartbeat 2026-03-16T08:59:30.000Z)'
+    );
+    expect(freshnessCause).not.toHaveTextContent(/Reboot recommended \(operation snapshot/);
+    expect(freshnessCause).not.toHaveTextContent(/Blocked by Stale blocker from retained operation/);
+    expect(freshnessCause).not.toHaveTextContent(/Output stale/);
+  });
+
+  it('does not trust retained workflow heartbeat for selected-agent run-context freshness', () => {
+    const selectedOperation: OfficeOperation = {
+      ...buildSelectedOperation(),
+      current_blocker: '',
+      reboot_recommended: false,
+      effective_severity: 'normal',
+      derived_staleness: {
+        severity: 'normal',
+        stale_for_ms: 0,
+        stale_for_minutes: 0,
+        last_meaningful_output_at: '2026-03-16T08:58:00.000Z'
+      },
+      last_heartbeat_at: '2026-03-16T08:59:30.000Z',
+      last_meaningful_output_at: '2026-03-16T08:58:00.000Z'
+    };
+    const collectorSnapshot: CollectorSnapshot = {
+      ...buildCollectorSnapshot(),
+      items: [
+        {
+          ...buildCollectorSnapshot().items[0],
+          supervision: {
+            watch_target: null,
+            watched_by: [],
+            needs_attention: false
+          },
+          heartbeat: {
+            ...buildCollectorSnapshot().items[0].heartbeat,
+            received_at: '2026-03-16T08:59:45.000Z',
+            last_meaningful_output_at: '2026-03-16T08:58:30.000Z',
+            current_blocker: '',
+            reboot_recommended: false
+          }
+        }
+      ]
+    };
+    const workflow: AgentWorkflow = {
+      ...buildWorkflow(),
+      detail: {
+        ...buildWorkflow().detail,
+        latest_heartbeat: {
+          agent_id: 'app-engineering',
+          received_at: '2026-03-16T09:05:00.000Z'
+        }
+      }
+    };
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          collectorSnapshot,
+          selectedOperation,
+          workflow,
+          workflowError: 'workflow refresh failed',
+          workflowState: 'error'
+        })}
+      />
+    );
+
+    const workflowSection = screen.getByRole('heading', { name: 'Workflow' }).closest('section');
+    expect(workflowSection).not.toBeNull();
+    expect(
+      within(workflowSection!).getByText('Showing last workflow snapshot. workflow refresh failed')
+    ).toBeVisible();
+
+    const runContextSection = screen.getByRole('heading', { name: 'Run Context' }).closest('section');
+    expect(runContextSection).not.toBeNull();
+    const freshnessCause = within(runContextSection!).getByText(
+      'Freshness cause · Output evidence (collector last output 2026-03-16T08:58:30.000Z) · Heartbeat fresh (collector heartbeat 2026-03-16T08:59:45.000Z) · Collector evidence (collector-watch collected 2026-03-16T09:00:00.000Z, heartbeat 2026-03-16T08:59:45.000Z)'
+    );
+    expect(freshnessCause).toBeVisible();
+    expect(freshnessCause).not.toHaveTextContent(
+      /Heartbeat fresh \(workflow heartbeat 2026-03-16T09:05:00\.000Z\)/
+    );
+  });
+
+  it('downgrades freshness cause copy when collector evidence is retained after a resource error', () => {
+    const selectedOperation: OfficeOperation = {
+      ...buildSelectedOperation(),
+      current_blocker: '',
+      reboot_recommended: false,
+      effective_severity: 'normal',
+      derived_staleness: {
+        severity: 'normal',
+        stale_for_ms: 0,
+        stale_for_minutes: 0,
+        last_meaningful_output_at: '2026-03-16T08:20:00.000Z'
+      },
+      last_heartbeat_at: null,
+      last_meaningful_output_at: '2026-03-16T08:20:00.000Z'
+    };
+    const workflow: AgentWorkflow = {
+      ...buildWorkflow(),
+      detail: {
+        ...buildWorkflow().detail,
+        latest_heartbeat: null
+      }
+    };
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          collectorSnapshotError: 'collector snapshot request failed',
+          collectorSnapshotState: 'error',
+          selectedOperation,
+          workflow
+        })}
+      />
+    );
+
+    const runContextSection = screen.getByRole('heading', { name: 'Run Context' }).closest('section');
+    expect(runContextSection).not.toBeNull();
+    const freshnessCause = within(runContextSection!).getByText(
+      /Freshness cause · Output evidence \(operation last output 2026-03-16T08:20:00.000Z\) · No trusted heartbeat evidence · Data gap · Stale collector source \(collector snapshot request failed\)/
+    );
+    expect(freshnessCause).toBeVisible();
+    expect(freshnessCause).not.toHaveTextContent(/Heartbeat fresh \(collector heartbeat/);
+  });
+
+  it('uses operation output timestamps for operation-derived stale copy when collector output is fresher', () => {
+    const selectedOperation: OfficeOperation = {
+      ...buildSelectedOperation(),
+      current_blocker: '',
+      reboot_recommended: false,
+      effective_severity: 'orange',
+      derived_staleness: {
+        severity: 'orange',
+        stale_for_ms: 2700000,
+        stale_for_minutes: 45,
+        last_meaningful_output_at: '2026-03-16T08:10:00.000Z'
+      },
+      last_heartbeat_at: '2026-03-16T08:10:00.000Z',
+      last_meaningful_output_at: '2026-03-16T08:10:00.000Z'
+    };
+    const collectorSnapshot: CollectorSnapshot = {
+      ...buildCollectorSnapshot(),
+      items: [
+        {
+          ...buildCollectorSnapshot().items[0],
+          supervision: {
+            watch_target: null,
+            watched_by: [],
+            needs_attention: false
+          },
+          heartbeat: {
+            ...buildCollectorSnapshot().items[0].heartbeat,
+            received_at: '2026-03-16T08:59:30.000Z',
+            last_meaningful_output_at: '2026-03-16T08:58:00.000Z',
+            current_blocker: '',
+            reboot_recommended: false
+          }
+        }
+      ]
+    };
+
+    render(<DetailsPanel {...buildProps({ collectorSnapshot, selectedOperation })} />);
+
+    const runContextSection = screen.getByRole('heading', { name: 'Run Context' }).closest('section');
+    expect(runContextSection).not.toBeNull();
+    const freshnessCause = within(runContextSection!).getByText(
+      'Freshness cause · Output stale (operation last output 2026-03-16T08:10:00.000Z, Orange 45m) · Heartbeat fresh (collector heartbeat 2026-03-16T08:59:30.000Z) · Collector evidence (collector-watch collected 2026-03-16T09:00:00.000Z, heartbeat 2026-03-16T08:59:30.000Z)'
+    );
+    expect(freshnessCause).toBeVisible();
+    expect(freshnessCause).not.toHaveTextContent(/Output stale \(collector last output .*Orange 45m/);
+  });
+
+  it('spells out collector data gaps in selected-agent run context instead of fabricating collector observations', () => {
+    const selectedOperation: OfficeOperation = {
+      ...buildSelectedOperation(),
+      current_blocker: '',
+      reboot_recommended: false
+    };
+    const { rerender } = render(
+      <DetailsPanel
+        {...buildProps({
+          collectorSnapshot: null,
+          collectorSnapshotState: 'ready',
+          selectedOperation
+        })}
+      />
+    );
+
+    let runContextSection = screen.getByRole('heading', { name: 'Run Context' }).closest('section');
+    expect(runContextSection).not.toBeNull();
+    expect(within(runContextSection!).getByText(/Data gap · No collector snapshot available/)).toBeVisible();
+    expect(within(runContextSection!).queryByText(/collector heartbeat/)).not.toBeInTheDocument();
+
+    rerender(
+      <DetailsPanel
+        {...buildProps({
+          collectorSnapshot: {
+            ...buildCollectorSnapshot(),
+            items: []
+          },
+          selectedOperation
+        })}
+      />
+    );
+
+    runContextSection = screen.getByRole('heading', { name: 'Run Context' }).closest('section');
+    expect(runContextSection).not.toBeNull();
+    expect(
+      within(runContextSection!).getByText(
+        /Data gap · No collector evidence for app-engineering in snapshot 2026-03-16T09:00:00.000Z/
+      )
+    ).toBeVisible();
+  });
+
   it('shows a selected agent responsibility chain with current evidence, sources, and correlation context', () => {
     render(<DetailsPanel {...buildProps()} />);
 

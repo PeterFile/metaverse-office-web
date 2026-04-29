@@ -11067,7 +11067,13 @@ describe('DetailsPanel shared memory', () => {
               {
                 ...buildMemoryArtifacts().items[0],
                 latest_event_id: 'evt-memory-replay-anchor',
-                latest_event_type: 'timeline_note'
+                latest_event_type: 'timeline_note',
+                replay_checkpoint: {
+                  event_id: 'evt-memory-replay-anchor',
+                  event_type: 'timeline_note',
+                  summary: 'Replay evidence bundle',
+                  last_seen_at: '2026-03-16T08:58:00.000Z'
+                }
               },
               {
                 ...buildMemoryArtifacts().items[1],
@@ -11088,7 +11094,13 @@ describe('DetailsPanel shared memory', () => {
     expect(reviewRecord).not.toBeNull();
 
     expect(within(replayRecord!).getByText('Latest event · evt-memory-replay-anchor · timeline_note')).toBeVisible();
+    expect(
+      within(replayRecord!).getByText(
+        'Replay checkpoint · evt-memory-replay-anchor · timeline_note · 2026-03-16T08:58:00.000Z'
+      )
+    ).toBeVisible();
     expect(within(reviewRecord!).queryByText(/^Latest event ·/)).not.toBeInTheDocument();
+    expect(within(reviewRecord!).queryByText(/^Replay checkpoint ·/)).not.toBeInTheDocument();
     expect(within(reviewRecord!).getByText('Latest event type · workflow_event')).toBeVisible();
   });
 

@@ -225,7 +225,8 @@ Optional env:
 - supported filters are `window`, `agent_id`, `correlation_id`, `artifact_ref`, `event_type`, `severity`, `artifact_kind`, and `limit`
 - event facet filters keep collector observations as extensions of matching event-backed artifacts, but do not surface unrelated collector-only artifacts
 - the route does not introduce a markdown-backed status store, write path, or separate task system; it materializes shared memory from the existing append-only evidence trail
-- items expose `artifact_ref`, `artifact_kind`, `file_name`, `first_seen_at`, `last_seen_at`, `mention_count`, `agent_ids`, `correlation_ids`, `source_kinds`, `latest_summary`, `latest_event_type`, optional `latest_event_id`, and optional `collector_last_modified_at`
+- items expose `artifact_ref`, `artifact_kind`, `file_name`, `first_seen_at`, `last_seen_at`, `mention_count`, `agent_ids`, `correlation_ids`, `source_kinds`, `latest_summary`, `latest_event_type`, optional `latest_event_id`, optional `replay_checkpoint`, and optional `collector_last_modified_at`
+- event-backed artifacts derive `replay_checkpoint` from the true latest event anchor; collector-only observations omit it instead of fabricating replay evidence
 - ordering is operational: newest `last_seen_at` first, then higher `mention_count`, then stable `artifact_ref`
 
 ### Handoff and reboot read-model notes

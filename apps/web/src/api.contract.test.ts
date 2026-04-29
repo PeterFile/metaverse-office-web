@@ -362,6 +362,12 @@ describe('read-only frontend/backend contract smoke', () => {
           latest_summary: 'Protocol engineering flagged the contract drift',
           latest_event_type: 'peer_watch_alert_raised',
           latest_event_id: 'evt_contract_peer_watch',
+          replay_checkpoint: {
+            event_id: 'evt_contract_peer_watch',
+            event_type: 'peer_watch_alert_raised',
+            summary: 'Protocol engineering flagged the contract drift',
+            last_seen_at: '2026-03-09T18:45:00.000Z'
+          },
           collector_last_modified_at: null
         }
       ]
@@ -423,6 +429,12 @@ describe('read-only frontend/backend contract smoke', () => {
           latest_summary: 'Protocol engineering flagged the contract drift',
           latest_event_type: 'peer_watch_alert_raised',
           latest_event_id: 'evt_contract_peer_watch',
+          replay_checkpoint: {
+            event_id: 'evt_contract_peer_watch',
+            event_type: 'peer_watch_alert_raised',
+            summary: 'Protocol engineering flagged the contract drift',
+            last_seen_at: '2026-03-09T18:45:00.000Z'
+          },
           collector_last_modified_at: null
         }
       ]
@@ -1510,6 +1522,12 @@ function expectMemoryArtifactContract(memoryArtifacts: MemoryArtifactIndex) {
       latest_summary: 'Lead completed the contract handoff',
       latest_event_type: 'agent_handoff_completed',
       latest_event_id: 'evt_contract_handoff_completed',
+      replay_checkpoint: {
+        event_id: 'evt_contract_handoff_completed',
+        event_type: 'agent_handoff_completed',
+        summary: 'Lead completed the contract handoff',
+        last_seen_at: '2026-03-09T18:48:00.000Z'
+      },
       collector_last_modified_at: null
     },
     {
@@ -1525,6 +1543,12 @@ function expectMemoryArtifactContract(memoryArtifacts: MemoryArtifactIndex) {
       latest_summary: 'Protocol engineering flagged the contract drift',
       latest_event_type: 'peer_watch_alert_raised',
       latest_event_id: 'evt_contract_peer_watch',
+      replay_checkpoint: {
+        event_id: 'evt_contract_peer_watch',
+        event_type: 'peer_watch_alert_raised',
+        summary: 'Protocol engineering flagged the contract drift',
+        last_seen_at: '2026-03-09T18:45:00.000Z'
+      },
       collector_last_modified_at: null
     },
     {
@@ -1540,6 +1564,12 @@ function expectMemoryArtifactContract(memoryArtifacts: MemoryArtifactIndex) {
       latest_summary: 'Lead completed the contract review',
       latest_event_type: 'review_completed',
       latest_event_id: 'evt_contract_review_completed',
+      replay_checkpoint: {
+        event_id: 'evt_contract_review_completed',
+        event_type: 'review_completed',
+        summary: 'Lead completed the contract review',
+        last_seen_at: '2026-03-09T18:42:00.000Z'
+      },
       collector_last_modified_at: null
     },
     {
@@ -1555,6 +1585,12 @@ function expectMemoryArtifactContract(memoryArtifacts: MemoryArtifactIndex) {
       latest_summary: 'Lead started the contract review',
       latest_event_type: 'review_started',
       latest_event_id: 'evt_contract_review_started',
+      replay_checkpoint: {
+        event_id: 'evt_contract_review_started',
+        event_type: 'review_started',
+        summary: 'Lead started the contract review',
+        last_seen_at: '2026-03-09T18:40:00.000Z'
+      },
       collector_last_modified_at: null
     }
   ]);

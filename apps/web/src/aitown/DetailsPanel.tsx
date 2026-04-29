@@ -2940,6 +2940,11 @@ function renderSharedMemoryArtifact({
       {artifact.latest_event_id ? (
         <span>{`Latest event · ${artifact.latest_event_id} · ${artifact.latest_event_type ?? 'unknown'}`}</span>
       ) : null}
+      {artifact.replay_checkpoint ? (
+        <span>{`Replay checkpoint · ${artifact.replay_checkpoint.event_id} · ${
+          artifact.replay_checkpoint.event_type ?? 'unknown'
+        } · ${artifact.replay_checkpoint.last_seen_at}`}</span>
+      ) : null}
       {artifact.source_kinds.length > 0 ? (
         <span>{`Source kinds · ${renderNamedList(dedupeNonEmptyStrings(artifact.source_kinds), 'No source kinds')}`}</span>
       ) : null}

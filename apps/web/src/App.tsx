@@ -72,6 +72,12 @@ type ZoneFocusRequest = {
 
 type CorrelationSpotlight = Pick<CorrelationDrilldown, 'correlation_id' | 'participant_agent_ids'>;
 
+type ReplayCheckpointFocus = {
+  eventId: string;
+  selectedAgentId: string | null;
+  selectedCorrelationId: string | null;
+};
+
 type SelectedAgentTimelineReplayPayload = {
   targetAgentId: string;
   timelineReplay: TimelineReplayResponse;
@@ -568,6 +574,7 @@ function AppInner() {
   const [focusedExactMemoryArtifact, setFocusedExactMemoryArtifact] = useState<MemoryArtifact | null>(null);
   const [focusedSharedMemoryArtifactRef, setFocusedSharedMemoryArtifactRef] = useState<string | null>(null);
   const [sharedMemoryJumpStatus, setSharedMemoryJumpStatus] = useState<string | null>(null);
+  const [replayCheckpointFocus, setReplayCheckpointFocus] = useState<ReplayCheckpointFocus | null>(null);
   const [cachedCorrelationSpotlight, setCachedCorrelationSpotlight] = useState<CorrelationSpotlight | null>(null);
   const [selectedAgentDrilldownTab, setSelectedAgentDrilldownTab] =
     useState<SelectedAgentDrilldownTab>('now');
@@ -602,17 +609,26 @@ function AppInner() {
     selectedCorrelationId,
     selectedCorrelationWasExplicit
   );
+  const crewReplayCheckpointEventId =
+    replayCheckpointFocus &&
+    selectedAgentId === null &&
+    replayCheckpointFocus.selectedAgentId === null &&
+    replayCheckpointFocus.selectedCorrelationId === selectedCorrelationId
+      ? replayCheckpointFocus.eventId
+      : null;
+  const activeCrewReplaySeverity = crewReplayCheckpointEventId ? null : selectedCrewReplaySeverity;
   const timelineReplayResource = usePolledResource({
     enabled: hubOpen && selectedAgentId === null,
     load: (signal) =>
       fetchTimeline({
         limit: CREW_TIMELINE_LIMIT,
         window: DEFAULT_WORKFLOW_WINDOW,
-        severity: selectedCrewReplaySeverity ?? undefined,
+        severity: activeCrewReplaySeverity ?? undefined,
         correlationId: crewReplayCorrelationId ?? undefined,
+        eventId: crewReplayCheckpointEventId ?? undefined,
         signal
       }),
-    resourceKey: `timeline-replay:severity=${selectedCrewReplaySeverity ?? '__all__'}:correlation=${crewReplayCorrelationId ?? '__all__'}`
+    resourceKey: `timeline-replay:severity=${activeCrewReplaySeverity ?? '__all__'}:correlation=${crewReplayCorrelationId ?? '__all__'}:event=${crewReplayCheckpointEventId ?? '__all__'}`
   });
   const crewOpenSupervisionAlertsResource = usePolledResource({
     enabled: hubOpen && selectedAgentId === null,
@@ -725,6 +741,10 @@ function AppInner() {
     setFocusedSharedMemoryArtifactRef(null);
     setSharedMemoryJumpStatus(null);
   }, [memoryArtifactResourceKey]);
+
+  useEffect(() => {
+    setReplayCheckpointFocus(null);
+  }, [selectedAgentId, selectedCorrelationId]);
 
   const memoryArtifacts = useMemo<MemoryArtifactIndex | null>(() => {
     if (!memoryArtifactsResource.data && !focusedExactMemoryArtifact) {
@@ -1004,8 +1024,16 @@ function AppInner() {
     defaultCorrelationId === null &&
     selectedOperationForAutoCorrelation === null &&
     workflowResource.state === 'loading';
+  const selectedAgentReplayCheckpointEventId =
+    replayCheckpointFocus &&
+    selectedAgentId !== null &&
+    replayCheckpointFocus.selectedAgentId === selectedAgentId &&
+    replayCheckpointFocus.selectedCorrelationId === selectedCorrelationId
+      ? replayCheckpointFocus.eventId
+      : null;
+  const activeSelectedAgentReplaySeverity = selectedAgentReplayCheckpointEventId ? null : selectedAgentReplaySeverity;
   const selectedAgentTimelineReplayResourceKey = selectedAgentId
-    ? `selected-agent-timeline-replay:${selectedAgentId}:correlation=${selectedAgentScopedCorrelationId ?? '__all__'}:severity=${selectedAgentReplaySeverity ?? '__all__'}`
+    ? `selected-agent-timeline-replay:${selectedAgentId}:correlation=${selectedAgentScopedCorrelationId ?? '__all__'}:severity=${activeSelectedAgentReplaySeverity ?? '__all__'}:event=${selectedAgentReplayCheckpointEventId ?? '__all__'}`
     : null;
   const previousSelectedAgentTimelineReplayResourceKeyRef = useRef<string | null>(
     selectedAgentTimelineReplayResourceKey
@@ -1022,7 +1050,8 @@ function AppInner() {
         window: DEFAULT_WORKFLOW_WINDOW,
         agentId: selectedAgentId!,
         correlationId: selectedAgentScopedCorrelationId ?? undefined,
-        severity: selectedAgentReplaySeverity ?? undefined,
+        severity: activeSelectedAgentReplaySeverity ?? undefined,
+        eventId: selectedAgentReplayCheckpointEventId ?? undefined,
         signal
       })
     }),
@@ -1323,6 +1352,45 @@ function AppInner() {
         dialog.scrollTop = targetScrollTop;
       }
     });
+  }, []);
+
+  const handleOpenReplayCheckpoint = useCallback(
+    (eventId: string) => {
+      const nextEventId = eventId.trim();
+      if (!nextEventId) {
+        return;
+      }
+
+      setReplayCheckpointFocus({
+        eventId: nextEventId,
+        selectedAgentId,
+        selectedCorrelationId
+      });
+      if (selectedAgentId !== null) {
+        handleSelectSelectedAgentDrilldownTab('replay');
+      }
+    },
+    [handleSelectSelectedAgentDrilldownTab, selectedAgentId, selectedCorrelationId]
+  );
+
+  const handleSelectSelectedAgentReplaySeverity = useCallback(
+    (severity: Severity | null) => {
+      setReplayCheckpointFocus(null);
+      setSelectedAgentReplayFilter(
+        selectedAgentId !== null
+          ? {
+              agentId: selectedAgentId,
+              severity
+            }
+          : null
+      );
+    },
+    [selectedAgentId]
+  );
+
+  const handleSelectCrewReplaySeverity = useCallback((severity: Severity | null) => {
+    setReplayCheckpointFocus(null);
+    setSelectedCrewReplaySeverity(severity);
   }, []);
 
   const selectAndFocusSelectedAgentDrilldownTab = useCallback(
@@ -2079,8 +2147,8 @@ function AppInner() {
               selectedCorrelationId={selectedCorrelationId}
               selectedCrewOpenSupervisionSeverity={selectedCrewOpenSupervisionSeverity}
               selectedAgentSupervisionHistorySeverity={selectedAgentSupervisionHistorySeverity}
-              selectedAgentReplaySeverity={selectedAgentReplaySeverity}
-              selectedCrewReplaySeverity={selectedCrewReplaySeverity}
+              selectedAgentReplaySeverity={activeSelectedAgentReplaySeverity}
+              selectedCrewReplaySeverity={activeCrewReplaySeverity}
               selectedOperationsState={selectedOperationsState}
               selectedOperationsSeverity={selectedOperationsSeverity}
               selectedOperation={selectedOperation}
@@ -2102,6 +2170,11 @@ function AppInner() {
               sharedMemoryRequestScopeLabel={sharedMemoryRequestScopeLabel}
               focusedSharedMemoryArtifactRef={focusedSharedMemoryArtifactRef}
               sharedMemoryJumpStatus={sharedMemoryJumpStatus}
+              replayCheckpointEventId={
+                selectedAgentId === null
+                  ? crewReplayCheckpointEventId
+                  : selectedAgentReplayCheckpointEventId
+              }
               selectedAgentSupervisionHistoryRequestScopeLabel={
                 selectedAgentSupervisionHistoryRequestScopeLabel
               }
@@ -2147,21 +2220,13 @@ function AppInner() {
                     : null
                 )
               }
-              onSelectSelectedAgentReplaySeverity={(severity) =>
-                setSelectedAgentReplayFilter(
-                  selectedAgentId !== null
-                    ? {
-                        agentId: selectedAgentId,
-                        severity
-                      }
-                    : null
-                )
-              }
-              onSelectCrewReplaySeverity={setSelectedCrewReplaySeverity}
+              onSelectSelectedAgentReplaySeverity={handleSelectSelectedAgentReplaySeverity}
+              onSelectCrewReplaySeverity={handleSelectCrewReplaySeverity}
               onSelectOperationsState={setSelectedOperationsState}
               onSelectOperationsSeverity={setSelectedOperationsSeverity}
               onSelectOperation={handleSelectOperation}
               onFocusSharedMemoryArtifact={handleFocusSharedMemoryArtifact}
+              onOpenReplayCheckpoint={handleOpenReplayCheckpoint}
               onFocusWorldZone={handleFocusWorldZone}
               />
             </div>

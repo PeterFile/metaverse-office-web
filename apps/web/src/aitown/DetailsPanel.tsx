@@ -88,6 +88,7 @@ type DetailsPanelProps = {
   sharedMemoryRequestScopeLabel: string;
   focusedSharedMemoryArtifactRef?: string | null;
   sharedMemoryJumpStatus?: string | null;
+  replayCheckpointEventId?: string | null;
   selectedAgentSupervisionHistoryRequestScopeLabel: string;
   selectedAgentSupervisionHistory: PeerWatchAlertsResponse | null;
   selectedAgentSupervisionHistoryError: string | null;
@@ -125,6 +126,7 @@ type DetailsPanelProps = {
   onSelectOperationsSeverity: (severity: Severity | null) => void;
   onSelectOperation: (operation: OfficeOperation, options?: SelectOperationOptions) => void;
   onFocusSharedMemoryArtifact?: (artifactRef: string, scope?: SharedMemoryJumpScope) => void;
+  onOpenReplayCheckpoint?: (eventId: string) => void;
   onFocusWorldZone?: (zoneId: string) => void;
 };
 
@@ -2302,6 +2304,22 @@ function renderSelectedAgentReplayDegradedErrorLabel(
   return `Showing last timeline replay snapshot. ${errorLabel}`;
 }
 
+function renderReplayCheckpointLoadingLabel(eventId: string) {
+  return `Loading replay checkpoint ${eventId}...`;
+}
+
+function renderReplayCheckpointEmptyLabel(eventId: string) {
+  return `No replay checkpoint event found for ${eventId}.`;
+}
+
+function renderReplayCheckpointInitialErrorLabel(eventId: string, timelineReplayError: string | null) {
+  return `Unable to load replay checkpoint ${eventId}. ${timelineReplayError ?? 'Timeline replay unavailable.'}`;
+}
+
+function renderReplayCheckpointDegradedErrorLabel(eventId: string, timelineReplayError: string | null) {
+  return `Showing last replay checkpoint ${eventId} snapshot. ${timelineReplayError ?? 'Timeline replay unavailable.'}`;
+}
+
 type ReplaySummaryBucket = {
   key: string;
   count: number;
@@ -2375,6 +2393,7 @@ function renderTimelineReplaySection({
   sectionClassName = '',
   requestScopeLabel = null,
   scopedReplayCorrelationId = null,
+  replayCheckpointEventId = null,
   selectedSeverity = null,
   timelineReplayItems,
   timelineReplayError,
@@ -2399,6 +2418,7 @@ function renderTimelineReplaySection({
   sectionClassName?: string;
   requestScopeLabel?: string | null;
   scopedReplayCorrelationId?: string | null;
+  replayCheckpointEventId?: string | null;
   selectedSeverity?: Severity | null;
   timelineReplayItems: WorkflowTimelineEvent[];
   timelineReplayError: string | null;
@@ -2427,6 +2447,7 @@ function renderTimelineReplaySection({
       <h3>Timeline Replay</h3>
       {requestScopeLabel ? <p>{`Request scope · ${requestScopeLabel}`}</p> : null}
       {scopedReplayCorrelationId ? <span>{`Scoped replay · ${scopedReplayCorrelationId}`}</span> : null}
+      {replayCheckpointEventId ? <span>{`Replay checkpoint focus · ${replayCheckpointEventId}`}</span> : null}
       {onSelectSeverity ? (
         <p>
           <label htmlFor="aitown-timeline-replay-severity-filter">Severity filter</label>{' '}
@@ -2887,6 +2908,7 @@ function renderSharedMemoryArtifact({
   currentAgentId,
   navigableAgentIds,
   isFocusedExactArtifact = false,
+  onOpenReplayCheckpoint,
   onSelectAgent,
   onSelectCorrelation
 }: {
@@ -2895,11 +2917,13 @@ function renderSharedMemoryArtifact({
   currentAgentId: string | null;
   navigableAgentIds: Set<string>;
   isFocusedExactArtifact?: boolean;
+  onOpenReplayCheckpoint?: (eventId: string) => void;
   onSelectAgent: SelectAgentHandler;
   onSelectCorrelation: SelectCorrelationHandler;
 }) {
   const artifactCorrelationId = findFirstNonEmptyString(artifact.correlation_ids);
   const preservedCorrelationId = activeCorrelationId ?? artifactCorrelationId;
+  const replayCheckpoint = artifact.replay_checkpoint;
 
   return (
     <li
@@ -2940,10 +2964,23 @@ function renderSharedMemoryArtifact({
       {artifact.latest_event_id ? (
         <span>{`Latest event · ${artifact.latest_event_id} · ${artifact.latest_event_type ?? 'unknown'}`}</span>
       ) : null}
-      {artifact.replay_checkpoint ? (
-        <span>{`Replay checkpoint · ${artifact.replay_checkpoint.event_id} · ${
-          artifact.replay_checkpoint.event_type ?? 'unknown'
-        } · ${artifact.replay_checkpoint.last_seen_at}`}</span>
+      {replayCheckpoint ? (
+        <span>
+          Replay checkpoint ·{' '}
+          {onOpenReplayCheckpoint ? (
+            <button
+              type="button"
+              className="aitown-link-button"
+              aria-label={`Open replay checkpoint ${replayCheckpoint.event_id}`}
+              onClick={() => onOpenReplayCheckpoint(replayCheckpoint.event_id)}
+            >
+              {replayCheckpoint.event_id}
+            </button>
+          ) : (
+            replayCheckpoint.event_id
+          )}
+          {` · ${replayCheckpoint.event_type ?? 'unknown'} · ${replayCheckpoint.last_seen_at}`}
+        </span>
       ) : null}
       {artifact.source_kinds.length > 0 ? (
         <span>{`Source kinds · ${renderNamedList(dedupeNonEmptyStrings(artifact.source_kinds), 'No source kinds')}`}</span>
@@ -2997,6 +3034,7 @@ function renderSharedMemorySection({
   activeCorrelationId,
   currentAgentId,
   navigableAgentIds,
+  onOpenReplayCheckpoint,
   onSelectAgent,
   onSelectCorrelation
 }: {
@@ -3012,6 +3050,7 @@ function renderSharedMemorySection({
   activeCorrelationId: string | null;
   currentAgentId: string | null;
   navigableAgentIds: Set<string>;
+  onOpenReplayCheckpoint?: (eventId: string) => void;
   onSelectAgent: SelectAgentHandler;
   onSelectCorrelation: SelectCorrelationHandler;
 }) {
@@ -3049,6 +3088,7 @@ function renderSharedMemorySection({
             currentAgentId,
             navigableAgentIds,
             isFocusedExactArtifact: focusedSharedMemoryArtifactRef === artifact.artifact_ref,
+            onOpenReplayCheckpoint,
             onSelectAgent,
             onSelectCorrelation
           })
@@ -3361,6 +3401,7 @@ export function DetailsPanel({
   sharedMemoryRequestScopeLabel,
   focusedSharedMemoryArtifactRef,
   sharedMemoryJumpStatus,
+  replayCheckpointEventId,
   selectedAgentSupervisionHistoryRequestScopeLabel,
   selectedAgentSupervisionHistory,
   selectedAgentSupervisionHistoryError,
@@ -3398,6 +3439,7 @@ export function DetailsPanel({
   onSelectOperationsSeverity,
   onSelectOperation,
   onFocusSharedMemoryArtifact,
+  onOpenReplayCheckpoint,
   onFocusWorldZone
 }: DetailsPanelProps) {
   const agents = [...world.agents.values()]
@@ -3544,6 +3586,7 @@ export function DetailsPanel({
       activeCorrelationQueueError !== null);
   const sharedMemoryActiveCorrelationId = selectedCorrelationId;
   const sharedMemoryArtifactRefs = new Set((memoryArtifacts?.items ?? []).map((artifact) => artifact.artifact_ref));
+  const activeReplayCheckpointEventId = replayCheckpointEventId?.trim() || null;
   const activeCorrelationQueueSection = shouldRenderActiveCorrelationQueueSection && activeCorrelationQueueCorrelation ? (
     <section
       className={`aitown-details__section${selectedAgent ? ' aitown-details__section--selected-evidence' : ''}`}
@@ -4128,6 +4171,7 @@ export function DetailsPanel({
           activeCorrelationId: sharedMemoryActiveCorrelationId,
           currentAgentId: null,
           navigableAgentIds,
+          onOpenReplayCheckpoint,
           onSelectAgent,
           onSelectCorrelation
         })}
@@ -4170,29 +4214,38 @@ export function DetailsPanel({
 
         {renderTimelineReplaySection({
           scopedReplayCorrelationId: manualCorrelationOverrideActive ? selectedCorrelationId : null,
+          replayCheckpointEventId: activeReplayCheckpointEventId,
           selectedSeverity: selectedCrewReplaySeverity,
           timelineReplayItems: timelineReplay?.items ?? [],
           timelineReplayError,
           timelineReplayState,
           hasReplaySnapshot: timelineReplay !== null,
-          loadingLabel: renderCrewReplayLoadingLabel(
-            manualCorrelationOverrideActive ? selectedCorrelationId : null,
-            selectedCrewReplaySeverity
-          ),
-          emptyLabel: renderCrewReplayEmptyLabel(
-            manualCorrelationOverrideActive ? selectedCorrelationId : null,
-            selectedCrewReplaySeverity
-          ),
-          initialErrorLabel: renderCrewReplayInitialErrorLabel(
-            manualCorrelationOverrideActive ? selectedCorrelationId : null,
-            selectedCrewReplaySeverity,
-            timelineReplayError
-          ),
-          degradedErrorLabel: renderCrewReplayDegradedErrorLabel(
-            manualCorrelationOverrideActive ? selectedCorrelationId : null,
-            selectedCrewReplaySeverity,
-            timelineReplayError
-          ),
+          loadingLabel: activeReplayCheckpointEventId
+            ? renderReplayCheckpointLoadingLabel(activeReplayCheckpointEventId)
+            : renderCrewReplayLoadingLabel(
+                manualCorrelationOverrideActive ? selectedCorrelationId : null,
+                selectedCrewReplaySeverity
+              ),
+          emptyLabel: activeReplayCheckpointEventId
+            ? renderReplayCheckpointEmptyLabel(activeReplayCheckpointEventId)
+            : renderCrewReplayEmptyLabel(
+                manualCorrelationOverrideActive ? selectedCorrelationId : null,
+                selectedCrewReplaySeverity
+              ),
+          initialErrorLabel: activeReplayCheckpointEventId
+            ? renderReplayCheckpointInitialErrorLabel(activeReplayCheckpointEventId, timelineReplayError)
+            : renderCrewReplayInitialErrorLabel(
+                manualCorrelationOverrideActive ? selectedCorrelationId : null,
+                selectedCrewReplaySeverity,
+                timelineReplayError
+              ),
+          degradedErrorLabel: activeReplayCheckpointEventId
+            ? renderReplayCheckpointDegradedErrorLabel(activeReplayCheckpointEventId, timelineReplayError)
+            : renderCrewReplayDegradedErrorLabel(
+                manualCorrelationOverrideActive ? selectedCorrelationId : null,
+                selectedCrewReplaySeverity,
+                timelineReplayError
+              ),
           activeCorrelationId: selectedCorrelationId,
           currentAgentId: null,
           navigableAgentIds,
@@ -5029,6 +5082,7 @@ export function DetailsPanel({
         activeCorrelationId: sharedMemoryActiveCorrelationId,
         currentAgentId: selectedAgent.agent_id,
         navigableAgentIds,
+        onOpenReplayCheckpoint,
         onSelectAgent,
         onSelectCorrelation
       })}
@@ -5072,23 +5126,32 @@ export function DetailsPanel({
         sectionClassName: 'aitown-details__section--selected-replay',
         requestScopeLabel: selectedAgentReplayScopeLabel,
         scopedReplayCorrelationId: selectedCorrelationId,
+        replayCheckpointEventId: activeReplayCheckpointEventId,
         selectedSeverity: selectedAgentReplaySeverity,
         timelineReplayItems: selectedAgentReplayItems,
         timelineReplayError: selectedAgentReplayError,
         timelineReplayState: selectedAgentReplayState,
         hasReplaySnapshot: selectedAgentReplayHasSnapshot,
-        loadingLabel: renderSelectedAgentReplayLoadingLabel(selectedCorrelationId, selectedAgentReplaySeverity),
-        emptyLabel: renderSelectedAgentReplayEmptyLabel(selectedCorrelationId, selectedAgentReplaySeverity),
-        initialErrorLabel: renderSelectedAgentReplayInitialErrorLabel(
-          selectedCorrelationId,
-          selectedAgentReplaySeverity,
-          selectedAgentReplayError
-        ),
-        degradedErrorLabel: renderSelectedAgentReplayDegradedErrorLabel(
-          selectedCorrelationId,
-          selectedAgentReplaySeverity,
-          selectedAgentReplayError
-        ),
+        loadingLabel: activeReplayCheckpointEventId
+          ? renderReplayCheckpointLoadingLabel(activeReplayCheckpointEventId)
+          : renderSelectedAgentReplayLoadingLabel(selectedCorrelationId, selectedAgentReplaySeverity),
+        emptyLabel: activeReplayCheckpointEventId
+          ? renderReplayCheckpointEmptyLabel(activeReplayCheckpointEventId)
+          : renderSelectedAgentReplayEmptyLabel(selectedCorrelationId, selectedAgentReplaySeverity),
+        initialErrorLabel: activeReplayCheckpointEventId
+          ? renderReplayCheckpointInitialErrorLabel(activeReplayCheckpointEventId, selectedAgentReplayError)
+          : renderSelectedAgentReplayInitialErrorLabel(
+              selectedCorrelationId,
+              selectedAgentReplaySeverity,
+              selectedAgentReplayError
+            ),
+        degradedErrorLabel: activeReplayCheckpointEventId
+          ? renderReplayCheckpointDegradedErrorLabel(activeReplayCheckpointEventId, selectedAgentReplayError)
+          : renderSelectedAgentReplayDegradedErrorLabel(
+              selectedCorrelationId,
+              selectedAgentReplaySeverity,
+              selectedAgentReplayError
+            ),
         activeCorrelationId: selectedCorrelationId,
         currentAgentId: selectedAgent.agent_id,
         navigableAgentIds,

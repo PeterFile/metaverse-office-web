@@ -11057,10 +11057,18 @@ describe('DetailsPanel workflow peer-watch alerts', () => {
 });
 
 describe('DetailsPanel shared memory', () => {
-  it('shows latest event anchors only when shared-memory artifacts provide event ids', () => {
+  it('shows replay checkpoint controls only when shared-memory artifacts provide event ids', async () => {
+    const user = userEvent.setup();
+    const onOpenReplayCheckpoint = vi.fn();
+    const onSelectAgent = vi.fn();
+    const onSelectCorrelation = vi.fn();
+
     render(
       <DetailsPanel
         {...buildProps({
+          onOpenReplayCheckpoint,
+          onSelectAgent,
+          onSelectCorrelation,
           memoryArtifacts: {
             generated_at: '2026-03-16T09:00:00.000Z',
             items: [
@@ -11094,11 +11102,19 @@ describe('DetailsPanel shared memory', () => {
     expect(reviewRecord).not.toBeNull();
 
     expect(within(replayRecord!).getByText('Latest event · evt-memory-replay-anchor · timeline_note')).toBeVisible();
-    expect(
-      within(replayRecord!).getByText(
-        'Replay checkpoint · evt-memory-replay-anchor · timeline_note · 2026-03-16T08:58:00.000Z'
-      )
-    ).toBeVisible();
+    expect(replayRecord!).toHaveTextContent(
+      'Replay checkpoint · evt-memory-replay-anchor · timeline_note · 2026-03-16T08:58:00.000Z'
+    );
+    const replayCheckpointButton = within(replayRecord!).getByRole('button', {
+      name: 'Open replay checkpoint evt-memory-replay-anchor'
+    });
+    expect(replayCheckpointButton).toBeVisible();
+
+    await user.click(replayCheckpointButton);
+
+    expect(onOpenReplayCheckpoint).toHaveBeenCalledWith('evt-memory-replay-anchor');
+    expect(onSelectAgent).not.toHaveBeenCalled();
+    expect(onSelectCorrelation).not.toHaveBeenCalled();
     expect(within(reviewRecord!).queryByText(/^Latest event ·/)).not.toBeInTheDocument();
     expect(within(reviewRecord!).queryByText(/^Replay checkpoint ·/)).not.toBeInTheDocument();
     expect(within(reviewRecord!).getByText('Latest event type · workflow_event')).toBeVisible();

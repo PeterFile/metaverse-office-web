@@ -348,6 +348,53 @@ describe('read-only frontend/backend contract smoke', () => {
     });
   });
 
+  it('passes timeline evidence_ref exact replay filters through to the real backend', async () => {
+    harness = await createHarness(() => '2026-03-09T19:00:00.000Z');
+    await seedContractSlice(harness.store);
+
+    const nativeFetch = globalThis.fetch.bind(globalThis);
+    const requests: RequestContract[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+        requests.push(getRequestContract(input, harness!.baseUrl, init));
+        return nativeFetch(input, init);
+      })
+    );
+
+    const evidenceRef = '/tmp/contract-peer-watch.md';
+    const api = await loadApi(harness.baseUrl);
+    const timeline = await api.fetchTimeline({
+      agentId: 'app-engineering',
+      eventType: 'peer_watch_alert_raised',
+      severity: 'orange',
+      sourceKind: 'controller_event',
+      evidenceRef,
+      correlationId: 'corr-contract'
+    });
+
+    expect(requests).toEqual([
+      {
+        method: 'GET',
+        origin: harness.baseUrl,
+        pathname: '/timeline',
+        query: [
+          ['agent_id', 'app-engineering'],
+          ['correlation_id', 'corr-contract'],
+          ['event_type', 'peer_watch_alert_raised'],
+          ['evidence_ref', evidenceRef],
+          ['limit', '10'],
+          ['severity', 'orange'],
+          ['source_kind', 'controller_event'],
+          ['window', '60m']
+        ]
+      }
+    ]);
+    expect(timeline.items.map((event) => event.event_id)).toEqual(['evt_contract_peer_watch']);
+    expect(timeline.items).toHaveLength(1);
+    expect(timeline.items.every((event) => event.evidence_refs.includes(evidenceRef))).toBe(true);
+  });
+
   it('passes memory artifact_ref exact filters through to the real backend and keeps the current scope constrained', async () => {
     harness = await createHarness(() => '2026-03-09T19:00:00.000Z');
     await seedContractSlice(harness.store);
@@ -551,6 +598,7 @@ describe('read-only frontend/backend contract smoke', () => {
         eventType: 'peer_watch_alert_raised',
         severity: 'orange',
         sourceKind: 'controller_event',
+        evidenceRef: '/tmp/contract-peer-watch.md',
         correlationId: 'corr-contract'
       }),
       api.fetchAgentInteractions('app-engineering', {
@@ -580,6 +628,7 @@ describe('read-only frontend/backend contract smoke', () => {
         query: [
           ['correlation_id', 'corr-contract'],
           ['event_type', 'peer_watch_alert_raised'],
+          ['evidence_ref', '/tmp/contract-peer-watch.md'],
           ['limit', '2'],
           ['severity', 'orange'],
           ['source_kind', 'controller_event']

@@ -130,6 +130,7 @@ export async function fetchAgentEvents(
     eventType?: string;
     severity?: string;
     sourceKind?: string;
+    evidenceRef?: string;
     correlationId?: string;
     signal?: AbortSignal;
   } = {}
@@ -146,6 +147,9 @@ export async function fetchAgentEvents(
   }
   if (options.sourceKind) {
     params.set('source_kind', options.sourceKind);
+  }
+  if (options.evidenceRef) {
+    params.set('evidence_ref', options.evidenceRef);
   }
   if (options.correlationId) {
     params.set('correlation_id', options.correlationId);
@@ -284,6 +288,7 @@ export async function fetchTimeline(
     eventType?: string;
     severity?: string;
     sourceKind?: string;
+    evidenceRef?: string;
     correlationId?: string;
     eventId?: string;
     signal?: AbortSignal;
@@ -305,6 +310,9 @@ export async function fetchTimeline(
   }
   if (options.sourceKind) {
     params.set('source_kind', options.sourceKind);
+  }
+  if (options.evidenceRef) {
+    params.set('evidence_ref', options.evidenceRef);
   }
   if (options.correlationId) {
     params.set('correlation_id', options.correlationId);

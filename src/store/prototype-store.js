@@ -544,6 +544,7 @@ class PrototypeStore {
       now: filters.now
     };
     const allIncidents = this.listIncidents({ ...baseFilters, limit: null });
+    const openIncidents = this.listIncidents({ ...baseFilters, status: 'open', limit: null });
     const allInteractions = listInteractionItems(this.events, baseFilters, null);
     const allTimeline = listTimelineItems(this.events, { ...baseFilters, limit: null });
 
@@ -560,6 +561,12 @@ class PrototypeStore {
         ? null
         : filters.limit;
     const interactionLimit = limit === null ? null : parseLimit(limit);
+    const closureLedger = createCorrelationClosureLedger({
+      incidents: allIncidents,
+      openIncidents,
+      interactions: allInteractions,
+      limit: interactionLimit
+    });
     const timestamps = collectCorrelationTimestamps({
       incidents: allIncidents,
       interactions: allInteractions,
@@ -585,6 +592,7 @@ class PrototypeStore {
       incident_count: allIncidents.length,
       interaction_count: allInteractions.length,
       event_count: allTimeline.length,
+      closure_ledger: closureLedger,
       incidents: this.listIncidents({ ...baseFilters, limit }),
       interactions: listInteractionItems(this.events, baseFilters, interactionLimit),
       timeline: listTimelineItems(this.events, { ...baseFilters, limit })
@@ -2983,6 +2991,81 @@ function getCollectorTmuxArtifactRef(item, tmuxObservation, fallbackTmuxRef = nu
 
 function compareIsoAsc(left, right) {
   return Date.parse(left || 0) - Date.parse(right || 0);
+}
+
+function createCorrelationClosureLedger({ incidents = [], openIncidents = [], interactions = [], limit = null }) {
+  const openIncidentIds = new Set(openIncidents.map((incident) => incident.incident_id));
+  const openEntries = openIncidents.map((incident) => createIncidentClosureEntry(incident, 'open'));
+  const closedEntries = incidents
+    .filter((incident) => !openIncidentIds.has(incident.incident_id))
+    .filter((incident) => incident.status === 'resolved' || incident.status === 'completed')
+    .map((incident) => createIncidentClosureEntry(incident, 'closed'));
+  const activeEntries = interactions
+    .filter((interaction) => !interaction.ended_at)
+    .map(createActiveInteractionClosureEntry);
+  const entries = [...openEntries, ...activeEntries, ...closedEntries].sort((left, right) => {
+    const rightTs = Date.parse(right.ts || 0);
+    const leftTs = Date.parse(left.ts || 0);
+
+    if (rightTs !== leftTs) {
+      return rightTs - leftTs;
+    }
+
+    return right.entry_id.localeCompare(left.entry_id);
+  });
+  const visibleEntries = limit === null ? entries : entries.slice(0, limit);
+
+  return {
+    state: openEntries.length > 0
+      ? 'open'
+      : activeEntries.length > 0
+        ? 'active'
+        : closedEntries.length > 0
+          ? 'closed'
+          : 'unknown',
+    basis: 'filtered_correlation_slice',
+    open_count: openEntries.length,
+    active_count: activeEntries.length,
+    closed_count: closedEntries.length,
+    entry_count: entries.length,
+    last_transition_ts: entries[0]?.ts || null,
+    entries: visibleEntries
+  };
+}
+
+function createIncidentClosureEntry(incident, state) {
+  return {
+    entry_id: `incident:${incident.incident_id}`,
+    state,
+    kind: incident.kind,
+    status: incident.status,
+    ts: incident.ts,
+    agent_id: incident.agent_id,
+    actor_id: incident.actor_id || null,
+    summary: incident.summary,
+    correlation_id: incident.correlation_id,
+    evidence_refs: normalizeEvidenceRefs(incident.evidence_refs),
+    source_kind: incident.source_kind,
+    incident_id: incident.incident_id
+  };
+}
+
+function createActiveInteractionClosureEntry(interaction) {
+  return {
+    entry_id: interaction.interaction_id,
+    state: 'active',
+    kind: interaction.interaction_type,
+    status: 'active',
+    ts: interaction.started_at,
+    agent_id: interaction.participant_agent_ids[0] || '',
+    actor_id: null,
+    summary: interaction.summary,
+    correlation_id: interaction.correlation_id,
+    evidence_refs: normalizeEvidenceRefs(interaction.evidence_refs),
+    source_kind: interaction.source_kind,
+    interaction_id: interaction.interaction_id,
+    related_event_ids: normalizeStringValues(interaction.related_event_ids)
+  };
 }
 
 function collectCorrelationTimestamps({ incidents = [], interactions = [], timeline = [] }) {

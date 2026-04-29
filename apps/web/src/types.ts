@@ -374,6 +374,34 @@ export interface PeerWatchAlertsResponse {
   items: PeerWatchAlert[];
 }
 
+export interface CorrelationClosureLedgerEntry {
+  entry_id: string;
+  state: 'open' | 'active' | 'closed';
+  kind: string;
+  status: string;
+  ts: string;
+  agent_id: string;
+  actor_id: string | null;
+  summary: string;
+  correlation_id: string;
+  evidence_refs: string[];
+  source_kind: string;
+  incident_id?: string;
+  interaction_id?: string;
+  related_event_ids?: string[];
+}
+
+export interface CorrelationClosureLedger {
+  state: 'open' | 'active' | 'closed' | 'unknown';
+  basis: 'filtered_correlation_slice';
+  open_count: number;
+  active_count: number;
+  closed_count: number;
+  entry_count: number;
+  last_transition_ts: string | null;
+  entries: CorrelationClosureLedgerEntry[];
+}
+
 export interface CorrelationDrilldown {
   correlation_id: string;
   participant_agent_ids: string[];
@@ -383,6 +411,7 @@ export interface CorrelationDrilldown {
   incident_count: number;
   interaction_count: number;
   event_count: number;
+  closure_ledger?: CorrelationClosureLedger;
   incidents: WorkflowIncident[];
   interactions: WorkflowInteraction[];
   timeline: WorkflowTimelineEvent[];

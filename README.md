@@ -215,8 +215,9 @@ Optional env:
 ### Correlation drill-down notes
 - `GET /correlations/:correlation_id` is a read-only aggregate over existing incident, interaction, and timeline read models
 - when `window` is present, it reuses the existing `Nm|Nh` filter format; when omitted, the drill-down keeps the full correlation history
-- when `limit` is present, it caps `incidents`, `interactions`, and `timeline` individually using their existing ordering semantics; `incident_count`, `interaction_count`, and `event_count` remain the full filtered totals
-- the response also exposes deduped `participant_agent_ids`, deduped `evidence_refs`, and `first_ts` / `last_ts` bounds for the full filtered correlation slice
+- when `limit` is present, it caps `incidents`, `interactions`, `timeline`, and the additive `closure_ledger.entries` slice using their existing newest-first/reader ordering semantics; `incident_count`, `interaction_count`, `event_count`, and closure ledger counts remain the full filtered totals
+- the response also exposes deduped `participant_agent_ids`, deduped `evidence_refs`, `first_ts` / `last_ts` bounds, and an additive `closure_ledger` for the full filtered correlation slice
+- `closure_ledger.state` is derived from current `status=open` incident semantics first, then active interactions, then closed resolved/completed incidents; it does not treat completed handoff/reboot start rows as open
 - the route returns `404` when the `correlation_id` matches no incidents, interactions, or events
 
 ### Shared memory artifact notes

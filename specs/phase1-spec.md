@@ -106,7 +106,8 @@ This repository mirrors the controller-approved Phase 1 scope so implementation 
 ## Correlation drill-down addendum
 - `GET /correlations/:correlation_id` stays read-only and aggregates one evidence-first drill-down surface from existing incident, interaction, and timeline/event read models
 - the route does not add a new write path, persisted table, or event type; it only reuses append-only events and existing derived reads
-- the response exposes `correlation_id`, deduped `participant_agent_ids`, deduped `evidence_refs`, `first_ts`, `last_ts`, `incident_count`, `interaction_count`, `event_count`, `incidents`, `interactions`, and `timeline`
+- the response exposes `correlation_id`, deduped `participant_agent_ids`, deduped `evidence_refs`, `first_ts`, `last_ts`, `incident_count`, `interaction_count`, `event_count`, additive `closure_ledger`, `incidents`, `interactions`, and `timeline`
+- `closure_ledger` is derived from the filtered correlation slice: current `status=open` incident semantics produce `open`, active unended interactions produce `active`, and resolved/completed incident evidence produces `closed`; completed handoff/reboot lifecycle rows are not reported as open
 - `window` reuses the existing `Nm|Nh` filter format; when omitted the drill-down keeps the full correlation history
 - `limit` caps each returned detail slice while leaving aggregate counts bound to the full filtered correlation match set
 - the route returns `404` when no incidents, interactions, or events match the requested `correlation_id`

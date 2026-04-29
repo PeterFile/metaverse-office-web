@@ -1579,6 +1579,27 @@ function expectCorrelationContract(correlation: CorrelationDrilldown) {
   expect(correlation.incident_count).toBe(2);
   expect(correlation.interaction_count).toBe(3);
   expect(correlation.event_count).toBe(4);
+  expect(correlation.closure_ledger).toMatchObject({
+    state: 'open',
+    basis: 'filtered_correlation_slice',
+    open_count: 1,
+    active_count: 1,
+    closed_count: 1,
+    entry_count: 3,
+    last_transition_ts: '2026-03-09T18:48:00.000Z'
+  });
+  expect(correlation.closure_ledger?.entries.map((entry) => entry.entry_id)).toEqual([
+    'incident:evt_contract_handoff_completed',
+    'interaction:evt_contract_peer_watch',
+    'incident:evt_contract_peer_watch'
+  ]);
+  expect(correlation.closure_ledger?.entries[0]).toMatchObject({
+    state: 'closed',
+    kind: 'handoff',
+    status: 'completed',
+    evidence_refs: ['/tmp/contract-handoff.md'],
+    source_kind: 'controller_event'
+  });
   expect(correlation.incidents.map((incident) => incident.incident_id)).toEqual([
     'evt_contract_handoff_completed',
     'evt_contract_peer_watch'

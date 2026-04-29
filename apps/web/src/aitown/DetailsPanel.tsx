@@ -154,6 +154,17 @@ const SEVERITY_LABELS = {
   red: 'Red'
 } as const;
 
+const CORRELATION_CLOSURE_LABELS = {
+  open: 'Open',
+  active: 'Active',
+  closed: 'Closed',
+  unknown: 'Unknown'
+} as const;
+
+const CORRELATION_CLOSURE_BASIS_LABELS = {
+  filtered_correlation_slice: 'filtered correlation slice'
+} as const;
+
 const SEVERITY_RANK = {
   normal: 0,
   yellow: 1,
@@ -849,6 +860,61 @@ function renderSharedMemoryEvidenceRefs({
       })}
     </span>
   ));
+}
+
+function renderCorrelationClosureLedger({
+  correlation,
+  sharedMemoryArtifactRefs,
+  onJump,
+  allowExactFallback
+}: {
+  correlation: CorrelationDrilldown;
+  sharedMemoryArtifactRefs: ReadonlySet<string>;
+  onJump: (artifactRef: string) => void;
+  allowExactFallback: boolean;
+}) {
+  const ledger = correlation.closure_ledger;
+  if (!ledger) {
+    return null;
+  }
+
+  return (
+    <>
+      <li className="aitown-record">
+        <strong>{`Closure · ${CORRELATION_CLOSURE_LABELS[ledger.state]}`}</strong>
+        <span>{`Basis · ${CORRELATION_CLOSURE_BASIS_LABELS[ledger.basis]}`}</span>
+        <span>{`Open ${ledger.open_count} · Active ${ledger.active_count} · Closed ${ledger.closed_count}`}</span>
+        <span>{`Entries · ${ledger.entry_count}`}</span>
+        {ledger.last_transition_ts ? <span>{`Latest transition · ${ledger.last_transition_ts}`}</span> : null}
+        {ledger.entries.length === 0 ? <span>No closure evidence in this correlation slice.</span> : null}
+      </li>
+      {ledger.entries.map((entry) => (
+        <li className="aitown-record" key={entry.entry_id}>
+          <strong>{`Closure evidence · ${entry.entry_id}`}</strong>
+          <span>{`Summary · ${entry.summary || 'No summary'}`}</span>
+          <span>{`State · ${CORRELATION_CLOSURE_LABELS[entry.state]} · ${entry.kind} · ${entry.status}`}</span>
+          <span>{`Transition · ${entry.ts}`}</span>
+          <span>{`Agent · ${entry.agent_id}`}</span>
+          {entry.actor_id ? <span>{`Actor · ${entry.actor_id}`}</span> : null}
+          <span>{`Source · ${entry.source_kind}`}</span>
+          <span>
+            Evidence ·{' '}
+            {renderSharedMemoryEvidenceRefs({
+              evidenceRefs: entry.evidence_refs,
+              sharedMemoryArtifactRefs,
+              onJump,
+              allowExactFallback
+            })}
+          </span>
+          {entry.incident_id ? <span>{`Incident · ${entry.incident_id}`}</span> : null}
+          {entry.interaction_id ? <span>{`Interaction · ${entry.interaction_id}`}</span> : null}
+          {entry.related_event_ids && entry.related_event_ids.length > 0 ? (
+            <span>{`Related events · ${entry.related_event_ids.join(', ')}`}</span>
+          ) : null}
+        </li>
+      ))}
+    </>
+  );
 }
 
 function resolveSharedMemoryEvidenceJumpBehavior(
@@ -4169,6 +4235,12 @@ export function DetailsPanel({
                   </span>
                   <span>{`Counts · ${correlation.incident_count} incidents · ${correlation.interaction_count} interactions · ${correlation.event_count} events`}</span>
                 </li>
+                {renderCorrelationClosureLedger({
+                  correlation,
+                  sharedMemoryArtifactRefs,
+                  onJump: sharedMemoryEvidenceJump.onJump,
+                  allowExactFallback: sharedMemoryEvidenceJump.allowExactFallback
+                })}
                 {correlation.incidents.map((incident) =>
                   renderIncidentRecord({
                     incident,
@@ -5058,6 +5130,12 @@ export function DetailsPanel({
                 </span>
                 <span>{`Counts · ${correlation.incident_count} incidents · ${correlation.interaction_count} interactions · ${correlation.event_count} events`}</span>
               </li>
+              {renderCorrelationClosureLedger({
+                correlation,
+                sharedMemoryArtifactRefs,
+                onJump: sharedMemoryEvidenceJump.onJump,
+                allowExactFallback: sharedMemoryEvidenceJump.allowExactFallback
+              })}
               {correlation.incidents.map((incident) =>
                 renderIncidentRecord({
                   incident,

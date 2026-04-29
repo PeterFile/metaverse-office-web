@@ -289,6 +289,46 @@ function buildCorrelation(): CorrelationDrilldown {
     incident_count: 1,
     interaction_count: 1,
     event_count: 1,
+    closure_ledger: {
+      state: 'open',
+      basis: 'filtered_correlation_slice',
+      open_count: 1,
+      active_count: 1,
+      closed_count: 0,
+      entry_count: 2,
+      last_transition_ts: '2026-03-16T08:50:00.000Z',
+      entries: [
+        {
+          entry_id: 'incident:inc-1',
+          state: 'open',
+          kind: 'peer_watch_alert',
+          status: 'open',
+          ts: '2026-03-16T08:50:00.000Z',
+          agent_id: 'app-engineering',
+          actor_id: 'controller',
+          summary: 'Lead is still waiting on workflow evidence',
+          correlation_id: 'corr-app-review',
+          evidence_refs: ['/evidence/correlation.md'],
+          source_kind: 'controller_event',
+          incident_id: 'inc-1'
+        },
+        {
+          entry_id: 'int-1',
+          state: 'active',
+          kind: 'peer_watch',
+          status: 'active',
+          ts: '2026-03-16T08:45:00.000Z',
+          agent_id: 'app-engineering',
+          actor_id: null,
+          summary: 'Reviewed the missing workflow package',
+          correlation_id: 'corr-app-review',
+          evidence_refs: ['/evidence/review.md'],
+          source_kind: 'controller_event',
+          interaction_id: 'int-1',
+          related_event_ids: ['evt-1']
+        }
+      ]
+    },
     incidents: [
       {
         incident_id: 'inc-1',
@@ -4035,6 +4075,34 @@ describe('DetailsPanel accountability signals', () => {
     expect(within(correlationCard!).getByText('Ended · 2026-03-16T08:47:30.000Z')).toBeVisible();
     expect(within(correlationCard!).getByText('Trigger · evt-1')).toBeVisible();
     expect(within(correlationCard!).getByText('State · blocked -> reviewing')).toBeVisible();
+  });
+
+  it('renders correlation closure ledger entries with distinct headings and summaries', () => {
+    render(<DetailsPanel {...buildProps()} />);
+
+    const section = screen.getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    expect(section).not.toBeNull();
+
+    const ledgerSummary = within(section!).getByText('Closure · Open').closest('li');
+    expect(ledgerSummary).not.toBeNull();
+    expect(ledgerSummary).toHaveTextContent('Basis · filtered correlation slice');
+    expect(ledgerSummary).toHaveTextContent('Open 1 · Active 1 · Closed 0');
+    expect(ledgerSummary).toHaveTextContent('Entries · 2');
+    expect(ledgerSummary).toHaveTextContent('Latest transition · 2026-03-16T08:50:00.000Z');
+
+    const incidentEntry = within(section!).getByText('Closure evidence · incident:inc-1').closest('li');
+    const interactionEntry = within(section!).getByText('Closure evidence · int-1').closest('li');
+    expect(incidentEntry).not.toBeNull();
+    expect(interactionEntry).not.toBeNull();
+    expect(incidentEntry).toHaveTextContent('Summary · Lead is still waiting on workflow evidence');
+    expect(incidentEntry).toHaveTextContent('State · Open · peer_watch_alert · open');
+    expect(incidentEntry).toHaveTextContent('Incident · inc-1');
+    expect(interactionEntry).toHaveTextContent('Summary · Reviewed the missing workflow package');
+    expect(interactionEntry).toHaveTextContent('State · Active · peer_watch · active');
+    expect(interactionEntry).toHaveTextContent('Interaction · int-1');
+    expect(interactionEntry).toHaveTextContent('Related events · evt-1');
+    expect(within(section!).getAllByText('Lead is still waiting on workflow evidence')).toHaveLength(1);
+    expect(within(section!).getAllByText('Reviewed the missing workflow package')).toHaveLength(1);
   });
 
   it('renders selected-agent workflow interaction correlation pivots only for populated ids and uses interaction-local accessible names', async () => {

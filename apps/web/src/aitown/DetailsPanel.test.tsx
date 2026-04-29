@@ -6815,6 +6815,128 @@ describe('DetailsPanel accountability signals', () => {
     ).toBeVisible();
   });
 
+  it('renders collector evidence coverage summary and low/no recent evidence rows without changing severity labels', () => {
+    const baseCollectorSnapshot = buildCollectorSnapshot();
+    const lowCoverageItem = {
+      agent_id: 'growth-revenue',
+      workspace_root: '/workspace/growth-revenue',
+      session_ref: 'sess-growth',
+      evidence_refs: [],
+      workspace_observations: [],
+      tmux_observations: [],
+      supervision: {
+        watch_target: null,
+        watched_by: [],
+        needs_attention: false
+      },
+      heartbeat: {
+        agent_id: 'growth-revenue',
+        actor_id: 'collector-watch',
+        received_at: '2026-03-16T08:59:15.000Z',
+        current_state: 'planning',
+        active_task: 'Review copy',
+        current_location: 'growth-desk',
+        last_meaningful_output_at: null,
+        last_file_write_at: null,
+        current_blocker: '',
+        confidence_level: 'medium' as const,
+        reboot_recommended: false,
+        evidence_refs: []
+      }
+    };
+    const collectorSnapshot: CollectorSnapshot = {
+      ...baseCollectorSnapshot,
+      summary: {
+        agent_count: 2,
+        heartbeat_count: 2,
+        tmux_observed_count: 1,
+        workspace_observed_count: 1,
+        reboot_recommended_count: 1
+      },
+      evidence_coverage: {
+        evidence_ref_count: 2,
+        covered_agent_count: 1,
+        low_confidence_agent_ids: ['growth-revenue'],
+        source_kind_buckets: {
+          workspace_file: 1,
+          workspace_root: 0,
+          tmux_observation: 1
+        },
+        agent_items: [
+          {
+            agent_id: 'app-engineering',
+            evidence_ref_count: 2,
+            source_kinds: ['tmux_observation', 'workspace_file'],
+            latest_evidence_at: '2026-03-16T08:58:00.000Z',
+            confidence_level: 'high'
+          },
+          {
+            agent_id: 'growth-revenue',
+            evidence_ref_count: 0,
+            source_kinds: [],
+            latest_evidence_at: null,
+            confidence_level: 'medium'
+          }
+        ]
+      },
+      items: [
+        baseCollectorSnapshot.items[0],
+        lowCoverageItem
+      ]
+    };
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          collectorSnapshot,
+          selectedAgent: null,
+          selectedCorrelationId: null,
+          selectedOperation: null,
+          workflow: null,
+          correlation: null
+        })}
+      />
+    );
+
+    const collectorSection = screen.getByRole('heading', { name: 'Collector Supervision' }).closest('section');
+    expect(collectorSection).not.toBeNull();
+    expect(within(collectorSection!).getByText('Evidence coverage · 1/2 agents · 2 refs')).toBeVisible();
+    expect(
+      within(collectorSection!).getByText('Evidence sources · workspace_file 1 · workspace_root 0 · tmux_observation 1')
+    ).toBeVisible();
+    expect(within(collectorSection!).getByText('Coverage below high-confidence/no evidence · growth-revenue')).toBeVisible();
+
+    const growthRevenueRecord = within(collectorSection!).getByText('Growth Revenue Agent').closest('li');
+    expect(growthRevenueRecord).not.toBeNull();
+    expect(growthRevenueRecord!).toHaveTextContent('Collector state · planning');
+    expect(growthRevenueRecord!).toHaveTextContent('Needs attention · No');
+    expect(growthRevenueRecord!).toHaveTextContent('Coverage status · below high-confidence/no evidence');
+    expect(growthRevenueRecord!).toHaveTextContent('Evidence coverage · 0 refs · No evidence sources');
+    expect(growthRevenueRecord!).toHaveTextContent('Latest evidence · No recent evidence');
+  });
+
+  it('keeps the legacy collector supervision surface when evidence coverage is absent', () => {
+    render(
+      <DetailsPanel
+        {...buildProps({
+          selectedAgent: null,
+          selectedCorrelationId: null,
+          selectedOperation: null,
+          workflow: null,
+          correlation: null
+        })}
+      />
+    );
+
+    const collectorSection = screen.getByRole('heading', { name: 'Collector Supervision' }).closest('section');
+    expect(collectorSection).not.toBeNull();
+    expect(within(collectorSection!).getByText('Latest snapshot · 2026-03-16T09:00:00.000Z')).toBeVisible();
+    expect(within(collectorSection!).queryByText(/^Evidence coverage ·/)).not.toBeInTheDocument();
+    expect(within(collectorSection!).queryByText(/^Evidence sources ·/)).not.toBeInTheDocument();
+    expect(within(collectorSection!).queryByText(/^Coverage low\/no recent evidence ·/)).not.toBeInTheDocument();
+    expect(within(collectorSection!).queryByText(/^Coverage status ·/)).not.toBeInTheDocument();
+  });
+
   it('renders crew-overview collector supervision watchers as pivots and carries the active correlation when present, otherwise keeps no-correlation behavior', async () => {
     const user = userEvent.setup();
     const onSelectAgent = vi.fn();

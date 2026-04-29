@@ -1057,6 +1057,32 @@ const collectorSnapshotFixture = {
     workspace_observed_count: 3,
     reboot_recommended_count: 1
   },
+  evidence_coverage: {
+    evidence_ref_count: 8,
+    covered_agent_count: 2,
+    low_confidence_agent_ids: ['growth-revenue'],
+    source_kind_buckets: {
+      workspace_file: 4,
+      workspace_root: 2,
+      tmux_observation: 2
+    },
+    agent_items: [
+      {
+        agent_id: 'app-engineering',
+        evidence_ref_count: 5,
+        source_kinds: ['tmux_observation', 'workspace_file', 'workspace_root'],
+        latest_evidence_at: '2026-03-16T08:59:10.000Z',
+        confidence_level: 'high'
+      },
+      {
+        agent_id: 'growth-revenue',
+        evidence_ref_count: 3,
+        source_kinds: ['tmux_observation', 'workspace_file', 'workspace_root'],
+        latest_evidence_at: '2026-03-16T08:58:40.000Z',
+        confidence_level: 'medium'
+      }
+    ]
+  },
   items: [
     {
       agent_id: 'app-engineering',
@@ -3527,6 +3553,10 @@ afterEach(() => {
     expect(within(collectorSection!).getByText('Workspace observations · 3')).toBeVisible();
     expect(within(collectorSection!).getByText('Tmux observations · 2')).toBeVisible();
     expect(within(collectorSection!).getByText('Reboot flags · 1')).toBeVisible();
+    expect(within(collectorSection!).getByText('Evidence coverage · 2/2 agents · 8 refs')).toBeVisible();
+    expect(
+      within(collectorSection!).getByText('Coverage below high-confidence/no evidence · growth-revenue')
+    ).toBeVisible();
     expect(
       within(collectorSection!).getByRole('button', {
         name: 'Select collector supervision agent app-engineering'
@@ -3562,6 +3592,10 @@ afterEach(() => {
     ).toBeVisible();
     expect(growthRevenueCollectorRecord!).toHaveTextContent('Watch target · No watch target');
     expect(growthRevenueCollectorRecord!).toHaveTextContent('Watch graph alignment · Watcher mismatch');
+    expect(growthRevenueCollectorRecord!).toHaveTextContent('Coverage status · below high-confidence/no evidence');
+    expect(growthRevenueCollectorRecord!).toHaveTextContent(
+      'Evidence coverage · 3 refs · tmux_observation, workspace_file, workspace_root'
+    );
     expect(collectorSection!).toHaveTextContent('Evidence · /tmp/controller-log.md, /tmp/evidence.md');
     expect(
       within(collectorSection!).getByRole('button', {

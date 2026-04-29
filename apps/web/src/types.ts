@@ -138,10 +138,32 @@ export interface CollectorSharedArtifact {
   source_kinds: Array<'workspace_file' | 'tmux_observation'>;
 }
 
+export type CollectorEvidenceCoverageSourceKind =
+  | 'workspace_file'
+  | 'workspace_root'
+  | 'tmux_observation';
+
+export interface CollectorEvidenceCoverageAgentItem {
+  agent_id: string;
+  evidence_ref_count: number;
+  source_kinds: CollectorEvidenceCoverageSourceKind[];
+  latest_evidence_at: string | null;
+  confidence_level: CollectorHeartbeat['confidence_level'] | null;
+}
+
+export interface CollectorEvidenceCoverage {
+  evidence_ref_count: number;
+  covered_agent_count: number;
+  low_confidence_agent_ids: string[];
+  source_kind_buckets: Record<CollectorEvidenceCoverageSourceKind, number>;
+  agent_items: CollectorEvidenceCoverageAgentItem[];
+}
+
 export interface CollectorSnapshot {
   collected_at: string;
   actor_id: string;
   summary: CollectorSnapshotSummary;
+  evidence_coverage?: CollectorEvidenceCoverage;
   shared_artifacts?: CollectorSharedArtifact[];
   items: CollectorItem[];
 }

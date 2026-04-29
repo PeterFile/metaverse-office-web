@@ -311,6 +311,43 @@ describe('read-only frontend/backend contract smoke', () => {
     });
   });
 
+  it('passes timeline event_id exact replay filters through to the real backend', async () => {
+    harness = await createHarness(() => '2026-03-09T19:00:00.000Z');
+    await seedContractSlice(harness.store);
+
+    const nativeFetch = globalThis.fetch.bind(globalThis);
+    const requests: RequestContract[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+        requests.push(getRequestContract(input, harness!.baseUrl, init));
+        return nativeFetch(input, init);
+      })
+    );
+
+    const api = await loadApi(harness.baseUrl);
+    const timeline = await api.fetchTimeline({ eventId: 'evt_contract_peer_watch' });
+
+    expect(requests).toEqual([
+      {
+        method: 'GET',
+        origin: harness.baseUrl,
+        pathname: '/timeline',
+        query: [
+          ['event_id', 'evt_contract_peer_watch'],
+          ['limit', '10'],
+          ['window', '60m']
+        ]
+      }
+    ]);
+    expect(timeline.items.map((event) => event.event_id)).toEqual(['evt_contract_peer_watch']);
+    expect(timeline.items[0]).toMatchObject({
+      event_type: 'peer_watch_alert_raised',
+      severity: 'orange',
+      correlation_id: 'corr-contract'
+    });
+  });
+
   it('passes memory artifact_ref exact filters through to the real backend and keeps the current scope constrained', async () => {
     harness = await createHarness(() => '2026-03-09T19:00:00.000Z');
     await seedContractSlice(harness.store);

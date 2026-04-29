@@ -285,6 +285,7 @@ export async function fetchTimeline(
     severity?: string;
     sourceKind?: string;
     correlationId?: string;
+    eventId?: string;
     signal?: AbortSignal;
   } = {}
 ): Promise<TimelineReplayResponse> {
@@ -307,6 +308,9 @@ export async function fetchTimeline(
   }
   if (options.correlationId) {
     params.set('correlation_id', options.correlationId);
+  }
+  if (options.eventId) {
+    params.set('event_id', options.eventId);
   }
 
   const response = await fetch(resolveApiUrl(`/timeline?${params.toString()}`), {

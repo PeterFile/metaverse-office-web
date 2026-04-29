@@ -2714,7 +2714,17 @@ function listMemoryArtifactItems({ events = [], latestCollectorReport = null, fi
       source_kinds: Array.from(artifact.source_kinds).sort(),
       latest_summary: artifact.latest_summary,
       latest_event_type: artifact.latest_event_type,
-      ...(artifact.latest_event_id ? { latest_event_id: artifact.latest_event_id } : {}),
+      ...(artifact.latest_event_id
+        ? {
+            latest_event_id: artifact.latest_event_id,
+            replay_checkpoint: {
+              event_id: artifact.latest_event_id,
+              event_type: artifact.latest_event_type,
+              summary: artifact.latest_summary,
+              last_seen_at: artifact.latest_event_ts
+            }
+          }
+        : {}),
       collector_last_modified_at: artifact.collector_last_modified_at
     }))
     .sort((left, right) => {

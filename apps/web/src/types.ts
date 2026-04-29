@@ -417,6 +417,13 @@ export interface CorrelationDrilldown {
   timeline: WorkflowTimelineEvent[];
 }
 
+export interface MemoryArtifactReplayCheckpoint {
+  event_id: string;
+  event_type: string | null;
+  summary: string | null;
+  last_seen_at: string;
+}
+
 export interface MemoryArtifact {
   artifact_ref: string;
   artifact_kind: 'workspace_file' | 'tmux_observation' | 'evidence_ref';
@@ -430,6 +437,7 @@ export interface MemoryArtifact {
   latest_summary: string | null;
   latest_event_type: string | null;
   latest_event_id?: string | null;
+  replay_checkpoint?: MemoryArtifactReplayCheckpoint | null;
   collector_last_modified_at: string | null;
 }
 

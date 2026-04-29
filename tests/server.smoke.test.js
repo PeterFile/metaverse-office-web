@@ -2624,6 +2624,12 @@ test('GET /memory/artifacts materializes actor and counterparty evidence plus co
         latest_summary: 'Lead started review with app-engineering as counterparty',
         latest_event_type: 'review_started',
         latest_event_id: 'evt_memory_counterparty',
+        replay_checkpoint: {
+          event_id: 'evt_memory_counterparty',
+          event_type: 'review_started',
+          summary: 'Lead started review with app-engineering as counterparty',
+          last_seen_at: '2026-03-09T18:06:00.000Z'
+        },
         collector_last_modified_at: null
       }
     ]
@@ -2645,6 +2651,12 @@ test('GET /memory/artifacts materializes actor and counterparty evidence plus co
       latest_summary: 'Collector observed state change reviewing -> coding',
       latest_event_type: 'agent_state_changed',
       latest_event_id: 'evt_collector_app-engineering_state_change_observed_normal_2026-03-09T18_18_00_000Z',
+      replay_checkpoint: {
+        event_id: 'evt_collector_app-engineering_state_change_observed_normal_2026-03-09T18_18_00_000Z',
+        event_type: 'agent_state_changed',
+        summary: 'Collector observed state change reviewing -> coding',
+        last_seen_at: '2026-03-09T18:18:00.000Z'
+      },
       collector_last_modified_at: '2026-03-09T18:18:30.000Z'
     },
     {
@@ -2660,6 +2672,12 @@ test('GET /memory/artifacts materializes actor and counterparty evidence plus co
       latest_summary: 'Collector observed workspace write to collector-only.md',
       latest_event_type: 'agent_wrote_file',
       latest_event_id: 'evt_collector_app-engineering_file_write_observed_normal_2026-03-09T18_18_00_000Z',
+      replay_checkpoint: {
+        event_id: 'evt_collector_app-engineering_file_write_observed_normal_2026-03-09T18_18_00_000Z',
+        event_type: 'agent_wrote_file',
+        summary: 'Collector observed workspace write to collector-only.md',
+        last_seen_at: '2026-03-09T18:17:00.000Z'
+      },
       collector_last_modified_at: '2026-03-09T18:17:00.000Z'
     }
   ]);
@@ -2680,6 +2698,7 @@ test('GET /memory/artifacts materializes actor and counterparty evidence plus co
     collector_last_modified_at: '2026-03-09T18:15:00.000Z'
   });
   assert.equal(Object.prototype.hasOwnProperty.call(passiveOnlyArtifact, 'latest_event_id'), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(passiveOnlyArtifact, 'replay_checkpoint'), false);
 
   const sharedArtifact = collectorOnlyResponse.body.items.find((item) => item.artifact_ref === '/tmp/shared.md');
   assert.deepEqual(sharedArtifact, {
@@ -2699,6 +2718,12 @@ test('GET /memory/artifacts materializes actor and counterparty evidence plus co
     latest_summary: 'Newer event updated the shared artifact anchor',
     latest_event_type: 'review_completed',
     latest_event_id: 'evt_memory_latest_artifact',
+    replay_checkpoint: {
+      event_id: 'evt_memory_latest_artifact',
+      event_type: 'review_completed',
+      summary: 'Newer event updated the shared artifact anchor',
+      last_seen_at: '2026-03-09T18:08:00.000Z'
+    },
     collector_last_modified_at: '2026-03-09T18:16:30.000Z'
   });
 
@@ -2724,6 +2749,12 @@ test('GET /memory/artifacts materializes actor and counterparty evidence plus co
       latest_summary: 'Newer event updated the shared artifact anchor',
       latest_event_type: 'review_completed',
       latest_event_id: 'evt_memory_latest_artifact',
+      replay_checkpoint: {
+        event_id: 'evt_memory_latest_artifact',
+        event_type: 'review_completed',
+        summary: 'Newer event updated the shared artifact anchor',
+        last_seen_at: '2026-03-09T18:08:00.000Z'
+      },
       collector_last_modified_at: '2026-03-09T18:16:30.000Z'
     }
   ]);
@@ -2845,6 +2876,12 @@ test('GET /memory/artifacts narrows evidence facets without leaking unrelated co
       latest_summary: 'Facet event referenced the shared workspace artifact',
       latest_event_type: 'review_started',
       latest_event_id: 'evt_memory_facet_match',
+      replay_checkpoint: {
+        event_id: 'evt_memory_facet_match',
+        event_type: 'review_started',
+        summary: 'Facet event referenced the shared workspace artifact',
+        last_seen_at: '2026-03-09T18:04:00.000Z'
+      },
       collector_last_modified_at: '2026-03-09T18:16:30.000Z'
     }
   ]);
@@ -3067,6 +3104,12 @@ test('GET /memory/artifacts does not leak collector_last_modified_at from filter
       latest_summary: 'Lead reviewed shared evidence with app engineering',
       latest_event_type: 'review_started',
       latest_event_id: 'evt_memory_event_only_for_app',
+      replay_checkpoint: {
+        event_id: 'evt_memory_event_only_for_app',
+        event_type: 'review_started',
+        summary: 'Lead reviewed shared evidence with app engineering',
+        last_seen_at: '2026-03-09T18:10:00.000Z'
+      },
       collector_last_modified_at: null
     }
   ]);
@@ -3202,6 +3245,12 @@ test('GET /memory/artifacts keeps stable tmux refs when later collector snapshot
       latest_summary: 'Collector observed state change coding -> reviewing',
       latest_event_type: 'agent_state_changed',
       latest_event_id: 'evt_collector_app-engineering_state_change_observed_normal_2026-03-09T18_19_00_000Z',
+      replay_checkpoint: {
+        event_id: 'evt_collector_app-engineering_state_change_observed_normal_2026-03-09T18_19_00_000Z',
+        event_type: 'agent_state_changed',
+        summary: 'Collector observed state change coding -> reviewing',
+        last_seen_at: '2026-03-09T18:19:00.000Z'
+      },
       collector_last_modified_at: '2026-03-09T18:19:30.000Z'
     }
   ]);
@@ -3292,6 +3341,12 @@ test('GET /memory/artifacts exposes multiple tmux panes as distinct artifacts', 
       latest_summary: 'Collector observed state change idle -> coding',
       latest_event_type: 'agent_state_changed',
       latest_event_id: 'evt_collector_app-engineering_state_change_observed_normal_2026-03-09T18_18_00_000Z',
+      replay_checkpoint: {
+        event_id: 'evt_collector_app-engineering_state_change_observed_normal_2026-03-09T18_18_00_000Z',
+        event_type: 'agent_state_changed',
+        summary: 'Collector observed state change idle -> coding',
+        last_seen_at: '2026-03-09T18:18:00.000Z'
+      },
       collector_last_modified_at: '2026-03-09T18:18:30.000Z'
     },
     {
@@ -3397,6 +3452,12 @@ test('GET /memory/artifacts binds collector state-change evidence to the active 
     latest_summary: 'Collector observed state change idle -> coding',
     latest_event_type: 'agent_state_changed',
     latest_event_id: 'evt_collector_app-engineering_state_change_observed_normal_2026-03-09T18_18_00_000Z',
+    replay_checkpoint: {
+      event_id: 'evt_collector_app-engineering_state_change_observed_normal_2026-03-09T18_18_00_000Z',
+      event_type: 'agent_state_changed',
+      summary: 'Collector observed state change idle -> coding',
+      last_seen_at: '2026-03-09T18:18:00.000Z'
+    },
     collector_last_modified_at: '2026-03-09T18:18:30.000Z'
   });
 });

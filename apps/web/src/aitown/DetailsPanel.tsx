@@ -1,5 +1,6 @@
 import type {
   AgentWorkflow,
+  CollectorEvidenceCoverageAgentItem,
   CollectorItem,
   CollectorSharedArtifact,
   CollectorSnapshot,
@@ -3243,6 +3244,54 @@ function resolveCollectorEvidenceRefs(item: CollectorItem) {
   );
 }
 
+function renderEvidenceRefCount(count: number) {
+  return `${count} ref${count === 1 ? '' : 's'}`;
+}
+
+function renderCollectorEvidenceCoverageSummary({
+  coverage,
+  agentCount
+}: {
+  coverage: CollectorSnapshot['evidence_coverage'] | null;
+  agentCount: number;
+}) {
+  if (!coverage) {
+    return null;
+  }
+
+  const buckets = coverage.source_kind_buckets;
+
+  return (
+    <>
+      <span>{`Evidence coverage · ${coverage.covered_agent_count}/${agentCount} agents · ${renderEvidenceRefCount(coverage.evidence_ref_count)}`}</span>
+      <span>
+        {`Evidence sources · workspace_file ${buckets.workspace_file} · workspace_root ${buckets.workspace_root} · tmux_observation ${buckets.tmux_observation}`}
+      </span>
+      <span>
+        {`Coverage below high-confidence/no evidence · ${renderNamedList(coverage.low_confidence_agent_ids, 'None')}`}
+      </span>
+    </>
+  );
+}
+
+function renderCollectorEvidenceCoverageItem({
+  coverageItem,
+  coverageLow
+}: {
+  coverageItem: CollectorEvidenceCoverageAgentItem;
+  coverageLow: boolean;
+}) {
+  return (
+    <>
+      <span>{`Coverage status · ${coverageLow ? 'below high-confidence/no evidence' : 'evidence coverage present'}`}</span>
+      <span>
+        {`Evidence coverage · ${renderEvidenceRefCount(coverageItem.evidence_ref_count)} · ${renderNamedList(coverageItem.source_kinds, 'No evidence sources')}`}
+      </span>
+      <span>{`Latest evidence · ${renderTimestamp(coverageItem.latest_evidence_at, 'No recent evidence')}`}</span>
+    </>
+  );
+}
+
 function resolveCollectorSeverity(item: CollectorItem): keyof typeof SEVERITY_LABELS {
   if (item.supervision.needs_attention) {
     return 'orange';
@@ -3255,10 +3304,15 @@ function resolveCollectorSeverity(item: CollectorItem): keyof typeof SEVERITY_LA
   return 'normal';
 }
 
-function compareCollectorItems(left: CollectorItem, right: CollectorItem) {
+function compareCollectorItems(
+  left: CollectorItem,
+  right: CollectorItem,
+  lowCoverageAgentIds: ReadonlySet<string> = new Set()
+) {
   const leftSignalScore =
     (left.supervision.needs_attention ? 100 : 0) +
     (left.heartbeat.reboot_recommended ? 50 : 0) +
+    (lowCoverageAgentIds.has(left.agent_id) ? 30 : 0) +
     (left.supervision.watch_target ? 20 : 0) +
     left.supervision.watched_by.length * 10 +
     resolveCollectorEvidenceRefs(left).length * 2 +
@@ -3267,6 +3321,7 @@ function compareCollectorItems(left: CollectorItem, right: CollectorItem) {
   const rightSignalScore =
     (right.supervision.needs_attention ? 100 : 0) +
     (right.heartbeat.reboot_recommended ? 50 : 0) +
+    (lowCoverageAgentIds.has(right.agent_id) ? 30 : 0) +
     (right.supervision.watch_target ? 20 : 0) +
     right.supervision.watched_by.length * 10 +
     resolveCollectorEvidenceRefs(right).length * 2 +
@@ -3655,15 +3710,23 @@ export function DetailsPanel({
       : null;
   const workflowWarning = workflowError && workflow ? renderWorkflowWarningLabel(workflowError) : null;
   const workflowSummaryFacets = workflow ? selectWorkflowSummaryFacets(workflow.summary) : null;
+  const collectorEvidenceCoverage = collectorSnapshot?.evidence_coverage ?? null;
+  const collectorEvidenceCoverageLowAgentIds = new Set(
+    collectorEvidenceCoverage?.low_confidence_agent_ids ?? []
+  );
+  const collectorEvidenceCoverageByAgentId = new Map(
+    (collectorEvidenceCoverage?.agent_items ?? []).map((item) => [item.agent_id, item])
+  );
   const collectorSignalItems = (collectorSnapshot?.items ?? [])
     .filter(
       (item) =>
         item.supervision.needs_attention ||
         item.heartbeat.reboot_recommended ||
         item.supervision.watch_target !== null ||
-        item.supervision.watched_by.length > 0
+        item.supervision.watched_by.length > 0 ||
+        collectorEvidenceCoverageLowAgentIds.has(item.agent_id)
     )
-    .sort(compareCollectorItems)
+    .sort((left, right) => compareCollectorItems(left, right, collectorEvidenceCoverageLowAgentIds))
     .slice(0, 3);
   const collectorSharedArtifacts = collectorSnapshot?.shared_artifacts;
   const selectedCollectorItem = selectedAgent
@@ -3846,6 +3909,10 @@ export function DetailsPanel({
                 <span>{`Workspace observations · ${collectorSnapshot.summary.workspace_observed_count}`}</span>
                 <span>{`Tmux observations · ${collectorSnapshot.summary.tmux_observed_count}`}</span>
                 <span>{`Reboot flags · ${collectorSnapshot.summary.reboot_recommended_count}`}</span>
+                {renderCollectorEvidenceCoverageSummary({
+                  coverage: collectorEvidenceCoverage,
+                  agentCount: collectorSnapshot.summary.agent_count
+                })}
               </li>
             ) : null}
             {collectorSnapshot && collectorSharedArtifacts !== undefined ? (
@@ -3878,6 +3945,7 @@ export function DetailsPanel({
               const collectorLabel = agentNameById.get(item.agent_id) ?? item.agent_id;
               const canNavigateToCollectorAgent = navigableAgentIds.has(item.agent_id);
               const watchGraphAlignment = resolveCollectorWatchGraphAlignment(item, world);
+              const collectorEvidenceCoverageItem = collectorEvidenceCoverageByAgentId.get(item.agent_id) ?? null;
 
               return (
                 <li key={item.agent_id} className={`aitown-record severity-${resolveCollectorSeverity(item)}`}>
@@ -3900,6 +3968,12 @@ export function DetailsPanel({
                     sharedMemoryArtifactRefs,
                     onJump: onFocusSharedMemoryArtifact ?? focusSharedMemoryArtifact
                   })}
+                  {collectorEvidenceCoverageItem
+                    ? renderCollectorEvidenceCoverageItem({
+                        coverageItem: collectorEvidenceCoverageItem,
+                        coverageLow: collectorEvidenceCoverageLowAgentIds.has(item.agent_id)
+                      })
+                    : null}
                   <span>
                     Watch target ·{' '}
                     {renderCollectorWatchTarget({
@@ -4628,6 +4702,12 @@ export function DetailsPanel({
                 sharedMemoryArtifactRefs,
                 onJump: onFocusSharedMemoryArtifact ?? focusSharedMemoryArtifact
               })}
+              {collectorEvidenceCoverageByAgentId.has(selectedCollectorItem.agent_id)
+                ? renderCollectorEvidenceCoverageItem({
+                    coverageItem: collectorEvidenceCoverageByAgentId.get(selectedCollectorItem.agent_id)!,
+                    coverageLow: collectorEvidenceCoverageLowAgentIds.has(selectedCollectorItem.agent_id)
+                  })
+                : null}
               <span>
                 Watch target ·{' '}
                 {renderCollectorWatchTarget({

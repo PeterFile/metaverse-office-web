@@ -1254,6 +1254,25 @@ async function seedContractSlice(store: BackendStore) {
       workspace_observed_count: 1,
       reboot_recommended_count: 0
     },
+    evidence_coverage: {
+      evidence_ref_count: 2,
+      covered_agent_count: 1,
+      low_confidence_agent_ids: [],
+      source_kind_buckets: {
+        workspace_file: 1,
+        workspace_root: 0,
+        tmux_observation: 1
+      },
+      agent_items: [
+        {
+          agent_id: 'app-engineering',
+          evidence_ref_count: 2,
+          source_kinds: ['tmux_observation', 'workspace_file'],
+          latest_evidence_at: '2026-03-09T18:58:45.000Z',
+          confidence_level: 'high'
+        }
+      ]
+    },
     shared_artifacts: [],
     items: [
       {
@@ -1568,6 +1587,25 @@ function expectCollectorSnapshotContract(snapshot: CollectorSnapshot | null) {
       reboot_recommended_count: 0
     },
     shared_artifacts: []
+  });
+  expect(snapshot?.evidence_coverage).toMatchObject({
+    evidence_ref_count: 2,
+    covered_agent_count: 1,
+    low_confidence_agent_ids: [],
+    source_kind_buckets: {
+      workspace_file: 1,
+      workspace_root: 0,
+      tmux_observation: 1
+    },
+    agent_items: [
+      {
+        agent_id: 'app-engineering',
+        evidence_ref_count: 2,
+        source_kinds: ['tmux_observation', 'workspace_file'],
+        latest_evidence_at: '2026-03-09T18:58:45.000Z',
+        confidence_level: 'high'
+      }
+    ]
   });
   expect(snapshot?.items).toHaveLength(1);
   expect(snapshot?.items[0]).toMatchObject({

@@ -9,6 +9,11 @@ const execFileAsync = promisify(execFile);
 
 const OBSERVED_WORKSPACE_PATHS = Object.freeze(['inbox.md', 'outbox.md', 'todo.md']);
 const TMUX_FORMAT_DELIMITER = '\u001f';
+const EVIDENCE_SOURCE_KINDS = Object.freeze([
+  'workspace_file',
+  'workspace_root',
+  'tmux_observation'
+]);
 const COMMAND_STATE_MAP = Object.freeze({
   cat: 'researching',
   git: 'reviewing',
@@ -75,6 +80,7 @@ async function collectControllerSnapshot(options = {}) {
     actor_id: actorId,
     summary: createCollectorSummary(items),
     shared_artifacts: createSharedArtifactRollup(items),
+    evidence_coverage: createEvidenceCoverageLedger(items),
     items
   };
 }
@@ -288,6 +294,138 @@ function createSharedArtifactRollup(items = []) {
       source_kinds: Array.from(artifact.source_kinds).sort()
     }))
     .sort(compareSharedArtifacts);
+}
+
+function createEvidenceCoverageLedger(items = []) {
+  const uniqueEvidenceRefs = new Set();
+  const sourceRefsByKind = new Map(EVIDENCE_SOURCE_KINDS.map((kind) => [kind, new Set()]));
+  const lowConfidenceAgentIds = [];
+  let coveredAgentCount = 0;
+  const agentItems = [];
+
+  for (const item of items) {
+    const itemCoverage = collectItemEvidenceCoverage(item);
+    const confidenceLevel = item?.heartbeat?.confidence_level || null;
+
+    if (itemCoverage.evidence_ref_count > 0) {
+      coveredAgentCount += 1;
+    }
+
+    if (confidenceLevel !== 'high' || itemCoverage.evidence_ref_count === 0) {
+      lowConfidenceAgentIds.push(item.agent_id);
+    }
+
+    for (const entry of itemCoverage.entries) {
+      uniqueEvidenceRefs.add(entry.ref);
+      if (sourceRefsByKind.has(entry.source_kind)) {
+        sourceRefsByKind.get(entry.source_kind).add(entry.ref);
+      }
+    }
+
+    agentItems.push({
+      agent_id: item.agent_id,
+      evidence_ref_count: itemCoverage.evidence_ref_count,
+      source_kinds: itemCoverage.source_kinds,
+      latest_evidence_at: itemCoverage.latest_evidence_at,
+      confidence_level: confidenceLevel
+    });
+  }
+
+  return {
+    evidence_ref_count: uniqueEvidenceRefs.size,
+    covered_agent_count: coveredAgentCount,
+    low_confidence_agent_ids: lowConfidenceAgentIds,
+    source_kind_buckets: {
+      workspace_file: sourceRefsByKind.get('workspace_file').size,
+      workspace_root: sourceRefsByKind.get('workspace_root').size,
+      tmux_observation: sourceRefsByKind.get('tmux_observation').size
+    },
+    agent_items: agentItems
+  };
+}
+
+function collectItemEvidenceCoverage(item = {}) {
+  const entriesByRef = new Map();
+
+  for (const evidenceRef of normalizeEvidenceRefs(item.evidence_refs)) {
+    addEvidenceCoverageEntry(entriesByRef, {
+      ref: evidenceRef,
+      source_kind: deriveEvidenceSourceKindFromRef(evidenceRef),
+      latest_at: null,
+      observed: false
+    });
+  }
+
+  for (const observation of item.workspace_observations || []) {
+    if (!observation || typeof observation.path !== 'string' || observation.path.length === 0) {
+      continue;
+    }
+
+    addEvidenceCoverageEntry(entriesByRef, {
+      ref: observation.path,
+      source_kind: deriveWorkspaceEvidenceSourceKind(observation),
+      latest_at: normalizeIsoTimestamp(observation.last_modified_at),
+      observed: true
+    });
+  }
+
+  for (const observation of item.tmux_observations || []) {
+    const artifactRef = observation?.artifact_ref || deriveTmuxArtifactRef(observation);
+    if (!artifactRef) {
+      continue;
+    }
+
+    addEvidenceCoverageEntry(entriesByRef, {
+      ref: artifactRef,
+      source_kind: 'tmux_observation',
+      latest_at: normalizeIsoTimestamp(observation.pane_activity_at),
+      observed: true
+    });
+  }
+
+  const entries = Array.from(entriesByRef.values());
+
+  return {
+    entries,
+    evidence_ref_count: entries.length,
+    source_kinds: Array.from(new Set(entries.map((entry) => entry.source_kind))).sort(),
+    latest_evidence_at: maxIsoTimestamp(entries.map((entry) => entry.latest_at))
+  };
+}
+
+function addEvidenceCoverageEntry(entriesByRef, entry) {
+  const existing = entriesByRef.get(entry.ref);
+  if (!existing) {
+    entriesByRef.set(entry.ref, entry);
+    return;
+  }
+
+  entriesByRef.set(entry.ref, {
+    ref: entry.ref,
+    source_kind: entry.observed || !existing.observed ? entry.source_kind : existing.source_kind,
+    latest_at: maxIsoTimestamp([existing.latest_at, entry.latest_at]),
+    observed: existing.observed || entry.observed
+  });
+}
+
+function deriveWorkspaceEvidenceSourceKind(observation) {
+  if (observation.kind === 'workspace_root') {
+    return 'workspace_root';
+  }
+
+  if (observation.kind === 'workspace_file') {
+    return 'workspace_file';
+  }
+
+  return deriveEvidenceSourceKindFromRef(observation.path);
+}
+
+function deriveEvidenceSourceKindFromRef(evidenceRef) {
+  if (typeof evidenceRef === 'string' && evidenceRef.startsWith('tmux://')) {
+    return 'tmux_observation';
+  }
+
+  return path.extname(evidenceRef) ? 'workspace_file' : 'workspace_root';
 }
 
 function collectItemArtifactMentions(item = {}) {

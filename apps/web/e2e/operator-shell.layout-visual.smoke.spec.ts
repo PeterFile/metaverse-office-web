@@ -112,7 +112,99 @@ async function expectCanvasDragMovesViewport(page: Page) {
     .toBeGreaterThan(40);
 }
 
+function expectViewportWithinHorizontalWorldBounds(
+  state: NonNullable<Awaited<ReturnType<typeof readViewportState>>>,
+  label: string
+) {
+  const scale = Math.max(state.scale ?? 1, 0.0001);
+  const rightAllowance = (state.clampPadding?.right ?? 0) / scale;
+
+  expect(state.left, `${label} should not expose a black left gutter`).toBeGreaterThanOrEqual(-0.5);
+  expect(state.right, `${label} should stay covered by the world scene`).toBeLessThanOrEqual(
+    state.worldWidth + rightAllowance + 0.5
+  );
+}
+
 test.describe('operator shell layout visual smoke', () => {
+  test('keeps Hub-open passive HUD overlay from blocking pan-first horizontal drag', async ({ page }) => {
+    await page.goto('/');
+
+    const worldHost = page.locator('.aitown-world__host');
+    await expect(worldHost).toBeVisible();
+    await page.waitForFunction(() => Boolean(window.__AITOWN_VIEWPORT__));
+
+    await page.getByRole('button', { name: 'Open Hub' }).click();
+
+    const hub = page.getByRole('dialog', { name: 'Hub' });
+    const passiveTopline = page.locator('.aitown-panel__topline');
+    await expect(hub).toBeVisible();
+    await expect(passiveTopline).toBeVisible();
+
+    const before = await readViewportState(page);
+    expect(before).not.toBeNull();
+    expectViewportWithinHorizontalWorldBounds(before!, 'initial Hub-open viewport');
+
+    const [worldRect, hubRect, toplineRect] = await Promise.all([readRect(worldHost), readRect(hub), readRect(passiveTopline)]);
+    const dragStart = {
+      x: Math.min(
+        Math.max(toplineRect.left + toplineRect.width * 0.5, worldRect.left + 64),
+        hubRect.left - 64,
+        worldRect.right - 64
+      ),
+      y: Math.min(
+        Math.max(toplineRect.top + toplineRect.height * 0.5, worldRect.top + 64),
+        worldRect.bottom - 64
+      )
+    };
+    expect(dragStart.x, 'drag should start inside the passive HUD topline lane').toBeGreaterThanOrEqual(
+      toplineRect.left + 1
+    );
+    expect(dragStart.x, 'drag should start inside the passive HUD topline lane').toBeLessThanOrEqual(
+      toplineRect.right - 1
+    );
+    expect(dragStart.y, 'drag should start inside the passive HUD topline lane').toBeGreaterThanOrEqual(
+      toplineRect.top + 1
+    );
+    expect(dragStart.y, 'drag should start inside the passive HUD topline lane').toBeLessThanOrEqual(
+      toplineRect.bottom - 1
+    );
+
+    const hitTarget = await page.evaluate(({ x, y }) => {
+      const target = document.elementFromPoint(x, y);
+      return {
+        insideWorld: Boolean(target?.closest('.aitown-world__host')),
+        insideHub: Boolean(target?.closest('#aitown-hub')),
+        tagName: target?.tagName ?? null,
+        className: target instanceof HTMLElement ? target.className : null
+      };
+    }, dragStart);
+    expect(hitTarget.insideWorld, `drag start should pass through passive HUD to the world: ${JSON.stringify(hitTarget)}`).toBe(
+      true
+    );
+    expect(hitTarget.insideHub, `drag start should not be inside the Hub sheet: ${JSON.stringify(hitTarget)}`).toBe(false);
+
+    await page.mouse.move(dragStart.x, dragStart.y);
+    await page.mouse.down();
+    await page.mouse.move(dragStart.x + 160, dragStart.y, { steps: 12 });
+    await page.mouse.up();
+
+    await expect
+      .poll(async () => {
+        const current = await readViewportState(page);
+        return current && before ? Math.abs(current.x - before.x) : 0;
+      }, 'Hub-open passive-HUD drag should move the viewport horizontally')
+      .toBeGreaterThan(40);
+    const after = await readViewportState(page);
+    expect(after).not.toBeNull();
+
+    expect(Math.abs(after!.top - before!.top), 'horizontal drag should not materially shift the vertical world lane').toBeLessThan(
+      8
+    );
+    expect(after!.scale, 'pan-first drag must not depend on zoom changes').toBeCloseTo(before!.scale ?? 1, 3);
+    expectViewportWithinHorizontalWorldBounds(after!, 'post-drag Hub-open viewport');
+    await expect(hub).toBeVisible();
+  });
+
   test('keeps the Hub first fold glanceable without hiding the world drag lane', async ({ page }) => {
     await page.goto('/');
 

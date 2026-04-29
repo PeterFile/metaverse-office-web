@@ -1054,6 +1054,7 @@ button {
   justify-content: flex-end;
   background: rgba(13, 9, 15, 0.52);
   backdrop-filter: blur(6px);
+  pointer-events: none;
 }
 
 .aitown-hub-sheet {
@@ -1061,6 +1062,7 @@ button {
   height: 100dvh;
   overflow-y: auto;
   padding: 20px 18px;
+  pointer-events: auto;
 }
 
 .aitown-hub-sheet__header {

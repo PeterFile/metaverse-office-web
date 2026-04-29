@@ -2381,6 +2381,10 @@ function matchesEventFilters(event, filters = {}) {
     return false;
   }
 
+  if (filters.evidence_ref && !normalizeEvidenceRefs(event.evidence_refs).includes(filters.evidence_ref)) {
+    return false;
+  }
+
   if (filters.correlation_id && event.correlation_id !== filters.correlation_id) {
     return false;
   }

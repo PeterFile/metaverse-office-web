@@ -894,6 +894,130 @@ test('GET replay event endpoints support exact source_kind filters', async (t) =
   assert.equal(unknownAgent.body.details, 'unknown agent unknown-agent');
 });
 
+test('GET replay event endpoints support exact evidence_ref filters', async (t) => {
+  const { baseUrl, store } = await createHarness(t, {
+    now: () => '2026-03-09T18:30:00.000Z'
+  });
+  const exactRef = '/tmp/evidence-ref.md';
+  const encodedExactRef = encodeURIComponent(exactRef);
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_evidence_exact_old',
+      ts: '2026-03-09T18:02:00.000Z',
+      agentId: 'app-engineering',
+      eventType: 'agent_wrote_file',
+      currentState: 'coding',
+      activeTask: 'Write evidence replay notes',
+      location: 'desk-app-engineering',
+      summary: 'Older exact evidence ref match',
+      severity: 'yellow',
+      correlationId: 'corr-evidence-ref',
+      evidenceRefs: [exactRef, '/tmp/evidence-extra.md'],
+      sourceKind: 'workspace_file'
+    })
+  );
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_evidence_substring',
+      ts: '2026-03-09T18:06:00.000Z',
+      agentId: 'app-engineering',
+      eventType: 'agent_wrote_file',
+      currentState: 'coding',
+      activeTask: 'Write substring replay notes',
+      location: 'desk-app-engineering',
+      summary: 'Only contains the target as a substring',
+      severity: 'yellow',
+      correlationId: 'corr-evidence-ref',
+      evidenceRefs: [`${exactRef}.backup`],
+      sourceKind: 'workspace_file'
+    })
+  );
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_evidence_exact_new',
+      ts: '2026-03-09T18:10:00.000Z',
+      agentId: 'app-engineering',
+      eventType: 'agent_wrote_file',
+      currentState: 'coding',
+      activeTask: 'Write exact replay notes',
+      location: 'desk-app-engineering',
+      summary: 'Newer exact evidence ref match',
+      severity: 'yellow',
+      correlationId: 'corr-evidence-ref',
+      evidenceRefs: [exactRef],
+      sourceKind: 'workspace_file'
+    })
+  );
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_evidence_other_agent',
+      ts: '2026-03-09T18:14:00.000Z',
+      agentId: 'protocol-engineering',
+      eventType: 'agent_wrote_file',
+      currentState: 'coding',
+      activeTask: 'Write protocol replay notes',
+      location: 'desk-protocol-engineering',
+      summary: 'Exact evidence ref match on another agent',
+      severity: 'yellow',
+      correlationId: 'corr-evidence-ref',
+      evidenceRefs: [exactRef],
+      sourceKind: 'workspace_file'
+    })
+  );
+
+  const events = await requestJson(`${baseUrl}/events?evidence_ref=${encodedExactRef}`);
+  assert.equal(events.response.status, 200);
+  assert.deepEqual(
+    events.body.items.map((item) => item.event_id),
+    ['evt_evidence_other_agent', 'evt_evidence_exact_new', 'evt_evidence_exact_old']
+  );
+  assert.ok(events.body.items.every((item) => item.evidence_refs.includes(exactRef)));
+
+  const composedEvents = await requestJson(
+    `${baseUrl}/events?evidence_ref=${encodedExactRef}&agent_id=app-engineering&event_type=agent_wrote_file&severity=yellow&source_kind=workspace_file&correlation_id=corr-evidence-ref&limit=1`
+  );
+  assert.equal(composedEvents.response.status, 200);
+  assert.deepEqual(
+    composedEvents.body.items.map((item) => item.event_id),
+    ['evt_evidence_exact_new']
+  );
+
+  const blankEvidenceRef = await requestJson(`${baseUrl}/events?evidence_ref=&limit=2`);
+  const missingEvidenceRef = await requestJson(`${baseUrl}/events?limit=2`);
+  assert.equal(blankEvidenceRef.response.status, 200);
+  assert.deepEqual(
+    blankEvidenceRef.body.items.map((item) => item.event_id),
+    missingEvidenceRef.body.items.map((item) => item.event_id)
+  );
+
+  const agentEvents = await requestJson(
+    `${baseUrl}/agents/app-engineering/events?evidence_ref=${encodedExactRef}&event_type=agent_wrote_file&limit=5`
+  );
+  assert.equal(agentEvents.response.status, 200);
+  assert.deepEqual(
+    agentEvents.body.items.map((item) => item.event_id),
+    ['evt_evidence_exact_new', 'evt_evidence_exact_old']
+  );
+
+  const unknownAgent = await requestJson(`${baseUrl}/agents/unknown-agent/events?evidence_ref=${encodedExactRef}`);
+  assert.equal(unknownAgent.response.status, 404);
+  assert.equal(unknownAgent.body.details, 'unknown agent unknown-agent');
+
+  const timeline = await requestJson(
+    `${baseUrl}/timeline?window=30m&evidence_ref=${encodedExactRef}&agent_id=app-engineering&event_type=agent_wrote_file&severity=yellow&source_kind=workspace_file&correlation_id=corr-evidence-ref&limit=2`
+  );
+  assert.equal(timeline.response.status, 200);
+  assert.deepEqual(
+    timeline.body.items.map((item) => item.event_id),
+    ['evt_evidence_exact_old', 'evt_evidence_exact_new']
+  );
+  assert.ok(Date.parse(timeline.body.items[0].ts) < Date.parse(timeline.body.items[1].ts));
+});
+
 test('GET interaction endpoints expose derived read models and filters', async (t) => {
   const { baseUrl, store } = await createHarness(t, {
     now: () => '2026-03-09T18:20:00.000Z'

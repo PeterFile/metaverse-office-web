@@ -126,16 +126,16 @@ Optional env:
 - `GET /health`
 - `GET /agents`
 - `GET /agents/:id?limit=`
-- `GET /agents/:id/events?limit=&event_type=&severity=&source_kind=&correlation_id=`
+- `GET /agents/:id/events?limit=&event_type=&severity=&source_kind=&evidence_ref=&correlation_id=`
 - `GET /agents/:id/incidents?kind=&severity=&status=&correlation_id=&limit=&window=`
 - `GET /agents/:id/interactions`
 - `GET /agents/:id/workflow?limit=&window=`
-- `GET /events?event_id=&agent_id=&event_type=&severity=&source_kind=&correlation_id=&limit=`
+- `GET /events?event_id=&agent_id=&event_type=&severity=&source_kind=&evidence_ref=&correlation_id=&limit=`
 - `GET /interactions`
 - `GET /collectors/controller-snapshot`
 - `GET /office/overview`
 - `GET /office/operations?limit=&state=&agent_id=&severity=`
-- `GET /timeline?window=&event_id=&agent_id=&event_type=&severity=&source_kind=&correlation_id=&limit=`
+- `GET /timeline?window=&event_id=&agent_id=&event_type=&severity=&source_kind=&evidence_ref=&correlation_id=&limit=`
 - `GET /peer-watch/alerts?status=&target_agent_id=&agent_id=&watcher_agent_id=&observer_agent_id=&correlation_id=&severity=&limit=`
 - `GET /incidents?kind=&agent_id=&severity=&status=&correlation_id=&limit=&window=`
 - `GET /correlations/:correlation_id?limit=&window=`
@@ -167,6 +167,11 @@ Optional env:
 - `open_peer_watch_alerts` is derived from unresolved peer-watch evidence, not from raw historical `raised` events
 - `recent_incidents` reuses the same normalized read-only incident feed semantics as `GET /incidents`, scoped to the requested agent
 
+### Event query notes
+- `GET /events` and `GET /agents/:id/events` are read-only event-log slices
+- `evidence_ref` exact-matches membership in `event.evidence_refs`; blank or missing values keep existing behavior
+- `GET /agents/:id/events` keeps returning `404` for unknown agent ids
+
 ### Agent incident query notes
 - `GET /agents/:id/incidents` stays read-only and applies the requested agent id as an implicit incident filter
 - supported filters are `kind`, `severity`, `status`, `correlation_id`, `limit`, and `window`
@@ -191,8 +196,9 @@ Optional env:
 
 ### Timeline replay notes
 - `GET /timeline` is a read-only replay slice over canonical events
-- supported filters are `window`, `event_id`, `agent_id`, `event_type`, `severity`, `source_kind`, `correlation_id`, and `limit`
+- supported filters are `window`, `event_id`, `agent_id`, `event_type`, `severity`, `source_kind`, `evidence_ref`, `correlation_id`, and `limit`
 - `source_kind` is a read-only exact-match provenance filter over `event.source_kind`
+- `evidence_ref` exact-matches membership in `event.evidence_refs`
 - replay output stays chronological ascending
 - when `limit` is present, the server chooses the newest matching events first and still returns them ascending
 - timeline items include evidence refs, counterparties, and `source_kind`, so collector-derived activity/supervision flows through unchanged

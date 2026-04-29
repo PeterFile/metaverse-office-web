@@ -95,6 +95,7 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
         event_type: url.searchParams.get('event_type'),
         severity: url.searchParams.get('severity'),
         source_kind: url.searchParams.get('source_kind'),
+        evidence_ref: url.searchParams.get('evidence_ref'),
         correlation_id: url.searchParams.get('correlation_id'),
         limit: url.searchParams.get('limit')
       })
@@ -206,6 +207,7 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
         event_type: url.searchParams.get('event_type'),
         severity: url.searchParams.get('severity'),
         source_kind: url.searchParams.get('source_kind'),
+        evidence_ref: url.searchParams.get('evidence_ref'),
         correlation_id: url.searchParams.get('correlation_id'),
         limit: url.searchParams.get('limit')
       })
@@ -237,6 +239,7 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
         event_type: url.searchParams.get('event_type'),
         severity: url.searchParams.get('severity'),
         source_kind: url.searchParams.get('source_kind'),
+        evidence_ref: url.searchParams.get('evidence_ref'),
         correlation_id: url.searchParams.get('correlation_id'),
         limit: url.searchParams.get('limit'),
         now: now()

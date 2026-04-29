@@ -99,6 +99,12 @@ const orangeSecondaryScopedTimelineUrl = '/timeline?limit=4&window=60m&severity=
 const appEngineeringSelectedTimelineUrl = '/timeline?limit=10&window=60m&agent_id=app-engineering';
 const appEngineeringReviewSelectedTimelineUrl =
   '/timeline?limit=10&window=60m&agent_id=app-engineering&correlation_id=corr-app-review';
+const orangeAppEngineeringReviewSelectedTimelineUrl =
+  '/timeline?limit=10&window=60m&agent_id=app-engineering&severity=orange&correlation_id=corr-app-review';
+const appEngineeringReviewSelectedTimelineCheckpointUrl =
+  '/timeline?limit=10&window=60m&agent_id=app-engineering&correlation_id=corr-app-review&event_id=evt-memory-replay-anchor';
+const orangeAppEngineeringReviewSelectedTimelineCheckpointUrl =
+  '/timeline?limit=10&window=60m&agent_id=app-engineering&severity=orange&correlation_id=corr-app-review&event_id=evt-memory-replay-anchor';
 const appEngineeringSecondarySelectedTimelineUrl =
   '/timeline?limit=10&window=60m&agent_id=app-engineering&correlation_id=corr-app-secondary';
 const orangeAppEngineeringSecondarySelectedTimelineUrl =
@@ -4666,6 +4672,139 @@ afterEach(() => {
     expect(postSelectionRequests).not.toContain(secondaryScopedTimelineUrl);
     expect(postSelectionRequests).not.toContain(timelineUrl);
   });
+
+  it('opens a replay checkpoint event from shared memory without changing the selected agent or correlation', async () => {
+    const replayCheckpointMemoryArtifacts = {
+      ...selectedCorrelationMemoryArtifactsFixture,
+      items: [
+        {
+          ...selectedCorrelationMemoryArtifactsFixture.items[0],
+          latest_event_id: 'evt-memory-replay-anchor',
+          latest_event_type: 'peer_watch_alert_raised',
+          replay_checkpoint: {
+            event_id: 'evt-memory-replay-anchor',
+            event_type: 'peer_watch_alert_raised',
+            summary: 'Workflow evidence checkpoint',
+            last_seen_at: '2026-03-16T08:58:00.000Z'
+          }
+        }
+      ]
+    };
+    const exactReplayFixture = {
+      items: [
+        {
+          ...correlationFixture.timeline[0],
+          event_id: 'evt-memory-replay-anchor',
+          summary: 'Replay checkpoint exact event opened'
+        }
+      ]
+    };
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === selectedCorrelationMemoryArtifactsUrl) {
+          return jsonResponse(replayCheckpointMemoryArtifacts);
+        }
+
+        if (url === orangeAppEngineeringReviewSelectedTimelineUrl) {
+          return jsonResponse({ items: [] });
+        }
+
+        if (url === appEngineeringReviewSelectedTimelineCheckpointUrl) {
+          return jsonResponse(exactReplayFixture);
+        }
+
+        return resolveTestFetchResponse(url);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
+    await selectSelectedAgentDrilldownTab(user, 'Replay / Correlation');
+
+    const replayPanelBeforeCheckpoint = screen.getByRole('tabpanel', { name: 'Replay / Correlation' });
+    const replaySectionBeforeCheckpoint = within(replayPanelBeforeCheckpoint)
+      .getByRole('heading', { name: 'Timeline Replay' })
+      .closest('section');
+    expect(replaySectionBeforeCheckpoint).not.toBeNull();
+
+    const severityFilterBeforeCheckpoint = within(replaySectionBeforeCheckpoint!).getByRole('combobox', {
+      name: 'Filter timeline replay by severity'
+    });
+    await user.selectOptions(severityFilterBeforeCheckpoint, 'orange');
+
+    await waitFor(() => {
+      expect(severityFilterBeforeCheckpoint).toHaveValue('orange');
+      expect(within(replaySectionBeforeCheckpoint!).getByText('No replay events for corr-app-review at Orange severity.')).toBeVisible();
+    });
+
+    await selectSelectedAgentDrilldownTab(user, 'Evidence');
+
+    const memorySection = within(details).getByRole('heading', { name: 'Shared Memory' }).closest('section');
+    expect(memorySection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+      expect(within(memorySection!).getByText('Ref · /tmp/evidence.md')).toBeVisible();
+      expect(memorySection!).toHaveTextContent(
+        'Replay checkpoint · evt-memory-replay-anchor · peer_watch_alert_raised · 2026-03-16T08:58:00.000Z'
+      );
+    });
+
+    const fetchCallCountBeforeCheckpoint = vi.mocked(globalThis.fetch).mock.calls.length;
+
+    await user.click(
+      within(memorySection!).getByRole('button', {
+        name: 'Open replay checkpoint evt-memory-replay-anchor'
+      })
+    );
+
+    const replayTab = screen.getByRole('tab', { name: 'Replay / Correlation' });
+    await waitFor(() => {
+      expect(replayTab).toHaveAttribute('aria-selected', 'true');
+      expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+    });
+
+    const replayPanel = screen.getByRole('tabpanel', { name: 'Replay / Correlation' });
+    const replaySection = within(replayPanel).getByRole('heading', { name: 'Timeline Replay' }).closest('section');
+    const correlationSection = within(replayPanel).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    expect(replaySection).not.toBeNull();
+    expect(correlationSection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(replaySection!).getByText('Request scope · Target agent · app-engineering · corr-app-review')).toBeVisible();
+      expect(within(replaySection!).getByText('Replay checkpoint focus · evt-memory-replay-anchor')).toBeVisible();
+      expect(within(replaySection!).getByText('Replay checkpoint exact event opened')).toBeVisible();
+      expect(
+        within(replaySection!).getByRole('combobox', {
+          name: 'Filter timeline replay by severity'
+        })
+      ).toHaveValue('');
+      expect(within(replaySection!).queryByText('Workflow evidence is still incomplete')).not.toBeInTheDocument();
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+    });
+
+    const postCheckpointRequests = vi
+      .mocked(globalThis.fetch)
+      .mock.calls.slice(fetchCallCountBeforeCheckpoint)
+      .map(([input]) => (typeof input === 'string' ? input : input.toString()));
+
+    expect(postCheckpointRequests).toContain(appEngineeringReviewSelectedTimelineCheckpointUrl);
+    expect(postCheckpointRequests).not.toContain(orangeAppEngineeringReviewSelectedTimelineCheckpointUrl);
+    expect(postCheckpointRequests).not.toContain(timelineUrl);
+    expect(postCheckpointRequests).not.toContain(reviewScopedTimelineUrl);
+    expect(postCheckpointRequests).not.toContain(appEngineeringMemoryArtifactsUrl);
+    expect(postCheckpointRequests).not.toContain(selectedCorrelationMemoryArtifactsUrl);
+    expect(
+      vi.mocked(globalThis.fetch).mock.calls.every(([, init]) => !init || !('method' in init) || init.method === 'GET')
+    ).toBe(true);
+  }, 10_000);
 
   it('refetches selected-agent scoped correlation replay with the selected severity filter', async () => {
     const user = userEvent.setup();

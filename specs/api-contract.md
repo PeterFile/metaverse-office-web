@@ -505,6 +505,25 @@
       "workspace_observed_count": 7,
       "reboot_recommended_count": 1
     },
+    "evidence_coverage": {
+      "evidence_ref_count": 2,
+      "covered_agent_count": 1,
+      "low_confidence_agent_ids": [],
+      "source_kind_buckets": {
+        "workspace_file": 1,
+        "workspace_root": 0,
+        "tmux_observation": 1
+      },
+      "agent_items": [
+        {
+          "agent_id": "app-engineering",
+          "evidence_ref_count": 2,
+          "source_kinds": ["tmux_observation", "workspace_file"],
+          "latest_evidence_at": "2026-03-09T18:04:30.000Z",
+          "confidence_level": "high"
+        }
+      ]
+    },
     "items": [
       {
         "agent_id": "app-engineering",

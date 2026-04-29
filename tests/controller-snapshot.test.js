@@ -8,7 +8,7 @@ const { SEED_AGENTS } = require('../src/domain');
 const { collectControllerSnapshot } = require('../src/collectors/controller-snapshot');
 const { createPrototypeStore } = require('../src/store/prototype-store');
 
-function createCollectorReport({ collectedAt, items }) {
+function createCollectorReport({ collectedAt, items, evidenceCoverage }) {
   return {
     collected_at: collectedAt,
     actor_id: 'team-lead',
@@ -19,6 +19,7 @@ function createCollectorReport({ collectedAt, items }) {
       workspace_observed_count: items.filter((item) => item.workspace_observations.length > 0).length,
       reboot_recommended_count: items.filter((item) => item.heartbeat.reboot_recommended).length
     },
+    ...(evidenceCoverage ? { evidence_coverage: evidenceCoverage } : {}),
     items
   };
 }
@@ -191,6 +192,81 @@ test('collector rolls up shared artifacts referenced by multiple agents in the s
   );
 });
 
+test('collector reports evidence coverage across workspace roots, files, and tmux refs', async () => {
+  const appAgent = {
+    ...SEED_AGENTS.find((agent) => agent.agent_id === 'app-engineering'),
+    workspace_root: '/tmp/evidence-coverage/app-engineering'
+  };
+  const growthAgent = {
+    ...SEED_AGENTS.find((agent) => agent.agent_id === 'growth-revenue'),
+    workspace_root: '/tmp/evidence-coverage/growth-revenue'
+  };
+  const marketAgent = {
+    ...SEED_AGENTS.find((agent) => agent.agent_id === 'market-intel'),
+    workspace_root: '/tmp/evidence-coverage/market-intel'
+  };
+  const appTodoRef = path.join(appAgent.workspace_root, 'todo.md');
+  const statsByPath = new Map([
+    [appAgent.workspace_root, { mtime: '2026-03-09T18:00:00.000Z' }],
+    [appTodoRef, { mtime: '2026-03-09T18:04:00.000Z' }],
+    [marketAgent.workspace_root, { mtime: '2026-03-09T18:02:00.000Z' }]
+  ]);
+
+  const report = await collectControllerSnapshot({
+    agents: [appAgent, growthAgent, marketAgent],
+    collectedAt: '2026-03-09T18:05:00.000Z',
+    readPathStat: async (targetPath) => statsByPath.get(targetPath) || null,
+    listTmuxPanes: async () => [
+      {
+        session_name: appAgent.session_ref,
+        window_index: '0',
+        pane_index: '1',
+        pane_id: '%11',
+        pane_title: 'Implement evidence coverage ledger',
+        pane_current_command: 'nvim',
+        pane_active: true,
+        pane_dead: false,
+        pane_activity_at: '2026-03-09T18:04:30.000Z'
+      }
+    ]
+  });
+
+  assert.deepEqual(report.evidence_coverage, {
+    evidence_ref_count: 4,
+    covered_agent_count: 2,
+    low_confidence_agent_ids: ['growth-revenue', 'market-intel'],
+    source_kind_buckets: {
+      workspace_file: 1,
+      workspace_root: 2,
+      tmux_observation: 1
+    },
+    agent_items: [
+      {
+        agent_id: 'app-engineering',
+        evidence_ref_count: 3,
+        source_kinds: ['tmux_observation', 'workspace_file', 'workspace_root'],
+        latest_evidence_at: '2026-03-09T18:04:30.000Z',
+        confidence_level: 'high'
+      },
+      {
+        agent_id: 'growth-revenue',
+        evidence_ref_count: 0,
+        source_kinds: [],
+        latest_evidence_at: null,
+        confidence_level: 'low'
+      },
+      {
+        agent_id: 'market-intel',
+        evidence_ref_count: 1,
+        source_kinds: ['workspace_root'],
+        latest_evidence_at: '2026-03-09T18:02:00.000Z',
+        confidence_level: 'medium'
+      }
+    ]
+  });
+  assert.deepEqual(report.shared_artifacts, []);
+});
+
 test('store appends collector heartbeats and exposes the latest collector report', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'metaverse-office-store-'));
   const storeFile = path.join(root, 'prototype-store.jsonl');
@@ -310,9 +386,37 @@ test('store derives shared snapshot artifacts from appended collector report ite
   const storeFile = path.join(root, 'prototype-store.jsonl');
   const store = await createPrototypeStore({ filePath: storeFile });
 
+  const evidenceCoverage = {
+    evidence_ref_count: 1,
+    covered_agent_count: 2,
+    low_confidence_agent_ids: [],
+    source_kind_buckets: {
+      workspace_file: 1,
+      workspace_root: 0,
+      tmux_observation: 0
+    },
+    agent_items: [
+      {
+        agent_id: 'app-engineering',
+        evidence_ref_count: 1,
+        source_kinds: ['workspace_file'],
+        latest_evidence_at: '2026-03-09T18:04:30.000Z',
+        confidence_level: 'high'
+      },
+      {
+        agent_id: 'growth-revenue',
+        evidence_ref_count: 1,
+        source_kinds: ['workspace_file'],
+        latest_evidence_at: '2026-03-09T18:04:45.000Z',
+        confidence_level: 'high'
+      }
+    ]
+  };
+
   const storedReport = await store.appendCollectorReport(
     createCollectorReport({
       collectedAt: '2026-03-09T18:05:00.000Z',
+      evidenceCoverage,
       items: [
         createReportItem({
           collectedAt: '2026-03-09T18:05:00.000Z',
@@ -348,7 +452,9 @@ test('store derives shared snapshot artifacts from appended collector report ite
       source_kinds: ['workspace_file']
     }
   ]);
+  assert.deepEqual(storedReport.evidence_coverage, evidenceCoverage);
   assert.deepEqual(store.getLatestCollectorReport().shared_artifacts, storedReport.shared_artifacts);
+  assert.deepEqual(store.getLatestCollectorReport().evidence_coverage, evidenceCoverage);
 });
 
 test('store appends collector-driven peer watch alerts for staleness and blocked snapshots', async () => {

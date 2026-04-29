@@ -2361,6 +2361,10 @@ function createPeerWatchAlertKey(event) {
 }
 
 function matchesEventFilters(event, filters = {}) {
+  if (filters.event_id && event.event_id !== filters.event_id) {
+    return false;
+  }
+
   if (filters.agent_id && event.agent_id !== filters.agent_id) {
     return false;
   }

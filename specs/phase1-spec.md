@@ -81,7 +81,7 @@ This repository mirrors the controller-approved Phase 1 scope so implementation 
 
 ## Timeline replay addendum
 - `GET /timeline` stays a read-only replay slice over append-only canonical events
-- supported filters are `window`, `agent_id`, `event_type`, `severity`, `source_kind`, `correlation_id`, and `limit`
+- supported filters are `window`, `event_id`, `agent_id`, `event_type`, `severity`, `source_kind`, `correlation_id`, and `limit`
 - `source_kind` exact-matches `event.source_kind` for read-only provenance filtering
 - replay output stays chronological ascending for readability
 - when `limit` is provided, select the most recent matching events first and return that slice ascending

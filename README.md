@@ -21,7 +21,7 @@ This repository is the implementation home for the Hermes-Agent metaverse-office
 - collector snapshots now also append deduped canonical `agent_state_changed` and `agent_wrote_file` events when observed state or file-write evidence advances
 - derived interaction read models now expose communication records without adding a new write path
 - enriched agent detail and peer-watch alert queries now expose current evidence surfaces without adding new writes
-- timeline replay slices now support evidence-first filtering by agent, event type, severity, correlation, and recent slice limit
+- timeline replay slices now support evidence-first filtering by agent, exact event id, event type, severity, correlation, and recent slice limit
 - operator incident feed now exposes a descending read-only view over peer-watch alerts, handoffs, and reboots without adding new persistence
 - correlation drill-down now exposes one read-only evidence/replay surface per `correlation_id` by aggregating existing incident, interaction, and timeline read models
 - agent detail and agent-scoped incident queries now expose recent incident evidence by reusing the same read-only incident feed semantics
@@ -130,12 +130,12 @@ Optional env:
 - `GET /agents/:id/incidents?kind=&severity=&status=&correlation_id=&limit=&window=`
 - `GET /agents/:id/interactions`
 - `GET /agents/:id/workflow?limit=&window=`
-- `GET /events?agent_id=&event_type=&severity=&source_kind=&correlation_id=&limit=`
+- `GET /events?event_id=&agent_id=&event_type=&severity=&source_kind=&correlation_id=&limit=`
 - `GET /interactions`
 - `GET /collectors/controller-snapshot`
 - `GET /office/overview`
 - `GET /office/operations?limit=&state=&agent_id=&severity=`
-- `GET /timeline?window=&agent_id=&event_type=&severity=&source_kind=&correlation_id=&limit=`
+- `GET /timeline?window=&event_id=&agent_id=&event_type=&severity=&source_kind=&correlation_id=&limit=`
 - `GET /peer-watch/alerts?status=&target_agent_id=&agent_id=&watcher_agent_id=&observer_agent_id=&correlation_id=&severity=&limit=`
 - `GET /incidents?kind=&agent_id=&severity=&status=&correlation_id=&limit=&window=`
 - `GET /correlations/:correlation_id?limit=&window=`
@@ -191,7 +191,7 @@ Optional env:
 
 ### Timeline replay notes
 - `GET /timeline` is a read-only replay slice over canonical events
-- supported filters are `window`, `agent_id`, `event_type`, `severity`, `source_kind`, `correlation_id`, and `limit`
+- supported filters are `window`, `event_id`, `agent_id`, `event_type`, `severity`, `source_kind`, `correlation_id`, and `limit`
 - `source_kind` is a read-only exact-match provenance filter over `event.source_kind`
 - replay output stays chronological ascending
 - when `limit` is present, the server chooses the newest matching events first and still returns them ascending

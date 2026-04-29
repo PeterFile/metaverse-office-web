@@ -677,6 +677,78 @@ test('GET /timeline supports replay filters, evidence fields, and ascending limi
   assert.ok(Date.parse(limited.body.items[0].ts) < Date.parse(limited.body.items[1].ts));
 });
 
+test('GET /events and /timeline support additive exact event_id filters', async (t) => {
+  const { baseUrl, store } = await createHarness(t, {
+    now: () => '2026-03-09T18:30:00.000Z'
+  });
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_exact_old',
+      ts: '2026-03-09T17:55:00.000Z',
+      agentId: 'app-engineering',
+      actorId: 'team-lead',
+      eventType: 'peer_watch_alert_raised',
+      currentState: 'blocked',
+      activeTask: 'Review exact replay filter',
+      location: 'review-zone',
+      summary: 'Older matching exact-filter event',
+      severity: 'orange',
+      correlationId: 'corr-exact-event',
+      counterpartyAgentIds: ['protocol-engineering'],
+      evidenceRefs: ['/tmp/exact-old.md'],
+      sourceKind: 'controller_event'
+    })
+  );
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_exact_target',
+      ts: '2026-03-09T18:20:00.000Z',
+      agentId: 'app-engineering',
+      actorId: 'team-lead',
+      eventType: 'peer_watch_alert_raised',
+      currentState: 'blocked',
+      activeTask: 'Review exact replay filter',
+      location: 'review-zone',
+      summary: 'Target exact-filter event',
+      severity: 'orange',
+      correlationId: 'corr-exact-event',
+      counterpartyAgentIds: ['protocol-engineering'],
+      evidenceRefs: ['/tmp/exact-target.md'],
+      sourceKind: 'controller_event'
+    })
+  );
+
+  const events = await requestJson(
+    `${baseUrl}/events?event_id=evt_exact_target&agent_id=app-engineering&event_type=peer_watch_alert_raised&severity=orange&source_kind=controller_event&correlation_id=corr-exact-event`
+  );
+  assert.equal(events.response.status, 200);
+  assert.deepEqual(
+    events.body.items.map((item) => item.event_id),
+    ['evt_exact_target']
+  );
+
+  const timeline = await requestJson(
+    `${baseUrl}/timeline?window=20m&event_id=evt_exact_target&agent_id=app-engineering&event_type=peer_watch_alert_raised&severity=orange&source_kind=controller_event&correlation_id=corr-exact-event`
+  );
+  assert.equal(timeline.response.status, 200);
+  assert.deepEqual(
+    timeline.body.items.map((item) => item.event_id),
+    ['evt_exact_target']
+  );
+
+  const windowedOut = await requestJson(`${baseUrl}/timeline?window=20m&event_id=evt_exact_old`);
+  assert.equal(windowedOut.response.status, 200);
+  assert.deepEqual(windowedOut.body.items, []);
+
+  const mismatchedAgent = await requestJson(
+    `${baseUrl}/events?event_id=evt_exact_target&agent_id=protocol-engineering`
+  );
+  assert.equal(mismatchedAgent.response.status, 200);
+  assert.deepEqual(mismatchedAgent.body.items, []);
+});
+
 test('GET replay event endpoints support exact source_kind filters', async (t) => {
   const { baseUrl, store } = await createHarness(t, {
     now: () => '2026-03-09T18:30:00.000Z'

@@ -251,10 +251,11 @@
 - the route path `:correlation_id` is required and is matched against existing append-only events plus the read models derived from them
 - supported query params are `limit` and `window`
 - `window` reuses the existing `Nm|Nh` parsing; when omitted the drill-down keeps the full correlation history instead of forcing a default replay window
-- `limit`, when provided, caps `incidents`, `interactions`, and `timeline` individually using their existing endpoint ordering semantics
-- `incident_count`, `interaction_count`, and `event_count` are computed from the full filtered match set before `limit` is applied
+- `limit`, when provided, caps `incidents`, `interactions`, `timeline`, and `closure_ledger.entries` using their existing endpoint or newest-first ordering semantics
+- `incident_count`, `interaction_count`, `event_count`, and closure ledger counts are computed from the full filtered match set before `limit` is applied
 - `participant_agent_ids` and `evidence_refs` are deduped across the full filtered correlation slice
 - `first_ts` and `last_ts` expose the temporal bounds of the full filtered correlation slice
+- `closure_ledger` is additive and derived only from existing reads: current `status=open` incident semantics produce `open`, unended interactions produce `active`, and resolved/completed incident evidence produces `closed`
 - the route returns `404` when the `correlation_id` matches no incidents, interactions, or events
 
 ## Shared memory artifact query semantics
@@ -373,6 +374,31 @@
   "incident_count": 4,
   "interaction_count": 3,
   "event_count": 6,
+  "closure_ledger": {
+    "state": "open",
+    "basis": "filtered_correlation_slice",
+    "open_count": 2,
+    "active_count": 1,
+    "closed_count": 1,
+    "entry_count": 4,
+    "last_transition_ts": "2026-03-09T18:12:00.000Z",
+    "entries": [
+      {
+        "entry_id": "incident:evt_corr_reboot_requested",
+        "state": "open",
+        "kind": "reboot",
+        "status": "requested",
+        "ts": "2026-03-09T18:12:00.000Z",
+        "agent_id": "app-engineering",
+        "actor_id": "team-lead",
+        "summary": "Lead requested a reboot after the evidence review",
+        "correlation_id": "corr-drilldown",
+        "evidence_refs": ["/tmp/corr-reboot.md"],
+        "source_kind": "controller_event",
+        "incident_id": "evt_corr_reboot_requested"
+      }
+    ]
+  },
   "incidents": [
     {
       "incident_id": "evt_corr_reboot_requested",

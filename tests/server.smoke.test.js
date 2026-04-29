@@ -3608,6 +3608,45 @@ test('GET /correlations/:correlation_id aggregates incident, interaction, and re
     incident_count: 4,
     interaction_count: 3,
     event_count: 6,
+    closure_ledger: {
+      state: 'open',
+      basis: 'filtered_correlation_slice',
+      open_count: 2,
+      active_count: 1,
+      closed_count: 1,
+      entry_count: 4,
+      last_transition_ts: '2026-03-09T18:12:00.000Z',
+      entries: [
+        {
+          entry_id: 'incident:evt_corr_reboot_requested',
+          state: 'open',
+          kind: 'reboot',
+          status: 'requested',
+          ts: '2026-03-09T18:12:00.000Z',
+          agent_id: 'app-engineering',
+          actor_id: 'team-lead',
+          summary: 'Lead requested a reboot after the evidence review',
+          correlation_id: 'corr-drilldown',
+          evidence_refs: ['/tmp/corr-reboot.md'],
+          source_kind: 'controller_event',
+          incident_id: 'evt_corr_reboot_requested'
+        },
+        {
+          entry_id: 'incident:evt_corr_handoff_completed',
+          state: 'closed',
+          kind: 'handoff',
+          status: 'completed',
+          ts: '2026-03-09T18:11:00.000Z',
+          agent_id: 'app-engineering',
+          actor_id: 'team-lead',
+          summary: 'Lead completed the evidence handoff',
+          correlation_id: 'corr-drilldown',
+          evidence_refs: ['/tmp/corr-handoff-complete.md'],
+          source_kind: 'controller_event',
+          incident_id: 'evt_corr_handoff_completed'
+        }
+      ]
+    },
     incidents: [
       {
         incident_id: 'evt_corr_reboot_requested',

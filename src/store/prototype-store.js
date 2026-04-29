@@ -2710,6 +2710,7 @@ function listMemoryArtifactItems({ events = [], latestCollectorReport = null, fi
   }
 
   const items = Array.from(artifactMap.values())
+    .filter((artifact) => !filters.source_kind || artifact.source_kinds.has(filters.source_kind))
     .map((artifact) => ({
       artifact_ref: artifact.artifact_ref,
       artifact_kind: artifact.artifact_kind,

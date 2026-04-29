@@ -323,6 +323,7 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
         artifact_ref: url.searchParams.get('artifact_ref'),
         event_type: url.searchParams.get('event_type'),
         severity: url.searchParams.get('severity'),
+        source_kind: url.searchParams.get('source_kind'),
         artifact_kind: url.searchParams.get('artifact_kind'),
         limit: url.searchParams.get('limit'),
         now: now()

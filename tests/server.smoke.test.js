@@ -3083,6 +3083,119 @@ test('GET /memory/artifacts narrows evidence facets without leaking unrelated co
   ]);
 });
 
+test('GET /memory/artifacts filters source_kind by exact provenance membership before limit', async (t) => {
+  const { baseUrl, store } = await createHarness(t, {
+    now: () => '2026-03-09T18:20:00.000Z'
+  });
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_memory_source_kind_shared_controller',
+      ts: '2026-03-09T18:04:00.000Z',
+      agentId: 'app-engineering',
+      actorId: 'team-lead',
+      eventType: 'review_started',
+      currentState: 'reviewing',
+      activeTask: 'Review source kind parity',
+      summary: 'Controller event referenced the shared artifact',
+      severity: 'yellow',
+      correlationId: 'corr-memory-source-kind',
+      evidenceRefs: ['/tmp/source-kind-shared.md'],
+      sourceKind: 'controller_event'
+    })
+  );
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_memory_source_kind_workspace_only',
+      ts: '2026-03-09T18:06:00.000Z',
+      agentId: 'app-engineering',
+      actorId: 'app-engineering',
+      eventType: 'agent_wrote_file',
+      currentState: 'coding',
+      activeTask: 'Write source kind parity notes',
+      summary: 'Workspace event referenced a workspace-only artifact',
+      severity: 'yellow',
+      correlationId: 'corr-memory-source-kind',
+      evidenceRefs: ['/tmp/source-kind-workspace-only.md'],
+      sourceKind: 'workspace_file'
+    })
+  );
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_memory_source_kind_shared_workspace',
+      ts: '2026-03-09T18:07:00.000Z',
+      agentId: 'app-engineering',
+      actorId: 'app-engineering',
+      eventType: 'agent_wrote_file',
+      currentState: 'coding',
+      activeTask: 'Update source kind parity notes',
+      summary: 'Workspace event updated the shared artifact',
+      severity: 'yellow',
+      correlationId: 'corr-memory-source-kind',
+      evidenceRefs: ['/tmp/source-kind-shared.md'],
+      sourceKind: 'workspace_file'
+    })
+  );
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_memory_source_kind_controller_newer',
+      ts: '2026-03-09T18:09:00.000Z',
+      agentId: 'app-engineering',
+      actorId: 'team-lead',
+      eventType: 'review_started',
+      currentState: 'reviewing',
+      activeTask: 'Review newer controller-only artifact',
+      summary: 'Newer controller event should not satisfy workspace_file',
+      severity: 'yellow',
+      correlationId: 'corr-memory-source-kind',
+      evidenceRefs: ['/tmp/source-kind-controller-only.md'],
+      sourceKind: 'controller_event'
+    })
+  );
+
+  const workspaceLimited = await requestJson(
+    `${baseUrl}/memory/artifacts?agent_id=app-engineering&correlation_id=corr-memory-source-kind&source_kind=workspace_file&limit=1`
+  );
+  assert.equal(workspaceLimited.response.status, 200);
+  assert.deepEqual(workspaceLimited.body.items.map((item) => item.artifact_ref), [
+    '/tmp/source-kind-shared.md'
+  ]);
+  assert.deepEqual(workspaceLimited.body.items[0].source_kinds, ['controller_event', 'workspace_file']);
+
+  const controllerResponse = await requestJson(
+    `${baseUrl}/memory/artifacts?agent_id=app-engineering&correlation_id=corr-memory-source-kind&source_kind=controller_event&limit=10`
+  );
+  assert.equal(controllerResponse.response.status, 200);
+  assert.deepEqual(controllerResponse.body.items.map((item) => item.artifact_ref), [
+    '/tmp/source-kind-controller-only.md',
+    '/tmp/source-kind-shared.md'
+  ]);
+
+  const artifactRefMismatch = await requestJson(
+    `${baseUrl}/memory/artifacts?agent_id=app-engineering&correlation_id=corr-memory-source-kind&artifact_ref=${encodeURIComponent('/tmp/source-kind-controller-only.md')}&source_kind=workspace_file&limit=10`
+  );
+  assert.equal(artifactRefMismatch.response.status, 200);
+  assert.deepEqual(artifactRefMismatch.body.items, []);
+
+  const unknownSourceKind = await requestJson(
+    `${baseUrl}/memory/artifacts?agent_id=app-engineering&correlation_id=corr-memory-source-kind&source_kind=missing_source_kind&limit=10`
+  );
+  assert.equal(unknownSourceKind.response.status, 200);
+  assert.deepEqual(unknownSourceKind.body.items, []);
+
+  const unfiltered = await requestJson(
+    `${baseUrl}/memory/artifacts?agent_id=app-engineering&correlation_id=corr-memory-source-kind&limit=10`
+  );
+  const blankSourceKind = await requestJson(
+    `${baseUrl}/memory/artifacts?agent_id=app-engineering&correlation_id=corr-memory-source-kind&source_kind=&limit=10`
+  );
+  assert.equal(blankSourceKind.response.status, 200);
+  assert.deepEqual(blankSourceKind.body, unfiltered.body);
+});
+
 test('GET /memory/artifacts keeps collector-only observations canonical and agent-scoped when no derived activity event exists', async (t) => {
   const { baseUrl, store } = await createHarness(t, {
     now: () => '2026-03-09T18:20:00.000Z'

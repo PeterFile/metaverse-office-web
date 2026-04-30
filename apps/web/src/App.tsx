@@ -163,6 +163,84 @@ function resolveLiveFocusAgentMeta(agent: WorldAgent, world: WorldState) {
   return `${phaseLabel} · ${zoneLabel}`;
 }
 
+function resolveLiveFocusReasonLine(agents: WorldAgent[]) {
+  const primaryAgent = agents[0];
+  if (!primaryAgent) {
+    return null;
+  }
+
+  const reasons = resolveLiveFocusReasons(primaryAgent);
+  const hiddenCount = Math.max(0, agents.length - 1);
+  if (hiddenCount > 0) {
+    reasons.push(`${hiddenCount} more focus ${hiddenCount === 1 ? 'agent' : 'agents'}`);
+  }
+
+  return `Why this matters · ${primaryAgent.display_name}: ${reasons.join('; ')}.`;
+}
+
+function resolveLiveFocusReasons(agent: WorldAgent) {
+  const reasons = renderLiveFocusSeverityReason(agent);
+  const hasStalenessReason = reasons.some((reason) => reason.startsWith('stale for '));
+
+  if (
+    !hasStalenessReason &&
+    agent.staleness &&
+    agent.staleness.severity !== 'normal' &&
+    agent.staleness.stale_for_minutes !== null
+  ) {
+    reasons.push(`stale for ${agent.staleness.stale_for_minutes}m`);
+  }
+
+  if (agent.phase === 'blocked') {
+    reasons.push('blocked');
+  }
+
+  if (agent.reboot_recommended) {
+    reasons.push('reboot recommended');
+  }
+
+  const hasIncidentReason = reasons.some((reason) => reason.includes('incident'));
+  if (!hasIncidentReason && agent.has_open_incidents) {
+    if (agent.open_alert_count > 0) {
+      reasons.push(`${agent.open_alert_count} open ${agent.open_alert_count === 1 ? 'alert' : 'alerts'}`);
+    } else {
+      reasons.push('open incident');
+    }
+  }
+
+  return dedupeLiveFocusReasons(reasons.length > 0 ? reasons : ['attention-worthy state']);
+}
+
+function renderLiveFocusSeverityReason(agent: WorldAgent) {
+  const rawReason = agent.severity_reason.trim();
+  const workflowUnavailable = rawReason.includes('(workflow unavailable)');
+  const baseReason = rawReason.replace(' (workflow unavailable)', '').trim();
+  const reasons: string[] = [];
+  const stalenessMatch = /^staleness: (\d+|\?)m$/.exec(baseReason);
+
+  if (stalenessMatch) {
+    reasons.push(`stale for ${stalenessMatch[1]}m`);
+  } else if (baseReason === 'open incident') {
+    reasons.push('open incident evidence');
+  } else if (baseReason === 'effective (backend)') {
+    reasons.push(`${HOT_ZONE_SEVERITY_LABELS[agent.severity]} backend severity`);
+  } else if (baseReason === 'reported' && agent.severity !== 'normal') {
+    reasons.push(`${HOT_ZONE_SEVERITY_LABELS[agent.severity]} reported severity`);
+  } else if (baseReason && baseReason !== 'reported') {
+    reasons.push(baseReason);
+  }
+
+  if (workflowUnavailable) {
+    reasons.push('workflow unavailable');
+  }
+
+  return reasons;
+}
+
+function dedupeLiveFocusReasons(reasons: string[]) {
+  return reasons.filter((reason, index) => reason.length > 0 && reasons.indexOf(reason) === index);
+}
+
 function renderEvidenceCoverageFocusRefCount(count: number) {
   return `${count} ref${count === 1 ? '' : 's'}`;
 }
@@ -1999,20 +2077,23 @@ function AppInner() {
                 <strong className="aitown-panel__topline-title">Live Focus</strong>
                 <span className="aitown-panel__topline-copy">{resolveLiveFocusSummaryLabel(liveFocusAgents.length)}</span>
                 {liveFocusAgents.length > 0 ? (
-                  <span className="aitown-panel__focus-chips" aria-label="Live focus agents">
-                    {liveFocusAgents.slice(0, 3).map((agent) => (
-                      <button
-                        key={agent.agent_id}
-                        type="button"
-                        className={`aitown-focus-chip severity-${agent.severity}${selectedAgentId === agent.agent_id ? ' is-active' : ''}`}
-                        aria-label={`Inspect live focus agent ${agent.display_name}`}
-                        onClick={() => handleSceneSelectAgent(agent.agent_id)}
-                      >
-                        <strong>{agent.display_name}</strong>
-                        <span>{resolveLiveFocusAgentMeta(agent, projectedWorld)}</span>
-                      </button>
-                    ))}
-                  </span>
+                  <>
+                    <span className="aitown-panel__topline-copy">{resolveLiveFocusReasonLine(liveFocusAgents)}</span>
+                    <span className="aitown-panel__focus-chips" aria-label="Live focus agents">
+                      {liveFocusAgents.slice(0, 3).map((agent) => (
+                        <button
+                          key={agent.agent_id}
+                          type="button"
+                          className={`aitown-focus-chip severity-${agent.severity}${selectedAgentId === agent.agent_id ? ' is-active' : ''}`}
+                          aria-label={`Inspect live focus agent ${agent.display_name}`}
+                          onClick={() => handleSceneSelectAgent(agent.agent_id)}
+                        >
+                          <strong>{agent.display_name}</strong>
+                          <span>{resolveLiveFocusAgentMeta(agent, projectedWorld)}</span>
+                        </button>
+                      ))}
+                    </span>
+                  </>
                 ) : (
                   <span className="aitown-panel__topline-copy">Drag to pan. Wheel to zoom. Tap or click an agent to inspect.</span>
                 )}

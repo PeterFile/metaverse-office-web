@@ -13,7 +13,10 @@ const {
   MEANINGFUL_OUTPUT_EVENT_TYPES,
   validateEventPayload
 } = require('../domain');
-const { createSharedArtifactRollup } = require('../collectors/controller-snapshot');
+const {
+  createEvidenceCoverageLedger,
+  createSharedArtifactRollup
+} = require('../collectors/controller-snapshot');
 
 const COLLECTOR_ALERT_SOURCE = 'controller_snapshot';
 const SEVERITY_RANK = Object.freeze({
@@ -177,6 +180,10 @@ class PrototypeStore {
 
   getLatestCollectorReport() {
     return this.latestCollectorReport;
+  }
+
+  getLatestCollectorEvidenceCoverage(filters = {}) {
+    return projectCollectorEvidenceCoverage(this.getLatestCollectorReport(), filters);
   }
 
   getCounts() {
@@ -1726,6 +1733,120 @@ function createCollectorResolvedSummary({ family, heartbeat }) {
   }
 
   return 'Collector cleared the previous supervision alert';
+}
+
+function projectCollectorEvidenceCoverage(report, filters = {}) {
+  const coverage = report?.evidence_coverage || null;
+  if (!coverage || !Array.isArray(coverage.agent_items)) {
+    return null;
+  }
+
+  const agentId = normalizeFilterValue(filters.agent_id);
+  const sourceKind = normalizeFilterValue(filters.source_kind);
+  const confidenceLevel = normalizeFilterValue(filters.confidence_level);
+  const limit = parseLimit(filters.limit);
+  const filteredAgentRows = coverage.agent_items
+    .filter(isEvidenceCoverageAgentItem)
+    .filter((item) => !agentId || item.agent_id === agentId)
+    .filter((item) => !sourceKind || normalizeStringValues(item.source_kinds).includes(sourceKind))
+    .filter((item) => !confidenceLevel || item.confidence_level === confidenceLevel)
+    .slice(0, limit);
+  const aggregate = createEvidenceCoverageAggregate(report, filteredAgentRows);
+
+  return {
+    collected_at: report.collected_at || null,
+    actor_id: report.actor_id || null,
+    evidence_ref_count: aggregate.evidence_ref_count,
+    covered_agent_count: aggregate.covered_agent_count,
+    low_confidence_agent_ids: aggregate.low_confidence_agent_ids,
+    source_kind_buckets: aggregate.source_kind_buckets,
+    agent_items: aggregate.agent_items.map(projectEvidenceCoverageAgentItem)
+  };
+}
+
+function createEvidenceCoverageAggregate(report, agentRows) {
+  const itemsByAgentId = new Map(
+    (Array.isArray(report?.items) ? report.items : [])
+      .filter((item) => item && typeof item.agent_id === 'string')
+      .map((item) => [item.agent_id, item])
+  );
+  const selectedItems = [];
+
+  for (const row of agentRows) {
+    const item = itemsByAgentId.get(row.agent_id);
+    if (!item) {
+      return createEvidenceCoverageAggregateFromRows(agentRows);
+    }
+
+    selectedItems.push(item);
+  }
+
+  return createEvidenceCoverageLedger(selectedItems);
+}
+
+function createEvidenceCoverageAggregateFromRows(agentRows) {
+  const sourceKindBuckets = {
+    workspace_file: 0,
+    workspace_root: 0,
+    tmux_observation: 0
+  };
+  let evidenceRefCount = 0;
+  let coveredAgentCount = 0;
+  const lowConfidenceAgentIds = [];
+
+  for (const row of agentRows) {
+    const rowEvidenceRefCount = normalizeCount(row.evidence_ref_count);
+    evidenceRefCount += rowEvidenceRefCount;
+
+    if (rowEvidenceRefCount > 0) {
+      coveredAgentCount += 1;
+    }
+
+    if (row.confidence_level !== 'high' || rowEvidenceRefCount === 0) {
+      lowConfidenceAgentIds.push(row.agent_id);
+    }
+
+    for (const sourceKind of normalizeStringValues(row.source_kinds)) {
+      if (Object.prototype.hasOwnProperty.call(sourceKindBuckets, sourceKind)) {
+        sourceKindBuckets[sourceKind] += 1;
+      }
+    }
+  }
+
+  return {
+    evidence_ref_count: evidenceRefCount,
+    covered_agent_count: coveredAgentCount,
+    low_confidence_agent_ids: lowConfidenceAgentIds,
+    source_kind_buckets: sourceKindBuckets,
+    agent_items: agentRows.map(projectEvidenceCoverageAgentItem)
+  };
+}
+
+function projectEvidenceCoverageAgentItem(item) {
+  return {
+    agent_id: item.agent_id,
+    evidence_ref_count: normalizeCount(item.evidence_ref_count),
+    source_kinds: normalizeStringValues(item.source_kinds),
+    latest_evidence_at: item.latest_evidence_at || null,
+    confidence_level: item.confidence_level || null
+  };
+}
+
+function isEvidenceCoverageAgentItem(item) {
+  return item && typeof item.agent_id === 'string' && item.agent_id.length > 0;
+}
+
+function normalizeFilterValue(value) {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function normalizeCount(value) {
+  return Number.isFinite(value) && value >= 0 ? value : 0;
 }
 
 function createCollectorAlertSignature({ family, severity, heartbeat }) {

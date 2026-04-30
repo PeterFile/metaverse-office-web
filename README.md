@@ -133,6 +133,7 @@ Optional env:
 - `GET /events?event_id=&agent_id=&event_type=&severity=&source_kind=&evidence_ref=&correlation_id=&limit=`
 - `GET /interactions`
 - `GET /collectors/controller-snapshot`
+- `GET /collectors/controller-snapshot/evidence-coverage?agent_id=&source_kind=&confidence_level=&limit=`
 - `GET /office/overview`
 - `GET /office/operations?limit=&state=&agent_id=&severity=`
 - `GET /timeline?window=&event_id=&agent_id=&event_type=&severity=&source_kind=&evidence_ref=&correlation_id=&limit=`
@@ -248,6 +249,9 @@ This keeps employee writes self-scoped and reserves cross-agent task dispatch pl
 ### Collector snapshot notes
 - `POST /collectors/controller-snapshot` is lead-only and requires `x-actor-id: team-lead`
 - `GET /collectors/controller-snapshot` is read-only and returns the latest in-memory collector report
+- `GET /collectors/controller-snapshot/evidence-coverage` is read-only and returns `{ "item": null }` until the latest in-memory collector report includes `evidence_coverage`
+- evidence coverage can be filtered by exact `agent_id`, collector evidence `source_kind`, `confidence_level`, and post-filter `limit`; blank filters are ignored and invalid limits use the existing read-model default
+- evidence coverage responses include only `collected_at`, `actor_id`, aggregate coverage counts, source-kind buckets, low-confidence agent ids, and bounded `agent_items`; the route does not touch tmux, the filesystem, or collector write paths
 - collector heartbeats are derived from real `inbox.md`, `outbox.md`, `todo.md` mtimes plus tmux pane metadata
 - collector-derived supervision reuses canonical `peer_watch_alert_raised` / `peer_watch_alert_resolved`
 - collector snapshots also append deduped canonical `agent_state_changed` and `agent_wrote_file` events when evidence shows a new state or a newer file write

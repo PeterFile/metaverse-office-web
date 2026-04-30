@@ -781,6 +781,7 @@ function handleTmuxError(error) {
 module.exports = {
   OBSERVED_WORKSPACE_PATHS,
   collectControllerSnapshot,
+  createEvidenceCoverageLedger,
   createSharedArtifactRollup,
   createControllerSnapshotCollector,
   createEvidenceRefs,

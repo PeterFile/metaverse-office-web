@@ -2074,7 +2074,7 @@ function AppInner() {
           </header>
           <div className="aitown-panel__hud-top">
             <div className="aitown-panel__topline">
-              <span>
+              <span className="aitown-panel__topline-card--live-focus">
                 <strong className="aitown-panel__topline-title">Live Focus</strong>
                 <span className="aitown-panel__topline-copy aitown-panel__topline-copy--live-focus-summary">
                   {resolveLiveFocusSummaryLabel(liveFocusAgents.length)}

@@ -245,6 +245,10 @@ button {
   text-transform: uppercase;
 }
 
+.aitown-panel__topline > .aitown-panel__topline-card--live-focus {
+  max-width: min(42ch, 42%);
+}
+
 .aitown-panel__topline-copy {
   color: #f0e3c1;
   font-size: 0.8rem;

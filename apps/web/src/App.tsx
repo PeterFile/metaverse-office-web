@@ -1033,6 +1033,7 @@ function AppInner() {
     [activeCorrelationParticipantAgentIds, activeCorrelationSpotlight?.correlation_id, projectedWorld, selectedAgentId]
   );
   const liveFocusAgents = useMemo(() => selectAttentionQueue(projectedWorld), [projectedWorld]);
+  const liveFocusReasonLine = useMemo(() => resolveLiveFocusReasonLine(liveFocusAgents), [liveFocusAgents]);
   const hotZones = useMemo(() => selectHotZones(projectedWorld), [projectedWorld]);
   const collectorSnapshotReadIsReady = collectorSnapshotResource.state === 'ready';
   const visibleCollectorSnapshot = collectorSnapshotReadIsReady
@@ -2075,10 +2076,12 @@ function AppInner() {
             <div className="aitown-panel__topline">
               <span>
                 <strong className="aitown-panel__topline-title">Live Focus</strong>
-                <span className="aitown-panel__topline-copy">{resolveLiveFocusSummaryLabel(liveFocusAgents.length)}</span>
+                <span className="aitown-panel__topline-copy aitown-panel__topline-copy--live-focus-summary">
+                  {resolveLiveFocusSummaryLabel(liveFocusAgents.length)}
+                  {liveFocusReasonLine ? <span className="aitown-panel__live-focus-reason"> {liveFocusReasonLine}</span> : null}
+                </span>
                 {liveFocusAgents.length > 0 ? (
                   <>
-                    <span className="aitown-panel__topline-copy">{resolveLiveFocusReasonLine(liveFocusAgents)}</span>
                     <span className="aitown-panel__focus-chips" aria-label="Live focus agents">
                       {liveFocusAgents.slice(0, 3).map((agent) => (
                         <button

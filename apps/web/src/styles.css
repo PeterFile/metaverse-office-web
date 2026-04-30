@@ -224,6 +224,7 @@ button {
 .aitown-panel__topline > span {
   align-self: flex-start;
   display: flex;
+  min-width: 0;
   flex-direction: column;
   gap: 6px;
   max-width: min(52ch, 48%);
@@ -248,6 +249,18 @@ button {
   color: #f0e3c1;
   font-size: 0.8rem;
   line-height: 1.4;
+}
+
+.aitown-panel__topline-copy--live-focus-summary {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.aitown-panel__live-focus-reason {
+  display: inline;
 }
 
 .aitown-panel__focus-chips {

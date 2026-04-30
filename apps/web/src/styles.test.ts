@@ -65,4 +65,11 @@ describe('AI Town shell styles', () => {
       /\.aitown-panel__toolbar\s*\{[\s\S]*?position:\s*absolute;[\s\S]*?right:\s*18px;[\s\S]*?top:\s*156px;[\s\S]*?display:\s*flex;[\s\S]*?gap:\s*10px;[\s\S]*?justify-content:\s*flex-end;[\s\S]*?pointer-events:\s*auto;/
     );
   });
+
+  it('keeps evidence coverage focus passive except its chips so the world drag lane remains available', () => {
+    expect(styles).toContain(
+      '.aitown-panel__evidence-focus {\n  display: flex;\n  max-width: min(58ch, 56%);\n  flex-direction: column;\n  align-items: flex-start;\n  gap: 6px;\n  pointer-events: none;\n}'
+    );
+    expect(styles).toMatch(/\.aitown-focus-chip\s*\{[\s\S]*?pointer-events:\s*auto;/);
+  });
 });

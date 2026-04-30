@@ -36,6 +36,8 @@ import { WorldProvider, useWorld } from './context/WorldContext';
 import { usePolledResource, type LoadState } from './hooks/usePolledResource';
 import { getHubFocusableElements, isHubElementVisible } from './hubFocus';
 import type {
+  CollectorEvidenceCoverageAgentItem,
+  CollectorSnapshot,
   CorrelationDrilldown,
   MemoryArtifact,
   MemoryArtifactIndex,
@@ -76,6 +78,12 @@ type ReplayCheckpointFocus = {
   eventId: string;
   selectedAgentId: string | null;
   selectedCorrelationId: string | null;
+};
+
+type EvidenceCoverageFocusItem = {
+  agentId: string;
+  displayName: string;
+  coverageItem: CollectorEvidenceCoverageAgentItem | null;
 };
 
 type SelectedAgentTimelineReplayPayload = {
@@ -153,6 +161,45 @@ function resolveLiveFocusAgentMeta(agent: WorldAgent, world: WorldState) {
   const zoneLabel = selectAgentZoneLabel(agent, world.zones);
 
   return `${phaseLabel} · ${zoneLabel}`;
+}
+
+function renderEvidenceCoverageFocusRefCount(count: number) {
+  return `${count} ref${count === 1 ? '' : 's'}`;
+}
+
+function renderEvidenceCoverageFocusSources(sourceKinds: string[]) {
+  return sourceKinds.length > 0 ? sourceKinds.join(', ') : 'No evidence sources';
+}
+
+function resolveEvidenceCoverageFocusItems(
+  collectorSnapshot: CollectorSnapshot | null,
+  overviewAgents: OfficeAgent[] | undefined
+): EvidenceCoverageFocusItem[] {
+  const coverage = collectorSnapshot?.evidence_coverage;
+  if (!coverage || coverage.low_confidence_agent_ids.length === 0) {
+    return [];
+  }
+
+  const overviewAgentsById = new Map((overviewAgents ?? []).map((agent) => [agent.agent_id, agent]));
+  const coverageItemsByAgentId = new Map(
+    coverage.agent_items.map((item) => [item.agent_id, item])
+  );
+
+  return coverage.low_confidence_agent_ids
+    .map((agentId) => {
+      const overviewAgent = overviewAgentsById.get(agentId);
+      if (!overviewAgent) {
+        return null;
+      }
+
+      return {
+        agentId,
+        displayName: overviewAgent.display_name,
+        coverageItem: coverageItemsByAgentId.get(agentId) ?? null
+      };
+    })
+    .filter((item): item is EvidenceCoverageFocusItem => item !== null)
+    .slice(0, 3);
 }
 
 function resolveHotZoneFocusMeta(zone: HotZoneSummary) {
@@ -578,6 +625,10 @@ function AppInner() {
   const [cachedCorrelationSpotlight, setCachedCorrelationSpotlight] = useState<CorrelationSpotlight | null>(null);
   const [selectedAgentDrilldownTab, setSelectedAgentDrilldownTab] =
     useState<SelectedAgentDrilldownTab>('now');
+  const [defaultEvidenceCoverageSnapshot, setDefaultEvidenceCoverageSnapshot] =
+    useState<CollectorSnapshot | null>(null);
+  const requestedSelectedAgentDrilldownTabRef = useRef<SelectedAgentDrilldownTab | null>(null);
+  const defaultEvidenceCoverageRequestedRef = useRef(false);
   const lastSelectedAgentRef = useRef<OfficeAgent | null>(null);
   const correlationSelectionModeRef = useRef<'auto' | 'manual' | 'preserved'>('auto');
   const lastCorrelationContextRef = useRef<string | null>(null);
@@ -646,6 +697,43 @@ function AppInner() {
     load: (signal) => fetchCollectorSnapshot(signal),
     resourceKey: 'collector-controller-snapshot'
   });
+  const defaultEvidenceCoverageReady = overviewResource.data !== null;
+
+  useEffect(() => {
+    if (hubOpen || selectedAgentId !== null || !defaultEvidenceCoverageReady || defaultEvidenceCoverageRequestedRef.current) {
+      return undefined;
+    }
+
+    defaultEvidenceCoverageRequestedRef.current = true;
+    const controller = new AbortController();
+    let settled = false;
+
+    void fetchCollectorSnapshot(controller.signal)
+      .then((snapshot) => {
+        setDefaultEvidenceCoverageSnapshot(snapshot);
+      })
+      .catch((error: unknown) => {
+        if (!(error instanceof Error && error.name === 'AbortError')) {
+          setDefaultEvidenceCoverageSnapshot(null);
+        }
+      })
+      .finally(() => {
+        settled = true;
+      });
+
+    return () => {
+      if (!settled) {
+        defaultEvidenceCoverageRequestedRef.current = false;
+      }
+      controller.abort();
+    };
+  }, [defaultEvidenceCoverageReady, hubOpen, selectedAgentId]);
+
+  useEffect(() => {
+    if (collectorSnapshotResource.state === 'ready') {
+      setDefaultEvidenceCoverageSnapshot(collectorSnapshotResource.data);
+    }
+  }, [collectorSnapshotResource.data, collectorSnapshotResource.state]);
 
   const operationsQueueEnabled = hubOpen && (selectedAgentId === null || selectedOperationSelection !== null);
 
@@ -868,6 +956,17 @@ function AppInner() {
   );
   const liveFocusAgents = useMemo(() => selectAttentionQueue(projectedWorld), [projectedWorld]);
   const hotZones = useMemo(() => selectHotZones(projectedWorld), [projectedWorld]);
+  const collectorSnapshotReadIsReady = collectorSnapshotResource.state === 'ready';
+  const visibleCollectorSnapshot = collectorSnapshotReadIsReady
+    ? collectorSnapshotResource.data
+    : collectorSnapshotResource.data ?? defaultEvidenceCoverageSnapshot;
+  const evidenceCoverageFocusItems = useMemo(
+    () =>
+      hubOpen || selectedAgentId !== null
+        ? []
+        : resolveEvidenceCoverageFocusItems(visibleCollectorSnapshot, overviewResource.data?.agents),
+    [hubOpen, overviewResource.data?.agents, selectedAgentId, visibleCollectorSnapshot]
+  );
 
   const selectedAgent = resolveSelectedAgent(
     selectedAgentId,
@@ -1321,7 +1420,14 @@ function AppInner() {
 
   useEffect(() => {
     if (hubOpen && selectedAgentId !== null) {
-      setSelectedAgentDrilldownTab('now');
+      const requestedTab = requestedSelectedAgentDrilldownTabRef.current;
+      requestedSelectedAgentDrilldownTabRef.current = null;
+      setSelectedAgentDrilldownTab(requestedTab ?? 'now');
+      return;
+    }
+
+    if (!hubOpen) {
+      requestedSelectedAgentDrilldownTabRef.current = null;
     }
   }, [hubOpen, selectedAgentId]);
 
@@ -1671,6 +1777,15 @@ function AppInner() {
     ]
   );
 
+  const handleEvidenceCoverageFocusAgent = useCallback(
+    (agentId: string) => {
+      requestedSelectedAgentDrilldownTabRef.current = 'evidence';
+      handleSceneSelectAgent(agentId);
+      setSelectedAgentDrilldownTab('evidence');
+    },
+    [handleSceneSelectAgent]
+  );
+
   const handleSelectOperation = useCallback(
     (
       operation: OfficeOperation,
@@ -1909,6 +2024,48 @@ function AppInner() {
                 <span className="aitown-panel__topline-copy">{viewportToplineStatus.snapshot}</span>
               </span>
             </div>
+            {evidenceCoverageFocusItems.length > 0 ? (
+              <section
+                className="aitown-panel__evidence-focus"
+                role="region"
+                aria-label="Evidence coverage focus"
+              >
+                <div className="aitown-panel__evidence-focus__head">
+                  <strong className="aitown-panel__topline-title">Evidence coverage focus</strong>
+                  <span className="aitown-panel__topline-copy">Coverage below high-confidence/no evidence</span>
+                </div>
+                <span
+                  className="aitown-panel__focus-chips aitown-panel__focus-chips--compact"
+                  role="group"
+                  aria-label="Evidence coverage focus agents"
+                >
+                  {evidenceCoverageFocusItems.map((item) => (
+                    <button
+                      key={item.agentId}
+                      type="button"
+                      className={`aitown-focus-chip aitown-focus-chip--evidence${selectedAgentId === item.agentId ? ' is-active' : ''}`}
+                      aria-label={`Inspect evidence coverage focus agent ${item.displayName}`}
+                      onClick={() => handleEvidenceCoverageFocusAgent(item.agentId)}
+                    >
+                      <strong>{item.displayName}</strong>
+                      <span>{`ID · ${item.agentId}`}</span>
+                      {item.coverageItem ? (
+                        <>
+                          <span>
+                            {`${renderEvidenceCoverageFocusRefCount(item.coverageItem.evidence_ref_count)} · ${renderEvidenceCoverageFocusSources(item.coverageItem.source_kinds)}`}
+                          </span>
+                          <span>
+                            {`Latest evidence · ${item.coverageItem.latest_evidence_at ?? 'No recent evidence'}`}
+                          </span>
+                        </>
+                      ) : (
+                        <span>Coverage below high-confidence/no evidence</span>
+                      )}
+                    </button>
+                  ))}
+                </span>
+              </section>
+            ) : null}
             {hotZones.length > 0 ? (
               <div className="aitown-panel__hot-zone-focus">
                 <strong className="aitown-panel__topline-title">Hot zone focus</strong>
@@ -2117,7 +2274,7 @@ function AppInner() {
               }
             >
               <DetailsPanel
-                collectorSnapshot={collectorSnapshotResource.data}
+                collectorSnapshot={visibleCollectorSnapshot}
               collectorSnapshotError={collectorSnapshotResource.error}
               collectorSnapshotState={collectorSnapshotResource.state}
               correlation={activeCorrelation}

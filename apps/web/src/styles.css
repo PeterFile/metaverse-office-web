@@ -274,6 +274,33 @@ button {
   justify-content: flex-end;
 }
 
+.aitown-panel__evidence-focus {
+  display: flex;
+  max-width: min(58ch, 56%);
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  pointer-events: none;
+}
+
+.aitown-panel__evidence-focus__head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 12px;
+  border-style: solid;
+  border-width: 14px;
+  border-image-source: url('/ai-town/assets/ui/box.svg');
+  border-image-repeat: stretch;
+  border-image-slice: 12.5%;
+  background: rgba(39, 24, 33, 0.84);
+  backdrop-filter: blur(8px);
+}
+
+.aitown-panel__evidence-focus .aitown-panel__focus-chips {
+  max-width: min(100%, 58ch);
+}
+
 .aitown-focus-chip {
   pointer-events: auto;
   display: flex;
@@ -297,6 +324,11 @@ button {
 .aitown-focus-chip--hot-zone {
   flex-basis: 128px;
   padding: 3px 8px 6px;
+}
+
+.aitown-focus-chip--evidence {
+  flex-basis: 170px;
+  background: rgba(47, 50, 55, 0.93);
 }
 
 .aitown-focus-chip:hover {
@@ -1276,6 +1308,10 @@ button {
     justify-content: flex-start;
   }
 
+  .aitown-panel__evidence-focus {
+    max-width: 100%;
+  }
+
   .aitown-panel__toolbar {
     right: 14px;
     top: 232px;
@@ -1400,6 +1436,10 @@ button {
 
   .aitown-panel__hot-zone-focus .aitown-panel__focus-chips {
     justify-content: flex-start;
+  }
+
+  .aitown-panel__evidence-focus {
+    max-width: 100%;
   }
 
   .aitown-panel__toolbar {

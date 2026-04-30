@@ -14,6 +14,7 @@ import {
   DEFAULT_WORKFLOW_WINDOW,
   RequestError,
   fetchAgentWorkflow,
+  fetchCollectorEvidenceCoverage,
   fetchCollectorSnapshot,
   fetchCorrelationDrilldown,
   fetchIncidents,
@@ -36,6 +37,7 @@ import { WorldProvider, useWorld } from './context/WorldContext';
 import { usePolledResource, type LoadState } from './hooks/usePolledResource';
 import { getHubFocusableElements, isHubElementVisible } from './hubFocus';
 import type {
+  CollectorEvidenceCoverage,
   CollectorEvidenceCoverageAgentItem,
   CollectorSnapshot,
   CorrelationDrilldown,
@@ -250,10 +252,9 @@ function renderEvidenceCoverageFocusSources(sourceKinds: string[]) {
 }
 
 function resolveEvidenceCoverageFocusItems(
-  collectorSnapshot: CollectorSnapshot | null,
+  coverage: CollectorEvidenceCoverage | null,
   overviewAgents: OfficeAgent[] | undefined
 ): EvidenceCoverageFocusItem[] {
-  const coverage = collectorSnapshot?.evidence_coverage;
   if (!coverage || coverage.low_confidence_agent_ids.length === 0) {
     return [];
   }
@@ -703,8 +704,8 @@ function AppInner() {
   const [cachedCorrelationSpotlight, setCachedCorrelationSpotlight] = useState<CorrelationSpotlight | null>(null);
   const [selectedAgentDrilldownTab, setSelectedAgentDrilldownTab] =
     useState<SelectedAgentDrilldownTab>('now');
-  const [defaultEvidenceCoverageSnapshot, setDefaultEvidenceCoverageSnapshot] =
-    useState<CollectorSnapshot | null>(null);
+  const [defaultEvidenceCoverage, setDefaultEvidenceCoverage] =
+    useState<CollectorEvidenceCoverage | null>(null);
   const requestedSelectedAgentDrilldownTabRef = useRef<SelectedAgentDrilldownTab | null>(null);
   const defaultEvidenceCoverageRequestedRef = useRef(false);
   const lastSelectedAgentRef = useRef<OfficeAgent | null>(null);
@@ -786,13 +787,13 @@ function AppInner() {
     const controller = new AbortController();
     let settled = false;
 
-    void fetchCollectorSnapshot(controller.signal)
-      .then((snapshot) => {
-        setDefaultEvidenceCoverageSnapshot(snapshot);
+    void fetchCollectorEvidenceCoverage({ signal: controller.signal })
+      .then((coverage) => {
+        setDefaultEvidenceCoverage(coverage);
       })
       .catch((error: unknown) => {
         if (!(error instanceof Error && error.name === 'AbortError')) {
-          setDefaultEvidenceCoverageSnapshot(null);
+          setDefaultEvidenceCoverage(null);
         }
       })
       .finally(() => {
@@ -809,7 +810,7 @@ function AppInner() {
 
   useEffect(() => {
     if (collectorSnapshotResource.state === 'ready') {
-      setDefaultEvidenceCoverageSnapshot(collectorSnapshotResource.data);
+      setDefaultEvidenceCoverage(collectorSnapshotResource.data?.evidence_coverage ?? null);
     }
   }, [collectorSnapshotResource.data, collectorSnapshotResource.state]);
 
@@ -1035,16 +1036,15 @@ function AppInner() {
   const liveFocusAgents = useMemo(() => selectAttentionQueue(projectedWorld), [projectedWorld]);
   const liveFocusReasonLine = useMemo(() => resolveLiveFocusReasonLine(liveFocusAgents), [liveFocusAgents]);
   const hotZones = useMemo(() => selectHotZones(projectedWorld), [projectedWorld]);
-  const collectorSnapshotReadIsReady = collectorSnapshotResource.state === 'ready';
-  const visibleCollectorSnapshot = collectorSnapshotReadIsReady
-    ? collectorSnapshotResource.data
-    : collectorSnapshotResource.data ?? defaultEvidenceCoverageSnapshot;
+  const visibleCollectorSnapshot = collectorSnapshotResource.data;
+  const visibleEvidenceCoverage =
+    collectorSnapshotResource.data?.evidence_coverage ?? defaultEvidenceCoverage;
   const evidenceCoverageFocusItems = useMemo(
     () =>
       hubOpen || selectedAgentId !== null
         ? []
-        : resolveEvidenceCoverageFocusItems(visibleCollectorSnapshot, overviewResource.data?.agents),
-    [hubOpen, overviewResource.data?.agents, selectedAgentId, visibleCollectorSnapshot]
+        : resolveEvidenceCoverageFocusItems(visibleEvidenceCoverage, overviewResource.data?.agents),
+    [hubOpen, overviewResource.data?.agents, selectedAgentId, visibleEvidenceCoverage]
   );
 
   const selectedAgent = resolveSelectedAgent(

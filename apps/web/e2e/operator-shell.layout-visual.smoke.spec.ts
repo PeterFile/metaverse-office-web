@@ -127,6 +127,30 @@ function expectViewportWithinHorizontalWorldBounds(
 
 test.describe('operator shell layout visual smoke', () => {
   test('surfaces evidence coverage focus by default without blocking non-chip world drag', async ({ page }) => {
+    const evidenceCoverage = {
+      evidence_ref_count: 1,
+      covered_agent_count: 1,
+      low_confidence_agent_ids: ['growth-revenue'],
+      source_kind_buckets: {
+        workspace_file: 1,
+        workspace_root: 0,
+        tmux_observation: 0
+      },
+      agent_items: [
+        {
+          agent_id: 'growth-revenue',
+          evidence_ref_count: 1,
+          source_kinds: ['workspace_file'],
+          latest_evidence_at: '2026-03-10T23:57:00.000Z',
+          confidence_level: 'medium'
+        }
+      ]
+    };
+
+    await page.route('**/collectors/controller-snapshot/evidence-coverage', async (route) => {
+      await route.fulfill({ json: { item: evidenceCoverage } });
+    });
+
     await page.route('**/collectors/controller-snapshot', async (route) => {
       const response = await route.fetch();
       const payload = await response.json();
@@ -136,25 +160,7 @@ test.describe('operator shell layout visual smoke', () => {
         json: {
           item: {
             ...payload.item,
-            evidence_coverage: {
-              evidence_ref_count: 1,
-              covered_agent_count: 1,
-              low_confidence_agent_ids: ['growth-revenue'],
-              source_kind_buckets: {
-                workspace_file: 1,
-                workspace_root: 0,
-                tmux_observation: 0
-              },
-              agent_items: [
-                {
-                  agent_id: 'growth-revenue',
-                  evidence_ref_count: 1,
-                  source_kinds: ['workspace_file'],
-                  latest_evidence_at: '2026-03-10T23:57:00.000Z',
-                  confidence_level: 'medium'
-                }
-              ]
-            }
+            evidence_coverage: evidenceCoverage
           }
         }
       });

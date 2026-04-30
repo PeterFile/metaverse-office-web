@@ -1,6 +1,7 @@
 import type {
   AgentEventsResponse,
   AgentInteractionsResponse,
+  CollectorEvidenceCoverage,
   AgentWorkflow,
   CollectorSnapshot,
   CorrelationDrilldown,
@@ -90,6 +91,40 @@ export async function fetchOfficeOverview(signal?: AbortSignal): Promise<OfficeO
 export async function fetchCollectorSnapshot(signal?: AbortSignal): Promise<CollectorSnapshot | null> {
   const response = await fetch(resolveApiUrl('/collectors/controller-snapshot'), { signal });
   const body = await parseJson<{ item: CollectorSnapshot | null }>(response);
+  return body.item;
+}
+
+export async function fetchCollectorEvidenceCoverage(
+  options: {
+    agentId?: string;
+    sourceKind?: string;
+    confidenceLevel?: string;
+    limit?: number;
+    signal?: AbortSignal;
+  } = {}
+): Promise<CollectorEvidenceCoverage | null> {
+  const params = new URLSearchParams();
+  if (options.agentId) {
+    params.set('agent_id', options.agentId);
+  }
+  if (options.sourceKind) {
+    params.set('source_kind', options.sourceKind);
+  }
+  if (options.confidenceLevel) {
+    params.set('confidence_level', options.confidenceLevel);
+  }
+  if (options.limit !== undefined) {
+    params.set('limit', String(options.limit));
+  }
+
+  const suffix = params.size > 0 ? `?${params.toString()}` : '';
+  const response = await fetch(
+    resolveApiUrl(`/collectors/controller-snapshot/evidence-coverage${suffix}`),
+    {
+      signal: options.signal
+    }
+  );
+  const body = await parseJson<{ item: CollectorEvidenceCoverage | null }>(response);
   return body.item;
 }
 

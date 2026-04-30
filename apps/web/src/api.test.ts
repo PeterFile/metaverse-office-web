@@ -5,6 +5,7 @@ import {
   fetchAgentEvents,
   fetchAgentIncidents,
   fetchAgentInteractions,
+  fetchCollectorEvidenceCoverage,
   fetchCollectorSnapshot,
   fetchMemoryArtifacts,
   fetchOfficeOperations,
@@ -285,6 +286,86 @@ describe('fetchCollectorSnapshot', () => {
     );
 
     await expect(fetchCollectorSnapshot()).resolves.toBeNull();
+  });
+});
+
+describe('fetchCollectorEvidenceCoverage', () => {
+  it('unwraps the lightweight collector evidence coverage projection', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            item: {
+              evidence_ref_count: 2,
+              covered_agent_count: 1,
+              low_confidence_agent_ids: ['growth-revenue'],
+              source_kind_buckets: {
+                workspace_file: 1,
+                workspace_root: 0,
+                tmux_observation: 1
+              },
+              agent_items: [
+                {
+                  agent_id: 'growth-revenue',
+                  evidence_ref_count: 2,
+                  source_kinds: ['tmux_observation', 'workspace_file'],
+                  latest_evidence_at: '2026-03-09T18:04:30.000Z',
+                  confidence_level: 'medium'
+                }
+              ]
+            }
+          }),
+          {
+            headers: JSON_HEADERS
+          }
+        )
+      )
+    );
+
+    await expect(fetchCollectorEvidenceCoverage()).resolves.toMatchObject({
+      evidence_ref_count: 2,
+      covered_agent_count: 1,
+      low_confidence_agent_ids: ['growth-revenue'],
+      agent_items: [
+        {
+          agent_id: 'growth-revenue',
+          evidence_ref_count: 2,
+          latest_evidence_at: '2026-03-09T18:04:30.000Z',
+          confidence_level: 'medium'
+        }
+      ]
+    });
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/collectors/controller-snapshot/evidence-coverage',
+      expect.objectContaining({ signal: undefined })
+    );
+  });
+
+  it('passes exact evidence coverage filters through to the read-only projection', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ item: null }), {
+          headers: JSON_HEADERS
+        })
+      )
+    );
+
+    await expect(
+      fetchCollectorEvidenceCoverage({
+        agentId: 'app-engineering',
+        sourceKind: 'tmux_observation',
+        confidenceLevel: 'low',
+        limit: 2
+      })
+    ).resolves.toBeNull();
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/collectors/controller-snapshot/evidence-coverage?agent_id=app-engineering&source_kind=tmux_observation&confidence_level=low&limit=2',
+      expect.objectContaining({ signal: undefined })
+    );
   });
 });
 

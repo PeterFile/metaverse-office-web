@@ -170,6 +170,7 @@ const selectedCorrelationMissingArtifactExactUrl =
 const selectedCorrelationTmuxArtifactExactUrl =
   '/memory/artifacts?limit=4&window=60m&agent_id=app-engineering&correlation_id=corr-app-review&artifact_ref=tmux%3A%2F%2F5-web3-app-engineering%2F0.1';
 const collectorSnapshotUrl = '/collectors/controller-snapshot';
+const collectorEvidenceCoverageUrl = '/collectors/controller-snapshot/evidence-coverage';
 
 const overviewFixture = {
   generated_at: '2026-03-16T09:00:00.000Z',
@@ -1524,6 +1525,10 @@ function resolveDefaultFetchResponse(url: string) {
     return jsonResponse({ item: collectorSnapshotFixture });
   }
 
+  if (url === collectorEvidenceCoverageUrl) {
+    return jsonResponse({ item: collectorSnapshotFixture.evidence_coverage });
+  }
+
   return null;
 }
 
@@ -2403,8 +2408,14 @@ afterEach(() => {
     expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
   });
 
-  it('surfaces evidence coverage focus on the default world shell before Hub opens', async () => {
+  it('surfaces evidence coverage focus on the default world shell before Hub opens from the lightweight projection', async () => {
     render(<App />);
+
+    await waitFor(() => {
+      const requestedUrls = vi.mocked(globalThis.fetch).mock.calls.map(([request]) => String(request));
+      expect(requestedUrls).toContain(collectorEvidenceCoverageUrl);
+      expect(requestedUrls).not.toContain(collectorSnapshotUrl);
+    });
 
     const evidenceFocus = await screen.findByRole('region', { name: 'Evidence coverage focus' });
     const focusChip = within(evidenceFocus).getByRole('button', {
@@ -2446,10 +2457,8 @@ afterEach(() => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = typeof input === 'string' ? input : input.toString();
 
-      if (url === collectorSnapshotUrl) {
-        const { evidence_coverage, ...collectorSnapshotWithoutCoverage } = collectorSnapshotFixture;
-        void evidence_coverage;
-        return jsonResponse({ item: collectorSnapshotWithoutCoverage });
+      if (url === collectorEvidenceCoverageUrl) {
+        return jsonResponse({ item: null });
       }
 
       return resolveTestFetchResponse(url);
@@ -2458,7 +2467,7 @@ afterEach(() => {
 
     render(<App />);
 
-    await waitFor(() => expect(fetchMock.mock.calls.map(([request]) => String(request))).toContain(collectorSnapshotUrl));
+    await waitFor(() => expect(fetchMock.mock.calls.map(([request]) => String(request))).toContain(collectorEvidenceCoverageUrl));
     expect(screen.queryByRole('region', { name: 'Evidence coverage focus' })).not.toBeInTheDocument();
     expect(screen.queryByText('Coverage below high-confidence/no evidence')).not.toBeInTheDocument();
     expect(screen.queryByText(/No evidence coverage/i)).not.toBeInTheDocument();
@@ -2468,23 +2477,20 @@ afterEach(() => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = typeof input === 'string' ? input : input.toString();
 
-      if (url === collectorSnapshotUrl) {
+      if (url === collectorEvidenceCoverageUrl) {
         return jsonResponse({
           item: {
-            ...collectorSnapshotFixture,
-            evidence_coverage: {
-              ...collectorSnapshotFixture.evidence_coverage,
-              low_confidence_agent_ids: ['ghost-agent'],
-              agent_items: [
-                {
-                  agent_id: 'ghost-agent',
-                  evidence_ref_count: 1,
-                  source_kinds: ['workspace_file'],
-                  latest_evidence_at: '2026-03-16T08:58:40.000Z',
-                  confidence_level: 'low'
-                }
-              ]
-            }
+            ...collectorSnapshotFixture.evidence_coverage,
+            low_confidence_agent_ids: ['ghost-agent'],
+            agent_items: [
+              {
+                agent_id: 'ghost-agent',
+                evidence_ref_count: 1,
+                source_kinds: ['workspace_file'],
+                latest_evidence_at: '2026-03-16T08:58:40.000Z',
+                confidence_level: 'low'
+              }
+            ]
           }
         });
       }
@@ -2495,25 +2501,25 @@ afterEach(() => {
 
     render(<App />);
 
-    await waitFor(() => expect(fetchMock.mock.calls.map(([request]) => String(request))).toContain(collectorSnapshotUrl));
+    await waitFor(() => expect(fetchMock.mock.calls.map(([request]) => String(request))).toContain(collectorEvidenceCoverageUrl));
     expect(screen.queryByRole('region', { name: 'Evidence coverage focus' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /ghost-agent/i })).not.toBeInTheDocument();
   });
 
   it('uses a later Hub collector snapshot for evidence coverage focus after the default one-shot lacks coverage', async () => {
     const user = userEvent.setup();
+    let evidenceCoverageRequestCount = 0;
     let collectorRequestCount = 0;
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = typeof input === 'string' ? input : input.toString();
 
+      if (url === collectorEvidenceCoverageUrl) {
+        evidenceCoverageRequestCount += 1;
+        return jsonResponse({ item: null });
+      }
+
       if (url === collectorSnapshotUrl) {
         collectorRequestCount += 1;
-        if (collectorRequestCount === 1) {
-          const { evidence_coverage, ...collectorSnapshotWithoutCoverage } = collectorSnapshotFixture;
-          void evidence_coverage;
-          return jsonResponse({ item: collectorSnapshotWithoutCoverage });
-        }
-
         return jsonResponse({ item: collectorSnapshotFixture });
       }
 
@@ -2523,11 +2529,11 @@ afterEach(() => {
 
     render(<App />);
 
-    await waitFor(() => expect(collectorRequestCount).toBe(1));
+    await waitFor(() => expect(evidenceCoverageRequestCount).toBe(1));
     expect(screen.queryByRole('region', { name: 'Evidence coverage focus' })).not.toBeInTheDocument();
 
     await openHub(user);
-    await waitFor(() => expect(collectorRequestCount).toBeGreaterThanOrEqual(2));
+    await waitFor(() => expect(collectorRequestCount).toBeGreaterThanOrEqual(1));
     await user.click(screen.getByRole('button', { name: 'Close Hub' }));
 
     const evidenceFocus = await screen.findByRole('region', { name: 'Evidence coverage focus' });
@@ -2544,9 +2550,13 @@ afterEach(() => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = typeof input === 'string' ? input : input.toString();
 
+      if (url === collectorEvidenceCoverageUrl) {
+        return jsonResponse({ item: collectorSnapshotFixture.evidence_coverage });
+      }
+
       if (url === collectorSnapshotUrl) {
         collectorRequestCount += 1;
-        return jsonResponse({ item: collectorRequestCount === 1 ? collectorSnapshotFixture : null });
+        return jsonResponse({ item: null });
       }
 
       return resolveTestFetchResponse(url);
@@ -13714,6 +13724,10 @@ afterEach(() => {
               headers: { 'content-type': 'application/json' }
             }
           );
+        }
+
+        if (url === collectorEvidenceCoverageUrl) {
+          return jsonResponse({ item: collectorSnapshotFixture.evidence_coverage });
         }
 
         throw new Error(`Unexpected request: ${url}`);

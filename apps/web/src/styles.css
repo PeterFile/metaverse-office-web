@@ -1315,6 +1315,12 @@ button {
     max-width: min(60ch, 100%);
   }
 
+  .aitown-panel__topline > .aitown-panel__topline-card--live-focus {
+    align-self: stretch;
+    width: 100%;
+    max-width: 100%;
+  }
+
   .aitown-panel__hot-zone-focus {
     max-width: 100%;
     margin-left: 0;
@@ -1443,6 +1449,12 @@ button {
   .aitown-panel__topline > span {
     max-width: 100%;
     font-size: 0.76rem;
+  }
+
+  .aitown-panel__topline > .aitown-panel__topline-card--live-focus {
+    align-self: stretch;
+    width: 100%;
+    max-width: 100%;
   }
 
   .aitown-panel__hot-zone-focus {

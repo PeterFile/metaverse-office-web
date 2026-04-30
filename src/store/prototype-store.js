@@ -2556,6 +2556,21 @@ function listInteractionItems(events, filters = {}, limit = parseLimit(filters.l
       }
 
       if (
+        filters.event_id &&
+        interaction.trigger_event_id !== filters.event_id &&
+        !(interaction.related_event_ids || []).includes(filters.event_id)
+      ) {
+        return false;
+      }
+
+      if (
+        filters.evidence_ref &&
+        !normalizeEvidenceRefs(interaction.evidence_refs).includes(filters.evidence_ref)
+      ) {
+        return false;
+      }
+
+      if (
         durationMs !== null &&
         nowMs !== null &&
         getInteractionSortMs(interaction) < nowMs - durationMs

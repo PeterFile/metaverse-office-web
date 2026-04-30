@@ -128,10 +128,10 @@ Optional env:
 - `GET /agents/:id?limit=`
 - `GET /agents/:id/events?limit=&event_type=&severity=&source_kind=&evidence_ref=&correlation_id=`
 - `GET /agents/:id/incidents?kind=&severity=&status=&correlation_id=&limit=&window=`
-- `GET /agents/:id/interactions`
+- `GET /agents/:id/interactions?event_id=&evidence_ref=&interaction_type=&counterparty_agent_id=&severity=&correlation_id=&limit=&window=`
 - `GET /agents/:id/workflow?limit=&window=`
 - `GET /events?event_id=&agent_id=&event_type=&severity=&source_kind=&evidence_ref=&correlation_id=&limit=`
-- `GET /interactions`
+- `GET /interactions?event_id=&evidence_ref=&interaction_type=&counterparty_agent_id=&severity=&correlation_id=&limit=&window=`
 - `GET /collectors/controller-snapshot`
 - `GET /collectors/controller-snapshot/evidence-coverage?agent_id=&source_kind=&confidence_level=&limit=`
 - `GET /office/overview`
@@ -193,7 +193,8 @@ Optional env:
 - supported interaction types are `question_reply`, `review`, `handoff`, `peer_watch`, and `meeting`
 - paired start/completed events collapse into one interaction only when interaction type, `correlation_id`, and participant lineage all match
 - when that lineage is ambiguous, the server returns single-event interaction records instead of guessing
-- global interaction filters: `interaction_type`, `counterparty_agent_id`, `severity`, `correlation_id`, `limit`, `window`
+- global interaction filters: `event_id`, `evidence_ref`, `interaction_type`, `counterparty_agent_id`, `severity`, `correlation_id`, `limit`, `window`; agent-scoped interaction reads support the same filters with `:id` as an implicit participant filter
+- `event_id` exact-matches the interaction `trigger_event_id` or any `related_event_ids` member; `evidence_ref` exact-matches membership in the interaction `evidence_refs` rollup
 
 ### Timeline replay notes
 - `GET /timeline` is a read-only replay slice over canonical events

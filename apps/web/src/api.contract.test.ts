@@ -607,7 +607,9 @@ describe('read-only frontend/backend contract smoke', () => {
         interactionType: 'peer_watch',
         counterpartyAgentId: 'protocol-engineering',
         severity: 'orange',
-        correlationId: 'corr-contract'
+        correlationId: 'corr-contract',
+        eventId: 'evt_contract_peer_watch',
+        evidenceRef: '/tmp/contract-peer-watch.md'
       }),
       api.fetchPeerWatchAlerts({
         status: 'open',
@@ -641,6 +643,8 @@ describe('read-only frontend/backend contract smoke', () => {
         query: [
           ['correlation_id', 'corr-contract'],
           ['counterparty_agent_id', 'protocol-engineering'],
+          ['event_id', 'evt_contract_peer_watch'],
+          ['evidence_ref', '/tmp/contract-peer-watch.md'],
           ['interaction_type', 'peer_watch'],
           ['limit', '2'],
           ['severity', 'orange'],

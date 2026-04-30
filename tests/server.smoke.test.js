@@ -1089,6 +1089,40 @@ test('GET interaction endpoints expose derived read models and filters', async (
     'evt_review_completed'
   ]);
 
+  const byCompletedEvent = await requestJson(
+    `${baseUrl}/interactions?event_id=evt_review_completed`
+  );
+  assert.equal(byCompletedEvent.response.status, 200);
+  assert.deepEqual(
+    byCompletedEvent.body.items.map((item) => item.interaction_id),
+    ['interaction:evt_review_started']
+  );
+
+  const byEvidenceRef = await requestJson(
+    `${baseUrl}/interactions?evidence_ref=${encodeURIComponent('/tmp/review-complete.md')}`
+  );
+  assert.equal(byEvidenceRef.response.status, 200);
+  assert.deepEqual(
+    byEvidenceRef.body.items.map((item) => item.interaction_id),
+    ['interaction:evt_review_started']
+  );
+
+  const agentExactEvidence = await requestJson(
+    `${baseUrl}/agents/app-engineering/interactions?event_id=evt_review_started&evidence_ref=${encodeURIComponent('/tmp/review-complete.md')}`
+  );
+  assert.equal(agentExactEvidence.response.status, 200);
+  assert.equal(agentExactEvidence.body.agent_id, 'app-engineering');
+  assert.deepEqual(
+    agentExactEvidence.body.items.map((item) => item.interaction_id),
+    ['interaction:evt_review_started']
+  );
+
+  const mismatchedExactEvidence = await requestJson(
+    `${baseUrl}/agents/app-engineering/interactions?event_id=evt_handoff_started&evidence_ref=${encodeURIComponent('/tmp/review-complete.md')}`
+  );
+  assert.equal(mismatchedExactEvidence.response.status, 200);
+  assert.deepEqual(mismatchedExactEvidence.body.items, []);
+
   const windowed = await requestJson(`${baseUrl}/interactions?window=5m`);
   assert.equal(windowed.response.status, 200);
   assert.equal(windowed.body.items.length, 1);

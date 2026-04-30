@@ -72,4 +72,12 @@ describe('AI Town shell styles', () => {
     );
     expect(styles).toMatch(/\.aitown-focus-chip\s*\{[\s\S]*?pointer-events:\s*auto;/);
   });
+
+  it('keeps the Live Focus reason line from expanding the draggable world safe lane', () => {
+    expect(styles).toMatch(/\.aitown-panel__topline > span\s*\{[\s\S]*?min-width:\s*0;/);
+    expect(styles).toContain('.aitown-panel__topline > .aitown-panel__topline-card--live-focus {\n  max-width: min(42ch, 42%);\n}');
+    expect(styles).toContain(
+      '.aitown-panel__topline-copy--live-focus-summary {\n  display: block;\n  max-width: 100%;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}'
+    );
+  });
 });

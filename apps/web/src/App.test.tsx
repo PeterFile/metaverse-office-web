@@ -2387,6 +2387,11 @@ afterEach(() => {
       name: 'Inspect live focus agent App Engineering Agent'
     });
     expect(screen.getByText(/need attention right now\./)).toBeVisible();
+    expect(
+      screen.getByText(
+        'Why this matters · App Engineering Agent: stale for 22m; workflow unavailable; reboot recommended; open incident; 1 more focus agent.'
+      )
+    ).toBeVisible();
     expect(screen.queryByRole('dialog', { name: 'Hub' })).not.toBeInTheDocument();
 
     expect(liveFocusButton).toBeVisible();

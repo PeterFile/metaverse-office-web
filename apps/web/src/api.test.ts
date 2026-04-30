@@ -443,7 +443,7 @@ describe('fetchAgentInteractions', () => {
     );
   });
 
-  it('passes limit, window, interaction_type, counterparty_agent_id, severity, and correlation_id filters through to the backend query string', async () => {
+  it('passes limit, window, interaction_type, counterparty_agent_id, severity, correlation_id, event_id, and evidence_ref filters through to the backend query string', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue(
@@ -465,11 +465,13 @@ describe('fetchAgentInteractions', () => {
       interactionType: 'peer_watch',
       counterpartyAgentId: 'protocol-engineering',
       severity: 'orange',
-      correlationId: 'corr-app-review'
+      correlationId: 'corr-app-review',
+      eventId: 'evt-app-review',
+      evidenceRef: '/tmp/contract-peer-watch.md'
     });
 
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      '/agents/app-engineering/interactions?limit=3&window=30m&interaction_type=peer_watch&counterparty_agent_id=protocol-engineering&severity=orange&correlation_id=corr-app-review',
+      '/agents/app-engineering/interactions?limit=3&window=30m&interaction_type=peer_watch&counterparty_agent_id=protocol-engineering&severity=orange&correlation_id=corr-app-review&event_id=evt-app-review&evidence_ref=%2Ftmp%2Fcontract-peer-watch.md',
       expect.objectContaining({ signal: undefined })
     );
   });

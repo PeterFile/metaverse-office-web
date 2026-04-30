@@ -118,6 +118,8 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
     sendJson(res, 200, {
       agent_id: agentId,
       items: store.listAgentInteractions(agentId, {
+        event_id: url.searchParams.get('event_id'),
+        evidence_ref: url.searchParams.get('evidence_ref'),
         interaction_type: url.searchParams.get('interaction_type'),
         counterparty_agent_id: url.searchParams.get('counterparty_agent_id'),
         severity: url.searchParams.get('severity'),
@@ -218,6 +220,8 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
   if (method === 'GET' && pathname === '/interactions') {
     sendJson(res, 200, {
       items: store.listInteractions({
+        event_id: url.searchParams.get('event_id'),
+        evidence_ref: url.searchParams.get('evidence_ref'),
         interaction_type: url.searchParams.get('interaction_type'),
         counterparty_agent_id: url.searchParams.get('counterparty_agent_id'),
         severity: url.searchParams.get('severity'),

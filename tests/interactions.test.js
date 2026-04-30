@@ -147,6 +147,65 @@ test('store derives paired and single-event interactions with filters', async ()
 
   assert.deepEqual(
     store.listInteractions({
+      event_id: 'evt_review_completed',
+      now: '2026-03-09T18:07:00.000Z'
+    }),
+    [review]
+  );
+
+  assert.deepEqual(
+    store.listInteractions({
+      event_id: 'evt_review_started',
+      evidence_ref: '/tmp/review-complete.md',
+      now: '2026-03-09T18:07:00.000Z'
+    }),
+    [review]
+  );
+
+  assert.deepEqual(
+    store.listInteractions({
+      event_id: 'evt_peer_watch_raised',
+      now: '2026-03-09T18:07:00.000Z'
+    }),
+    [peerWatch]
+  );
+
+  assert.deepEqual(
+    store.listInteractions({
+      evidence_ref: '/tmp/peer-watch.md',
+      now: '2026-03-09T18:07:00.000Z'
+    }),
+    [peerWatch]
+  );
+
+  assert.deepEqual(
+    store.listAgentInteractions('app-engineering', {
+      event_id: 'evt_review_completed',
+      evidence_ref: '/tmp/review-start.md',
+      now: '2026-03-09T18:07:00.000Z'
+    }),
+    [review]
+  );
+
+  assert.deepEqual(
+    store.listInteractions({
+      event_id: 'evt_missing',
+      now: '2026-03-09T18:07:00.000Z'
+    }),
+    []
+  );
+
+  assert.deepEqual(
+    store.listInteractions({
+      event_id: 'evt_review_completed',
+      evidence_ref: '/tmp/peer-watch.md',
+      now: '2026-03-09T18:07:00.000Z'
+    }),
+    []
+  );
+
+  assert.deepEqual(
+    store.listInteractions({
       severity: 'orange',
       window: '1m',
       now: '2026-03-09T18:07:00.000Z'

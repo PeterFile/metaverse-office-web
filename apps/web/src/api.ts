@@ -175,6 +175,8 @@ export async function fetchAgentInteractions(
     counterpartyAgentId?: string;
     severity?: string;
     correlationId?: string;
+    eventId?: string;
+    evidenceRef?: string;
     signal?: AbortSignal;
   } = {}
 ): Promise<AgentInteractionsResponse> {
@@ -194,6 +196,12 @@ export async function fetchAgentInteractions(
   }
   if (options.correlationId) {
     params.set('correlation_id', options.correlationId);
+  }
+  if (options.eventId) {
+    params.set('event_id', options.eventId);
+  }
+  if (options.evidenceRef) {
+    params.set('evidence_ref', options.evidenceRef);
   }
 
   const suffix = params.size > 0 ? `?${params.toString()}` : '';

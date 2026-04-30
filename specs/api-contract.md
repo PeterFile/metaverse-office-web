@@ -6,12 +6,12 @@
 - `GET /agents/:id?limit=`
 - `GET /agents/:id/events?limit=&event_type=&severity=&source_kind=&evidence_ref=&correlation_id=`
 - `GET /agents/:id/incidents?kind=&severity=&status=&correlation_id=&limit=&window=`
-- `GET /agents/:id/interactions?interaction_type=&counterparty_agent_id=&severity=&correlation_id=&limit=&window=`
+- `GET /agents/:id/interactions?event_id=&evidence_ref=&interaction_type=&counterparty_agent_id=&severity=&correlation_id=&limit=&window=`
 - `GET /agents/:id/workflow?limit=&window=`
 - `GET /collectors/controller-snapshot`
 - `GET /collectors/controller-snapshot/evidence-coverage?agent_id=&source_kind=&confidence_level=&limit=`
 - `GET /events?event_id=&agent_id=&event_type=&severity=&source_kind=&evidence_ref=&correlation_id=&limit=`
-- `GET /interactions?interaction_type=&counterparty_agent_id=&severity=&correlation_id=&limit=&window=`
+- `GET /interactions?event_id=&evidence_ref=&interaction_type=&counterparty_agent_id=&severity=&correlation_id=&limit=&window=`
 - `GET /office/overview`
 - `GET /office/operations?limit=&state=&agent_id=&severity=`
 - `GET /timeline?window=&event_id=&agent_id=&event_type=&severity=&source_kind=&evidence_ref=&correlation_id=&limit=`
@@ -260,8 +260,9 @@
 - supported interaction types are `question_reply`, `review`, `handoff`, `peer_watch`, and `meeting`
 - paired start/completed events collapse into one interaction only when the derived interaction type, `correlation_id`, and participant lineage all match
 - ambiguous or unmatched events remain single-event interaction records instead of guessed pairs
-- `GET /interactions` supports `interaction_type`, `counterparty_agent_id`, `severity`, `correlation_id`, `limit`, and `window`
+- `GET /interactions` supports `event_id`, `evidence_ref`, `interaction_type`, `counterparty_agent_id`, `severity`, `correlation_id`, `limit`, and `window`
 - `GET /agents/:id/interactions` supports the same filters while treating `:id` as the implicit participant filter
+- `event_id` exact-matches an interaction when it equals `trigger_event_id` or appears in `related_event_ids`; `evidence_ref` exact-matches membership in `evidence_refs`
 - each interaction item exposes `interaction_id`, `interaction_type`, `correlation_id`, `started_at`, `ended_at`, `participant_agent_ids`, `trigger_event_id`, `before_state`, `after_state`, `severity`, `evidence_refs`, `summary`, and `related_event_ids`
 
 ## Peer-watch alert query semantics

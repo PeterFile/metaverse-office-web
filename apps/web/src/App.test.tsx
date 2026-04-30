@@ -2398,6 +2398,168 @@ afterEach(() => {
     expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
   });
 
+  it('surfaces evidence coverage focus on the default world shell before Hub opens', async () => {
+    render(<App />);
+
+    const evidenceFocus = await screen.findByRole('region', { name: 'Evidence coverage focus' });
+    const focusChip = within(evidenceFocus).getByRole('button', {
+      name: 'Inspect evidence coverage focus agent Growth Revenue Agent'
+    });
+
+    expect(evidenceFocus).toBeVisible();
+    expect(within(evidenceFocus).getByText('Coverage below high-confidence/no evidence')).toBeVisible();
+    expect(focusChip).toBeVisible();
+    expect(focusChip).toHaveTextContent('Growth Revenue Agent');
+    expect(focusChip).toHaveTextContent('ID · growth-revenue');
+    expect(focusChip).toHaveTextContent('3 refs · tmux_observation, workspace_file, workspace_root');
+    expect(focusChip).toHaveTextContent('Latest evidence · 2026-03-16T08:58:40.000Z');
+    expect(screen.queryByRole('dialog', { name: 'Hub' })).not.toBeInTheDocument();
+  });
+
+  it('opens the selected agent Evidence tab from an evidence coverage focus chip', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const evidenceFocus = await screen.findByRole('region', { name: 'Evidence coverage focus' });
+    await user.click(
+      within(evidenceFocus).getByRole('button', {
+        name: 'Inspect evidence coverage focus agent Growth Revenue Agent'
+      })
+    );
+
+    const details = await screen.findByRole('complementary', { name: 'Agent details' });
+    const evidenceTab = await screen.findByRole('tab', { name: 'Evidence' });
+
+    expect(screen.getByRole('dialog', { name: 'Hub' })).toBeVisible();
+    expect(within(details).getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+    await waitFor(() => expect(evidenceTab).toHaveAttribute('aria-selected', 'true'));
+    expect(screen.getByRole('tabpanel', { name: 'Evidence' })).toBeVisible();
+    expect(details).toHaveAttribute('data-selected-agent-drilldown-tab', 'evidence');
+  });
+
+  it('omits the evidence coverage focus strip when collector coverage is absent', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString();
+
+      if (url === collectorSnapshotUrl) {
+        const { evidence_coverage, ...collectorSnapshotWithoutCoverage } = collectorSnapshotFixture;
+        void evidence_coverage;
+        return jsonResponse({ item: collectorSnapshotWithoutCoverage });
+      }
+
+      return resolveTestFetchResponse(url);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<App />);
+
+    await waitFor(() => expect(fetchMock.mock.calls.map(([request]) => String(request))).toContain(collectorSnapshotUrl));
+    expect(screen.queryByRole('region', { name: 'Evidence coverage focus' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Coverage below high-confidence/no evidence')).not.toBeInTheDocument();
+    expect(screen.queryByText(/No evidence coverage/i)).not.toBeInTheDocument();
+  });
+
+  it('omits evidence coverage focus chips for agents missing from the current overview', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString();
+
+      if (url === collectorSnapshotUrl) {
+        return jsonResponse({
+          item: {
+            ...collectorSnapshotFixture,
+            evidence_coverage: {
+              ...collectorSnapshotFixture.evidence_coverage,
+              low_confidence_agent_ids: ['ghost-agent'],
+              agent_items: [
+                {
+                  agent_id: 'ghost-agent',
+                  evidence_ref_count: 1,
+                  source_kinds: ['workspace_file'],
+                  latest_evidence_at: '2026-03-16T08:58:40.000Z',
+                  confidence_level: 'low'
+                }
+              ]
+            }
+          }
+        });
+      }
+
+      return resolveTestFetchResponse(url);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<App />);
+
+    await waitFor(() => expect(fetchMock.mock.calls.map(([request]) => String(request))).toContain(collectorSnapshotUrl));
+    expect(screen.queryByRole('region', { name: 'Evidence coverage focus' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /ghost-agent/i })).not.toBeInTheDocument();
+  });
+
+  it('uses a later Hub collector snapshot for evidence coverage focus after the default one-shot lacks coverage', async () => {
+    const user = userEvent.setup();
+    let collectorRequestCount = 0;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString();
+
+      if (url === collectorSnapshotUrl) {
+        collectorRequestCount += 1;
+        if (collectorRequestCount === 1) {
+          const { evidence_coverage, ...collectorSnapshotWithoutCoverage } = collectorSnapshotFixture;
+          void evidence_coverage;
+          return jsonResponse({ item: collectorSnapshotWithoutCoverage });
+        }
+
+        return jsonResponse({ item: collectorSnapshotFixture });
+      }
+
+      return resolveTestFetchResponse(url);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<App />);
+
+    await waitFor(() => expect(collectorRequestCount).toBe(1));
+    expect(screen.queryByRole('region', { name: 'Evidence coverage focus' })).not.toBeInTheDocument();
+
+    await openHub(user);
+    await waitFor(() => expect(collectorRequestCount).toBeGreaterThanOrEqual(2));
+    await user.click(screen.getByRole('button', { name: 'Close Hub' }));
+
+    const evidenceFocus = await screen.findByRole('region', { name: 'Evidence coverage focus' });
+    expect(
+      within(evidenceFocus).getByRole('button', {
+        name: 'Inspect evidence coverage focus agent Growth Revenue Agent'
+      })
+    ).toBeVisible();
+  });
+
+  it('clears cached evidence coverage focus when a later Hub collector read has no snapshot', async () => {
+    const user = userEvent.setup();
+    let collectorRequestCount = 0;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString();
+
+      if (url === collectorSnapshotUrl) {
+        collectorRequestCount += 1;
+        return jsonResponse({ item: collectorRequestCount === 1 ? collectorSnapshotFixture : null });
+      }
+
+      return resolveTestFetchResponse(url);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<App />);
+
+    expect(await screen.findByRole('region', { name: 'Evidence coverage focus' })).toBeVisible();
+    await openHub(user);
+    await screen.findByText('No collector snapshot available yet.');
+    await user.click(screen.getByRole('button', { name: 'Close Hub' }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole('region', { name: 'Evidence coverage focus' })).not.toBeInTheDocument();
+    });
+  });
+
   it('surfaces hot-zone focus chips in the shell topline without changing selection, correlation, or fetch state', async () => {
     const user = userEvent.setup();
 

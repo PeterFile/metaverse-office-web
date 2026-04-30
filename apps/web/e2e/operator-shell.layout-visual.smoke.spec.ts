@@ -126,6 +126,93 @@ function expectViewportWithinHorizontalWorldBounds(
 }
 
 test.describe('operator shell layout visual smoke', () => {
+  test('surfaces evidence coverage focus by default without blocking non-chip world drag', async ({ page }) => {
+    await page.route('**/collectors/controller-snapshot', async (route) => {
+      const response = await route.fetch();
+      const payload = await response.json();
+
+      await route.fulfill({
+        response,
+        json: {
+          item: {
+            ...payload.item,
+            evidence_coverage: {
+              evidence_ref_count: 1,
+              covered_agent_count: 1,
+              low_confidence_agent_ids: ['growth-revenue'],
+              source_kind_buckets: {
+                workspace_file: 1,
+                workspace_root: 0,
+                tmux_observation: 0
+              },
+              agent_items: [
+                {
+                  agent_id: 'growth-revenue',
+                  evidence_ref_count: 1,
+                  source_kinds: ['workspace_file'],
+                  latest_evidence_at: '2026-03-10T23:57:00.000Z',
+                  confidence_level: 'medium'
+                }
+              ]
+            }
+          }
+        }
+      });
+    });
+
+    await page.goto('/');
+
+    const worldHost = page.locator('.aitown-world__host');
+    const evidenceFocus = page.getByRole('region', { name: 'Evidence coverage focus' });
+    const evidenceFocusHead = evidenceFocus.locator('.aitown-panel__evidence-focus__head');
+    const evidenceFocusChip = evidenceFocus.getByRole('button', {
+      name: 'Inspect evidence coverage focus agent Growth Revenue Agent'
+    });
+    await expect(worldHost).toBeVisible();
+    await page.waitForFunction(() => Boolean(window.__AITOWN_VIEWPORT__));
+    await expect(evidenceFocus).toBeVisible();
+    await expect(evidenceFocus.getByText('Coverage below high-confidence/no evidence')).toBeVisible();
+    await expect(evidenceFocusChip).toBeVisible();
+    await expect(page.getByRole('dialog', { name: 'Hub' })).toHaveCount(0);
+
+    const before = await readViewportState(page);
+    expect(before).not.toBeNull();
+    const [headRect] = await Promise.all([readRect(evidenceFocusHead)]);
+    const dragStart = {
+      x: headRect.left + Math.min(16, Math.max(1, headRect.width / 2)),
+      y: headRect.top + Math.min(12, Math.max(1, headRect.height / 2))
+    };
+
+    const hitTarget = await page.evaluate(({ x, y }) => {
+      const target = document.elementFromPoint(x, y);
+      return {
+        insideWorld: Boolean(target?.closest('.aitown-world__host')),
+        insideEvidenceFocus: Boolean(target?.closest('.aitown-panel__evidence-focus')),
+        insideEvidenceFocusChip: Boolean(target?.closest('.aitown-focus-chip')),
+        tagName: target?.tagName ?? null,
+        className: target instanceof HTMLElement ? target.className : null
+      };
+    }, dragStart);
+    expect(
+      hitTarget.insideWorld,
+      `non-chip evidence focus area should pass through to the world: ${JSON.stringify(hitTarget)}`
+    ).toBe(true);
+    expect(hitTarget.insideEvidenceFocusChip).toBe(false);
+    expect(hitTarget.insideEvidenceFocus).toBe(false);
+
+    await page.mouse.move(dragStart.x, dragStart.y);
+    await page.mouse.down();
+    await page.mouse.move(dragStart.x + 140, dragStart.y, { steps: 12 });
+    await page.mouse.up();
+
+    await expect
+      .poll(async () => {
+        const current = await readViewportState(page);
+        return current && before ? Math.abs(current.x - before.x) : 0;
+      }, 'Evidence focus non-chip area should leave horizontal world drag usable')
+      .toBeGreaterThan(40);
+  });
+
   test('keeps Hub-open passive HUD overlay from blocking pan-first horizontal drag', async ({ page }) => {
     await page.goto('/');
 

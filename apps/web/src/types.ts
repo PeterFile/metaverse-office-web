@@ -352,6 +352,58 @@ export interface TimelineReplayResponse {
   items: WorkflowTimelineEvent[];
 }
 
+export interface AccountabilityReplayQuery {
+  event_id?: string;
+  evidence_ref?: string;
+  correlation_id?: string;
+  agent_id?: string;
+  limit: number;
+  window: string;
+}
+
+export interface AccountabilityReplaySummary {
+  basis: 'event_log_and_existing_read_models';
+  bounded_by: {
+    limit: number;
+    window: string;
+  };
+  event_count: number;
+  interaction_count: number;
+  artifact_count: number;
+  participant_agent_ids: string[];
+  actor_ids: string[];
+  evidence_refs: string[];
+  source_kind_buckets: Record<string, number>;
+  first_ts: string | null;
+  last_ts: string | null;
+}
+
+export interface AccountabilityReplayLedgerEntry {
+  entry_type: 'event' | 'interaction' | 'memory_artifact';
+  entry_id: string;
+  ts: string;
+  basis_event_ids: string[];
+  agent_id?: string;
+  actor_id?: string | null;
+  source_kind?: string | null;
+  source_kinds?: string[];
+  evidence_refs: string[];
+  correlation_id?: string | null;
+  correlation_ids?: string[];
+  summary?: string | null;
+  provenance?: 'event_backed_artifact' | 'collector_observation_without_event_id';
+}
+
+export interface AccountabilityReplayBundle {
+  generated_at: string;
+  query: AccountabilityReplayQuery;
+  accountability: AccountabilityReplaySummary;
+  ledger: AccountabilityReplayLedgerEntry[];
+  events: WorkflowTimelineEvent[];
+  interactions: WorkflowInteraction[];
+  memory_artifacts: MemoryArtifact[];
+}
+
 export interface WorkflowSummary {
   incident_count: number;
   interaction_count: number;

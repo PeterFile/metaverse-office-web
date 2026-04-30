@@ -15,6 +15,7 @@
 - `GET /office/overview`
 - `GET /office/operations?limit=&state=&agent_id=&severity=`
 - `GET /timeline?window=&event_id=&agent_id=&event_type=&severity=&source_kind=&evidence_ref=&correlation_id=&limit=`
+- `GET /accountability/replay?event_id=&evidence_ref=&correlation_id=&agent_id=&limit=&window=`
 - `GET /peer-watch/alerts?status=&target_agent_id=&agent_id=&watcher_agent_id=&observer_agent_id=&correlation_id=&severity=&limit=`
 - `GET /incidents?kind=&agent_id=&severity=&status=&correlation_id=&limit=&window=`
 - `GET /correlations/:correlation_id?limit=&window=`
@@ -306,6 +307,16 @@
 - collector-only observations may expose `latest_summary`, `latest_event_type`, `latest_event_id`, and `replay_checkpoint` as `null`/omitted when the latest snapshot did not materialize a canonical activity event for that artifact
 - event-backed artifacts expose optional `latest_event_id` and `replay_checkpoint` from the same newest event that supplies `latest_summary` and `latest_event_type`; collector-only artifacts do not fabricate event ids or replay checkpoints
 - item ordering is newest `last_seen_at` first, then highest `mention_count`, then stable `artifact_ref`
+
+## Accountability replay bundle semantics
+- `GET /accountability/replay` is read-only and derives one bounded bundle from existing event-log, interaction, and shared-memory read models
+- supported anchors are `event_id`, `evidence_ref`, `correlation_id`, and `agent_id`; at least one must be present or the route returns `400` with `missing_replay_anchor`
+- supported bounds are `limit` and `window`; omitted bounds default to `limit=10` and `window=60m`, and the response echoes the effective values in `query` and `accountability.bounded_by`
+- response shape is `{ generated_at, query, accountability, ledger, events, interactions, memory_artifacts }`
+- `accountability.basis` is `event_log_and_existing_read_models`; rollups include counts, participant agent ids, actor ids, evidence refs, source-kind buckets, and first/last ledger timestamps from the already bounded slice
+- `ledger` entries use `entry_type` values `event`, `interaction`, or `memory_artifact`; `basis_event_ids` must contain only real existing event ids
+- event-backed artifacts may cite their real `latest_event_id`; collector-only artifacts must use empty `basis_event_ids`, `provenance: "collector_observation_without_event_id"`, and no fabricated replay checkpoint
+- the route does not create events, persist replay state, read tmux/filesystem data, dispatch commands, or infer evidence from file names
 
 ## Peer-watch alert response shape
 ```json

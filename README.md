@@ -137,6 +137,7 @@ Optional env:
 - `GET /office/overview`
 - `GET /office/operations?limit=&state=&agent_id=&severity=`
 - `GET /timeline?window=&event_id=&agent_id=&event_type=&severity=&source_kind=&evidence_ref=&correlation_id=&limit=`
+- `GET /accountability/replay?event_id=&evidence_ref=&correlation_id=&agent_id=&limit=&window=`
 - `GET /peer-watch/alerts?status=&target_agent_id=&agent_id=&watcher_agent_id=&observer_agent_id=&correlation_id=&severity=&limit=`
 - `GET /incidents?kind=&agent_id=&severity=&status=&correlation_id=&limit=&window=`
 - `GET /correlations/:correlation_id?limit=&window=`
@@ -204,6 +205,14 @@ Optional env:
 - replay output stays chronological ascending
 - when `limit` is present, the server chooses the newest matching events first and still returns them ascending
 - timeline items include evidence refs, counterparties, and `source_kind`, so collector-derived activity/supervision flows through unchanged
+
+### Accountability replay notes
+- `GET /accountability/replay` is a bounded read-only bundle over existing event, interaction, and shared-memory artifact read models
+- at least one anchor is required: `event_id`, `evidence_ref`, `correlation_id`, or `agent_id`; missing all anchors returns `400 missing_replay_anchor`
+- `limit` and `window` bound every returned slice; missing values default to `limit=10` and `window=60m`
+- the response includes `accountability` rollups, chronological `ledger` entries, `events`, `interactions`, and `memory_artifacts`
+- ledger `basis_event_ids` cite only existing event ids; collector-only artifacts remain marked as `collector_observation_without_event_id` and do not fabricate replay checkpoints
+- the route does not add a write path, storage table, command dispatch path, or collector filesystem/tmux read
 
 ### Peer-watch alert query notes
 - `GET /peer-watch/alerts` stays read-only and derives its evidence view from canonical peer-watch events

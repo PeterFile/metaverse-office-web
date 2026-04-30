@@ -9,6 +9,7 @@
 - `GET /agents/:id/interactions?interaction_type=&counterparty_agent_id=&severity=&correlation_id=&limit=&window=`
 - `GET /agents/:id/workflow?limit=&window=`
 - `GET /collectors/controller-snapshot`
+- `GET /collectors/controller-snapshot/evidence-coverage?agent_id=&source_kind=&confidence_level=&limit=`
 - `GET /events?event_id=&agent_id=&event_type=&severity=&source_kind=&evidence_ref=&correlation_id=&limit=`
 - `GET /interactions?interaction_type=&counterparty_agent_id=&severity=&correlation_id=&limit=&window=`
 - `GET /office/overview`
@@ -43,6 +44,12 @@
 - the latest collector report is an in-memory read model; heartbeat storage stays backward compatible as append-only `heartbeat` records
 - the latest collector report also exposes `shared_artifacts`, a top-level per-snapshot rollup derived only from the current collected items
 - `shared_artifacts` entries appear only when at least two agents in the same snapshot mention the same `artifact_ref` and expose `artifact_ref`, `artifact_kind`, optional `file_name`, `agent_ids`, `agent_count`, `mention_count`, `last_seen_at`, and `source_kinds`
+- `GET /collectors/controller-snapshot/evidence-coverage` is a bounded read-only projection of the latest report's `evidence_coverage`; it does not trigger collection and does not read tmux or the filesystem
+- when no latest report or no latest `evidence_coverage` exists, `GET /collectors/controller-snapshot/evidence-coverage` returns `200` with `{ "item": null }`
+- `agent_id`, `source_kind`, and `confidence_level` filters exact-match coverage `agent_items`; blank filter values are ignored, and `source_kind` matches collector evidence source kinds only (`workspace_file`, `workspace_root`, `tmux_observation`)
+- `source_kind` selects agent items that mention that source kind; selected multi-source agents keep their full coverage row, so projection aggregates still describe the returned agents' complete evidence mix rather than a per-ref slice
+- `limit` applies after filters; invalid, negative, or missing limits follow the existing read-model limit behavior (`50` default, `200` maximum)
+- evidence-coverage projection aggregates (`evidence_ref_count`, `covered_agent_count`, `source_kind_buckets`, `low_confidence_agent_ids`) are recomputed from the filtered/limited agent item set while preserving stable snapshot order
 - collector-derived activity uses canonical event types only: `agent_state_changed` and `agent_wrote_file`
 - collector-derived supervision uses existing canonical event types only: `peer_watch_alert_raised` and `peer_watch_alert_resolved`
 - collector-derived `agent_state_changed` requires evidence-backed state drift versus the previously known projection and uses `tmux_observation` or `workspace_file` as the source kind
@@ -53,6 +60,33 @@
 - when a previously open collector-derived alert clears in a later snapshot, append `peer_watch_alert_resolved`
 - time alone must never fabricate `red`; `red` remains explicit event-driven supervision
 - collector-derived activity and supervision remain queryable through `/timeline` using the same evidence/source fields as the canonical event log
+
+## Collector evidence coverage response shape
+```json
+{
+  "item": {
+    "collected_at": "2026-03-09T18:05:00.000Z",
+    "actor_id": "team-lead",
+    "evidence_ref_count": 2,
+    "covered_agent_count": 1,
+    "source_kind_buckets": {
+      "workspace_file": 1,
+      "workspace_root": 0,
+      "tmux_observation": 1
+    },
+    "low_confidence_agent_ids": [],
+    "agent_items": [
+      {
+        "agent_id": "app-engineering",
+        "evidence_ref_count": 2,
+        "source_kinds": ["tmux_observation", "workspace_file"],
+        "latest_evidence_at": "2026-03-09T18:04:30.000Z",
+        "confidence_level": "high"
+      }
+    ]
+  }
+}
+```
 
 ## Agent detail query semantics
 - `GET /agents/:id` returns the current agent projection plus evidence-first detail slices

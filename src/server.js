@@ -313,6 +313,18 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
     return;
   }
 
+  if (method === 'GET' && pathname === '/collectors/controller-snapshot/evidence-coverage') {
+    sendJson(res, 200, {
+      item: store.getLatestCollectorEvidenceCoverage({
+        agent_id: url.searchParams.get('agent_id'),
+        source_kind: url.searchParams.get('source_kind'),
+        confidence_level: url.searchParams.get('confidence_level'),
+        limit: url.searchParams.get('limit')
+      })
+    });
+    return;
+  }
+
   if (method === 'GET' && pathname === '/memory/artifacts') {
     sendJson(res, 200, {
       generated_at: now(),

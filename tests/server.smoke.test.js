@@ -4,6 +4,8 @@ const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
 
+const { collectControllerSnapshot } = require('../src/collectors/controller-snapshot');
+const { SEED_AGENTS } = require('../src/domain');
 const { createAppServer } = require('../src/server');
 const { createPrototypeStore } = require('../src/store/prototype-store');
 
@@ -4527,6 +4529,179 @@ test('collector snapshot endpoints stay read-only on GET and require team-lead o
   assert.equal(JSON.parse(lines[0]).kind, 'event');
   assert.equal(JSON.parse(lines[1]).kind, 'event');
   assert.equal(JSON.parse(lines[2]).kind, 'heartbeat');
+});
+
+test('GET /collectors/controller-snapshot/evidence-coverage projects latest coverage read-only with filters', async (t) => {
+  const selectedAgents = ['app-engineering', 'protocol-engineering', 'growth-revenue'].map((agentId) =>
+    SEED_AGENTS.find((agent) => agent.agent_id === agentId)
+  );
+  const appAgent = selectedAgents[0];
+  const protocolAgent = selectedAgents[1];
+  const appTodoRef = path.join(appAgent.workspace_root, 'todo.md');
+  const statsByPath = new Map([
+    [appTodoRef, { mtime: '2026-03-09T18:04:00.000Z' }],
+    [protocolAgent.workspace_root, { mtime: '2026-03-09T18:03:00.000Z' }]
+  ]);
+  let collectCount = 0;
+
+  const controllerSnapshotCollector = {
+    async collectSnapshot({ actorId, collectedAt }) {
+      collectCount += 1;
+
+      return collectControllerSnapshot({
+        actorId,
+        collectedAt,
+        agents: selectedAgents,
+        readPathStat: async (targetPath) => statsByPath.get(targetPath) || null,
+        listTmuxPanes: async () => [
+          {
+            session_name: appAgent.session_ref,
+            window_index: '0',
+            pane_index: '1',
+            pane_id: '%11',
+            pane_title: 'Implement evidence coverage API',
+            pane_current_command: 'nvim',
+            pane_active: true,
+            pane_dead: false,
+            pane_activity_at: '2026-03-09T18:04:30.000Z'
+          }
+        ]
+      });
+    }
+  };
+
+  const { baseUrl, store } = await createHarness(t, { controllerSnapshotCollector });
+
+  const missing = await requestJson(`${baseUrl}/collectors/controller-snapshot/evidence-coverage`);
+  assert.equal(missing.response.status, 200);
+  assert.deepEqual(missing.body, { item: null });
+  assert.equal(collectCount, 0);
+
+  const collected = await requestJson(`${baseUrl}/collectors/controller-snapshot`, {
+    method: 'POST',
+    headers: {
+      'x-actor-id': 'team-lead'
+    }
+  });
+  assert.equal(collected.response.status, 201);
+  assert.equal(collectCount, 1);
+
+  const latestBeforeRead = store.getLatestCollectorReport();
+  const coverage = await requestJson(`${baseUrl}/collectors/controller-snapshot/evidence-coverage`);
+  assert.equal(coverage.response.status, 200);
+  assert.deepEqual(coverage.body.item, {
+    collected_at: '2026-03-09T18:05:00.000Z',
+    actor_id: 'team-lead',
+    ...collected.body.item.evidence_coverage
+  });
+  assert.equal(Object.hasOwn(coverage.body.item, 'items'), false);
+  assert.equal(collectCount, 1);
+  assert.equal(store.getLatestCollectorReport(), latestBeforeRead);
+
+  const appOnly = await requestJson(
+    `${baseUrl}/collectors/controller-snapshot/evidence-coverage?agent_id=app-engineering`
+  );
+  assert.deepEqual(appOnly.body.item.agent_items.map((item) => item.agent_id), ['app-engineering']);
+  assert.equal(appOnly.body.item.evidence_ref_count, 2);
+  assert.equal(appOnly.body.item.covered_agent_count, 1);
+  assert.deepEqual(appOnly.body.item.source_kind_buckets, {
+    workspace_file: 1,
+    workspace_root: 0,
+    tmux_observation: 1
+  });
+  assert.deepEqual(appOnly.body.item.low_confidence_agent_ids, []);
+
+  const workspaceFile = await requestJson(
+    `${baseUrl}/collectors/controller-snapshot/evidence-coverage?source_kind=workspace_file`
+  );
+  assert.deepEqual(workspaceFile.body.item.agent_items.map((item) => item.agent_id), [
+    'app-engineering'
+  ]);
+  assert.deepEqual(workspaceFile.body.item.agent_items[0].source_kinds, [
+    'tmux_observation',
+    'workspace_file'
+  ]);
+  assert.deepEqual(workspaceFile.body.item.source_kind_buckets, {
+    workspace_file: 1,
+    workspace_root: 0,
+    tmux_observation: 1
+  });
+
+  const unknownAgent = await requestJson(
+    `${baseUrl}/collectors/controller-snapshot/evidence-coverage?agent_id=unknown-agent`
+  );
+  assert.deepEqual(unknownAgent.body.item, {
+    collected_at: '2026-03-09T18:05:00.000Z',
+    actor_id: 'team-lead',
+    evidence_ref_count: 0,
+    covered_agent_count: 0,
+    low_confidence_agent_ids: [],
+    source_kind_buckets: {
+      workspace_file: 0,
+      workspace_root: 0,
+      tmux_observation: 0
+    },
+    agent_items: []
+  });
+
+  const workspaceRoot = await requestJson(
+    `${baseUrl}/collectors/controller-snapshot/evidence-coverage?source_kind=workspace_root`
+  );
+  assert.deepEqual(workspaceRoot.body.item.agent_items.map((item) => item.agent_id), [
+    'protocol-engineering'
+  ]);
+  assert.equal(workspaceRoot.body.item.evidence_ref_count, 1);
+  assert.deepEqual(workspaceRoot.body.item.low_confidence_agent_ids, ['protocol-engineering']);
+
+  const eventSourceKind = await requestJson(
+    `${baseUrl}/collectors/controller-snapshot/evidence-coverage?source_kind=controller_event`
+  );
+  assert.deepEqual(eventSourceKind.body.item.agent_items, []);
+  assert.deepEqual(eventSourceKind.body.item.source_kind_buckets, {
+    workspace_file: 0,
+    workspace_root: 0,
+    tmux_observation: 0
+  });
+
+  const lowConfidence = await requestJson(
+    `${baseUrl}/collectors/controller-snapshot/evidence-coverage?confidence_level=low`
+  );
+  assert.deepEqual(lowConfidence.body.item.agent_items.map((item) => item.agent_id), [
+    'growth-revenue'
+  ]);
+  assert.equal(lowConfidence.body.item.covered_agent_count, 0);
+  assert.deepEqual(lowConfidence.body.item.low_confidence_agent_ids, ['growth-revenue']);
+
+  const blankFiltersWithLimit = await requestJson(
+    `${baseUrl}/collectors/controller-snapshot/evidence-coverage?source_kind=&confidence_level=&limit=2`
+  );
+  assert.deepEqual(blankFiltersWithLimit.body.item.agent_items.map((item) => item.agent_id), [
+    'app-engineering',
+    'protocol-engineering'
+  ]);
+  assert.deepEqual(blankFiltersWithLimit.body.item.source_kind_buckets, {
+    workspace_file: 1,
+    workspace_root: 1,
+    tmux_observation: 1
+  });
+
+  const negativeLimit = await requestJson(
+    `${baseUrl}/collectors/controller-snapshot/evidence-coverage?limit=-1`
+  );
+  assert.deepEqual(negativeLimit.body.item.agent_items.map((item) => item.agent_id), [
+    'app-engineering',
+    'protocol-engineering',
+    'growth-revenue'
+  ]);
+
+  const nonNumericLimit = await requestJson(
+    `${baseUrl}/collectors/controller-snapshot/evidence-coverage?limit=not-a-number`
+  );
+  assert.deepEqual(nonNumericLimit.body.item.agent_items.map((item) => item.agent_id), [
+    'app-engineering',
+    'protocol-engineering',
+    'growth-revenue'
+  ]);
 });
 
 test('collector snapshot POST exposes shared artifact rollups for refs shared by multiple agents', async (t) => {

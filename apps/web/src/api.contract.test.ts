@@ -10,6 +10,7 @@ import type {
   AgentEventsResponse,
   AgentInteractionsResponse,
   AgentWorkflow,
+  CollectorEvidenceCoverage,
   CollectorSnapshot,
   CorrelationDrilldown,
   IncidentFeedResponse,
@@ -110,7 +111,7 @@ describe('read-only frontend/backend contract smoke', () => {
     expect(path.basename(harness.root)).toMatch(/^web-contract-/);
   });
 
-  it('loads /office/overview, /office/operations, /agents/:id/workflow, /incidents, /timeline, /collectors/controller-snapshot, /memory/artifacts, and /correlations/:id from the real backend', async () => {
+  it('loads /office/overview, /office/operations, /agents/:id/workflow, /incidents, /timeline, /collectors/controller-snapshot, /collectors/controller-snapshot/evidence-coverage, /memory/artifacts, and /correlations/:id from the real backend', async () => {
     harness = await createHarness(() => '2026-03-09T19:00:00.000Z');
     await seedContractSlice(harness.store);
 
@@ -125,20 +126,30 @@ describe('read-only frontend/backend contract smoke', () => {
     );
 
     const api = await loadApi(harness.baseUrl);
-    const [overview, operations, workflow, incidents, timeline, collectorSnapshot, memoryArtifacts, correlation] =
-      await Promise.all([
-        api.fetchOfficeOverview(),
-        api.fetchOfficeOperations(),
-        api.fetchAgentWorkflow('app-engineering'),
-        api.fetchIncidents(),
-        api.fetchTimeline(),
-        api.fetchCollectorSnapshot(),
-        api.fetchMemoryArtifacts({
-          agentId: 'app-engineering',
-          correlationId: 'corr-contract'
-        }),
-        api.fetchCorrelationDrilldown('corr-contract')
-      ]);
+    const [
+      overview,
+      operations,
+      workflow,
+      incidents,
+      timeline,
+      collectorSnapshot,
+      collectorEvidenceCoverage,
+      memoryArtifacts,
+      correlation
+    ] = await Promise.all([
+      api.fetchOfficeOverview(),
+      api.fetchOfficeOperations(),
+      api.fetchAgentWorkflow('app-engineering'),
+      api.fetchIncidents(),
+      api.fetchTimeline(),
+      api.fetchCollectorSnapshot(),
+      api.fetchCollectorEvidenceCoverage(),
+      api.fetchMemoryArtifacts({
+        agentId: 'app-engineering',
+        correlationId: 'corr-contract'
+      }),
+      api.fetchCorrelationDrilldown('corr-contract')
+    ]);
 
     expect(requests).toEqual([
       {
@@ -189,6 +200,12 @@ describe('read-only frontend/backend contract smoke', () => {
       {
         method: 'GET',
         origin: harness.baseUrl,
+        pathname: '/collectors/controller-snapshot/evidence-coverage',
+        query: []
+      },
+      {
+        method: 'GET',
+        origin: harness.baseUrl,
         pathname: '/memory/artifacts',
         query: [
           ['agent_id', 'app-engineering'],
@@ -213,6 +230,7 @@ describe('read-only frontend/backend contract smoke', () => {
     expectIncidentFeedContract(incidents);
     expectTimelineContract(timeline);
     expectCollectorSnapshotContract(collectorSnapshot);
+    expectCollectorEvidenceCoverageContract(collectorEvidenceCoverage);
     expectMemoryArtifactContract(memoryArtifacts);
     expectCorrelationContract(correlation);
   });
@@ -1631,6 +1649,28 @@ function expectCollectorSnapshotContract(snapshot: CollectorSnapshot | null) {
       confidence_level: 'high',
       reboot_recommended: false
     }
+  });
+}
+
+function expectCollectorEvidenceCoverageContract(coverage: CollectorEvidenceCoverage | null) {
+  expect(coverage).toMatchObject({
+    evidence_ref_count: 2,
+    covered_agent_count: 1,
+    low_confidence_agent_ids: [],
+    source_kind_buckets: {
+      workspace_file: 1,
+      workspace_root: 0,
+      tmux_observation: 1
+    },
+    agent_items: [
+      {
+        agent_id: 'app-engineering',
+        evidence_ref_count: 2,
+        source_kinds: ['tmux_observation', 'workspace_file'],
+        latest_evidence_at: '2026-03-09T18:58:45.000Z',
+        confidence_level: 'high'
+      }
+    ]
   });
 }
 

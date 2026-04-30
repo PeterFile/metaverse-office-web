@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   RequestError,
+  fetchAccountabilityReplay,
   fetchAgentEvents,
   fetchAgentIncidents,
   fetchAgentInteractions,
@@ -151,6 +152,66 @@ describe('fetchTimeline', () => {
 
     expect(globalThis.fetch).toHaveBeenCalledWith(
       '/timeline?limit=4&window=30m&agent_id=app-engineering&event_type=peer_watch_alert_raised&severity=orange&source_kind=controller_event&evidence_ref=%2Ftmp%2Fevidence+ref%231.md&correlation_id=corr-app-review&event_id=evt+app%2Freview%231',
+      expect.objectContaining({ signal: undefined })
+    );
+  });
+});
+
+describe('fetchAccountabilityReplay', () => {
+  it('passes explicit bounds and replay anchors through to the backend query string', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            generated_at: '2026-03-09T19:00:00.000Z',
+            query: {
+              event_id: 'evt app/review#1',
+              evidence_ref: '/tmp/evidence ref#1.md',
+              correlation_id: 'corr replay',
+              agent_id: 'app-engineering',
+              limit: 3,
+              window: '15m'
+            },
+            accountability: {
+              basis: 'event_log_and_existing_read_models',
+              bounded_by: {
+                limit: 3,
+                window: '15m'
+              },
+              event_count: 0,
+              interaction_count: 0,
+              artifact_count: 0,
+              participant_agent_ids: [],
+              actor_ids: [],
+              evidence_refs: [],
+              source_kind_buckets: {},
+              first_ts: null,
+              last_ts: null
+            },
+            ledger: [],
+            events: [],
+            interactions: [],
+            memory_artifacts: []
+          }),
+          {
+            headers: JSON_HEADERS
+          }
+        )
+      )
+    );
+
+    await fetchAccountabilityReplay({
+      limit: 3,
+      window: '15m',
+      eventId: 'evt app/review#1',
+      evidenceRef: '/tmp/evidence ref#1.md',
+      correlationId: 'corr replay',
+      agentId: 'app-engineering'
+    });
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/accountability/replay?limit=3&window=15m&event_id=evt+app%2Freview%231&evidence_ref=%2Ftmp%2Fevidence+ref%231.md&correlation_id=corr+replay&agent_id=app-engineering',
       expect.objectContaining({ signal: undefined })
     );
   });

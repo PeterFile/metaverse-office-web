@@ -252,6 +252,27 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
     return;
   }
 
+  if (method === 'GET' && pathname === '/accountability/replay') {
+    if (!hasReplayAnchor(url.searchParams)) {
+      sendJson(res, 400, {
+        error: 'missing_replay_anchor',
+        details: 'one of event_id, evidence_ref, correlation_id, or agent_id is required'
+      });
+      return;
+    }
+
+    sendJson(res, 200, store.getAccountabilityReplay({
+      event_id: getSearchValue(url.searchParams, 'event_id'),
+      evidence_ref: getSearchValue(url.searchParams, 'evidence_ref'),
+      correlation_id: getSearchValue(url.searchParams, 'correlation_id'),
+      agent_id: getSearchValue(url.searchParams, 'agent_id'),
+      limit: url.searchParams.get('limit') || '10',
+      window: url.searchParams.get('window') || '60m',
+      now: now()
+    }));
+    return;
+  }
+
   if (method === 'GET' && pathname === '/peer-watch/alerts') {
     sendJson(res, 200, {
       items: store.listPeerWatchAlerts({
@@ -443,6 +464,22 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
     error: 'not_found',
     details: `${method} ${pathname} is not implemented`
   });
+}
+
+function hasReplayAnchor(searchParams) {
+  return ['event_id', 'evidence_ref', 'correlation_id', 'agent_id'].some((name) =>
+    Boolean(getSearchValue(searchParams, name))
+  );
+}
+
+function getSearchValue(searchParams, name) {
+  const value = searchParams.get(name);
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const trimmedValue = value.trim();
+  return trimmedValue.length > 0 ? trimmedValue : null;
 }
 
 function getActorId(req) {

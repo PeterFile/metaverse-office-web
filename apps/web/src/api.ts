@@ -1,4 +1,5 @@
 import type {
+  AccountabilityReplayBundle,
   AgentEventsResponse,
   AgentInteractionsResponse,
   CollectorEvidenceCoverage,
@@ -369,6 +370,42 @@ export async function fetchTimeline(
   });
 
   return parseJson<TimelineReplayResponse>(response);
+}
+
+export async function fetchAccountabilityReplay(
+  options: {
+    limit?: number;
+    window?: string;
+    eventId?: string;
+    evidenceRef?: string;
+    correlationId?: string;
+    agentId?: string;
+    signal?: AbortSignal;
+  } = {}
+): Promise<AccountabilityReplayBundle> {
+  const params = new URLSearchParams({
+    limit: String(options.limit ?? DEFAULT_WORKFLOW_LIMIT),
+    window: options.window ?? DEFAULT_WORKFLOW_WINDOW
+  });
+
+  if (options.eventId) {
+    params.set('event_id', options.eventId);
+  }
+  if (options.evidenceRef) {
+    params.set('evidence_ref', options.evidenceRef);
+  }
+  if (options.correlationId) {
+    params.set('correlation_id', options.correlationId);
+  }
+  if (options.agentId) {
+    params.set('agent_id', options.agentId);
+  }
+
+  const response = await fetch(resolveApiUrl(`/accountability/replay?${params.toString()}`), {
+    signal: options.signal
+  });
+
+  return parseJson<AccountabilityReplayBundle>(response);
 }
 
 export async function fetchPeerWatchAlerts(

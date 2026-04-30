@@ -357,6 +357,40 @@ class PrototypeStore {
     });
   }
 
+  getAccountabilityReplay(filters = {}) {
+    const normalizedFilters = normalizeAccountabilityReplayFilters(filters);
+    const events = this.listTimeline(normalizedFilters);
+    const interactions = this.listInteractions(normalizedFilters);
+    const memoryArtifacts = listAccountabilityReplayArtifacts({
+      store: this,
+      filters: normalizedFilters,
+      events,
+      interactions
+    });
+    const ledger = createAccountabilityReplayLedger({
+      events,
+      interactions,
+      memoryArtifacts,
+      eventIds: new Set(this.events.map((event) => event.event_id))
+    });
+
+    return {
+      generated_at: normalizedFilters.now || new Date().toISOString(),
+      query: createAccountabilityReplayQuery(normalizedFilters),
+      accountability: createAccountabilityReplaySummary({
+        filters: normalizedFilters,
+        events,
+        interactions,
+        memoryArtifacts,
+        ledger
+      }),
+      ledger,
+      events,
+      interactions,
+      memory_artifacts: memoryArtifacts
+    };
+  }
+
   listPeerWatchAlerts(filters = {}) {
     if (filters.status === 'open') {
       return this.listOpenPeerWatchAlerts(filters);
@@ -855,6 +889,228 @@ function createWorkflowSummary({ incidents = [], interactions = [], timeline = [
     severity_buckets: severityBuckets,
     latest_activity_at: latestActivityAt
   };
+}
+
+function normalizeAccountabilityReplayFilters(filters = {}) {
+  return {
+    event_id: normalizeOptionalString(filters.event_id),
+    evidence_ref: normalizeOptionalString(filters.evidence_ref),
+    correlation_id: normalizeOptionalString(filters.correlation_id),
+    agent_id: normalizeOptionalString(filters.agent_id),
+    limit: parseLimit(
+      filters.limit === null || filters.limit === undefined || filters.limit === ''
+        ? 10
+        : filters.limit
+    ),
+    window: normalizeOptionalString(filters.window) || '60m',
+    now: normalizeOptionalString(filters.now)
+  };
+}
+
+function normalizeOptionalString(value) {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const trimmedValue = value.trim();
+  return trimmedValue.length > 0 ? trimmedValue : null;
+}
+
+function createAccountabilityReplayQuery(filters) {
+  const query = {};
+
+  if (filters.event_id) {
+    query.event_id = filters.event_id;
+  }
+  if (filters.evidence_ref) {
+    query.evidence_ref = filters.evidence_ref;
+  }
+  if (filters.correlation_id) {
+    query.correlation_id = filters.correlation_id;
+  }
+  if (filters.agent_id) {
+    query.agent_id = filters.agent_id;
+  }
+
+  query.limit = filters.limit;
+  query.window = filters.window;
+  return query;
+}
+
+function listAccountabilityReplayArtifacts({ store, filters, events = [], interactions = [] }) {
+  const artifacts = store.listMemoryArtifacts({
+    window: filters.window,
+    agent_id: filters.agent_id,
+    correlation_id: filters.correlation_id,
+    artifact_ref: filters.evidence_ref,
+    limit: filters.event_id ? null : filters.limit,
+    now: filters.now
+  });
+
+  if (!filters.event_id) {
+    return artifacts;
+  }
+
+  const activityEvidenceRefs = new Set(
+    normalizeEvidenceRefs([
+      ...events.flatMap((event) => event.evidence_refs || []),
+      ...interactions.flatMap((interaction) => interaction.evidence_refs || [])
+    ])
+  );
+
+  return applyOptionalLimit(
+    artifacts.filter((artifact) => activityEvidenceRefs.has(artifact.artifact_ref)),
+    filters.limit
+  );
+}
+
+function createAccountabilityReplaySummary({
+  filters,
+  events = [],
+  interactions = [],
+  memoryArtifacts = [],
+  ledger = []
+}) {
+  return {
+    basis: 'event_log_and_existing_read_models',
+    bounded_by: {
+      limit: filters.limit,
+      window: filters.window
+    },
+    event_count: events.length,
+    interaction_count: interactions.length,
+    artifact_count: memoryArtifacts.length,
+    participant_agent_ids: normalizeAgentIds([
+      ...events.flatMap(getTimelineParticipantAgentIds),
+      ...interactions.flatMap((interaction) => interaction.participant_agent_ids || []),
+      ...memoryArtifacts.flatMap((artifact) => artifact.agent_ids || [])
+    ]),
+    actor_ids: normalizeAgentIds(events.map((event) => event.actor_id)),
+    evidence_refs: normalizeEvidenceRefs([
+      ...events.flatMap((event) => event.evidence_refs || []),
+      ...interactions.flatMap((interaction) => interaction.evidence_refs || []),
+      ...memoryArtifacts.map((artifact) => artifact.artifact_ref)
+    ]).sort(),
+    source_kind_buckets: createAccountabilitySourceKindBuckets({
+      events,
+      interactions,
+      memoryArtifacts
+    }),
+    first_ts: ledger[0]?.ts || null,
+    last_ts: ledger[ledger.length - 1]?.ts || null
+  };
+}
+
+function createAccountabilitySourceKindBuckets({ events = [], interactions = [], memoryArtifacts = [] }) {
+  const buckets = {};
+
+  for (const event of events) {
+    incrementBucket(buckets, event.source_kind);
+  }
+  for (const interaction of interactions) {
+    incrementBucket(buckets, interaction.source_kind);
+  }
+  for (const artifact of memoryArtifacts) {
+    for (const sourceKind of artifact.source_kinds || []) {
+      incrementBucket(buckets, sourceKind);
+    }
+  }
+
+  return buckets;
+}
+
+function createAccountabilityReplayLedger({
+  events = [],
+  interactions = [],
+  memoryArtifacts = [],
+  eventIds = new Set()
+}) {
+  return [
+    ...events.map(createAccountabilityEventLedgerEntry),
+    ...interactions.map((interaction) => createAccountabilityInteractionLedgerEntry({ interaction, eventIds })),
+    ...memoryArtifacts.map((artifact) =>
+      createAccountabilityArtifactLedgerEntry({ artifact, eventIds })
+    )
+  ].sort(compareAccountabilityLedgerEntries);
+}
+
+function createAccountabilityEventLedgerEntry(event) {
+  return {
+    entry_type: 'event',
+    entry_id: event.event_id,
+    ts: event.ts,
+    basis_event_ids: [event.event_id],
+    agent_id: event.agent_id,
+    actor_id: event.actor_id,
+    source_kind: event.source_kind,
+    evidence_refs: normalizeEvidenceRefs(event.evidence_refs),
+    correlation_id: event.correlation_id || null,
+    summary: event.summary
+  };
+}
+
+function createAccountabilityInteractionLedgerEntry({ interaction, eventIds }) {
+  return {
+    entry_type: 'interaction',
+    entry_id: interaction.interaction_id,
+    ts: interaction.ended_at || interaction.started_at,
+    basis_event_ids: normalizeStringValues(interaction.related_event_ids).filter((eventId) =>
+      eventIds.has(eventId)
+    ),
+    agent_id: interaction.participant_agent_ids[0] || undefined,
+    source_kind: interaction.source_kind || null,
+    evidence_refs: normalizeEvidenceRefs(interaction.evidence_refs),
+    correlation_id: interaction.correlation_id || null,
+    summary: interaction.summary
+  };
+}
+
+function createAccountabilityArtifactLedgerEntry({ artifact, eventIds }) {
+  const latestEventId =
+    artifact.latest_event_id && eventIds.has(artifact.latest_event_id)
+      ? artifact.latest_event_id
+      : null;
+
+  return {
+    entry_type: 'memory_artifact',
+    entry_id: artifact.artifact_ref,
+    ts: artifact.last_seen_at,
+    basis_event_ids: latestEventId ? [latestEventId] : [],
+    source_kinds: normalizeStringValues(artifact.source_kinds),
+    evidence_refs: [artifact.artifact_ref],
+    correlation_ids: normalizeStringValues(artifact.correlation_ids),
+    summary: artifact.latest_summary || 'collector-only artifact without event id',
+    provenance: latestEventId
+      ? 'event_backed_artifact'
+      : 'collector_observation_without_event_id'
+  };
+}
+
+function compareAccountabilityLedgerEntries(left, right) {
+  const tsDelta = Date.parse(left.ts || 0) - Date.parse(right.ts || 0);
+  if (tsDelta !== 0) {
+    return tsDelta;
+  }
+
+  const typeDelta =
+    getAccountabilityLedgerEntryTypeRank(left.entry_type) -
+    getAccountabilityLedgerEntryTypeRank(right.entry_type);
+  if (typeDelta !== 0) {
+    return typeDelta;
+  }
+
+  return left.entry_id.localeCompare(right.entry_id);
+}
+
+function getAccountabilityLedgerEntryTypeRank(entryType) {
+  if (entryType === 'event') {
+    return 0;
+  }
+  if (entryType === 'interaction') {
+    return 1;
+  }
+
+  return 2;
 }
 
 function createSeverityBuckets() {

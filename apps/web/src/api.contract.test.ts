@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type {
+  AccountabilityReplayBundle,
   AgentEventsResponse,
   AgentInteractionsResponse,
   AgentWorkflow,
@@ -541,6 +542,44 @@ describe('read-only frontend/backend contract smoke', () => {
         }
       ]
     });
+  });
+
+  it('loads /accountability/replay from the real backend with bounded read-only anchors', async () => {
+    harness = await createHarness(() => '2026-03-09T19:00:00.000Z');
+    await seedContractSlice(harness.store);
+
+    const nativeFetch = globalThis.fetch.bind(globalThis);
+    const requests: RequestContract[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+        requests.push(getRequestContract(input, harness!.baseUrl, init));
+        return nativeFetch(input, init);
+      })
+    );
+
+    const api = await loadApi(harness.baseUrl);
+    const replay = await api.fetchAccountabilityReplay({
+      agentId: 'app-engineering',
+      correlationId: 'corr-contract',
+      limit: 2,
+      window: '60m'
+    });
+
+    expect(requests).toEqual([
+      {
+        method: 'GET',
+        origin: harness.baseUrl,
+        pathname: '/accountability/replay',
+        query: [
+          ['agent_id', 'app-engineering'],
+          ['correlation_id', 'corr-contract'],
+          ['limit', '2'],
+          ['window', '60m']
+        ]
+      }
+    ]);
+    expectAccountabilityReplayContract(replay);
   });
 
   it('passes office-operations agent_id filters through to the real backend without widening the request surface', async () => {
@@ -1762,6 +1801,69 @@ function expectMemoryArtifactContract(memoryArtifacts: MemoryArtifactIndex) {
       collector_last_modified_at: null
     }
   ]);
+}
+
+function expectAccountabilityReplayContract(replay: AccountabilityReplayBundle) {
+  expect(replay.generated_at).toBe('2026-03-09T19:00:00.000Z');
+  expect(replay.query).toEqual({
+    correlation_id: 'corr-contract',
+    agent_id: 'app-engineering',
+    limit: 2,
+    window: '60m'
+  });
+  expect(replay.accountability).toMatchObject({
+    basis: 'event_log_and_existing_read_models',
+    bounded_by: {
+      limit: 2,
+      window: '60m'
+    },
+    event_count: 2,
+    interaction_count: 2,
+    artifact_count: 2,
+    participant_agent_ids: [
+      'app-engineering',
+      'growth-revenue',
+      'protocol-engineering',
+      'team-lead'
+    ],
+    actor_ids: ['team-lead'],
+    evidence_refs: ['/tmp/contract-handoff.md', '/tmp/contract-peer-watch.md'],
+    source_kind_buckets: {
+      controller_event: 6
+    },
+    first_ts: '2026-03-09T18:45:00.000Z',
+    last_ts: '2026-03-09T18:48:00.000Z'
+  });
+  expect(replay.events.map((event) => event.event_id)).toEqual([
+    'evt_contract_peer_watch',
+    'evt_contract_handoff_completed'
+  ]);
+  expect(replay.interactions.map((interaction) => interaction.interaction_id)).toEqual([
+    'interaction:evt_contract_handoff_completed',
+    'interaction:evt_contract_peer_watch'
+  ]);
+  expect(replay.memory_artifacts.map((artifact) => artifact.artifact_ref)).toEqual([
+    '/tmp/contract-handoff.md',
+    '/tmp/contract-peer-watch.md'
+  ]);
+  expect(replay.ledger.map((entry) => entry.entry_type)).toEqual([
+    'event',
+    'interaction',
+    'memory_artifact',
+    'event',
+    'interaction',
+    'memory_artifact'
+  ]);
+  expect(
+    replay.ledger.every((entry) =>
+      entry.basis_event_ids.every((eventId) =>
+        [
+          'evt_contract_handoff_completed',
+          'evt_contract_peer_watch'
+        ].includes(eventId)
+      )
+    )
+  ).toBe(true);
 }
 
 function expectCorrelationContract(correlation: CorrelationDrilldown) {

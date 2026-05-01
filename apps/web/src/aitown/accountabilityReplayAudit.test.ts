@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import { deriveAccountabilityReplayAudit } from './accountabilityReplayAudit';
+import {
+  deriveAccountabilityReplayAudit,
+  deriveAccountabilityReplayAuditVerdict
+} from './accountabilityReplayAudit';
 import type { AccountabilityReplayBundle } from '../types';
 
 function buildAccountabilityReplayBundle(): AccountabilityReplayBundle {
@@ -158,5 +161,93 @@ describe('accountability replay audit summary', () => {
     expect(bundle).toEqual(originalBundle);
     expect(audit.participants).not.toBe(bundle.accountability.participant_agent_ids);
     expect(audit.rows[0].basis_event_ids).not.toBe(bundle.ledger[0].basis_event_ids);
+  });
+
+  it('derives an empty replay audit verdict without fabricating anchors', () => {
+    expect(deriveAccountabilityReplayAuditVerdict(null)).toEqual({
+      status: 'empty',
+      replayable: false,
+      counts: {
+        ledger_row_count: 0,
+        replayable_row_count: 0,
+        collector_observation_without_event_id_row_count: 0,
+        unsupported_unbacked_row_count: 0
+      },
+      replay_anchor_event_ids: [],
+      gap_rows: [],
+      warnings: []
+    });
+  });
+
+  it('reports fully replayable bundles from real basis event ids only', () => {
+    const bundle = buildAccountabilityReplayBundle();
+    bundle.ledger = [
+      {
+        ...bundle.ledger[0],
+        basis_event_ids: [' evt-real-2 ', 'evt-real-1', 'evt-real-1', ''],
+        provenance: 'event_backed_artifact'
+      },
+      {
+        ...bundle.ledger[0],
+        entry_id: 'evt-real-3',
+        basis_event_ids: ['evt-real-3'],
+        evidence_refs: [' /evidence/third.md ']
+      }
+    ];
+
+    const verdict = deriveAccountabilityReplayAuditVerdict(bundle);
+
+    expect(verdict).toMatchObject({
+      status: 'fully_replayable',
+      replayable: true,
+      replay_anchor_event_ids: ['evt-real-2', 'evt-real-1', 'evt-real-3'],
+      gap_rows: [],
+      warnings: []
+    });
+    expect(verdict.counts).toEqual({
+      ledger_row_count: 2,
+      replayable_row_count: 2,
+      collector_observation_without_event_id_row_count: 0,
+      unsupported_unbacked_row_count: 0
+    });
+    expect(Object.keys(verdict)).not.toContain('checkpoint_event_id');
+  });
+
+  it('summarizes collector-only and unsupported replay gaps without fake checkpoints', () => {
+    const bundle = buildAccountabilityReplayBundle();
+    const originalBundle = JSON.parse(JSON.stringify(bundle));
+
+    const verdict = deriveAccountabilityReplayAuditVerdict(bundle);
+
+    expect(verdict).toMatchObject({
+      status: 'unsupported_unbacked_gaps',
+      replayable: false,
+      replay_anchor_event_ids: ['evt-real-1', 'evt-real-2'],
+      warnings: ['collector-observation/no replay anchor', 'unsupported/unbacked']
+    });
+    expect(verdict.gap_rows).toEqual([
+      {
+        entry_type: 'memory_artifact',
+        entry_id: '/evidence/collector.md',
+        provenance: 'collector_observation_without_event_id',
+        status: 'collector_observation_without_event_id',
+        warning: 'collector-observation/no replay anchor',
+        evidence_refs: ['/evidence/collector.md'],
+        source_kinds: ['collector_snapshot'],
+        correlation_ids: ['corr-collector']
+      },
+      {
+        entry_type: 'interaction',
+        entry_id: 'interaction:unbacked',
+        provenance: undefined,
+        status: 'unsupported_unbacked',
+        warning: 'unsupported/unbacked',
+        evidence_refs: [],
+        source_kinds: [],
+        correlation_ids: []
+      }
+    ]);
+    expect(verdict.gap_rows.flatMap((row) => Object.keys(row))).not.toContain('checkpoint_event_id');
+    expect(bundle).toEqual(originalBundle);
   });
 });

@@ -63,6 +63,8 @@ function formatRuntimeBackfillEvidence(
   displayName: string,
   incidentIds: string[],
   sourceKinds: string[],
+  correlationIds: string[],
+  evidenceRefs: string[],
   degradedReasons: string[]
 ): string {
   const parts = [`Incident-feed backfill · ${displayName}`];
@@ -71,6 +73,12 @@ function formatRuntimeBackfillEvidence(
   }
   if (sourceKinds.length > 0) {
     parts.push(`sources ${sourceKinds.join(', ')}`);
+  }
+  if (correlationIds.length > 0) {
+    parts.push(`correlations ${correlationIds.join(', ')}`);
+  }
+  if (evidenceRefs.length > 0) {
+    parts.push(`evidence refs ${evidenceRefs.join(', ')}`);
   }
   if (degradedReasons.length > 0) {
     parts.push(degradedReasons.join('; '));
@@ -195,6 +203,8 @@ export function SceneStatusLegend({ onFocusWorldZone, world: providedWorld }: Sc
                     evidence.display_name,
                     evidence.incident_ids,
                     evidence.source_kinds,
+                    evidence.correlation_ids,
+                    evidence.evidence_refs,
                     evidence.degraded_reasons
                   )}
                 </span>

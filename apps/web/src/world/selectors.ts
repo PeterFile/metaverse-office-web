@@ -54,6 +54,8 @@ export interface RuntimeBackfillEvidenceSummary {
   degraded_reasons: string[];
   incident_ids: string[];
   source_kinds: string[];
+  correlation_ids: string[];
+  evidence_refs: string[];
 }
 
 // ── Single agent ──
@@ -155,11 +157,13 @@ export function selectRuntimeBackfillEvidence(
   const summaries: RuntimeBackfillEvidenceSummary[] = [];
   for (const [, agent] of world.agents) {
     const evidence = agent.runtime_evidence;
+    const incidentIds = uniqueTrimmedStrings(evidence?.incident_ids ?? []);
+    const sourceKinds = uniqueTrimmedStrings(evidence?.source_kinds ?? []);
     if (
       !evidence ||
       evidence.source !== 'incident_feed_backfill' ||
-      evidence.incident_ids.length === 0 ||
-      evidence.source_kinds.length === 0
+      incidentIds.length === 0 ||
+      sourceKinds.length === 0
     ) {
       continue;
     }
@@ -168,8 +172,10 @@ export function selectRuntimeBackfillEvidence(
       agent_id: agent.agent_id,
       display_name: agent.display_name,
       degraded_reasons: [...evidence.degraded_reasons],
-      incident_ids: [...evidence.incident_ids],
-      source_kinds: [...evidence.source_kinds],
+      incident_ids: incidentIds,
+      source_kinds: sourceKinds,
+      correlation_ids: uniqueTrimmedStrings(evidence.correlation_ids ?? []),
+      evidence_refs: uniqueTrimmedStrings(evidence.evidence_refs ?? []),
     });
   }
 
@@ -177,6 +183,23 @@ export function selectRuntimeBackfillEvidence(
     (left, right) =>
       left.display_name.localeCompare(right.display_name) || left.agent_id.localeCompare(right.agent_id)
   );
+}
+
+function uniqueTrimmedStrings(values: Array<string | null | undefined>): string[] {
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+
+  for (const value of values) {
+    const trimmed = value?.trim() ?? '';
+    if (!trimmed || seen.has(trimmed)) {
+      continue;
+    }
+
+    seen.add(trimmed);
+    normalized.push(trimmed);
+  }
+
+  return normalized;
 }
 
 export function selectHotZones(

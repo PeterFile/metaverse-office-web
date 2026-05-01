@@ -23,6 +23,10 @@ export default defineConfig(({ mode }) => {
           target: proxyTarget,
           changeOrigin: true
         },
+        '/accountability': {
+          target: proxyTarget,
+          changeOrigin: true
+        },
         '/collectors': {
           target: proxyTarget,
           changeOrigin: true

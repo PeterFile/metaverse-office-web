@@ -3657,15 +3657,16 @@ test.describe('operator shell smoke', () => {
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toBeVisible();
     await expect(operationSection.getByText('planning · Prepare handoff notes')).toBeVisible();
     await expect(operationSection.getByText('Evidence · /tmp/revenue-handoff.md')).toBeVisible();
-    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
-    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
-    await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
-    await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toHaveCount(0);
 
     await page.waitForTimeout(150);
 
     const postJumpRequests = requestedUrls.slice(requestCountBeforeJump);
     expectOnlyBenignPostJumpRequests(postJumpRequests);
+
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
+    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
+    await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
+    await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toHaveCount(0);
     expect(requestedUrls).not.toContain('/office/operations?agent_id=team-lead');
     expect(requestedUrls).not.toContain('/agents/team-lead/workflow?limit=10&window=60m');
     expect(requestedUrls).not.toContain(
@@ -3787,16 +3788,17 @@ test.describe('operator shell smoke', () => {
     await expect(memorySection.getByText('Exact artifact fallback stayed inside the growth handoff scope')).toBeVisible();
     await expect(focusedSharedMemoryRecord).toHaveCount(1);
     await expect(focusedSharedMemoryRecord).toContainText('Ref · /tmp/revenue-handoff.md');
-    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Now');
-    await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toBeVisible();
-    await expect(operationSection.getByText('planning · Prepare handoff notes')).toBeVisible();
-    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
-    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
 
     await page.waitForTimeout(150);
 
     const postJumpRequests = requestedUrls.slice(requestCountBeforeJump);
     expect(postJumpRequests).toEqual([exactArtifactUrl]);
+
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Now');
+    await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toBeVisible();
+    await expect(operationSection.getByText('planning · Prepare handoff notes')).toBeVisible();
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
+    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
     expect(requestedUrls).not.toContain('/office/operations?agent_id=team-lead');
     expect(requestedUrls).not.toContain('/memory/artifacts?limit=4&window=60m&agent_id=growth-revenue');
     expect(requestedUrls).not.toContain('/correlations/corr-growth-lead-review?limit=10&window=60m');
@@ -3868,6 +3870,14 @@ test.describe('operator shell smoke', () => {
     await expect(detailsPanel).toHaveAttribute('data-selected-agent-drilldown-tab', 'evidence');
     await expect(focusedSharedMemoryRecord).toHaveCount(1);
     await expect(focusedSharedMemoryRecord).toContainText('Ref · /tmp/revenue-handoff.md');
+
+    await page.waitForTimeout(150);
+
+    const postJumpRequests = requestedUrls.slice(requestCountBeforeJump);
+    expectOnlyBenignPostJumpRequests(postJumpRequests, [
+      '/correlations/corr-revenue-handoff?limit=10&window=60m'
+    ]);
+
     await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Now');
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toBeVisible();
     await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
@@ -3876,13 +3886,6 @@ test.describe('operator shell smoke', () => {
     await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
     await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toHaveCount(0);
     await expect(detailsPanel.getByRole('button', { name: 'Return to current scope' })).toHaveCount(0);
-
-    await page.waitForTimeout(150);
-
-    const postJumpRequests = requestedUrls.slice(requestCountBeforeJump);
-    expectOnlyBenignPostJumpRequests(postJumpRequests, [
-      '/correlations/corr-revenue-handoff?limit=10&window=60m'
-    ]);
   });
 
   test('jumps from crew-overview active-queue evidence refs into the shared-memory record via keyboard traversal', async ({
@@ -6214,14 +6217,15 @@ test.describe('operator shell smoke', () => {
     await expect(workflowInteractionRecord.getByText('Evidence · /tmp/revenue-handoff.md')).toBeVisible();
     await expect(focusedSharedMemoryRecord).toHaveCount(1);
     await expect(focusedSharedMemoryRecord).toContainText('Ref · /tmp/revenue-handoff.md');
-    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
-    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
-    await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toHaveCount(0);
 
     await page.waitForTimeout(150);
 
     const postJumpRequests = requestedUrls.slice(requestCountBeforeJump);
     expectOnlyBenignPostJumpRequests(postJumpRequests);
+
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
+    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
+    await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toHaveCount(0);
     expect(requestedUrls).not.toContain('/agents/team-lead/workflow?limit=10&window=60m');
     expect(requestedUrls).not.toContain(
       '/memory/artifacts?limit=4&window=60m&agent_id=team-lead&correlation_id=corr-revenue-handoff'
@@ -6656,14 +6660,15 @@ test.describe('operator shell smoke', () => {
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toBeVisible();
     await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
     await expect(selectedWorkflowStatusCorrelationButton).toBeVisible();
-    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
-    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
-    await expect(detailsPanel.getByRole('button', { name: 'Return to current scope' })).toHaveCount(0);
 
     await page.waitForTimeout(150);
 
     const postReselectRequests = requestedUrls.slice(requestCountBeforeReselect);
     expectOnlyBenignPostJumpRequests(postReselectRequests);
+
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
+    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
+    await expect(detailsPanel.getByRole('button', { name: 'Return to current scope' })).toHaveCount(0);
   });
 
   test('switches the active correlation from a workflow status correlation button without changing the selected agent via keyboard traversal', async ({
@@ -6929,14 +6934,15 @@ test.describe('operator shell smoke', () => {
     await expect(handoffRecord.getByText('Evidence · /tmp/revenue-handoff.md')).toBeVisible();
     await expect(focusedSharedMemoryRecord).toHaveCount(1);
     await expect(focusedSharedMemoryRecord).toContainText('Ref · /tmp/revenue-handoff.md');
-    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
-    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
-    await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toHaveCount(0);
 
     await page.waitForTimeout(150);
 
     const postJumpRequests = requestedUrls.slice(requestCountBeforeJump);
     expectOnlyBenignPostJumpRequests(postJumpRequests);
+
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
+    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
+    await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toHaveCount(0);
     expect(requestedUrls).not.toContain('/agents/team-lead/workflow?limit=10&window=60m');
     expect(requestedUrls).not.toContain(
       '/memory/artifacts?limit=4&window=60m&agent_id=team-lead&correlation_id=corr-revenue-handoff'
@@ -8177,14 +8183,15 @@ test.describe('operator shell smoke', () => {
     await expect(recentEventRecord.getByText('Evidence · /tmp/revenue-handoff.md')).toBeVisible();
     await expect(focusedSharedMemoryRecord).toHaveCount(1);
     await expect(focusedSharedMemoryRecord).toContainText('Ref · /tmp/revenue-handoff.md');
-    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
-    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
-    await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toHaveCount(0);
 
     await page.waitForTimeout(150);
 
     const postJumpRequests = requestedUrls.slice(requestCountBeforeJump);
     expectOnlyBenignPostJumpRequests(postJumpRequests);
+
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
+    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
+    await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toHaveCount(0);
   });
 
   test('keeps the active workflow correlation when opening a workflow peer-watch observer pivot via keyboard traversal', async ({
@@ -8615,13 +8622,14 @@ test.describe('operator shell smoke', () => {
     await expect(detailsPanel.getByRole('button', { name: 'Return to current scope' })).toHaveCount(0);
     await expect(focusedSharedMemoryRecord).toHaveCount(1);
     await expect(focusedSharedMemoryRecord).toContainText('Ref · /tmp/revenue-handoff.md');
-    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
-    await expect(correlationSection.getByText(baselineCorrelationId!, { exact: true })).toBeVisible();
 
     await page.waitForTimeout(150);
 
     const postJumpRequests = requestedUrls.slice(requestCountBeforeJump);
     expectOnlyBenignPostJumpRequests(postJumpRequests);
+
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
+    await expect(correlationSection.getByText(baselineCorrelationId!, { exact: true })).toBeVisible();
   });
 
   test('shows the selected-agent supervision history loading state explicitly while the first selected-agent read is pending', async ({
@@ -8885,14 +8893,15 @@ test.describe('operator shell smoke', () => {
     await expect(memorySection.getByText('Collector observed workspace write to revenue-handoff.md')).toBeVisible();
     await expect(selectedSharedMemoryCorrelationButton).toBeVisible();
     await expect(detailsPanel.getByRole('button', { name: 'Return to current scope' })).toHaveCount(0);
-    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
-    await expect(correlationSection.getByText(accountabilityCorrelationId, { exact: true })).toBeVisible();
-    await expect(replaySection.getByRole('heading', { name: 'Timeline Replay' })).toBeVisible();
-    await expect(replaySection.getByText(`Scoped replay · ${accountabilityCorrelationId}`)).toBeVisible();
 
     await page.waitForTimeout(150);
 
     expect(requestedUrls).toHaveLength(requestCountBeforeReselect);
+
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
+    await expect(correlationSection.getByText(accountabilityCorrelationId, { exact: true })).toBeVisible();
+    await expect(replaySection.getByRole('heading', { name: 'Timeline Replay' })).toBeVisible();
+    await expect(replaySection.getByText(`Scoped replay · ${accountabilityCorrelationId}`)).toBeVisible();
   });
 
   test(
@@ -9061,13 +9070,14 @@ test.describe('operator shell smoke', () => {
       await expect(returnToCurrentScopeButton).toHaveCount(0);
       await expect(focusedSharedMemoryRecord).toHaveCount(1);
       await expect(focusedSharedMemoryRecord).toContainText('Ref · /tmp/revenue-handoff.md');
-      await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
-      await expect(correlationSection.getByText(accountabilityCorrelationId, { exact: true })).toBeVisible();
 
       await page.waitForTimeout(150);
 
       const postJumpRequests = requestedUrls.slice(requestCountBeforeJump);
       expectOnlyBenignPostJumpRequests(postJumpRequests);
+
+      await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
+      await expect(correlationSection.getByText(accountabilityCorrelationId, { exact: true })).toBeVisible();
     }
   );
 
@@ -9187,13 +9197,14 @@ test.describe('operator shell smoke', () => {
     await expect(detailsPanel.getByRole('button', { name: 'Return to current scope' })).toHaveCount(0);
     await expect(focusedSharedMemoryRecord).toHaveCount(1);
     await expect(focusedSharedMemoryRecord).toContainText('Ref · /tmp/revenue-handoff.md');
-    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
-    await expect(correlationSection.getByText(accountabilityCorrelationId, { exact: true })).toBeVisible();
 
     await page.waitForTimeout(150);
 
     const postJumpRequests = requestedUrls.slice(requestCountBeforeJump);
     expectOnlyBenignPostJumpRequests(postJumpRequests);
+
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
+    await expect(correlationSection.getByText(accountabilityCorrelationId, { exact: true })).toBeVisible();
   });
 
   test('keeps the active selected correlation when opening a supervision history actor pivot via keyboard traversal', async ({

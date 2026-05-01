@@ -299,6 +299,51 @@ test('accountability replay ledger drops interaction basis ids that are not even
   assert.ok(!ledgerEntry.basis_event_ids.includes('not-a-real-event'));
 });
 
+test('accountability replay ledger canonicalizes noisy interaction basis ids', async (t) => {
+  const { store } = await createHarness(t);
+  await seedReplaySlice(store);
+  store.listInteractions = () => [
+    {
+      interaction_id: 'interaction:manual-noisy-basis',
+      interaction_type: 'handoff',
+      correlation_id: 'corr-replay',
+      started_at: '2026-03-09T18:42:00.000Z',
+      ended_at: '2026-03-09T18:45:00.000Z',
+      participant_agent_ids: ['app-engineering', 'protocol-engineering'],
+      status: 'completed',
+      severity: 'normal',
+      evidence_refs: ['/tmp/replay-start.md'],
+      source_kind: 'controller_event',
+      summary: 'Interaction carries noisy related event ids',
+      related_event_ids: [
+        ' evt_replay_review_started ',
+        'evt_replay_review_started',
+        '',
+        '   ',
+        42,
+        null,
+        'not-a-real-event',
+        ' evt_replay_review_completed '
+      ]
+    }
+  ];
+
+  const bundle = store.getAccountabilityReplay({
+    evidence_ref: '/tmp/replay-start.md',
+    limit: 5,
+    window: '15m',
+    now: '2026-03-09T18:50:00.000Z'
+  });
+  const ledgerEntry = bundle.ledger.find(
+    (entry) => entry.entry_id === 'interaction:manual-noisy-basis'
+  );
+
+  assert.deepEqual(ledgerEntry.basis_event_ids, [
+    'evt_replay_review_completed',
+    'evt_replay_review_started'
+  ]);
+});
+
 test('GET /accountability/replay uses real event ids for event_id anchors and stays read-only', async (t) => {
   const { baseUrl, store, storeFile } = await createHarness(t);
   await seedReplaySlice(store);
@@ -332,6 +377,89 @@ test('GET /accountability/replay uses real event ids for event_id anchors and st
         ].includes(eventId)
       )
     )
+  );
+});
+
+test('accountability replay ledger canonicalizes memory artifact latest event ids', async (t) => {
+  const { store } = await createHarness(t);
+  await seedReplaySlice(store);
+  store.listMemoryArtifacts = () => [
+    {
+      artifact_ref: '/tmp/replay-padded-memory.md',
+      artifact_kind: 'evidence_ref',
+      file_name: 'replay-padded-memory.md',
+      first_seen_at: '2026-03-09T18:45:00.000Z',
+      last_seen_at: '2026-03-09T18:45:00.000Z',
+      mention_count: 1,
+      agent_ids: ['protocol-engineering'],
+      correlation_ids: ['corr-replay'],
+      source_kinds: ['workspace_file'],
+      latest_summary: 'Padded memory artifact latest event id',
+      latest_event_type: 'review_completed',
+      latest_event_id: ' evt_replay_review_completed ',
+      collector_last_modified_at: null
+    },
+    {
+      artifact_ref: '/tmp/replay-blank-memory.md',
+      artifact_kind: 'evidence_ref',
+      file_name: 'replay-blank-memory.md',
+      first_seen_at: '2026-03-09T18:44:00.000Z',
+      last_seen_at: '2026-03-09T18:44:00.000Z',
+      mention_count: 1,
+      agent_ids: ['app-engineering'],
+      correlation_ids: ['corr-replay'],
+      source_kinds: ['controller_snapshot'],
+      latest_summary: null,
+      latest_event_type: null,
+      latest_event_id: '   ',
+      collector_last_modified_at: '2026-03-09T18:44:00.000Z'
+    },
+    {
+      artifact_ref: '/tmp/replay-nonexistent-memory.md',
+      artifact_kind: 'evidence_ref',
+      file_name: 'replay-nonexistent-memory.md',
+      first_seen_at: '2026-03-09T18:43:00.000Z',
+      last_seen_at: '2026-03-09T18:43:00.000Z',
+      mention_count: 1,
+      agent_ids: ['app-engineering'],
+      correlation_ids: ['corr-replay'],
+      source_kinds: ['controller_snapshot'],
+      latest_summary: null,
+      latest_event_type: null,
+      latest_event_id: 'not-a-real-event',
+      collector_last_modified_at: '2026-03-09T18:43:00.000Z'
+    }
+  ];
+
+  const bundle = store.getAccountabilityReplay({
+    evidence_ref: '/tmp/replay-start.md',
+    limit: 5,
+    window: '15m',
+    now: '2026-03-09T18:50:00.000Z'
+  });
+  const artifactEntries = new Map(
+    bundle.ledger
+      .filter((entry) => entry.entry_type === 'memory_artifact')
+      .map((entry) => [entry.entry_id, entry])
+  );
+
+  assert.deepEqual(
+    artifactEntries.get('/tmp/replay-padded-memory.md').basis_event_ids,
+    ['evt_replay_review_completed']
+  );
+  assert.equal(
+    artifactEntries.get('/tmp/replay-padded-memory.md').provenance,
+    'event_backed_artifact'
+  );
+  assert.deepEqual(artifactEntries.get('/tmp/replay-blank-memory.md').basis_event_ids, []);
+  assert.equal(
+    artifactEntries.get('/tmp/replay-blank-memory.md').provenance,
+    'collector_observation_without_event_id'
+  );
+  assert.deepEqual(artifactEntries.get('/tmp/replay-nonexistent-memory.md').basis_event_ids, []);
+  assert.equal(
+    artifactEntries.get('/tmp/replay-nonexistent-memory.md').provenance,
+    'collector_observation_without_event_id'
   );
 });
 

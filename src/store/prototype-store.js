@@ -1064,8 +1064,9 @@ function createAccountabilityInteractionLedgerEntry({ interaction, eventIds }) {
     entry_type: 'interaction',
     entry_id: interaction.interaction_id,
     ts: interaction.ended_at || interaction.started_at,
-    basis_event_ids: normalizeStringValues(interaction.related_event_ids).filter((eventId) =>
-      eventIds.has(eventId)
+    basis_event_ids: canonicalizeAccountabilityReplayBasisEventIds(
+      interaction.related_event_ids,
+      eventIds
     ),
     agent_id: interaction.participant_agent_ids[0] || undefined,
     source_kind: interaction.source_kind || null,
@@ -1077,9 +1078,7 @@ function createAccountabilityInteractionLedgerEntry({ interaction, eventIds }) {
 
 function createAccountabilityArtifactLedgerEntry({ artifact, eventIds }) {
   const latestEventId =
-    artifact.latest_event_id && eventIds.has(artifact.latest_event_id)
-      ? artifact.latest_event_id
-      : null;
+    canonicalizeAccountabilityReplayBasisEventIds([artifact.latest_event_id], eventIds)[0] || null;
 
   return {
     entry_type: 'memory_artifact',
@@ -1094,6 +1093,28 @@ function createAccountabilityArtifactLedgerEntry({ artifact, eventIds }) {
       ? 'event_backed_artifact'
       : 'collector_observation_without_event_id'
   };
+}
+
+function canonicalizeAccountabilityReplayBasisEventIds(values, eventIds) {
+  if (!Array.isArray(values)) {
+    return [];
+  }
+
+  const basisEventIds = new Set();
+  for (const value of values) {
+    if (typeof value !== 'string') {
+      continue;
+    }
+
+    const eventId = value.trim();
+    if (eventId.length === 0 || !eventIds.has(eventId)) {
+      continue;
+    }
+
+    basisEventIds.add(eventId);
+  }
+
+  return Array.from(basisEventIds).sort();
 }
 
 function compareAccountabilityLedgerEntries(left, right) {

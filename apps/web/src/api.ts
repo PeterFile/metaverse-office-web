@@ -481,6 +481,7 @@ export async function fetchMemoryArtifacts(
     artifactRef?: string;
     eventType?: string;
     severity?: string;
+    sourceKind?: string;
     artifactKind?: string;
     signal?: AbortSignal;
   } = {}
@@ -508,6 +509,10 @@ export async function fetchMemoryArtifacts(
 
   if (options.severity) {
     params.set('severity', options.severity);
+  }
+
+  if (options.sourceKind) {
+    params.set('source_kind', options.sourceKind);
   }
 
   if (options.artifactKind) {

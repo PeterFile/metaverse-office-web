@@ -544,6 +544,52 @@ describe('read-only frontend/backend contract smoke', () => {
     });
   });
 
+  it('passes memory source_kind filters through to the real backend artifact source_kinds membership', async () => {
+    harness = await createHarness(() => '2026-03-09T19:00:00.000Z');
+    await seedContractSlice(harness.store);
+
+    const nativeFetch = globalThis.fetch.bind(globalThis);
+    const requests: RequestContract[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+        requests.push(getRequestContract(input, harness!.baseUrl, init));
+        return nativeFetch(input, init);
+      })
+    );
+
+    const api = await loadApi(harness.baseUrl);
+    const memoryArtifacts = await api.fetchMemoryArtifacts({
+      sourceKind: 'workspace_file'
+    });
+
+    expect(requests).toEqual([
+      {
+        method: 'GET',
+        origin: harness.baseUrl,
+        pathname: '/memory/artifacts',
+        query: [
+          ['limit', '10'],
+          ['source_kind', 'workspace_file'],
+          ['window', '60m']
+        ]
+      }
+    ]);
+    expect(memoryArtifacts.generated_at).toBe('2026-03-09T19:00:00.000Z');
+    expect(memoryArtifacts.items).toHaveLength(1);
+    expect(memoryArtifacts.items[0]).toEqual(
+      expect.objectContaining({
+        artifact_ref: '/tmp/app-engineering/todo.md',
+        artifact_kind: 'workspace_file',
+        file_name: 'todo.md'
+      })
+    );
+    expect(memoryArtifacts.items[0].source_kinds).toContain('workspace_file');
+    expect(
+      memoryArtifacts.items.every((artifact) => artifact.source_kinds.includes('workspace_file'))
+    ).toBe(true);
+  });
+
   it('loads /accountability/replay from the real backend with bounded read-only anchors', async () => {
     harness = await createHarness(() => '2026-03-09T19:00:00.000Z');
     await seedContractSlice(harness.store);

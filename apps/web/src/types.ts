@@ -357,6 +357,8 @@ export interface AccountabilityReplayQuery {
   evidence_ref?: string;
   correlation_id?: string;
   agent_id?: string;
+  source_kind?: string;
+  artifact_kind?: string;
   limit: number;
   window: string;
 }

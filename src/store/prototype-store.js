@@ -897,6 +897,8 @@ function normalizeAccountabilityReplayFilters(filters = {}) {
     evidence_ref: normalizeOptionalString(filters.evidence_ref),
     correlation_id: normalizeOptionalString(filters.correlation_id),
     agent_id: normalizeOptionalString(filters.agent_id),
+    source_kind: normalizeOptionalString(filters.source_kind),
+    artifact_kind: normalizeOptionalString(filters.artifact_kind),
     limit: parseLimit(
       filters.limit === null || filters.limit === undefined || filters.limit === ''
         ? 10
@@ -931,6 +933,12 @@ function createAccountabilityReplayQuery(filters) {
   if (filters.agent_id) {
     query.agent_id = filters.agent_id;
   }
+  if (filters.source_kind) {
+    query.source_kind = filters.source_kind;
+  }
+  if (filters.artifact_kind) {
+    query.artifact_kind = filters.artifact_kind;
+  }
 
   query.limit = filters.limit;
   query.window = filters.window;
@@ -943,6 +951,8 @@ function listAccountabilityReplayArtifacts({ store, filters, events = [], intera
     agent_id: filters.agent_id,
     correlation_id: filters.correlation_id,
     artifact_ref: filters.evidence_ref,
+    source_kind: filters.source_kind,
+    artifact_kind: filters.artifact_kind,
     limit: filters.event_id ? null : filters.limit,
     now: filters.now
   });

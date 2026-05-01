@@ -266,6 +266,8 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
       evidence_ref: getSearchValue(url.searchParams, 'evidence_ref'),
       correlation_id: getSearchValue(url.searchParams, 'correlation_id'),
       agent_id: getSearchValue(url.searchParams, 'agent_id'),
+      source_kind: getSearchValue(url.searchParams, 'source_kind'),
+      artifact_kind: getSearchValue(url.searchParams, 'artifact_kind'),
       limit: url.searchParams.get('limit') || '10',
       window: url.searchParams.get('window') || '60m',
       now: now()

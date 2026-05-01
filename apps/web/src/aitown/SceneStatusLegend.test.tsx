@@ -336,4 +336,120 @@ describe('SceneStatusLegend', () => {
     expect(items[2]).not.toHaveTextContent('evidence refs');
     expect(screen.getByText('Data quality')).toBeVisible();
   });
+
+  it('renders passive incident evidence provenance when projected incidents carry evidence', async () => {
+    const world = makeWorldState({
+      incidents: [
+        {
+          incident_id: 'inc-alert',
+          kind: 'peer_watch_alert',
+          agent_id: 'app-engineering',
+          actor_id: 'team-lead',
+          severity: 'orange',
+          status: 'open',
+          summary: 'Peer watch alert',
+          ts: '2026-03-14T10:00:00Z',
+          correlation_id: 'corr-alert',
+          source_kind: 'controller_event',
+          evidence_refs: ['/tmp/a.md', 'tmux://session/0.1'],
+          counterparty_agent_ids: ['ops-lead'],
+        },
+      ],
+    });
+
+    renderLegend(world);
+
+    const evidenceList = await screen.findByRole('list', { name: 'Incident evidence legend' });
+    const items = within(evidenceList).getAllByRole('listitem');
+
+    expect(screen.getByText('Incident evidence')).toBeVisible();
+    expect(items).toHaveLength(1);
+    expect(items[0]).toHaveTextContent(
+      'inc-alert · source controller_event · actor team-lead · correlation corr-alert · evidence /tmp/a.md, tmux://session/0.1 · counterparties ops-lead'
+    );
+  });
+
+  it('renders bounded incident evidence overflow copy with correct plurals', async () => {
+    const world = makeWorldState({
+      incidents: [
+        {
+          incident_id: 'inc-overflow',
+          kind: 'peer_watch_alert',
+          agent_id: 'app-engineering',
+          actor_id: 'team-lead',
+          severity: 'orange',
+          status: 'open',
+          summary: 'Overflow provenance',
+          ts: '2026-03-14T10:00:00Z',
+          correlation_id: 'corr-overflow',
+          source_kind: 'controller_event',
+          evidence_refs: ['ref-1', 'ref-2', 'ref-3', 'ref-4', 'ref-5'],
+          counterparty_agent_ids: ['agent-a', 'agent-b', 'agent-c', 'agent-d', 'agent-e'],
+        },
+      ],
+    });
+
+    renderLegend(world);
+
+    const evidenceList = await screen.findByRole('list', { name: 'Incident evidence legend' });
+    const items = within(evidenceList).getAllByRole('listitem');
+
+    expect(items).toHaveLength(1);
+    expect(items[0]).toHaveTextContent(
+      'inc-overflow · source controller_event · actor team-lead · correlation corr-overflow · evidence ref-1, ref-2, ref-3 (+2 more evidence refs) · counterparties agent-a, agent-b, agent-c (+2 more counterparties)'
+    );
+    expect(items[0]).not.toHaveTextContent('counterpartys');
+  });
+
+  it('keeps incident evidence before hot-zone actions so passive provenance does not lift focus buttons', async () => {
+    const world = makeWorldState({
+      agents: new Map([
+        [
+          'app-engineering',
+          makeWorldAgent({
+            zone: 'meeting-zone',
+            severity: 'yellow',
+            has_open_incidents: true,
+          }),
+        ],
+      ]),
+      zones: [
+        makeZoneSnapshot({
+          zone_id: 'meeting-zone',
+          label: 'Meeting Zone',
+          occupant_ids: ['app-engineering'],
+        }),
+      ],
+      incidents: [
+        {
+          incident_id: 'inc-alert',
+          kind: 'peer_watch_alert',
+          agent_id: 'app-engineering',
+          actor_id: 'team-lead',
+          severity: 'yellow',
+          status: 'open',
+          summary: 'Peer watch alert',
+          ts: '2026-03-14T10:00:00Z',
+          correlation_id: 'corr-alert',
+          source_kind: 'controller_event',
+          evidence_refs: ['/tmp/a.md'],
+          counterparty_agent_ids: ['ops-lead'],
+        },
+      ],
+    });
+
+    renderLegend(world, vi.fn());
+
+    const incidentTitle = await screen.findByText('Incident evidence');
+    const hotZonesTitle = await screen.findByText('Hot zones');
+    expect(incidentTitle.compareDocumentPosition(hotZonesTitle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Meeting Zone/ })).toBeVisible();
+  });
+
+  it('keeps incident evidence provenance hidden when projected incidents have no evidence', () => {
+    renderLegend(makeWorldState());
+
+    expect(screen.queryByRole('list', { name: 'Incident evidence legend' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Incident evidence')).not.toBeInTheDocument();
+  });
 });

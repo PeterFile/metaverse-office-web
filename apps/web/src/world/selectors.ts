@@ -31,6 +31,9 @@ const SEVERITY_EMOJI: Record<Severity, string> = {
 };
 
 const HOT_ZONE_LIMIT = 3;
+const INCIDENT_EVIDENCE_LIMIT = 3;
+const INCIDENT_EVIDENCE_REF_LIMIT = 3;
+const INCIDENT_COUNTERPARTY_LIMIT = 3;
 
 export interface HotZoneSummary {
   zone_id: string;
@@ -56,6 +59,19 @@ export interface RuntimeBackfillEvidenceSummary {
   source_kinds: string[];
   correlation_ids: string[];
   evidence_refs: string[];
+}
+
+export interface IncidentEvidenceSummary {
+  incident_id: string;
+  severity: Severity;
+  ts: string;
+  source_kind: string;
+  actor_id: string;
+  correlation_id: string | null;
+  evidence_refs: string[];
+  evidence_ref_overflow_count?: number;
+  counterparty_agent_ids: string[];
+  counterparty_agent_overflow_count?: number;
 }
 
 // ── Single agent ──
@@ -185,6 +201,49 @@ export function selectRuntimeBackfillEvidence(
   );
 }
 
+export function selectIncidentEvidenceSummaries(
+  world: WorldState | null | undefined,
+  limit = INCIDENT_EVIDENCE_LIMIT
+): IncidentEvidenceSummary[] {
+  if (!world || limit <= 0 || world.incidents.length === 0) {
+    return [];
+  }
+
+  const summaries: IncidentEvidenceSummary[] = [];
+  for (const incident of world.incidents) {
+    const sourceKind = incident.source_kind.trim();
+    const actorId = incident.actor_id.trim();
+    const correlationId = incident.correlation_id?.trim() || null;
+    const allEvidenceRefs = uniqueTrimmedStrings(incident.evidence_refs);
+    const allCounterpartyAgentIds = uniqueTrimmedStrings(incident.counterparty_agent_ids);
+    const evidenceRefs = allEvidenceRefs.slice(0, INCIDENT_EVIDENCE_REF_LIMIT);
+    const counterpartyAgentIds = allCounterpartyAgentIds.slice(0, INCIDENT_COUNTERPARTY_LIMIT);
+    const evidenceRefOverflowCount = allEvidenceRefs.length - evidenceRefs.length;
+    const counterpartyAgentOverflowCount = allCounterpartyAgentIds.length - counterpartyAgentIds.length;
+
+    if (!sourceKind && !actorId && !correlationId && allEvidenceRefs.length === 0 && allCounterpartyAgentIds.length === 0) {
+      continue;
+    }
+
+    summaries.push({
+      incident_id: incident.incident_id,
+      severity: incident.severity,
+      ts: incident.ts,
+      source_kind: sourceKind,
+      actor_id: actorId,
+      correlation_id: correlationId,
+      evidence_refs: evidenceRefs,
+      ...(evidenceRefOverflowCount > 0 ? { evidence_ref_overflow_count: evidenceRefOverflowCount } : {}),
+      counterparty_agent_ids: counterpartyAgentIds,
+      ...(counterpartyAgentOverflowCount > 0
+        ? { counterparty_agent_overflow_count: counterpartyAgentOverflowCount }
+        : {}),
+    });
+  }
+
+  return summaries.sort(compareIncidentEvidenceSummaries).slice(0, limit);
+}
+
 function uniqueTrimmedStrings(values: Array<string | null | undefined>): string[] {
   const seen = new Set<string>();
   const normalized: string[] = [];
@@ -200,6 +259,18 @@ function uniqueTrimmedStrings(values: Array<string | null | undefined>): string[
   }
 
   return normalized;
+}
+
+function compareIncidentEvidenceSummaries(a: IncidentEvidenceSummary, b: IncidentEvidenceSummary): number {
+  const severityDelta = SEVERITY_RANK[b.severity] - SEVERITY_RANK[a.severity];
+  if (severityDelta !== 0) return severityDelta;
+
+  const aTs = Date.parse(a.ts);
+  const bTs = Date.parse(b.ts);
+  const timestampDelta = (Number.isNaN(bTs) ? 0 : bTs) - (Number.isNaN(aTs) ? 0 : aTs);
+  if (timestampDelta !== 0) return timestampDelta;
+
+  return a.incident_id.localeCompare(b.incident_id);
 }
 
 export function selectHotZones(

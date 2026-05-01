@@ -1,5 +1,11 @@
 import { useWorld } from '../context/WorldContext';
-import { SEVERITY_EMOJI, selectDataQualitySummary, selectHotZones, selectRuntimeBackfillEvidence } from '../world/selectors';
+import {
+  SEVERITY_EMOJI,
+  selectDataQualitySummary,
+  selectHotZones,
+  selectIncidentEvidenceSummaries,
+  selectRuntimeBackfillEvidence,
+} from '../world/selectors';
 import type { Severity, WorldState } from '../world/types';
 
 import { SCENE_AGENT_STATUS_LEGEND } from './agentStatusBadge';
@@ -87,6 +93,46 @@ function formatRuntimeBackfillEvidence(
   return parts.join(' · ');
 }
 
+function formatOverflow(count: number, singular: string, plural = `${singular}s`): string {
+  return count > 0 ? ` (+${count} more ${count === 1 ? singular : plural})` : '';
+}
+
+function formatIncidentEvidenceSummary(
+  incidentId: string,
+  sourceKind: string,
+  actorId: string,
+  correlationId: string | null,
+  evidenceRefs: string[],
+  evidenceRefOverflowCount: number,
+  counterpartyAgentIds: string[],
+  counterpartyAgentOverflowCount: number
+): string {
+  const parts = [incidentId];
+  if (sourceKind) {
+    parts.push(`source ${sourceKind}`);
+  }
+  if (actorId) {
+    parts.push(`actor ${actorId}`);
+  }
+  if (correlationId) {
+    parts.push(`correlation ${correlationId}`);
+  }
+  if (evidenceRefs.length > 0) {
+    parts.push(`evidence ${evidenceRefs.join(', ')}${formatOverflow(evidenceRefOverflowCount, 'evidence ref')}`);
+  }
+  if (counterpartyAgentIds.length > 0) {
+    parts.push(
+      `counterparties ${counterpartyAgentIds.join(', ')}${formatOverflow(
+        counterpartyAgentOverflowCount,
+        'counterparty',
+        'counterparties'
+      )}`
+    );
+  }
+
+  return parts.join(' · ');
+}
+
 type SceneStatusLegendProps = {
   onFocusWorldZone?: (zoneId: string) => void;
   world?: WorldState | null;
@@ -98,6 +144,7 @@ export function SceneStatusLegend({ onFocusWorldZone, world: providedWorld }: Sc
   const hotZones = selectHotZones(world);
   const dataQualitySummary = selectDataQualitySummary(world);
   const runtimeBackfillEvidence = selectRuntimeBackfillEvidence(world);
+  const incidentEvidenceSummaries = selectIncidentEvidenceSummaries(world);
 
   return (
     <div id="scene-status-legend" className="aitown-status-legend">
@@ -112,6 +159,33 @@ export function SceneStatusLegend({ onFocusWorldZone, world: providedWorld }: Sc
           </li>
         ))}
       </ul>
+
+      {incidentEvidenceSummaries.length > 0 ? (
+        <>
+          <span className="aitown-status-legend__title">Incident evidence</span>
+          <ul className="aitown-status-legend__items" aria-label="Incident evidence legend">
+            {incidentEvidenceSummaries.map((incident) => (
+              <li key={incident.incident_id} className="aitown-status-legend__item">
+                <span className="aitown-status-legend__token" aria-hidden="true">
+                  {SEVERITY_EMOJI[incident.severity]}
+                </span>
+                <span>
+                  {formatIncidentEvidenceSummary(
+                    incident.incident_id,
+                    incident.source_kind,
+                    incident.actor_id,
+                    incident.correlation_id,
+                    incident.evidence_refs,
+                    incident.evidence_ref_overflow_count ?? 0,
+                    incident.counterparty_agent_ids,
+                    incident.counterparty_agent_overflow_count ?? 0
+                  )}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : null}
 
       {hotZones.length > 0 ? (
         <>

@@ -863,11 +863,15 @@ function buildIncidentSnapshots(
     incident_id: i.incident_id,
     kind: i.kind,
     agent_id: i.agent_id,
+    actor_id: i.actor_id,
     severity: i.severity,
     status: i.status,
     summary: i.summary,
     ts: i.ts,
     correlation_id: i.correlation_id,
+    source_kind: i.source_kind,
+    evidence_refs: [...i.evidence_refs],
+    counterparty_agent_ids: [...i.counterparty_agent_ids],
   }));
 }
 

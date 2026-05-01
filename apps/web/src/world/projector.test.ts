@@ -236,6 +236,8 @@ describe('projectWorldState', () => {
   });
 
   it('includes incident feed in world state', () => {
+    const evidenceRefs = ['tmux://session/0.1', '/tmp/evidence.md'];
+    const counterpartyAgentIds = ['team-lead', 'ops-lead'];
     const feed: IncidentFeedResponse = {
       items: [
         {
@@ -248,8 +250,8 @@ describe('projectWorldState', () => {
           severity: 'red',
           summary: 'Reboot requested',
           correlation_id: 'corr-1',
-          evidence_refs: [],
-          counterparty_agent_ids: [],
+          evidence_refs: evidenceRefs,
+          counterparty_agent_ids: counterpartyAgentIds,
           source_kind: 'controller_event',
         },
       ],
@@ -262,7 +264,16 @@ describe('projectWorldState', () => {
     };
     const world = projectWorldState(input);
     expect(world.incidents).toHaveLength(1);
-    expect(world.incidents[0].incident_id).toBe('inc-1');
+    expect(world.incidents[0]).toMatchObject({
+      incident_id: 'inc-1',
+      source_kind: 'controller_event',
+      actor_id: 'team-lead',
+      evidence_refs: ['tmux://session/0.1', '/tmp/evidence.md'],
+      counterparty_agent_ids: ['team-lead', 'ops-lead'],
+      correlation_id: 'corr-1',
+    });
+    expect(world.incidents[0].evidence_refs).not.toBe(evidenceRefs);
+    expect(world.incidents[0].counterparty_agent_ids).not.toBe(counterpartyAgentIds);
   });
 
   it('backfills incident-feed severity and handoff phase without workflow coverage while keeping alert counts peer-watch specific', () => {

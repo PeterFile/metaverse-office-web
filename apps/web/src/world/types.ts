@@ -98,11 +98,15 @@ export interface IncidentSnapshot {
   incident_id: string;
   kind: string;
   agent_id: string;
+  actor_id: string;
   severity: Severity;
   status: string;
   summary: string;
   ts: string;
   correlation_id: string | null;
+  source_kind: string;
+  evidence_refs: string[];
+  counterparty_agent_ids: string[];
 }
 
 // ── World Summary ──

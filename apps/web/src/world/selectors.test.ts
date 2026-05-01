@@ -8,6 +8,7 @@ import {
   selectDataQualitySummary,
   selectGlobalSeverity,
   selectHotZones,
+  selectIncidentEvidenceSummaries,
   selectRuntimeBackfillEvidence,
   selectWatchEdgeRisk,
 } from './selectors';
@@ -308,6 +309,206 @@ describe('selectRuntimeBackfillEvidence', () => {
     });
 
     expect(selectRuntimeBackfillEvidence(world)).toEqual([]);
+  });
+});
+
+describe('selectIncidentEvidenceSummaries', () => {
+  it('returns capped incident provenance summaries in deterministic order', () => {
+    const world = makeWorldState({
+      incidents: [
+        {
+          incident_id: 'inc-red-old',
+          kind: 'reboot',
+          agent_id: 'app-engineering',
+          actor_id: 'team-lead',
+          severity: 'red',
+          status: 'requested',
+          summary: 'Old red reboot',
+          ts: '2026-03-14T10:00:00Z',
+          correlation_id: 'corr-red-old',
+          source_kind: 'controller_event',
+          evidence_refs: [' /tmp/a.md ', '', '/tmp/a.md', 'tmux://session/0.1'],
+          counterparty_agent_ids: [' ops-lead ', 'ops-lead', ' '],
+        },
+        {
+          incident_id: 'inc-yellow',
+          kind: 'handoff',
+          agent_id: 'app-engineering',
+          actor_id: 'team-lead',
+          severity: 'yellow',
+          status: 'waiting',
+          summary: 'Yellow handoff',
+          ts: '2026-03-14T10:05:00Z',
+          correlation_id: 'corr-yellow',
+          source_kind: 'controller_event',
+          evidence_refs: ['tmux://yellow/0.1'],
+          counterparty_agent_ids: ['growth-revenue'],
+        },
+        {
+          incident_id: 'inc-red-new-b',
+          kind: 'peer_watch_alert',
+          agent_id: 'app-engineering',
+          actor_id: 'ops-lead',
+          severity: 'red',
+          status: 'open',
+          summary: 'New red alert B',
+          ts: '2026-03-14T10:10:00Z',
+          correlation_id: 'corr-red-new',
+          source_kind: 'collector_snapshot',
+          evidence_refs: [],
+          counterparty_agent_ids: ['team-lead'],
+        },
+        {
+          incident_id: 'inc-red-new-a',
+          kind: 'peer_watch_alert',
+          agent_id: 'app-engineering',
+          actor_id: 'ops-lead',
+          severity: 'red',
+          status: 'open',
+          summary: 'New red alert A',
+          ts: '2026-03-14T10:10:00Z',
+          correlation_id: 'corr-red-new',
+          source_kind: 'collector_snapshot',
+          evidence_refs: ['tmux://new/0.1'],
+          counterparty_agent_ids: [],
+        },
+      ],
+    });
+
+    expect(selectIncidentEvidenceSummaries(world, 3)).toEqual([
+      {
+        incident_id: 'inc-red-new-a',
+        severity: 'red',
+        ts: '2026-03-14T10:10:00Z',
+        source_kind: 'collector_snapshot',
+        actor_id: 'ops-lead',
+        correlation_id: 'corr-red-new',
+        evidence_refs: ['tmux://new/0.1'],
+        counterparty_agent_ids: [],
+      },
+      {
+        incident_id: 'inc-red-new-b',
+        severity: 'red',
+        ts: '2026-03-14T10:10:00Z',
+        source_kind: 'collector_snapshot',
+        actor_id: 'ops-lead',
+        correlation_id: 'corr-red-new',
+        evidence_refs: [],
+        counterparty_agent_ids: ['team-lead'],
+      },
+      {
+        incident_id: 'inc-red-old',
+        severity: 'red',
+        ts: '2026-03-14T10:00:00Z',
+        source_kind: 'controller_event',
+        actor_id: 'team-lead',
+        correlation_id: 'corr-red-old',
+        evidence_refs: ['/tmp/a.md', 'tmux://session/0.1'],
+        counterparty_agent_ids: ['ops-lead'],
+      },
+    ]);
+  });
+
+  it('caps per-incident provenance arrays and reports overflow counts', () => {
+    const world = makeWorldState({
+      incidents: [
+        {
+          incident_id: 'inc-overflow',
+          kind: 'peer_watch_alert',
+          agent_id: 'app-engineering',
+          actor_id: 'team-lead',
+          severity: 'orange',
+          status: 'open',
+          summary: 'Overflow provenance',
+          ts: '2026-03-14T10:00:00Z',
+          correlation_id: 'corr-overflow',
+          source_kind: 'collector_snapshot',
+          evidence_refs: ['ref-1', 'ref-2', 'ref-3', 'ref-4', 'ref-5'],
+          counterparty_agent_ids: ['agent-a', 'agent-b', 'agent-c', 'agent-d'],
+        },
+      ],
+    });
+
+    expect(selectIncidentEvidenceSummaries(world)).toEqual([
+      {
+        incident_id: 'inc-overflow',
+        severity: 'orange',
+        ts: '2026-03-14T10:00:00Z',
+        source_kind: 'collector_snapshot',
+        actor_id: 'team-lead',
+        correlation_id: 'corr-overflow',
+        evidence_refs: ['ref-1', 'ref-2', 'ref-3'],
+        evidence_ref_overflow_count: 2,
+        counterparty_agent_ids: ['agent-a', 'agent-b', 'agent-c'],
+        counterparty_agent_overflow_count: 1,
+      },
+    ]);
+  });
+
+  it('orders invalid incident evidence timestamps deterministically by incident id', () => {
+    const world = makeWorldState({
+      incidents: [
+        {
+          incident_id: 'inc-z',
+          kind: 'peer_watch_alert',
+          agent_id: 'app-engineering',
+          actor_id: 'team-lead',
+          severity: 'orange',
+          status: 'open',
+          summary: 'Invalid timestamp Z',
+          ts: 'not-a-date',
+          correlation_id: 'corr-z',
+          source_kind: 'collector_snapshot',
+          evidence_refs: ['tmux://z/0.1'],
+          counterparty_agent_ids: [],
+        },
+        {
+          incident_id: 'inc-a',
+          kind: 'peer_watch_alert',
+          agent_id: 'app-engineering',
+          actor_id: 'team-lead',
+          severity: 'orange',
+          status: 'open',
+          summary: 'Invalid timestamp A',
+          ts: 'also-not-a-date',
+          correlation_id: 'corr-a',
+          source_kind: 'collector_snapshot',
+          evidence_refs: ['tmux://a/0.1'],
+          counterparty_agent_ids: [],
+        },
+      ],
+    });
+
+    expect(selectIncidentEvidenceSummaries(world).map((incident) => incident.incident_id)).toEqual([
+      'inc-a',
+      'inc-z',
+    ]);
+  });
+
+  it('falls back quietly and suppresses incidents without meaningful provenance', () => {
+    const world = makeWorldState({
+      incidents: [
+        {
+          incident_id: 'inc-empty',
+          kind: 'reboot',
+          agent_id: 'app-engineering',
+          actor_id: '',
+          severity: 'orange',
+          status: 'requested',
+          summary: 'No provenance',
+          ts: '2026-03-14T10:00:00Z',
+          correlation_id: ' ',
+          source_kind: ' ',
+          evidence_refs: [' '],
+          counterparty_agent_ids: [''],
+        },
+      ],
+    });
+
+    expect(selectIncidentEvidenceSummaries(null)).toEqual([]);
+    expect(selectIncidentEvidenceSummaries(makeWorldState())).toEqual([]);
+    expect(selectIncidentEvidenceSummaries(world)).toEqual([]);
+    expect(selectIncidentEvidenceSummaries(world, 0)).toEqual([]);
   });
 });
 

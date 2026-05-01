@@ -1,4 +1,6 @@
 import type {
+  AccountabilityReplayBundle,
+  AccountabilityReplayLedgerEntry,
   AgentWorkflow,
   CollectorEvidenceCoverageAgentItem,
   CollectorItem,
@@ -111,6 +113,9 @@ type DetailsPanelProps = {
   selectedAgentTimelineReplay: TimelineReplayResponse | null;
   selectedAgentTimelineReplayError: string | null;
   selectedAgentTimelineReplayState: LoadState;
+  selectedAgentAccountabilityReplay: AccountabilityReplayBundle | null;
+  selectedAgentAccountabilityReplayError: string | null;
+  selectedAgentAccountabilityReplayState: LoadState;
   workflow: AgentWorkflow | null;
   workflowError: string | null;
   workflowState: LoadState;
@@ -2390,6 +2395,131 @@ function renderReplaySummaryFacets(facets: ReplaySummaryFacets) {
   );
 }
 
+function renderReplayBundleSourceKindCounts(sourceKindBuckets: Record<string, number>) {
+  const sourceKindCounts = Object.entries(sourceKindBuckets)
+    .filter(([, count]) => count > 0)
+    .map(([sourceKind, count]) => `${sourceKind} (${count})`);
+
+  return renderNamedList(sourceKindCounts, 'No source-kind counts');
+}
+
+function renderReplayBundleQueryAnchors(bundle: AccountabilityReplayBundle) {
+  const anchors = dedupeNonEmptyStrings([
+    bundle.query.agent_id ? `agent_id ${bundle.query.agent_id}` : null,
+    bundle.query.correlation_id ? `correlation_id ${bundle.query.correlation_id}` : null,
+    bundle.query.event_id ? `event_id ${bundle.query.event_id}` : null,
+    bundle.query.evidence_ref ? `evidence_ref ${bundle.query.evidence_ref}` : null
+  ]);
+
+  return renderNamedList(anchors, 'No query anchors');
+}
+
+function renderReplayBundleLedgerSourceKinds(entry: AccountabilityReplayLedgerEntry) {
+  const sourceKinds = dedupeNonEmptyStrings([
+    entry.source_kind,
+    ...(entry.source_kinds ?? [])
+  ]);
+
+  return renderNamedList(sourceKinds, 'No source kinds');
+}
+
+function renderReplayBundleLedgerBasisEventIds(entry: AccountabilityReplayLedgerEntry) {
+  if (entry.basis_event_ids.length > 0) {
+    return entry.basis_event_ids.join(', ');
+  }
+
+  return entry.provenance === 'collector_observation_without_event_id'
+    ? 'None (collector-only artifact)'
+    : 'None supplied';
+}
+
+function renderReplayBundleLedgerEntry(entry: AccountabilityReplayLedgerEntry) {
+  return (
+    <li key={`${entry.entry_type}:${entry.entry_id}`} className="aitown-record">
+      <strong>{entry.summary ?? entry.entry_id}</strong>
+      <span>{`Ledger entry · ${entry.entry_type} · ${entry.entry_id}`}</span>
+      <span>{`At · ${renderTimestamp(entry.ts, 'No ledger timestamp')}`}</span>
+      <span>{`Basis events · ${renderReplayBundleLedgerBasisEventIds(entry)}`}</span>
+      <span>{`Source kinds · ${renderReplayBundleLedgerSourceKinds(entry)}`}</span>
+      <span>{`Evidence · ${renderEvidenceRefs(entry.evidence_refs)}`}</span>
+      {entry.agent_id ? <span>{`Agent · ${entry.agent_id}`}</span> : null}
+      {entry.actor_id ? <span>{`Actor · ${entry.actor_id}`}</span> : null}
+      {entry.correlation_id ? <span>{`Correlation · ${entry.correlation_id}`}</span> : null}
+      {entry.correlation_ids && entry.correlation_ids.length > 0 ? (
+        <span>{`Correlations · ${entry.correlation_ids.join(', ')}`}</span>
+      ) : null}
+      {entry.provenance ? <span>{`Provenance · ${entry.provenance}`}</span> : null}
+    </li>
+  );
+}
+
+function renderSelectedAgentReplayBundleSection({
+  replayBundle,
+  replayBundleError,
+  replayBundleState
+}: {
+  replayBundle: AccountabilityReplayBundle | null;
+  replayBundleError: string | null;
+  replayBundleState: LoadState;
+}) {
+  const replayBundleWarning =
+    replayBundleError && replayBundle ? `Showing last replay bundle snapshot. ${replayBundleError}` : null;
+
+  return (
+    <section className="aitown-details__section aitown-details__section--selected-replay">
+      <h3>Replay Bundle</h3>
+      <ul className="aitown-records">
+        {replayBundleState === 'loading' && !replayBundle ? (
+          <li className="aitown-record">Loading replay bundle...</li>
+        ) : null}
+        {replayBundleError && !replayBundle ? (
+          <li className="aitown-record">{`Unable to load replay bundle. ${replayBundleError}`}</li>
+        ) : null}
+        {replayBundleWarning ? <li className="aitown-record">{replayBundleWarning}</li> : null}
+        {replayBundle ? (
+          <>
+            <li className="aitown-record">
+              <strong>Replay bundle summary</strong>
+              <span>{`Basis · ${replayBundle.accountability.basis}`}</span>
+              <span>
+                {`bounded_by · limit ${replayBundle.accountability.bounded_by.limit} · window ${replayBundle.accountability.bounded_by.window} · generated_at ${replayBundle.generated_at}`}
+              </span>
+              <span>{`Query anchors · ${renderReplayBundleQueryAnchors(replayBundle)}`}</span>
+              <span>
+                {`Counts · ${replayBundle.accountability.event_count} events · ${replayBundle.accountability.interaction_count} interactions · ${replayBundle.accountability.artifact_count} artifacts`}
+              </span>
+              <span>
+                {`Source-kind counts · ${renderReplayBundleSourceKindCounts(
+                  replayBundle.accountability.source_kind_buckets
+                )} · derived/read-only`}
+              </span>
+              <span>{`Ledger · ${replayBundle.ledger.length} entries · derived/read-only`}</span>
+              <span>
+                {`Participants · ${renderNamedList(
+                  replayBundle.accountability.participant_agent_ids,
+                  'No participants'
+                )}`}
+              </span>
+              <span>{`Actors · ${renderNamedList(replayBundle.accountability.actor_ids, 'No actors')}`}</span>
+              <span>{`Evidence · ${renderEvidenceRefs(replayBundle.accountability.evidence_refs)}`}</span>
+              <span>
+                {`Window · ${renderTimestamp(
+                  replayBundle.accountability.first_ts,
+                  'No first event timestamp'
+                )} -> ${renderTimestamp(replayBundle.accountability.last_ts, 'No last event timestamp')}`}
+              </span>
+            </li>
+            {replayBundle.ledger.map((entry) => renderReplayBundleLedgerEntry(entry))}
+          </>
+        ) : null}
+        {replayBundleState === 'ready' && !replayBundleError && !replayBundle ? (
+          <li className="aitown-record">No replay bundle loaded.</li>
+        ) : null}
+      </ul>
+    </section>
+  );
+}
+
 function renderTimelineReplaySection({
   sectionClassName = '',
   requestScopeLabel = null,
@@ -3478,6 +3608,9 @@ export function DetailsPanel({
   selectedAgentTimelineReplay,
   selectedAgentTimelineReplayError,
   selectedAgentTimelineReplayState,
+  selectedAgentAccountabilityReplay,
+  selectedAgentAccountabilityReplayError,
+  selectedAgentAccountabilityReplayState,
   workflow,
   workflowError,
   workflowState,
@@ -5243,6 +5376,12 @@ export function DetailsPanel({
         onFocusWorldZone,
         onSelectAgent,
         onSelectCorrelation
+      })}
+
+      {renderSelectedAgentReplayBundleSection({
+        replayBundle: selectedAgentAccountabilityReplay,
+        replayBundleError: selectedAgentAccountabilityReplayError,
+        replayBundleState: selectedAgentAccountabilityReplayState
       })}
 
       <section className="aitown-details__section aitown-details__section--selected-replay">

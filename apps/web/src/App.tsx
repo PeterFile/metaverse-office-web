@@ -14,6 +14,7 @@ import {
   DEFAULT_WORKFLOW_WINDOW,
   RequestError,
   fetchAgentWorkflow,
+  fetchAccountabilityReplay,
   fetchCollectorEvidenceCoverage,
   fetchCollectorSnapshot,
   fetchCorrelationDrilldown,
@@ -37,6 +38,7 @@ import { WorldProvider, useWorld } from './context/WorldContext';
 import { usePolledResource, type LoadState } from './hooks/usePolledResource';
 import { getHubFocusableElements, isHubElementVisible } from './hubFocus';
 import type {
+  AccountabilityReplayBundle,
   CollectorEvidenceCoverage,
   CollectorEvidenceCoverageAgentItem,
   CollectorSnapshot,
@@ -98,6 +100,13 @@ type SelectedAgentSupervisionHistoryPayload = {
   correlationId: string | null;
   severity: Severity | null;
   peerWatchAlerts: PeerWatchAlertsResponse;
+};
+
+type SelectedAgentAccountabilityReplayPayload = {
+  targetAgentId: string;
+  correlationId: string | null;
+  eventId: string | null;
+  replayBundle: AccountabilityReplayBundle;
 };
 
 const CREW_TIMELINE_LIMIT = 4;
@@ -1263,6 +1272,62 @@ function AppInner() {
     previousSelectedAgentTimelineReplayResourceKeyRef.current =
       selectedAgentTimelineReplayResourceKey;
   }, [selectedAgentTimelineReplayResourceKey]);
+  const selectedAgentAccountabilityReplayResourceKey = selectedAgentId
+    ? `selected-agent-accountability-replay:${selectedAgentId}:correlation=${selectedAgentScopedCorrelationId ?? '__all__'}:event=${selectedAgentReplayCheckpointEventId ?? '__all__'}`
+    : null;
+  const previousSelectedAgentAccountabilityReplayResourceKeyRef = useRef<string | null>(
+    selectedAgentAccountabilityReplayResourceKey
+  );
+  const selectedAgentAccountabilityReplayResource = usePolledResource<SelectedAgentAccountabilityReplayPayload>({
+    enabled:
+      hubOpen &&
+      selectedAgentId !== null &&
+      selectedAgentDrilldownTab === 'replay' &&
+      !selectedAgentTimelineReplayDefaultCorrelationPending,
+    load: async (signal) => ({
+      targetAgentId: selectedAgentId!,
+      correlationId: selectedAgentScopedCorrelationId,
+      eventId: selectedAgentReplayCheckpointEventId,
+      replayBundle: await fetchAccountabilityReplay({
+        limit: DEFAULT_WORKFLOW_LIMIT,
+        window: DEFAULT_WORKFLOW_WINDOW,
+        agentId: selectedAgentId!,
+        correlationId: selectedAgentScopedCorrelationId ?? undefined,
+        eventId: selectedAgentReplayCheckpointEventId ?? undefined,
+        signal
+      })
+    }),
+    resourceKey: selectedAgentAccountabilityReplayResourceKey
+  });
+  const selectedAgentAccountabilityReplaySelectionChanged =
+    selectedAgentId !== null &&
+    selectedAgentAccountabilityReplayResourceKey !== null &&
+    previousSelectedAgentAccountabilityReplayResourceKeyRef.current !==
+      selectedAgentAccountabilityReplayResourceKey;
+  const selectedAgentAccountabilityReplayPayloadMatches =
+    selectedAgentAccountabilityReplayResource.data?.targetAgentId === selectedAgentId &&
+    selectedAgentAccountabilityReplayResource.data?.correlationId === selectedAgentScopedCorrelationId &&
+    selectedAgentAccountabilityReplayResource.data?.eventId === selectedAgentReplayCheckpointEventId;
+  const selectedAgentAccountabilityReplaySurfaceIsStale =
+    selectedAgentAccountabilityReplaySelectionChanged ||
+    (selectedAgentAccountabilityReplayResource.data !== null &&
+      !selectedAgentAccountabilityReplayPayloadMatches);
+  const selectedAgentAccountabilityReplay =
+    !selectedAgentAccountabilityReplaySurfaceIsStale &&
+    selectedAgentAccountabilityReplayPayloadMatches &&
+    selectedAgentAccountabilityReplayResource.data !== null
+      ? selectedAgentAccountabilityReplayResource.data.replayBundle
+      : null;
+  const selectedAgentAccountabilityReplayError = selectedAgentAccountabilityReplaySurfaceIsStale
+    ? null
+    : selectedAgentAccountabilityReplayResource.error;
+  const selectedAgentAccountabilityReplayState: LoadState = selectedAgentAccountabilityReplaySurfaceIsStale
+    ? 'loading'
+    : selectedAgentAccountabilityReplayResource.state;
+  useEffect(() => {
+    previousSelectedAgentAccountabilityReplayResourceKeyRef.current =
+      selectedAgentAccountabilityReplayResourceKey;
+  }, [selectedAgentAccountabilityReplayResourceKey]);
   const selectedAgentSupervisionHistoryResourceKey = selectedAgentId
     ? `selected-agent-supervision-history:${selectedAgentId}:correlation=${selectedAgentScopedCorrelationId ?? '__all__'}:severity=${selectedAgentSupervisionHistorySeverity ?? '__all__'}`
     : null;
@@ -2401,6 +2466,9 @@ function AppInner() {
               selectedAgentTimelineReplay={selectedAgentTimelineReplay}
               selectedAgentTimelineReplayError={selectedAgentTimelineReplayError}
               selectedAgentTimelineReplayState={selectedAgentTimelineReplayState}
+              selectedAgentAccountabilityReplay={selectedAgentAccountabilityReplay}
+              selectedAgentAccountabilityReplayError={selectedAgentAccountabilityReplayError}
+              selectedAgentAccountabilityReplayState={selectedAgentAccountabilityReplayState}
               workflow={activeWorkflow}
               workflowError={workflowError}
               workflowState={workflowState}

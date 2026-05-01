@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { DetailsPanel } from './DetailsPanel';
 import type {
+  AccountabilityReplayBundle,
   AgentWorkflow,
   CollectorSnapshot,
   CorrelationDrilldown,
@@ -432,6 +433,132 @@ function buildReplayTimelineEvent(overrides: Partial<WorkflowTimelineEvent> = {}
   };
 }
 
+function buildAccountabilityReplayBundle(
+  overrides: Partial<AccountabilityReplayBundle> = {}
+): AccountabilityReplayBundle {
+  return {
+    generated_at: '2026-03-16T09:00:00.000Z',
+    query: {
+      agent_id: 'app-engineering',
+      correlation_id: 'corr-app-review',
+      limit: 10,
+      window: '60m'
+    },
+    accountability: {
+      basis: 'event_log_and_existing_read_models',
+      bounded_by: {
+        limit: 10,
+        window: '60m'
+      },
+      event_count: 1,
+      interaction_count: 1,
+      artifact_count: 2,
+      participant_agent_ids: ['app-engineering', 'team-lead'],
+      actor_ids: ['team-lead'],
+      evidence_refs: ['/evidence/replay.md', 'tmux://5-web3-app-engineering/0.1'],
+      source_kind_buckets: {
+        controller_event: 2,
+        collector_snapshot: 1
+      },
+      first_ts: '2026-03-16T08:45:00.000Z',
+      last_ts: '2026-03-16T08:59:00.000Z'
+    },
+    ledger: [
+      {
+        entry_type: 'event',
+        entry_id: 'evt-replay-basis',
+        ts: '2026-03-16T08:50:00.000Z',
+        basis_event_ids: ['evt-replay-basis'],
+        agent_id: 'app-engineering',
+        actor_id: 'team-lead',
+        source_kind: 'controller_event',
+        evidence_refs: ['/evidence/replay.md'],
+        correlation_id: 'corr-app-review',
+        summary: 'Event-backed replay anchor'
+      },
+      {
+        entry_type: 'interaction',
+        entry_id: 'interaction-replay-basis',
+        ts: '2026-03-16T08:51:00.000Z',
+        basis_event_ids: ['evt-replay-basis'],
+        source_kinds: ['controller_event'],
+        evidence_refs: ['/evidence/replay.md'],
+        correlation_id: 'corr-app-review',
+        summary: 'Interaction folded from event'
+      },
+      {
+        entry_type: 'memory_artifact',
+        entry_id: 'artifact:/evidence/replay.md',
+        ts: '2026-03-16T08:52:00.000Z',
+        basis_event_ids: ['evt-replay-basis'],
+        source_kinds: ['controller_event'],
+        evidence_refs: ['/evidence/replay.md'],
+        correlation_ids: ['corr-app-review'],
+        summary: 'Event-backed replay artifact',
+        provenance: 'event_backed_artifact'
+      },
+      {
+        entry_type: 'memory_artifact',
+        entry_id: 'artifact:tmux://5-web3-app-engineering/0.1',
+        ts: '2026-03-16T08:59:00.000Z',
+        basis_event_ids: [],
+        source_kinds: ['collector_snapshot'],
+        evidence_refs: ['tmux://5-web3-app-engineering/0.1'],
+        correlation_ids: [],
+        summary: 'Collector tmux preview artifact',
+        provenance: 'collector_observation_without_event_id'
+      }
+    ],
+    events: [
+      buildReplayTimelineEvent({
+        event_id: 'evt-replay-basis',
+        summary: 'Event-backed replay anchor'
+      })
+    ],
+    interactions: [
+      {
+        ...buildCorrelation().interactions[0],
+        interaction_id: 'interaction-replay-basis',
+        trigger_event_id: 'evt-replay-basis',
+        summary: 'Interaction folded from event'
+      }
+    ],
+    memory_artifacts: [
+      {
+        artifact_ref: '/evidence/replay.md',
+        artifact_kind: 'evidence_ref',
+        file_name: 'replay.md',
+        first_seen_at: '2026-03-16T08:45:00.000Z',
+        last_seen_at: '2026-03-16T08:52:00.000Z',
+        mention_count: 2,
+        agent_ids: ['app-engineering'],
+        correlation_ids: ['corr-app-review'],
+        source_kinds: ['controller_event'],
+        latest_summary: 'Event-backed replay artifact',
+        latest_event_type: 'peer_watch_alert_raised',
+        latest_event_id: 'evt-replay-basis',
+        collector_last_modified_at: null
+      },
+      {
+        artifact_ref: 'tmux://5-web3-app-engineering/0.1',
+        artifact_kind: 'tmux_observation',
+        file_name: '0.1',
+        first_seen_at: '2026-03-16T08:59:00.000Z',
+        last_seen_at: '2026-03-16T08:59:00.000Z',
+        mention_count: 1,
+        agent_ids: ['app-engineering'],
+        correlation_ids: [],
+        source_kinds: ['collector_snapshot'],
+        latest_summary: 'Collector tmux preview artifact',
+        latest_event_type: null,
+        latest_event_id: null,
+        collector_last_modified_at: '2026-03-16T08:59:00.000Z'
+      }
+    ],
+    ...overrides
+  };
+}
+
 function buildCollectorSnapshot(): CollectorSnapshot {
   return {
     collected_at: '2026-03-16T09:00:00.000Z',
@@ -567,6 +694,9 @@ function buildProps(overrides: Partial<DetailsPanelProps> = {}): DetailsPanelPro
     },
     selectedAgentTimelineReplayError: null,
     selectedAgentTimelineReplayState: 'ready',
+    selectedAgentAccountabilityReplay: null,
+    selectedAgentAccountabilityReplayError: null,
+    selectedAgentAccountabilityReplayState: 'idle',
     workflow: buildWorkflow(),
     workflowError: null,
     workflowState: 'ready',
@@ -2679,6 +2809,45 @@ describe('DetailsPanel accountability signals', () => {
       )
     ).toBeVisible();
     expect(within(section!).getByText('Selected workflow orange degraded replay')).toBeVisible();
+  });
+
+  it('renders selected-agent replay bundle basis, bounds, derived counts, ledger basis event ids, and collector-only provenance', () => {
+    render(
+      <DetailsPanel
+        {...buildProps({
+          selectedAgentDrilldownTab: 'replay',
+          selectedAgentAccountabilityReplay: buildAccountabilityReplayBundle(),
+          selectedAgentAccountabilityReplayError: null,
+          selectedAgentAccountabilityReplayState: 'ready'
+        })}
+      />
+    );
+
+    const section = screen.getByRole('heading', { name: 'Replay Bundle' }).closest('section');
+    expect(section).not.toBeNull();
+    expect(within(section!).getByText('Basis · event_log_and_existing_read_models')).toBeVisible();
+    expect(
+      within(section!).getByText('bounded_by · limit 10 · window 60m · generated_at 2026-03-16T09:00:00.000Z')
+    ).toBeVisible();
+    expect(within(section!).getByText('Counts · 1 events · 1 interactions · 2 artifacts')).toBeVisible();
+    expect(
+      within(section!).getByText('Source-kind counts · controller_event (2), collector_snapshot (1) · derived/read-only')
+    ).toBeVisible();
+    expect(within(section!).getByText('Ledger · 4 entries · derived/read-only')).toBeVisible();
+    expect(within(section!).getByText('Participants · app-engineering, team-lead')).toBeVisible();
+    expect(within(section!).getByText('Actors · team-lead')).toBeVisible();
+
+    const eventBackedArtifactRecord = within(section!).getByText('Event-backed replay artifact').closest('li');
+    expect(eventBackedArtifactRecord).not.toBeNull();
+    expect(within(eventBackedArtifactRecord!).getByText('Basis events · evt-replay-basis')).toBeVisible();
+    expect(within(eventBackedArtifactRecord!).getByText('Provenance · event_backed_artifact')).toBeVisible();
+
+    const collectorOnlyRecord = within(section!).getByText('Collector tmux preview artifact').closest('li');
+    expect(collectorOnlyRecord).not.toBeNull();
+    expect(within(collectorOnlyRecord!).getByText('Basis events · None (collector-only artifact)')).toBeVisible();
+    expect(within(collectorOnlyRecord!).getByText('Provenance · collector_observation_without_event_id')).toBeVisible();
+    expect(collectorOnlyRecord).not.toHaveTextContent(/evt-/);
+    expect(collectorOnlyRecord).not.toHaveTextContent(/Replay checkpoint/);
   });
 
   it('jumps from matching active-queue evidence refs to shared memory while leaving non-matching refs as plain text and showing explicit fallbacks', async () => {

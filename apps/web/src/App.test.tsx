@@ -69,7 +69,7 @@ vi.mock('./aitown/WorldScene', () => ({
 }));
 
 import App, { resolveOverviewRefreshWarning, resolveSelectedAgent, resolveViewportToplineStatus } from './App';
-import type { AgentWorkflow, OfficeAgent } from './types';
+import type { AccountabilityReplayBundle, AgentWorkflow, OfficeAgent } from './types';
 
 const DEFAULT_NAVIGATOR_USER_AGENT = window.navigator.userAgent;
 
@@ -116,6 +116,12 @@ const growthRevenueReviewSelectedTimelineUrl =
   '/timeline?limit=10&window=60m&agent_id=growth-revenue&correlation_id=corr-app-review';
 const growthRevenueSecondarySelectedTimelineUrl =
   '/timeline?limit=10&window=60m&agent_id=growth-revenue&correlation_id=corr-app-secondary';
+const appEngineeringReviewAccountabilityReplayUrl =
+  '/accountability/replay?limit=10&window=60m&correlation_id=corr-app-review&agent_id=app-engineering';
+const appEngineeringReviewAccountabilityReplayCheckpointUrl =
+  '/accountability/replay?limit=10&window=60m&event_id=evt-memory-replay-anchor&correlation_id=corr-app-review&agent_id=app-engineering';
+const teamLeadAccountabilityReplayUrl =
+  '/accountability/replay?limit=10&window=60m&agent_id=team-lead';
 const workflowUrl = '/agents/app-engineering/workflow?limit=10&window=60m';
 const teamLeadWorkflowUrl = '/agents/team-lead/workflow?limit=10&window=60m';
 const teamLeadIncidentsUrl = '/agents/team-lead/incidents?limit=10&window=60m';
@@ -1346,6 +1352,84 @@ const crewOverviewSelectedCorrelationMemoryArtifactsFixture = {
   ]
 };
 
+function buildAccountabilityReplayFixture(url: string): AccountabilityReplayBundle {
+  const parsedUrl = new URL(url, 'http://localhost');
+  const agentId = parsedUrl.searchParams.get('agent_id') ?? 'app-engineering';
+  const correlationId = parsedUrl.searchParams.get('correlation_id');
+  const eventId = parsedUrl.searchParams.get('event_id');
+  const evidenceRef = parsedUrl.searchParams.get('evidence_ref');
+  const limit = Number(parsedUrl.searchParams.get('limit') ?? '10');
+  const windowValue = parsedUrl.searchParams.get('window') ?? '60m';
+  const summaryAgent = agentId === 'team-lead' ? 'Team Lead' : 'App Engineering Agent';
+  const summary = eventId
+    ? `${summaryAgent} accountability checkpoint bundle`
+    : `${summaryAgent} accountability replay bundle`;
+  const basisEventId = eventId ?? `evt-accountability-${agentId}`;
+
+  return {
+    generated_at: '2026-03-16T09:00:00.000Z',
+    query: {
+      ...(eventId ? { event_id: eventId } : {}),
+      ...(evidenceRef ? { evidence_ref: evidenceRef } : {}),
+      ...(correlationId ? { correlation_id: correlationId } : {}),
+      agent_id: agentId,
+      limit,
+      window: windowValue
+    },
+    accountability: {
+      basis: 'event_log_and_existing_read_models',
+      bounded_by: {
+        limit,
+        window: windowValue
+      },
+      event_count: 1,
+      interaction_count: 1,
+      artifact_count: 1,
+      participant_agent_ids: correlationId ? [agentId, 'team-lead'] : [agentId],
+      actor_ids: ['team-lead'],
+      evidence_refs: ['/tmp/evidence.md'],
+      source_kind_buckets: {
+        controller_event: 2
+      },
+      first_ts: '2026-03-16T08:50:00.000Z',
+      last_ts: '2026-03-16T08:58:00.000Z'
+    },
+    ledger: [
+      {
+        entry_type: 'event',
+        entry_id: basisEventId,
+        ts: '2026-03-16T08:50:00.000Z',
+        basis_event_ids: [basisEventId],
+        agent_id: agentId,
+        actor_id: 'team-lead',
+        source_kind: 'controller_event',
+        evidence_refs: ['/tmp/evidence.md'],
+        correlation_id: correlationId,
+        summary
+      }
+    ],
+    events: [
+      {
+        event_id: basisEventId,
+        ts: '2026-03-16T08:50:00.000Z',
+        agent_id: agentId,
+        actor_id: 'team-lead',
+        event_type: eventId ? 'replay_checkpoint' : 'peer_watch_alert_raised',
+        severity: 'orange',
+        current_state: agentId === 'team-lead' ? 'reviewing' : 'blocked',
+        location: agentId === 'team-lead' ? 'lead-desk' : 'meeting-zone',
+        summary,
+        correlation_id: correlationId,
+        counterparty_agent_ids: correlationId ? ['team-lead'] : [],
+        evidence_refs: ['/tmp/evidence.md'],
+        source_kind: 'controller_event'
+      }
+    ],
+    interactions: [],
+    memory_artifacts: []
+  };
+}
+
 function jsonResponse(body: unknown) {
   return new Response(JSON.stringify(body), {
     headers: { 'content-type': 'application/json' }
@@ -1439,6 +1523,10 @@ function resolveDefaultFetchResponse(url: string) {
   const selectedAgentTimelineResponse = resolveSelectedAgentTimelineResponse(url);
   if (selectedAgentTimelineResponse) {
     return selectedAgentTimelineResponse;
+  }
+
+  if (url.startsWith('/accountability/replay?')) {
+    return jsonResponse(buildAccountabilityReplayFixture(url));
   }
 
   if (url === workflowUrl) {
@@ -4884,6 +4972,112 @@ afterEach(() => {
     expect(postSelectionRequests).not.toContain(timelineUrl);
   });
 
+  it('loads selected-agent accountability replay bundles with bounded read-only GET anchors only after Replay / Correlation is active', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+    });
+
+    const requestsBeforeReplayTab = vi
+      .mocked(globalThis.fetch)
+      .mock.calls.map(([input]) => (typeof input === 'string' ? input : input.toString()));
+    expect(requestsBeforeReplayTab).not.toContain(appEngineeringReviewAccountabilityReplayUrl);
+
+    const fetchCallCountBeforeReplayTab = vi.mocked(globalThis.fetch).mock.calls.length;
+    const replayPanel = await selectSelectedAgentDrilldownTab(user, 'Replay / Correlation');
+    const replayBundleSection = (await within(replayPanel).findByRole('heading', { name: 'Replay Bundle' })).closest(
+      'section'
+    );
+    expect(replayBundleSection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(replayBundleSection!).getByText('App Engineering Agent accountability replay bundle')).toBeVisible();
+      expect(within(replayBundleSection!).getByText('Basis · event_log_and_existing_read_models')).toBeVisible();
+      expect(
+        within(replayBundleSection!).getByText(
+          'bounded_by · limit 10 · window 60m · generated_at 2026-03-16T09:00:00.000Z'
+        )
+      ).toBeVisible();
+      expect(within(replayBundleSection!).getByText('Ledger · 1 entries · derived/read-only')).toBeVisible();
+    });
+
+    const postReplayTabRequests = vi
+      .mocked(globalThis.fetch)
+      .mock.calls.slice(fetchCallCountBeforeReplayTab)
+      .map(([input]) => (typeof input === 'string' ? input : input.toString()));
+    const accountabilityReplayCalls = vi
+      .mocked(globalThis.fetch)
+      .mock.calls.filter(([input]) => {
+        const url = typeof input === 'string' ? input : input.toString();
+        return url.startsWith('/accountability/replay?');
+      });
+
+    expect(postReplayTabRequests).toContain(appEngineeringReviewAccountabilityReplayUrl);
+    expect(postReplayTabRequests.some((url) => url.includes('/dispatch'))).toBe(false);
+    expect(postReplayTabRequests.some((url) => url.includes('/commands'))).toBe(false);
+    expect(accountabilityReplayCalls.length).toBeGreaterThan(0);
+    expect(
+      accountabilityReplayCalls.every(([, init]) => !init || !('method' in init) || init.method === 'GET')
+    ).toBe(true);
+  });
+
+  it('keys selected-agent accountability replay bundles by selected agent and correlation to avoid stale bundle reuse', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user);
+    await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
+
+    let replayPanel = await selectSelectedAgentDrilldownTab(user, 'Replay / Correlation');
+    let replayBundleSection = (await within(replayPanel).findByRole('heading', { name: 'Replay Bundle' })).closest(
+      'section'
+    );
+    expect(replayBundleSection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(replayBundleSection!).getByText('App Engineering Agent accountability replay bundle')).toBeVisible();
+    });
+
+    await user.click(
+      within(replayPanel).getByRole('button', {
+        name: 'Select correlation participant agent team-lead'
+      })
+    );
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'Team Lead' })).toBeVisible();
+    });
+
+    const requestsBeforeTeamReplayTab = vi
+      .mocked(globalThis.fetch)
+      .mock.calls.map(([input]) => (typeof input === 'string' ? input : input.toString()));
+    expect(requestsBeforeTeamReplayTab).not.toContain(teamLeadAccountabilityReplayUrl);
+
+    replayPanel = await selectSelectedAgentDrilldownTab(user, 'Replay / Correlation');
+    replayBundleSection = (await within(replayPanel).findByRole('heading', { name: 'Replay Bundle' })).closest(
+      'section'
+    );
+    expect(replayBundleSection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(within(replayBundleSection!).getByText('Team Lead accountability replay bundle')).toBeVisible();
+      expect(
+        within(replayBundleSection!).queryByText('App Engineering Agent accountability replay bundle')
+      ).not.toBeInTheDocument();
+    });
+
+    const requestedUrls = vi
+      .mocked(globalThis.fetch)
+      .mock.calls.map(([input]) => (typeof input === 'string' ? input : input.toString()));
+    expect(requestedUrls).toContain(appEngineeringReviewAccountabilityReplayUrl);
+    expect(requestedUrls).toContain(teamLeadAccountabilityReplayUrl);
+  });
+
   it('opens a replay checkpoint event from shared memory without changing the selected agent or correlation', async () => {
     const replayCheckpointMemoryArtifacts = {
       ...selectedCorrelationMemoryArtifactsFixture,
@@ -5007,6 +5201,7 @@ afterEach(() => {
       .map(([input]) => (typeof input === 'string' ? input : input.toString()));
 
     expect(postCheckpointRequests).toContain(appEngineeringReviewSelectedTimelineCheckpointUrl);
+    expect(postCheckpointRequests).toContain(appEngineeringReviewAccountabilityReplayCheckpointUrl);
     expect(postCheckpointRequests).not.toContain(orangeAppEngineeringReviewSelectedTimelineCheckpointUrl);
     expect(postCheckpointRequests).not.toContain(timelineUrl);
     expect(postCheckpointRequests).not.toContain(reviewScopedTimelineUrl);

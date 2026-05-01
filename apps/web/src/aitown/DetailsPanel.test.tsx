@@ -2850,6 +2850,100 @@ describe('DetailsPanel accountability signals', () => {
     expect(collectorOnlyRecord).not.toHaveTextContent(/Replay checkpoint/);
   });
 
+  it('opens selected-agent replay bundle ledger basis events as replay checkpoints without changing scope', async () => {
+    const user = userEvent.setup();
+    const onOpenReplayCheckpoint = vi.fn();
+    const onSelectAgent = vi.fn();
+    const onSelectCorrelation = vi.fn();
+    const onFocusSharedMemoryArtifact = vi.fn();
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          onFocusSharedMemoryArtifact,
+          onOpenReplayCheckpoint,
+          onSelectAgent,
+          onSelectCorrelation,
+          selectedAgentDrilldownTab: 'replay',
+          selectedAgentAccountabilityReplay: buildAccountabilityReplayBundle(),
+          selectedAgentAccountabilityReplayError: null,
+          selectedAgentAccountabilityReplayState: 'ready'
+        })}
+      />
+    );
+
+    const section = screen.getByRole('heading', { name: 'Replay Bundle' }).closest('section');
+    expect(section).not.toBeNull();
+    const eventLedgerRecord = within(section!).getByText('Event-backed replay anchor').closest('li');
+    const collectorOnlyRecord = within(section!).getByText('Collector tmux preview artifact').closest('li');
+    expect(eventLedgerRecord).not.toBeNull();
+    expect(collectorOnlyRecord).not.toBeNull();
+
+    const replayCheckpointButton = within(eventLedgerRecord!).getByRole('button', {
+      name: 'Open replay checkpoint evt-replay-basis'
+    });
+    expect(replayCheckpointButton).toBeVisible();
+    expect(
+      within(collectorOnlyRecord!).queryByRole('button', {
+        name: /Open replay checkpoint/
+      })
+    ).not.toBeInTheDocument();
+
+    await user.click(replayCheckpointButton);
+
+    expect(onOpenReplayCheckpoint).toHaveBeenCalledWith('evt-replay-basis');
+    expect(onSelectAgent).not.toHaveBeenCalled();
+    expect(onSelectCorrelation).not.toHaveBeenCalled();
+    expect(onFocusSharedMemoryArtifact).not.toHaveBeenCalled();
+  });
+
+  it('suppresses blank and duplicate replay bundle ledger basis checkpoint ids', async () => {
+    const user = userEvent.setup();
+    const onOpenReplayCheckpoint = vi.fn();
+    const replayBundle = buildAccountabilityReplayBundle();
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          onOpenReplayCheckpoint,
+          selectedAgentDrilldownTab: 'replay',
+          selectedAgentAccountabilityReplay: {
+            ...replayBundle,
+            ledger: [
+              {
+                ...replayBundle.ledger[0],
+                basis_event_ids: [' evt-replay-basis ', 'evt-replay-basis', '', '   ', 'evt-second-basis']
+              }
+            ]
+          },
+          selectedAgentAccountabilityReplayError: null,
+          selectedAgentAccountabilityReplayState: 'ready'
+        })}
+      />
+    );
+
+    const section = screen.getByRole('heading', { name: 'Replay Bundle' }).closest('section');
+    expect(section).not.toBeNull();
+    const eventLedgerRecord = within(section!).getByText('Event-backed replay anchor').closest('li');
+    expect(eventLedgerRecord).not.toBeNull();
+
+    const replayCheckpointButtons = within(eventLedgerRecord!).getAllByRole('button', {
+      name: /Open replay checkpoint/
+    });
+    expect(replayCheckpointButtons.map((button) => button.textContent)).toEqual([
+      'evt-replay-basis',
+      'evt-second-basis'
+    ]);
+
+    await user.click(
+      within(eventLedgerRecord!).getByRole('button', {
+        name: 'Open replay checkpoint evt-second-basis'
+      })
+    );
+
+    expect(onOpenReplayCheckpoint).toHaveBeenCalledWith('evt-second-basis');
+  });
+
   it('links backed selected-agent replay bundle evidence refs to shared memory and leaves unbacked refs plain', async () => {
     const user = userEvent.setup();
     const onFocusSharedMemoryArtifact = vi.fn();

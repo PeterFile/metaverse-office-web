@@ -32,6 +32,7 @@ describe('browser smoke Playwright config', () => {
     const viteConfigSource = readFileSync(resolve(process.cwd(), 'vite.config.ts'), 'utf8');
 
     expect(viteConfigSource).toContain("'/timeline': {");
+    expect(viteConfigSource).toContain("'/accountability': {");
     expect(viteConfigSource).toContain("'/collectors': {");
     expect(viteConfigSource).toContain("'/memory': {");
     expect(viteConfigSource).toContain("'/peer-watch': {");

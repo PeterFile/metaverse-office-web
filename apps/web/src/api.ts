@@ -380,6 +380,8 @@ export async function fetchAccountabilityReplay(
     evidenceRef?: string;
     correlationId?: string;
     agentId?: string;
+    sourceKind?: string;
+    artifactKind?: string;
     signal?: AbortSignal;
   } = {}
 ): Promise<AccountabilityReplayBundle> {
@@ -399,6 +401,12 @@ export async function fetchAccountabilityReplay(
   }
   if (options.agentId) {
     params.set('agent_id', options.agentId);
+  }
+  if (options.sourceKind) {
+    params.set('source_kind', options.sourceKind);
+  }
+  if (options.artifactKind) {
+    params.set('artifact_kind', options.artifactKind);
   }
 
   const response = await fetch(resolveApiUrl(`/accountability/replay?${params.toString()}`), {

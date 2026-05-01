@@ -608,6 +608,8 @@ describe('read-only frontend/backend contract smoke', () => {
     const replay = await api.fetchAccountabilityReplay({
       agentId: 'app-engineering',
       correlationId: 'corr-contract',
+      sourceKind: 'controller_event',
+      artifactKind: 'evidence_ref',
       limit: 2,
       window: '60m'
     });
@@ -619,8 +621,10 @@ describe('read-only frontend/backend contract smoke', () => {
         pathname: '/accountability/replay',
         query: [
           ['agent_id', 'app-engineering'],
+          ['artifact_kind', 'evidence_ref'],
           ['correlation_id', 'corr-contract'],
           ['limit', '2'],
+          ['source_kind', 'controller_event'],
           ['window', '60m']
         ]
       }
@@ -1854,6 +1858,8 @@ function expectAccountabilityReplayContract(replay: AccountabilityReplayBundle) 
   expect(replay.query).toEqual({
     correlation_id: 'corr-contract',
     agent_id: 'app-engineering',
+    source_kind: 'controller_event',
+    artifact_kind: 'evidence_ref',
     limit: 2,
     window: '60m'
   });

@@ -170,6 +170,8 @@ describe('fetchAccountabilityReplay', () => {
               evidence_ref: '/tmp/evidence ref#1.md',
               correlation_id: 'corr replay',
               agent_id: 'app-engineering',
+              source_kind: 'workspace_file',
+              artifact_kind: 'evidence_ref',
               limit: 3,
               window: '15m'
             },
@@ -207,11 +209,13 @@ describe('fetchAccountabilityReplay', () => {
       eventId: 'evt app/review#1',
       evidenceRef: '/tmp/evidence ref#1.md',
       correlationId: 'corr replay',
-      agentId: 'app-engineering'
+      agentId: 'app-engineering',
+      sourceKind: 'workspace_file',
+      artifactKind: 'evidence_ref'
     });
 
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      '/accountability/replay?limit=3&window=15m&event_id=evt+app%2Freview%231&evidence_ref=%2Ftmp%2Fevidence+ref%231.md&correlation_id=corr+replay&agent_id=app-engineering',
+      '/accountability/replay?limit=3&window=15m&event_id=evt+app%2Freview%231&evidence_ref=%2Ftmp%2Fevidence+ref%231.md&correlation_id=corr+replay&agent_id=app-engineering&source_kind=workspace_file&artifact_kind=evidence_ref',
       expect.objectContaining({ signal: undefined })
     );
   });

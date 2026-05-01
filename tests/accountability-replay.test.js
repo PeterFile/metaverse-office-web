@@ -163,6 +163,52 @@ async function seedReplaySlice(store) {
   );
 }
 
+async function seedReplayFacetSlice(store) {
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_replay_facets_controller_latest',
+      ts: '2026-03-09T18:49:00.000Z',
+      eventType: 'agent_replied',
+      currentState: 'coding',
+      activeTask: 'Patch replay facets',
+      summary: 'Controller event should be filtered out by source kind',
+      correlationId: 'corr-replay-facets',
+      counterpartyAgentIds: ['team-lead'],
+      evidenceRefs: ['/tmp/replay-facets/controller.md']
+    })
+  );
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_replay_facets_workspace_todo',
+      ts: '2026-03-09T18:48:30.000Z',
+      eventType: 'agent_replied',
+      currentState: 'coding',
+      activeTask: 'Patch replay facets',
+      summary: 'Workspace todo artifact is newer but has the wrong artifact kind',
+      correlationId: 'corr-replay-facets',
+      counterpartyAgentIds: ['team-lead'],
+      evidenceRefs: ['/tmp/replay-facets/todo.md'],
+      sourceKind: 'workspace_file'
+    })
+  );
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_replay_facets_workspace_evidence',
+      ts: '2026-03-09T18:48:00.000Z',
+      eventType: 'agent_replied',
+      currentState: 'coding',
+      activeTask: 'Patch replay facets',
+      summary: 'Workspace evidence artifact survives replay facet filters',
+      correlationId: 'corr-replay-facets',
+      counterpartyAgentIds: ['team-lead'],
+      evidenceRefs: ['/tmp/replay-facets/evidence.md'],
+      sourceKind: 'workspace_file'
+    })
+  );
+}
+
 async function countStoreLines(storeFile) {
   const content = await readFile(storeFile, 'utf8');
   return content.split('\n').filter((line) => line.trim()).length;
@@ -321,4 +367,44 @@ test('GET /accountability/replay applies correlation_id, agent_id, limit, and wi
   assert.equal(body.accountability.first_ts, '2026-03-09T18:49:00.000Z');
   assert.equal(body.accountability.last_ts, '2026-03-09T18:49:00.000Z');
   assert.ok(!body.accountability.evidence_refs.includes('/tmp/replay-old.md'));
+});
+
+test('GET /accountability/replay accepts evidence facets and filters memory artifacts before limit', async (t) => {
+  const { baseUrl, store, storeFile } = await createHarness(t);
+  await seedReplayFacetSlice(store);
+  const beforeLineCount = await countStoreLines(storeFile);
+  let mutationCallCount = 0;
+
+  for (const methodName of ['appendEvent', 'appendHeartbeat', 'appendCollectorReport']) {
+    const originalMethod = store[methodName].bind(store);
+    store[methodName] = async (...args) => {
+      mutationCallCount += 1;
+      return originalMethod(...args);
+    };
+  }
+
+  const { response, body } = await requestJson(
+    `${baseUrl}/accountability/replay?correlation_id=corr-replay-facets&source_kind=${encodeURIComponent(' workspace_file ')}&artifact_kind=${encodeURIComponent(' evidence_ref ')}&limit=1&window=15m`
+  );
+  const afterLineCount = await countStoreLines(storeFile);
+
+  assert.equal(response.status, 200);
+  assert.equal(afterLineCount, beforeLineCount);
+  assert.equal(mutationCallCount, 0);
+  assert.deepEqual(body.query, {
+    correlation_id: 'corr-replay-facets',
+    source_kind: 'workspace_file',
+    artifact_kind: 'evidence_ref',
+    limit: 1,
+    window: '15m'
+  });
+  assert.deepEqual(body.events.map((event) => event.event_id), [
+    'evt_replay_facets_workspace_todo'
+  ]);
+  assert.ok(body.events.every((event) => event.source_kind === 'workspace_file'));
+  assert.deepEqual(body.memory_artifacts.map((artifact) => artifact.artifact_ref), [
+    '/tmp/replay-facets/evidence.md'
+  ]);
+  assert.equal(body.memory_artifacts[0].artifact_kind, 'evidence_ref');
+  assert.deepEqual(body.memory_artifacts[0].source_kinds, ['workspace_file']);
 });

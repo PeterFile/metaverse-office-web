@@ -12,6 +12,7 @@ import type {
   DataQuality,
   IncidentSnapshot,
   PhaseSignals,
+  RuntimeEvidence,
   StalenessDerived,
   TrailEntry,
   WatchEdgeSnapshot,
@@ -120,6 +121,7 @@ export function projectWorldState(input: ProjectorInput): WorldState {
 
   for (const oa of overview.agents) {
     const workflow = workflows.get(oa.agent_id) ?? null;
+    const runtimeEvidence = buildAgentRuntimeEvidence(oa.agent_id, workflow, runtimeIncidentFeedItems, now);
     const wa = projectAgent(
       oa,
       workflow,
@@ -127,6 +129,7 @@ export function projectWorldState(input: ProjectorInput): WorldState {
       activeIncidentCountsByAgent.get(oa.agent_id) ?? 0,
       activeIncidentMaxSeverityByAgent.get(oa.agent_id) ?? 'normal',
       incidentFeedPhaseSignalsByAgent.get(oa.agent_id) ?? null,
+      runtimeEvidence,
       now
     );
     agents.set(wa.agent_id, wa);
@@ -182,6 +185,7 @@ function projectAgent(
   incidentFeedOpenCount: number,
   incidentFeedMaxSeverity: Severity,
   incidentFeedPhaseSignals: IncidentFeedPhaseSignals | null,
+  runtimeEvidence: RuntimeEvidence,
   now: string
 ): WorldAgent {
   const signals = extractPhaseSignals(oa, workflow, incidentFeedOpenCount, incidentFeedPhaseSignals);
@@ -225,6 +229,7 @@ function projectAgent(
     recent_trail: recentTrail,
     open_alert_count: openAlertCount,
     has_open_incidents: hasOpenIncidents,
+    runtime_evidence: runtimeEvidence,
   };
 }
 
@@ -880,6 +885,55 @@ function isRuntimeEffectiveBackfillIncident(incident: WorkflowIncident, now: str
   }
 
   return false;
+}
+
+function buildAgentRuntimeEvidence(
+  agentId: string,
+  workflow: AgentWorkflow | null,
+  runtimeIncidentFeedItems: WorkflowIncident[],
+  now: string
+): RuntimeEvidence {
+  if (workflow) {
+    return {
+      source: 'workflow',
+      degraded_reasons: [],
+      incident_ids: [],
+      source_kinds: [],
+    };
+  }
+
+  const evidenceIncidents = runtimeIncidentFeedItems
+    .filter((incident) => incident.agent_id === agentId && isRuntimeEffectiveBackfillIncident(incident, now))
+    .sort(compareIncidentsByTimestampThenId);
+
+  if (evidenceIncidents.length === 0) {
+    return {
+      source: 'overview_only',
+      degraded_reasons: [],
+      incident_ids: [],
+      source_kinds: [],
+    };
+  }
+
+  return {
+    source: 'incident_feed_backfill',
+    degraded_reasons: ['workflow partial'],
+    incident_ids: uniqueStrings(evidenceIncidents.map((incident) => incident.incident_id)),
+    source_kinds: uniqueStrings(evidenceIncidents.map((incident) => incident.source_kind)).sort(),
+  };
+}
+
+function compareIncidentsByTimestampThenId(a: WorkflowIncident, b: WorkflowIncident): number {
+  const timestampDelta = Date.parse(a.ts) - Date.parse(b.ts);
+  if (timestampDelta !== 0) {
+    return timestampDelta;
+  }
+
+  return a.incident_id.localeCompare(b.incident_id);
+}
+
+function uniqueStrings(values: string[]): string[] {
+  return Array.from(new Set(values.filter((value) => value.trim().length > 0)));
 }
 
 // ── Data quality ──

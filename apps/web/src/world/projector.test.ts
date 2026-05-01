@@ -333,6 +333,69 @@ describe('projectWorldState', () => {
     expect(edge?.risk_level).toBe('orange');
   });
 
+  it('records agent-level incident-feed backfill evidence without fabricating workflow provenance', () => {
+    const feed: IncidentFeedResponse = {
+      items: [
+        {
+          incident_id: 'inc-alert',
+          kind: 'peer_watch_alert',
+          ts: '2026-03-14T10:00:00Z',
+          agent_id: 'app-engineering',
+          actor_id: 'team-lead',
+          status: 'open',
+          severity: 'orange',
+          summary: 'Peer-watch alert raised',
+          correlation_id: 'corr-1',
+          evidence_refs: [],
+          counterparty_agent_ids: [],
+          source_kind: 'controller_event',
+        },
+        {
+          incident_id: 'inc-active-2',
+          kind: 'handoff',
+          ts: '2026-03-14T10:01:00Z',
+          agent_id: 'app-engineering',
+          actor_id: 'team-lead',
+          status: 'waiting',
+          severity: 'yellow',
+          summary: 'Handoff waiting',
+          correlation_id: 'corr-2',
+          evidence_refs: [],
+          counterparty_agent_ids: ['team-lead'],
+          source_kind: 'controller_event',
+        },
+        {
+          incident_id: 'inc-resolved-noise',
+          kind: 'reboot',
+          ts: '2026-03-14T08:00:00Z',
+          agent_id: 'app-engineering',
+          actor_id: 'team-lead',
+          status: 'completed',
+          severity: 'red',
+          summary: 'Old completed reboot should not justify backfill',
+          correlation_id: 'corr-old',
+          evidence_refs: [],
+          counterparty_agent_ids: [],
+          source_kind: 'collector_snapshot',
+        },
+      ],
+    };
+
+    const world = projectWorldState({
+      overview: makeOverview(),
+      workflows: new Map(),
+      incidentFeed: feed,
+      now: NOW,
+    });
+
+    expect(world.agents.get('app-engineering')?.runtime_evidence).toEqual({
+      source: 'incident_feed_backfill',
+      degraded_reasons: ['workflow partial'],
+      incident_ids: ['inc-alert', 'inc-active-2'],
+      source_kinds: ['controller_event'],
+    });
+  });
+
   it('does not backfill crew runtime risk from a saturated incident feed window', () => {
     const feed: IncidentFeedResponse = {
       items: [

@@ -44,6 +44,8 @@ export interface RuntimeEvidence {
   degraded_reasons: string[];
   incident_ids: string[];
   source_kinds: string[];
+  correlation_ids: string[];
+  evidence_refs: string[];
 }
 
 // ── World Agent ──

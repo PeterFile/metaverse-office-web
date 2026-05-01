@@ -333,7 +333,7 @@ describe('projectWorldState', () => {
     expect(edge?.risk_level).toBe('orange');
   });
 
-  it('records agent-level incident-feed backfill evidence without fabricating workflow provenance', () => {
+  it('records agent-level incident-feed backfill provenance only from effective incidents', () => {
     const feed: IncidentFeedResponse = {
       items: [
         {
@@ -345,8 +345,8 @@ describe('projectWorldState', () => {
           status: 'open',
           severity: 'orange',
           summary: 'Peer-watch alert raised',
-          correlation_id: 'corr-1',
-          evidence_refs: [],
+          correlation_id: ' corr-a ',
+          evidence_refs: [' /tmp/a.md ', ' ', '/tmp/a.md'],
           counterparty_agent_ids: [],
           source_kind: 'controller_event',
         },
@@ -359,13 +359,27 @@ describe('projectWorldState', () => {
           status: 'waiting',
           severity: 'yellow',
           summary: 'Handoff waiting',
-          correlation_id: 'corr-2',
-          evidence_refs: [],
+          correlation_id: 'corr-b',
+          evidence_refs: ['tmux://session/0.1', '/tmp/a.md'],
           counterparty_agent_ids: ['team-lead'],
           source_kind: 'controller_event',
         },
         {
           incident_id: 'inc-resolved-noise',
+          kind: 'peer_watch_alert',
+          ts: '2026-03-14T10:02:00Z',
+          agent_id: 'app-engineering',
+          actor_id: 'team-lead',
+          status: 'resolved',
+          severity: 'orange',
+          summary: 'Resolved alert should not justify runtime backfill provenance',
+          correlation_id: 'corr-resolved',
+          evidence_refs: ['/tmp/resolved.md'],
+          counterparty_agent_ids: [],
+          source_kind: 'controller_event',
+        },
+        {
+          incident_id: 'inc-completed-stale',
           kind: 'reboot',
           ts: '2026-03-14T08:00:00Z',
           agent_id: 'app-engineering',
@@ -374,7 +388,7 @@ describe('projectWorldState', () => {
           severity: 'red',
           summary: 'Old completed reboot should not justify backfill',
           correlation_id: 'corr-old',
-          evidence_refs: [],
+          evidence_refs: ['/tmp/old.md'],
           counterparty_agent_ids: [],
           source_kind: 'collector_snapshot',
         },
@@ -393,6 +407,8 @@ describe('projectWorldState', () => {
       degraded_reasons: ['workflow partial'],
       incident_ids: ['inc-alert', 'inc-active-2'],
       source_kinds: ['controller_event'],
+      correlation_ids: ['corr-a', 'corr-b'],
+      evidence_refs: ['/tmp/a.md', 'tmux://session/0.1'],
     });
   });
 
@@ -463,7 +479,7 @@ describe('projectWorldState', () => {
           severity: 'red',
           summary: 'Feed reboot requested',
           correlation_id: 'corr-feed',
-          evidence_refs: [],
+          evidence_refs: ['/tmp/feed.md'],
           counterparty_agent_ids: [],
           source_kind: 'controller_event',
         },
@@ -485,6 +501,14 @@ describe('projectWorldState', () => {
     expect(agent.zone).toBe('desk-app-engineering');
     expect(agent.severity).toBe('normal');
     expect(agent.severity_reason).toBe('reported');
+    expect(agent.runtime_evidence).toEqual({
+      source: 'workflow',
+      degraded_reasons: [],
+      incident_ids: [],
+      source_kinds: [],
+      correlation_ids: [],
+      evidence_refs: [],
+    });
   });
 
   it('ignores stale active feed entries when a newer incident lifecycle record has resolved or completed', () => {

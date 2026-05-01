@@ -289,6 +289,23 @@ describe('SceneStatusLegend', () => {
               degraded_reasons: ['workflow partial'],
               incident_ids: ['inc-alert', 'inc-active-2'],
               source_kinds: ['controller_event'],
+              correlation_ids: ['corr-a', 'corr-b'],
+              evidence_refs: ['/tmp/a.md', 'tmux://session/0.1'],
+            },
+          }),
+        ],
+        [
+          'support-agent',
+          makeWorldAgent({
+            agent_id: 'support-agent',
+            display_name: 'Support Agent',
+            runtime_evidence: {
+              source: 'incident_feed_backfill',
+              degraded_reasons: ['workflow partial'],
+              incident_ids: ['inc-support'],
+              source_kinds: ['controller_event'],
+              correlation_ids: [' '],
+              evidence_refs: [],
             },
           }),
         ],
@@ -310,8 +327,13 @@ describe('SceneStatusLegend', () => {
       'Degraded · 3 evidence gaps · last overview 2026-03-14T09:55:00Z · overview unavailable; incident feed unavailable; workflow partial'
     );
     expect(items[1]).toHaveTextContent(
-      'Incident-feed backfill · App Engineering Agent · incidents inc-alert, inc-active-2 · sources controller_event · workflow partial'
+      'Incident-feed backfill · App Engineering Agent · incidents inc-alert, inc-active-2 · sources controller_event · correlations corr-a, corr-b · evidence refs /tmp/a.md, tmux://session/0.1 · workflow partial'
     );
+    expect(items[2]).toHaveTextContent(
+      'Incident-feed backfill · Support Agent · incidents inc-support · sources controller_event · workflow partial'
+    );
+    expect(items[2]).not.toHaveTextContent('correlations');
+    expect(items[2]).not.toHaveTextContent('evidence refs');
     expect(screen.getByText('Data quality')).toBeVisible();
   });
 });

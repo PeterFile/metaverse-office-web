@@ -899,6 +899,8 @@ function buildAgentRuntimeEvidence(
       degraded_reasons: [],
       incident_ids: [],
       source_kinds: [],
+      correlation_ids: [],
+      evidence_refs: [],
     };
   }
 
@@ -912,6 +914,8 @@ function buildAgentRuntimeEvidence(
       degraded_reasons: [],
       incident_ids: [],
       source_kinds: [],
+      correlation_ids: [],
+      evidence_refs: [],
     };
   }
 
@@ -920,6 +924,8 @@ function buildAgentRuntimeEvidence(
     degraded_reasons: ['workflow partial'],
     incident_ids: uniqueStrings(evidenceIncidents.map((incident) => incident.incident_id)),
     source_kinds: uniqueStrings(evidenceIncidents.map((incident) => incident.source_kind)).sort(),
+    correlation_ids: uniqueTrimmedStrings(evidenceIncidents.map((incident) => incident.correlation_id)),
+    evidence_refs: uniqueTrimmedStrings(evidenceIncidents.flatMap((incident) => incident.evidence_refs)),
   };
 }
 
@@ -934,6 +940,23 @@ function compareIncidentsByTimestampThenId(a: WorkflowIncident, b: WorkflowIncid
 
 function uniqueStrings(values: string[]): string[] {
   return Array.from(new Set(values.filter((value) => value.trim().length > 0)));
+}
+
+function uniqueTrimmedStrings(values: Array<string | null | undefined>): string[] {
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+
+  for (const value of values) {
+    const trimmed = value?.trim() ?? '';
+    if (!trimmed || seen.has(trimmed)) {
+      continue;
+    }
+
+    seen.add(trimmed);
+    normalized.push(trimmed);
+  }
+
+  return normalized;
 }
 
 // ── Data quality ──

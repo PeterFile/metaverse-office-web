@@ -51,4 +51,58 @@ describe('getHubFocusableElements', () => {
       )
     ).toEqual(['Jump to shared memory artifact /tmp/evidence.md']);
   });
+
+  it('skips focusables inside inert ancestors while keeping enabled siblings', () => {
+    document.body.innerHTML = `
+      <section>
+        <div inert>
+          <button aria-label="Suppressed by inert">Suppressed by inert</button>
+          <a href="#inert-link" aria-label="Inert link">Inert link</a>
+        </div>
+        <button aria-label="Visible sibling">Visible sibling</button>
+      </section>
+    `;
+
+    expect(
+      getHubFocusableElements(document.body).map(
+        (element) => element.getAttribute('aria-label') ?? element.textContent?.trim() ?? element.tagName.toLowerCase()
+      )
+    ).toEqual(['Visible sibling']);
+  });
+
+  it('skips focusables inside aria-hidden ancestors while keeping enabled siblings', () => {
+    document.body.innerHTML = `
+      <section>
+        <div aria-hidden="true">
+          <button aria-label="Suppressed by aria-hidden">Suppressed by aria-hidden</button>
+          <a href="#hidden-link" aria-label="Aria hidden link">Aria hidden link</a>
+        </div>
+        <button aria-label="Visible sibling">Visible sibling</button>
+      </section>
+    `;
+
+    expect(
+      getHubFocusableElements(document.body).map(
+        (element) => element.getAttribute('aria-label') ?? element.textContent?.trim() ?? element.tagName.toLowerCase()
+      )
+    ).toEqual(['Visible sibling']);
+  });
+
+  it('skips controls suppressed by disabled fieldset containment while keeping enabled siblings', () => {
+    document.body.innerHTML = `
+      <section>
+        <fieldset disabled>
+          <button aria-label="Suppressed by disabled fieldset">Suppressed by disabled fieldset</button>
+          <input aria-label="Suppressed input" />
+        </fieldset>
+        <button aria-label="Visible sibling">Visible sibling</button>
+      </section>
+    `;
+
+    expect(
+      getHubFocusableElements(document.body).map(
+        (element) => element.getAttribute('aria-label') ?? element.textContent?.trim() ?? element.tagName.toLowerCase()
+      )
+    ).toEqual(['Visible sibling']);
+  });
 });

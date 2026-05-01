@@ -27,11 +27,20 @@ function isHiddenBySelectedAgentDrilldown(element: HTMLElement) {
 }
 
 export function isHubElementVisible(element: HTMLElement) {
+  if (element.matches(':disabled')) {
+    return false;
+  }
+
   const win = element.ownerDocument.defaultView;
   let current: HTMLElement | null = element;
 
   while (current) {
-    if (current.hidden || current.getAttribute('aria-hidden') === 'true' || isHiddenBySelectedAgentDrilldown(current)) {
+    if (
+      current.hidden ||
+      current.hasAttribute('inert') ||
+      current.getAttribute('aria-hidden') === 'true' ||
+      isHiddenBySelectedAgentDrilldown(current)
+    ) {
       return false;
     }
 

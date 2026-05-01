@@ -1,5 +1,5 @@
 import { useWorld } from '../context/WorldContext';
-import { SEVERITY_EMOJI, selectDataQualitySummary, selectHotZones } from '../world/selectors';
+import { SEVERITY_EMOJI, selectDataQualitySummary, selectHotZones, selectRuntimeBackfillEvidence } from '../world/selectors';
 import type { Severity, WorldState } from '../world/types';
 
 import { SCENE_AGENT_STATUS_LEGEND } from './agentStatusBadge';
@@ -59,6 +59,26 @@ function formatDataQualitySummary(degradedReasonCount: number, lastOverviewAt: s
   return parts.join(' · ');
 }
 
+function formatRuntimeBackfillEvidence(
+  displayName: string,
+  incidentIds: string[],
+  sourceKinds: string[],
+  degradedReasons: string[]
+): string {
+  const parts = [`Incident-feed backfill · ${displayName}`];
+  if (incidentIds.length > 0) {
+    parts.push(`incidents ${incidentIds.join(', ')}`);
+  }
+  if (sourceKinds.length > 0) {
+    parts.push(`sources ${sourceKinds.join(', ')}`);
+  }
+  if (degradedReasons.length > 0) {
+    parts.push(degradedReasons.join('; '));
+  }
+
+  return parts.join(' · ');
+}
+
 type SceneStatusLegendProps = {
   onFocusWorldZone?: (zoneId: string) => void;
   world?: WorldState | null;
@@ -69,6 +89,7 @@ export function SceneStatusLegend({ onFocusWorldZone, world: providedWorld }: Sc
   const world = providedWorld ?? contextWorld;
   const hotZones = selectHotZones(world);
   const dataQualitySummary = selectDataQualitySummary(world);
+  const runtimeBackfillEvidence = selectRuntimeBackfillEvidence(world);
 
   return (
     <div id="scene-status-legend" className="aitown-status-legend">
@@ -143,25 +164,42 @@ export function SceneStatusLegend({ onFocusWorldZone, world: providedWorld }: Sc
         </>
       ) : null}
 
-      {dataQualitySummary ? (
+      {dataQualitySummary || runtimeBackfillEvidence.length > 0 ? (
         <>
           <span className="aitown-status-legend__title">Data quality</span>
           <ul className="aitown-status-legend__items" aria-label="Data quality legend">
-            <li className="aitown-status-legend__item">
-              <span className="aitown-status-legend__token" aria-hidden="true">
-                ⚠
-              </span>
-              <span>
-                <strong>Degraded</strong>
-                {' · '}
-                {formatDataQualitySummary(
-                  dataQualitySummary.degraded_reasons.length,
-                  dataQualitySummary.last_overview_at
-                )}
-                {' · '}
-                {dataQualitySummary.degraded_reasons.join('; ')}
-              </span>
-            </li>
+            {dataQualitySummary ? (
+              <li className="aitown-status-legend__item">
+                <span className="aitown-status-legend__token" aria-hidden="true">
+                  ⚠
+                </span>
+                <span>
+                  <strong>Degraded</strong>
+                  {' · '}
+                  {formatDataQualitySummary(
+                    dataQualitySummary.degraded_reasons.length,
+                    dataQualitySummary.last_overview_at
+                  )}
+                  {' · '}
+                  {dataQualitySummary.degraded_reasons.join('; ')}
+                </span>
+              </li>
+            ) : null}
+            {runtimeBackfillEvidence.map((evidence) => (
+              <li key={evidence.agent_id} className="aitown-status-legend__item">
+                <span className="aitown-status-legend__token" aria-hidden="true">
+                  ⓘ
+                </span>
+                <span>
+                  {formatRuntimeBackfillEvidence(
+                    evidence.display_name,
+                    evidence.incident_ids,
+                    evidence.source_kinds,
+                    evidence.degraded_reasons
+                  )}
+                </span>
+              </li>
+            ))}
           </ul>
         </>
       ) : null}

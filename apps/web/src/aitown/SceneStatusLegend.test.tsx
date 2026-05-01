@@ -280,6 +280,19 @@ describe('SceneStatusLegend', () => {
 
   it('renders a degraded data-quality section when evidence coverage is incomplete', async () => {
     const world = makeWorldState({
+      agents: new Map([
+        [
+          'app-engineering',
+          makeWorldAgent({
+            runtime_evidence: {
+              source: 'incident_feed_backfill',
+              degraded_reasons: ['workflow partial'],
+              incident_ids: ['inc-alert', 'inc-active-2'],
+              source_kinds: ['controller_event'],
+            },
+          }),
+        ],
+      ]),
       data_quality: {
         overview_available: false,
         workflow_agent_ids: ['app-engineering'],
@@ -292,9 +305,13 @@ describe('SceneStatusLegend', () => {
     renderLegend(world);
 
     const dataQualityList = await screen.findByRole('list', { name: 'Data quality legend' });
-    expect(screen.getByText('Data quality')).toBeVisible();
-    expect(within(dataQualityList).getByRole('listitem')).toHaveTextContent(
+    const items = within(dataQualityList).getAllByRole('listitem');
+    expect(items[0]).toHaveTextContent(
       'Degraded · 3 evidence gaps · last overview 2026-03-14T09:55:00Z · overview unavailable; incident feed unavailable; workflow partial'
     );
+    expect(items[1]).toHaveTextContent(
+      'Incident-feed backfill · App Engineering Agent · incidents inc-alert, inc-active-2 · sources controller_event · workflow partial'
+    );
+    expect(screen.getByText('Data quality')).toBeVisible();
   });
 });

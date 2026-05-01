@@ -8,6 +8,7 @@ import {
   selectDataQualitySummary,
   selectGlobalSeverity,
   selectHotZones,
+  selectRuntimeBackfillEvidence,
   selectWatchEdgeRisk,
 } from './selectors';
 import type { WatchEdgeSnapshot, WorldAgent, WorldState, ZoneSnapshot } from './types';
@@ -203,6 +204,98 @@ describe('selectDataQualitySummary', () => {
       degraded_reasons: ['overview unavailable', 'incident feed unavailable', 'workflow partial'],
       last_overview_at: '2026-03-14T09:55:00Z',
     });
+  });
+});
+
+describe('selectRuntimeBackfillEvidence', () => {
+  it('returns agent-level incident-feed backfill evidence in deterministic order', () => {
+    const world = makeWorldState({
+      agents: new Map<string, WorldAgent>([
+        [
+          'z-agent',
+          makeWorldAgent({
+            agent_id: 'z-agent',
+            display_name: 'Z Agent',
+            runtime_evidence: {
+              source: 'incident_feed_backfill',
+              degraded_reasons: ['workflow partial'],
+              incident_ids: ['inc-z'],
+              source_kinds: ['controller_event'],
+            },
+          }),
+        ],
+        [
+          'a-agent',
+          makeWorldAgent({
+            agent_id: 'a-agent',
+            display_name: 'A Agent',
+            runtime_evidence: {
+              source: 'incident_feed_backfill',
+              degraded_reasons: ['workflow partial'],
+              incident_ids: ['inc-a', 'inc-b'],
+              source_kinds: ['collector_snapshot', 'controller_event'],
+            },
+          }),
+        ],
+        [
+          'workflow-agent',
+          makeWorldAgent({
+            agent_id: 'workflow-agent',
+            display_name: 'Workflow Agent',
+            runtime_evidence: {
+              source: 'workflow',
+              degraded_reasons: [],
+              incident_ids: [],
+              source_kinds: [],
+            },
+          }),
+        ],
+      ]),
+    });
+
+    expect(selectRuntimeBackfillEvidence(world)).toEqual([
+      {
+        agent_id: 'a-agent',
+        display_name: 'A Agent',
+        degraded_reasons: ['workflow partial'],
+        incident_ids: ['inc-a', 'inc-b'],
+        source_kinds: ['collector_snapshot', 'controller_event'],
+      },
+      {
+        agent_id: 'z-agent',
+        display_name: 'Z Agent',
+        degraded_reasons: ['workflow partial'],
+        incident_ids: ['inc-z'],
+        source_kinds: ['controller_event'],
+      },
+    ]);
+  });
+
+  it('falls back quietly when world data has no incident-feed backfill evidence', () => {
+    expect(selectRuntimeBackfillEvidence(null)).toEqual([]);
+    expect(selectRuntimeBackfillEvidence(makeWorldState())).toEqual([]);
+  });
+
+  it('suppresses incident-feed backfill rows that lack real incident ids or source kinds', () => {
+    const world = makeWorldState({
+      agents: new Map<string, WorldAgent>([
+        [
+          'claimed-only',
+          makeWorldAgent({
+            agent_id: 'claimed-only',
+            display_name: 'Claimed Only',
+            runtime_evidence: {
+              source: 'incident_feed_backfill',
+              degraded_reasons: ['workflow partial'],
+              incident_ids: [],
+              source_kinds: [],
+            },
+          }),
+        ],
+      ]),
+    });
+
+    expect(selectRuntimeBackfillEvidence(world)).toEqual([]);
   });
 });
 

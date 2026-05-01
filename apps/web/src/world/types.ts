@@ -36,6 +36,16 @@ export interface StalenessDerived {
   last_meaningful_output_at: string | null;
 }
 
+// ── Runtime Evidence Transparency ──
+export type RuntimeEvidenceSource = 'workflow' | 'incident_feed_backfill' | 'overview_only';
+
+export interface RuntimeEvidence {
+  source: RuntimeEvidenceSource;
+  degraded_reasons: string[];
+  incident_ids: string[];
+  source_kinds: string[];
+}
+
 // ── World Agent ──
 export interface WorldAgent {
   agent_id: string;
@@ -57,6 +67,7 @@ export interface WorldAgent {
   recent_trail: TrailEntry[];
   open_alert_count: number;
   has_open_incidents: boolean;
+  runtime_evidence?: RuntimeEvidence;
 }
 
 // ── Zone Snapshot ──

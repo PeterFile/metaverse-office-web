@@ -48,6 +48,14 @@ export interface DataQualitySummary {
   last_overview_at: string | null;
 }
 
+export interface RuntimeBackfillEvidenceSummary {
+  agent_id: string;
+  display_name: string;
+  degraded_reasons: string[];
+  incident_ids: string[];
+  source_kinds: string[];
+}
+
 // ── Single agent ──
 
 export function selectAgentLabel(agent: WorldAgent): string {
@@ -135,6 +143,40 @@ export function selectDataQualitySummary(
     degraded_reasons: normalizedReasons,
     last_overview_at: world.data_quality.last_overview_at,
   };
+}
+
+export function selectRuntimeBackfillEvidence(
+  world: WorldState | null | undefined
+): RuntimeBackfillEvidenceSummary[] {
+  if (!world) {
+    return [];
+  }
+
+  const summaries: RuntimeBackfillEvidenceSummary[] = [];
+  for (const [, agent] of world.agents) {
+    const evidence = agent.runtime_evidence;
+    if (
+      !evidence ||
+      evidence.source !== 'incident_feed_backfill' ||
+      evidence.incident_ids.length === 0 ||
+      evidence.source_kinds.length === 0
+    ) {
+      continue;
+    }
+
+    summaries.push({
+      agent_id: agent.agent_id,
+      display_name: agent.display_name,
+      degraded_reasons: [...evidence.degraded_reasons],
+      incident_ids: [...evidence.incident_ids],
+      source_kinds: [...evidence.source_kinds],
+    });
+  }
+
+  return summaries.sort(
+    (left, right) =>
+      left.display_name.localeCompare(right.display_name) || left.agent_id.localeCompare(right.agent_id)
+  );
 }
 
 export function selectHotZones(

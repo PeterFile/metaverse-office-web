@@ -2850,6 +2850,112 @@ describe('DetailsPanel accountability signals', () => {
     expect(collectorOnlyRecord).not.toHaveTextContent(/Replay checkpoint/);
   });
 
+  it('links backed selected-agent replay bundle evidence refs to shared memory and leaves unbacked refs plain', async () => {
+    const user = userEvent.setup();
+    const onFocusSharedMemoryArtifact = vi.fn();
+    const onSelectAgent = vi.fn();
+    const onSelectCorrelation = vi.fn();
+    const replayBundle = buildAccountabilityReplayBundle();
+    const currentOnlyArtifactRef = 'artifact/current-only';
+    const missingSummaryEvidenceRef = '/evidence/replay-missing.md';
+    const missingLedgerEvidenceRef = '/evidence/replay-ledger-missing.md';
+    const memoryArtifacts: MemoryArtifactIndex = {
+      ...buildMemoryArtifacts(),
+      items: [
+        ...buildMemoryArtifacts().items,
+        {
+          artifact_ref: currentOnlyArtifactRef,
+          artifact_kind: 'evidence_ref',
+          file_name: 'current-only.md',
+          first_seen_at: '2026-03-16T08:49:00.000Z',
+          last_seen_at: '2026-03-16T08:58:00.000Z',
+          mention_count: 1,
+          agent_ids: ['app-engineering'],
+          correlation_ids: ['corr-app-review'],
+          source_kinds: ['controller_event'],
+          latest_summary: 'Current shared-memory replay anchor',
+          latest_event_type: 'workflow_event',
+          collector_last_modified_at: '2026-03-16T08:58:00.000Z'
+        }
+      ]
+    };
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          memoryArtifacts,
+          onFocusSharedMemoryArtifact,
+          onSelectAgent,
+          onSelectCorrelation,
+          selectedAgentDrilldownTab: 'replay',
+          selectedAgentAccountabilityReplay: {
+            ...replayBundle,
+            accountability: {
+              ...replayBundle.accountability,
+              evidence_refs: ['/evidence/replay.md', currentOnlyArtifactRef, missingSummaryEvidenceRef]
+            },
+            ledger: [
+              {
+                ...replayBundle.ledger[0],
+                evidence_refs: ['/evidence/replay.md', missingLedgerEvidenceRef]
+              },
+              ...replayBundle.ledger.slice(1)
+            ]
+          },
+          selectedAgentAccountabilityReplayError: null,
+          selectedAgentAccountabilityReplayState: 'ready'
+        })}
+      />
+    );
+
+    const section = screen.getByRole('heading', { name: 'Replay Bundle' }).closest('section');
+    expect(section).not.toBeNull();
+    const summaryRecord = within(section!).getByText('Replay bundle summary').closest('li');
+    const ledgerRecord = within(section!).getByText('Event-backed replay anchor').closest('li');
+    expect(summaryRecord).not.toBeNull();
+    expect(ledgerRecord).not.toBeNull();
+
+    expect(
+      within(summaryRecord!).getByRole('button', {
+        name: 'Jump to replay bundle evidence ref /evidence/replay.md'
+      })
+    ).toHaveTextContent('/evidence/replay.md');
+    expect(
+      within(summaryRecord!).getByRole('button', {
+        name: `Jump to replay bundle evidence ref ${currentOnlyArtifactRef}`
+      })
+    ).toHaveTextContent(currentOnlyArtifactRef);
+    expect(
+      within(summaryRecord!).queryByRole('button', {
+        name: `Jump to replay bundle evidence ref ${missingSummaryEvidenceRef}`
+      })
+    ).not.toBeInTheDocument();
+    expect(summaryRecord!).toHaveTextContent(
+      `Evidence · /evidence/replay.md, ${currentOnlyArtifactRef}, ${missingSummaryEvidenceRef}`
+    );
+    expect(
+      within(ledgerRecord!).getByRole('button', {
+        name: 'Jump to replay bundle evidence ref /evidence/replay.md'
+      })
+    ).toHaveTextContent('/evidence/replay.md');
+    expect(
+      within(ledgerRecord!).queryByRole('button', {
+        name: `Jump to replay bundle evidence ref ${missingLedgerEvidenceRef}`
+      })
+    ).not.toBeInTheDocument();
+    expect(ledgerRecord!).toHaveTextContent(`Evidence · /evidence/replay.md, ${missingLedgerEvidenceRef}`);
+
+    await user.click(
+      within(summaryRecord!).getByRole('button', {
+        name: `Jump to replay bundle evidence ref ${currentOnlyArtifactRef}`
+      })
+    );
+
+    expect(onFocusSharedMemoryArtifact).toHaveBeenCalledWith(currentOnlyArtifactRef);
+    expect(onSelectAgent).not.toHaveBeenCalled();
+    expect(onSelectCorrelation).not.toHaveBeenCalled();
+  });
+
   it('jumps from matching active-queue evidence refs to shared memory while leaving non-matching refs as plain text and showing explicit fallbacks', async () => {
     const user = userEvent.setup();
     const onSelectAgent = vi.fn();
@@ -3037,6 +3143,41 @@ describe('DetailsPanel accountability signals', () => {
     expect(within(focusedArtifactRecord!).getByText('Focused exact jump')).toBeVisible();
     expect(unfocusedArtifactRecord).not.toHaveClass('aitown-record--shared-memory-focused');
     expect(within(unfocusedArtifactRecord!).queryByText('Focused exact jump')).not.toBeInTheDocument();
+  });
+
+  it('shows focused exact-artifact backlinks from selected-agent replay bundle summary and ledger evidence refs', () => {
+    const focusedArtifactRef = '/evidence/replay.md';
+    const replayBundle = buildAccountabilityReplayBundle();
+    const memoryArtifacts: MemoryArtifactIndex = {
+      ...buildMemoryArtifacts(),
+      items: [...buildMemoryArtifacts().items, replayBundle.memory_artifacts[0]]
+    };
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          focusedSharedMemoryArtifactRef: focusedArtifactRef,
+          memoryArtifacts,
+          selectedAgentDrilldownTab: 'replay',
+          selectedAgentAccountabilityReplay: replayBundle,
+          selectedAgentAccountabilityReplayError: null,
+          selectedAgentAccountabilityReplayState: 'ready'
+        })}
+      />
+    );
+
+    const sharedMemorySection = screen.getByRole('heading', { name: 'Shared Memory' }).closest('section');
+    expect(sharedMemorySection).not.toBeNull();
+
+    const backlinkLane = within(sharedMemorySection!).getByText('Current-scope backlinks').closest('div');
+    expect(backlinkLane).not.toBeNull();
+    expect(within(backlinkLane!).getByText('Replay bundle summary')).toBeVisible();
+    expect(within(backlinkLane!).getByText('event_log_and_existing_read_models · corr-app-review')).toBeVisible();
+    expect(within(backlinkLane!).getAllByText('Replay bundle ledger').length).toBeGreaterThan(0);
+    expect(within(backlinkLane!).getByText('Event-backed replay anchor')).toBeVisible();
+    expect(
+      within(backlinkLane!).queryByText('No current-scope backlinks cite this artifact.')
+    ).not.toBeInTheDocument();
   });
 
   it('shows focused exact-artifact backlinks from crew-overview current-scope correlation data without a selected agent', () => {

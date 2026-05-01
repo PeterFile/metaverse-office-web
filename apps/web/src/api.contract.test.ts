@@ -1742,6 +1742,8 @@ function expectCollectorSnapshotContract(snapshot: CollectorSnapshot | null) {
 }
 
 function expectCollectorEvidenceCoverageContract(coverage: CollectorEvidenceCoverage | null) {
+  expect(coverage?.collected_at).toBe('2026-03-09T18:59:00.000Z');
+  expect(coverage?.actor_id).toBe('team-lead');
   expect(coverage).toMatchObject({
     evidence_ref_count: 2,
     covered_agent_count: 1,

@@ -1,3 +1,5 @@
+import { Fragment } from 'react';
+
 import type {
   AccountabilityReplayBundle,
   AccountabilityReplayLedgerEntry,
@@ -2462,9 +2464,31 @@ function renderReplayBundleLedgerSourceKinds(entry: AccountabilityReplayLedgerEn
   return renderNamedList(sourceKinds, 'No source kinds');
 }
 
-function renderReplayBundleLedgerBasisEventIds(entry: AccountabilityReplayLedgerEntry) {
-  if (entry.basis_event_ids.length > 0) {
-    return entry.basis_event_ids.join(', ');
+function renderReplayBundleLedgerBasisEventIds(
+  entry: AccountabilityReplayLedgerEntry,
+  onOpenReplayCheckpoint?: (eventId: string) => void
+) {
+  const basisEventIds = Array.from(
+    new Set(entry.basis_event_ids.map((eventId) => eventId.trim()).filter((eventId) => eventId.length > 0))
+  );
+  if (basisEventIds.length > 0) {
+    if (!onOpenReplayCheckpoint) {
+      return basisEventIds.join(', ');
+    }
+
+    return basisEventIds.map((eventId, index) => (
+      <Fragment key={eventId}>
+        {index > 0 ? ', ' : null}
+        <button
+          type="button"
+          className="aitown-link-button"
+          aria-label={`Open replay checkpoint ${eventId}`}
+          onClick={() => onOpenReplayCheckpoint(eventId)}
+        >
+          {eventId}
+        </button>
+      </Fragment>
+    ));
   }
 
   return entry.provenance === 'collector_observation_without_event_id'
@@ -2486,18 +2510,20 @@ function buildReplayBundleSharedMemoryArtifactRefs(
 function renderReplayBundleLedgerEntry({
   entry,
   sharedMemoryArtifactRefs,
-  onJump
+  onJump,
+  onOpenReplayCheckpoint
 }: {
   entry: AccountabilityReplayLedgerEntry;
   sharedMemoryArtifactRefs: ReadonlySet<string>;
   onJump: (artifactRef: string) => void;
+  onOpenReplayCheckpoint?: (eventId: string) => void;
 }) {
   return (
     <li key={`${entry.entry_type}:${entry.entry_id}`} className="aitown-record">
       <strong>{entry.summary ?? entry.entry_id}</strong>
       <span>{`Ledger entry · ${entry.entry_type} · ${entry.entry_id}`}</span>
       <span>{`At · ${renderTimestamp(entry.ts, 'No ledger timestamp')}`}</span>
-      <span>{`Basis events · ${renderReplayBundleLedgerBasisEventIds(entry)}`}</span>
+      <span>Basis events · {renderReplayBundleLedgerBasisEventIds(entry, onOpenReplayCheckpoint)}</span>
       <span>{`Source kinds · ${renderReplayBundleLedgerSourceKinds(entry)}`}</span>
       <span>
         Evidence ·{' '}
@@ -2524,13 +2550,15 @@ function renderSelectedAgentReplayBundleSection({
   replayBundleError,
   replayBundleState,
   sharedMemoryArtifactRefs,
-  onFocusSharedMemoryArtifact
+  onFocusSharedMemoryArtifact,
+  onOpenReplayCheckpoint
 }: {
   replayBundle: AccountabilityReplayBundle | null;
   replayBundleError: string | null;
   replayBundleState: LoadState;
   sharedMemoryArtifactRefs: ReadonlySet<string>;
   onFocusSharedMemoryArtifact?: (artifactRef: string, scope?: SharedMemoryJumpScope) => void;
+  onOpenReplayCheckpoint?: (eventId: string) => void;
 }) {
   const replayBundleWarning =
     replayBundleError && replayBundle ? `Showing last replay bundle snapshot. ${replayBundleError}` : null;
@@ -2595,7 +2623,8 @@ function renderSelectedAgentReplayBundleSection({
               renderReplayBundleLedgerEntry({
                 entry,
                 sharedMemoryArtifactRefs: replayBundleSharedMemoryArtifactRefs,
-                onJump
+                onJump,
+                onOpenReplayCheckpoint
               })
             )}
           </>
@@ -5472,7 +5501,8 @@ export function DetailsPanel({
         replayBundleError: selectedAgentAccountabilityReplayError,
         replayBundleState: selectedAgentAccountabilityReplayState,
         sharedMemoryArtifactRefs,
-        onFocusSharedMemoryArtifact
+        onFocusSharedMemoryArtifact,
+        onOpenReplayCheckpoint
       })}
 
       <section className="aitown-details__section aitown-details__section--selected-replay">

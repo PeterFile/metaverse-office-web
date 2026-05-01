@@ -258,6 +258,42 @@ function appendVisibleEvidenceRefBacklinks<RecordType extends { evidence_refs: s
   });
 }
 
+function renderReplayBundleSummaryBacklinkLabel(replayBundle: AccountabilityReplayBundle) {
+  return replayBundle.query.correlation_id
+    ? `${replayBundle.accountability.basis} · ${replayBundle.query.correlation_id}`
+    : replayBundle.accountability.basis;
+}
+
+function appendReplayBundleEvidenceBacklinks(
+  backlinksByKey: Map<string, SharedMemoryBacklink>,
+  replayBundle: AccountabilityReplayBundle | null,
+  focusedArtifactRef: string
+) {
+  if (!replayBundle) {
+    return;
+  }
+
+  if (replayBundle.accountability.evidence_refs.includes(focusedArtifactRef)) {
+    appendSharedMemoryBacklink(backlinksByKey, {
+      key: `replay-bundle-summary:${focusedArtifactRef}`,
+      sourceLabel: 'Replay bundle summary',
+      label: renderReplayBundleSummaryBacklinkLabel(replayBundle)
+    });
+  }
+
+  replayBundle.ledger.forEach((entry) => {
+    if (!entry.evidence_refs.includes(focusedArtifactRef)) {
+      return;
+    }
+
+    appendSharedMemoryBacklink(backlinksByKey, {
+      key: `replay-bundle-ledger:${entry.entry_type}:${entry.entry_id}:${focusedArtifactRef}`,
+      sourceLabel: 'Replay bundle ledger',
+      label: entry.summary || entry.entry_id
+    });
+  });
+}
+
 function appendCollectorSharedArtifactBacklinks(
   backlinksByKey: Map<string, SharedMemoryBacklink>,
   collectorSharedArtifacts: ReadonlyArray<CollectorSharedArtifact> | null | undefined,
@@ -312,6 +348,7 @@ function buildFocusedSharedMemoryBacklinks({
   timelineReplay,
   workflow,
   correlation,
+  selectedAgentAccountabilityReplay,
   collectorSharedArtifacts,
   visibleCollectorItems
 }: {
@@ -323,6 +360,7 @@ function buildFocusedSharedMemoryBacklinks({
   timelineReplay: TimelineReplayResponse | null;
   workflow: AgentWorkflow | null;
   correlation: CorrelationDrilldown | null;
+  selectedAgentAccountabilityReplay: AccountabilityReplayBundle | null;
   collectorSharedArtifacts: ReadonlyArray<CollectorSharedArtifact> | null | undefined;
   visibleCollectorItems: ReadonlyArray<CollectorItem>;
 }): SharedMemoryBacklinkSummary {
@@ -499,6 +537,7 @@ function buildFocusedSharedMemoryBacklinks({
     );
   }
 
+  appendReplayBundleEvidenceBacklinks(backlinksByKey, selectedAgentAccountabilityReplay, focusedArtifactRef);
   appendCollectorSharedArtifactBacklinks(backlinksByKey, collectorSharedArtifacts, focusedArtifactRef);
   appendCollectorProvenanceBacklinks(backlinksByKey, visibleCollectorItems, focusedArtifactRef);
 
@@ -2433,7 +2472,26 @@ function renderReplayBundleLedgerBasisEventIds(entry: AccountabilityReplayLedger
     : 'None supplied';
 }
 
-function renderReplayBundleLedgerEntry(entry: AccountabilityReplayLedgerEntry) {
+function buildReplayBundleSharedMemoryArtifactRefs(
+  replayBundle: AccountabilityReplayBundle,
+  sharedMemoryArtifactRefs: ReadonlySet<string>
+) {
+  const replayBundleArtifactRefs = new Set(sharedMemoryArtifactRefs);
+  replayBundle.memory_artifacts.forEach((artifact) => {
+    replayBundleArtifactRefs.add(artifact.artifact_ref);
+  });
+  return replayBundleArtifactRefs;
+}
+
+function renderReplayBundleLedgerEntry({
+  entry,
+  sharedMemoryArtifactRefs,
+  onJump
+}: {
+  entry: AccountabilityReplayLedgerEntry;
+  sharedMemoryArtifactRefs: ReadonlySet<string>;
+  onJump: (artifactRef: string) => void;
+}) {
   return (
     <li key={`${entry.entry_type}:${entry.entry_id}`} className="aitown-record">
       <strong>{entry.summary ?? entry.entry_id}</strong>
@@ -2441,7 +2499,15 @@ function renderReplayBundleLedgerEntry(entry: AccountabilityReplayLedgerEntry) {
       <span>{`At · ${renderTimestamp(entry.ts, 'No ledger timestamp')}`}</span>
       <span>{`Basis events · ${renderReplayBundleLedgerBasisEventIds(entry)}`}</span>
       <span>{`Source kinds · ${renderReplayBundleLedgerSourceKinds(entry)}`}</span>
-      <span>{`Evidence · ${renderEvidenceRefs(entry.evidence_refs)}`}</span>
+      <span>
+        Evidence ·{' '}
+        {renderSharedMemoryEvidenceRefs({
+          evidenceRefs: entry.evidence_refs,
+          sharedMemoryArtifactRefs,
+          onJump,
+          jumpAriaLabelPrefix: 'Jump to replay bundle evidence ref'
+        })}
+      </span>
       {entry.agent_id ? <span>{`Agent · ${entry.agent_id}`}</span> : null}
       {entry.actor_id ? <span>{`Actor · ${entry.actor_id}`}</span> : null}
       {entry.correlation_id ? <span>{`Correlation · ${entry.correlation_id}`}</span> : null}
@@ -2456,14 +2522,22 @@ function renderReplayBundleLedgerEntry(entry: AccountabilityReplayLedgerEntry) {
 function renderSelectedAgentReplayBundleSection({
   replayBundle,
   replayBundleError,
-  replayBundleState
+  replayBundleState,
+  sharedMemoryArtifactRefs,
+  onFocusSharedMemoryArtifact
 }: {
   replayBundle: AccountabilityReplayBundle | null;
   replayBundleError: string | null;
   replayBundleState: LoadState;
+  sharedMemoryArtifactRefs: ReadonlySet<string>;
+  onFocusSharedMemoryArtifact?: (artifactRef: string, scope?: SharedMemoryJumpScope) => void;
 }) {
   const replayBundleWarning =
     replayBundleError && replayBundle ? `Showing last replay bundle snapshot. ${replayBundleError}` : null;
+  const replayBundleSharedMemoryArtifactRefs = replayBundle
+    ? buildReplayBundleSharedMemoryArtifactRefs(replayBundle, sharedMemoryArtifactRefs)
+    : sharedMemoryArtifactRefs;
+  const { onJump } = resolveSharedMemoryEvidenceJumpBehavior(onFocusSharedMemoryArtifact);
 
   return (
     <section className="aitown-details__section aitown-details__section--selected-replay">
@@ -2501,7 +2575,15 @@ function renderSelectedAgentReplayBundleSection({
                 )}`}
               </span>
               <span>{`Actors · ${renderNamedList(replayBundle.accountability.actor_ids, 'No actors')}`}</span>
-              <span>{`Evidence · ${renderEvidenceRefs(replayBundle.accountability.evidence_refs)}`}</span>
+              <span>
+                Evidence ·{' '}
+                {renderSharedMemoryEvidenceRefs({
+                  evidenceRefs: replayBundle.accountability.evidence_refs,
+                  sharedMemoryArtifactRefs: replayBundleSharedMemoryArtifactRefs,
+                  onJump,
+                  jumpAriaLabelPrefix: 'Jump to replay bundle evidence ref'
+                })}
+              </span>
               <span>
                 {`Window · ${renderTimestamp(
                   replayBundle.accountability.first_ts,
@@ -2509,7 +2591,13 @@ function renderSelectedAgentReplayBundleSection({
                 )} -> ${renderTimestamp(replayBundle.accountability.last_ts, 'No last event timestamp')}`}
               </span>
             </li>
-            {replayBundle.ledger.map((entry) => renderReplayBundleLedgerEntry(entry))}
+            {replayBundle.ledger.map((entry) =>
+              renderReplayBundleLedgerEntry({
+                entry,
+                sharedMemoryArtifactRefs: replayBundleSharedMemoryArtifactRefs,
+                onJump
+              })
+            )}
           </>
         ) : null}
         {replayBundleState === 'ready' && !replayBundleError && !replayBundle ? (
@@ -3875,6 +3963,7 @@ export function DetailsPanel({
     timelineReplay,
     workflow,
     correlation,
+    selectedAgentAccountabilityReplay,
     collectorSharedArtifacts: selectedAgent ? null : collectorSharedArtifacts,
     visibleCollectorItems
   });
@@ -5381,7 +5470,9 @@ export function DetailsPanel({
       {renderSelectedAgentReplayBundleSection({
         replayBundle: selectedAgentAccountabilityReplay,
         replayBundleError: selectedAgentAccountabilityReplayError,
-        replayBundleState: selectedAgentAccountabilityReplayState
+        replayBundleState: selectedAgentAccountabilityReplayState,
+        sharedMemoryArtifactRefs,
+        onFocusSharedMemoryArtifact
       })}
 
       <section className="aitown-details__section aitown-details__section--selected-replay">

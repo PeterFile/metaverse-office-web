@@ -61,6 +61,41 @@ export interface RuntimeBackfillEvidenceSummary {
   evidence_refs: string[];
 }
 
+export type RuntimeEvidenceAccountabilityStatus =
+  | 'empty'
+  | 'workflow_authoritative'
+  | 'backfill_present'
+  | 'overview_only_gaps';
+
+export type RuntimeEvidenceGapSource = 'overview_only' | 'missing_runtime_evidence';
+
+export interface RuntimeEvidenceAccountabilityGapAgent {
+  agent_id: string;
+  display_name: string;
+  source: RuntimeEvidenceGapSource;
+  degraded_reasons: string[];
+}
+
+export interface RuntimeEvidenceAccountabilitySummary {
+  status: RuntimeEvidenceAccountabilityStatus;
+  counts: {
+    total_agents: number;
+    workflow_authoritative: number;
+    incident_feed_backfill: number;
+    overview_only: number;
+    missing_runtime_evidence: number;
+    degraded_agents: number;
+    incident_backed_agents: number;
+    evidence_backed_agents: number;
+  };
+  degraded_reasons: string[];
+  incident_ids: string[];
+  source_kinds: string[];
+  correlation_ids: string[];
+  evidence_refs: string[];
+  gap_agents: RuntimeEvidenceAccountabilityGapAgent[];
+}
+
 export interface IncidentEvidenceSummary {
   incident_id: string;
   severity: Severity;
@@ -201,6 +236,92 @@ export function selectRuntimeBackfillEvidence(
   );
 }
 
+export function selectRuntimeEvidenceAccountabilitySummary(
+  world: WorldState | null | undefined
+): RuntimeEvidenceAccountabilitySummary {
+  const summary = createEmptyRuntimeEvidenceAccountabilitySummary();
+  if (!world || world.agents.size === 0) {
+    return summary;
+  }
+
+  summary.counts.total_agents = world.agents.size;
+  const degradedReasons: string[] = [];
+  const incidentIds: string[] = [];
+  const sourceKinds: string[] = [];
+  const correlationIds: string[] = [];
+  const evidenceRefs: string[] = [];
+
+  for (const [, agent] of world.agents) {
+    const evidence = agent.runtime_evidence;
+    if (!evidence) {
+      summary.counts.missing_runtime_evidence += 1;
+      summary.gap_agents.push({
+        agent_id: agent.agent_id,
+        display_name: agent.display_name,
+        source: 'missing_runtime_evidence',
+        degraded_reasons: [],
+      });
+      continue;
+    }
+
+    const normalizedReasons = uniqueTrimmedStrings(evidence.degraded_reasons);
+    const normalizedIncidentIds = uniqueTrimmedStrings(evidence.incident_ids);
+    const normalizedSourceKinds = uniqueTrimmedStrings(evidence.source_kinds);
+    const normalizedCorrelationIds = uniqueTrimmedStrings(evidence.correlation_ids);
+    const normalizedEvidenceRefs = uniqueTrimmedStrings(evidence.evidence_refs);
+
+    if (normalizedReasons.length > 0) {
+      summary.counts.degraded_agents += 1;
+      degradedReasons.push(...normalizedReasons);
+    }
+    if (normalizedIncidentIds.length > 0) {
+      summary.counts.incident_backed_agents += 1;
+      incidentIds.push(...normalizedIncidentIds);
+    }
+    if (normalizedEvidenceRefs.length > 0) {
+      summary.counts.evidence_backed_agents += 1;
+      evidenceRefs.push(...normalizedEvidenceRefs);
+    }
+
+    sourceKinds.push(...normalizedSourceKinds);
+    correlationIds.push(...normalizedCorrelationIds);
+
+    if (evidence.source === 'workflow') {
+      summary.counts.workflow_authoritative += 1;
+    } else if (evidence.source === 'incident_feed_backfill') {
+      summary.counts.incident_feed_backfill += 1;
+    } else if (evidence.source === 'overview_only') {
+      summary.counts.overview_only += 1;
+      summary.gap_agents.push({
+        agent_id: agent.agent_id,
+        display_name: agent.display_name,
+        source: 'overview_only',
+        degraded_reasons: normalizedReasons,
+      });
+    }
+  }
+
+  summary.degraded_reasons = uniqueTrimmedStrings(degradedReasons);
+  summary.incident_ids = uniqueTrimmedStrings(incidentIds);
+  summary.source_kinds = uniqueTrimmedStrings(sourceKinds);
+  summary.correlation_ids = uniqueTrimmedStrings(correlationIds);
+  summary.evidence_refs = uniqueTrimmedStrings(evidenceRefs);
+  summary.gap_agents.sort(
+    (left, right) =>
+      left.display_name.localeCompare(right.display_name) || left.agent_id.localeCompare(right.agent_id)
+  );
+
+  if (summary.gap_agents.length > 0) {
+    summary.status = 'overview_only_gaps';
+  } else if (summary.counts.incident_feed_backfill > 0) {
+    summary.status = 'backfill_present';
+  } else {
+    summary.status = 'workflow_authoritative';
+  }
+
+  return summary;
+}
+
 export function selectIncidentEvidenceSummaries(
   world: WorldState | null | undefined,
   limit = INCIDENT_EVIDENCE_LIMIT
@@ -242,6 +363,28 @@ export function selectIncidentEvidenceSummaries(
   }
 
   return summaries.sort(compareIncidentEvidenceSummaries).slice(0, limit);
+}
+
+function createEmptyRuntimeEvidenceAccountabilitySummary(): RuntimeEvidenceAccountabilitySummary {
+  return {
+    status: 'empty',
+    counts: {
+      total_agents: 0,
+      workflow_authoritative: 0,
+      incident_feed_backfill: 0,
+      overview_only: 0,
+      missing_runtime_evidence: 0,
+      degraded_agents: 0,
+      incident_backed_agents: 0,
+      evidence_backed_agents: 0,
+    },
+    degraded_reasons: [],
+    incident_ids: [],
+    source_kinds: [],
+    correlation_ids: [],
+    evidence_refs: [],
+    gap_agents: [],
+  };
 }
 
 function uniqueTrimmedStrings(values: Array<string | null | undefined>): string[] {

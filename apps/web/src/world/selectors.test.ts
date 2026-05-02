@@ -10,6 +10,7 @@ import {
   selectHotZones,
   selectIncidentEvidenceSummaries,
   selectRuntimeBackfillEvidence,
+  selectRuntimeEvidenceAccountabilitySummary,
   selectWatchEdgeRisk,
 } from './selectors';
 import type { WatchEdgeSnapshot, WorldAgent, WorldState, ZoneSnapshot } from './types';
@@ -309,6 +310,117 @@ describe('selectRuntimeBackfillEvidence', () => {
     });
 
     expect(selectRuntimeBackfillEvidence(world)).toEqual([]);
+  });
+});
+
+describe('selectRuntimeEvidenceAccountabilitySummary', () => {
+  it('derives runtime evidence posture without fabricating provenance', () => {
+    const world = makeWorldState({
+      agents: new Map<string, WorldAgent>([
+        [
+          'workflow-agent',
+          makeWorldAgent({
+            agent_id: 'workflow-agent',
+            display_name: 'Workflow Agent',
+            runtime_evidence: {
+              source: 'workflow',
+              degraded_reasons: [],
+              incident_ids: [],
+              source_kinds: [],
+              correlation_ids: [],
+              evidence_refs: [],
+            },
+          }),
+        ],
+        [
+          'backfill-agent',
+          makeWorldAgent({
+            agent_id: 'backfill-agent',
+            display_name: 'Backfill Agent',
+            runtime_evidence: {
+              source: 'incident_feed_backfill',
+              degraded_reasons: [' workflow partial ', 'workflow partial', ''],
+              incident_ids: [' inc-1 ', 'inc-1', 'inc-2'],
+              source_kinds: [' controller_event ', '', 'collector_snapshot'],
+              correlation_ids: ['corr-2', ' corr-1 ', 'corr-1'],
+              evidence_refs: [' tmux://agent/0.1 ', '', 'tmux://agent/0.1', '/tmp/evidence.md'],
+            },
+          }),
+        ],
+        [
+          'overview-agent',
+          makeWorldAgent({
+            agent_id: 'overview-agent',
+            display_name: 'Overview Agent',
+            runtime_evidence: {
+              source: 'overview_only',
+              degraded_reasons: ['workflow missing'],
+              incident_ids: [],
+              source_kinds: [],
+              correlation_ids: [],
+              evidence_refs: [],
+            },
+          }),
+        ],
+        ['missing-agent', makeWorldAgent({ agent_id: 'missing-agent', display_name: 'Missing Agent' })],
+      ]),
+    });
+
+    expect(selectRuntimeEvidenceAccountabilitySummary(world)).toEqual({
+      status: 'overview_only_gaps',
+      counts: {
+        total_agents: 4,
+        workflow_authoritative: 1,
+        incident_feed_backfill: 1,
+        overview_only: 1,
+        missing_runtime_evidence: 1,
+        degraded_agents: 2,
+        incident_backed_agents: 1,
+        evidence_backed_agents: 1,
+      },
+      degraded_reasons: ['workflow partial', 'workflow missing'],
+      incident_ids: ['inc-1', 'inc-2'],
+      source_kinds: ['controller_event', 'collector_snapshot'],
+      correlation_ids: ['corr-2', 'corr-1'],
+      evidence_refs: ['tmux://agent/0.1', '/tmp/evidence.md'],
+      gap_agents: [
+        {
+          agent_id: 'missing-agent',
+          display_name: 'Missing Agent',
+          source: 'missing_runtime_evidence',
+          degraded_reasons: [],
+        },
+        {
+          agent_id: 'overview-agent',
+          display_name: 'Overview Agent',
+          source: 'overview_only',
+          degraded_reasons: ['workflow missing'],
+        },
+      ],
+    });
+  });
+
+  it('returns an empty posture when no world or agents are available', () => {
+    expect(selectRuntimeEvidenceAccountabilitySummary(null)).toEqual({
+      status: 'empty',
+      counts: {
+        total_agents: 0,
+        workflow_authoritative: 0,
+        incident_feed_backfill: 0,
+        overview_only: 0,
+        missing_runtime_evidence: 0,
+        degraded_agents: 0,
+        incident_backed_agents: 0,
+        evidence_backed_agents: 0,
+      },
+      degraded_reasons: [],
+      incident_ids: [],
+      source_kinds: [],
+      correlation_ids: [],
+      evidence_refs: [],
+      gap_agents: [],
+    });
+    expect(selectRuntimeEvidenceAccountabilitySummary(makeWorldState())).toEqual(selectRuntimeEvidenceAccountabilitySummary(null));
   });
 });
 

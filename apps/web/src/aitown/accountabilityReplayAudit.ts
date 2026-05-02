@@ -38,6 +38,32 @@ export interface AccountabilityReplayAuditSummary {
   rows: AccountabilityReplayAuditRow[];
 }
 
+export type AccountabilityReplayAuditVerdictStatus =
+  | 'empty'
+  | 'fully_replayable'
+  | 'collector_observation_gaps'
+  | 'unsupported_unbacked_gaps';
+
+export interface AccountabilityReplayAuditGapRow {
+  entry_type: AccountabilityReplayAuditRow['entry_type'];
+  entry_id: string;
+  provenance?: AccountabilityReplayAuditRow['provenance'];
+  status: Exclude<AccountabilityReplayAuditRowStatus, 'replayable'>;
+  warning: string;
+  evidence_refs: string[];
+  source_kinds: string[];
+  correlation_ids: string[];
+}
+
+export interface AccountabilityReplayAuditVerdict {
+  status: AccountabilityReplayAuditVerdictStatus;
+  replayable: boolean;
+  counts: AccountabilityReplayAuditCounts;
+  replay_anchor_event_ids: string[];
+  gap_rows: AccountabilityReplayAuditGapRow[];
+  warnings: string[];
+}
+
 const EMPTY_COUNTS: AccountabilityReplayAuditCounts = {
   ledger_row_count: 0,
   replayable_row_count: 0,
@@ -193,5 +219,55 @@ export function deriveAccountabilityReplayAudit(
     source_kinds: sourceKinds,
     correlation_ids: correlationIds,
     rows
+  };
+}
+
+function deriveVerdictStatus(counts: AccountabilityReplayAuditCounts): AccountabilityReplayAuditVerdictStatus {
+  if (counts.ledger_row_count === 0) return 'empty';
+  if (counts.unsupported_unbacked_row_count > 0) return 'unsupported_unbacked_gaps';
+  if (counts.collector_observation_without_event_id_row_count > 0) {
+    return 'collector_observation_gaps';
+  }
+  return 'fully_replayable';
+}
+
+export function deriveAccountabilityReplayAuditVerdict(
+  bundle: AccountabilityReplayBundle | null | undefined
+): AccountabilityReplayAuditVerdict {
+  const audit = deriveAccountabilityReplayAudit(bundle);
+  const replayAnchorEventIds: string[] = [];
+  const gapRows: AccountabilityReplayAuditGapRow[] = [];
+  const warnings: string[] = [];
+
+  for (const row of audit.rows) {
+    if (row.replayable) {
+      for (const basisEventId of row.basis_event_ids) {
+        pushToken(replayAnchorEventIds, basisEventId);
+      }
+      continue;
+    }
+
+    const warning = row.warning ?? row.status;
+    pushToken(warnings, warning);
+    gapRows.push({
+      entry_type: row.entry_type,
+      entry_id: row.entry_id,
+      provenance: row.provenance,
+      status: row.status as Exclude<AccountabilityReplayAuditRowStatus, 'replayable'>,
+      warning,
+      evidence_refs: [...row.evidence_refs],
+      source_kinds: [...row.source_kinds],
+      correlation_ids: [...row.correlation_ids]
+    });
+  }
+
+  const status = deriveVerdictStatus(audit.counts);
+  return {
+    status,
+    replayable: status === 'fully_replayable',
+    counts: { ...audit.counts },
+    replay_anchor_event_ids: replayAnchorEventIds,
+    gap_rows: gapRows,
+    warnings
   };
 }

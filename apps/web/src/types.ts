@@ -222,7 +222,9 @@ export interface WorkflowDetail {
   current_location: string;
   latest_heartbeat: {
     agent_id: string;
+    actor_id?: string;
     received_at?: string;
+    confidence_level?: string;
   } | null;
   open_peer_watch_alerts: WorkflowPeerWatchAlert[];
   recent_events: WorkflowDetailEvent[];
@@ -230,6 +232,12 @@ export interface WorkflowDetail {
   recent_incidents: WorkflowIncident[];
   recent_handoffs: WorkflowDetailHandoff[];
   recent_reboots: WorkflowDetailReboot[];
+}
+
+export type AgentDetail = WorkflowDetail;
+
+export interface AgentDetailResponse {
+  item: AgentDetail;
 }
 
 export interface WorkflowPeerWatchAlert {

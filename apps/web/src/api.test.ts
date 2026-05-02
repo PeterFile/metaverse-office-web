@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   RequestError,
   fetchAccountabilityReplay,
+  fetchAgentDetail,
   fetchAgentEvents,
   fetchAgentIncidents,
   fetchAgentInteractions,
@@ -441,6 +442,200 @@ describe('fetchCollectorEvidenceCoverage', () => {
       '/collectors/controller-snapshot/evidence-coverage?agent_id=app-engineering&source_kind=tmux_observation&confidence_level=low&limit=2',
       expect.objectContaining({ signal: undefined })
     );
+  });
+});
+
+describe('fetchAgentDetail', () => {
+  it('omits the query string when callers omit limit', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            item: {
+              agent_id: 'app-engineering',
+              current_state: 'blocked',
+              active_task: 'Fix the contract drift',
+              current_location: 'desk-app-engineering',
+              latest_heartbeat: null,
+              open_peer_watch_alerts: [],
+              recent_events: [],
+              recent_interactions: [],
+              recent_incidents: [],
+              recent_handoffs: [],
+              recent_reboots: []
+            }
+          }),
+          {
+            headers: JSON_HEADERS
+          }
+        )
+      )
+    );
+
+    await fetchAgentDetail('app-engineering');
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/agents/app-engineering',
+      expect.objectContaining({ signal: undefined })
+    );
+  });
+
+  it('passes explicit limit through to the backend query string', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            item: {
+              agent_id: 'app-engineering',
+              current_state: 'blocked',
+              active_task: 'Fix the contract drift',
+              current_location: 'desk-app-engineering',
+              latest_heartbeat: null,
+              open_peer_watch_alerts: [],
+              recent_events: [],
+              recent_interactions: [],
+              recent_incidents: [],
+              recent_handoffs: [],
+              recent_reboots: []
+            }
+          }),
+          {
+            headers: JSON_HEADERS
+          }
+        )
+      )
+    );
+
+    await fetchAgentDetail('app-engineering', { limit: 2 });
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/agents/app-engineering?limit=2',
+      expect.objectContaining({ signal: undefined })
+    );
+  });
+
+  it('unwraps the item envelope and preserves latest heartbeat, peer-watch alerts, and recent slices', async () => {
+    const item = {
+      agent_id: 'app-engineering',
+      display_name: 'App Engineering Agent',
+      current_state: 'blocked',
+      active_task: 'Fix the contract drift',
+      current_location: 'desk-app-engineering',
+      latest_heartbeat: {
+        agent_id: 'app-engineering',
+        received_at: '2026-03-09T18:59:00.000Z'
+      },
+      open_peer_watch_alerts: [
+        {
+          alert_id: 'evt_contract_peer_watch',
+          ts: '2026-03-09T18:45:00.000Z',
+          agent_id: 'app-engineering',
+          target_agent_id: 'app-engineering',
+          actor_id: 'team-lead',
+          observer_agent_id: 'team-lead',
+          watcher_agent_ids: ['protocol-engineering'],
+          severity: 'orange',
+          status: 'open',
+          current_state: 'blocked',
+          active_task: 'Fix the contract drift',
+          summary: 'Protocol engineering flagged the contract drift',
+          evidence_refs: ['/tmp/contract-peer-watch.md'],
+          evidence_count: 1,
+          correlation_id: 'corr-app-review',
+          source_kind: 'controller_event',
+          metadata: {}
+        }
+      ],
+      recent_events: [
+        {
+          event_id: 'evt_contract_peer_watch',
+          ts: '2026-03-09T18:45:00.000Z',
+          agent_id: 'app-engineering',
+          actor_id: 'team-lead',
+          agent_role: 'app-engineering',
+          event_type: 'peer_watch_alert_raised',
+          severity: 'orange',
+          current_state: 'blocked',
+          active_task: 'Fix the contract drift',
+          location: 'review-zone',
+          summary: 'Protocol engineering flagged the contract drift',
+          correlation_id: 'corr-app-review',
+          counterparty_agent_ids: ['protocol-engineering'],
+          evidence_refs: ['/tmp/contract-peer-watch.md'],
+          source_kind: 'controller_event',
+          metadata: {}
+        }
+      ],
+      recent_interactions: [
+        {
+          interaction_id: 'interaction:evt_contract_peer_watch',
+          interaction_type: 'peer_watch',
+          correlation_id: 'corr-app-review',
+          started_at: '2026-03-09T18:45:00.000Z',
+          participant_agent_ids: ['app-engineering', 'protocol-engineering'],
+          trigger_event_id: 'evt_contract_peer_watch',
+          severity: 'orange',
+          evidence_refs: ['/tmp/contract-peer-watch.md'],
+          source_kind: 'controller_event',
+          summary: 'Protocol engineering flagged the contract drift'
+        }
+      ],
+      recent_incidents: [
+        {
+          incident_id: 'evt_contract_peer_watch',
+          kind: 'peer_watch_alert',
+          ts: '2026-03-09T18:45:00.000Z',
+          agent_id: 'app-engineering',
+          actor_id: 'team-lead',
+          status: 'open',
+          severity: 'orange',
+          summary: 'Protocol engineering flagged the contract drift',
+          correlation_id: 'corr-app-review',
+          evidence_refs: ['/tmp/contract-peer-watch.md'],
+          counterparty_agent_ids: ['protocol-engineering'],
+          source_kind: 'controller_event'
+        }
+      ],
+      recent_handoffs: [],
+      recent_reboots: []
+    };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ item }), {
+          headers: JSON_HEADERS
+        })
+      )
+    );
+
+    await expect(fetchAgentDetail('app-engineering')).resolves.toEqual(item);
+  });
+
+  it('maps unknown-agent 404 responses into RequestError metadata for detail reads', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            error: 'not_found',
+            details: 'unknown agent unknown-agent'
+          }),
+          {
+            status: 404,
+            headers: JSON_HEADERS
+          }
+        )
+      )
+    );
+
+    await expect(fetchAgentDetail('unknown-agent')).rejects.toMatchObject({
+      name: 'RequestError',
+      status: 404,
+      code: 'not_found',
+      message: 'unknown agent unknown-agent'
+    });
   });
 });
 

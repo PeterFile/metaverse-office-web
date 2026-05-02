@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type {
   AccountabilityReplayBundle,
+  AgentDetail,
   AgentEventsResponse,
   AgentInteractionsResponse,
   AgentWorkflow,
@@ -818,6 +819,34 @@ describe('read-only frontend/backend contract smoke', () => {
       }
     ]);
     expectAgentIncidentsContract(incidents);
+  });
+
+  it('loads /agents/:id detail from the real backend without adding workflow defaults', async () => {
+    harness = await createHarness(() => '2026-03-09T19:00:00.000Z');
+    await seedContractSlice(harness.store);
+
+    const nativeFetch = globalThis.fetch.bind(globalThis);
+    const requests: RequestContract[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+        requests.push(getRequestContract(input, harness!.baseUrl, init));
+        return nativeFetch(input, init);
+      })
+    );
+
+    const api = await loadApi(harness.baseUrl);
+    const detail = await api.fetchAgentDetail('app-engineering', { limit: 2 });
+
+    expect(requests).toEqual([
+      {
+        method: 'GET',
+        origin: harness.baseUrl,
+        pathname: '/agents/app-engineering',
+        query: [['limit', '2']]
+      }
+    ]);
+    expectAgentDetailContract(detail);
   });
 
   it('sends explicit default read-only bounds for /agents/:id/events, /agents/:id/interactions, and /peer-watch/alerts', async () => {
@@ -1641,6 +1670,47 @@ function expectWorkflowContract(workflow: AgentWorkflow) {
     'evt_contract_handoff_completed',
     'evt_collector_app-engineering_blocked_raised_orange_2026-03-09T18_59_00_000Z'
   ]);
+}
+
+function expectAgentDetailContract(detail: AgentDetail) {
+  expect(detail.agent_id).toBe('app-engineering');
+  expect(detail.display_name).toBe('App Engineering Agent');
+  expect(detail.current_state).toBe('blocked');
+  expect(detail.current_location).toBe('desk-app-engineering');
+  expect(detail.latest_heartbeat).toMatchObject({
+    agent_id: 'app-engineering',
+    actor_id: 'team-lead',
+    received_at: '2026-03-09T18:59:00.000Z',
+    confidence_level: 'high'
+  });
+  expect(detail.open_peer_watch_alerts.map((alert) => alert.alert_id)).toEqual([
+    'evt_collector_app-engineering_blocked_raised_orange_2026-03-09T18_59_00_000Z',
+    'evt_contract_peer_watch'
+  ]);
+  expect(detail.open_peer_watch_alerts[0]).toMatchObject({
+    source_kind: 'controller_event',
+    evidence_refs: ['/tmp/app-engineering/todo.md', 'tmux://5-web3-app-engineering/0.1'],
+    watcher_agent_ids: ['protocol-engineering']
+  });
+  expect(detail.recent_events.map((event) => event.event_id)).toEqual([
+    'evt_collector_app-engineering_blocked_raised_orange_2026-03-09T18_59_00_000Z',
+    'evt_contract_handoff_completed'
+  ]);
+  expect(detail.recent_interactions.map((interaction) => interaction.interaction_id)).toEqual([
+    'interaction:evt_collector_app-engineering_blocked_raised_orange_2026-03-09T18_59_00_000Z',
+    'interaction:evt_contract_handoff_completed'
+  ]);
+  expect(detail.recent_incidents.map((incident) => incident.incident_id)).toEqual([
+    'evt_collector_app-engineering_blocked_raised_orange_2026-03-09T18_59_00_000Z',
+    'evt_contract_handoff_completed'
+  ]);
+  expect(detail.recent_handoffs).toEqual([
+    expect.objectContaining({
+      handoff_id: 'evt_contract_handoff_completed',
+      status: 'completed'
+    })
+  ]);
+  expect(detail.recent_reboots).toEqual([]);
 }
 
 function expectIncidentFeedContract(feed: IncidentFeedResponse) {

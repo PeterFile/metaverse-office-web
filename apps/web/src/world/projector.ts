@@ -898,14 +898,7 @@ function buildAgentRuntimeEvidence(
   now: string
 ): RuntimeEvidence {
   if (workflow) {
-    return {
-      source: 'workflow',
-      degraded_reasons: [],
-      incident_ids: [],
-      source_kinds: [],
-      correlation_ids: [],
-      evidence_refs: [],
-    };
+    return buildWorkflowRuntimeEvidence(workflow);
   }
 
   const evidenceIncidents = runtimeIncidentFeedItems
@@ -930,6 +923,39 @@ function buildAgentRuntimeEvidence(
     source_kinds: uniqueStrings(evidenceIncidents.map((incident) => incident.source_kind)).sort(),
     correlation_ids: uniqueTrimmedStrings(evidenceIncidents.map((incident) => incident.correlation_id)),
     evidence_refs: uniqueTrimmedStrings(evidenceIncidents.flatMap((incident) => incident.evidence_refs)),
+  };
+}
+
+interface WorkflowRuntimeEvidenceRecord {
+  incident_id?: string | null;
+  source_kind?: string | null;
+  correlation_id?: string | null;
+  evidence_refs?: string[];
+}
+
+function buildWorkflowRuntimeEvidence(workflow: AgentWorkflow): RuntimeEvidence {
+  const incidentRecords = [
+    ...workflow.incidents,
+    ...workflow.detail.recent_incidents,
+  ];
+  const evidenceRecords: WorkflowRuntimeEvidenceRecord[] = [
+    ...incidentRecords,
+    ...workflow.detail.open_peer_watch_alerts,
+    ...workflow.detail.recent_events,
+    ...workflow.detail.recent_interactions,
+    ...workflow.detail.recent_handoffs,
+    ...workflow.detail.recent_reboots,
+    ...workflow.interactions,
+    ...workflow.timeline,
+  ];
+
+  return {
+    source: 'workflow',
+    degraded_reasons: [],
+    incident_ids: uniqueTrimmedStrings(incidentRecords.map((record) => record.incident_id)),
+    source_kinds: uniqueTrimmedStrings(evidenceRecords.map((record) => record.source_kind)),
+    correlation_ids: uniqueTrimmedStrings(evidenceRecords.map((record) => record.correlation_id)),
+    evidence_refs: uniqueTrimmedStrings(evidenceRecords.flatMap((record) => record.evidence_refs ?? [])),
   };
 }
 

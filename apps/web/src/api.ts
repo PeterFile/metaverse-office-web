@@ -1,5 +1,7 @@
 import type {
   AccountabilityReplayBundle,
+  AgentDetail,
+  AgentDetailResponse,
   AgentEventsResponse,
   AgentInteractionsResponse,
   CollectorEvidenceCoverage,
@@ -157,6 +159,26 @@ export async function fetchOfficeOperations(
     signal: options.signal
   });
   return parseJson<OfficeOperations>(response);
+}
+
+export async function fetchAgentDetail(
+  agentId: string,
+  options: { limit?: number; signal?: AbortSignal } = {}
+): Promise<AgentDetail> {
+  const params = new URLSearchParams();
+  if (options.limit !== undefined) {
+    params.set('limit', String(options.limit));
+  }
+
+  const suffix = params.size > 0 ? `?${params.toString()}` : '';
+  const response = await fetch(
+    resolveApiUrl(`/agents/${encodeURIComponent(agentId)}${suffix}`),
+    {
+      signal: options.signal
+    }
+  );
+  const body = await parseJson<AgentDetailResponse>(response);
+  return body.item;
 }
 
 export async function fetchAgentEvents(

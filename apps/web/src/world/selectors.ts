@@ -311,7 +311,7 @@ export function selectHotZones(
         rebootCount += 1;
       }
 
-      if (occupant.has_open_incidents) {
+      if (occupant.has_open_incidents || occupant.open_alert_count > 0) {
         openAlertOrIncidentOccupantCount += 1;
       }
 

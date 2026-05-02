@@ -667,6 +667,44 @@ describe('selectHotZones', () => {
     ]);
   });
 
+  it('counts open peer-watch alerts as hot-zone evidence without incident fallback', () => {
+    const world = makeWorldState({
+      agents: new Map([
+        [
+          'alert-only',
+          makeWorldAgent({
+            agent_id: 'alert-only',
+            display_name: 'Alert Only',
+            zone: 'watch-pod',
+            open_alert_count: 2,
+            has_open_incidents: false,
+          }),
+        ],
+      ]),
+      zones: [
+        makeZoneSnapshot({
+          zone_id: 'watch-pod',
+          label: 'Watch Pod',
+          kind: 'shared',
+          occupant_ids: ['alert-only'],
+        }),
+      ],
+    });
+
+    expect(selectHotZones(world)).toEqual([
+      {
+        zone_id: 'watch-pod',
+        label: 'Watch Pod',
+        highest_severity: 'normal',
+        occupant_count: 1,
+        blocked_count: 0,
+        reboot_count: 0,
+        open_alert_or_incident_occupant_count: 1,
+        runtime_freshness_degraded_count: 0,
+      },
+    ]);
+  });
+
   it('treats stale-only runtime freshness degradation as a hot-zone signal on its own', () => {
     const world = makeWorldState({
       agents: new Map([

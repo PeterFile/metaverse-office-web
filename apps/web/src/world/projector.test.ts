@@ -476,8 +476,57 @@ describe('projectWorldState', () => {
     expect(world.data_quality.degraded_reasons).toContain('incident feed truncated');
   });
 
-  it('keeps workflow-derived runtime risk authoritative when incident feed also has active items', () => {
-    const wf = makeWorkflow();
+  it('keeps workflow-derived runtime risk and runtime evidence authoritative when incident feed also has active items', () => {
+    const wf = makeWorkflow({
+      incidents: [
+        {
+          incident_id: ' inc-workflow ',
+          kind: 'workflow_evidence',
+          ts: '2026-03-14T09:59:00Z',
+          agent_id: 'app-engineering',
+          actor_id: 'team-lead',
+          status: 'completed',
+          severity: 'normal',
+          summary: 'Workflow evidence record',
+          correlation_id: ' corr-workflow ',
+          evidence_refs: [' /tmp/workflow.md ', '', '/tmp/workflow.md'],
+          counterparty_agent_ids: ['growth-revenue'],
+          source_kind: ' controller_event ',
+        },
+      ],
+      timeline: [
+        {
+          event_id: 'evt-workflow',
+          ts: '2026-03-14T10:00:00Z',
+          agent_id: 'app-engineering',
+          actor_id: 'team-lead',
+          event_type: 'handoff_completed',
+          severity: 'normal',
+          current_state: 'coding',
+          location: 'desk-app-engineering',
+          summary: 'Workflow event carries evidence',
+          correlation_id: 'corr-workflow',
+          counterparty_agent_ids: [],
+          evidence_refs: ['tmux://workflow/0.1'],
+          source_kind: 'controller_event',
+        },
+        {
+          event_id: 'evt-collector',
+          ts: '2026-03-14T10:01:00Z',
+          agent_id: 'app-engineering',
+          actor_id: 'collector',
+          event_type: 'collector_snapshot',
+          severity: 'normal',
+          current_state: 'coding',
+          location: 'desk-app-engineering',
+          summary: 'Collector evidence',
+          correlation_id: 'corr-collector',
+          counterparty_agent_ids: [],
+          evidence_refs: ['tmux://workflow/0.1', ' /tmp/collector.md '],
+          source_kind: 'collector_snapshot',
+        },
+      ],
+    });
     const feed: IncidentFeedResponse = {
       items: [
         {
@@ -515,10 +564,10 @@ describe('projectWorldState', () => {
     expect(agent.runtime_evidence).toEqual({
       source: 'workflow',
       degraded_reasons: [],
-      incident_ids: [],
-      source_kinds: [],
-      correlation_ids: [],
-      evidence_refs: [],
+      incident_ids: ['inc-workflow'],
+      source_kinds: ['controller_event', 'collector_snapshot'],
+      correlation_ids: ['corr-workflow', 'corr-collector'],
+      evidence_refs: ['/tmp/workflow.md', 'tmux://workflow/0.1', '/tmp/collector.md'],
     });
   });
 

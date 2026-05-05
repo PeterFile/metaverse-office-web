@@ -68,8 +68,13 @@ vi.mock('./aitown/WorldScene', () => ({
   }
 }));
 
-import App, { resolveOverviewRefreshWarning, resolveSelectedAgent, resolveViewportToplineStatus } from './App';
-import type { AccountabilityReplayBundle, AgentWorkflow, OfficeAgent } from './types';
+import App, {
+  resolveOverviewRefreshWarning,
+  resolveSelectedAgent,
+  resolveSelectedAgentPeekEvidenceRef,
+  resolveViewportToplineStatus
+} from './App';
+import type { AccountabilityReplayBundle, AgentWorkflow, OfficeAgent, OfficeOperation } from './types';
 
 const DEFAULT_NAVIGATOR_USER_AGENT = window.navigator.userAgent;
 
@@ -2500,6 +2505,8 @@ afterEach(() => {
 
     expect(screen.queryByRole('dialog', { name: 'Hub' })).not.toBeInTheDocument();
     const inspectPeek = await screen.findByRole('region', { name: 'Selected agent inspect peek' });
+    await act(async () => {});
+    expect(vi.mocked(globalThis.fetch).mock.calls.map(([request]) => String(request))).not.toContain(workflowUrl);
     expect(within(inspectPeek).getByText('App Engineering Agent')).toBeVisible();
     expect(within(inspectPeek).getByText('Orange · blocked')).toBeVisible();
 
@@ -14345,6 +14352,51 @@ afterEach(() => {
       agent_id: 'app-engineering',
       display_name: 'App Engineering Agent'
     });
+  });
+
+  it('keeps selected-agent peek evidence scoped to the displayed correlation', () => {
+    const appOperation = operationsFixture.items[0] as OfficeOperation;
+    const secondaryOnlyWorkflow = {
+      ...workflowFixture.detail,
+      open_peer_watch_alerts: [],
+      recent_events: [],
+      recent_incidents: [],
+      recent_reboots: [],
+      recent_interactions: [],
+      recent_handoffs: [workflowFixture.detail.recent_handoffs[0]]
+    };
+
+    expect(
+      resolveSelectedAgentPeekEvidenceRef({
+        selectedOperation: {
+          ...appOperation,
+          latest_event: null
+        },
+        workflow: secondaryOnlyWorkflow,
+        correlationId: 'corr-app-review'
+      })
+    ).toBeNull();
+    expect(
+      resolveSelectedAgentPeekEvidenceRef({
+        selectedOperation: null,
+        workflow: secondaryOnlyWorkflow,
+        correlationId: null
+      })
+    ).toBe('/tmp/secondary-evidence.md');
+    expect(
+      resolveSelectedAgentPeekEvidenceRef({
+        selectedOperation: {
+          ...appOperation,
+          correlation_id: 'corr-app-review',
+          latest_event: {
+            ...appOperation.latest_event!,
+            evidence_refs: ['/tmp/review-operation.md']
+          }
+        },
+        workflow: null,
+        correlationId: 'corr-app-secondary'
+      })
+    ).toBeNull();
   });
 
   it('shows incident feed failures explicitly even for selected agents', async () => {

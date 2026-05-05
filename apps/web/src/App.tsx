@@ -679,14 +679,14 @@ type WorkflowEvidenceRecord = {
 };
 
 function selectFirstEvidenceRef(records: WorkflowEvidenceRecord[], correlationId: string | null) {
-  const correlationEvidenceRef = correlationId
-    ? records.find((record) => record.correlation_id === correlationId && record.evidence_refs.length > 0)?.evidence_refs[0]
-    : null;
+  if (correlationId) {
+    return records.find((record) => record.correlation_id === correlationId && record.evidence_refs.length > 0)?.evidence_refs[0] ?? null;
+  }
 
-  return correlationEvidenceRef ?? records.find((record) => record.evidence_refs.length > 0)?.evidence_refs[0] ?? null;
+  return records.find((record) => record.evidence_refs.length > 0)?.evidence_refs[0] ?? null;
 }
 
-function resolveSelectedAgentPeekEvidenceRef({
+export function resolveSelectedAgentPeekEvidenceRef({
   selectedOperation,
   workflow,
   correlationId
@@ -695,8 +695,11 @@ function resolveSelectedAgentPeekEvidenceRef({
   workflow: WorkflowDetail | null;
   correlationId: string | null;
 }) {
-  if (selectedOperation?.latest_event?.evidence_refs[0]) {
-    return selectedOperation.latest_event.evidence_refs[0];
+  const operationEvidenceRef = selectedOperation?.latest_event?.evidence_refs[0] ?? null;
+  const operationCorrelationId = selectedOperation?.correlation_id ?? null;
+
+  if (operationEvidenceRef && (!correlationId || operationCorrelationId === correlationId)) {
+    return operationEvidenceRef;
   }
 
   if (!workflow) {
@@ -897,7 +900,7 @@ function AppInner() {
   );
 
   const workflowResource = usePolledResource({
-    enabled: selectedAgentId !== null,
+    enabled: hubOpen && selectedAgentId !== null,
     load: (signal) =>
       fetchAgentWorkflow(selectedAgentId!, {
         limit: DEFAULT_WORKFLOW_LIMIT,

@@ -442,6 +442,14 @@ test.describe('operator shell layout visual smoke', () => {
   });
 
   test('keeps selected-agent inspect peek compact outside the world drag lane', async ({ page }) => {
+    const workflowRequests: string[] = [];
+    page.on('request', (request) => {
+      const url = request.url();
+      if (url.includes('/agents/growth-revenue/workflow')) {
+        workflowRequests.push(url);
+      }
+    });
+
     await page.goto('/');
 
     const worldHost = page.locator('.aitown-world__host');
@@ -459,8 +467,9 @@ test.describe('operator shell layout visual smoke', () => {
     await expect(inspectPeek.getByText('Growth Revenue Agent')).toBeVisible();
     await expect(inspectPeek.getByText(/Yellow .* planning/)).toBeVisible();
     await expect(inspectPeek.getByText('Operation · Prepare handoff notes')).toBeVisible();
-    await expect(inspectPeek.getByText('Correlation · corr-growth-lead-review')).toBeVisible();
-    await expect(inspectPeek.getByText('Evidence · /tmp/growth-review-complete.md')).toBeVisible();
+    expect(workflowRequests, 'Hub-closed inspect peek should not request selected-agent workflow').toHaveLength(0);
+    await expect(inspectPeek.getByText('Correlation · corr-growth-lead-review')).toHaveCount(0);
+    await expect(inspectPeek.getByText('Evidence · /tmp/growth-review-complete.md')).toHaveCount(0);
 
     const [worldRect, peekRect] = await Promise.all([readRect(worldHost), readRect(inspectPeek)]);
     expect(peekRect.width, 'Inspect peek should stay compact').toBeLessThanOrEqual(360);

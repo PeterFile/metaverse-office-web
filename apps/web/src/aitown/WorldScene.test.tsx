@@ -98,6 +98,7 @@ const { MockDisplayObject, MockTicker, appInitMock, appDestroyMock, appInstances
 
   class MockTicker {
     deltaMS = 1000 / 60;
+    maxFPS = 0;
     listeners = new Set<(ticker: MockTicker) => void>();
     add = vi.fn((listener: (ticker: MockTicker) => void) => {
       this.listeners.add(listener);
@@ -668,6 +669,7 @@ describe('WorldScene watch overlay caption gating', () => {
 
     const app = appInstances.at(-1);
     expect(app).toBeDefined();
+    expect(app?.ticker.maxFPS).toBe(12);
     expect(app?.ticker.add).toHaveBeenCalledTimes(1);
     expect(app?.ticker.listeners.size).toBe(1);
 
@@ -2926,39 +2928,20 @@ describe('WorldScene watch overlay caption gating', () => {
       });
     });
 
-    fireEvent.pointerDown(host as HTMLDivElement, {
-      pointerId: 1,
-      pointerType: 'mouse',
-      button: 0,
-      buttons: 1,
-      clientX: 500,
-      clientY: 320
-    });
-    fireEvent.pointerMove(host as HTMLDivElement, {
-      pointerId: 1,
-      pointerType: 'mouse',
-      buttons: 1,
-      clientX: 380,
-      clientY: 320
-    });
-    fireEvent.pointerUp(host as HTMLDivElement, {
-      pointerId: 1,
-      pointerType: 'mouse',
-      button: 0,
-      clientX: 380,
-      clientY: 320
-    });
-
     const inspectionBeforeReset = readViewportInspector()?.read();
     const expectedDefaultCenterX =
       (selectedAgent?.position.x ?? 0) +
       (inspectionBeforeReset?.clampPadding.right ?? 0) / ((inspectionBeforeReset?.scale ?? 1) * 2);
+    const manualCenterX = expectedDefaultCenterX - 80;
+
+    readViewportInspector()?.moveCenter(manualCenterX, selectedAgent?.position.y ?? 0);
 
     await waitFor(() => {
-      expect(readViewportCenter().x).not.toBeCloseTo(expectedDefaultCenterX, 4);
+      expect(readViewportCenter().x).toBeCloseTo(manualCenterX, 4);
     });
 
     const manualCenter = readViewportCenter();
+    expect(manualCenter.x).not.toBeCloseTo(expectedDefaultCenterX, 4);
 
     rerender(
       <main className="aitown-shell">

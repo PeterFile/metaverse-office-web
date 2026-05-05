@@ -71,7 +71,9 @@ const statusBadgeStyle = new TextStyle({
 const WATCH_PARTICIPANT_HIGHLIGHT_COLOR = 0xffd785;
 const CORRELATION_PARTICIPANT_HIGHLIGHT_COLOR = 0x8be9d5;
 const AGENT_MOTION_TAU = Math.PI * 2;
+const AGENT_MOTION_MAX_FRAMES_PER_SECOND = 12;
 const AGENT_MOTION_MAX_DELTA_SECONDS = 0.12;
+const AGENT_MOTION_FRAME_INTERVAL_SECONDS = 1 / AGENT_MOTION_MAX_FRAMES_PER_SECOND;
 
 type AgentMotionProfile = {
   radiusX: number;
@@ -797,6 +799,7 @@ export default function WorldScene({
     let overlayObserver: MutationObserver | null = null;
     let viewportZoomHandler: (() => void) | null = null;
     let agentMotionTicker: ((ticker: Ticker) => void) | null = null;
+    let agentMotionAccumulatorSeconds = 0;
     let activePointerId: number | null = null;
     let activeTouchPointerIds = new Set<number>();
     let lastPointerPosition: { x: number; y: number } | null = null;
@@ -868,6 +871,7 @@ export default function WorldScene({
       host.appendChild(app.canvas);
       app.canvas.style.width = '100%';
       app.canvas.style.height = '100%';
+      app.ticker.maxFPS = AGENT_MOTION_MAX_FRAMES_PER_SECOND;
 
       let assets;
       try {
@@ -1227,12 +1231,24 @@ export default function WorldScene({
       app.stage.addChild(viewport);
 
       agentMotionTicker = (ticker: Ticker) => {
-        const deltaMS = Number.isFinite(ticker.deltaMS) ? ticker.deltaMS : 1000 / 60;
-
-        applyAgentMotionFrame(agentMotionStatesRef.current, deltaMS / 1000);
-        if (agentMotionStatesRef.current.length > 0) {
-          agentLayer.sortChildren();
+        if (agentMotionStatesRef.current.length === 0) {
+          agentMotionAccumulatorSeconds = 0;
+          return;
         }
+
+        const deltaMS = Number.isFinite(ticker.deltaMS) ? ticker.deltaMS : 1000 / 60;
+        agentMotionAccumulatorSeconds += Math.min(
+          Math.max(deltaMS / 1000, 0),
+          AGENT_MOTION_MAX_DELTA_SECONDS
+        );
+
+        if (agentMotionAccumulatorSeconds < AGENT_MOTION_FRAME_INTERVAL_SECONDS) {
+          return;
+        }
+
+        applyAgentMotionFrame(agentMotionStatesRef.current, agentMotionAccumulatorSeconds);
+        agentMotionAccumulatorSeconds = 0;
+        agentLayer.sortChildren();
       };
       app.ticker.add(agentMotionTicker);
 

@@ -85,9 +85,9 @@ button {
   color: #f7f0d2;
   --aitown-edge: clamp(8px, 1.4vw, 18px);
   --aitown-panel-gap: clamp(8px, 1.1vw, 14px);
-  --aitown-frame-width: clamp(20px, 2.6vw, 36px);
-  --aitown-box-border: clamp(10px, 1.6vw, 18px);
-  --aitown-token-border: clamp(7px, 1vw, 10px);
+  --aitown-frame-width: clamp(12px, 1.4vw, 20px);
+  --aitown-box-border: clamp(6px, 0.9vw, 10px);
+  --aitown-token-border: clamp(4px, 0.65vw, 6px);
 }
 
 .aitown-panel__chrome {
@@ -169,7 +169,7 @@ button {
 .aitown-shell__stat {
   min-width: 0;
   border-style: solid;
-  border-width: clamp(8px, 1.1vw, 12px);
+  border-width: var(--aitown-token-border);
   border-image-source: url('/ai-town/assets/ui/box.svg');
   border-image-repeat: stretch;
   border-image-slice: 12.5%;
@@ -377,7 +377,7 @@ button {
   gap: 3px;
   min-width: 0;
   border-style: solid;
-  border-width: 12px;
+  border-width: var(--aitown-token-border);
   border-image-source: url('/ai-town/assets/ui/box.svg');
   border-image-repeat: stretch;
   border-image-slice: 12.5%;
@@ -543,7 +543,7 @@ button {
   min-width: 18px;
   padding: 2px 4px;
   border-style: solid;
-  border-width: 10px;
+  border-width: var(--aitown-token-border);
   border-image-source: url('/ai-town/assets/ui/box.svg');
   border-image-repeat: stretch;
   border-image-slice: 12.5%;
@@ -575,6 +575,7 @@ button {
   overscroll-behavior: contain;
   pointer-events: auto;
   backdrop-filter: blur(8px);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.34);
   scrollbar-width: thin;
 }
 
@@ -782,7 +783,7 @@ button {
   gap: 2px;
   padding: 6px 10px 7px;
   border-style: solid;
-  border-width: 12px;
+  border-width: var(--aitown-token-border);
   border-image-source: url('/ai-town/assets/ui/box.svg');
   border-image-repeat: stretch;
   border-image-slice: 12.5%;
@@ -810,7 +811,7 @@ button {
   flex-direction: column;
   gap: 16px;
   border-style: solid;
-  border-width: 24px;
+  border-width: var(--aitown-box-border);
   border-image-source: url('/ai-town/assets/ui/box.svg');
   border-image-repeat: stretch;
   border-image-slice: 12.5%;
@@ -849,7 +850,7 @@ button {
   min-width: 0;
   max-height: min(22dvh, 180px);
   border-style: solid;
-  border-width: clamp(24px, 5vw, 46px);
+  border-width: clamp(10px, 1.4vw, 16px);
   border-image-source: url('/ai-town/assets/ui/desc.svg');
   border-image-repeat: stretch;
   border-image-slice: 28%;
@@ -863,7 +864,7 @@ button {
 }
 
 .aitown-details__summary p {
-  margin: -14px 0 0;
+  margin: 0;
   color: #fff3d0;
   line-height: 1.5;
 }
@@ -878,7 +879,7 @@ button {
 .aitown-stat-card {
   min-width: 0;
   border-style: solid;
-  border-width: 12px;
+  border-width: var(--aitown-token-border);
   border-image-source: url('/ai-town/assets/ui/box.svg');
   border-image-repeat: stretch;
   border-image-slice: 12.5%;
@@ -920,7 +921,7 @@ button {
   flex-direction: column;
   gap: 3px;
   border-style: solid;
-  border-width: 12px;
+  border-width: var(--aitown-token-border);
   border-image-source: url('/ai-town/assets/ui/box.svg');
   border-image-repeat: stretch;
   border-image-slice: 12.5%;
@@ -1056,7 +1057,7 @@ button {
   gap: 12px;
   width: 100%;
   border-style: solid;
-  border-width: 12px;
+  border-width: var(--aitown-token-border);
   border-image-source: url('/ai-town/assets/ui/box.svg');
   border-image-repeat: stretch;
   border-image-slice: 12.5%;
@@ -1080,7 +1081,7 @@ button {
 }
 
 .aitown-button {
-  border-width: 1em;
+  border-width: var(--aitown-token-border);
   border-image-source: url('/ai-town/assets/ui/button.svg');
   border-image-repeat: stretch;
   border-image-slice: 25%;
@@ -1136,7 +1137,7 @@ button {
 
 .aitown-button {
   border-style: solid;
-  border-width: 12px;
+  border-width: var(--aitown-token-border);
   border-image-source: url('/ai-town/assets/ui/button.svg');
   border-image-repeat: stretch;
   border-image-slice: 12.5%;
@@ -1277,7 +1278,7 @@ button {
   margin-bottom: 10px;
   padding: 6px 10px 7px;
   border-style: solid;
-  border-width: 12px;
+  border-width: var(--aitown-token-border);
   border-image-source: url('/ai-town/assets/ui/box.svg');
   border-image-repeat: stretch;
   border-image-slice: 12.5%;
@@ -1294,7 +1295,7 @@ button {
 .aitown-hub-drilldown {
   min-width: 0;
   border-style: solid;
-  border-width: 10px;
+  border-width: var(--aitown-token-border);
   border-image-source: url('/ai-town/assets/ui/box.svg');
   border-image-repeat: stretch;
   border-image-slice: 12.5%;
@@ -1510,8 +1511,8 @@ button {
     height: 100dvh;
     --aitown-edge: 6px;
     --aitown-panel-gap: 6px;
-    --aitown-box-border: 8px;
-    --aitown-token-border: 8px;
+    --aitown-box-border: 6px;
+    --aitown-token-border: 5px;
   }
 
   .aitown-panel__chrome {
@@ -1528,7 +1529,7 @@ button {
 
   .aitown-panel--game {
     min-height: 0;
-    border-width: 24px;
+    border-width: 12px;
   }
 
   .game-title {
@@ -1578,7 +1579,7 @@ button {
   }
 
   .aitown-panel--details {
-    border-width: 18px;
+    border-width: 10px;
   }
 
   .aitown-details__grid {
@@ -1625,7 +1626,7 @@ button {
 
   .aitown-focus-chip {
     flex-basis: 112px;
-    border-width: 8px;
+    border-width: var(--aitown-token-border);
     padding: 2px 5px 4px;
   }
 
@@ -1654,7 +1655,7 @@ button {
 
   .aitown-button {
     min-width: 0;
-    border-width: 8px;
+    border-width: var(--aitown-token-border);
     padding: 4px 5px 5px;
     font-size: 0.68rem;
     overflow: hidden;

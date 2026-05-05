@@ -127,12 +127,21 @@ async function focusHubControlWithTab(
 
   await expect(locator).toBeVisible();
 
-  for (let step = 0; step < maxTabs; step += 1) {
-    if (await locator.evaluate((element) => element === document.activeElement)) {
-      return;
-    }
+  const targetElement = await locator.elementHandle();
+  if (!targetElement) {
+    throw new Error(`could not resolve ${accessibleName} before keyboard traversal`);
+  }
 
-    await page.keyboard.press(reverse ? 'Shift+Tab' : 'Tab');
+  try {
+    for (let step = 0; step < maxTabs; step += 1) {
+      if (await targetElement.evaluate((element) => element === document.activeElement)) {
+        return;
+      }
+
+      await page.keyboard.press(reverse ? 'Shift+Tab' : 'Tab');
+    }
+  } finally {
+    await targetElement.dispose();
   }
 
   throw new Error(

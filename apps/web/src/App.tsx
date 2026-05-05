@@ -2104,7 +2104,8 @@ function AppInner() {
     <main className="aitown-shell game-background">
       <section className="aitown-shell__layout aitown-shell__layout--fullscreen">
         <section className="aitown-panel aitown-panel--game aitown-panel--game-fullscreen" role="region" aria-label="Office world">
-          <header className="aitown-shell__header">
+          <div className="aitown-panel__chrome">
+            <header className="aitown-shell__header">
             <div className="aitown-shell__brand">
               <span className="aitown-shell__eyebrow">Metaverse Office operator shell</span>
               <h1 className="game-title">Metaverse Office</h1>
@@ -2267,6 +2268,7 @@ function AppInner() {
                 Clear Selection
               </button>
             ) : null}
+          </div>
           </div>
           <SceneStatusLegend onFocusWorldZone={handleFocusWorldZone} world={projectedWorld} />
 

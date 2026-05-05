@@ -597,6 +597,28 @@ describe('run-browser-smoke helpers', () => {
     expect(signals).toEqual(['SIGINT']);
   });
 
+  it('force-kills managed servers that ignore graceful shutdown', async () => {
+    const child = new EventEmitter() as EventEmitter & {
+      exitCode: number | null;
+      signalCode: string | null;
+      kill: (signal?: string) => boolean;
+    };
+    child.exitCode = null;
+    child.signalCode = null;
+    const signals: string[] = [];
+    child.kill = (signal = 'SIGTERM') => {
+      signals.push(signal);
+      if (signal === 'SIGKILL') {
+        child.signalCode = signal;
+        queueMicrotask(() => child.emit('exit', 0, signal));
+      }
+      return true;
+    };
+
+    await expect(stopManagedServer(child as any, 'SIGINT', 0)).resolves.toBeUndefined();
+    expect(signals).toEqual(['SIGINT', 'SIGKILL']);
+  });
+
   it('resolves shutdown immediately for children that already exited by signal', async () => {
     const child = new EventEmitter() as EventEmitter & {
       exitCode: number | null;

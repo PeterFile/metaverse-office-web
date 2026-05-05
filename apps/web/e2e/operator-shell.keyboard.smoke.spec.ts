@@ -6673,7 +6673,14 @@ test.describe('operator shell smoke', () => {
     await page.waitForTimeout(150);
 
     const postReselectRequests = requestedUrls.slice(requestCountBeforeReselect);
-    expectOnlyBenignPostJumpRequests(postReselectRequests);
+    expectOnlyBenignPostJumpRequests(postReselectRequests, [
+      '/office/operations?agent_id=growth-revenue',
+      '/agents/growth-revenue/workflow?limit=10&window=60m',
+      '/timeline?limit=10&window=60m&agent_id=growth-revenue&correlation_id=corr-revenue-handoff',
+      resolveSelectedAgentSupervisionHistoryPath('growth-revenue', 'corr-revenue-handoff'),
+      '/memory/artifacts?limit=4&window=60m&agent_id=growth-revenue&correlation_id=corr-revenue-handoff',
+      '/correlations/corr-revenue-handoff?limit=10&window=60m'
+    ]);
 
     await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();

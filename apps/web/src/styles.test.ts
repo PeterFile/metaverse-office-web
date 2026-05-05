@@ -53,17 +53,16 @@ describe('AI Town shell styles', () => {
     expect(styles).toMatch(/\.aitown-world__host canvas\s*\{[\s\S]*?touch-action:\s*pinch-zoom;/);
   });
 
-  it('keeps the hud lane below scene overlays while moving hot-zone focus below the topline row and outside toolbar overlap', () => {
-    expect(styles).toContain(
-      '.aitown-panel__hud-top {\n  position: absolute;\n  top: 148px;\n  left: 18px;\n  right: 18px;\n  z-index: 5;\n  display: flex;\n  flex-direction: column;\n  align-items: stretch;\n  gap: 12px;\n  pointer-events: none;\n}'
-    );
-    expect(styles).toContain(
-      '.aitown-panel__hot-zone-focus {\n  display: flex;\n  max-width: min(52ch, 48%);\n  margin-left: auto;\n  flex-direction: column;\n  align-items: flex-end;\n  gap: 6px;\n  pointer-events: none;\n}'
-    );
-    expect(styles).toContain('.aitown-panel__hot-zone-focus .aitown-panel__focus-chips {\n  justify-content: flex-end;\n}');
+  it('keeps header toolbar and HUD in one chrome flow instead of competing absolute offsets', () => {
     expect(styles).toMatch(
-      /\.aitown-panel__toolbar\s*\{[\s\S]*?position:\s*absolute;[\s\S]*?right:\s*18px;[\s\S]*?top:\s*156px;[\s\S]*?display:\s*flex;[\s\S]*?gap:\s*10px;[\s\S]*?justify-content:\s*flex-end;[\s\S]*?pointer-events:\s*auto;/
+      /\.aitown-panel__chrome\s*\{[\s\S]*?position:\s*absolute;[\s\S]*?grid-template-areas:\s*[\s\S]*?'header toolbar'[\s\S]*?'hud hud';[\s\S]*?pointer-events:\s*none;/
     );
+    expect(styles).toMatch(/\.aitown-shell__header\s*\{[\s\S]*?grid-area:\s*header;/);
+    expect(styles).toMatch(/\.aitown-panel__hud-top\s*\{[\s\S]*?grid-area:\s*hud;[\s\S]*?pointer-events:\s*none;/);
+    expect(styles).toMatch(
+      /\.aitown-panel__toolbar\s*\{[\s\S]*?grid-area:\s*toolbar;[\s\S]*?display:\s*flex;[\s\S]*?pointer-events:\s*auto;/
+    );
+    expect(styles).not.toMatch(/\.aitown-panel__toolbar\s*\{[^}]*position:\s*absolute;/);
   });
 
   it('keeps evidence coverage focus passive except its chips so the world drag lane remains available', () => {
@@ -75,9 +74,27 @@ describe('AI Town shell styles', () => {
 
   it('keeps the Live Focus reason line from expanding the draggable world safe lane', () => {
     expect(styles).toMatch(/\.aitown-panel__topline > span\s*\{[\s\S]*?min-width:\s*0;/);
-    expect(styles).toContain('.aitown-panel__topline > .aitown-panel__topline-card--live-focus {\n  max-width: min(42ch, 42%);\n}');
+    expect(styles).toContain('.aitown-panel__topline > .aitown-panel__topline-card--live-focus {\n  max-width: min(42ch, 46%);\n}');
     expect(styles).toContain(
       '.aitown-panel__topline-copy--live-focus-summary {\n  display: block;\n  max-width: 100%;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}'
+    );
+  });
+
+  it('caps portrait chrome so mobile center drag remains a world lane', () => {
+    expect(styles).toMatch(
+      /@media \(max-width:\s*720px\)\s*\{[\s\S]*?\.aitown-panel__chrome\s*\{[\s\S]*?grid-template-areas:\s*[\s\S]*?'toolbar'[\s\S]*?'header'[\s\S]*?'hud';[\s\S]*?max-height:\s*min\(34dvh, 288px\);[\s\S]*?overflow-y:\s*auto;/
+    );
+    expect(styles).toMatch(
+      /@media \(max-width:\s*720px\)\s*\{[\s\S]*?\.aitown-shell__eyebrow,[\s\S]*?\.aitown-shell__brand p\s*\{[\s\S]*?display:\s*none;/
+    );
+    expect(styles).toMatch(
+      /@media \(max-width:\s*720px\)\s*\{[\s\S]*?\.aitown-panel__topline > span:not\(\.aitown-panel__topline-card--live-focus\)\s*\{[\s\S]*?display:\s*none;/
+    );
+    expect(styles).toMatch(
+      /@media \(max-width:\s*720px\)\s*\{[\s\S]*?\.aitown-panel__hot-zone-focus\s*\{[\s\S]*?display:\s*none;/
+    );
+    expect(styles).toMatch(
+      /@media \(max-width:\s*720px\)\s*\{[\s\S]*?\.aitown-button\s*\{[\s\S]*?text-overflow:\s*ellipsis;[\s\S]*?white-space:\s*nowrap;/
     );
   });
 });

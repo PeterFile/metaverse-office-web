@@ -85,6 +85,18 @@ async function expectLocatorInsideRect(locator: Locator, container: Locator, lab
   );
 }
 
+async function expectLocatorInsideViewport(page: Page, locator: Locator, label: string) {
+  const rect = await readRect(locator);
+  const viewport = page.viewportSize();
+  const epsilon = 1;
+
+  expect(viewport, `${label} requires an explicit viewport`).not.toBeNull();
+  expect(rect.left, `${label} should not overflow viewport left`).toBeGreaterThanOrEqual(-epsilon);
+  expect(rect.right, `${label} should not overflow viewport right`).toBeLessThanOrEqual(viewport!.width + epsilon);
+  expect(rect.top, `${label} should not overflow viewport top`).toBeGreaterThanOrEqual(-epsilon);
+  expect(rect.bottom, `${label} should not overflow viewport bottom`).toBeLessThanOrEqual(viewport!.height + epsilon);
+}
+
 async function expectCanvasDragMovesViewport(page: Page) {
   const canvas = page.locator('.aitown-world__host canvas');
   await expect(canvas).toBeVisible();
@@ -337,6 +349,96 @@ test.describe('operator shell layout visual smoke', () => {
     await page.getByRole('button', { name: 'Close Hub' }).click();
     await expect(hub).toHaveCount(0);
     await expectCanvasDragMovesViewport(page);
+  });
+
+  test('keeps the 390px portrait shell bounded across Hub and selected-watch transitions', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/');
+
+    const worldHost = page.locator('.aitown-world__host');
+    await expect(worldHost).toBeVisible();
+    await page.waitForFunction(() => Boolean(window.__AITOWN_VIEWPORT__));
+
+    const initialOverflow = await page.evaluate(() => ({
+      bodyWidth: document.body.scrollWidth,
+      documentWidth: document.documentElement.scrollWidth,
+      viewportWidth: window.innerWidth
+    }));
+    expect(Math.max(initialOverflow.bodyWidth, initialOverflow.documentWidth)).toBeLessThanOrEqual(
+      initialOverflow.viewportWidth + 1
+    );
+
+    await page.getByRole('button', { name: 'Open Hub' }).click();
+    const hub = page.getByRole('dialog', { name: 'Hub' });
+    const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
+    await expect(hub).toBeVisible();
+    await expectLocatorInsideViewport(page, hub, 'mobile Hub sheet');
+
+    await detailsPanel.getByRole('button', { name: 'Inspect Growth Revenue Agent', exact: true }).click();
+    await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+
+    const overflowingDetailItems = await hub.locator('.aitown-record, .aitown-link-button').evaluateAll((elements) =>
+      elements
+        .filter((element) => element.scrollWidth > element.clientWidth + 1)
+        .map((element) => ({
+          className: element instanceof HTMLElement ? element.className : '',
+          text: element.textContent?.trim().slice(0, 80) ?? ''
+        }))
+        .slice(0, 4)
+    );
+    expect(overflowingDetailItems).toEqual([]);
+
+    await page.getByRole('button', { name: 'Close Hub' }).click();
+    await expect(hub).toHaveCount(0);
+
+    const toolbar = page.locator('.aitown-panel__toolbar');
+    const statusLegend = page.locator('.aitown-status-legend');
+    const watchOverlay = page.getByRole('region', { name: 'Selected watch links' });
+    await expect(toolbar).toBeVisible();
+    await expect(statusLegend).toBeVisible();
+    await expect(watchOverlay).toBeVisible();
+
+    await expectLocatorInsideViewport(page, toolbar, 'mobile toolbar');
+    await expectLocatorInsideViewport(page, statusLegend, 'mobile status legend');
+    await expectLocatorInsideViewport(page, watchOverlay, 'mobile selected-watch overlay');
+
+    const legendPolicy = await statusLegend.evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      const style = getComputedStyle(element);
+
+      return {
+        height: rect.height,
+        overflowY: style.overflowY
+      };
+    });
+    expect(legendPolicy.height, 'mobile status legend should stay bounded').toBeLessThanOrEqual(212);
+    expect(legendPolicy.overflowY, 'mobile status legend should scroll instead of growing unbounded').toBe('auto');
+
+    const centerHit = await page.evaluate(() => {
+      const target = document.elementFromPoint(window.innerWidth / 2, window.innerHeight / 2);
+
+      return {
+        insideButton: Boolean(target?.closest('button')),
+        insideWorld: Boolean(target?.closest('.aitown-world__host')),
+        tagName: target?.tagName ?? null,
+        className: target instanceof HTMLElement ? target.className : null
+      };
+    });
+    expect(centerHit.insideButton, `portrait center should not hit chrome controls: ${JSON.stringify(centerHit)}`).toBe(
+      false
+    );
+    expect(centerHit.insideWorld, `portrait center should remain a world drag lane: ${JSON.stringify(centerHit)}`).toBe(
+      true
+    );
+
+    const finalOverflow = await page.evaluate(() => ({
+      bodyWidth: document.body.scrollWidth,
+      documentWidth: document.documentElement.scrollWidth,
+      viewportWidth: window.innerWidth
+    }));
+    expect(Math.max(finalOverflow.bodyWidth, finalOverflow.documentWidth)).toBeLessThanOrEqual(
+      finalOverflow.viewportWidth + 1
+    );
   });
 
   test('keeps selected-agent inspect peek compact outside the world drag lane', async ({ page }) => {

@@ -50,7 +50,8 @@ import type {
   OfficeOperations,
   PeerWatchAlertsResponse,
   Severity,
-  TimelineReplayResponse
+  TimelineReplayResponse,
+  WorkflowDetail
 } from './types';
 import { projectWorldState } from './world/projector';
 import {
@@ -672,6 +673,52 @@ function selectDefaultCorrelationId({
   );
 }
 
+type WorkflowEvidenceRecord = {
+  correlation_id: string | null;
+  evidence_refs: string[];
+};
+
+function selectFirstEvidenceRef(records: WorkflowEvidenceRecord[], correlationId: string | null) {
+  if (correlationId) {
+    return records.find((record) => record.correlation_id === correlationId && record.evidence_refs.length > 0)?.evidence_refs[0] ?? null;
+  }
+
+  return records.find((record) => record.evidence_refs.length > 0)?.evidence_refs[0] ?? null;
+}
+
+export function resolveSelectedAgentPeekEvidenceRef({
+  selectedOperation,
+  workflow,
+  correlationId
+}: {
+  selectedOperation: OfficeOperation | null;
+  workflow: WorkflowDetail | null;
+  correlationId: string | null;
+}) {
+  const operationEvidenceRef = selectedOperation?.latest_event?.evidence_refs[0] ?? null;
+  const operationCorrelationId = selectedOperation?.correlation_id ?? null;
+
+  if (operationEvidenceRef && (!correlationId || operationCorrelationId === correlationId)) {
+    return operationEvidenceRef;
+  }
+
+  if (!workflow) {
+    return null;
+  }
+
+  return selectFirstEvidenceRef(
+    [
+      ...workflow.open_peer_watch_alerts,
+      ...workflow.recent_events,
+      ...workflow.recent_incidents,
+      ...workflow.recent_handoffs,
+      ...workflow.recent_reboots,
+      ...workflow.recent_interactions
+    ],
+    correlationId
+  );
+}
+
 function AppInner() {
   const { selectedAgentId, setSelectedAgentId, setWorld } = useWorld();
   const [hubOpen, setHubOpen] = useState(false);
@@ -853,7 +900,7 @@ function AppInner() {
   );
 
   const workflowResource = usePolledResource({
-    enabled: selectedAgentId !== null,
+    enabled: hubOpen && selectedAgentId !== null,
     load: (signal) =>
       fetchAgentWorkflow(selectedAgentId!, {
         limit: DEFAULT_WORKFLOW_LIMIT,
@@ -1475,8 +1522,10 @@ function AppInner() {
 
   useEffect(() => {
     if (!hubOpen) {
-      lastCorrelationContextRef.current = null;
-      correlationSelectionModeRef.current = 'auto';
+      if (selectedAgentId === null && selectedCorrelationId === null) {
+        lastCorrelationContextRef.current = null;
+        correlationSelectionModeRef.current = 'auto';
+      }
       return;
     }
 
@@ -1487,7 +1536,7 @@ function AppInner() {
       setSelectedCorrelationWasExplicit(false);
       setSelectedCorrelationCarryForward(false);
     }
-  }, [correlationSelectionContext, hubOpen]);
+  }, [correlationSelectionContext, hubOpen, selectedAgentId, selectedCorrelationId]);
 
   useEffect(() => {
     if (!hubOpen) {
@@ -1906,9 +1955,6 @@ function AppInner() {
           selectedCorrelationCarryForward,
         resolveOperationSnapshotSeed(agentId, crewOverviewOperationSeedData)
       );
-      if (agentId) {
-        setHubOpen(true);
-      }
     },
     [
       activeCorrelationParticipantAgentIds,
@@ -1926,6 +1972,7 @@ function AppInner() {
       requestedSelectedAgentDrilldownTabRef.current = 'evidence';
       handleSceneSelectAgent(agentId);
       setSelectedAgentDrilldownTab('evidence');
+      setHubOpen(true);
     },
     [handleSceneSelectAgent]
   );
@@ -2095,10 +2142,11 @@ function AppInner() {
     null;
   const selectedAgentPeekCorrelationId =
     selectedOperation?.correlation_id ?? selectedCorrelationId ?? defaultCorrelationId;
-  const selectedAgentPeekEvidenceRef =
-    selectedOperation?.latest_event?.evidence_refs[0] ??
-    activeWorkflow?.detail.recent_events.find((event) => event.evidence_refs.length > 0)?.evidence_refs[0] ??
-    null;
+  const selectedAgentPeekEvidenceRef = resolveSelectedAgentPeekEvidenceRef({
+    selectedOperation,
+    workflow: activeWorkflow?.detail ?? null,
+    correlationId: selectedAgentPeekCorrelationId
+  });
 
   return (
     <main className="aitown-shell game-background">

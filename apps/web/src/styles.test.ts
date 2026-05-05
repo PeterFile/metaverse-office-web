@@ -42,6 +42,15 @@ describe('AI Town shell styles', () => {
     );
   });
 
+  it('uses thin RimWorld-style chrome instead of coarse nested frames', () => {
+    expect(styles).toMatch(/--aitown-frame-width:\s*clamp\(12px, 1\.4vw, 20px\);/);
+    expect(styles).toMatch(/--aitown-box-border:\s*clamp\(6px, 0\.9vw, 10px\);/);
+    expect(styles).toMatch(/--aitown-token-border:\s*clamp\(4px, 0\.65vw, 6px\);/);
+    expect(styles).toMatch(/\.aitown-panel--details\s*\{[^}]*border-width:\s*var\(--aitown-box-border\);/);
+    expect(styles).toMatch(/\.aitown-details__summary\s*\{[^}]*border-width:\s*clamp\(10px, 1\.4vw, 16px\);/);
+    expect(styles).not.toContain('border-width: clamp(24px, 5vw, 46px);');
+  });
+
   it('renders Hub as a dismissible overlay instead of a permanent side rail', () => {
     expect(styles).toMatch(/\.aitown-hub-overlay\s*\{[\s\S]*?position:\s*fixed;/);
     expect(styles).toMatch(/\.aitown-hub-overlay\s*\{[\s\S]*?justify-content:\s*flex-end;/);

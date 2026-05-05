@@ -442,27 +442,24 @@ test.describe('operator shell layout visual smoke', () => {
   });
 
   test('keeps selected-agent inspect peek compact outside the world drag lane', async ({ page }) => {
+    const workflowRequests: string[] = [];
+    page.on('request', (request) => {
+      const url = request.url();
+      if (url.includes('/agents/growth-revenue/workflow')) {
+        workflowRequests.push(url);
+      }
+    });
+
     await page.goto('/');
 
     const worldHost = page.locator('.aitown-world__host');
     await expect(worldHost).toBeVisible();
     await page.waitForFunction(() => Boolean(window.__AITOWN_VIEWPORT__));
 
-    await page.getByRole('button', { name: 'Open Hub' }).click();
-
     const hub = page.getByRole('dialog', { name: 'Hub' });
-    const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
-    const activeQueueSection = detailsPanel.locator('section').filter({
-      has: page.getByRole('heading', { name: 'Active Queue' })
-    });
+    await expect(hub).toHaveCount(0);
 
-    await activeQueueSection
-      .getByRole('button', { name: 'Inspect Growth Revenue Agent from active queue' })
-      .click();
-    await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
-    await expect(page.getByRole('region', { name: 'Selected agent inspect peek' })).toHaveCount(0);
-
-    await page.getByRole('button', { name: 'Close Hub' }).click();
+    await page.getByRole('button', { name: 'Inspect live focus agent Growth Revenue Agent' }).click();
     await expect(hub).toHaveCount(0);
 
     const inspectPeek = page.getByRole('region', { name: 'Selected agent inspect peek' });
@@ -470,8 +467,9 @@ test.describe('operator shell layout visual smoke', () => {
     await expect(inspectPeek.getByText('Growth Revenue Agent')).toBeVisible();
     await expect(inspectPeek.getByText(/Yellow .* planning/)).toBeVisible();
     await expect(inspectPeek.getByText('Operation · Prepare handoff notes')).toBeVisible();
-    await expect(inspectPeek.getByText('Correlation · corr-revenue-handoff')).toBeVisible();
-    await expect(inspectPeek.getByText('Evidence · /tmp/revenue-handoff.md')).toBeVisible();
+    expect(workflowRequests, 'Hub-closed inspect peek should not request selected-agent workflow').toHaveLength(0);
+    await expect(inspectPeek.getByText('Correlation · corr-growth-lead-review')).toHaveCount(0);
+    await expect(inspectPeek.getByText('Evidence · /tmp/growth-review-complete.md')).toHaveCount(0);
 
     const [worldRect, peekRect] = await Promise.all([readRect(worldHost), readRect(inspectPeek)]);
     expect(peekRect.width, 'Inspect peek should stay compact').toBeLessThanOrEqual(360);

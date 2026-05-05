@@ -545,15 +545,40 @@ function requestStatus(url, timeoutMs = 2_000) {
   });
 }
 
-export function stopManagedServer(child, signal = 'SIGTERM') {
+export function stopManagedServer(child, signal = 'SIGTERM', forceKillAfterMs = 5_000) {
   return new Promise((resolve) => {
     if (child.exitCode !== null || child.signalCode !== null) {
       resolve();
       return;
     }
 
-    child.once('exit', () => resolve());
-    child.kill(signal);
+    let settled = false;
+    let forceKillTimeout = null;
+    const finish = () => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      if (forceKillTimeout !== null) {
+        clearTimeout(forceKillTimeout);
+      }
+      child.off('exit', finish);
+      resolve();
+    };
+
+    child.once('exit', finish);
+
+    if (!child.kill(signal)) {
+      finish();
+      return;
+    }
+
+    forceKillTimeout = setTimeout(() => {
+      if (!settled) {
+        child.kill('SIGKILL');
+      }
+    }, forceKillAfterMs);
   });
 }
 

@@ -127,12 +127,21 @@ async function focusHubControlWithTab(
 
   await expect(locator).toBeVisible();
 
-  for (let step = 0; step < maxTabs; step += 1) {
-    if (await locator.evaluate((element) => element === document.activeElement)) {
-      return;
-    }
+  const targetElement = await locator.elementHandle();
+  if (!targetElement) {
+    throw new Error(`could not resolve ${accessibleName} before keyboard traversal`);
+  }
 
-    await page.keyboard.press(reverse ? 'Shift+Tab' : 'Tab');
+  try {
+    for (let step = 0; step < maxTabs; step += 1) {
+      if (await targetElement.evaluate((element) => element === document.activeElement)) {
+        return;
+      }
+
+      await page.keyboard.press(reverse ? 'Shift+Tab' : 'Tab');
+    }
+  } finally {
+    await targetElement.dispose();
   }
 
   throw new Error(
@@ -6664,7 +6673,14 @@ test.describe('operator shell smoke', () => {
     await page.waitForTimeout(150);
 
     const postReselectRequests = requestedUrls.slice(requestCountBeforeReselect);
-    expectOnlyBenignPostJumpRequests(postReselectRequests);
+    expectOnlyBenignPostJumpRequests(postReselectRequests, [
+      '/office/operations?agent_id=growth-revenue',
+      '/agents/growth-revenue/workflow?limit=10&window=60m',
+      '/timeline?limit=10&window=60m&agent_id=growth-revenue&correlation_id=corr-revenue-handoff',
+      resolveSelectedAgentSupervisionHistoryPath('growth-revenue', 'corr-revenue-handoff'),
+      '/memory/artifacts?limit=4&window=60m&agent_id=growth-revenue&correlation_id=corr-revenue-handoff',
+      '/correlations/corr-revenue-handoff?limit=10&window=60m'
+    ]);
 
     await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();

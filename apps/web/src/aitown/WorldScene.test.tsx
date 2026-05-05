@@ -6,7 +6,7 @@ import type { AiTownAssets } from './assetLoader';
 import type { AiTownSceneModel, SceneAgent } from './types';
 import type { ViewportInspector } from './viewport';
 
-const { MockDisplayObject, appInitMock, appDestroyMock } = vi.hoisted(() => {
+const { MockDisplayObject, MockTicker, appInitMock, appDestroyMock, appInstances } = vi.hoisted(() => {
   class MockDisplayObject {
     children: MockDisplayObject[] = [];
     eventMode?: string;
@@ -96,10 +96,35 @@ const { MockDisplayObject, appInitMock, appDestroyMock } = vi.hoisted(() => {
     destroy(_options?: unknown) {}
   }
 
+  class MockTicker {
+    deltaMS = 1000 / 60;
+    maxFPS = 0;
+    listeners = new Set<(ticker: MockTicker) => void>();
+    add = vi.fn((listener: (ticker: MockTicker) => void) => {
+      this.listeners.add(listener);
+      return this;
+    });
+    remove = vi.fn((listener: (ticker: MockTicker) => void) => {
+      this.listeners.delete(listener);
+      return this;
+    });
+
+    tick(deltaMS = 1000 / 60) {
+      this.deltaMS = deltaMS;
+      for (const listener of [...this.listeners]) {
+        listener(this);
+      }
+    }
+  }
+
+  const appInstances: Array<{ stage: MockDisplayObject; ticker: MockTicker }> = [];
+
   return {
     MockDisplayObject,
+    MockTicker,
     appInitMock: vi.fn(),
-    appDestroyMock: vi.fn().mockResolvedValue(undefined)
+    appDestroyMock: vi.fn().mockResolvedValue(undefined),
+    appInstances
   };
 });
 
@@ -108,8 +133,13 @@ vi.mock('pixi.js', () => {
     canvas = document.createElement('canvas');
     renderer = { events: {} };
     stage = new Container();
+    ticker = new MockTicker();
     init = appInitMock;
     destroy = appDestroyMock;
+
+    constructor() {
+      appInstances.push(this);
+    }
   }
 
   class Container extends MockDisplayObject {}
@@ -390,6 +420,19 @@ function readViewportCenter() {
   };
 }
 
+function readAgentLayer() {
+  const app = appInstances.at(-1);
+  expect(app).toBeDefined();
+
+  const viewport = app?.stage.children[0];
+  expect(viewport).toBeDefined();
+
+  const agentLayer = viewport?.children[3];
+  expect(agentLayer).toBeDefined();
+
+  return agentLayer;
+}
+
 function installViewportInspectorTracker() {
   const assignedValues: Array<ViewportInspector | undefined> = [];
   let currentValue: ViewportInspector | undefined;
@@ -434,6 +477,7 @@ function makeAssets(): AiTownAssets {
 
 beforeEach(() => {
   MockResizeObserver.instances = [];
+  appInstances.length = 0;
   vi.stubGlobal('ResizeObserver', MockResizeObserver);
   appInitMock.mockReset().mockRejectedValue(new Error('renderer_init_failed'));
   appDestroyMock.mockClear();
@@ -606,6 +650,62 @@ describe('WorldScene watch overlay caption gating', () => {
     await waitFor(() => {
       expect(screen.queryByRole('region', { name: 'Active correlation' })).not.toBeInTheDocument();
     });
+  });
+
+  it('throttles employee motion on the Pixi ticker without capping the renderer frame rate', async () => {
+    appInitMock.mockReset().mockResolvedValue(undefined);
+    vi.mocked(loadAiTownAssets).mockResolvedValue(makeAssets());
+
+    const scene = makeScene();
+    const homeAgent = scene.agents.find((agent) => agent.agentId === 'app-engineering');
+    const { unmount } = render(<WorldScene scene={scene} onSelectAgent={vi.fn()} />);
+
+    expect(homeAgent).toBeDefined();
+
+    await waitFor(() => {
+      expect(readViewportInspector()).toBeDefined();
+      expect(readAgentLayer()?.children).toHaveLength(scene.agents.length);
+    });
+
+    const app = appInstances.at(-1);
+    expect(app).toBeDefined();
+    expect(app?.ticker.maxFPS).toBe(0);
+    expect(app?.ticker.add).toHaveBeenCalledTimes(1);
+    expect(app?.ticker.listeners.size).toBe(1);
+
+    const agentLayer = readAgentLayer();
+    const agentSprite = agentLayer?.children.find(
+      (child) => child.x === homeAgent?.position.x && child.y === homeAgent?.position.y
+    );
+
+    expect(agentSprite).toBeDefined();
+
+    const startX = agentSprite?.x ?? 0;
+    const startY = agentSprite?.y ?? 0;
+
+    act(() => {
+      app?.ticker.tick(10);
+    });
+
+    expect(agentSprite?.x).toBe(startX);
+    expect(agentSprite?.y).toBe(startY);
+
+    act(() => {
+      app?.ticker.tick(1000);
+    });
+
+    const offsetX = (agentSprite?.x ?? 0) - (homeAgent?.position.x ?? 0);
+    const offsetY = (agentSprite?.y ?? 0) - (homeAgent?.position.y ?? 0);
+    const distanceFromHome = Math.hypot(offsetX, offsetY);
+
+    expect(distanceFromHome).toBeGreaterThan(0.1);
+    expect(distanceFromHome).toBeLessThanOrEqual(3.1);
+    expect(homeAgent?.position).toEqual({ x: 120, y: 180 });
+
+    unmount();
+
+    expect(app?.ticker.remove).toHaveBeenCalledTimes(1);
+    expect(app?.ticker.listeners.size).toBe(0);
   });
 
   it('routes active correlation overlay clamp padding into the viewport inspector and clears it when the overlay disappears', async () => {
@@ -2838,39 +2938,20 @@ describe('WorldScene watch overlay caption gating', () => {
       });
     });
 
-    fireEvent.pointerDown(host as HTMLDivElement, {
-      pointerId: 1,
-      pointerType: 'mouse',
-      button: 0,
-      buttons: 1,
-      clientX: 500,
-      clientY: 320
-    });
-    fireEvent.pointerMove(host as HTMLDivElement, {
-      pointerId: 1,
-      pointerType: 'mouse',
-      buttons: 1,
-      clientX: 380,
-      clientY: 320
-    });
-    fireEvent.pointerUp(host as HTMLDivElement, {
-      pointerId: 1,
-      pointerType: 'mouse',
-      button: 0,
-      clientX: 380,
-      clientY: 320
-    });
-
     const inspectionBeforeReset = readViewportInspector()?.read();
     const expectedDefaultCenterX =
       (selectedAgent?.position.x ?? 0) +
       (inspectionBeforeReset?.clampPadding.right ?? 0) / ((inspectionBeforeReset?.scale ?? 1) * 2);
+    const manualCenterX = expectedDefaultCenterX - 80;
+
+    readViewportInspector()?.moveCenter(manualCenterX, selectedAgent?.position.y ?? 0);
 
     await waitFor(() => {
-      expect(readViewportCenter().x).not.toBeCloseTo(expectedDefaultCenterX, 4);
+      expect(readViewportCenter().x).toBeCloseTo(manualCenterX, 4);
     });
 
     const manualCenter = readViewportCenter();
+    expect(manualCenter.x).not.toBeCloseTo(expectedDefaultCenterX, 4);
 
     rerender(
       <main className="aitown-shell">

@@ -8,7 +8,8 @@ import {
   Sprite,
   Text,
   TextStyle,
-  Texture
+  Texture,
+  type Ticker
 } from 'pixi.js';
 import { Viewport } from 'pixi-viewport';
 
@@ -69,9 +70,220 @@ const statusBadgeStyle = new TextStyle({
 
 const WATCH_PARTICIPANT_HIGHLIGHT_COLOR = 0xffd785;
 const CORRELATION_PARTICIPANT_HIGHLIGHT_COLOR = 0x8be9d5;
+const AGENT_MOTION_TAU = Math.PI * 2;
+const AGENT_MOTION_MAX_FRAMES_PER_SECOND = 12;
+const AGENT_MOTION_MAX_DELTA_SECONDS = 0.12;
+const AGENT_MOTION_FRAME_INTERVAL_SECONDS = 1 / AGENT_MOTION_MAX_FRAMES_PER_SECOND;
+
+type AgentMotionProfile = {
+  radiusX: number;
+  radiusY: number;
+  cycleSeconds: number;
+  driftSeconds: number;
+  driftX: number;
+  driftY: number;
+  jitterAmplitude: number;
+  jitterFrequency: number;
+  maxDistance: number;
+  phaseOffset: number;
+  driftPhaseOffset: number;
+  jitterPhaseOffset: number;
+  direction: 1 | -1;
+  startOffsetSeconds: number;
+};
+
+type AgentMotionState = {
+  container: Container;
+  homeX: number;
+  homeY: number;
+  elapsedSeconds: number;
+  profile: AgentMotionProfile;
+};
 
 function resolveWatchModeLabel(watchMode: 'lead' | 'peer') {
   return watchMode === 'lead' ? 'Lead watch' : 'Peer watch';
+}
+
+function hashAgentMotionKey(value: string) {
+  let hash = 2166136261;
+
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+
+  return hash >>> 0;
+}
+
+function deriveAgentMotionUnit(seed: number, salt: number) {
+  let value = (seed + Math.imul(salt + 1, 0x9e3779b9)) >>> 0;
+  value ^= value >>> 16;
+  value = Math.imul(value, 0x7feb352d);
+  value ^= value >>> 15;
+  value = Math.imul(value, 0x846ca68b);
+  value ^= value >>> 16;
+
+  return (value >>> 0) / 0xffffffff;
+}
+
+function resolveAgentAnimationSpeed(agent: SceneAgent) {
+  if (agent.phase === 'sleeping') {
+    return 0.025;
+  }
+
+  if (agent.phase === 'blocked' || agent.phase === 'reboot_recommended' || agent.phase === 'rebooting') {
+    return 0.035;
+  }
+
+  if (agent.severity === 'red') {
+    return 0.045;
+  }
+
+  if (agent.phase === 'active' || agent.phase === 'reviewing' || agent.phase === 'handoff_active') {
+    return 0.09;
+  }
+
+  return 0.07;
+}
+
+function resolveAgentMotionProfile(agent: SceneAgent): AgentMotionProfile {
+  const seed = hashAgentMotionKey(`${agent.agentId}:${agent.phase}:${agent.severity}`);
+  const severityJitter = {
+    normal: 0,
+    yellow: 0.08,
+    orange: 0.18,
+    red: 0.38
+  }[agent.severity];
+  const severitySlowdown = {
+    normal: 1,
+    yellow: 1.08,
+    orange: 1.22,
+    red: 1.52
+  }[agent.severity];
+  const unit = (salt: number) => deriveAgentMotionUnit(seed, salt);
+  const criticalPhase = agent.phase === 'blocked' || agent.phase === 'reboot_recommended' || agent.phase === 'rebooting';
+  let radiusX = 2.2 + unit(0) * 1.8;
+  let radiusY = 0.7 + unit(1) * 0.9;
+  let cycleSeconds = 8.5 + unit(2) * 3.5;
+  let driftX = 0.35 + unit(3) * 0.45;
+  let driftY = 0.2 + unit(4) * 0.3;
+  let jitterAmplitude = 0.04 + severityJitter;
+  let maxDistance = 4.8;
+
+  if (agent.phase === 'active' || agent.phase === 'reviewing' || agent.phase === 'handoff_active') {
+    radiusX = 4.1 + unit(0) * 2.5;
+    radiusY = 1.2 + unit(1) * 1.2;
+    cycleSeconds = 5.8 + unit(2) * 2.7;
+    driftX = 0.45 + unit(3) * 0.55;
+    driftY = 0.28 + unit(4) * 0.34;
+    maxDistance = 7.2;
+  } else if (agent.phase === 'handoff_pending' || agent.phase === 'handoff_done' || agent.phase === 'recovered') {
+    radiusX = 3.1 + unit(0) * 2.1;
+    radiusY = 0.9 + unit(1) * 1.1;
+    cycleSeconds = 7 + unit(2) * 3.3;
+    maxDistance = 5.8;
+  } else if (agent.phase === 'waiting' || agent.phase === 'idle' || agent.phase === 'unknown') {
+    radiusX = 1.8 + unit(0) * 1.7;
+    radiusY = 0.5 + unit(1) * 0.85;
+    cycleSeconds = 10 + unit(2) * 5;
+    maxDistance = 4.1;
+  } else if (agent.phase === 'sleeping') {
+    radiusX = 0.35 + unit(0) * 0.35;
+    radiusY = 0.12 + unit(1) * 0.18;
+    cycleSeconds = 18 + unit(2) * 6;
+    driftX = 0.08;
+    driftY = 0.05;
+    jitterAmplitude = 0;
+    maxDistance = 1.1;
+  }
+
+  if (criticalPhase) {
+    radiusX = 0.9 + unit(0) * 1.25;
+    radiusY = 0.25 + unit(1) * 0.55;
+    cycleSeconds = 13 + unit(2) * 7.5;
+    driftX = 0.16 + unit(3) * 0.24;
+    driftY = 0.1 + unit(4) * 0.18;
+    jitterAmplitude = 0.34 + severityJitter + (agent.rebootRecommended ? 0.18 : 0);
+    maxDistance = 3;
+  } else if (agent.severity === 'red') {
+    radiusX = Math.min(radiusX, 3.2);
+    radiusY = Math.min(radiusY, 1.35);
+    maxDistance = Math.min(maxDistance, 4.2);
+  } else if (agent.severity === 'orange') {
+    radiusX = Math.min(radiusX, 5.3);
+    maxDistance = Math.min(maxDistance, 6.1);
+  }
+
+  cycleSeconds *= severitySlowdown;
+
+  return {
+    radiusX,
+    radiusY,
+    cycleSeconds,
+    driftSeconds: cycleSeconds * (1.65 + unit(5) * 0.55),
+    driftX,
+    driftY,
+    jitterAmplitude,
+    jitterFrequency: 1.6 + unit(6) * 1.4,
+    maxDistance,
+    phaseOffset: unit(7) * AGENT_MOTION_TAU,
+    driftPhaseOffset: unit(8) * AGENT_MOTION_TAU,
+    jitterPhaseOffset: unit(9) * AGENT_MOTION_TAU,
+    direction: unit(10) > 0.5 ? 1 : -1,
+    startOffsetSeconds: unit(11) * cycleSeconds
+  };
+}
+
+function createAgentMotionState(agent: SceneAgent, container: Container): AgentMotionState {
+  const profile = resolveAgentMotionProfile(agent);
+
+  return {
+    container,
+    homeX: agent.position.x,
+    homeY: agent.position.y,
+    elapsedSeconds: profile.startOffsetSeconds,
+    profile
+  };
+}
+
+function resolveAgentMotionOffset(state: AgentMotionState) {
+  const { elapsedSeconds, profile } = state;
+  const walkAngle =
+    (elapsedSeconds / profile.cycleSeconds) * AGENT_MOTION_TAU * profile.direction + profile.phaseOffset;
+  const driftAngle = (elapsedSeconds / profile.driftSeconds) * AGENT_MOTION_TAU + profile.driftPhaseOffset;
+  let offsetX = Math.cos(walkAngle) * profile.radiusX + Math.sin(driftAngle) * profile.driftX;
+  let offsetY = Math.sin(walkAngle) * profile.radiusY + Math.cos(driftAngle * 1.17) * profile.driftY;
+
+  if (profile.jitterAmplitude > 0) {
+    offsetX += Math.sin(elapsedSeconds * profile.jitterFrequency + profile.jitterPhaseOffset) * profile.jitterAmplitude;
+    offsetY +=
+      Math.cos(elapsedSeconds * profile.jitterFrequency * 0.73 + profile.jitterPhaseOffset) *
+      profile.jitterAmplitude *
+      0.55;
+  }
+
+  const distance = Math.hypot(offsetX, offsetY);
+  if (distance > profile.maxDistance) {
+    const scale = profile.maxDistance / distance;
+    offsetX *= scale;
+    offsetY *= scale;
+  }
+
+  return { x: offsetX, y: offsetY };
+}
+
+function applyAgentMotionFrame(states: AgentMotionState[], deltaSeconds: number) {
+  const safeDeltaSeconds = Number.isFinite(deltaSeconds)
+    ? Math.min(Math.max(deltaSeconds, 0), AGENT_MOTION_MAX_DELTA_SECONDS)
+    : 1 / 60;
+
+  for (const state of states) {
+    state.elapsedSeconds += safeDeltaSeconds;
+    const offset = resolveAgentMotionOffset(state);
+
+    state.container.position.set(state.homeX + offset.x, state.homeY + offset.y);
+    state.container.zIndex = state.homeY + offset.y;
+  }
 }
 
 function resolveActiveCorrelationOverlayParticipants(scene: AiTownSceneModel) {
@@ -395,7 +607,7 @@ function createAgentSprite(
   character.anchor.set(0.5, 1);
   character.y = 10;
   character.scale.set(1.1);
-  character.animationSpeed = agent.phase === 'blocked' ? 0.03 : 0.08;
+  character.animationSpeed = resolveAgentAnimationSpeed(agent);
   character.play();
 
   const nameLabel = new Text({
@@ -456,6 +668,7 @@ export default function WorldScene({
   const zoneLayerRef = useRef<Container | null>(null);
   const watchLayerRef = useRef<Container | null>(null);
   const agentLayerRef = useRef<Container | null>(null);
+  const agentMotionStatesRef = useRef<AgentMotionState[]>([]);
   const onSelectAgentRef = useRef(onSelectAgent);
   const lastCenteredAgentRef = useRef<CenteredAgentState | null>(null);
   const selectedAgentRef = useRef<CenteredAgentState | null>(null);
@@ -585,6 +798,8 @@ export default function WorldScene({
     let resizeObserver: ResizeObserver | null = null;
     let overlayObserver: MutationObserver | null = null;
     let viewportZoomHandler: (() => void) | null = null;
+    let agentMotionTicker: ((ticker: Ticker) => void) | null = null;
+    let agentMotionAccumulatorSeconds = 0;
     let activePointerId: number | null = null;
     let activeTouchPointerIds = new Set<number>();
     let lastPointerPosition: { x: number; y: number } | null = null;
@@ -1014,6 +1229,28 @@ export default function WorldScene({
       viewport.addChild(mapContainer, zoneLayer, watchLayer, agentLayer);
       app.stage.addChild(viewport);
 
+      agentMotionTicker = (ticker: Ticker) => {
+        if (agentMotionStatesRef.current.length === 0) {
+          agentMotionAccumulatorSeconds = 0;
+          return;
+        }
+
+        const deltaMS = Number.isFinite(ticker.deltaMS) ? ticker.deltaMS : 1000 / 60;
+        agentMotionAccumulatorSeconds += Math.min(
+          Math.max(deltaMS / 1000, 0),
+          AGENT_MOTION_MAX_DELTA_SECONDS
+        );
+
+        if (agentMotionAccumulatorSeconds < AGENT_MOTION_FRAME_INTERVAL_SECONDS) {
+          return;
+        }
+
+        applyAgentMotionFrame(agentMotionStatesRef.current, agentMotionAccumulatorSeconds);
+        agentMotionAccumulatorSeconds = 0;
+        agentLayer.sortChildren();
+      };
+      app.ticker.add(agentMotionTicker);
+
       const viewportInspector = createViewportInspector({
         viewport,
         getClampPadding: () => clampPaddingRef.current,
@@ -1077,6 +1314,10 @@ export default function WorldScene({
       if (viewportRef.current && viewportZoomHandler) {
         viewportRef.current.off('zoomed', viewportZoomHandler);
       }
+      if (agentMotionTicker) {
+        app.ticker.remove(agentMotionTicker);
+      }
+      agentMotionStatesRef.current = [];
       host.removeEventListener('wheel', passthroughBrowserZoomShortcut, { capture: true });
       host.removeEventListener('pointerdown', handleHostPointerDown);
       host.removeEventListener('pointermove', handleHostPointerMove);
@@ -1158,6 +1399,7 @@ export default function WorldScene({
       zoneLayer.removeChildren().forEach((child) => child.destroy({ children: true }));
       watchLayer.removeChildren().forEach((child) => child.destroy({ children: true }));
       agentLayer.removeChildren().forEach((child) => child.destroy({ children: true }));
+      agentMotionStatesRef.current = [];
 
       const emphasisByAgentId = resolveWatchOverlayAgentEmphasisById(
         scene.selectedAgentId,
@@ -1172,6 +1414,7 @@ export default function WorldScene({
 
       watchLayer.addChild(createWatchOverlay(scene));
 
+      const nextAgentMotionStates: AgentMotionState[] = [];
       for (const agent of scene.agents) {
         const agentSprite = createAgentSprite(
           agent,
@@ -1189,8 +1432,10 @@ export default function WorldScene({
         );
 
         agentLayer.addChild(agentSprite);
+        nextAgentMotionStates.push(createAgentMotionState(agent, agentSprite));
       }
 
+      agentMotionStatesRef.current = nextAgentMotionStates;
       agentLayer.sortChildren();
 
       const selectedAgent = selectedAgentRef.current;

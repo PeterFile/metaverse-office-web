@@ -652,7 +652,7 @@ describe('WorldScene watch overlay caption gating', () => {
     });
   });
 
-  it('registers employee motion on the Pixi ticker, keeps it bounded around home, and cleans it up', async () => {
+  it('throttles employee motion on the Pixi ticker without capping the renderer frame rate', async () => {
     appInitMock.mockReset().mockResolvedValue(undefined);
     vi.mocked(loadAiTownAssets).mockResolvedValue(makeAssets());
 
@@ -669,7 +669,7 @@ describe('WorldScene watch overlay caption gating', () => {
 
     const app = appInstances.at(-1);
     expect(app).toBeDefined();
-    expect(app?.ticker.maxFPS).toBe(12);
+    expect(app?.ticker.maxFPS).toBe(0);
     expect(app?.ticker.add).toHaveBeenCalledTimes(1);
     expect(app?.ticker.listeners.size).toBe(1);
 
@@ -679,6 +679,16 @@ describe('WorldScene watch overlay caption gating', () => {
     );
 
     expect(agentSprite).toBeDefined();
+
+    const startX = agentSprite?.x ?? 0;
+    const startY = agentSprite?.y ?? 0;
+
+    act(() => {
+      app?.ticker.tick(10);
+    });
+
+    expect(agentSprite?.x).toBe(startX);
+    expect(agentSprite?.y).toBe(startY);
 
     act(() => {
       app?.ticker.tick(1000);

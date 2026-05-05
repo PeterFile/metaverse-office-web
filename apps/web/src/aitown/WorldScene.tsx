@@ -871,7 +871,6 @@ export default function WorldScene({
       host.appendChild(app.canvas);
       app.canvas.style.width = '100%';
       app.canvas.style.height = '100%';
-      app.ticker.maxFPS = AGENT_MOTION_MAX_FRAMES_PER_SECOND;
 
       let assets;
       try {

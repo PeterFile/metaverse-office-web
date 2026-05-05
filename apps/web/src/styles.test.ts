@@ -80,6 +80,18 @@ describe('AI Town shell styles', () => {
     );
   });
 
+  it('bounds dense colony-sim HUD surfaces with wrapping and internal scroll instead of widening the viewport', () => {
+    expect(styles).toMatch(/\.aitown-shell\s*\{[\s\S]*?max-width:\s*100vw;/);
+    expect(styles).toMatch(/\.aitown-shell__stats\s*\{[\s\S]*?grid-template-columns:\s*repeat\(4, minmax\(58px, 1fr\)\);[\s\S]*?min-width:\s*0;/);
+    expect(styles).toMatch(/\.aitown-panel__focus-chips\s*\{[\s\S]*?min-width:\s*0;[\s\S]*?max-width:\s*100%;/);
+    expect(styles).toMatch(
+      /\.aitown-panel__evidence-focus \.aitown-panel__focus-chips,[\s\S]*?\.aitown-panel__hot-zone-focus \.aitown-panel__focus-chips\s*\{[\s\S]*?max-height:\s*min\(18dvh, 156px\);[\s\S]*?overflow-y:\s*auto;[\s\S]*?overscroll-behavior:\s*contain;/
+    );
+    expect(styles).toMatch(/\.aitown-status-legend\s*\{[\s\S]*?overflow-y:\s*auto;[\s\S]*?scrollbar-gutter:\s*stable;/);
+    expect(styles).toMatch(/\.aitown-selected-agent-peek\s*\{[\s\S]*?overflow-y:\s*auto;[\s\S]*?overscroll-behavior:\s*contain;/);
+    expect(styles).toMatch(/\.aitown-details__summary\s*\{[\s\S]*?max-height:\s*min\(22dvh, 180px\);[\s\S]*?overflow-y:\s*auto;/);
+  });
+
   it('caps portrait chrome so mobile center drag remains a world lane', () => {
     expect(styles).toMatch(
       /@media \(max-width:\s*720px\)\s*\{[\s\S]*?\.aitown-panel__chrome\s*\{[\s\S]*?grid-template-areas:\s*[\s\S]*?'toolbar'[\s\S]*?'header'[\s\S]*?'hud';[\s\S]*?max-height:\s*min\(34dvh, 288px\);[\s\S]*?overflow-y:\s*auto;/

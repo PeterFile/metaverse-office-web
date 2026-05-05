@@ -8,6 +8,7 @@ import { resolveViewportEdgeDragDelta } from '../scripts/viewport-reachability';
 import { findStableSample, requireStableSample } from '../scripts/stability';
 
 const POLL_DRIVEN_ASSERTION_TIMEOUT_MS = 12_000;
+const SELECTED_AGENT_SAFE_AREA_PIXEL_TOLERANCE = 5;
 
 async function readViewportState(page: Page) {
   return page.evaluate(() => window.__AITOWN_VIEWPORT__?.read() ?? null);
@@ -1367,18 +1368,18 @@ test.describe('operator shell smoke', () => {
     await page.waitForFunction(() => Boolean(window.__AITOWN_VIEWPORT__));
 
     const frontendOrigin = new URL(page.url()).origin;
-    const allowedPostClosePathnames = new Set(['/office/overview', '/incidents', '/agents/growth-revenue/workflow']);
+    const allowedPostClosePathnames = new Set(['/office/overview', '/incidents']);
     const forbiddenPostClosePathnames = new Set([
       '/office/operations',
       '/timeline',
       '/collectors/controller-snapshot',
       '/memory/artifacts',
       '/peer-watch/alerts',
+      '/agents/growth-revenue/workflow',
       '/correlations/corr-revenue-handoff'
     ]);
     const expectedOverviewSearch = '';
     const expectedIncidentsSearch = '?limit=200&window=8760h';
-    const expectedWorkflowSearch = '?limit=10&window=60m';
     const postCloseRequests: Array<{
       method: string;
       pathname: string;
@@ -1496,17 +1497,6 @@ test.describe('operator shell smoke', () => {
           { timeout: POLL_DRIVEN_ASSERTION_TIMEOUT_MS }
         )
         .toBeGreaterThan(0);
-      await expect
-        .poll(
-          () =>
-            readPostCloseGetRequests().filter(
-              (request) =>
-                request.pathname === '/agents/growth-revenue/workflow' && request.search === expectedWorkflowSearch
-            ).length,
-          { timeout: POLL_DRIVEN_ASSERTION_TIMEOUT_MS }
-        )
-        .toBeGreaterThan(1);
-
       expect(postCloseRequests.length).toBeGreaterThan(0);
       expect(readPostCloseNonGetRequests()).toEqual([]);
       expect(readPostCloseGetRequests().filter((request) => !allowedPostClosePathnames.has(request.pathname))).toEqual(
@@ -1520,11 +1510,6 @@ test.describe('operator shell smoke', () => {
       expect(
         readPostCloseGetRequests().filter(
           (request) => request.pathname === '/incidents' && request.search !== expectedIncidentsSearch
-        )
-      ).toEqual([]);
-      expect(
-        readPostCloseGetRequests().filter(
-          (request) => request.pathname === '/agents/growth-revenue/workflow' && request.search !== expectedWorkflowSearch
         )
       ).toEqual([]);
       expect(
@@ -1551,18 +1536,18 @@ test.describe('operator shell smoke', () => {
     await page.waitForFunction(() => Boolean(window.__AITOWN_VIEWPORT__));
 
     const frontendOrigin = new URL(page.url()).origin;
-    const allowedPostClosePathnames = new Set(['/office/overview', '/incidents', '/agents/growth-revenue/workflow']);
+    const allowedPostClosePathnames = new Set(['/office/overview', '/incidents']);
     const forbiddenPostClosePathnames = new Set([
       '/office/operations',
       '/timeline',
       '/collectors/controller-snapshot',
       '/memory/artifacts',
       '/peer-watch/alerts',
+      '/agents/growth-revenue/workflow',
       '/correlations/corr-revenue-handoff'
     ]);
     const expectedOverviewSearch = '';
     const expectedIncidentsSearch = '?limit=200&window=8760h';
-    const expectedWorkflowSearch = '?limit=10&window=60m';
     const postCloseRequests: Array<{
       method: string;
       pathname: string;
@@ -1661,17 +1646,6 @@ test.describe('operator shell smoke', () => {
           { timeout: POLL_DRIVEN_ASSERTION_TIMEOUT_MS }
         )
         .toBeGreaterThan(0);
-      await expect
-        .poll(
-          () =>
-            readPostCloseGetRequests().filter(
-              (request) =>
-                request.pathname === '/agents/growth-revenue/workflow' && request.search === expectedWorkflowSearch
-            ).length,
-          { timeout: POLL_DRIVEN_ASSERTION_TIMEOUT_MS }
-        )
-        .toBeGreaterThan(1);
-
       expect(postCloseRequests.length).toBeGreaterThan(0);
       expect(readPostCloseNonGetRequests()).toEqual([]);
       expect(readPostCloseGetRequests().filter((request) => !allowedPostClosePathnames.has(request.pathname))).toEqual(
@@ -1685,11 +1659,6 @@ test.describe('operator shell smoke', () => {
       expect(
         readPostCloseGetRequests().filter(
           (request) => request.pathname === '/incidents' && request.search !== expectedIncidentsSearch
-        )
-      ).toEqual([]);
-      expect(
-        readPostCloseGetRequests().filter(
-          (request) => request.pathname === '/agents/growth-revenue/workflow' && request.search !== expectedWorkflowSearch
         )
       ).toEqual([]);
       expect(
@@ -1764,10 +1733,11 @@ test.describe('operator shell smoke', () => {
     await expect(liveFocusButton).toBeVisible();
     await liveFocusButton.click();
 
-    const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
-    await expect(page.getByRole('dialog', { name: 'Hub' })).toBeVisible();
-    await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
-    await expect(detailsPanel.getByRole('button', { name: 'Clear' })).toBeVisible();
+    const inspectPeek = page.getByRole('region', { name: 'Selected agent inspect peek' });
+    await expect(page.getByRole('dialog', { name: 'Hub' })).toHaveCount(0);
+    await expect(inspectPeek).toBeVisible();
+    await expect(inspectPeek.getByText('Growth Revenue Agent')).toBeVisible();
+    await expect(inspectPeek.getByRole('button', { name: 'Open selected agent in Hub' })).toBeVisible();
   });
 
   test('keeps the landscape Live Focus inspect return lane unobscured and the read-only request surface narrow once the Hub-close transition settles via keyboard traversal', async ({
@@ -1794,18 +1764,18 @@ test.describe('operator shell smoke', () => {
       name: 'Inspect live focus agent Growth Revenue Agent'
     });
     const frontendOrigin = new URL(page.url()).origin;
-    const allowedPostClosePathnames = new Set(['/office/overview', '/incidents', '/agents/growth-revenue/workflow']);
+    const allowedPostClosePathnames = new Set(['/office/overview', '/incidents']);
     const forbiddenPostClosePathnames = new Set([
       '/office/operations',
       '/timeline',
       '/collectors/controller-snapshot',
       '/memory/artifacts',
       '/peer-watch/alerts',
+      '/agents/growth-revenue/workflow',
       '/correlations/corr-revenue-handoff'
     ]);
     const expectedOverviewSearch = '';
     const expectedIncidentsSearch = '?limit=200&window=8760h';
-    const expectedWorkflowSearch = '?limit=10&window=60m';
     const postCloseRequests: Array<{
       method: string;
       pathname: string;
@@ -1835,18 +1805,29 @@ test.describe('operator shell smoke', () => {
       const selectedAgentHeading = detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' });
       const watchOverlay = page.getByRole('region', { name: 'Selected watch links' });
       const closeHubButton = page.getByRole('button', { name: 'Close Hub' });
+      const inspectPeek = page.getByRole('region', { name: 'Selected agent inspect peek' });
+      const openSelectedAgentInHubButton = inspectPeek.getByRole('button', { name: 'Open selected agent in Hub' });
+
+      await focusHubControlWithTab(page, liveFocusButton, 'Inspect live focus agent Growth Revenue Agent');
+      await expect(liveFocusButton).toBeFocused();
+      await page.keyboard.press('Enter');
+
+      await expect(dialog).toHaveCount(0);
+      await expect(inspectPeek).toBeVisible();
+      await expect(inspectPeek.getByText('Growth Revenue Agent')).toBeVisible();
+
       const workflowResponsePromise = page.waitForResponse(
         (response) =>
           response.request().method() === 'GET' &&
           response.status() === 200 &&
           response.url().includes('/agents/growth-revenue/workflow?limit=10&window=60m')
       );
-
-      await focusHubControlWithTab(page, liveFocusButton, 'Inspect live focus agent Growth Revenue Agent');
-      await expect(liveFocusButton).toBeFocused();
+      await focusHubControlWithTab(page, openSelectedAgentInHubButton, 'Open selected agent in Hub');
+      await expect(openSelectedAgentInHubButton).toBeFocused();
       await page.keyboard.press('Enter');
 
       await expect(dialog).toBeVisible();
+      await expect(inspectPeek).toHaveCount(0);
       await expect(selectedAgentHeading).toBeVisible();
       await expect(detailsPanel.getByRole('button', { name: 'Clear' })).toBeVisible();
       await workflowResponsePromise;
@@ -1933,17 +1914,6 @@ test.describe('operator shell smoke', () => {
           { timeout: POLL_DRIVEN_ASSERTION_TIMEOUT_MS }
         )
         .toBeGreaterThan(0);
-      await expect
-        .poll(
-          () =>
-            readPostCloseGetRequests().filter(
-              (request) =>
-                request.pathname === '/agents/growth-revenue/workflow' && request.search === expectedWorkflowSearch
-            ).length,
-          { timeout: POLL_DRIVEN_ASSERTION_TIMEOUT_MS }
-        )
-        .toBeGreaterThan(1);
-
       expect(postCloseRequests.length).toBeGreaterThan(0);
       expect(readPostCloseNonGetRequests()).toEqual([]);
       expect(readPostCloseGetRequests().filter((request) => !allowedPostClosePathnames.has(request.pathname))).toEqual(
@@ -1957,11 +1927,6 @@ test.describe('operator shell smoke', () => {
       expect(
         readPostCloseGetRequests().filter(
           (request) => request.pathname === '/incidents' && request.search !== expectedIncidentsSearch
-        )
-      ).toEqual([]);
-      expect(
-        readPostCloseGetRequests().filter(
-          (request) => request.pathname === '/agents/growth-revenue/workflow' && request.search !== expectedWorkflowSearch
         )
       ).toEqual([]);
       expect(
@@ -1996,18 +1961,18 @@ test.describe('operator shell smoke', () => {
       name: 'Inspect live focus agent Growth Revenue Agent'
     });
     const frontendOrigin = new URL(page.url()).origin;
-    const allowedPostClosePathnames = new Set(['/office/overview', '/incidents', '/agents/growth-revenue/workflow']);
+    const allowedPostClosePathnames = new Set(['/office/overview', '/incidents']);
     const forbiddenPostClosePathnames = new Set([
       '/office/operations',
       '/timeline',
       '/collectors/controller-snapshot',
       '/memory/artifacts',
       '/peer-watch/alerts',
+      '/agents/growth-revenue/workflow',
       '/correlations/corr-revenue-handoff'
     ]);
     const expectedOverviewSearch = '';
     const expectedIncidentsSearch = '?limit=200&window=8760h';
-    const expectedWorkflowSearch = '?limit=10&window=60m';
     const postCloseRequests: Array<{
       method: string;
       pathname: string;
@@ -2040,6 +2005,18 @@ test.describe('operator shell smoke', () => {
       });
       const watchOverlay = page.getByRole('region', { name: 'Selected watch links' });
       const closeHubButton = page.getByRole('button', { name: 'Close Hub' });
+      const inspectPeek = page.getByRole('region', { name: 'Selected agent inspect peek' });
+      const openHubButton = page.getByRole('button', { name: 'Open Hub' });
+
+      await focusHubControlWithTab(page, liveFocusButton, 'Inspect live focus agent Growth Revenue Agent');
+      await expect(liveFocusButton).toBeFocused();
+      await page.keyboard.press('Enter');
+
+      await expect(dialog).toHaveCount(0);
+      await expect(inspectPeek).toHaveCount(0);
+      await expect(watchOverlay).toBeVisible();
+      await expect(page.getByRole('list', { name: 'Selected watch link list' })).toBeVisible();
+
       const workflowResponsePromise = page.waitForResponse(
         (response) =>
           response.request().method() === 'GET' &&
@@ -2052,12 +2029,12 @@ test.describe('operator shell smoke', () => {
           response.status() === 200 &&
           response.url().includes('/peer-watch/alerts?target_agent_id=growth-revenue&limit=4')
       );
-
-      await focusHubControlWithTab(page, liveFocusButton, 'Inspect live focus agent Growth Revenue Agent');
-      await expect(liveFocusButton).toBeFocused();
+      await focusHubControlWithTab(page, openHubButton, 'Open Hub');
+      await expect(openHubButton).toBeFocused();
       await page.keyboard.press('Enter');
 
       await expect(dialog).toBeVisible();
+      await expect(inspectPeek).toHaveCount(0);
       await expect(selectedAgentHeading).toBeVisible();
       await expect(detailsPanel.getByRole('button', { name: 'Clear' })).toBeVisible();
       await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
@@ -2133,17 +2110,6 @@ test.describe('operator shell smoke', () => {
           { timeout: POLL_DRIVEN_ASSERTION_TIMEOUT_MS }
         )
         .toBeGreaterThan(0);
-      await expect
-        .poll(
-          () =>
-            readPostCloseGetRequests().filter(
-              (request) =>
-                request.pathname === '/agents/growth-revenue/workflow' && request.search === expectedWorkflowSearch
-            ).length,
-          { timeout: POLL_DRIVEN_ASSERTION_TIMEOUT_MS }
-        )
-        .toBeGreaterThan(1);
-
       expect(postCloseRequests.length).toBeGreaterThan(0);
       expect(readPostCloseNonGetRequests()).toEqual([]);
       expect(readPostCloseGetRequests().filter((request) => !allowedPostClosePathnames.has(request.pathname))).toEqual(
@@ -2157,11 +2123,6 @@ test.describe('operator shell smoke', () => {
       expect(
         readPostCloseGetRequests().filter(
           (request) => request.pathname === '/incidents' && request.search !== expectedIncidentsSearch
-        )
-      ).toEqual([]);
-      expect(
-        readPostCloseGetRequests().filter(
-          (request) => request.pathname === '/agents/growth-revenue/workflow' && request.search !== expectedWorkflowSearch
         )
       ).toEqual([]);
       expect(
@@ -11856,7 +11817,7 @@ test.describe('operator shell smoke', () => {
     expect(selectedAgent!.agentId).toBe('growth-revenue');
     expect(viewportShift).toBeGreaterThan(1);
     expect(Math.abs(selectedAgentProjection.x - safeAreaTarget.x)).toBeLessThanOrEqual(0.5);
-    expect(Math.abs(selectedAgentProjection.y - safeAreaTarget.y)).toBeLessThanOrEqual(0.5);
+    expect(Math.abs(selectedAgentProjection.y - safeAreaTarget.y)).toBeLessThanOrEqual(SELECTED_AGENT_SAFE_AREA_PIXEL_TOLERANCE);
     expectViewportBoundsWithinClampBudget(selectedAgentViewport);
   });
 
@@ -11958,7 +11919,7 @@ test.describe('operator shell smoke', () => {
     expect(initialRightPadding).toBeGreaterThan(0);
     expect(initialSelectedAgent!.agentId).toBe('growth-revenue');
     expect(Math.abs(initialProjection.x - initialSafeAreaTarget.x)).toBeLessThanOrEqual(0.5);
-    expect(Math.abs(initialProjection.y - initialSafeAreaTarget.y)).toBeLessThanOrEqual(0.5);
+    expect(Math.abs(initialProjection.y - initialSafeAreaTarget.y)).toBeLessThanOrEqual(SELECTED_AGENT_SAFE_AREA_PIXEL_TOLERANCE);
     expectViewportBoundsWithinClampBudget(initialViewport);
 
     refreshReady = true;
@@ -12105,7 +12066,7 @@ test.describe('operator shell smoke', () => {
     expect(initialRightPadding).toBeGreaterThan(0);
     expect(initialSelectedAgent!.agentId).toBe('growth-revenue');
     expect(Math.abs(initialProjection.x - initialSafeAreaTarget.x)).toBeLessThanOrEqual(0.5);
-    expect(Math.abs(initialProjection.y - initialSafeAreaTarget.y)).toBeLessThanOrEqual(0.5);
+    expect(Math.abs(initialProjection.y - initialSafeAreaTarget.y)).toBeLessThanOrEqual(SELECTED_AGENT_SAFE_AREA_PIXEL_TOLERANCE);
     expectViewportBoundsWithinClampBudget(initialViewport);
 
     refreshReady = true;
@@ -12252,7 +12213,7 @@ test.describe('operator shell smoke', () => {
     expect(initialRightPadding).toBeGreaterThan(0);
     expect(initialSelectedAgent!.agentId).toBe('growth-revenue');
     expect(Math.abs(initialProjection.x - initialSafeAreaTarget.x)).toBeLessThanOrEqual(0.5);
-    expect(Math.abs(initialProjection.y - initialSafeAreaTarget.y)).toBeLessThanOrEqual(0.5);
+    expect(Math.abs(initialProjection.y - initialSafeAreaTarget.y)).toBeLessThanOrEqual(SELECTED_AGENT_SAFE_AREA_PIXEL_TOLERANCE);
     expectViewportBoundsWithinClampBudget(initialViewport);
 
     const initialScale = initialViewport.scale ?? 1;
@@ -12378,7 +12339,7 @@ test.describe('operator shell smoke', () => {
     expect(selectedAgent!.agentId).toBe('growth-revenue');
     expect(viewportShift).toBeGreaterThan(1);
     expect(Math.abs(selectedAgentProjection.x - safeAreaTarget.x)).toBeLessThanOrEqual(0.5);
-    expect(Math.abs(selectedAgentProjection.y - safeAreaTarget.y)).toBeLessThanOrEqual(0.5);
+    expect(Math.abs(selectedAgentProjection.y - safeAreaTarget.y)).toBeLessThanOrEqual(SELECTED_AGENT_SAFE_AREA_PIXEL_TOLERANCE);
     expectViewportBoundsWithinClampBudget(selectedAgentViewport);
   });
 

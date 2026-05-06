@@ -52,10 +52,19 @@ describe('AI Town shell styles', () => {
     expect(styles).not.toContain('border-width: clamp(10px, 1.4vw, 16px);');
   });
 
-  it('renders Hub as a dismissible overlay instead of a permanent side rail', () => {
+  it('renders Hub as a compact bottom deck that preserves the primary world drag lane', () => {
     expect(styles).toMatch(/\.aitown-hub-overlay\s*\{[\s\S]*?position:\s*fixed;/);
-    expect(styles).toMatch(/\.aitown-hub-overlay\s*\{[\s\S]*?justify-content:\s*flex-end;/);
-    expect(styles).toMatch(/\.aitown-hub-sheet\s*\{[\s\S]*?width:\s*min\(430px, 100vw\);[\s\S]*?height:\s*100dvh;/);
+    expect(styles).toMatch(/\.aitown-hub-overlay\s*\{[\s\S]*?align-items:\s*flex-end;[\s\S]*?justify-content:\s*center;/);
+    expect(styles).toMatch(
+      /\.aitown-hub-sheet\s*\{[\s\S]*?width:\s*min\(1120px, calc\(100vw - 24px\)\);[\s\S]*?max-height:\s*min\(220px, 23dvh\);[\s\S]*?overflow:\s*hidden;/
+    );
+    expect(styles).toMatch(/\.aitown-hub-sheet__body\s*\{[\s\S]*?display:\s*grid;[\s\S]*?overflow:\s*hidden;/);
+    expect(styles).toMatch(/\.aitown-hub-sheet \.aitown-panel--details\s*\{[\s\S]*?grid-auto-flow:\s*column;[\s\S]*?overflow-x:\s*auto;[\s\S]*?overflow-y:\s*hidden;/);
+    expect(styles).toMatch(
+      /\.aitown-hub-sheet \.aitown-details__section--active-queue\s*\{[\s\S]*?display:\s*flex;[\s\S]*?flex-direction:\s*column;[\s\S]*?min-height:\s*0;/
+    );
+    expect(styles).toMatch(/\.aitown-hub-sheet \.aitown-details__section--active-queue > div\s*\{[\s\S]*?grid-template-columns:\s*auto minmax\(0, 1fr\);/);
+    expect(styles).toMatch(/\.aitown-hub-sheet \.aitown-details__section--active-queue \.aitown-records\s*\{[\s\S]*?flex:\s*1 1 auto;[\s\S]*?overflow:\s*hidden;/);
   });
 
   it('keeps browser pinch zoom available on the fullscreen world host and canvas', () => {
@@ -75,11 +84,10 @@ describe('AI Town shell styles', () => {
     expect(styles).not.toMatch(/\.aitown-panel__toolbar\s*\{[^}]*position:\s*absolute;/);
   });
 
-  it('keeps evidence coverage focus passive except its chips so the world drag lane remains available', () => {
-    expect(styles).toContain(
-      '.aitown-panel__evidence-focus {\n  display: flex;\n  max-width: min(58ch, 56%);\n  flex-direction: column;\n  align-items: flex-start;\n  gap: 6px;\n  pointer-events: none;\n}'
-    );
-    expect(styles).toMatch(/\.aitown-panel__hud-popover\[open\]\s*\{[^}]*pointer-events:\s*none;/);
+  it('collects viewport, zones, and evidence into one passive HUD cluster', () => {
+    expect(styles).toMatch(/\.aitown-panel__signal-cluster\s*\{[\s\S]*?display:\s*grid;[\s\S]*?pointer-events:\s*none;/);
+    expect(styles).toMatch(/\.aitown-panel__signal-cluster\[open\]\s*\{[^}]*pointer-events:\s*none;/);
+    expect(styles).toMatch(/\.aitown-panel__signal-grid\s*\{[\s\S]*?grid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\);/);
     expect(styles).toMatch(/\.aitown-panel__hud-popover-summary\s*\{[^}]*pointer-events:\s*auto;/);
     expect(styles).toMatch(/\.aitown-focus-chip\s*\{[\s\S]*?pointer-events:\s*auto;/);
   });
@@ -96,9 +104,7 @@ describe('AI Town shell styles', () => {
     expect(styles).toMatch(/\.aitown-shell\s*\{[\s\S]*?max-width:\s*100vw;/);
     expect(styles).toMatch(/\.aitown-shell__stats\s*\{[\s\S]*?grid-template-columns:\s*repeat\(4, minmax\(58px, 1fr\)\);[\s\S]*?min-width:\s*0;/);
     expect(styles).toMatch(/\.aitown-panel__focus-chips\s*\{[\s\S]*?min-width:\s*0;[\s\S]*?max-width:\s*100%;/);
-    expect(styles).toMatch(
-      /\.aitown-panel__evidence-focus \.aitown-panel__focus-chips,[\s\S]*?\.aitown-panel__hot-zone-focus \.aitown-panel__focus-chips\s*\{[\s\S]*?max-height:\s*min\(18dvh, 156px\);[\s\S]*?overflow-y:\s*auto;[\s\S]*?overscroll-behavior:\s*contain;/
-    );
+    expect(styles).toMatch(/\.aitown-panel__signal-panel \.aitown-panel__focus-chips\s*\{[\s\S]*?max-height:\s*min\(18dvh, 156px\);[\s\S]*?overflow-y:\s*auto;[\s\S]*?overscroll-behavior:\s*contain;/);
     expect(styles).toMatch(/\.aitown-status-legend\s*\{[\s\S]*?overflow-y:\s*auto;[\s\S]*?scrollbar-gutter:\s*stable;/);
     expect(styles).toMatch(/\.aitown-selected-agent-peek\s*\{[\s\S]*?overflow-y:\s*auto;[\s\S]*?overscroll-behavior:\s*contain;/);
     expect(styles).toMatch(/\.aitown-details__summary\s*\{[\s\S]*?max-height:\s*min\(22dvh, 180px\);[\s\S]*?overflow-y:\s*auto;/);
@@ -112,7 +118,7 @@ describe('AI Town shell styles', () => {
       /@media \(max-width:\s*720px\)\s*\{[\s\S]*?\.aitown-shell__eyebrow,[\s\S]*?\.aitown-shell__brand p\s*\{[\s\S]*?display:\s*none;/
     );
     expect(styles).toMatch(
-      /@media \(max-width:\s*720px\)\s*\{[\s\S]*?\.aitown-panel__topline-popover--viewport,[\s\S]*?\.aitown-panel__hud-popover--hot-zone\s*\{[\s\S]*?display:\s*none;/
+      /@media \(max-width:\s*720px\)\s*\{[\s\S]*?\.aitown-panel__signal-cluster\s*\{[\s\S]*?display:\s*none;/
     );
     expect(styles).toMatch(
       /@media \(max-width:\s*720px\)\s*\{[\s\S]*?\.aitown-panel__hot-zone-focus\s*\{[\s\S]*?display:\s*none;/

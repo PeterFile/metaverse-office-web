@@ -456,6 +456,8 @@ function installViewportInspectorTracker() {
 
 function makeAssets(): AiTownAssets {
   const textureFrame = { source: {} };
+  const appEngineeringPawn = { source: {}, assetId: 'pawn_app_eng' };
+  const leadPawn = { source: {}, assetId: 'pawn_lead' };
   const characterAnimations = Object.fromEntries(
     characterKeys.map((characterKey) => [
       characterKey,
@@ -470,6 +472,10 @@ function makeAssets(): AiTownAssets {
 
   return {
     characterAnimations,
+    rolePawnTextures: {
+      app_eng: appEngineeringPawn as unknown as AiTownAssets['rolePawnTextures']['app_eng'],
+      lead: leadPawn as unknown as AiTownAssets['rolePawnTextures']['lead']
+    },
     tileSetTexture: textureFrame as AiTownAssets['tileSetTexture'],
     animationSheets: {}
   };
@@ -493,6 +499,7 @@ function makeAgent(overrides: Partial<SceneAgent> = {}): SceneAgent {
     zoneId: 'delivery-desk',
     position: { x: 120, y: 180 },
     characterKey: 'f1',
+    rolePawnKey: 'app_eng',
     facing: 'down',
     phase: 'blocked',
     severity: 'orange',
@@ -576,6 +583,46 @@ function makeWideSelectedAgentScene() {
 }
 
 describe('WorldScene watch overlay caption gating', () => {
+  it('renders generated role pawn textures before falling back to 32x32folk animations', async () => {
+    appInitMock.mockReset().mockResolvedValue(undefined);
+    const assets = makeAssets();
+    vi.mocked(loadAiTownAssets).mockResolvedValue(assets);
+
+    const scene = {
+      ...makeScene(),
+      agents: [
+        makeAgent({
+          agentId: 'app-engineering',
+          displayName: 'App Engineering Agent',
+          rolePawnKey: 'app_eng',
+          characterKey: 'f1',
+          position: { x: 120, y: 180 }
+        }),
+        makeAgent({
+          agentId: 'fallback-agent',
+          displayName: 'Fallback Agent',
+          rolePawnKey: undefined,
+          characterKey: 'f2',
+          position: { x: 160, y: 180 },
+          selected: false
+        })
+      ]
+    } satisfies AiTownSceneModel;
+
+    render(<WorldScene scene={scene} onSelectAgent={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(readAgentLayer()?.children).toHaveLength(scene.agents.length);
+    });
+
+    const [pawnAgent, fallbackAgent] = readAgentLayer()?.children ?? [];
+    const pawnVisual = pawnAgent?.children[4] as { texture?: unknown } | undefined;
+    const fallbackVisual = fallbackAgent?.children[4] as { texture?: unknown } | undefined;
+
+    expect(pawnVisual?.texture).toBe(assets.rolePawnTextures.app_eng);
+    expect(fallbackVisual?.texture).toEqual(assets.characterAnimations.f2.down);
+  });
+
   it('keeps selected watch-link captions hidden while the renderer is still failed', async () => {
     render(<WorldScene scene={makeScene()} onSelectAgent={vi.fn()} />);
 

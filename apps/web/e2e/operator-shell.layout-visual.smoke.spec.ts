@@ -138,7 +138,7 @@ function expectViewportWithinHorizontalWorldBounds(
 }
 
 test.describe('operator shell layout visual smoke', () => {
-  test('keeps compact evidence coverage disclosure from blocking non-chip world drag', async ({ page }) => {
+  test('keeps compact HUD signals disclosure from blocking non-chip world drag', async ({ page }) => {
     const evidenceCoverage = {
       evidence_ref_count: 1,
       covered_agent_count: 1,
@@ -181,22 +181,25 @@ test.describe('operator shell layout visual smoke', () => {
     await page.goto('/');
 
     const worldHost = page.locator('.aitown-world__host');
+    const signals = page.getByRole('region', { name: 'Office HUD signals' });
+    const signalsSummary = signals.locator('summary');
     const evidenceFocus = page.getByRole('region', { name: 'Evidence coverage focus' });
-    const evidenceFocusSummary = evidenceFocus.locator('summary');
     const evidenceFocusHead = evidenceFocus.locator('.aitown-panel__evidence-focus__head');
     const evidenceFocusChip = evidenceFocus.getByRole('button', {
       name: 'Inspect evidence coverage focus agent Growth Revenue Agent'
     });
     await expect(worldHost).toBeVisible();
     await page.waitForFunction(() => Boolean(window.__AITOWN_VIEWPORT__));
-    await expect(evidenceFocus).toBeVisible();
-    await expect(evidenceFocusSummary.getByText('Evidence', { exact: true })).toBeVisible();
-    await expect(evidenceFocusSummary.getByText('1 low coverage', { exact: true })).toBeVisible();
-    await expect(evidenceFocus.getByText('Coverage below high-confidence/no evidence')).toBeHidden();
-    await expect(evidenceFocusChip).toHaveCount(0);
+    await expect(signals).toBeVisible();
+    await expect(signalsSummary.getByText('Signals', { exact: true })).toBeVisible();
+    await expect(signalsSummary.getByText(/Evidence · 1/)).toBeVisible();
+    await expect(evidenceFocus).toBeHidden();
     await expect(page.getByRole('dialog', { name: 'Hub' })).toHaveCount(0);
 
-    await evidenceFocusSummary.click();
+    await signalsSummary.click();
+    await expect(evidenceFocus).toBeVisible();
+    await expect(evidenceFocus.getByText('Evidence', { exact: true })).toBeVisible();
+    await expect(evidenceFocus.getByText('1 low coverage', { exact: true })).toBeVisible();
     await expect(evidenceFocus.getByText('Coverage below high-confidence/no evidence')).toBeVisible();
     await expect(evidenceFocusChip).toBeVisible();
 
@@ -345,7 +348,7 @@ test.describe('operator shell layout visual smoke', () => {
 
     const [worldRect, hubRect] = await Promise.all([readRect(worldHost), readRect(hub)]);
     const hubWorldObstructionRatio = resolveIntersectionArea(worldRect, hubRect) / (worldRect.width * worldRect.height);
-    expect(hubWorldObstructionRatio, 'Hub sheet should stay a side sheet, not a world-covering modal').toBeLessThanOrEqual(
+    expect(hubWorldObstructionRatio, 'Hub deck should stay compact, not a world-covering modal').toBeLessThanOrEqual(
       0.36
     );
     expect(

@@ -196,8 +196,8 @@ describe('run-browser-smoke helpers', () => {
     ]);
   });
 
-  it('forwards extra Playwright CLI args through the wrapper after pnpm\'s separator', () => {
-    expect(resolvePlaywrightArgs(['--', '--headed', '--grep', 'pinch handoff'])).toEqual([
+  it('forwards CI sharding Playwright args through the wrapper without dropping default smoke specs', () => {
+    expect(resolvePlaywrightArgs(['--', '--fully-parallel', '--shard=1/2'])).toEqual([
       'exec',
       'playwright',
       'test',
@@ -206,9 +206,8 @@ describe('run-browser-smoke helpers', () => {
       'e2e/operator-shell.layout-visual.smoke.spec.ts',
       '--config',
       'playwright.config.ts',
-      '--headed',
-      '--grep',
-      'pinch handoff'
+      '--fully-parallel',
+      '--shard=1/2'
     ]);
   });
 

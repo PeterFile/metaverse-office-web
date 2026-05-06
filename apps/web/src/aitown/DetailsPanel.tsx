@@ -35,6 +35,7 @@ import {
   collectInteractionSourceKinds,
   formatCollectorDerivedPeerWatchMetadata
 } from './accountabilitySignals';
+import { deriveAgentDetailEvidenceFacets } from './agentDetailEvidenceFacets';
 
 export type SelectedAgentDrilldownTab = 'now' | 'evidence' | 'replay';
 
@@ -190,6 +191,7 @@ const EMPTY_SEVERITY_BUCKETS: Record<Severity, number> = {
 };
 
 const SHARED_MEMORY_BACKLINK_LIMIT = 4;
+const STRUCTURED_EVIDENCE_FACET_TOKEN_LIMIT = 3;
 
 type SharedMemoryBacklink = {
   key: string;
@@ -1022,6 +1024,21 @@ function renderParticipants(participantAgentIds: string[]) {
 
 function renderNamedList(values: string[], emptyLabel: string) {
   return values.length > 0 ? values.join(', ') : emptyLabel;
+}
+
+function renderCompactFacetList(values: readonly string[], emptyLabel: string) {
+  const visibleValues = values.slice(0, STRUCTURED_EVIDENCE_FACET_TOKEN_LIMIT);
+
+  if (visibleValues.length === 0) {
+    return emptyLabel;
+  }
+
+  const overflowCount = values.length - visibleValues.length;
+  return overflowCount > 0 ? `${visibleValues.join(', ')}, +${overflowCount} more` : visibleValues.join(', ');
+}
+
+function renderStructuredEvidenceFacetCount(count: number, singular: string, plural = `${singular}s`) {
+  return `${count} ${count === 1 ? singular : plural}`;
 }
 
 function dedupeNonEmptyStrings(values: Array<string | null | undefined>) {
@@ -3960,6 +3977,7 @@ export function DetailsPanel({
       : null;
   const workflowWarning = workflowError && workflow ? renderWorkflowWarningLabel(workflowError) : null;
   const workflowSummaryFacets = workflow ? selectWorkflowSummaryFacets(workflow.summary) : null;
+  const selectedAgentDetailEvidenceFacets = deriveAgentDetailEvidenceFacets(workflow?.detail);
   const collectorEvidenceCoverage = collectorSnapshot?.evidence_coverage ?? null;
   const collectorEvidenceCoverageLowAgentIds = new Set(
     collectorEvidenceCoverage?.low_confidence_agent_ids ?? []
@@ -5265,6 +5283,48 @@ export function DetailsPanel({
                   'No activity in current workflow window'
                 )}`}
               </span>
+            </li>
+          ) : null}
+          {selectedAgentDetailEvidenceFacets.status === 'evidence_present' ? (
+            <li className="aitown-record">
+              <strong>Structured evidence facets</strong>
+              <span>Scope · Structured evidence facets from loaded workflow detail only; not full activity</span>
+              <span>
+                {`Facet counts · ${[
+                  renderStructuredEvidenceFacetCount(
+                    selectedAgentDetailEvidenceFacets.evidence_refs.length,
+                    'evidence ref'
+                  ),
+                  renderStructuredEvidenceFacetCount(
+                    selectedAgentDetailEvidenceFacets.source_kinds.length,
+                    'source kind'
+                  ),
+                  renderStructuredEvidenceFacetCount(
+                    selectedAgentDetailEvidenceFacets.correlation_ids.length,
+                    'correlation'
+                  ),
+                  renderStructuredEvidenceFacetCount(
+                    selectedAgentDetailEvidenceFacets.event_ids.length,
+                    'event id'
+                  ),
+                  renderStructuredEvidenceFacetCount(
+                    selectedAgentDetailEvidenceFacets.incident_ids.length,
+                    'incident id'
+                  ),
+                  renderStructuredEvidenceFacetCount(
+                    selectedAgentDetailEvidenceFacets.counterparty_agent_ids.length,
+                    'counterparty',
+                    'counterparties'
+                  )
+                ].join(' · ')}`}
+              </span>
+              <span>{`Structured rows · ${renderStructuredEvidenceFacetCount(selectedAgentDetailEvidenceFacets.rows.length, 'loaded detail row')}`}</span>
+              <span>{`Evidence refs · ${renderCompactFacetList(selectedAgentDetailEvidenceFacets.evidence_refs, 'No evidence refs')}`}</span>
+              <span>{`Source kinds · ${renderCompactFacetList(selectedAgentDetailEvidenceFacets.source_kinds, 'No source kinds')}`}</span>
+              <span>{`Correlations · ${renderCompactFacetList(selectedAgentDetailEvidenceFacets.correlation_ids, 'No correlations')}`}</span>
+              <span>{`Events · ${renderCompactFacetList(selectedAgentDetailEvidenceFacets.event_ids, 'No event ids')}`}</span>
+              <span>{`Incidents · ${renderCompactFacetList(selectedAgentDetailEvidenceFacets.incident_ids, 'No incident ids')}`}</span>
+              <span>{`Counterparties · ${renderCompactFacetList(selectedAgentDetailEvidenceFacets.counterparty_agent_ids, 'No counterparties')}`}</span>
             </li>
           ) : null}
           {workflow?.detail.latest_heartbeat ? (

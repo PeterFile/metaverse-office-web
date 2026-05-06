@@ -72,10 +72,12 @@ function WorldFixture({
   world,
   providedWorld,
   onFocusWorldZone,
+  defaultOpen = true,
 }: {
   world: WorldState | null;
   providedWorld?: WorldState | null;
   onFocusWorldZone?: (zoneId: string) => void;
+  defaultOpen?: boolean;
 }) {
   const { setWorld } = useWorld();
 
@@ -83,22 +85,36 @@ function WorldFixture({
     setWorld(world);
   }, [setWorld, world]);
 
-  return <SceneStatusLegend onFocusWorldZone={onFocusWorldZone} world={providedWorld} />;
+  return <SceneStatusLegend defaultOpen={defaultOpen} onFocusWorldZone={onFocusWorldZone} world={providedWorld} />;
 }
 
 function renderLegend(
   world: WorldState | null,
   onFocusWorldZone?: (zoneId: string) => void,
-  providedWorld?: WorldState | null
+  providedWorld?: WorldState | null,
+  defaultOpen = true
 ) {
   return render(
     <WorldProvider>
-      <WorldFixture world={world} providedWorld={providedWorld} onFocusWorldZone={onFocusWorldZone} />
+      <WorldFixture
+        world={world}
+        providedWorld={providedWorld}
+        onFocusWorldZone={onFocusWorldZone}
+        defaultOpen={defaultOpen}
+      />
     </WorldProvider>
   );
 }
 
 describe('SceneStatusLegend', () => {
+  it('keeps the production legend collapsed to a compact world summary by default', () => {
+    renderLegend(makeWorldState(), undefined, undefined, false);
+
+    expect(screen.getByText('World legend')).toBeVisible();
+    expect(screen.getByText('4 badge meanings')).toBeVisible();
+    expect(screen.getByText('Badge legend')).not.toBeVisible();
+  });
+
   it('keeps the hot zones section hidden when projected world data is unavailable', () => {
     renderLegend(null);
 

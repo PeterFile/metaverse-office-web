@@ -1769,6 +1769,7 @@ afterEach(() => {
 });
 
   it('renders the operator shell as the default frontend', async () => {
+    const user = userEvent.setup();
     render(<App />);
 
     expect(await screen.findByRole('heading', { name: 'Metaverse Office' })).toBeVisible();
@@ -1777,6 +1778,8 @@ afterEach(() => {
       screen.getByText('Operator shell for real-running, supervised, replayable, accountable agents.')
     ).toBeVisible();
     expect(screen.getByText('Office snapshot · Live')).toBeVisible();
+    expect(screen.getByText('Snapshot 2026-03-16T09:00:00.000Z')).not.toBeVisible();
+    await user.click(screen.getByText('Viewport'));
     expect(screen.getByText('Snapshot 2026-03-16T09:00:00.000Z')).toBeVisible();
 
     const worldRegion = screen.getByRole('region', { name: 'Office world' });
@@ -1917,10 +1920,17 @@ afterEach(() => {
     });
   });
 
-  it('renders an accessible scene status legend for the canvas badge markers', async () => {
+  it('renders an accessible compact scene status legend for the canvas badge markers', async () => {
+    const user = userEvent.setup();
     render(<App />);
 
     const worldRegion = await screen.findByRole('region', { name: 'Office world' });
+    expect(within(worldRegion).getByText('World legend')).toBeVisible();
+    expect(within(worldRegion).getByText(/focused signal|badge meanings/)).toBeVisible();
+    expect(within(worldRegion).getByText('Badge legend')).not.toBeVisible();
+
+    await user.click(within(worldRegion).getByText('World legend'));
+
     const legend = within(worldRegion).getByRole('list', { name: 'Scene status legend' });
     const items = within(legend).getAllByRole('listitem');
 
@@ -1963,6 +1973,7 @@ afterEach(() => {
 
     const fetchCallCountBeforeFocus = vi.mocked(globalThis.fetch).mock.calls.length;
     const worldRegion = screen.getByRole('region', { name: 'Office world' });
+    await user.click(within(worldRegion).getByText('World legend'));
     const hotZonesLegend = within(worldRegion).getByRole('list', { name: 'Hot zones legend' });
 
     await user.click(
@@ -2518,6 +2529,7 @@ afterEach(() => {
   });
 
   it('surfaces evidence coverage focus on the default world shell before Hub opens from the lightweight projection', async () => {
+    const user = userEvent.setup();
     render(<App />);
 
     await waitFor(() => {
@@ -2527,11 +2539,17 @@ afterEach(() => {
     });
 
     const evidenceFocus = await screen.findByRole('region', { name: 'Evidence coverage focus' });
+
+    expect(within(evidenceFocus).getByText('Evidence')).toBeVisible();
+    expect(within(evidenceFocus).getByText('1 low coverage')).toBeVisible();
+    expect(within(evidenceFocus).getByText('Coverage below high-confidence/no evidence')).not.toBeVisible();
+
+    await user.click(within(evidenceFocus).getByText('Evidence'));
+
     const focusChip = within(evidenceFocus).getByRole('button', {
       name: 'Inspect evidence coverage focus agent Growth Revenue Agent'
     });
 
-    expect(evidenceFocus).toBeVisible();
     expect(within(evidenceFocus).getByText('Coverage below high-confidence/no evidence')).toBeVisible();
     expect(focusChip).toBeVisible();
     expect(focusChip).toHaveTextContent('Growth Revenue Agent');
@@ -2546,6 +2564,7 @@ afterEach(() => {
     render(<App />);
 
     const evidenceFocus = await screen.findByRole('region', { name: 'Evidence coverage focus' });
+    await user.click(within(evidenceFocus).getByText('Evidence'));
     await user.click(
       within(evidenceFocus).getByRole('button', {
         name: 'Inspect evidence coverage focus agent Growth Revenue Agent'
@@ -2646,6 +2665,11 @@ afterEach(() => {
     await user.click(screen.getByRole('button', { name: 'Close Hub' }));
 
     const evidenceFocus = await screen.findByRole('region', { name: 'Evidence coverage focus' });
+    expect(within(evidenceFocus).getByText('Evidence')).toBeVisible();
+    expect(within(evidenceFocus).getByText('1 low coverage')).toBeVisible();
+
+    await user.click(within(evidenceFocus).getByText('Evidence'));
+
     expect(
       within(evidenceFocus).getByRole('button', {
         name: 'Inspect evidence coverage focus agent Growth Revenue Agent'
@@ -2674,7 +2698,8 @@ afterEach(() => {
 
     render(<App />);
 
-    expect(await screen.findByRole('region', { name: 'Evidence coverage focus' })).toBeVisible();
+    const evidenceFocus = await screen.findByRole('region', { name: 'Evidence coverage focus' });
+    expect(within(evidenceFocus).getByText('Evidence')).toBeVisible();
     await openHub(user);
     await screen.findByText('No collector snapshot available yet.');
     await user.click(screen.getByRole('button', { name: 'Close Hub' }));
@@ -2703,7 +2728,15 @@ afterEach(() => {
     expect(screen.queryByRole('dialog', { name: 'Hub' })).not.toBeInTheDocument();
 
     const fetchCallCountBeforeFocus = vi.mocked(globalThis.fetch).mock.calls.length;
-    const hotZoneFocus = await screen.findByRole('group', { name: 'Hot zone focus' });
+    const hotZoneFocusRegion = await screen.findByRole('region', { name: 'Hot zone focus' });
+
+    expect(within(hotZoneFocusRegion).getByText('Zones')).toBeVisible();
+    expect(within(hotZoneFocusRegion).getByText('1 hot zone')).toBeVisible();
+    expect(within(hotZoneFocusRegion).getByText('Hot zone focus')).not.toBeVisible();
+
+    await user.click(within(hotZoneFocusRegion).getByText('Zones'));
+
+    const hotZoneFocus = within(hotZoneFocusRegion).getByRole('group', { name: 'Hot zone focus' });
     const hotZoneFocusContainer = hotZoneFocus.closest('.aitown-panel__hot-zone-focus');
 
     expect(hotZoneFocusContainer).not.toBeNull();
@@ -14496,6 +14529,7 @@ afterEach(() => {
   });
 
   it('keeps the last overview snapshot visible when a later overview poll fails', async () => {
+    const user = userEvent.setup();
     (window as typeof window & { __AITOWN_POLL_INTERVAL_MS__?: number }).__AITOWN_POLL_INTERVAL_MS__ = 10;
 
     let overviewRequests = 0;
@@ -14532,7 +14566,9 @@ afterEach(() => {
 
     expect(await screen.findByRole('heading', { name: 'Metaverse Office' })).toBeVisible();
     expect(await screen.findByText('Office snapshot · Live')).toBeVisible();
-    expect(await screen.findByText(/Snapshot 2026-03-16T09:00:00.000Z/)).toBeVisible();
+    expect(await screen.findByText(/Snapshot 2026-03-16T09:00:00.000Z/)).not.toBeVisible();
+    await user.click(screen.getByText('Viewport'));
+    expect(screen.getByText(/Snapshot 2026-03-16T09:00:00.000Z/)).toBeVisible();
 
     expect(await screen.findByText('Showing last office snapshot.')).toBeVisible();
     expect(screen.getByText('overview refresh failed')).toBeVisible();
@@ -14542,6 +14578,7 @@ afterEach(() => {
   });
 
   it('shows an explicit viewport unavailable status when the first overview load fails', async () => {
+    const user = userEvent.setup();
     vi.stubGlobal(
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
@@ -14568,6 +14605,8 @@ afterEach(() => {
 
     expect(await screen.findByRole('heading', { name: 'Metaverse Office' })).toBeVisible();
     expect(await screen.findByText('Office snapshot · Unavailable · overview unavailable')).toBeVisible();
+    expect(screen.getByText('No office snapshot loaded yet')).not.toBeVisible();
+    await user.click(screen.getByText('Viewport'));
     expect(screen.getByText('No office snapshot loaded yet')).toBeVisible();
     expect(screen.getByText('Unable to load office overview.')).toBeVisible();
   });

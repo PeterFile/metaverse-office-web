@@ -1070,6 +1070,107 @@ describe('DetailsPanel selected-agent workflow lifecycle', () => {
     ).toBeVisible();
     expect(within(workflowSection!).getByText('Latest activity · 2026-03-16T08:58:00.000Z')).toBeVisible();
   });
+
+  it('surfaces compact structured evidence facets in the selected-agent evidence workflow section', () => {
+    const workflow = buildWorkflow();
+    workflow.detail.open_peer_watch_alerts = [
+      buildCollectorDerivedPeerWatchAlert({
+        alert_id: 'alert-structured-facet',
+        target_agent_id: 'growth-revenue',
+        evidence_refs: ['/evidence/watch.md'],
+        correlation_id: 'corr-peer-watch',
+        source_kind: 'peer_watch'
+      })
+    ];
+    workflow.detail.recent_interactions = [
+      {
+        interaction_id: 'interaction-structured-facet',
+        interaction_type: 'review',
+        correlation_id: 'corr-app-review',
+        started_at: '2026-03-16T08:56:30.000Z',
+        participant_agent_ids: ['app-engineering', 'team-lead'],
+        trigger_event_id: 'evt-interaction',
+        related_event_ids: ['evt-related'],
+        evidence_refs: ['/evidence/review.md'],
+        source_kind: 'workflow_interaction',
+        summary: 'Reviewed structured detail facets'
+      }
+    ];
+    workflow.detail.recent_incidents = [
+      {
+        incident_id: 'inc-structured-facet',
+        kind: 'handoff',
+        ts: '2026-03-16T08:55:30.000Z',
+        agent_id: 'app-engineering',
+        actor_id: 'team-lead',
+        status: 'started',
+        severity: 'yellow',
+        summary: 'Incident contributes a structured facet',
+        correlation_id: 'corr-app-review',
+        evidence_refs: ['/evidence/incident.md'],
+        counterparty_agent_ids: ['team-lead'],
+        source_kind: 'incident_reader'
+      }
+    ];
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          selectedAgentDrilldownTab: 'evidence',
+          workflow
+        })}
+      />
+    );
+
+    const workflowSection = screen.getByRole('heading', { name: 'Workflow' }).closest('section');
+    expect(workflowSection).not.toBeNull();
+    const facetsRecord = within(workflowSection!)
+      .getByText((_, element) => element?.tagName === 'STRONG' && element.textContent === 'Structured evidence facets')
+      .closest('li');
+    expect(facetsRecord).not.toBeNull();
+    expect(within(facetsRecord!).getByText('Scope · Structured evidence facets from loaded workflow detail only; not full activity')).toBeVisible();
+    expect(
+      within(facetsRecord!).getByText(
+        'Facet counts · 4 evidence refs · 4 source kinds · 2 correlations · 3 event ids · 1 incident id · 2 counterparties'
+      )
+    ).toBeVisible();
+    expect(
+      within(facetsRecord!).getByText('Evidence refs · /evidence/incident.md, /evidence/log.md, /evidence/review.md, +1 more')
+    ).toBeVisible();
+    expect(within(facetsRecord!).getByText('Source kinds · incident_reader, peer_watch, workflow_event, +1 more')).toBeVisible();
+    expect(within(facetsRecord!).getByText('Correlations · corr-app-review, corr-peer-watch')).toBeVisible();
+    expect(within(facetsRecord!).getByText('Events · evt-2, evt-interaction, evt-related')).toBeVisible();
+    expect(within(facetsRecord!).getByText('Incidents · inc-structured-facet')).toBeVisible();
+    expect(within(facetsRecord!).getByText('Counterparties · growth-revenue, team-lead')).toBeVisible();
+  });
+
+  it('does not report structured evidence facets when workflow detail has no structured evidence', () => {
+    const workflow = buildWorkflow();
+    workflow.detail.open_peer_watch_alerts = [];
+    workflow.detail.recent_events = [];
+    workflow.detail.recent_interactions = [];
+    workflow.detail.recent_incidents = [];
+    workflow.detail.recent_handoffs = [];
+    workflow.detail.recent_reboots = [];
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          selectedAgentDrilldownTab: 'evidence',
+          workflow
+        })}
+      />
+    );
+
+    const workflowSection = screen.getByRole('heading', { name: 'Workflow' }).closest('section');
+    expect(workflowSection).not.toBeNull();
+    expect(
+      within(workflowSection!).queryByText(
+        (_, element) => element?.tagName === 'STRONG' && element.textContent === 'Structured evidence facets'
+      )
+    ).not.toBeInTheDocument();
+    expect(within(workflowSection!).queryByText(/Structured evidence facets from loaded workflow detail/)).not.toBeInTheDocument();
+  });
 });
 
 describe('DetailsPanel accountability signals', () => {

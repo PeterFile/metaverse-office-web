@@ -85,9 +85,9 @@ button {
   color: #f7f0d2;
   --aitown-edge: clamp(8px, 1.4vw, 18px);
   --aitown-panel-gap: clamp(8px, 1.1vw, 14px);
-  --aitown-frame-width: clamp(12px, 1.4vw, 20px);
-  --aitown-box-border: clamp(6px, 0.9vw, 10px);
-  --aitown-token-border: clamp(4px, 0.65vw, 6px);
+  --aitown-frame-width: clamp(2px, 0.35vw, 4px);
+  --aitown-box-border: clamp(1px, 0.25vw, 3px);
+  --aitown-token-border: 1px;
 }
 
 .aitown-panel__chrome {
@@ -259,7 +259,8 @@ button {
   pointer-events: none;
 }
 
-.aitown-panel__topline > span {
+.aitown-panel__topline > span,
+.aitown-panel__topline-popover {
   align-self: flex-start;
   display: flex;
   min-width: 0;
@@ -274,6 +275,65 @@ button {
   border-image-slice: 12.5%;
   background: rgba(39, 24, 33, 0.82);
   backdrop-filter: blur(8px);
+}
+
+.aitown-panel__topline-popover {
+  pointer-events: auto;
+}
+
+.aitown-panel__topline-popover > summary,
+.aitown-panel__hud-popover-summary {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  cursor: pointer;
+  list-style: none;
+  pointer-events: auto;
+}
+
+.aitown-panel__topline-popover > summary::-webkit-details-marker,
+.aitown-panel__hud-popover-summary::-webkit-details-marker {
+  display: none;
+}
+
+.aitown-panel__hud-popover {
+  pointer-events: auto;
+  display: flex;
+  min-width: 0;
+  max-width: min(28ch, 42%);
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 10px;
+  border-style: solid;
+  border-width: var(--aitown-token-border);
+  border-image-source: url('/ai-town/assets/ui/box.svg');
+  border-image-repeat: stretch;
+  border-image-slice: 12.5%;
+  background: rgba(39, 24, 33, 0.82);
+  backdrop-filter: blur(8px);
+}
+
+.aitown-panel__hud-popover[open] {
+  max-width: min(58ch, 56%);
+  pointer-events: none;
+}
+
+.aitown-panel__hud-popover--hot-zone {
+  align-self: flex-start;
+  margin-left: auto;
+}
+
+.aitown-panel__hud-popover--hot-zone[open] {
+  max-width: min(52ch, 48%);
+}
+
+.aitown-panel__hud-popover .aitown-panel__evidence-focus,
+.aitown-panel__hud-popover .aitown-panel__hot-zone-focus {
+  max-width: 100%;
+  margin-left: 0;
+  padding-top: 6px;
 }
 
 .aitown-panel__topline-title {
@@ -447,7 +507,7 @@ button {
   max-height: min(34dvh, 280px);
   flex-direction: column;
   gap: 8px;
-  max-width: min(560px, calc(100% - (var(--aitown-edge) * 2)));
+  max-width: min(320px, calc(100% - (var(--aitown-edge) * 2)));
   padding: 8px 10px;
   border-style: solid;
   border-width: var(--aitown-token-border);
@@ -463,6 +523,40 @@ button {
   pointer-events: auto;
   scrollbar-gutter: stable;
   scrollbar-width: thin;
+}
+
+.aitown-status-legend[open] {
+  max-width: min(560px, calc(100% - (var(--aitown-edge) * 2)));
+}
+
+.aitown-status-legend__summary {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.aitown-status-legend__summary::-webkit-details-marker {
+  display: none;
+}
+
+.aitown-status-legend__summary-copy {
+  min-width: 0;
+  color: #e6d9bb;
+  font-size: 0.74rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.aitown-status-legend__content {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .aitown-status-legend__title {
@@ -594,6 +688,19 @@ button {
   overscroll-behavior: contain;
   padding-right: 2px;
   scrollbar-width: thin;
+}
+
+.aitown-selected-agent-peek__facts summary {
+  color: #8be9d5;
+  cursor: pointer;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  list-style: none;
+  text-transform: uppercase;
+}
+
+.aitown-selected-agent-peek__facts summary::-webkit-details-marker {
+  display: none;
 }
 
 .aitown-selected-agent-peek__eyebrow {
@@ -850,7 +957,7 @@ button {
   min-width: 0;
   max-height: min(22dvh, 180px);
   border-style: solid;
-  border-width: clamp(10px, 1.4vw, 16px);
+  border-width: var(--aitown-box-border);
   border-image-source: url('/ai-town/assets/ui/desc.svg');
   border-image-repeat: stretch;
   border-image-slice: 28%;
@@ -1148,19 +1255,19 @@ button {
 }
 
 .severity-normal {
-  border-left: 4px solid #8ed16f;
+  box-shadow: inset 3px 0 0 #8ed16f;
 }
 
 .severity-yellow {
-  border-left: 4px solid #f8d34b;
+  box-shadow: inset 3px 0 0 #f8d34b;
 }
 
 .severity-orange {
-  border-left: 4px solid #ff9551;
+  box-shadow: inset 3px 0 0 #ff9551;
 }
 
 .severity-red {
-  border-left: 4px solid #f26767;
+  box-shadow: inset 3px 0 0 #f26767;
 }
 
 .aitown-world__canvas {
@@ -1556,7 +1663,7 @@ button {
   }
 
   .aitown-shell__stat {
-    border-width: 6px;
+    border-width: var(--aitown-token-border);
     padding: 1px 3px 2px;
   }
 
@@ -1579,7 +1686,7 @@ button {
   }
 
   .aitown-panel--details {
-    border-width: 10px;
+    border-width: var(--aitown-box-border);
   }
 
   .aitown-details__grid {
@@ -1599,13 +1706,16 @@ button {
     gap: 6px;
   }
 
-  .aitown-panel__topline > span {
+  .aitown-panel__topline > span,
+  .aitown-panel__topline-popover,
+  .aitown-panel__hud-popover {
     max-width: 100%;
     padding: 4px 6px;
     font-size: 0.68rem;
   }
 
-  .aitown-panel__topline > span:not(.aitown-panel__topline-card--live-focus) {
+  .aitown-panel__topline-popover--viewport,
+  .aitown-panel__hud-popover--hot-zone {
     display: none;
   }
 

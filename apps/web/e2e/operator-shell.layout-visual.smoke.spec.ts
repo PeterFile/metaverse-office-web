@@ -138,7 +138,7 @@ function expectViewportWithinHorizontalWorldBounds(
 }
 
 test.describe('operator shell layout visual smoke', () => {
-  test('surfaces evidence coverage focus by default without blocking non-chip world drag', async ({ page }) => {
+  test('keeps compact evidence coverage disclosure from blocking non-chip world drag', async ({ page }) => {
     const evidenceCoverage = {
       evidence_ref_count: 1,
       covered_agent_count: 1,
@@ -182,6 +182,7 @@ test.describe('operator shell layout visual smoke', () => {
 
     const worldHost = page.locator('.aitown-world__host');
     const evidenceFocus = page.getByRole('region', { name: 'Evidence coverage focus' });
+    const evidenceFocusSummary = evidenceFocus.locator('summary');
     const evidenceFocusHead = evidenceFocus.locator('.aitown-panel__evidence-focus__head');
     const evidenceFocusChip = evidenceFocus.getByRole('button', {
       name: 'Inspect evidence coverage focus agent Growth Revenue Agent'
@@ -189,9 +190,15 @@ test.describe('operator shell layout visual smoke', () => {
     await expect(worldHost).toBeVisible();
     await page.waitForFunction(() => Boolean(window.__AITOWN_VIEWPORT__));
     await expect(evidenceFocus).toBeVisible();
+    await expect(evidenceFocusSummary.getByText('Evidence', { exact: true })).toBeVisible();
+    await expect(evidenceFocusSummary.getByText('1 low coverage', { exact: true })).toBeVisible();
+    await expect(evidenceFocus.getByText('Coverage below high-confidence/no evidence')).toBeHidden();
+    await expect(evidenceFocusChip).toHaveCount(0);
+    await expect(page.getByRole('dialog', { name: 'Hub' })).toHaveCount(0);
+
+    await evidenceFocusSummary.click();
     await expect(evidenceFocus.getByText('Coverage below high-confidence/no evidence')).toBeVisible();
     await expect(evidenceFocusChip).toBeVisible();
-    await expect(page.getByRole('dialog', { name: 'Hub' })).toHaveCount(0);
 
     const before = await readViewportState(page);
     expect(before).not.toBeNull();
@@ -466,10 +473,14 @@ test.describe('operator shell layout visual smoke', () => {
     await expect(inspectPeek).toBeVisible();
     await expect(inspectPeek.getByText('Growth Revenue Agent')).toBeVisible();
     await expect(inspectPeek.getByText(/Yellow .* planning/)).toBeVisible();
-    await expect(inspectPeek.getByText('Operation · Prepare handoff notes')).toBeVisible();
+    await expect(inspectPeek.getByText('Inspect facts')).toBeVisible();
+    await expect(inspectPeek.getByText('Operation · Prepare handoff notes')).toBeHidden();
     expect(workflowRequests, 'Hub-closed inspect peek should not request selected-agent workflow').toHaveLength(0);
     await expect(inspectPeek.getByText('Correlation · corr-growth-lead-review')).toHaveCount(0);
     await expect(inspectPeek.getByText('Evidence · /tmp/growth-review-complete.md')).toHaveCount(0);
+
+    await inspectPeek.getByText('Inspect facts').click();
+    await expect(inspectPeek.getByText('Operation · Prepare handoff notes')).toBeVisible();
 
     const [worldRect, peekRect] = await Promise.all([readRect(worldHost), readRect(inspectPeek)]);
     expect(peekRect.width, 'Inspect peek should stay compact').toBeLessThanOrEqual(360);

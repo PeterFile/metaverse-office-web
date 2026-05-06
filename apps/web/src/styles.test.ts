@@ -43,12 +43,13 @@ describe('AI Town shell styles', () => {
   });
 
   it('uses thin RimWorld-style chrome instead of coarse nested frames', () => {
-    expect(styles).toMatch(/--aitown-frame-width:\s*clamp\(12px, 1\.4vw, 20px\);/);
-    expect(styles).toMatch(/--aitown-box-border:\s*clamp\(6px, 0\.9vw, 10px\);/);
-    expect(styles).toMatch(/--aitown-token-border:\s*clamp\(4px, 0\.65vw, 6px\);/);
+    expect(styles).toMatch(/--aitown-frame-width:\s*clamp\(2px, 0\.35vw, 4px\);/);
+    expect(styles).toMatch(/--aitown-box-border:\s*clamp\(1px, 0\.25vw, 3px\);/);
+    expect(styles).toMatch(/--aitown-token-border:\s*1px;/);
     expect(styles).toMatch(/\.aitown-panel--details\s*\{[^}]*border-width:\s*var\(--aitown-box-border\);/);
-    expect(styles).toMatch(/\.aitown-details__summary\s*\{[^}]*border-width:\s*clamp\(10px, 1\.4vw, 16px\);/);
+    expect(styles).toMatch(/\.aitown-details__summary\s*\{[^}]*border-width:\s*var\(--aitown-box-border\);/);
     expect(styles).not.toContain('border-width: clamp(24px, 5vw, 46px);');
+    expect(styles).not.toContain('border-width: clamp(10px, 1.4vw, 16px);');
   });
 
   it('renders Hub as a dismissible overlay instead of a permanent side rail', () => {
@@ -78,11 +79,13 @@ describe('AI Town shell styles', () => {
     expect(styles).toContain(
       '.aitown-panel__evidence-focus {\n  display: flex;\n  max-width: min(58ch, 56%);\n  flex-direction: column;\n  align-items: flex-start;\n  gap: 6px;\n  pointer-events: none;\n}'
     );
+    expect(styles).toMatch(/\.aitown-panel__hud-popover\[open\]\s*\{[^}]*pointer-events:\s*none;/);
+    expect(styles).toMatch(/\.aitown-panel__hud-popover-summary\s*\{[^}]*pointer-events:\s*auto;/);
     expect(styles).toMatch(/\.aitown-focus-chip\s*\{[\s\S]*?pointer-events:\s*auto;/);
   });
 
   it('keeps the Live Focus reason line from expanding the draggable world safe lane', () => {
-    expect(styles).toMatch(/\.aitown-panel__topline > span\s*\{[\s\S]*?min-width:\s*0;/);
+    expect(styles).toMatch(/\.aitown-panel__topline > span,[\s\S]*?\.aitown-panel__topline-popover\s*\{[\s\S]*?min-width:\s*0;/);
     expect(styles).toContain('.aitown-panel__topline > .aitown-panel__topline-card--live-focus {\n  max-width: min(42ch, 46%);\n}');
     expect(styles).toContain(
       '.aitown-panel__topline-copy--live-focus-summary {\n  display: block;\n  max-width: 100%;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}'
@@ -109,7 +112,7 @@ describe('AI Town shell styles', () => {
       /@media \(max-width:\s*720px\)\s*\{[\s\S]*?\.aitown-shell__eyebrow,[\s\S]*?\.aitown-shell__brand p\s*\{[\s\S]*?display:\s*none;/
     );
     expect(styles).toMatch(
-      /@media \(max-width:\s*720px\)\s*\{[\s\S]*?\.aitown-panel__topline > span:not\(\.aitown-panel__topline-card--live-focus\)\s*\{[\s\S]*?display:\s*none;/
+      /@media \(max-width:\s*720px\)\s*\{[\s\S]*?\.aitown-panel__topline-popover--viewport,[\s\S]*?\.aitown-panel__hud-popover--hot-zone\s*\{[\s\S]*?display:\s*none;/
     );
     expect(styles).toMatch(
       /@media \(max-width:\s*720px\)\s*\{[\s\S]*?\.aitown-panel__hot-zone-focus\s*\{[\s\S]*?display:\s*none;/

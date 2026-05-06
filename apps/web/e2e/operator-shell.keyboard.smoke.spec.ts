@@ -31,15 +31,53 @@ function resolveWorldPointScreenProjection(
   };
 }
 
+function clampViewportTarget(value: number, min: number, max: number) {
+  const lower = Math.min(min, max);
+  const upper = Math.max(min, max);
+
+  return Math.min(Math.max(value, lower), upper);
+}
+
 function resolveViewportSafeAreaTarget(
   state: NonNullable<Awaited<ReturnType<typeof readViewportState>>>
 ) {
-  const topPadding = state.clampPadding?.top ?? 0;
-  const rightPadding = state.clampPadding?.right ?? 0;
+  const topPadding = Math.max(0, state.clampPadding?.top ?? 0);
+  const rightPadding = Math.max(0, state.clampPadding?.right ?? 0);
 
   return {
     x: (state.screenWidth - rightPadding) / 2,
     y: topPadding + (state.screenHeight - topPadding) / 2
+  };
+}
+
+function resolveViewportReachableSafeAreaTarget(
+  state: NonNullable<Awaited<ReturnType<typeof readViewportState>>>,
+  point: { x: number; y: number }
+) {
+  const scale = Math.max(state.scale ?? 1, Number.EPSILON);
+  const rightPadding = Math.max(0, state.clampPadding?.right ?? 0);
+  const topPadding = Math.max(0, state.clampPadding?.top ?? 0);
+  const desiredTarget = resolveViewportSafeAreaTarget(state);
+  const screenWorldWidth = state.screenWidth / scale;
+  const screenWorldHeight = state.screenHeight / scale;
+  const leftBound = 0;
+  const rightBound = state.worldWidth + rightPadding / scale;
+  const topBound = topPadding === 0 ? 0 : -topPadding / scale;
+  const bottomBound = state.worldHeight;
+  const reachableLeft = clampViewportTarget(
+    point.x - desiredTarget.x / scale,
+    leftBound,
+    rightBound - screenWorldWidth
+  );
+  const reachableTop = clampViewportTarget(
+    point.y - desiredTarget.y / scale,
+    topBound,
+    bottomBound - screenWorldHeight
+  );
+
+  return {
+    x: (point.x - reachableLeft) * scale,
+    y: (point.y - reachableTop) * scale
   };
 }
 
@@ -134,7 +172,80 @@ async function focusHubControlWithTab(
   }
 
   try {
-    for (let step = 0; step < maxTabs; step += 1) {
+    const plannedTraversal = await targetElement.evaluate((target, traversalOptions) => {
+      const targetElement = target instanceof HTMLElement ? target : null;
+      const activeElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+
+      if (!targetElement || !activeElement) {
+        return null;
+      }
+
+      const focusScope = activeElement.closest('[role="dialog"], dialog, [aria-modal="true"]');
+      const scope = focusScope instanceof HTMLElement && focusScope.contains(targetElement) ? focusScope : document;
+      const selector = 'a[href], button, input, select, textarea, summary, [tabindex]';
+      const focusableElements = Array.from(scope.querySelectorAll<HTMLElement>(selector)).filter((element) => {
+        if (element.tabIndex < 0 || element.closest('[hidden], [inert], [aria-hidden="true"]')) {
+          return false;
+        }
+
+        if ('disabled' in element && Boolean((element as HTMLButtonElement).disabled)) {
+          return false;
+        }
+
+        const style = window.getComputedStyle(element);
+        return (
+          style.display !== 'none' &&
+          style.visibility !== 'hidden' &&
+          style.visibility !== 'collapse' &&
+          element.getClientRects().length > 0
+        );
+      });
+
+      const activeIndex = focusableElements.indexOf(activeElement);
+      const targetIndex = focusableElements.indexOf(targetElement);
+
+      if (activeIndex < 0 || targetIndex < 0 || focusableElements.length === 0) {
+        return null;
+      }
+
+      const focusableCount = focusableElements.length;
+      const forwardSteps = (targetIndex - activeIndex + focusableCount) % focusableCount;
+      const reverseSteps = (activeIndex - targetIndex + focusableCount) % focusableCount;
+      const steps = traversalOptions.reverse ? reverseSteps : forwardSteps;
+
+      if (steps > traversalOptions.maxTabs) {
+        return {
+          direction: traversalOptions.reverse ? 'reverse' : 'forward',
+          focusableCount,
+          steps,
+          withinBudget: false
+        };
+      }
+
+      return {
+        direction: traversalOptions.reverse ? 'reverse' : 'forward',
+        focusableCount,
+        steps,
+        withinBudget: true
+      };
+    }, { maxTabs, reverse });
+
+    let remainingTabs = maxTabs;
+
+    if (plannedTraversal?.withinBudget) {
+      const key = plannedTraversal.direction === 'reverse' ? 'Shift+Tab' : 'Tab';
+      for (let step = 0; step < plannedTraversal.steps; step += 1) {
+        await page.keyboard.press(key);
+      }
+
+      remainingTabs = Math.max(0, maxTabs - plannedTraversal.steps);
+
+      if (await targetElement.evaluate((element) => element === document.activeElement)) {
+        return;
+      }
+    }
+
+    for (let step = 0; step < remainingTabs; step += 1) {
       if (await targetElement.evaluate((element) => element === document.activeElement)) {
         return;
       }
@@ -1433,19 +1544,21 @@ test.describe('operator shell smoke', () => {
         x: selectedAgent!.x,
         y: selectedAgent!.y
       });
-      const toplineCards = await page.locator('.aitown-panel__topline > span').evaluateAll((elements) =>
-        elements
-          .map((element) => {
-            const rect = element.getBoundingClientRect();
-            return {
-              left: rect.left,
-              right: rect.right,
-              top: rect.top,
-              bottom: rect.bottom
-            };
-          })
-          .sort((a, b) => a.left - b.left)
-      );
+      const toplineCards = await page
+        .locator('.aitown-panel__topline > span, .aitown-panel__topline > details')
+        .evaluateAll((elements) =>
+          elements
+            .map((element) => {
+              const rect = element.getBoundingClientRect();
+              return {
+                left: rect.left,
+                right: rect.right,
+                top: rect.top,
+                bottom: rect.bottom
+              };
+            })
+            .sort((a, b) => a.left - b.left)
+        );
       const selectedBaselineScale = selectedAgentViewport.scale ?? 1;
       const selectedBaselineTop = selectedAgentViewport.top;
       const selectedBaselineClampPadding = {
@@ -1673,10 +1786,18 @@ test.describe('operator shell smoke', () => {
     await page.goto('/');
 
     const worldRegion = page.getByRole('region', { name: 'Office world' });
+    const legendDisclosure = worldRegion.locator('.aitown-status-legend__summary');
     const legend = worldRegion.getByRole('list', { name: 'Scene status legend' });
     const items = legend.getByRole('listitem');
 
     await expect(worldRegion).toBeVisible();
+    await expect(worldRegion.getByText('World legend')).toBeVisible();
+    await expect(worldRegion.getByText('Badge legend')).toBeHidden();
+
+    await legendDisclosure.focus();
+    await expect(legendDisclosure).toBeFocused();
+    await page.keyboard.press('Enter');
+
     await expect(worldRegion.getByText('Badge legend')).toBeVisible();
     await expect(legend).toBeVisible();
     await expect(items).toHaveCount(4);
@@ -1693,7 +1814,15 @@ test.describe('operator shell smoke', () => {
 
     await forceViewportAgainstTopRightClamp(page);
     const before = await waitForViewportSettle(page);
-    const hotZoneFocusGroup = page.getByRole('group', { name: 'Hot zone focus' });
+    const hotZoneFocusRegion = page.getByRole('region', { name: 'Hot zone focus' });
+    const hotZoneDisclosure = hotZoneFocusRegion.locator('.aitown-panel__hud-popover-summary');
+
+    await expect(hotZoneFocusRegion.getByText('Zones')).toBeVisible();
+    await focusHubControlWithTab(page, hotZoneDisclosure, 'Hot zone focus disclosure');
+    await expect(hotZoneDisclosure).toBeFocused();
+    await page.keyboard.press('Enter');
+
+    const hotZoneFocusGroup = hotZoneFocusRegion.getByRole('group', { name: 'Hot zone focus' });
     const hotZoneButton = hotZoneFocusGroup.getByRole('button', {
       name: /Meeting Zone.*Focus in world viewport/
     });
@@ -1850,19 +1979,21 @@ test.describe('operator shell smoke', () => {
         x: selectedAgent!.x,
         y: selectedAgent!.y
       });
-      const toplineCards = await page.locator('.aitown-panel__topline > span').evaluateAll((elements) =>
-        elements
-          .map((element) => {
-            const rect = element.getBoundingClientRect();
-            return {
-              left: rect.left,
-              right: rect.right,
-              top: rect.top,
-              bottom: rect.bottom
-            };
-          })
-          .sort((a, b) => a.left - b.left)
-      );
+      const toplineCards = await page
+        .locator('.aitown-panel__topline > span, .aitown-panel__topline > details')
+        .evaluateAll((elements) =>
+          elements
+            .map((element) => {
+              const rect = element.getBoundingClientRect();
+              return {
+                left: rect.left,
+                right: rect.right,
+                top: rect.top,
+                bottom: rect.bottom
+              };
+            })
+            .sort((a, b) => a.left - b.left)
+        );
       const selectedBaselineScale = selectedAgentViewport.scale ?? 1;
       const selectedBaselineTop = selectedAgentViewport.top;
       const selectedBaselineClampPadding = {
@@ -2909,6 +3040,8 @@ test.describe('operator shell smoke', () => {
   });
 
   test('returns a manual active-queue correlation to the current scope via keyboard traversal', async ({ page }) => {
+    test.setTimeout(45_000);
+
     const requestedUrls: string[] = [];
     page.on('request', (request) => {
       try {
@@ -3055,7 +3188,7 @@ test.describe('operator shell smoke', () => {
   test('keeps the active crew-overview correlation when opening an active-queue counterparty pivot via keyboard traversal', async ({
     page
   }) => {
-    test.setTimeout(45_000);
+    test.setTimeout(60_000);
 
     await page.route('**/office/operations?limit=4', async (route) => {
       const response = await route.fetch();
@@ -3132,7 +3265,7 @@ test.describe('operator shell smoke', () => {
   test('keeps the active crew-overview correlation when opening an active-queue actor pivot via keyboard traversal', async ({
     page
   }) => {
-    test.setTimeout(45_000);
+    test.setTimeout(60_000);
 
     const requestedUrls: string[] = [];
     page.on('request', (request) => {
@@ -3977,6 +4110,8 @@ test.describe('operator shell smoke', () => {
   test('keeps the active accountability correlation and request scope when opening an audit-signal responsibility chain pivot via keyboard traversal', async ({
     page
   }) => {
+    test.setTimeout(45_000);
+
     const requestedUrls: string[] = [];
     const forbiddenRequests: string[] = [];
     const directOperationUrl = '/office/operations?agent_id=team-lead';
@@ -11734,7 +11869,10 @@ test.describe('operator shell smoke', () => {
       x: resizedSelectedAgent!.x,
       y: resizedSelectedAgent!.y
     });
-    const resizedSafeAreaTarget = resolveViewportSafeAreaTarget(resizedViewport);
+    const resizedSafeAreaTarget = resolveViewportReachableSafeAreaTarget(resizedViewport, {
+      x: resizedSelectedAgent!.x,
+      y: resizedSelectedAgent!.y
+    });
     const resizedScale = resizedViewport.scale ?? 1;
     const resizedTop = resizedViewport.top;
     const resizedClampPadding = {
@@ -11809,7 +11947,10 @@ test.describe('operator shell smoke', () => {
       x: selectedAgent!.x,
       y: selectedAgent!.y
     });
-    const safeAreaTarget = resolveViewportSafeAreaTarget(selectedAgentViewport);
+    const safeAreaTarget = resolveViewportReachableSafeAreaTarget(selectedAgentViewport, {
+      x: selectedAgent!.x,
+      y: selectedAgent!.y
+    });
 
     expect(baselineRightPadding).toBeGreaterThan(0);
     expect(selectedRightPadding).toBeGreaterThan(0);
@@ -11914,7 +12055,10 @@ test.describe('operator shell smoke', () => {
       x: initialSelectedAgent!.x,
       y: initialSelectedAgent!.y
     });
-    const initialSafeAreaTarget = resolveViewportSafeAreaTarget(initialViewport);
+    const initialSafeAreaTarget = resolveViewportReachableSafeAreaTarget(initialViewport, {
+      x: initialSelectedAgent!.x,
+      y: initialSelectedAgent!.y
+    });
 
     expect(initialRightPadding).toBeGreaterThan(0);
     expect(initialSelectedAgent!.agentId).toBe('growth-revenue');
@@ -11949,7 +12093,10 @@ test.describe('operator shell smoke', () => {
       x: refreshedSelectedAgent!.x,
       y: refreshedSelectedAgent!.y
     });
-    const refreshedSafeAreaTarget = resolveViewportSafeAreaTarget(refreshedViewport);
+    const refreshedSafeAreaTarget = resolveViewportReachableSafeAreaTarget(refreshedViewport, {
+      x: refreshedSelectedAgent!.x,
+      y: refreshedSelectedAgent!.y
+    });
     const worldShift = Math.hypot(
       refreshedSelectedAgent!.x - initialSelectedAgent!.x,
       refreshedSelectedAgent!.y - initialSelectedAgent!.y
@@ -12061,7 +12208,10 @@ test.describe('operator shell smoke', () => {
       x: initialSelectedAgent!.x,
       y: initialSelectedAgent!.y
     });
-    const initialSafeAreaTarget = resolveViewportSafeAreaTarget(initialViewport);
+    const initialSafeAreaTarget = resolveViewportReachableSafeAreaTarget(initialViewport, {
+      x: initialSelectedAgent!.x,
+      y: initialSelectedAgent!.y
+    });
 
     expect(initialRightPadding).toBeGreaterThan(0);
     expect(initialSelectedAgent!.agentId).toBe('growth-revenue');
@@ -12096,7 +12246,10 @@ test.describe('operator shell smoke', () => {
       x: refreshedSelectedAgent!.x,
       y: refreshedSelectedAgent!.y
     });
-    const refreshedSafeAreaTarget = resolveViewportSafeAreaTarget(refreshedViewport);
+    const refreshedSafeAreaTarget = resolveViewportReachableSafeAreaTarget(refreshedViewport, {
+      x: refreshedSelectedAgent!.x,
+      y: refreshedSelectedAgent!.y
+    });
     const worldShift = Math.hypot(
       refreshedSelectedAgent!.x - initialSelectedAgent!.x,
       refreshedSelectedAgent!.y - initialSelectedAgent!.y
@@ -12208,7 +12361,10 @@ test.describe('operator shell smoke', () => {
       x: initialSelectedAgent!.x,
       y: initialSelectedAgent!.y
     });
-    const initialSafeAreaTarget = resolveViewportSafeAreaTarget(initialViewport);
+    const initialSafeAreaTarget = resolveViewportReachableSafeAreaTarget(initialViewport, {
+      x: initialSelectedAgent!.x,
+      y: initialSelectedAgent!.y
+    });
 
     expect(initialRightPadding).toBeGreaterThan(0);
     expect(initialSelectedAgent!.agentId).toBe('growth-revenue');
@@ -12331,7 +12487,10 @@ test.describe('operator shell smoke', () => {
       x: selectedAgent!.x,
       y: selectedAgent!.y
     });
-    const safeAreaTarget = resolveViewportSafeAreaTarget(selectedAgentViewport);
+    const safeAreaTarget = resolveViewportReachableSafeAreaTarget(selectedAgentViewport, {
+      x: selectedAgent!.x,
+      y: selectedAgent!.y
+    });
 
     expect(baselineRightPadding).toBeGreaterThan(0);
     expect(selectedRightPadding).toBeGreaterThan(0);

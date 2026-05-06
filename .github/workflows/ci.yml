@@ -22,9 +22,6 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Install Playwright Chromium
-        run: pnpm --filter @metaverse-office/web install:browsers:ci
-
       - name: Run backend tests
         run: pnpm backend:test
 
@@ -37,17 +34,87 @@ jobs:
       - name: Run web production build
         run: pnpm web:build
 
-      - name: Run browser smoke (preview)
-        run: pnpm web:test:browser-smoke
+  browser-smoke-preview:
+    name: Browser smoke (preview, shard ${{ matrix.shard_label }})
+    needs: test
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - shard: '1/2'
+            shard_label: '1-of-2'
+          - shard: '2/2'
+            shard_label: '2-of-2'
+    steps:
+      - uses: actions/checkout@v4
 
-      - name: Run browser smoke (dev)
-        run: pnpm web:test:browser-smoke:dev
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.19.0
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright Chromium
+        run: pnpm --filter @metaverse-office/web install:browsers:ci
+
+      - name: Run browser smoke (preview)
+        run: pnpm --filter @metaverse-office/web test:browser-smoke -- --fully-parallel --shard=${{ matrix.shard }}
 
       - name: Upload Playwright artifacts on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-artifacts-${{ github.run_id }}-${{ github.run_attempt }}
+          name: playwright-artifacts-preview-${{ matrix.shard_label }}-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: ignore
+          path: |
+            apps/web/playwright-report
+            apps/web/test-results
+
+  browser-smoke-dev:
+    name: Browser smoke (dev, shard ${{ matrix.shard_label }})
+    needs: test
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - shard: '1/2'
+            shard_label: '1-of-2'
+          - shard: '2/2'
+            shard_label: '2-of-2'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.19.0
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright Chromium
+        run: pnpm --filter @metaverse-office/web install:browsers:ci
+
+      - name: Run browser smoke (dev)
+        run: pnpm --filter @metaverse-office/web test:browser-smoke:dev -- --fully-parallel --shard=${{ matrix.shard }}
+
+      - name: Upload Playwright artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-artifacts-dev-${{ matrix.shard_label }}-${{ github.run_id }}-${{ github.run_attempt }}
           if-no-files-found: ignore
           path: |
             apps/web/playwright-report

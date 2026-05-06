@@ -1621,7 +1621,10 @@ button {
   min-height: 0;
   max-height: 100%;
   gap: 5px;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
 }
 
 .aitown-hub-sheet .aitown-details__section--active-queue {
@@ -1644,8 +1647,8 @@ button {
 }
 
 .aitown-hub-sheet .aitown-details__section:not(.aitown-details__section--active-queue) .aitown-records {
-  max-height: 100%;
-  overflow: hidden;
+  max-height: none;
+  overflow: visible;
 }
 
 .aitown-hub-sheet .aitown-records {
@@ -1657,18 +1660,25 @@ button {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   flex: 1 1 auto;
   min-height: 0;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
 }
 
 .aitown-hub-sheet .aitown-details__section--active-queue .aitown-queue-record {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   min-height: 0;
   max-height: 100%;
+  gap: 1px 5px;
   overflow: hidden;
 }
 
 .aitown-hub-sheet .aitown-details__section--active-queue .aitown-queue-record__button {
+  grid-column: 1 / -1;
   min-height: 0;
-  max-height: 64px;
+  max-height: 52px;
   gap: 2px;
   padding: 3px 6px 4px;
   overflow: hidden;
@@ -1687,13 +1697,29 @@ button {
 }
 
 .aitown-hub-sheet .aitown-details__section--active-queue .aitown-queue-record__meta {
-  display: none;
+  display: block;
+  min-width: 0;
+  padding: 0 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .aitown-hub-sheet .aitown-record {
-  gap: 2px;
-  padding: 3px 7px 5px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: start;
+  gap: 1px 8px;
+  padding: 2px 6px 3px;
   overflow: hidden;
+}
+
+.aitown-hub-sheet .aitown-record strong {
+  display: block;
+  grid-column: 1 / -1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .aitown-hub-sheet .aitown-record span,
@@ -1711,10 +1737,10 @@ button {
 
 .aitown-hub-sheet .aitown-queue-record__preview,
 .aitown-hub-sheet .aitown-record span:not(:first-child) {
-  display: -webkit-box;
+  display: block;
   overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .aitown-panel--details[data-selected-agent-drilldown-tab='now']

@@ -64,7 +64,9 @@ describe('AI Town shell styles', () => {
       /\.aitown-hub-sheet \.aitown-details__section--active-queue\s*\{[\s\S]*?display:\s*flex;[\s\S]*?flex-direction:\s*column;[\s\S]*?min-height:\s*0;/
     );
     expect(styles).toMatch(/\.aitown-hub-sheet \.aitown-details__section--active-queue > div\s*\{[\s\S]*?grid-template-columns:\s*auto minmax\(0, 1fr\);/);
-    expect(styles).toMatch(/\.aitown-hub-sheet \.aitown-details__section--active-queue \.aitown-records\s*\{[\s\S]*?flex:\s*1 1 auto;[\s\S]*?overflow:\s*hidden;/);
+    expect(styles).toMatch(/\.aitown-hub-sheet \.aitown-details__section--active-queue \.aitown-records\s*\{[\s\S]*?flex:\s*1 1 auto;[\s\S]*?overflow-y:\s*auto;/);
+    expect(styles).toMatch(/\.aitown-hub-sheet \.aitown-details__section--active-queue \.aitown-queue-record__meta\s*\{[\s\S]*?display:\s*block;[\s\S]*?text-overflow:\s*ellipsis;/);
+    expect(styles).toMatch(/\.aitown-hub-sheet \.aitown-record\s*\{[\s\S]*?grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\);/);
   });
 
   it('keeps browser pinch zoom available on the fullscreen world host and canvas', () => {

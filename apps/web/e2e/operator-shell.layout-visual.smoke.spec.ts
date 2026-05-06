@@ -263,7 +263,7 @@ test.describe('operator shell layout visual smoke', () => {
     const dragStart = {
       x: Math.min(
         Math.max(toplineRect.left + toplineRect.width * 0.5, worldRect.left + 64),
-        hubRect.left - 64,
+        toplineRect.right - 1,
         worldRect.right - 64
       ),
       y: Math.min(
@@ -514,7 +514,7 @@ test.describe('operator shell layout visual smoke', () => {
     await expect(page.getByRole('region', { name: 'Selected agent inspect peek' })).toHaveCount(0);
   });
 
-  test('keeps the selected-agent Hub focus ribbon compact and sticky inside the Hub sheet', async ({ page }) => {
+  test('keeps the selected-agent Hub focus ribbon compact inside the bottom deck', async ({ page }) => {
     await page.goto('/');
 
     const worldHost = page.locator('.aitown-world__host');
@@ -596,15 +596,9 @@ test.describe('operator shell layout visual smoke', () => {
     await hub.evaluate((element) => {
       element.scrollTop = 720;
     });
-    await expect.poll(() => hub.evaluate((element) => element.scrollTop)).toBeGreaterThan(100);
+    await expect.poll(() => hub.evaluate((element) => element.scrollTop)).toBe(0);
     await expect(focusRibbon).toBeVisible();
-    const scrolledRibbonRect = await readRect(focusRibbon);
-    expect(scrolledRibbonRect.top, 'Hub focus ribbon should remain sticky in the Hub sheet').toBeGreaterThanOrEqual(
-      hubRect.top - 1
-    );
-    expect(scrolledRibbonRect.bottom, 'Hub focus ribbon should remain visible in the Hub sheet').toBeLessThanOrEqual(
-      hubRect.bottom + 1
-    );
+    await expectLocatorInsideRect(focusRibbon, hub, 'Hub focus ribbon after no-op deck scroll');
 
     await page.getByRole('button', { name: 'Close Hub' }).click();
     await expect(hub).toHaveCount(0);
@@ -619,7 +613,7 @@ test.describe('operator shell layout visual smoke', () => {
     await expect(page.getByRole('region', { name: 'Hub focus ribbon' })).toBeVisible();
   });
 
-  test('selected-agent Hub drilldown tabs split Now Evidence and Replay Correlation without widening the Hub', async ({
+  test('selected-agent Hub drilldown tabs split Now Evidence and Replay Correlation inside the bottom deck', async ({
     page
   }) => {
     await page.goto('/');
@@ -682,7 +676,10 @@ test.describe('operator shell layout visual smoke', () => {
       readRect(focusRibbon),
       readRect(drilldown)
     ]);
-    expect(hubRect.width, 'Hub width should remain unchanged').toBeLessThanOrEqual(430);
+    expect(hubRect.width, 'Hub deck should stay bounded by the wide bottom deck contract').toBeLessThanOrEqual(
+      Math.min(1120, page.viewportSize()!.width - 24) + 1
+    );
+    expect(hubRect.height, 'Hub deck should stay shallow instead of becoming a tall side sheet').toBeLessThanOrEqual(220);
     expect(
       focusRibbonRect.height + drilldownRect.height,
       'Hub focus ribbon plus drilldown tabs should stay compact'
@@ -696,7 +693,7 @@ test.describe('operator shell layout visual smoke', () => {
     await hub.evaluate((element) => {
       element.scrollTop = 720;
     });
-    await expect.poll(() => hub.evaluate((element) => element.scrollTop)).toBeGreaterThan(100);
+    await expect.poll(() => hub.evaluate((element) => element.scrollTop)).toBe(0);
     await evidenceTab.click();
     const evidencePanel = page.getByRole('tabpanel', { name: 'Evidence' });
     await expect(evidencePanel).toBeVisible();

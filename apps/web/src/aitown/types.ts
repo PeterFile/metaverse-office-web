@@ -25,6 +25,15 @@ export interface AiTownMapData {
 
 export type CharacterKey = 'f1' | 'f2' | 'f3' | 'f4' | 'f5' | 'f6' | 'f7' | 'f8';
 
+export type RolePawnKey =
+  | 'app_eng'
+  | 'growth'
+  | 'lead'
+  | 'market_intel'
+  | 'product_pmf'
+  | 'protocol_eng'
+  | 'tokenomics';
+
 export type Facing = 'down' | 'left' | 'right' | 'up';
 
 export interface ScenePoint {
@@ -47,6 +56,7 @@ export interface SceneAgent {
   zoneId: string;
   position: ScenePoint;
   characterKey: CharacterKey;
+  rolePawnKey?: RolePawnKey;
   facing: Facing;
   phase: AgentPhase;
   severity: Severity;

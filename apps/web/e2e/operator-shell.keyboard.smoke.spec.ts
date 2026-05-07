@@ -1814,13 +1814,17 @@ test.describe('operator shell smoke', () => {
 
     await forceViewportAgainstTopRightClamp(page);
     const before = await waitForViewportSettle(page);
+    const signals = page.getByRole('region', { name: 'Office HUD signals' });
+    const signalsDisclosure = signals.locator('.aitown-panel__hud-popover-summary');
     const hotZoneFocusRegion = page.getByRole('region', { name: 'Hot zone focus' });
-    const hotZoneDisclosure = hotZoneFocusRegion.locator('.aitown-panel__hud-popover-summary');
 
-    await expect(hotZoneFocusRegion.getByText('Zones')).toBeVisible();
-    await focusHubControlWithTab(page, hotZoneDisclosure, 'Hot zone focus disclosure');
-    await expect(hotZoneDisclosure).toBeFocused();
+    await expect(signals.getByText('Signals')).toBeVisible();
+    await expect(signals.getByText(/Zones ·/)).toBeVisible();
+    await expect(hotZoneFocusRegion).toBeHidden();
+    await focusHubControlWithTab(page, signalsDisclosure, 'HUD signals disclosure');
+    await expect(signalsDisclosure).toBeFocused();
     await page.keyboard.press('Enter');
+    await expect(hotZoneFocusRegion).toBeVisible();
 
     const hotZoneFocusGroup = hotZoneFocusRegion.getByRole('group', { name: 'Hot zone focus' });
     const hotZoneButton = hotZoneFocusGroup.getByRole('button', {

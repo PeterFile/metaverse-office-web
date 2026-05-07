@@ -2147,6 +2147,13 @@ function AppInner() {
     workflow: activeWorkflow?.detail ?? null,
     correlationId: selectedAgentPeekCorrelationId
   });
+  const hudSignalSummary = [
+    `Viewport · ${viewportToplineStatus.status}`,
+    evidenceCoverageFocusItems.length > 0 ? `Evidence · ${evidenceCoverageFocusItems.length}` : null,
+    hotZones.length > 0 ? `Zones · ${hotZones.length}` : null
+  ]
+    .filter(Boolean)
+    .join(' / ');
 
   return (
     <main className="aitown-shell game-background">
@@ -2215,96 +2222,93 @@ function AppInner() {
                   <span className="aitown-panel__topline-copy">Drag to pan. Wheel to zoom. Tap or click an agent to inspect.</span>
                 )}
               </span>
-              <details className="aitown-panel__topline-popover aitown-panel__topline-popover--viewport">
-                <summary>
-                  <strong className="aitown-panel__topline-title">Viewport</strong>
-                  <span className="aitown-panel__topline-copy">{viewportToplineStatus.status}</span>
-                </summary>
-                <span className="aitown-panel__topline-copy">Drag to pan. Wheel to zoom. Tap or click an agent to inspect.</span>
-                <span className="aitown-panel__topline-copy">{viewportToplineStatus.snapshot}</span>
-              </details>
-            </div>
-            {evidenceCoverageFocusItems.length > 0 ? (
-              <details
-                className="aitown-panel__hud-popover aitown-panel__hud-popover--evidence"
-                role="region"
-                aria-label="Evidence coverage focus"
-              >
+              <details className="aitown-panel__signal-cluster" role="region" aria-label="Office HUD signals">
                 <summary className="aitown-panel__hud-popover-summary">
-                  <strong className="aitown-panel__topline-title">Evidence</strong>
-                  <span className="aitown-panel__topline-copy">
-                    {`${evidenceCoverageFocusItems.length} low coverage`}
-                  </span>
+                  <strong className="aitown-panel__topline-title">Signals</strong>
+                  <span className="aitown-panel__topline-copy">{hudSignalSummary}</span>
                 </summary>
-                <section className="aitown-panel__evidence-focus">
-                  <div className="aitown-panel__evidence-focus__head">
-                    <strong className="aitown-panel__topline-title">Evidence coverage focus</strong>
-                    <span className="aitown-panel__topline-copy">Coverage below high-confidence/no evidence</span>
-                  </div>
-                  <span
-                    className="aitown-panel__focus-chips aitown-panel__focus-chips--compact"
-                    role="group"
-                    aria-label="Evidence coverage focus agents"
-                  >
-                    {evidenceCoverageFocusItems.map((item) => (
-                      <button
-                        key={item.agentId}
-                        type="button"
-                        className={`aitown-focus-chip aitown-focus-chip--evidence${selectedAgentId === item.agentId ? ' is-active' : ''}`}
-                        aria-label={`Inspect evidence coverage focus agent ${item.displayName}`}
-                        onClick={() => handleEvidenceCoverageFocusAgent(item.agentId)}
+                <div className="aitown-panel__signal-grid">
+                  <section className="aitown-panel__signal-panel aitown-panel__signal-panel--viewport">
+                    <strong className="aitown-panel__topline-title">Viewport</strong>
+                    <span className="aitown-panel__topline-copy">Drag to pan. Wheel to zoom. Tap or click an agent to inspect.</span>
+                    <span className="aitown-panel__topline-copy">{viewportToplineStatus.snapshot}</span>
+                  </section>
+                  {evidenceCoverageFocusItems.length > 0 ? (
+                    <section
+                      className="aitown-panel__signal-panel aitown-panel__evidence-focus"
+                      role="region"
+                      aria-label="Evidence coverage focus"
+                    >
+                      <div className="aitown-panel__evidence-focus__head">
+                        <strong className="aitown-panel__topline-title">Evidence</strong>
+                        <span className="aitown-panel__topline-copy">
+                          {`${evidenceCoverageFocusItems.length} low coverage`}
+                        </span>
+                      </div>
+                      <span className="aitown-panel__topline-copy">Coverage below high-confidence/no evidence</span>
+                      <span
+                        className="aitown-panel__focus-chips aitown-panel__focus-chips--compact"
+                        role="group"
+                        aria-label="Evidence coverage focus agents"
                       >
-                        <strong>{item.displayName}</strong>
-                        <span>{`ID · ${item.agentId}`}</span>
-                        {item.coverageItem ? (
-                          <>
-                            <span>
-                              {`${renderEvidenceCoverageFocusRefCount(item.coverageItem.evidence_ref_count)} · ${renderEvidenceCoverageFocusSources(item.coverageItem.source_kinds)}`}
-                            </span>
-                            <span>
-                              {`Latest evidence · ${item.coverageItem.latest_evidence_at ?? 'No recent evidence'}`}
-                            </span>
-                          </>
-                        ) : (
-                          <span>Coverage below high-confidence/no evidence</span>
-                        )}
-                      </button>
-                    ))}
-                  </span>
-                </section>
-              </details>
-            ) : null}
-            {hotZones.length > 0 ? (
-              <details className="aitown-panel__hud-popover aitown-panel__hud-popover--hot-zone" role="region" aria-label="Hot zone focus">
-                <summary className="aitown-panel__hud-popover-summary">
-                  <strong className="aitown-panel__topline-title">Zones</strong>
-                  <span className="aitown-panel__topline-copy">
-                    {`${hotZones.length} hot zone${hotZones.length === 1 ? '' : 's'}`}
-                  </span>
-                </summary>
-                <div className="aitown-panel__hot-zone-focus">
-                  <strong className="aitown-panel__topline-title">Hot zone focus</strong>
-                  <span
-                    className="aitown-panel__focus-chips aitown-panel__focus-chips--compact"
-                    role="group"
-                    aria-label="Hot zone focus"
-                  >
-                    {hotZones.map((zone) => (
-                      <button
-                        key={zone.zone_id}
-                        type="button"
-                        className={`aitown-focus-chip aitown-focus-chip--hot-zone severity-${zone.highest_severity}`}
-                        aria-label={`${zone.label} · ${resolveHotZoneFocusMeta(zone)} · Focus in world viewport`}
-                        onClick={() => handleFocusWorldZone(zone.zone_id)}
+                        {evidenceCoverageFocusItems.map((item) => (
+                          <button
+                            key={item.agentId}
+                            type="button"
+                            className={`aitown-focus-chip aitown-focus-chip--evidence${selectedAgentId === item.agentId ? ' is-active' : ''}`}
+                            aria-label={`Inspect evidence coverage focus agent ${item.displayName}`}
+                            onClick={() => handleEvidenceCoverageFocusAgent(item.agentId)}
+                          >
+                            <strong>{item.displayName}</strong>
+                            <span>{`ID · ${item.agentId}`}</span>
+                            {item.coverageItem ? (
+                              <>
+                                <span>
+                                  {`${renderEvidenceCoverageFocusRefCount(item.coverageItem.evidence_ref_count)} · ${renderEvidenceCoverageFocusSources(item.coverageItem.source_kinds)}`}
+                                </span>
+                                <span>
+                                  {`Latest evidence · ${item.coverageItem.latest_evidence_at ?? 'No recent evidence'}`}
+                                </span>
+                              </>
+                            ) : (
+                              <span>Coverage below high-confidence/no evidence</span>
+                            )}
+                          </button>
+                        ))}
+                      </span>
+                    </section>
+                  ) : null}
+                  {hotZones.length > 0 ? (
+                    <section className="aitown-panel__signal-panel aitown-panel__hot-zone-focus" role="region" aria-label="Hot zone focus">
+                      <div className="aitown-panel__evidence-focus__head">
+                        <strong className="aitown-panel__topline-title">Zones</strong>
+                        <span className="aitown-panel__topline-copy">
+                          {`${hotZones.length} hot zone${hotZones.length === 1 ? '' : 's'}`}
+                        </span>
+                      </div>
+                      <span
+                        className="aitown-panel__focus-chips aitown-panel__focus-chips--compact"
+                        role="group"
+                        aria-label="Hot zone focus"
                       >
-                        <strong>{zone.label}</strong>
-                        <span>{resolveHotZoneFocusMeta(zone)}</span>
-                      </button>
-                    ))}
-                  </span>
+                        {hotZones.map((zone) => (
+                          <button
+                            key={zone.zone_id}
+                            type="button"
+                            className={`aitown-focus-chip aitown-focus-chip--hot-zone severity-${zone.highest_severity}`}
+                            aria-label={`${zone.label} · ${resolveHotZoneFocusMeta(zone)} · Focus in world viewport`}
+                            onClick={() => handleFocusWorldZone(zone.zone_id)}
+                          >
+                            <strong>{zone.label}</strong>
+                            <span>{resolveHotZoneFocusMeta(zone)}</span>
+                          </button>
+                        ))}
+                      </span>
+                    </section>
+                  ) : null}
                 </div>
               </details>
-            ) : null}
+            </div>
 
           </div>
           <div className="aitown-panel__toolbar">
@@ -2426,7 +2430,8 @@ function AppInner() {
                 </button>
               </div>
             </div>
-            {selectedAgent ? (
+            <div className={selectedAgent ? 'aitown-hub-sheet__body aitown-hub-sheet__body--selected-agent' : 'aitown-hub-sheet__body'}>
+              {selectedAgent ? (
               <div className="aitown-hub-selected-agent-chrome">
                 <section
                   className={`aitown-hub-focus-ribbon severity-${selectedAgentPeekSeverity}`}
@@ -2476,14 +2481,14 @@ function AppInner() {
                   </div>
                 </section>
               </div>
-            ) : null}
-            <div
+              ) : null}
+              <div
               id={
                 selectedAgent
                   ? resolveSelectedAgentDrilldownPanelId(selectedAgentDrilldownTab)
                   : undefined
               }
-              className={selectedAgent ? 'aitown-hub-drilldown__panel' : undefined}
+              className={selectedAgent ? 'aitown-hub-drilldown__panel' : 'aitown-hub-drilldown__panel aitown-hub-drilldown__panel--crew'}
               role={selectedAgent ? 'tabpanel' : undefined}
               aria-labelledby={
                 selectedAgent
@@ -2607,6 +2612,7 @@ function AppInner() {
               onOpenReplayCheckpoint={handleOpenReplayCheckpoint}
               onFocusWorldZone={handleFocusWorldZone}
               />
+              </div>
             </div>
           </div>
         </div>

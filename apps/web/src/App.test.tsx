@@ -1638,6 +1638,12 @@ async function openHub(user: ReturnType<typeof userEvent.setup>) {
   return screen.findByRole('complementary', { name: 'Agent details' });
 }
 
+async function openHudSignals(user: ReturnType<typeof userEvent.setup>) {
+  const signals = await screen.findByRole('region', { name: 'Office HUD signals' });
+  await user.click(within(signals).getByText('Signals'));
+  return signals;
+}
+
 async function openSelectedAgentPeekInHub(user: ReturnType<typeof userEvent.setup>, agentName?: string) {
   const inspectPeek = await screen.findByRole('region', { name: 'Selected agent inspect peek' });
 
@@ -1777,9 +1783,10 @@ afterEach(() => {
     expect(
       screen.getByText('Operator shell for real-running, supervised, replayable, accountable agents.')
     ).toBeVisible();
-    expect(screen.getByText('Office snapshot · Live')).toBeVisible();
+    const signals = await screen.findByRole('region', { name: 'Office HUD signals' });
+    expect(within(signals).getByText(/Office snapshot · Live/)).toBeVisible();
     expect(screen.getByText('Snapshot 2026-03-16T09:00:00.000Z')).not.toBeVisible();
-    await user.click(screen.getByText('Viewport'));
+    await openHudSignals(user);
     expect(screen.getByText('Snapshot 2026-03-16T09:00:00.000Z')).toBeVisible();
 
     const worldRegion = screen.getByRole('region', { name: 'Office world' });
@@ -2538,13 +2545,12 @@ afterEach(() => {
       expect(requestedUrls).not.toContain(collectorSnapshotUrl);
     });
 
+    await openHudSignals(user);
     const evidenceFocus = await screen.findByRole('region', { name: 'Evidence coverage focus' });
 
     expect(within(evidenceFocus).getByText('Evidence')).toBeVisible();
     expect(within(evidenceFocus).getByText('1 low coverage')).toBeVisible();
-    expect(within(evidenceFocus).getByText('Coverage below high-confidence/no evidence')).not.toBeVisible();
-
-    await user.click(within(evidenceFocus).getByText('Evidence'));
+    expect(within(evidenceFocus).getByText('Coverage below high-confidence/no evidence')).toBeVisible();
 
     const focusChip = within(evidenceFocus).getByRole('button', {
       name: 'Inspect evidence coverage focus agent Growth Revenue Agent'
@@ -2563,8 +2569,8 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
+    await openHudSignals(user);
     const evidenceFocus = await screen.findByRole('region', { name: 'Evidence coverage focus' });
-    await user.click(within(evidenceFocus).getByText('Evidence'));
     await user.click(
       within(evidenceFocus).getByRole('button', {
         name: 'Inspect evidence coverage focus agent Growth Revenue Agent'
@@ -2664,11 +2670,10 @@ afterEach(() => {
     await waitFor(() => expect(collectorRequestCount).toBeGreaterThanOrEqual(1));
     await user.click(screen.getByRole('button', { name: 'Close Hub' }));
 
+    await openHudSignals(user);
     const evidenceFocus = await screen.findByRole('region', { name: 'Evidence coverage focus' });
     expect(within(evidenceFocus).getByText('Evidence')).toBeVisible();
     expect(within(evidenceFocus).getByText('1 low coverage')).toBeVisible();
-
-    await user.click(within(evidenceFocus).getByText('Evidence'));
 
     expect(
       within(evidenceFocus).getByRole('button', {
@@ -2698,6 +2703,7 @@ afterEach(() => {
 
     render(<App />);
 
+    await openHudSignals(user);
     const evidenceFocus = await screen.findByRole('region', { name: 'Evidence coverage focus' });
     expect(within(evidenceFocus).getByText('Evidence')).toBeVisible();
     await openHub(user);
@@ -2728,19 +2734,17 @@ afterEach(() => {
     expect(screen.queryByRole('dialog', { name: 'Hub' })).not.toBeInTheDocument();
 
     const fetchCallCountBeforeFocus = vi.mocked(globalThis.fetch).mock.calls.length;
+    await openHudSignals(user);
     const hotZoneFocusRegion = await screen.findByRole('region', { name: 'Hot zone focus' });
 
     expect(within(hotZoneFocusRegion).getByText('Zones')).toBeVisible();
     expect(within(hotZoneFocusRegion).getByText('1 hot zone')).toBeVisible();
-    expect(within(hotZoneFocusRegion).getByText('Hot zone focus')).not.toBeVisible();
-
-    await user.click(within(hotZoneFocusRegion).getByText('Zones'));
 
     const hotZoneFocus = within(hotZoneFocusRegion).getByRole('group', { name: 'Hot zone focus' });
     const hotZoneFocusContainer = hotZoneFocus.closest('.aitown-panel__hot-zone-focus');
 
     expect(hotZoneFocusContainer).not.toBeNull();
-    expect(hotZoneFocus.closest('.aitown-panel__topline')).toBeNull();
+    expect(hotZoneFocus.closest('.aitown-panel__signal-cluster')).not.toBeNull();
 
     await user.click(
       within(hotZoneFocus).getByRole('button', {
@@ -14565,15 +14569,16 @@ afterEach(() => {
     render(<App />);
 
     expect(await screen.findByRole('heading', { name: 'Metaverse Office' })).toBeVisible();
-    expect(await screen.findByText('Office snapshot · Live')).toBeVisible();
-    expect(await screen.findByText(/Snapshot 2026-03-16T09:00:00.000Z/)).not.toBeVisible();
-    await user.click(screen.getByText('Viewport'));
-    expect(screen.getByText(/Snapshot 2026-03-16T09:00:00.000Z/)).toBeVisible();
+    let signals = await screen.findByRole('region', { name: 'Office HUD signals' });
+    expect(await within(signals).findByText(/Office snapshot · Refresh failed · overview refresh failed/)).toBeVisible();
+    expect(within(signals).getByText(/Snapshot 2026-03-16T09:00:00.000Z/)).not.toBeVisible();
+    signals = await openHudSignals(user);
+    expect(within(signals).getByText(/Snapshot 2026-03-16T09:00:00.000Z/)).toBeVisible();
 
     expect(await screen.findByText('Showing last office snapshot.')).toBeVisible();
     expect(screen.getByText('overview refresh failed')).toBeVisible();
-    expect(screen.getByText('Office snapshot · Refresh failed · overview refresh failed')).toBeVisible();
-    expect(screen.getByText(/Snapshot 2026-03-16T09:00:00.000Z/)).toBeVisible();
+    expect(within(signals).getByText(/Office snapshot · Refresh failed · overview refresh failed/)).toBeVisible();
+    expect(within(signals).getByText(/Snapshot 2026-03-16T09:00:00.000Z/)).toBeVisible();
     expect(screen.queryByText('Unable to load office overview.')).not.toBeInTheDocument();
   });
 
@@ -14604,10 +14609,11 @@ afterEach(() => {
     render(<App />);
 
     expect(await screen.findByRole('heading', { name: 'Metaverse Office' })).toBeVisible();
-    expect(await screen.findByText('Office snapshot · Unavailable · overview unavailable')).toBeVisible();
-    expect(screen.getByText('No office snapshot loaded yet')).not.toBeVisible();
-    await user.click(screen.getByText('Viewport'));
-    expect(screen.getByText('No office snapshot loaded yet')).toBeVisible();
+    const signals = await screen.findByRole('region', { name: 'Office HUD signals' });
+    expect(within(signals).getByText(/Office snapshot · Unavailable · overview unavailable/)).toBeVisible();
+    expect(within(signals).getByText('No office snapshot loaded yet')).not.toBeVisible();
+    await openHudSignals(user);
+    expect(within(signals).getByText('No office snapshot loaded yet')).toBeVisible();
     expect(screen.getByText('Unable to load office overview.')).toBeVisible();
   });
 

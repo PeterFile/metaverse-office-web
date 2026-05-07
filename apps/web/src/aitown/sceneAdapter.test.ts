@@ -172,8 +172,53 @@ describe('adaptWorldToScene', () => {
       hasOpenIncidents: true
     });
     expect(appEngineering?.characterKey).toMatch(/^f[1-8]$/);
+    expect(appEngineering?.rolePawnKey).toBe('app_eng');
     expect(appEngineering?.position.x).toBeGreaterThan(0);
     expect(appEngineering?.position.y).toBeGreaterThan(0);
+  });
+
+  it('assigns distinct generated role pawn keys while preserving old character fallbacks', () => {
+    const roleWorld: WorldState = {
+      ...world,
+      agents: new Map([
+        ...world.agents,
+        [
+          'protocol-engineering',
+          {
+            ...world.agents.get('app-engineering')!,
+            agent_id: 'protocol-engineering',
+            display_name: 'Protocol Engineering Agent',
+            zone: 'meeting-zone',
+            raw_location: 'meeting-zone'
+          }
+        ],
+        [
+          'tokenomics',
+          {
+            ...world.agents.get('growth-revenue')!,
+            agent_id: 'tokenomics',
+            display_name: 'Tokenomics Agent',
+            zone: 'growth-desk',
+            raw_location: 'growth-desk'
+          }
+        ]
+      ])
+    };
+
+    const scene = adaptWorldToScene(roleWorld, null);
+    const pawnKeys = new Map(scene.agents.map((agent) => [agent.agentId, agent.rolePawnKey]));
+
+    expect([...pawnKeys]).toEqual(
+      expect.arrayContaining([
+        ['team-lead', 'lead'],
+        ['app-engineering', 'app_eng'],
+        ['protocol-engineering', 'protocol_eng'],
+        ['growth-revenue', 'growth'],
+        ['tokenomics', 'tokenomics']
+      ])
+    );
+    expect(scene.agents.every((agent) => /^f[1-8]$/.test(agent.characterKey))).toBe(true);
+    expect(new Set([...pawnKeys.values()].filter(Boolean)).size).toBe(5);
   });
 
   it('falls back to a stable anchor when the derived zone is absent from overview zones', () => {

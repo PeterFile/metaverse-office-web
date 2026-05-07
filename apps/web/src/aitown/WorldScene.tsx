@@ -548,7 +548,8 @@ function createAgentSprite(
   emphasis: WatchOverlayAgentEmphasis | 'none',
   correlationHighlighted: boolean,
   onSelect: (agentId: string | null) => void,
-  characterTextures: Record<string, Texture[]>
+  characterTextures: Record<string, Texture[]>,
+  rolePawnTexture?: Texture
 ) {
   const container = new Container();
   container.position.set(agent.position.x, agent.position.y);
@@ -603,12 +604,16 @@ function createAgentSprite(
     });
   }
 
-  const character = new AnimatedSprite(characterTextures[agent.facing] ?? characterTextures.down);
+  const character = rolePawnTexture
+    ? new Sprite(rolePawnTexture)
+    : new AnimatedSprite(characterTextures[agent.facing] ?? characterTextures.down);
   character.anchor.set(0.5, 1);
   character.y = 10;
-  character.scale.set(1.1);
-  character.animationSpeed = resolveAgentAnimationSpeed(agent);
-  character.play();
+  character.scale.set(rolePawnTexture ? 0.32 : 1.1);
+  if (character instanceof AnimatedSprite) {
+    character.animationSpeed = resolveAgentAnimationSpeed(agent);
+    character.play();
+  }
 
   const nameLabel = new Text({
     text: agent.displayName,
@@ -1428,7 +1433,8 @@ export default function WorldScene({
 
             onSelectAgentRef.current(agentId);
           },
-          assets.characterAnimations[agent.characterKey]
+          assets.characterAnimations[agent.characterKey],
+          agent.rolePawnKey ? assets.rolePawnTextures[agent.rolePawnKey] : undefined
         );
 
         agentLayer.addChild(agentSprite);

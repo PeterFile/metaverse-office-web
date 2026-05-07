@@ -4044,7 +4044,7 @@ export function DetailsPanel({
           </p>
         </div>
 
-        <section className="aitown-details__section">
+        <section className="aitown-details__section aitown-details__section--active-queue">
           <h3>Active Queue</h3>
           {activeQueueStateBucketsStatus ? <p role="status">{activeQueueStateBucketsStatus}</p> : null}
           <div>

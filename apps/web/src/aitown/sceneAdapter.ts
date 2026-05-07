@@ -6,6 +6,7 @@ import type {
   AiTownSceneModel,
   CharacterKey,
   Facing,
+  RolePawnKey,
   ScenePoint,
   SceneWatchEdge,
   SceneZone
@@ -98,6 +99,34 @@ function agentCharacter(agentId: string): CharacterKey {
   return CHARACTER_KEYS[stableHash(agentId) % CHARACTER_KEYS.length];
 }
 
+function agentRolePawn(agent: WorldAgent): RolePawnKey | undefined {
+  const roleKey = `${agent.agent_id} ${agent.display_name}`.toLowerCase();
+
+  if (agent.kind === 'lead' || roleKey.includes('lead')) {
+    return 'lead';
+  }
+  if (roleKey.includes('protocol')) {
+    return 'protocol_eng';
+  }
+  if (roleKey.includes('tokenomics')) {
+    return 'tokenomics';
+  }
+  if (roleKey.includes('market')) {
+    return 'market_intel';
+  }
+  if (roleKey.includes('product') || roleKey.includes('pmf')) {
+    return 'product_pmf';
+  }
+  if (roleKey.includes('growth')) {
+    return 'growth';
+  }
+  if (roleKey.includes('app')) {
+    return 'app_eng';
+  }
+
+  return undefined;
+}
+
 function findFallbackZone(agent: WorldAgent, zones: SceneZone[]) {
   const directMatch = zones.find((zone) => zone.zoneId === agent.zone);
   if (directMatch) {
@@ -175,6 +204,7 @@ export function adaptWorldToScene(
       zoneId: agent.zone,
       position: toPixel(laidOut),
       characterKey: agentCharacter(agent.agent_id),
+      rolePawnKey: agentRolePawn(agent),
       facing: agentFacing(agent.agent_id),
       phase: agent.phase,
       severity: agent.severity,

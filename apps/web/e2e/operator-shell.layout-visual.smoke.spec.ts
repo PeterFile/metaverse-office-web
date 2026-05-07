@@ -138,7 +138,7 @@ function expectViewportWithinHorizontalWorldBounds(
 }
 
 test.describe('operator shell layout visual smoke', () => {
-  test('keeps compact evidence coverage disclosure from blocking non-chip world drag', async ({ page }) => {
+  test('keeps compact HUD signals disclosure from blocking non-chip world drag', async ({ page }) => {
     const evidenceCoverage = {
       evidence_ref_count: 1,
       covered_agent_count: 1,
@@ -181,22 +181,25 @@ test.describe('operator shell layout visual smoke', () => {
     await page.goto('/');
 
     const worldHost = page.locator('.aitown-world__host');
+    const signals = page.getByRole('region', { name: 'Office HUD signals' });
+    const signalsSummary = signals.locator('summary');
     const evidenceFocus = page.getByRole('region', { name: 'Evidence coverage focus' });
-    const evidenceFocusSummary = evidenceFocus.locator('summary');
     const evidenceFocusHead = evidenceFocus.locator('.aitown-panel__evidence-focus__head');
     const evidenceFocusChip = evidenceFocus.getByRole('button', {
       name: 'Inspect evidence coverage focus agent Growth Revenue Agent'
     });
     await expect(worldHost).toBeVisible();
     await page.waitForFunction(() => Boolean(window.__AITOWN_VIEWPORT__));
-    await expect(evidenceFocus).toBeVisible();
-    await expect(evidenceFocusSummary.getByText('Evidence', { exact: true })).toBeVisible();
-    await expect(evidenceFocusSummary.getByText('1 low coverage', { exact: true })).toBeVisible();
-    await expect(evidenceFocus.getByText('Coverage below high-confidence/no evidence')).toBeHidden();
-    await expect(evidenceFocusChip).toHaveCount(0);
+    await expect(signals).toBeVisible();
+    await expect(signalsSummary.getByText('Signals', { exact: true })).toBeVisible();
+    await expect(signalsSummary.getByText(/Evidence · 1/)).toBeVisible();
+    await expect(evidenceFocus).toBeHidden();
     await expect(page.getByRole('dialog', { name: 'Hub' })).toHaveCount(0);
 
-    await evidenceFocusSummary.click();
+    await signalsSummary.click();
+    await expect(evidenceFocus).toBeVisible();
+    await expect(evidenceFocus.getByText('Evidence', { exact: true })).toBeVisible();
+    await expect(evidenceFocus.getByText('1 low coverage', { exact: true })).toBeVisible();
     await expect(evidenceFocus.getByText('Coverage below high-confidence/no evidence')).toBeVisible();
     await expect(evidenceFocusChip).toBeVisible();
 
@@ -260,7 +263,7 @@ test.describe('operator shell layout visual smoke', () => {
     const dragStart = {
       x: Math.min(
         Math.max(toplineRect.left + toplineRect.width * 0.5, worldRect.left + 64),
-        hubRect.left - 64,
+        toplineRect.right - 1,
         worldRect.right - 64
       ),
       y: Math.min(
@@ -345,7 +348,7 @@ test.describe('operator shell layout visual smoke', () => {
 
     const [worldRect, hubRect] = await Promise.all([readRect(worldHost), readRect(hub)]);
     const hubWorldObstructionRatio = resolveIntersectionArea(worldRect, hubRect) / (worldRect.width * worldRect.height);
-    expect(hubWorldObstructionRatio, 'Hub sheet should stay a side sheet, not a world-covering modal').toBeLessThanOrEqual(
+    expect(hubWorldObstructionRatio, 'Hub deck should stay compact, not a world-covering modal').toBeLessThanOrEqual(
       0.36
     );
     expect(
@@ -511,7 +514,7 @@ test.describe('operator shell layout visual smoke', () => {
     await expect(page.getByRole('region', { name: 'Selected agent inspect peek' })).toHaveCount(0);
   });
 
-  test('keeps the selected-agent Hub focus ribbon compact and sticky inside the Hub sheet', async ({ page }) => {
+  test('keeps the selected-agent Hub focus ribbon compact inside the bottom deck', async ({ page }) => {
     await page.goto('/');
 
     const worldHost = page.locator('.aitown-world__host');
@@ -593,15 +596,9 @@ test.describe('operator shell layout visual smoke', () => {
     await hub.evaluate((element) => {
       element.scrollTop = 720;
     });
-    await expect.poll(() => hub.evaluate((element) => element.scrollTop)).toBeGreaterThan(100);
+    await expect.poll(() => hub.evaluate((element) => element.scrollTop)).toBe(0);
     await expect(focusRibbon).toBeVisible();
-    const scrolledRibbonRect = await readRect(focusRibbon);
-    expect(scrolledRibbonRect.top, 'Hub focus ribbon should remain sticky in the Hub sheet').toBeGreaterThanOrEqual(
-      hubRect.top - 1
-    );
-    expect(scrolledRibbonRect.bottom, 'Hub focus ribbon should remain visible in the Hub sheet').toBeLessThanOrEqual(
-      hubRect.bottom + 1
-    );
+    await expectLocatorInsideRect(focusRibbon, hub, 'Hub focus ribbon after no-op deck scroll');
 
     await page.getByRole('button', { name: 'Close Hub' }).click();
     await expect(hub).toHaveCount(0);
@@ -616,7 +613,7 @@ test.describe('operator shell layout visual smoke', () => {
     await expect(page.getByRole('region', { name: 'Hub focus ribbon' })).toBeVisible();
   });
 
-  test('selected-agent Hub drilldown tabs split Now Evidence and Replay Correlation without widening the Hub', async ({
+  test('selected-agent Hub drilldown tabs split Now Evidence and Replay Correlation inside the bottom deck', async ({
     page
   }) => {
     await page.goto('/');
@@ -679,7 +676,10 @@ test.describe('operator shell layout visual smoke', () => {
       readRect(focusRibbon),
       readRect(drilldown)
     ]);
-    expect(hubRect.width, 'Hub width should remain unchanged').toBeLessThanOrEqual(430);
+    expect(hubRect.width, 'Hub deck should stay bounded by the wide bottom deck contract').toBeLessThanOrEqual(
+      Math.min(1120, page.viewportSize()!.width - 24) + 1
+    );
+    expect(hubRect.height, 'Hub deck should stay shallow instead of becoming a tall side sheet').toBeLessThanOrEqual(220);
     expect(
       focusRibbonRect.height + drilldownRect.height,
       'Hub focus ribbon plus drilldown tabs should stay compact'
@@ -693,7 +693,7 @@ test.describe('operator shell layout visual smoke', () => {
     await hub.evaluate((element) => {
       element.scrollTop = 720;
     });
-    await expect.poll(() => hub.evaluate((element) => element.scrollTop)).toBeGreaterThan(100);
+    await expect.poll(() => hub.evaluate((element) => element.scrollTop)).toBe(0);
     await evidenceTab.click();
     const evidencePanel = page.getByRole('tabpanel', { name: 'Evidence' });
     await expect(evidencePanel).toBeVisible();

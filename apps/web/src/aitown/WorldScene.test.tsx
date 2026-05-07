@@ -433,6 +433,41 @@ function readAgentLayer() {
   return agentLayer;
 }
 
+function readZoneLayer() {
+  const app = appInstances.at(-1);
+  expect(app).toBeDefined();
+
+  const viewport = app?.stage.children[0];
+  expect(viewport).toBeDefined();
+
+  const zoneLayer = viewport?.children[1];
+  expect(zoneLayer).toBeDefined();
+
+  return zoneLayer;
+}
+
+type MockTreeNode = {
+  children?: MockTreeNode[];
+  options?: unknown;
+};
+
+function collectPixiTextLabels(node: MockTreeNode | undefined): string[] {
+  if (!node) {
+    return [];
+  }
+
+  const options = node.options;
+  const text =
+    typeof options === 'object' && options !== null && 'text' in options
+      ? (options as { text?: unknown }).text
+      : undefined;
+
+  return [
+    ...(typeof text === 'string' ? [text] : []),
+    ...(node.children ?? []).flatMap((child) => collectPixiTextLabels(child))
+  ];
+}
+
 function installViewportInspectorTracker() {
   const assignedValues: Array<ViewportInspector | undefined> = [];
   let currentValue: ViewportInspector | undefined;
@@ -621,6 +656,59 @@ describe('WorldScene watch overlay caption gating', () => {
 
     expect(pawnVisual?.texture).toBe(assets.rolePawnTextures.app_eng);
     expect(fallbackVisual?.texture).toEqual(assets.characterAnimations.f2.down);
+  });
+
+  it('removes zone labels from the map and keeps agent labels short', async () => {
+    appInitMock.mockReset().mockResolvedValue(undefined);
+    vi.mocked(loadAiTownAssets).mockResolvedValue(makeAssets());
+    const baseScene = makeScene();
+
+    const scene = {
+      ...baseScene,
+      zones: [
+        ...baseScene.zones,
+        {
+          zoneId: 'review-zone',
+          label: 'Review Zone',
+          kind: 'shared' as const,
+          anchor: { x: 16, y: 12 },
+          occupantIds: ['protocol-engineering']
+        }
+      ],
+      agents: [
+        makeAgent({
+          agentId: 'app-engineering',
+          displayName: 'App Engineering Agent',
+          position: { x: 120, y: 180 }
+        }),
+        makeAgent({
+          agentId: 'protocol-engineering',
+          displayName: 'Protocol Engineering Agent',
+          position: { x: 160, y: 180 },
+          selected: false,
+          severity: 'normal',
+          openAlertCount: 0,
+          hasOpenIncidents: false
+        })
+      ],
+      watchEdges: []
+    } satisfies AiTownSceneModel;
+
+    render(<WorldScene scene={scene} onSelectAgent={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(readAgentLayer()?.children).toHaveLength(scene.agents.length);
+    });
+
+    expect(readZoneLayer()?.children).toHaveLength(0);
+
+    const textLabels = collectPixiTextLabels(appInstances.at(-1)?.stage);
+    expect(textLabels).toContain('App');
+    expect(textLabels).toContain('Protocol');
+    expect(textLabels).not.toContain('App Engineering Agent');
+    expect(textLabels).not.toContain('Protocol Engineering Agent');
+    expect(textLabels).not.toContain('Delivery Desk');
+    expect(textLabels).not.toContain('Review Zone');
   });
 
   it('keeps selected watch-link captions hidden while the renderer is still failed', async () => {

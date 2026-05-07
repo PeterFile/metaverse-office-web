@@ -14,7 +14,7 @@ import {
 import { Viewport } from 'pixi-viewport';
 
 import { loadAiTownAssets } from './assetLoader';
-import type { AiTownSceneModel, SceneAgent, SceneZone } from './types';
+import type { AiTownSceneModel, SceneAgent } from './types';
 import {
   DEFAULT_ALLOW_VIEWPORT_DRAG_OUTSIDE,
   DEFAULT_MAX_VIEWPORT_SCALE,
@@ -47,18 +47,11 @@ const SEVERITY_COLORS = {
   red: 0xf26767
 } as const;
 
-const zoneLabelStyle = new TextStyle({
-  fontFamily: '"VCR OSD Mono", monospace',
-  fontSize: 10,
-  fill: 0xf9f5d7,
-  stroke: { color: 0x2e2030, width: 4, join: 'round' }
-});
-
 const nameLabelStyle = new TextStyle({
   fontFamily: '"VCR OSD Mono", monospace',
-  fontSize: 10,
+  fontSize: 8,
   fill: 0xffffff,
-  stroke: { color: 0x20162a, width: 4, join: 'round' }
+  stroke: { color: 0x20162a, width: 3, join: 'round' }
 });
 
 const statusBadgeStyle = new TextStyle({
@@ -102,6 +95,14 @@ type AgentMotionState = {
 
 function resolveWatchModeLabel(watchMode: 'lead' | 'peer') {
   return watchMode === 'lead' ? 'Lead watch' : 'Peer watch';
+}
+
+function resolveAgentWorldLabel(displayName: string, fallbackId: string) {
+  const cleanedDisplayName = displayName.trim().replace(/\s+agent$/i, '').trim();
+  const source = cleanedDisplayName || fallbackId.trim() || 'Agent';
+  const [firstToken = 'Agent'] = source.split(/[\s_-]+/).filter(Boolean);
+
+  return firstToken.length > 8 ? firstToken.slice(0, 8) : firstToken;
 }
 
 function hashAgentMotionKey(value: string) {
@@ -475,38 +476,6 @@ function buildStaticMap(
   return container;
 }
 
-function createZoneLabel(zone: SceneZone, selectedAgentIds: Set<string>, tileDim: number) {
-  const container = new Container();
-  const highlighted = zone.occupantIds.some((agentId) => selectedAgentIds.has(agentId));
-  const x = zone.anchor.x * tileDim;
-  const y = zone.anchor.y * tileDim;
-
-  const background = new Graphics();
-  background.roundRect(-34, -42, 68, 18, 6).fill({
-    color: highlighted ? 0x6a3d2c : 0x231626,
-    alpha: highlighted ? 0.72 : 0.58
-  });
-  background.roundRect(-34, -42, 68, 18, 6).stroke({
-    color: highlighted ? 0xffd785 : 0xd4b36b,
-    width: 1,
-    alpha: 0.7
-  });
-
-  const label = new Text({
-    text: zone.label,
-    style: zoneLabelStyle,
-    resolution: 2
-  });
-  label.anchor.set(0.5, 0.5);
-  label.y = -33;
-
-  container.position.set(x, y);
-  container.addChild(background, label);
-  container.eventMode = 'none';
-
-  return container;
-}
-
 function createAgentStatusBadge(agent: SceneAgent) {
   const badge = resolveSceneAgentStatusBadge(agent);
 
@@ -616,7 +585,7 @@ function createAgentSprite(
   }
 
   const nameLabel = new Text({
-    text: agent.displayName,
+    text: resolveAgentWorldLabel(agent.displayName, agent.agentId),
     style: nameLabelStyle,
     resolution: 2
   });
@@ -1411,11 +1380,6 @@ export default function WorldScene({
         scene.watchEdges
       );
       const correlationParticipantIds = new Set(scene.correlationParticipantAgentIds);
-      const selectedSet = new Set(emphasisByAgentId.keys());
-
-      for (const zone of scene.zones) {
-        zoneLayer.addChild(createZoneLabel(zone, selectedSet, scene.map.tileDim));
-      }
 
       watchLayer.addChild(createWatchOverlay(scene));
 

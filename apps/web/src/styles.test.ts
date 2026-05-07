@@ -52,14 +52,14 @@ describe('AI Town shell styles', () => {
     expect(styles).not.toContain('border-width: clamp(10px, 1.4vw, 16px);');
   });
 
-  it('renders Hub as a compact bottom deck that preserves the primary world drag lane', () => {
+  it('renders Hub as a readable bottom deck with internal scrollports', () => {
     expect(styles).toMatch(/\.aitown-hub-overlay\s*\{[\s\S]*?position:\s*fixed;/);
     expect(styles).toMatch(/\.aitown-hub-overlay\s*\{[\s\S]*?align-items:\s*flex-end;[\s\S]*?justify-content:\s*center;/);
     expect(styles).toMatch(
       /\.aitown-hub-overlay\s*\{[\s\S]*?padding:\s*0 12px calc\(var\(--aitown-edge\) \+ var\(--aitown-category-bar-reserve\) - 4px\);/
     );
     expect(styles).toMatch(
-      /\.aitown-hub-sheet\s*\{[\s\S]*?width:\s*min\(1120px, calc\(100vw - 24px\)\);[\s\S]*?max-height:\s*max\(96px, min\(220px, calc\(23dvh - var\(--aitown-category-bar-reserve\)\)\)\);[\s\S]*?overflow:\s*hidden;/
+      /\.aitown-hub-sheet\s*\{[\s\S]*?width:\s*min\(1120px, calc\(100vw - 24px\)\);[\s\S]*?height:\s*clamp\(300px, 42dvh, 430px\);[\s\S]*?max-height:\s*calc\(100dvh - var\(--aitown-category-bar-reserve\) - \(var\(--aitown-edge\) \* 2\)\);[\s\S]*?overflow:\s*hidden;/
     );
     expect(styles).toMatch(/\.aitown-hub-sheet__body\s*\{[\s\S]*?display:\s*grid;[\s\S]*?overflow:\s*hidden;/);
     expect(styles).toMatch(/\.aitown-hub-sheet \.aitown-panel--details\s*\{[\s\S]*?grid-auto-flow:\s*column;[\s\S]*?overflow-x:\s*auto;[\s\S]*?overflow-y:\s*hidden;/);

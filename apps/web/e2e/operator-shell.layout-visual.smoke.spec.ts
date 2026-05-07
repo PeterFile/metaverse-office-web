@@ -40,6 +40,17 @@ function resolvePrimaryDragLane(rect: RectSnapshot): RectSnapshot {
   };
 }
 
+function resolveUpperWorldDragLane(rect: RectSnapshot): RectSnapshot {
+  return {
+    left: rect.left + rect.width * 0.25,
+    right: rect.left + rect.width * 0.60,
+    top: rect.top + rect.height * 0.20,
+    bottom: rect.top + rect.height * 0.42,
+    width: rect.width * 0.35,
+    height: rect.height * 0.22
+  };
+}
+
 async function readViewportState(page: Page) {
   return page.evaluate(() => window.__AITOWN_VIEWPORT__?.read() ?? null);
 }
@@ -194,6 +205,13 @@ test.describe('operator shell layout visual smoke', () => {
     await expect(signalsSummary.getByText('Signals', { exact: true })).toBeVisible();
     await expect(signalsSummary.getByText(/Evidence · 1/)).toBeVisible();
     await expect(evidenceFocus).toBeHidden();
+    const roster = page.getByRole('navigation', { name: 'Agent roster' });
+    const appEngineeringPortrait = roster.locator(
+      '.aitown-agent-roster__portrait img[src="/assets/generated/pawn_app_eng.png"]'
+    );
+    await expect(roster).toBeVisible();
+    await expect(appEngineeringPortrait).toBeVisible();
+    await expect(roster.locator('.aitown-agent-roster__portrait').first()).not.toContainText('AE');
     await expect(page.getByRole('dialog', { name: 'Hub' })).toHaveCount(0);
 
     await signalsSummary.click();
@@ -320,7 +338,7 @@ test.describe('operator shell layout visual smoke', () => {
     await expect(hub).toBeVisible();
   });
 
-  test('keeps the Hub first fold glanceable without hiding the world drag lane', async ({ page }) => {
+  test('keeps the Hub first fold readable while leaving the upper world drag lane', async ({ page }) => {
     await page.goto('/');
 
     const worldHost = page.locator('.aitown-world__host');
@@ -347,12 +365,12 @@ test.describe('operator shell layout visual smoke', () => {
 
     const [worldRect, hubRect] = await Promise.all([readRect(worldHost), readRect(hub)]);
     const hubWorldObstructionRatio = resolveIntersectionArea(worldRect, hubRect) / (worldRect.width * worldRect.height);
-    expect(hubWorldObstructionRatio, 'Hub deck should stay compact, not a world-covering modal').toBeLessThanOrEqual(
-      0.36
+    expect(hubWorldObstructionRatio, 'Hub deck should stay bounded, not a world-covering modal').toBeLessThanOrEqual(
+      0.43
     );
     expect(
-      resolveIntersectionArea(resolvePrimaryDragLane(worldRect), hubRect),
-      'Hub sheet should leave the primary world drag lane visually clear'
+      resolveIntersectionArea(resolveUpperWorldDragLane(worldRect), hubRect),
+      'Hub sheet should leave the upper world drag lane visually clear'
     ).toBe(0);
 
     await page.getByRole('button', { name: 'Close panel' }).click();
@@ -565,8 +583,8 @@ test.describe('operator shell layout visual smoke', () => {
       hubRect.width
     );
     expect(
-      resolveIntersectionArea(resolvePrimaryDragLane(worldRect), ribbonRect),
-      'Hub focus ribbon should not cover the primary world drag lane'
+      resolveIntersectionArea(resolveUpperWorldDragLane(worldRect), ribbonRect),
+      'Hub focus ribbon should not cover the upper world drag lane'
     ).toBe(0);
     await expectLocatorInsideRect(focusRibbon, hub, 'Hub focus ribbon');
 
@@ -677,14 +695,17 @@ test.describe('operator shell layout visual smoke', () => {
     expect(hubRect.width, 'Hub deck should stay bounded by the wide bottom deck contract').toBeLessThanOrEqual(
       Math.min(1120, page.viewportSize()!.width - 24) + 1
     );
-    expect(hubRect.height, 'Hub deck should stay shallow instead of becoming a tall side sheet').toBeLessThanOrEqual(220);
+    expect(hubRect.height, 'Hub deck should be tall enough to read opened category content').toBeGreaterThanOrEqual(
+      296
+    );
+    expect(hubRect.height, 'Hub deck should stay bounded instead of becoming a full modal on desktop').toBeLessThanOrEqual(430);
     expect(
       focusRibbonRect.height + drilldownRect.height,
       'Hub focus ribbon plus drilldown tabs should stay compact'
     ).toBeLessThanOrEqual(198);
     expect(
-      resolveIntersectionArea(resolvePrimaryDragLane(worldRect), drilldownRect),
-      'Selected-agent drilldown tabs should not cover the primary world drag lane'
+      resolveIntersectionArea(resolveUpperWorldDragLane(worldRect), drilldownRect),
+      'Selected-agent drilldown tabs should not cover the upper world drag lane'
     ).toBe(0);
     await expectLocatorInsideRect(drilldown, hub, 'Selected-agent drilldown tabs');
 

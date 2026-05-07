@@ -179,11 +179,11 @@ button {
 
 .aitown-agent-roster__button {
   display: grid;
-  grid-template-columns: 30px minmax(0, 1fr);
+  grid-template-columns: 34px minmax(0, 1fr);
   align-items: center;
   gap: 5px;
-  width: 82px;
-  min-height: 38px;
+  width: 90px;
+  min-height: 48px;
   padding: 3px 5px;
   border: 1px solid rgba(215, 192, 161, 0.68);
   border-radius: 3px;
@@ -211,19 +211,36 @@ button {
 }
 
 .aitown-agent-roster__portrait {
+  position: relative;
   display: grid;
-  width: 30px;
-  height: 30px;
+  width: 34px;
+  height: 40px;
   place-items: center;
-  border: 1px solid rgba(255, 229, 168, 0.72);
+  align-self: end;
+  border: 1px solid rgba(255, 229, 168, 0.62);
   border-radius: 2px;
-  color: #2b1c24;
-  background: linear-gradient(180deg, #f7d57b, #d9954e);
-  font-family: 'Upheaval Pro', sans-serif;
-  font-size: 0.82rem;
-  line-height: 1;
-  letter-spacing: 0.04em;
-  text-shadow: none;
+  background: linear-gradient(180deg, rgba(67, 54, 54, 0.78), rgba(22, 16, 21, 0.7));
+  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.26);
+  overflow: hidden;
+}
+
+.aitown-agent-roster__portrait img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center bottom;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.72));
+  user-select: none;
+}
+
+.aitown-agent-roster__portrait-fallback {
+  width: 18px;
+  height: 26px;
+  border-radius: 999px 999px 4px 4px;
+  background: linear-gradient(180deg, #f7d57b, #8b5d45);
+  box-shadow: inset 0 -6px 0 rgba(43, 28, 36, 0.35);
 }
 
 .aitown-agent-roster__copy {
@@ -1578,8 +1595,9 @@ button {
 .aitown-hub-sheet {
   display: flex;
   width: min(1120px, calc(100vw - 24px));
-  max-height: max(96px, min(220px, calc(23dvh - var(--aitown-category-bar-reserve))));
-  min-height: min(120px, max(88px, calc(23dvh - var(--aitown-category-bar-reserve))));
+  height: clamp(300px, 42dvh, 430px);
+  max-height: calc(100dvh - var(--aitown-category-bar-reserve) - (var(--aitown-edge) * 2));
+  min-height: min(300px, calc(100dvh - var(--aitown-category-bar-reserve) - (var(--aitown-edge) * 2)));
   flex-direction: column;
   overflow: hidden;
   padding: 8px;
@@ -2150,16 +2168,15 @@ button {
   }
 
   .aitown-agent-roster__button {
-    grid-template-columns: 26px minmax(0, 1fr);
-    width: 74px;
-    min-height: 34px;
+    grid-template-columns: 28px minmax(0, 1fr);
+    width: 78px;
+    min-height: 40px;
     padding: 2px 4px;
   }
 
   .aitown-agent-roster__portrait {
-    width: 26px;
-    height: 26px;
-    font-size: 0.72rem;
+    width: 28px;
+    height: 34px;
   }
 
   .aitown-agent-roster__copy strong {

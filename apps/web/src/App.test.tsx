@@ -2611,9 +2611,14 @@ afterEach(() => {
       name: 'Inspect live focus agent App Engineering Agent'
     });
 
+    const rosterPortrait = appEngineeringButton.querySelector('.aitown-agent-roster__portrait img');
+
     expect(appEngineeringButton).toBeVisible();
     expect(appEngineeringButton).toHaveTextContent('App Eng');
     expect(appEngineeringButton).toHaveTextContent('R');
+    expect(rosterPortrait).toBeInstanceOf(HTMLImageElement);
+    expect(rosterPortrait).toHaveAttribute('src', '/assets/generated/pawn_app_eng.png');
+    expect(roster).not.toHaveTextContent('AE');
     expect(roster).not.toHaveTextContent('Meeting Zone');
     expect(roster).not.toHaveTextContent('Team Lead Desk');
     expect(liveFocusButton).toHaveTextContent('Reboot recommended · R');

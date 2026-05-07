@@ -5,6 +5,7 @@ import campfire from './data/animations/campfire.json';
 import gentlesparkle from './data/animations/gentlesparkle.json';
 import gentlesplash from './data/animations/gentlesplash.json';
 import gentlewaterfall from './data/animations/gentlewaterfall.json';
+import { ROLE_PAWN_TEXTURE_URLS } from './rolePawnAssets';
 import windmill from './data/animations/windmill.json';
 import type { CharacterKey, Facing, RolePawnKey } from './types';
 
@@ -16,16 +17,6 @@ export interface AiTownAssets {
   tileSetTexture: Texture;
   animationSheets: Record<string, Spritesheet>;
 }
-
-const rolePawnTextureUrls: Record<RolePawnKey, string> = {
-  app_eng: '/assets/generated/pawn_app_eng.png',
-  growth: '/assets/generated/pawn_growth.png',
-  lead: '/assets/generated/pawn_lead.png',
-  market_intel: '/assets/generated/pawn_market_intel.png',
-  product_pmf: '/assets/generated/pawn_product_pmf.png',
-  protocol_eng: '/assets/generated/pawn_protocol_eng.png',
-  tokenomics: '/assets/generated/pawn_tokenomics.png'
-};
 
 const animationManifests: Record<string, { data: PixiSpritesheetData; url: string }> = {
   'campfire.json': {
@@ -95,7 +86,7 @@ export async function loadAiTownAssets() {
     const animationSheets = {} as Record<string, Spritesheet>;
     const rolePawnTextures: Partial<Record<RolePawnKey, Texture>> = {};
 
-    for (const [rolePawnKey, url] of Object.entries(rolePawnTextureUrls) as Array<[RolePawnKey, string]>) {
+    for (const [rolePawnKey, url] of Object.entries(ROLE_PAWN_TEXTURE_URLS) as Array<[RolePawnKey, string]>) {
       rolePawnTextures[rolePawnKey] = await loadTexture(url);
     }
 

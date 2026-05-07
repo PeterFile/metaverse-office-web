@@ -34,6 +34,7 @@ import {
   type SelectedAgentDrilldownTab
 } from './aitown/DetailsPanel';
 import { SceneStatusLegend } from './aitown/SceneStatusLegend';
+import { resolveRolePawnAssetUrl } from './aitown/rolePawnAssets';
 import { adaptWorldToScene } from './aitown/sceneAdapter';
 import { WorldProvider, useWorld } from './context/WorldContext';
 import { usePolledResource, type LoadState } from './hooks/usePolledResource';
@@ -187,16 +188,6 @@ function resolveAgentRosterName(displayName: string, fallbackId: string) {
   return `${truncateRosterToken(firstToken, 8)} ${truncateRosterToken(secondToken, 3)}`;
 }
 
-function resolveAgentRosterInitials(displayName: string, fallbackId: string) {
-  const initials = normalizeAgentNameTokens(displayName, fallbackId)
-    .slice(0, 2)
-    .map((token) => token[0]?.toUpperCase())
-    .filter(Boolean)
-    .join('');
-
-  return initials || '?';
-}
-
 function resolveAgentRosterStatus(agent: AgentRosterStatusState) {
   if (agent.rebootRecommended || agent.phase === 'reboot_recommended' || agent.phase === 'rebooting') {
     return 'R';
@@ -244,8 +235,8 @@ function AgentRoster({ agents, selectedAgentId, onSelectAgent }: AgentRosterProp
         {agents.map((agent) => {
           const selected = selectedAgentId === agent.agentId;
           const shortName = resolveAgentRosterName(agent.displayName, agent.agentId);
-          const initials = resolveAgentRosterInitials(agent.displayName, agent.agentId);
           const status = resolveAgentRosterStatus(agent);
+          const portraitUrl = resolveRolePawnAssetUrl(agent.rolePawnKey);
 
           return (
             <li key={agent.agentId} className="aitown-agent-roster__item">
@@ -258,7 +249,11 @@ function AgentRoster({ agents, selectedAgentId, onSelectAgent }: AgentRosterProp
                 onClick={() => onSelectAgent(agent.agentId)}
               >
                 <span className="aitown-agent-roster__portrait" aria-hidden="true">
-                  {initials}
+                  {portraitUrl ? (
+                    <img src={portraitUrl} alt="" loading="eager" draggable={false} />
+                  ) : (
+                    <span className="aitown-agent-roster__portrait-fallback" />
+                  )}
                 </span>
                 <span className="aitown-agent-roster__copy">
                   <strong>{shortName}</strong>

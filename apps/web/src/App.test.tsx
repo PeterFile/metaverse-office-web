@@ -2599,6 +2599,33 @@ afterEach(() => {
     expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
   });
 
+  it('surfaces a compact top agent roster without zone or desk copy', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const roster = await screen.findByRole('navigation', { name: 'Agent roster' });
+    const appEngineeringButton = within(roster).getByRole('button', {
+      name: 'Select and locate App Engineering Agent'
+    });
+    const liveFocusButton = await screen.findByRole('button', {
+      name: 'Inspect live focus agent App Engineering Agent'
+    });
+
+    expect(appEngineeringButton).toBeVisible();
+    expect(appEngineeringButton).toHaveTextContent('App Eng');
+    expect(appEngineeringButton).toHaveTextContent('R');
+    expect(roster).not.toHaveTextContent('Meeting Zone');
+    expect(roster).not.toHaveTextContent('Team Lead Desk');
+    expect(liveFocusButton).toHaveTextContent('Reboot recommended · R');
+    expect(liveFocusButton).not.toHaveTextContent('Meeting Zone');
+
+    await user.click(appEngineeringButton);
+
+    const inspectPeek = await screen.findByRole('region', { name: 'Selected agent inspect peek' });
+    expect(within(inspectPeek).getByText('App Engineering Agent')).toBeVisible();
+    expect(appEngineeringButton).toHaveAttribute('aria-pressed', 'true');
+  });
+
   it('surfaces evidence coverage focus on the default world shell before Hub opens from the lightweight projection', async () => {
     const user = userEvent.setup();
     render(<App />);

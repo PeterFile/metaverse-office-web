@@ -62,10 +62,22 @@ import {
   selectHotZones,
   type HotZoneSummary
 } from './world/selectors';
+import type { SceneAgent } from './aitown/types';
+
+type AgentRosterStatusState = Pick<
+  SceneAgent,
+  'phase' | 'severity' | 'rebootRecommended' | 'openAlertCount' | 'hasOpenIncidents' | 'runtimeFreshnessSeverity'
+>;
+
+type AgentRosterProps = {
+  agents: SceneAgent[];
+  selectedAgentId: string | null;
+  onSelectAgent: (agentId: string) => void;
+};
 
 const CREW_INCIDENT_FEED_LIMIT = 200;
 const CREW_INCIDENT_FEED_WINDOW = '8760h';
-import type { WorldAgent, WorldState } from './world/types';
+import type { WorldAgent } from './world/types';
 
 const LazyWorldScene = lazy(() => import('./aitown/WorldScene'));
 
@@ -153,6 +165,114 @@ const HOT_ZONE_SEVERITY_LABELS: Record<Severity, string> = {
   red: 'Red'
 };
 
+function normalizeAgentNameTokens(displayName: string, fallbackId: string) {
+  const cleanedDisplayName = displayName.trim().replace(/\s+agent$/i, '').trim();
+  const source = cleanedDisplayName || fallbackId.trim() || 'Agent';
+
+  return source.split(/[\s_-]+/).filter(Boolean);
+}
+
+function truncateRosterToken(token: string, maxLength: number) {
+  return token.length > maxLength ? token.slice(0, maxLength) : token;
+}
+
+function resolveAgentRosterName(displayName: string, fallbackId: string) {
+  const tokens = normalizeAgentNameTokens(displayName, fallbackId);
+  const [firstToken = 'Agent', secondToken] = tokens;
+
+  if (!secondToken) {
+    return truncateRosterToken(firstToken, 10);
+  }
+
+  return `${truncateRosterToken(firstToken, 8)} ${truncateRosterToken(secondToken, 3)}`;
+}
+
+function resolveAgentRosterInitials(displayName: string, fallbackId: string) {
+  const initials = normalizeAgentNameTokens(displayName, fallbackId)
+    .slice(0, 2)
+    .map((token) => token[0]?.toUpperCase())
+    .filter(Boolean)
+    .join('');
+
+  return initials || '?';
+}
+
+function resolveAgentRosterStatus(agent: AgentRosterStatusState) {
+  if (agent.rebootRecommended || agent.phase === 'reboot_recommended' || agent.phase === 'rebooting') {
+    return 'R';
+  }
+
+  if (agent.phase === 'blocked') {
+    return 'BLK';
+  }
+
+  if (agent.openAlertCount > 0) {
+    return `${Math.min(agent.openAlertCount, 9)}!`;
+  }
+
+  if (agent.hasOpenIncidents) {
+    return '!';
+  }
+
+  if (agent.runtimeFreshnessSeverity && agent.runtimeFreshnessSeverity !== 'normal') {
+    return 'S';
+  }
+
+  if (agent.severity !== 'normal') {
+    return agent.severity[0]?.toUpperCase() ?? '⚠';
+  }
+
+  if (agent.phase === 'sleeping') {
+    return 'ZZ';
+  }
+
+  if (agent.phase === 'active' || agent.phase === 'reviewing' || agent.phase === 'handoff_active') {
+    return 'ACT';
+  }
+
+  return 'OK';
+}
+
+function AgentRoster({ agents, selectedAgentId, onSelectAgent }: AgentRosterProps) {
+  if (agents.length === 0) {
+    return null;
+  }
+
+  return (
+    <nav className="aitown-agent-roster" aria-label="Agent roster">
+      <ol className="aitown-agent-roster__list">
+        {agents.map((agent) => {
+          const selected = selectedAgentId === agent.agentId;
+          const shortName = resolveAgentRosterName(agent.displayName, agent.agentId);
+          const initials = resolveAgentRosterInitials(agent.displayName, agent.agentId);
+          const status = resolveAgentRosterStatus(agent);
+
+          return (
+            <li key={agent.agentId} className="aitown-agent-roster__item">
+              <button
+                type="button"
+                className={`aitown-agent-roster__button severity-${agent.severity}${selected ? ' is-active' : ''}`}
+                aria-label={`Select and locate ${agent.displayName}`}
+                aria-pressed={selected}
+                title={agent.displayName}
+                onClick={() => onSelectAgent(agent.agentId)}
+              >
+                <span className="aitown-agent-roster__portrait" aria-hidden="true">
+                  {initials}
+                </span>
+                <span className="aitown-agent-roster__copy">
+                  <strong>{shortName}</strong>
+                  <span>{status}</span>
+                </span>
+              </button>
+            </li>
+          );
+        })}
+      </ol>
+    </nav>
+  );
+}
+
 function isJsdomEnvironment() {
   return typeof navigator !== 'undefined' && /jsdom/i.test(navigator.userAgent);
 }
@@ -192,11 +312,18 @@ function resolveLiveFocusSummaryLabel(attentionCount: number) {
     : `${attentionCount} agents need attention right now.`;
 }
 
-function resolveLiveFocusAgentMeta(agent: WorldAgent, world: WorldState) {
+function resolveLiveFocusAgentMeta(agent: WorldAgent) {
   const phaseLabel = PHASE_LABELS[agent.phase] ?? agent.phase;
-  const zoneLabel = selectAgentZoneLabel(agent, world.zones);
+  const statusSignals = resolveAgentRosterStatus({
+    phase: agent.phase,
+    severity: agent.severity,
+    rebootRecommended: agent.reboot_recommended,
+    openAlertCount: agent.open_alert_count,
+    hasOpenIncidents: agent.has_open_incidents,
+    runtimeFreshnessSeverity: agent.staleness?.severity ?? null
+  });
 
-  return `${phaseLabel} · ${zoneLabel}`;
+  return `${phaseLabel} · ${statusSignals}`;
 }
 
 function resolveLiveFocusReasonLine(agents: WorldAgent[]) {
@@ -2205,6 +2332,12 @@ function AppInner() {
               <p>Operator shell for real-running, supervised, replayable, accountable agents.</p>
             </div>
 
+            <AgentRoster
+              agents={scene.agents}
+              selectedAgentId={selectedAgentId}
+              onSelectAgent={handleSceneSelectAgent}
+            />
+
             <div className="aitown-shell__stats" aria-label="Office summary">
               <div className="aitown-shell__stat">
                 <span>Agents</span>
@@ -2251,7 +2384,7 @@ function AppInner() {
                           onClick={() => handleSceneSelectAgent(agent.agent_id)}
                         >
                           <strong>{agent.display_name}</strong>
-                          <span>{resolveLiveFocusAgentMeta(agent, projectedWorld)}</span>
+                          <span>{resolveLiveFocusAgentMeta(agent)}</span>
                         </button>
                       ))}
                     </span>

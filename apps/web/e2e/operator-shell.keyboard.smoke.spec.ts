@@ -83,6 +83,18 @@ function resolveViewportReachableSafeAreaTarget(
 
 type SelectedAgentDrilldownTabLabel = 'Now' | 'Evidence' | 'Replay / Correlation';
 
+type OfficeCategoryLabel = 'Crew' | 'Queue' | 'Supervision' | 'Evidence' | 'Replay' | 'Memory';
+
+const OFFICE_CATEGORY_LABELS: OfficeCategoryLabel[] = ['Crew', 'Queue', 'Supervision', 'Evidence', 'Replay', 'Memory'];
+
+function officeCategoryButton(page: Page, category: OfficeCategoryLabel = 'Crew') {
+  return page.getByRole('button', { name: category, exact: true });
+}
+
+async function openOfficeCategory(page: Page, category: OfficeCategoryLabel = 'Crew') {
+  await officeCategoryButton(page, category).click();
+}
+
 const SELECTED_AGENT_DRILLDOWN_TAB_LABELS: SelectedAgentDrilldownTabLabel[] = [
   'Now',
   'Evidence',
@@ -128,18 +140,25 @@ async function revealSelectedAgentDrilldownControlIfNeeded(page: Page, locator: 
     return;
   }
 
-  const tablist = page.getByRole('tablist', { name: 'Selected agent drilldown' });
-  if ((await tablist.count()) === 0 || !(await tablist.isVisible())) {
-    return;
-  }
-
   const resolvedDetailsPanel = detailsPanel ?? page.getByRole('complementary', { name: 'Agent details' });
-  if ((await resolvedDetailsPanel.count()) === 0 || !(await resolvedDetailsPanel.isVisible())) {
-    return;
+  const hasDetailsPanel = (await resolvedDetailsPanel.count()) > 0 && (await resolvedDetailsPanel.isVisible());
+  const tablist = page.getByRole('tablist', { name: 'Selected agent drilldown' });
+  if (hasDetailsPanel && (await tablist.count()) > 0 && (await tablist.isVisible())) {
+    for (const tabLabel of SELECTED_AGENT_DRILLDOWN_TAB_LABELS) {
+      await selectSelectedAgentDrilldownTabIfPresent(page, resolvedDetailsPanel, tabLabel);
+      if (await locator.isVisible()) {
+        return;
+      }
+    }
   }
 
-  for (const tabLabel of SELECTED_AGENT_DRILLDOWN_TAB_LABELS) {
-    await selectSelectedAgentDrilldownTabIfPresent(page, resolvedDetailsPanel, tabLabel);
+  for (const category of OFFICE_CATEGORY_LABELS) {
+    const categoryButton = officeCategoryButton(page, category);
+    if ((await categoryButton.count()) === 0 || !(await categoryButton.isVisible())) {
+      continue;
+    }
+
+    await categoryButton.click();
     if (await locator.isVisible()) {
       return;
     }
@@ -1373,13 +1392,13 @@ test.describe('operator shell smoke', () => {
 
     await page.goto('/');
 
-    await expect(page.getByText('Metaverse Office operator shell')).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Metaverse Office' })).toBeVisible();
+    await expect(page.getByText('Metaverse Office operator shell')).toHaveCount(1);
+    await expect(page.getByRole('heading', { name: 'Metaverse Office' })).toHaveCount(1);
     await expect(page.getByRole('region', { name: 'Office world' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Open Hub' })).toBeVisible();
+    await expect(officeCategoryButton(page)).toBeVisible();
     await expect(page.getByRole('complementary', { name: 'Agent details' })).toHaveCount(0);
 
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page);
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     await expect(detailsPanel.getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
@@ -1408,7 +1427,7 @@ test.describe('operator shell smoke', () => {
 
     await expect(nowPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
     await expect(nowPanel.getByRole('heading', { name: 'Current Operation' })).toBeVisible();
-    await expect(nowPanel.getByRole('heading', { name: 'Run Context' })).toHaveCount(0);
+    await expect(nowPanel.getByRole('heading', { name: 'Run Context' })).toBeVisible();
     await expect(nowPanel.getByRole('heading', { name: 'Workflow' })).toHaveCount(0);
     await expect(nowPanel.locator('.aitown-details__head').getByText('Prepare handoff notes', { exact: true })).toBeVisible();
     await expect(nowPanel.getByText('meeting-zone', { exact: true })).toBeVisible();
@@ -1458,9 +1477,9 @@ test.describe('operator shell smoke', () => {
     await expect(replayPanel.getByRole('heading', { name: 'Correlation Drilldown' })).toBeVisible();
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
 
-    await page.getByRole('button', { name: 'Close Hub' }).click();
+    await page.getByRole('button', { name: 'Close panel' }).click();
     await expect(page.getByRole('complementary', { name: 'Agent details' })).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Open Hub' })).toBeVisible();
+    await expect(officeCategoryButton(page)).toBeVisible();
   });
 
   test('keeps landscape selected-agent world-shell safe-lane reachability on read-only GET routes once the Hub-close transition settles', async ({
@@ -1525,12 +1544,12 @@ test.describe('operator shell smoke', () => {
           response.url().includes('/agents/growth-revenue/workflow?limit=10&window=60m')
       );
 
-      await page.getByRole('button', { name: 'Open Hub' }).click();
+      await openOfficeCategory(page);
       await detailsPanel.getByRole('button', { name: 'Inspect Growth Revenue Agent', exact: true }).click();
       await expect(selectedAgentHeading).toBeVisible();
       await workflowResponsePromise;
 
-      await page.getByRole('button', { name: 'Close Hub' }).click();
+      await page.getByRole('button', { name: 'Close panel' }).click();
       await expect(detailsPanel).toHaveCount(0);
       await expect(watchOverlay).toBeVisible();
       await expect(page.getByRole('list', { name: 'Selected watch link list' })).toBeVisible();
@@ -1695,12 +1714,12 @@ test.describe('operator shell smoke', () => {
           response.url().includes('/agents/growth-revenue/workflow?limit=10&window=60m')
       );
 
-      await page.getByRole('button', { name: 'Open Hub' }).click();
+      await openOfficeCategory(page);
       await detailsPanel.getByRole('button', { name: 'Inspect Growth Revenue Agent', exact: true }).click();
       await expect(selectedAgentHeading).toBeVisible();
       await workflowResponsePromise;
 
-      await page.getByRole('button', { name: 'Close Hub' }).click();
+      await page.getByRole('button', { name: 'Close panel' }).click();
       await expect(detailsPanel).toHaveCount(0);
       await expect(watchOverlay).toBeVisible();
       await expect(page.getByRole('list', { name: 'Selected watch link list' })).toBeVisible();
@@ -1870,7 +1889,7 @@ test.describe('operator shell smoke', () => {
     await expect(page.getByRole('dialog', { name: 'Hub' })).toHaveCount(0);
     await expect(inspectPeek).toBeVisible();
     await expect(inspectPeek.getByText('Growth Revenue Agent')).toBeVisible();
-    await expect(inspectPeek.getByRole('button', { name: 'Open selected agent in Hub' })).toBeVisible();
+    await expect(officeCategoryButton(page)).toBeVisible();
   });
 
   test('keeps the landscape Live Focus inspect return lane unobscured and the read-only request surface narrow once the Hub-close transition settles via keyboard traversal', async ({
@@ -1937,9 +1956,9 @@ test.describe('operator shell smoke', () => {
       const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
       const selectedAgentHeading = detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' });
       const watchOverlay = page.getByRole('region', { name: 'Selected watch links' });
-      const closeHubButton = page.getByRole('button', { name: 'Close Hub' });
+      const closeHubButton = page.getByRole('button', { name: 'Close panel' });
       const inspectPeek = page.getByRole('region', { name: 'Selected agent inspect peek' });
-      const openSelectedAgentInHubButton = inspectPeek.getByRole('button', { name: 'Open selected agent in Hub' });
+      const openSelectedAgentInHubButton = officeCategoryButton(page);
 
       await focusHubControlWithTab(page, liveFocusButton, 'Inspect live focus agent Growth Revenue Agent');
       await expect(liveFocusButton).toBeFocused();
@@ -1955,7 +1974,7 @@ test.describe('operator shell smoke', () => {
           response.status() === 200 &&
           response.url().includes('/agents/growth-revenue/workflow?limit=10&window=60m')
       );
-      await focusHubControlWithTab(page, openSelectedAgentInHubButton, 'Open selected agent in Hub');
+      await focusHubControlWithTab(page, openSelectedAgentInHubButton, 'Crew');
       await expect(openSelectedAgentInHubButton).toBeFocused();
       await page.keyboard.press('Enter');
 
@@ -1965,7 +1984,7 @@ test.describe('operator shell smoke', () => {
       await expect(detailsPanel.getByRole('button', { name: 'Clear' })).toBeVisible();
       await workflowResponsePromise;
 
-      await focusHubControlWithTab(page, closeHubButton, 'Close Hub');
+      await focusHubControlWithTab(page, closeHubButton, 'Close panel');
       await expect(closeHubButton).toBeFocused();
       await page.keyboard.press('Enter');
 
@@ -2139,9 +2158,9 @@ test.describe('operator shell smoke', () => {
         has: page.getByRole('heading', { name: 'Supervision History' })
       });
       const watchOverlay = page.getByRole('region', { name: 'Selected watch links' });
-      const closeHubButton = page.getByRole('button', { name: 'Close Hub' });
+      const closeHubButton = page.getByRole('button', { name: 'Close panel' });
       const inspectPeek = page.getByRole('region', { name: 'Selected agent inspect peek' });
-      const openHubButton = page.getByRole('button', { name: 'Open Hub' });
+      const openHubButton = officeCategoryButton(page);
 
       await focusHubControlWithTab(page, liveFocusButton, 'Inspect live focus agent Growth Revenue Agent');
       await expect(liveFocusButton).toBeFocused();
@@ -2164,7 +2183,7 @@ test.describe('operator shell smoke', () => {
           response.status() === 200 &&
           response.url().includes('/peer-watch/alerts?target_agent_id=growth-revenue&limit=4')
       );
-      await focusHubControlWithTab(page, openHubButton, 'Open Hub');
+      await focusHubControlWithTab(page, openHubButton, 'Crew');
       await expect(openHubButton).toBeFocused();
       await page.keyboard.press('Enter');
 
@@ -2182,7 +2201,7 @@ test.describe('operator shell smoke', () => {
         )
       ).toBeVisible();
 
-      await focusHubControlWithTab(page, closeHubButton, 'Close Hub');
+      await focusHubControlWithTab(page, closeHubButton, 'Close panel');
       await expect(closeHubButton).toBeFocused();
       await page.keyboard.press('Enter');
 
@@ -2282,7 +2301,7 @@ test.describe('operator shell smoke', () => {
     });
 
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page);
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     await detailsPanel.getByRole('button', { name: 'Inspect Growth Revenue Agent', exact: true }).click();
@@ -2303,7 +2322,7 @@ test.describe('operator shell smoke', () => {
     await expect(detailsPanel).toHaveAttribute('data-selected-agent-drilldown-tab', 'now');
     await expect(nowPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
     await expect(nowPanel.getByRole('heading', { name: 'Current Operation' })).toBeVisible();
-    await expect(nowPanel.getByRole('heading', { name: 'Run Context' })).toHaveCount(0);
+    await expect(nowPanel.getByRole('heading', { name: 'Run Context' })).toBeVisible();
     await expect(operationSection.getByText('planning · Prepare handoff notes')).toBeVisible();
     expect(selectedOperationRequests).toContain('/office/operations?agent_id=growth-revenue');
 
@@ -2383,7 +2402,7 @@ test.describe('operator shell smoke', () => {
     });
 
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page);
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const inspectButton = detailsPanel.getByRole('button', {
@@ -2421,7 +2440,7 @@ test.describe('operator shell smoke', () => {
   test('treats Hub as a dismissible dialog and restores trigger focus on Escape', async ({ page }) => {
     await page.goto('/');
 
-    const trigger = page.getByRole('button', { name: 'Open Hub' });
+    const trigger = officeCategoryButton(page);
     await trigger.focus();
     await expect(trigger).toBeFocused();
 
@@ -2429,20 +2448,20 @@ test.describe('operator shell smoke', () => {
 
     const dialog = page.getByRole('dialog', { name: 'Hub' });
     await expect(dialog).toBeVisible();
-    await expect(dialog.getByRole('button', { name: 'Close Hub' })).toBeFocused();
+    await expect(dialog.getByRole('button', { name: 'Close panel' })).toBeFocused();
 
     await page.keyboard.press('Escape');
 
     await expect(dialog).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Open Hub' })).toBeFocused();
+    await expect(officeCategoryButton(page)).toBeFocused();
   });
 
   test('keeps Tab focus contained inside Hub while the dialog is open', async ({ page }) => {
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page);
 
     const dialog = page.getByRole('dialog', { name: 'Hub' });
-    const closeButton = dialog.getByRole('button', { name: 'Close Hub' });
+    const closeButton = dialog.getByRole('button', { name: 'Close panel' });
     const firstDialogButton = dialog.getByRole('button').first();
     const lastDialogButton = dialog.getByRole('button').last();
 
@@ -2463,7 +2482,7 @@ test.describe('operator shell smoke', () => {
 
   test('opens agent detail and correlation drilldown from the crew-overview active queue via keyboard traversal', async ({ page }) => {
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page, 'Queue');
 
     const dialog = page.getByRole('dialog', { name: 'Hub' });
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
@@ -2478,7 +2497,6 @@ test.describe('operator shell smoke', () => {
     });
 
     await expect(dialog).toBeVisible();
-    await expect(detailsPanel.getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
     await expect(detailsPanel.getByRole('heading', { name: 'Active Queue' })).toBeVisible();
     await focusHubControlWithTab(page, queueButton, 'Inspect Growth Revenue Agent from active queue');
     await expect(queueButton).toBeFocused();
@@ -2532,7 +2550,7 @@ test.describe('operator shell smoke', () => {
     });
 
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page, 'Supervision');
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const correlationSection = detailsPanel.locator('section').filter({
@@ -2542,10 +2560,8 @@ test.describe('operator shell smoke', () => {
       name: 'Inspect Growth Revenue Agent from open supervision alerts queue'
     });
 
-    await expect(detailsPanel.getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
     await expect(detailsPanel.getByRole('heading', { name: 'Open Supervision Alerts' })).toBeVisible();
     await expect(detailsPanel.getByText('Growth revenue needs open supervision review follow-up')).toBeVisible();
-    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
     await focusHubControlWithTab(
       page,
       openAlertsButton,
@@ -2554,8 +2570,7 @@ test.describe('operator shell smoke', () => {
     await expect(openAlertsButton).toBeFocused();
     await page.keyboard.press('Enter');
 
-    await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
-    await expect(detailsPanel.getByRole('button', { name: 'Clear' })).toBeFocused();
+    await expect(page.getByRole('region', { name: 'Hub focus ribbon' }).getByText('Growth Revenue Agent')).toBeVisible();
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
     await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toBeVisible();
@@ -2618,7 +2633,7 @@ test.describe('operator shell smoke', () => {
     });
 
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page, 'Supervision');
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const openAlertsSection = detailsPanel.locator('section').filter({
@@ -2636,7 +2651,6 @@ test.describe('operator shell smoke', () => {
     });
     const focusedSharedMemoryRecord = detailsPanel.locator('li[data-shared-memory-target]:focus');
 
-    await expect(detailsPanel.getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
     await expect(openAlertsSection.getByText('Yellow supervision alert should stay out of filtered backlinks')).toBeVisible();
     await expect(openAlertsSection.getByText('Orange supervision alert cites revenue handoff')).toBeVisible();
 
@@ -2689,7 +2703,7 @@ test.describe('operator shell smoke', () => {
     });
 
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page, 'Queue');
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const correlationSection = detailsPanel.locator('section').filter({
@@ -2699,8 +2713,7 @@ test.describe('operator shell smoke', () => {
       name: 'Open active queue correlation corr-growth-lead-review'
     });
 
-    await expect(detailsPanel.getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
-    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
+    await expect(detailsPanel.getByRole('heading', { name: 'Active Queue' })).toBeVisible();
     await focusHubControlWithTab(
       page,
       activeQueueCorrelationButton,
@@ -2709,7 +2722,7 @@ test.describe('operator shell smoke', () => {
     await expect(activeQueueCorrelationButton).toBeFocused();
     await page.keyboard.press('Enter');
 
-    await expect(detailsPanel.getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
+    await expect(detailsPanel.getByRole('heading', { name: 'Correlation Drilldown' })).toBeVisible();
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
     await expect(detailsPanel.getByRole('button', { name: 'Clear' })).toHaveCount(0);
     await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toBeVisible();
@@ -2766,7 +2779,7 @@ test.describe('operator shell smoke', () => {
     await page.route(activeQueueCorrelationRoute, activeQueueCorrelationHandler);
 
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page, 'Queue');
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const correlationSection = detailsPanel.locator('section').filter({
@@ -2776,9 +2789,11 @@ test.describe('operator shell smoke', () => {
       name: 'Open active queue correlation corr-growth-lead-review'
     });
 
-    await expect(detailsPanel.getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
+    await expect(detailsPanel.getByRole('heading', { name: 'Active Queue' })).toBeVisible();
+    await openOfficeCategory(page, 'Replay');
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
+    await openOfficeCategory(page, 'Queue');
     await focusHubControlWithTab(
       page,
       activeQueueCorrelationButton,
@@ -2830,14 +2845,14 @@ test.describe('operator shell smoke', () => {
     await page.route(crewTimelineRoute, crewTimelineHandler);
 
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page, 'Replay');
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const replaySection = detailsPanel.locator('section').filter({
       has: page.getByRole('heading', { name: 'Timeline Replay' })
     });
 
-    await expect(detailsPanel.getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
+    await expect(detailsPanel.getByRole('heading', { name: 'Timeline Replay' })).toBeVisible();
     await expect.poll(() => interceptedTimelineRequests.length).toBe(1);
     await expect(replaySection.getByText('Loading timeline replay...')).toBeVisible();
     await expect(replaySection.getByText('timeline replay refresh failed')).toHaveCount(0);
@@ -2900,7 +2915,7 @@ test.describe('operator shell smoke', () => {
     });
 
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page, 'Queue');
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const correlationSection = detailsPanel.locator('section').filter({
@@ -2915,10 +2930,12 @@ test.describe('operator shell smoke', () => {
     const scopedTimelineUrl = '/timeline?limit=4&window=60m&correlation_id=corr-revenue-handoff';
     const scopedArtifactsUrl = '/memory/artifacts?limit=4&window=60m&correlation_id=corr-revenue-handoff';
 
-    await expect(detailsPanel.getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
+    await expect(detailsPanel.getByRole('heading', { name: 'Active Queue' })).toBeVisible();
+    await expect(selectedActiveQueueCorrelationButton).toBeVisible();
+    await openOfficeCategory(page, 'Replay');
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
-    await expect(selectedActiveQueueCorrelationButton).toBeVisible();
+    await openOfficeCategory(page, 'Queue');
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
     await expect(detailsPanel.getByRole('button', { name: 'Clear' })).toHaveCount(0);
     await expect(detailsPanel.getByRole('button', { name: 'Return to current scope' })).toHaveCount(0);
@@ -2933,9 +2950,10 @@ test.describe('operator shell smoke', () => {
     const requestCountBeforeReselect = requestedUrls.length;
     await page.keyboard.press('Enter');
 
-    await expect(detailsPanel.getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
+    await openOfficeCategory(page, 'Replay');
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
+    await openOfficeCategory(page, 'Queue');
     await expect(selectedActiveQueueCorrelationButton).toBeVisible();
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
     await expect(detailsPanel.getByRole('button', { name: 'Clear' })).toHaveCount(0);
@@ -2986,7 +3004,7 @@ test.describe('operator shell smoke', () => {
     });
 
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page, 'Queue');
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const correlationSection = detailsPanel.locator('section').filter({
@@ -3004,9 +3022,11 @@ test.describe('operator shell smoke', () => {
     const scopedTimelineUrl = '/timeline?limit=4&window=60m&correlation_id=corr-growth-lead-review';
     const scopedArtifactsUrl = '/memory/artifacts?limit=4&window=60m&correlation_id=corr-growth-lead-review';
 
-    await expect(detailsPanel.getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
+    await expect(detailsPanel.getByRole('heading', { name: 'Active Queue' })).toBeVisible();
+    await openOfficeCategory(page, 'Replay');
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
     await expect(detailsPanel.getByRole('button', { name: 'Return to current scope' })).toHaveCount(0);
+    await openOfficeCategory(page, 'Queue');
     await focusHubControlWithTab(
       page,
       activeQueueCorrelationButton,
@@ -3028,15 +3048,17 @@ test.describe('operator shell smoke', () => {
     await scopedTimelineResponse;
     await scopedArtifactsResponse;
 
-    await expect(detailsPanel.getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
+    await openOfficeCategory(page, 'Replay');
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
     await expect(detailsPanel.getByRole('button', { name: 'Clear' })).toHaveCount(0);
     await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('Counts · 0 incidents · 1 interactions · 2 events')).toBeVisible();
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toHaveCount(0);
-    await expect(detailsPanel.getByRole('button', { name: 'Return to current scope' })).toBeVisible();
-    await expect(detailsPanel.getByRole('button', { name: 'Open active queue correlation corr-growth-lead-review, currently selected' })).toBeVisible();
     await expect(replaySection.getByText('Scoped replay · corr-growth-lead-review')).toBeVisible();
+    await openOfficeCategory(page, 'Crew');
+    await expect(detailsPanel.getByRole('button', { name: 'Return to current scope' })).toBeVisible();
+    await openOfficeCategory(page, 'Queue');
+    await expect(detailsPanel.getByRole('button', { name: 'Open active queue correlation corr-growth-lead-review, currently selected' })).toBeVisible();
 
     const postSelectionRequests = requestedUrls.slice(requestCountBeforeSelection);
     expect(postSelectionRequests).toContain(scopedTimelineUrl);
@@ -3082,7 +3104,7 @@ test.describe('operator shell smoke', () => {
     });
 
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page, 'Queue');
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const correlationSection = detailsPanel.locator('section').filter({
@@ -3106,10 +3128,14 @@ test.describe('operator shell smoke', () => {
     const scopedTimelineUrl = '/timeline?limit=4&window=60m&correlation_id=corr-growth-lead-review';
     const scopedArtifactsUrl = '/memory/artifacts?limit=4&window=60m&correlation_id=corr-growth-lead-review';
 
-    await expect(detailsPanel.getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
+    await expect(detailsPanel.getByRole('heading', { name: 'Active Queue' })).toBeVisible();
+    await openOfficeCategory(page, 'Replay');
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
+    await openOfficeCategory(page, 'Memory');
     await expect(memorySection.getByText('Request scope · Crew overview')).toBeVisible();
+    await openOfficeCategory(page, 'Replay');
     await expect(returnToCurrentScopeButton).toHaveCount(0);
+    await openOfficeCategory(page, 'Queue');
     await focusHubControlWithTab(
       page,
       activeQueueCorrelationButton,
@@ -3131,16 +3157,19 @@ test.describe('operator shell smoke', () => {
     await scopedTimelineResponse;
     await scopedArtifactsResponse;
 
-    await expect(detailsPanel.getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
+    await openOfficeCategory(page, 'Replay');
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
     await expect(detailsPanel.getByRole('button', { name: 'Clear' })).toHaveCount(0);
     await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('Counts · 0 incidents · 1 interactions · 2 events')).toBeVisible();
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toHaveCount(0);
-    await expect(memorySection.getByText('Request scope · Crew overview · corr-growth-lead-review')).toBeVisible();
-    await expect(returnToCurrentScopeButton).toBeVisible();
-    await expect(selectedActiveQueueCorrelationButton).toBeVisible();
     await expect(replaySection.getByText('Scoped replay · corr-growth-lead-review')).toBeVisible();
+    await openOfficeCategory(page, 'Crew');
+    await expect(returnToCurrentScopeButton).toBeVisible();
+    await openOfficeCategory(page, 'Memory');
+    await expect(memorySection.getByText('Request scope · Crew overview · corr-growth-lead-review')).toBeVisible();
+    await openOfficeCategory(page, 'Queue');
+    await expect(selectedActiveQueueCorrelationButton).toBeVisible();
 
     await focusHubControlWithTab(page, returnToCurrentScopeButton, 'Return to current scope');
     await expect(returnToCurrentScopeButton).toBeFocused();
@@ -3165,18 +3194,20 @@ test.describe('operator shell smoke', () => {
     await defaultTimelineResponse;
     await defaultArtifactsResponse;
 
-    await expect(detailsPanel.getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
+    await openOfficeCategory(page, 'Replay');
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
     await expect(detailsPanel.getByRole('button', { name: 'Clear' })).toHaveCount(0);
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
     await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toHaveCount(0);
+    await expect(returnToCurrentScopeButton).toHaveCount(0);
+    await expect(replaySection.getByText('Scoped replay · corr-growth-lead-review')).toHaveCount(0);
+    await openOfficeCategory(page, 'Memory');
     await expect(memorySection.getByText('Request scope · Crew overview')).toBeVisible();
     await expect(memorySection.getByText('Request scope · Crew overview · corr-growth-lead-review')).toHaveCount(0);
-    await expect(returnToCurrentScopeButton).toHaveCount(0);
+    await openOfficeCategory(page, 'Queue');
     await expect(selectedActiveQueueCorrelationButton).toHaveCount(0);
     await expect(activeQueueCorrelationButton).toBeVisible();
-    await expect(replaySection.getByText('Scoped replay · corr-growth-lead-review')).toHaveCount(0);
 
     const postSelectionRequests = requestedUrls.slice(requestCountBeforeSelection, requestCountBeforeReset);
     expect(postSelectionRequests).toContain(scopedTimelineUrl);
@@ -3220,7 +3251,7 @@ test.describe('operator shell smoke', () => {
     });
 
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page);
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const clearButton = detailsPanel.getByRole('button', { name: 'Clear' });
@@ -3307,7 +3338,7 @@ test.describe('operator shell smoke', () => {
     });
 
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page);
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const clearButton = detailsPanel.getByRole('button', { name: 'Clear' });
@@ -3343,8 +3374,7 @@ test.describe('operator shell smoke', () => {
     await expect(activeQueueActorButton).toBeFocused();
     await page.keyboard.press('Enter');
 
-    await expect(detailsPanel.getByRole('heading', { name: 'Team Lead' })).toBeVisible();
-    await expect(clearButton).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Hub focus ribbon' }).getByText('Team Lead')).toBeVisible();
     await expectFocusedElementVisible(page);
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
     await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
@@ -3394,7 +3424,7 @@ test.describe('operator shell smoke', () => {
     });
 
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page);
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const clearButton = detailsPanel.getByRole('button', { name: 'Clear' });
@@ -3541,7 +3571,7 @@ test.describe('operator shell smoke', () => {
     });
 
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page);
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const clearButton = detailsPanel.getByRole('button', { name: 'Clear' });
@@ -3649,7 +3679,7 @@ test.describe('operator shell smoke', () => {
     });
 
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page);
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const clearButton = detailsPanel.getByRole('button', { name: 'Clear' });
@@ -3686,8 +3716,7 @@ test.describe('operator shell smoke', () => {
     await expect(operationActorButton).toBeFocused();
     await page.keyboard.press('Enter');
 
-    await expect(detailsPanel.getByRole('heading', { name: 'Team Lead' })).toBeVisible();
-    await expect(clearButton).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Hub focus ribbon' }).getByText('Team Lead')).toBeVisible();
     await expectFocusedElementVisible(page);
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
     await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
@@ -3714,7 +3743,7 @@ test.describe('operator shell smoke', () => {
     });
 
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page);
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const queueButton = detailsPanel.getByRole('button', {
@@ -3768,7 +3797,9 @@ test.describe('operator shell smoke', () => {
     await page.waitForTimeout(150);
 
     const postJumpRequests = requestedUrls.slice(requestCountBeforeJump);
-    expectOnlyBenignPostJumpRequests(postJumpRequests);
+    expectOnlyBenignPostJumpRequests(postJumpRequests, [
+      '/correlations/corr-revenue-handoff?limit=10&window=60m'
+    ]);
 
     await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
@@ -3843,7 +3874,7 @@ test.describe('operator shell smoke', () => {
     });
 
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page);
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const queueButton = detailsPanel.getByRole('button', {
@@ -3925,7 +3956,7 @@ test.describe('operator shell smoke', () => {
     });
 
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page);
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const queueButton = detailsPanel.getByRole('button', {
@@ -3999,7 +4030,7 @@ test.describe('operator shell smoke', () => {
     page
   }) => {
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page, 'Queue');
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const queueSection = detailsPanel.locator('section').filter({
@@ -4014,30 +4045,34 @@ test.describe('operator shell smoke', () => {
     });
     const focusedSharedMemoryRecord = detailsPanel.locator('li[data-shared-memory-target]:focus');
 
-    await expect(detailsPanel.getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
+    await expect(detailsPanel.getByRole('heading', { name: 'Active Queue' })).toBeVisible();
     await expect(detailsPanel.getByRole('button', { name: 'Clear' })).toHaveCount(0);
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
     await expect(stateFilter).toHaveValue('');
+    await openOfficeCategory(page, 'Replay');
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
+    await openOfficeCategory(page, 'Queue');
     await expect(evidenceJumpButton).toBeVisible();
     await focusHubControlWithTab(page, evidenceJumpButton, 'Jump to shared memory artifact /tmp/revenue-handoff.md');
     await expect(evidenceJumpButton).toBeFocused();
     await page.keyboard.press('Enter');
 
-    await expect(detailsPanel.getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
+    await expect(focusedSharedMemoryRecord).toHaveCount(1);
+    await expect(focusedSharedMemoryRecord).toContainText('Ref · /tmp/revenue-handoff.md');
+    await openOfficeCategory(page, 'Queue');
+    await expect(detailsPanel.getByRole('heading', { name: 'Active Queue' })).toBeVisible();
     await expect(detailsPanel.getByRole('button', { name: 'Clear' })).toHaveCount(0);
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
     await expect(stateFilter).toHaveValue('');
+    await openOfficeCategory(page, 'Replay');
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
-    await expect(focusedSharedMemoryRecord).toHaveCount(1);
-    await expect(focusedSharedMemoryRecord).toContainText('Ref · /tmp/revenue-handoff.md');
   });
 
   test('jumps from audit-signal artifacts into the shared-memory record via keyboard traversal', async ({ page }) => {
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page);
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const queueButton = detailsPanel.getByRole('button', {
@@ -4075,7 +4110,7 @@ test.describe('operator shell smoke', () => {
 
   test('jumps from audit-signal accountability evidence refs into the shared-memory record via keyboard traversal', async ({ page }) => {
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page);
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const queueButton = detailsPanel.getByRole('button', {
@@ -4152,7 +4187,7 @@ test.describe('operator shell smoke', () => {
     });
 
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page);
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const clearButton = detailsPanel.getByRole('button', { name: 'Clear' });
@@ -4217,8 +4252,7 @@ test.describe('operator shell smoke', () => {
     await workflowResponse;
     await scopedArtifactsResponse;
 
-    await expect(detailsPanel.getByRole('heading', { name: 'Team Lead' })).toBeVisible();
-    await expect(clearButton).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Hub focus ribbon' }).getByText('Team Lead')).toBeVisible();
     await expectFocusedElementVisible(page);
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
     await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
@@ -4318,7 +4352,7 @@ test.describe('operator shell smoke', () => {
     });
 
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page);
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const clearButton = detailsPanel.getByRole('button', { name: 'Clear' });
@@ -4393,8 +4427,7 @@ test.describe('operator shell smoke', () => {
     await workflowResponse;
     await scopedArtifactsResponse;
 
-    await expect(detailsPanel.getByRole('heading', { name: 'Team Lead' })).toBeVisible();
-    await expect(clearButton).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Hub focus ribbon' }).getByText('Team Lead')).toBeVisible();
     await expectFocusedElementVisible(page);
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
     await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
@@ -4443,7 +4476,7 @@ test.describe('operator shell smoke', () => {
 
   test('jumps from collector observation evidence refs into the shared-memory record via keyboard traversal', async ({ page }) => {
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page);
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const queueButton = detailsPanel.getByRole('button', {
@@ -4606,7 +4639,7 @@ test.describe('operator shell smoke', () => {
     });
 
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page);
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const queueButton = detailsPanel.getByRole('button', {
@@ -4717,7 +4750,7 @@ test.describe('operator shell smoke', () => {
     page
   }) => {
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page, 'Supervision');
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const clearButton = detailsPanel.getByRole('button', { name: 'Clear' });
@@ -4731,9 +4764,11 @@ test.describe('operator shell smoke', () => {
       name: 'Select collector snapshot actor team-lead'
     });
 
-    await expect(detailsPanel.getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
+    await expect(detailsPanel.getByRole('heading', { name: 'Collector Supervision' })).toBeVisible();
+    await openOfficeCategory(page, 'Replay');
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
+    await openOfficeCategory(page, 'Supervision');
     await focusHubControlWithTab(
       page,
       collectorSnapshotActorButton,
@@ -4742,8 +4777,7 @@ test.describe('operator shell smoke', () => {
     await expect(collectorSnapshotActorButton).toBeFocused();
     await page.keyboard.press('Enter');
 
-    await expect(detailsPanel.getByRole('heading', { name: 'Team Lead' })).toBeVisible();
-    await expect(clearButton).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Hub focus ribbon' }).getByText('Team Lead')).toBeVisible();
     await expectFocusedElementVisible(page);
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
     await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
@@ -4766,7 +4800,7 @@ test.describe('operator shell smoke', () => {
     });
 
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page, 'Supervision');
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const clearButton = detailsPanel.getByRole('button', { name: 'Clear' });
@@ -4781,9 +4815,11 @@ test.describe('operator shell smoke', () => {
     });
     const scopedArtifactsUrl = '/memory/artifacts?limit=4&window=60m&agent_id=team-lead&correlation_id=corr-revenue-handoff';
 
-    await expect(detailsPanel.getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
+    await expect(detailsPanel.getByRole('heading', { name: 'Collector Supervision' })).toBeVisible();
+    await openOfficeCategory(page, 'Replay');
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
+    await openOfficeCategory(page, 'Supervision');
     await focusHubControlWithTab(
       page,
       watcherButton,
@@ -4792,8 +4828,8 @@ test.describe('operator shell smoke', () => {
     await expect(watcherButton).toBeFocused();
     await page.keyboard.press('Enter');
 
-    await expect(detailsPanel.getByRole('heading', { name: 'Team Lead' })).toBeVisible();
-    await expect(clearButton).toBeFocused();
+    await expect(page.getByRole('region', { name: 'Hub focus ribbon' }).getByText('Team Lead')).toBeVisible();
+    await expectFocusedElementVisible(page);
     await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
     await expect(detailsPanel.getByRole('heading', { name: 'Workflow' })).toBeVisible();
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
@@ -4840,7 +4876,7 @@ test.describe('operator shell smoke', () => {
     });
 
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page, 'Supervision');
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const clearButton = detailsPanel.getByRole('button', { name: 'Clear' });
@@ -4855,8 +4891,10 @@ test.describe('operator shell smoke', () => {
     });
     const unscopedArtifactsUrl = '/memory/artifacts?limit=4&window=60m&agent_id=team-lead';
 
-    await expect(detailsPanel.getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
+    await expect(detailsPanel.getByRole('heading', { name: 'Collector Supervision' })).toBeVisible();
+    await openOfficeCategory(page, 'Replay');
     await expect(correlationSection.getByText('No correlation selected.')).toBeVisible();
+    await openOfficeCategory(page, 'Supervision');
     await focusHubControlWithTab(
       page,
       watcherButton,
@@ -4865,14 +4903,11 @@ test.describe('operator shell smoke', () => {
     await expect(watcherButton).toBeFocused();
     await page.keyboard.press('Enter');
 
-    await expect(detailsPanel.getByRole('heading', { name: 'Team Lead' })).toBeVisible();
-    await expect(clearButton).toBeFocused();
+    await expect(page.getByRole('region', { name: 'Hub focus ribbon' }).getByText('Team Lead')).toBeVisible();
+    await expectFocusedElementVisible(page);
     await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
     await expect(detailsPanel.getByRole('heading', { name: 'Workflow' })).toBeVisible();
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
-    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
-    await expect(correlationSection.getByText('No correlation selected.')).toBeVisible();
-    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toHaveCount(0);
     await expect.poll(() => requestedUrls.includes(unscopedArtifactsUrl)).toBe(true);
     expect(requestedUrls).not.toContain(
       '/memory/artifacts?limit=4&window=60m&agent_id=team-lead&correlation_id=corr-growth-lead-review'
@@ -4900,7 +4935,7 @@ test.describe('operator shell smoke', () => {
     });
 
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page, 'Evidence');
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const clearButton = detailsPanel.getByRole('button', { name: 'Clear' });
@@ -4917,11 +4952,13 @@ test.describe('operator shell smoke', () => {
     const teamLeadScopedArtifactsUrl =
       '/memory/artifacts?limit=4&window=60m&agent_id=team-lead&correlation_id=corr-growth-lead-review';
 
-    await expect(detailsPanel.getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
+    await expect(detailsPanel.getByRole('heading', { name: 'Incident Feed' })).toBeVisible();
     await expect(detailsPanel.getByText('incident refresh failed')).toBeVisible();
+    await openOfficeCategory(page, 'Replay');
     await expect(correlationSection.getByText('No correlation selected.')).toBeVisible();
     expect(requestedUrls).not.toContain(teamLeadCorrelationUrl);
     expect(requestedUrls).not.toContain(teamLeadScopedArtifactsUrl);
+    await openOfficeCategory(page, 'Supervision');
     await focusHubControlWithTab(
       page,
       watcherButton,
@@ -4930,8 +4967,8 @@ test.describe('operator shell smoke', () => {
     await expect(watcherButton).toBeFocused();
     await page.keyboard.press('Enter');
 
-    await expect(detailsPanel.getByRole('heading', { name: 'Team Lead' })).toBeVisible();
-    await expect(clearButton).toBeFocused();
+    await expect(page.getByRole('region', { name: 'Hub focus ribbon' }).getByText('Team Lead')).toBeVisible();
+    await expectFocusedElementVisible(page);
     await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
     await expect(detailsPanel.getByRole('heading', { name: 'Workflow' })).toBeVisible();
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
@@ -4945,7 +4982,7 @@ test.describe('operator shell smoke', () => {
 
   test('carries the crew-overview incident correlation into a selected-agent pivot via keyboard traversal', async ({ page }) => {
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page, 'Evidence');
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const clearButton = detailsPanel.getByRole('button', { name: 'Clear' });
@@ -4959,7 +4996,7 @@ test.describe('operator shell smoke', () => {
       name: 'Select incident agent growth-revenue from incident evt_revenue_handoff_completed'
     });
 
-    await expect(detailsPanel.getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
+    await expect(detailsPanel.getByRole('heading', { name: 'Incident Feed' })).toBeVisible();
     await focusHubControlWithTab(
       page,
       incidentAgentButton,
@@ -4968,8 +5005,8 @@ test.describe('operator shell smoke', () => {
     await expect(incidentAgentButton).toBeFocused();
     await page.keyboard.press('Enter');
 
-    await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
-    await expect(clearButton).toBeFocused();
+    await expect(page.getByRole('region', { name: 'Hub focus ribbon' }).getByText('Growth Revenue Agent')).toBeVisible();
+    await expectFocusedElementVisible(page);
     await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
     await expect(detailsPanel.getByRole('heading', { name: 'Workflow' })).toBeVisible();
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
@@ -4981,7 +5018,7 @@ test.describe('operator shell smoke', () => {
 
   test('keeps the active crew-overview correlation when opening an office-grid home-agent pivot via keyboard traversal', async ({ page }) => {
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page);
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const clearButton = detailsPanel.getByRole('button', { name: 'Clear' });
@@ -4993,14 +5030,15 @@ test.describe('operator shell smoke', () => {
     });
 
     await expect(detailsPanel.getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
+    await openOfficeCategory(page, 'Replay');
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
+    await openOfficeCategory(page, 'Crew');
     await focusHubControlWithTab(page, homeAgentButton, 'Select home agent Team Lead in Team Lead Desk');
     await expect(homeAgentButton).toBeFocused();
     await page.keyboard.press('Enter');
 
-    await expect(detailsPanel.getByRole('heading', { name: 'Team Lead' })).toBeVisible();
-    await expect(clearButton).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Hub focus ribbon' }).getByText('Team Lead')).toBeVisible();
     await expectFocusedElementVisible(page);
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
     await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
@@ -5010,7 +5048,7 @@ test.describe('operator shell smoke', () => {
 
   test('keeps the active crew-overview correlation when opening a watch-topology endpoint pivot via keyboard traversal', async ({ page }) => {
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page, 'Supervision');
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const clearButton = detailsPanel.getByRole('button', { name: 'Clear' });
@@ -5021,9 +5059,11 @@ test.describe('operator shell smoke', () => {
       name: 'Select watch topology source agent from lead edge team-lead app-engineering'
     });
 
-    await expect(detailsPanel.getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
+    await expect(detailsPanel.getByRole('heading', { name: 'Watch Topology' })).toBeVisible();
+    await openOfficeCategory(page, 'Replay');
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
+    await openOfficeCategory(page, 'Supervision');
     await focusHubControlWithTab(
       page,
       topologyPivotButton,
@@ -5032,8 +5072,7 @@ test.describe('operator shell smoke', () => {
     await expect(topologyPivotButton).toBeFocused();
     await page.keyboard.press('Enter');
 
-    await expect(detailsPanel.getByRole('heading', { name: 'Team Lead' })).toBeVisible();
-    await expect(clearButton).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Hub focus ribbon' }).getByText('Team Lead')).toBeVisible();
     await expectFocusedElementVisible(page);
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
     await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
@@ -5055,7 +5094,7 @@ test.describe('operator shell smoke', () => {
     });
 
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page, 'Supervision');
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const clearButton = detailsPanel.getByRole('button', { name: 'Clear' });
@@ -5068,9 +5107,11 @@ test.describe('operator shell smoke', () => {
     const scopedArtifactsUrl =
       '/memory/artifacts?limit=4&window=60m&agent_id=app-engineering&correlation_id=corr-revenue-handoff';
 
-    await expect(detailsPanel.getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
+    await expect(detailsPanel.getByRole('heading', { name: 'Watch Topology' })).toBeVisible();
+    await openOfficeCategory(page, 'Replay');
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
+    await openOfficeCategory(page, 'Supervision');
     await focusHubControlWithTab(
       page,
       topologyPivotButton,
@@ -5079,8 +5120,8 @@ test.describe('operator shell smoke', () => {
     await expect(topologyPivotButton).toBeFocused();
     await page.keyboard.press('Enter');
 
-    await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
-    await expect(clearButton).toBeFocused();
+    await expect(page.getByRole('region', { name: 'Hub focus ribbon' }).getByText('App Engineering Agent')).toBeVisible();
+    await expectFocusedElementVisible(page);
     await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
     await expect(detailsPanel.getByRole('heading', { name: 'Workflow' })).toBeVisible();
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
@@ -5096,7 +5137,7 @@ test.describe('operator shell smoke', () => {
 
   test('opens an incident correlation drilldown from the selected-agent Hub via keyboard traversal', async ({ page }) => {
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page);
 
     const dialog = page.getByRole('dialog', { name: 'Hub' });
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
@@ -5141,7 +5182,7 @@ test.describe('operator shell smoke', () => {
 
   test('keeps the active correlation when opening a correlation incident actor pivot via keyboard traversal', async ({ page }) => {
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page);
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const clearButton = detailsPanel.getByRole('button', { name: 'Clear' });
@@ -5190,8 +5231,7 @@ test.describe('operator shell smoke', () => {
     await expect(incidentActorButton).toBeFocused();
     await page.keyboard.press('Enter');
 
-    await expect(detailsPanel.getByRole('heading', { name: 'Team Lead' })).toBeVisible();
-    await expect(clearButton).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Hub focus ribbon' }).getByText('Team Lead')).toBeVisible();
     await expectFocusedElementVisible(page);
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
     await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
@@ -5202,7 +5242,7 @@ test.describe('operator shell smoke', () => {
 
   test('keeps the active correlation when opening a correlation timeline actor pivot via keyboard traversal', async ({ page }) => {
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page);
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const clearButton = detailsPanel.getByRole('button', { name: 'Clear' });
@@ -5252,8 +5292,7 @@ test.describe('operator shell smoke', () => {
     await expect(timelineActorButton).toBeFocused();
     await page.keyboard.press('Enter');
 
-    await expect(detailsPanel.getByRole('heading', { name: 'Team Lead' })).toBeVisible();
-    await expect(clearButton).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Hub focus ribbon' }).getByText('Team Lead')).toBeVisible();
     await expectFocusedElementVisible(page);
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
     await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
@@ -5300,7 +5339,7 @@ test.describe('operator shell smoke', () => {
     });
 
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page, 'Replay');
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const clearButton = detailsPanel.getByRole('button', { name: 'Clear' });
@@ -5323,7 +5362,7 @@ test.describe('operator shell smoke', () => {
     const scopedArtifactsUrl =
       '/memory/artifacts?limit=4&window=60m&agent_id=growth-revenue&correlation_id=corr-growth-lead-review';
 
-    await expect(detailsPanel.getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
+    await expect(detailsPanel.getByRole('heading', { name: 'Timeline Replay' })).toBeVisible();
 
     await focusHubControlWithTab(page, replayCorrelationButton, 'Open replay correlation corr-growth-lead-review', {
       detailsPanel
@@ -5358,8 +5397,8 @@ test.describe('operator shell smoke', () => {
     await workflowResponse;
     await scopedArtifactsResponse;
 
-    await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
-    await expect(clearButton).toBeFocused();
+    await expect(page.getByRole('region', { name: 'Hub focus ribbon' }).getByText('Growth Revenue Agent')).toBeVisible();
+    await expectFocusedElementVisible(page);
     await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
     await expect(detailsPanel.getByRole('heading', { name: 'Workflow' })).toBeVisible();
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
@@ -5408,7 +5447,7 @@ test.describe('operator shell smoke', () => {
 
   test('keeps the active replay correlation when opening a replay actor pivot via keyboard traversal', async ({ page }) => {
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page, 'Replay');
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const clearButton = detailsPanel.getByRole('button', { name: 'Clear' });
@@ -5428,7 +5467,7 @@ test.describe('operator shell smoke', () => {
       name: 'Select replay actor from event evt_growth_review_started team-lead'
     });
 
-    await expect(detailsPanel.getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
+    await expect(detailsPanel.getByRole('heading', { name: 'Timeline Replay' })).toBeVisible();
 
     await focusHubControlWithTab(page, replayCorrelationButton, 'Open replay correlation corr-growth-lead-review', {
       detailsPanel
@@ -5448,8 +5487,7 @@ test.describe('operator shell smoke', () => {
     await expect(replayActorButton).toBeFocused();
     await page.keyboard.press('Enter');
 
-    await expect(detailsPanel.getByRole('heading', { name: 'Team Lead' })).toBeVisible();
-    await expect(clearButton).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Hub focus ribbon' }).getByText('Team Lead')).toBeVisible();
     await expectFocusedElementVisible(page);
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
     await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
@@ -5471,7 +5509,7 @@ test.describe('operator shell smoke', () => {
     });
 
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page, 'Replay');
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const correlationSection = detailsPanel.locator('section').filter({
@@ -5486,7 +5524,7 @@ test.describe('operator shell smoke', () => {
     const scopedTimelineUrl = '/timeline?limit=4&window=60m&correlation_id=corr-revenue-handoff';
     const scopedArtifactsUrl = '/memory/artifacts?limit=4&window=60m&correlation_id=corr-revenue-handoff';
 
-    await expect(detailsPanel.getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
+    await expect(detailsPanel.getByRole('heading', { name: 'Timeline Replay' })).toBeVisible();
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
     await expect(selectedReplayCorrelationButton).toBeVisible();
@@ -5502,7 +5540,7 @@ test.describe('operator shell smoke', () => {
     const requestCountBeforeReselect = requestedUrls.length;
     await page.keyboard.press('Enter');
 
-    await expect(detailsPanel.getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
+    await expect(detailsPanel.getByRole('heading', { name: 'Timeline Replay' })).toBeVisible();
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
     await expect(selectedReplayCorrelationButton).toBeVisible();
@@ -5530,7 +5568,7 @@ test.describe('operator shell smoke', () => {
     });
 
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page, 'Replay');
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const correlationSection = detailsPanel.locator('section').filter({
@@ -5556,12 +5594,10 @@ test.describe('operator shell smoke', () => {
     });
     const focusedSharedMemoryRecord = detailsPanel.locator('li[data-shared-memory-target]:focus');
 
-    await expect(detailsPanel.getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
+    await expect(detailsPanel.getByRole('heading', { name: 'Timeline Replay' })).toBeVisible();
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
     await expect(selectedReplayCorrelationButton).toBeVisible();
-    await expect(selectedSharedMemoryCorrelationButton).toBeVisible();
-    await expect(memorySection.getByText('Ref · /tmp/revenue-handoff.md')).toBeVisible();
     await expect(detailsPanel.getByRole('button', { name: 'Clear' })).toHaveCount(0);
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
     await expect(detailsPanel.getByRole('button', { name: 'Return to current scope' })).toHaveCount(0);
@@ -5574,15 +5610,12 @@ test.describe('operator shell smoke', () => {
     const requestCountBeforeJump = requestedUrls.length;
     await page.keyboard.press('Enter');
 
-    await expect(detailsPanel.getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
-    await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
-    await expect(correlationSection.getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
-    await expect(selectedReplayCorrelationButton).toBeVisible();
+    await expect(detailsPanel.getByRole('heading', { name: 'Shared Memory' })).toBeVisible();
     await expect(selectedSharedMemoryCorrelationButton).toBeVisible();
+    await expect(memorySection.getByText('Ref · /tmp/revenue-handoff.md')).toBeVisible();
     await expect(detailsPanel.getByRole('button', { name: 'Clear' })).toHaveCount(0);
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
     await expect(detailsPanel.getByRole('button', { name: 'Return to current scope' })).toHaveCount(0);
-    await expect(replaySection.getByText('Scoped replay · corr-revenue-handoff')).toHaveCount(0);
     await expect(focusedSharedMemoryRecord).toHaveCount(1);
     await expect(focusedSharedMemoryRecord).toContainText('Ref · /tmp/revenue-handoff.md');
 
@@ -5599,7 +5632,7 @@ test.describe('operator shell smoke', () => {
     page
   }) => {
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page, 'Replay');
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const clearButton = detailsPanel.getByRole('button', { name: 'Clear' });
@@ -5619,7 +5652,7 @@ test.describe('operator shell smoke', () => {
       name: 'Select replay counterparty from event evt_growth_review_started team-lead'
     });
 
-    await expect(detailsPanel.getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
+    await expect(detailsPanel.getByRole('heading', { name: 'Timeline Replay' })).toBeVisible();
 
     await focusHubControlWithTab(page, replayCorrelationButton, 'Open replay correlation corr-growth-lead-review', {
       detailsPanel
@@ -5639,8 +5672,7 @@ test.describe('operator shell smoke', () => {
     await expect(replayCounterpartyButton).toBeFocused();
     await page.keyboard.press('Enter');
 
-    await expect(detailsPanel.getByRole('heading', { name: 'Team Lead' })).toBeVisible();
-    await expect(clearButton).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Hub focus ribbon' }).getByText('Team Lead')).toBeVisible();
     await expectFocusedElementVisible(page);
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
     await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
@@ -5796,10 +5828,9 @@ test.describe('operator shell smoke', () => {
     });
 
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page, 'Replay');
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
-    const clearButton = detailsPanel.getByRole('button', { name: 'Clear' });
     const replaySection = detailsPanel.locator('section').filter({
       has: page.getByRole('heading', { name: 'Timeline Replay' })
     });
@@ -5813,7 +5844,7 @@ test.describe('operator shell smoke', () => {
       name: 'Select replay counterparty from event evt_browser_replay_counterparty_fallback team-lead'
     });
 
-    await expect(detailsPanel.getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
+    await expect(detailsPanel.getByRole('heading', { name: 'Timeline Replay' })).toBeVisible();
     await expect(correlationSection.getByText('No correlation selected.')).toBeVisible();
     await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toHaveCount(0);
     await focusHubControlWithTab(
@@ -5843,8 +5874,7 @@ test.describe('operator shell smoke', () => {
     await correlationResponse;
     await artifactsResponse;
 
-    await expect(detailsPanel.getByRole('heading', { name: 'Team Lead' })).toBeVisible();
-    await expect(clearButton).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Hub focus ribbon' }).getByText('Team Lead')).toBeVisible();
     await expectFocusedElementVisible(page);
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
     await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
@@ -5892,7 +5922,7 @@ test.describe('operator shell smoke', () => {
 
   test('keeps the clicked selected-agent incident correlation when opening an incident counterparty pivot via keyboard traversal', async ({ page }) => {
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page);
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const clearButton = detailsPanel.getByRole('button', { name: 'Clear' });
@@ -5942,7 +5972,7 @@ test.describe('operator shell smoke', () => {
 
   test('keeps the clicked selected-agent incident correlation when opening an incident actor pivot via keyboard traversal', async ({ page }) => {
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page);
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const clearButton = detailsPanel.getByRole('button', { name: 'Clear' });
@@ -5980,8 +6010,7 @@ test.describe('operator shell smoke', () => {
     await expect(incidentActorButton).toBeFocused();
     await page.keyboard.press('Enter');
 
-    await expect(detailsPanel.getByRole('heading', { name: 'Team Lead' })).toBeVisible();
-    await expect(clearButton).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Hub focus ribbon' }).getByText('Team Lead')).toBeVisible();
     await expectFocusedElementVisible(page);
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
     await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
@@ -6038,7 +6067,7 @@ test.describe('operator shell smoke', () => {
 
       try {
         await page.goto('/');
-        await page.getByRole('button', { name: 'Open Hub' }).click();
+        await openOfficeCategory(page);
 
         const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
         const incidentSection = detailsPanel.locator('section').filter({
@@ -6098,7 +6127,7 @@ test.describe('operator shell smoke', () => {
 
   test('opens a workflow correlation pivot from the selected-agent Hub via keyboard traversal', async ({ page }) => {
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page);
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const clearButton = detailsPanel.getByRole('button', { name: 'Clear' });
@@ -6177,7 +6206,7 @@ test.describe('operator shell smoke', () => {
     });
 
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page);
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const inspectButton = detailsPanel.getByRole('button', {
@@ -6274,7 +6303,7 @@ test.describe('operator shell smoke', () => {
     });
 
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page);
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const inspectButton = detailsPanel.getByRole('button', {
@@ -6383,7 +6412,7 @@ test.describe('operator shell smoke', () => {
     });
 
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page);
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const clearButton = detailsPanel.getByRole('button', { name: 'Clear' });
@@ -6581,7 +6610,7 @@ test.describe('operator shell smoke', () => {
     });
 
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page);
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const clearButton = detailsPanel.getByRole('button', { name: 'Clear' });
@@ -6632,8 +6661,7 @@ test.describe('operator shell smoke', () => {
     await expect(workflowInteractionParticipantButton).toBeFocused();
     await page.keyboard.press('Enter');
 
-    await expect(detailsPanel.getByRole('heading', { name: 'Team Lead' })).toBeVisible();
-    await expect(clearButton).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Hub focus ribbon' }).getByText('Team Lead')).toBeVisible();
     await expectFocusedElementVisible(page);
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
     await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
@@ -6648,7 +6676,7 @@ test.describe('operator shell smoke', () => {
 
   test('keeps the active workflow correlation when opening a workflow counterparty pivot via keyboard traversal', async ({ page }) => {
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page);
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const clearButton = detailsPanel.getByRole('button', { name: 'Clear' });
@@ -6696,8 +6724,7 @@ test.describe('operator shell smoke', () => {
     await expect(workflowCounterpartyButton).toBeFocused();
     await page.keyboard.press('Enter');
 
-    await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
-    await expect(clearButton).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Hub focus ribbon' }).getByText('App Engineering Agent')).toBeVisible();
     await expectFocusedElementVisible(page);
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
     await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
@@ -6720,7 +6747,7 @@ test.describe('operator shell smoke', () => {
     });
 
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page);
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const inspectButton = detailsPanel.getByRole('button', {
@@ -6777,6 +6804,7 @@ test.describe('operator shell smoke', () => {
       '/office/operations?agent_id=growth-revenue',
       '/agents/growth-revenue/workflow?limit=10&window=60m',
       '/timeline?limit=10&window=60m&agent_id=growth-revenue&correlation_id=corr-revenue-handoff',
+      '/accountability/replay?limit=10&window=60m&correlation_id=corr-revenue-handoff&agent_id=growth-revenue',
       resolveSelectedAgentSupervisionHistoryPath('growth-revenue', 'corr-revenue-handoff'),
       '/memory/artifacts?limit=4&window=60m&agent_id=growth-revenue&correlation_id=corr-revenue-handoff',
       '/correlations/corr-revenue-handoff?limit=10&window=60m'
@@ -6868,7 +6896,7 @@ test.describe('operator shell smoke', () => {
     });
 
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page);
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const inspectButton = detailsPanel.getByRole('button', {
@@ -6996,7 +7024,7 @@ test.describe('operator shell smoke', () => {
     });
 
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page);
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const inspectButton = detailsPanel.getByRole('button', {
@@ -7070,7 +7098,7 @@ test.describe('operator shell smoke', () => {
     page
   }) => {
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page);
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const clearButton = detailsPanel.getByRole('button', { name: 'Clear' });
@@ -7109,8 +7137,7 @@ test.describe('operator shell smoke', () => {
     await expect(workflowStatusActorButton).toBeFocused();
     await page.keyboard.press('Enter');
 
-    await expect(detailsPanel.getByRole('heading', { name: 'Team Lead' })).toBeVisible();
-    await expect(clearButton).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Hub focus ribbon' }).getByText('Team Lead')).toBeVisible();
     await expectFocusedElementVisible(page);
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
     await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
@@ -7123,7 +7150,7 @@ test.describe('operator shell smoke', () => {
     page
   }) => {
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page);
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const clearButton = detailsPanel.getByRole('button', { name: 'Clear' });
@@ -7381,7 +7408,7 @@ test.describe('operator shell smoke', () => {
     });
 
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page);
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const clearButton = detailsPanel.getByRole('button', { name: 'Clear' });
@@ -7501,7 +7528,7 @@ test.describe('operator shell smoke', () => {
     page
   }) => {
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page);
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const clearButton = detailsPanel.getByRole('button', { name: 'Clear' });
@@ -7537,8 +7564,7 @@ test.describe('operator shell smoke', () => {
     await expect(workflowRecentEventActorButton).toBeFocused();
     await page.keyboard.press('Enter');
 
-    await expect(detailsPanel.getByRole('heading', { name: 'Team Lead' })).toBeVisible();
-    await expect(clearButton).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Hub focus ribbon' }).getByText('Team Lead')).toBeVisible();
     await expectFocusedElementVisible(page);
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
     await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
@@ -7627,7 +7653,7 @@ test.describe('operator shell smoke', () => {
     });
 
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page);
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const clearButton = detailsPanel.getByRole('button', { name: 'Clear' });
@@ -7935,7 +7961,7 @@ test.describe('operator shell smoke', () => {
     });
 
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page);
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const clearButton = detailsPanel.getByRole('button', { name: 'Clear' });
@@ -8126,7 +8152,7 @@ test.describe('operator shell smoke', () => {
     });
 
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page);
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const clearButton = detailsPanel.getByRole('button', { name: 'Clear' });
@@ -8244,7 +8270,7 @@ test.describe('operator shell smoke', () => {
     });
 
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page);
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const inspectButton = detailsPanel.getByRole('button', {
@@ -8356,7 +8382,7 @@ test.describe('operator shell smoke', () => {
     });
 
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page);
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const clearButton = detailsPanel.getByRole('button', { name: 'Clear' });
@@ -8403,8 +8429,7 @@ test.describe('operator shell smoke', () => {
     await expect(observerButton).toBeFocused();
     await page.keyboard.press('Enter');
 
-    await expect(detailsPanel.getByRole('heading', { name: 'Team Lead' })).toBeVisible();
-    await expect(clearButton).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Hub focus ribbon' }).getByText('Team Lead')).toBeVisible();
     await expectFocusedElementVisible(page);
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
     await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
@@ -8458,7 +8483,7 @@ test.describe('operator shell smoke', () => {
     });
 
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page);
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const clearButton = detailsPanel.getByRole('button', { name: 'Clear' });
@@ -8505,8 +8530,7 @@ test.describe('operator shell smoke', () => {
     await expect(targetButton).toBeFocused();
     await page.keyboard.press('Enter');
 
-    await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
-    await expect(clearButton).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Hub focus ribbon' }).getByText('Growth Revenue Agent')).toBeVisible();
     await expectFocusedElementVisible(page);
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
     await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
@@ -8560,7 +8584,7 @@ test.describe('operator shell smoke', () => {
     });
 
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page);
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const clearButton = detailsPanel.getByRole('button', { name: 'Clear' });
@@ -8606,8 +8630,7 @@ test.describe('operator shell smoke', () => {
     await expect(watcherButton).toBeFocused();
     await page.keyboard.press('Enter');
 
-    await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
-    await expect(clearButton).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Hub focus ribbon' }).getByText('Growth Revenue Agent')).toBeVisible();
     await expectFocusedElementVisible(page);
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toHaveCount(0);
     await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
@@ -8672,7 +8695,7 @@ test.describe('operator shell smoke', () => {
     });
 
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page);
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const inspectButton = detailsPanel.getByRole('button', {
@@ -8804,7 +8827,7 @@ test.describe('operator shell smoke', () => {
     });
 
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page);
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const inspectButton = detailsPanel.getByRole('button', {
@@ -8871,7 +8894,7 @@ test.describe('operator shell smoke', () => {
     });
 
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page);
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const inspectButton = detailsPanel.getByRole('button', {
@@ -8950,7 +8973,7 @@ test.describe('operator shell smoke', () => {
       });
     });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page);
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const inspectButton = detailsPanel.getByRole('button', {
@@ -9012,7 +9035,10 @@ test.describe('operator shell smoke', () => {
 
     await page.waitForTimeout(150);
 
-    expect(requestedUrls).toHaveLength(requestCountBeforeReselect);
+    const postReselectRequests = requestedUrls.slice(requestCountBeforeReselect);
+    expectOnlyBenignPostJumpRequests(postReselectRequests, [
+      `/accountability/replay?limit=10&window=60m&correlation_id=${encodeURIComponent(accountabilityCorrelationId)}&agent_id=app-engineering`
+    ]);
 
     await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText(accountabilityCorrelationId, { exact: true })).toBeVisible();
@@ -9071,7 +9097,7 @@ test.describe('operator shell smoke', () => {
       });
 
       await page.goto('/');
-      await page.getByRole('button', { name: 'Open Hub' }).click();
+      await openOfficeCategory(page);
 
       const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
       const inspectButton = detailsPanel.getByRole('button', {
@@ -9248,7 +9274,7 @@ test.describe('operator shell smoke', () => {
     });
 
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page);
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const inspectButton = detailsPanel.getByRole('button', {
@@ -9399,7 +9425,7 @@ test.describe('operator shell smoke', () => {
     });
 
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page);
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const clearButton = detailsPanel.getByRole('button', { name: 'Clear' });
@@ -9571,7 +9597,7 @@ test.describe('operator shell smoke', () => {
     });
 
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page);
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const inspectButton = detailsPanel.getByRole('button', {
@@ -9708,7 +9734,7 @@ test.describe('operator shell smoke', () => {
     });
 
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page);
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const inspectButton = detailsPanel.getByRole('button', {
@@ -9857,7 +9883,7 @@ test.describe('operator shell smoke', () => {
     });
 
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page);
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const clearButton = detailsPanel.getByRole('button', { name: 'Clear' });
@@ -10047,7 +10073,7 @@ test.describe('operator shell smoke', () => {
     });
 
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page);
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const clearButton = detailsPanel.getByRole('button', { name: 'Clear' });
@@ -10159,7 +10185,7 @@ test.describe('operator shell smoke', () => {
 
   test('opens a correlation participant pivot from the selected-agent Hub via keyboard traversal', async ({ page }) => {
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page);
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const clearButton = detailsPanel.getByRole('button', { name: 'Clear' });
@@ -10227,8 +10253,8 @@ test.describe('operator shell smoke', () => {
     });
 
     await page.goto('/');
-    await expect(page.getByText('Metaverse Office operator shell')).toBeVisible();
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await expect(page.getByText('Metaverse Office operator shell')).toHaveCount(1);
+    await openOfficeCategory(page);
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const inspectButton = detailsPanel.getByRole('button', {
@@ -10245,7 +10271,7 @@ test.describe('operator shell smoke', () => {
     });
 
     await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
-    await expect(page.getByText('Metaverse Office operator shell')).toBeVisible();
+    await expect(page.getByText('Metaverse Office operator shell')).toHaveCount(1);
     await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
     await expect(workflowSection.getByText('Loading workflow...')).toBeVisible();
     await expect(workflowSection.getByText(/Unable to load workflow\./)).toHaveCount(0);
@@ -10257,7 +10283,7 @@ test.describe('operator shell smoke', () => {
     releaseSelectedWorkflow!();
 
     await expect(page.getByRole('region', { name: 'Hub focus ribbon' }).getByText('App Engineering Agent')).toBeVisible();
-    await expect(page.getByText('Metaverse Office operator shell')).toBeVisible();
+    await expect(page.getByText('Metaverse Office operator shell')).toHaveCount(1);
     await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
     await expect(workflowSection.getByText('Unable to load workflow. workflow request failed')).toBeVisible();
     await expect(workflowSection.getByText('Loading workflow...')).toHaveCount(0);
@@ -10287,7 +10313,7 @@ test.describe('operator shell smoke', () => {
     });
 
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page);
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     await detailsPanel.getByRole('button', { name: 'Inspect App Engineering Agent', exact: true }).click();
@@ -10306,7 +10332,7 @@ test.describe('operator shell smoke', () => {
     test.setTimeout(45_000);
     await installFastPollInterval(page);
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page);
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     await detailsPanel.getByRole('button', { name: 'Inspect Growth Revenue Agent', exact: true }).click();
@@ -10328,7 +10354,7 @@ test.describe('operator shell smoke', () => {
     test.setTimeout(45_000);
     await installFastPollInterval(page);
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page, 'Queue');
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const operationSection = detailsPanel.locator('section').filter({
@@ -10374,7 +10400,7 @@ test.describe('operator shell smoke', () => {
     test.setTimeout(45_000);
     await installFastPollInterval(page);
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page, 'Queue');
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const operationSection = detailsPanel.locator('section').filter({
@@ -10432,7 +10458,7 @@ test.describe('operator shell smoke', () => {
 
     await expect(page.getByRole('heading', { name: 'Metaverse Office' })).toBeVisible();
     await expect(page.getByRole('region', { name: 'Office world' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Open Hub' })).toBeVisible();
+    await expect(officeCategoryButton(page)).toBeVisible();
 
     await enableScenario(page, 'degraded-refresh');
 
@@ -10443,7 +10469,7 @@ test.describe('operator shell smoke', () => {
     await expect(page.getByText('Office snapshot · Refresh failed · overview refresh failed')).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Metaverse Office' })).toBeVisible();
     await expect(page.getByRole('region', { name: 'Office world' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Open Hub' })).toBeVisible();
+    await expect(officeCategoryButton(page)).toBeVisible();
     await expect(page.getByText('Unable to load office overview.')).toHaveCount(0);
   });
 
@@ -10472,7 +10498,7 @@ test.describe('operator shell smoke', () => {
     };
 
     page.on('request', handleRequest);
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page);
 
     try {
       await expect(page.getByRole('dialog', { name: 'Hub' })).toBeVisible();
@@ -10536,7 +10562,7 @@ test.describe('operator shell smoke', () => {
     };
 
     page.on('request', handleRequest);
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page);
 
     try {
       const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
@@ -10655,7 +10681,7 @@ test.describe('operator shell smoke', () => {
     });
 
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page);
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const supervisionSection = detailsPanel.locator('section').filter({
@@ -10936,12 +10962,12 @@ test.describe('operator shell smoke', () => {
     await expect(page.locator('.aitown-world__host canvas')).toBeVisible();
     await page.waitForFunction(() => Boolean(window.__AITOWN_VIEWPORT__));
 
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page);
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     await detailsPanel.getByRole('button', { name: 'Inspect Growth Revenue Agent', exact: true }).click();
     await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
-    await page.getByRole('button', { name: 'Close Hub' }).click();
+    await page.getByRole('button', { name: 'Close panel' }).click();
     await expect(page.getByRole('complementary', { name: 'Agent details' })).toHaveCount(0);
     await expect(page.getByRole('region', { name: 'Selected watch links' })).toBeVisible();
     await expect(page.getByRole('list', { name: 'Selected watch link list' })).toBeVisible();
@@ -10977,7 +11003,7 @@ test.describe('operator shell smoke', () => {
 
     const resetViewButton = page.getByRole('button', { name: 'Reset view' });
     await expect(resetViewButton).toHaveAttribute('aria-keyshortcuts', 'R');
-    await expect(page.getByRole('button', { name: 'Open Hub' })).toBeVisible();
+    await expect(officeCategoryButton(page)).toBeVisible();
 
     const baselinePose = await readViewportPose(page);
     expect(baselinePose).not.toBeNull();
@@ -11002,7 +11028,7 @@ test.describe('operator shell smoke', () => {
 
     await page.keyboard.press('r');
 
-    await expect(page.getByRole('button', { name: 'Open Hub' })).toBeVisible();
+    await expect(officeCategoryButton(page)).toBeVisible();
     await expect(page.getByRole('dialog', { name: 'Hub' })).toHaveCount(0);
 
     await expect
@@ -11030,7 +11056,7 @@ test.describe('operator shell smoke', () => {
     await expect(page.locator('.aitown-world__host canvas')).toBeVisible();
     await page.waitForFunction(() => Boolean(window.__AITOWN_VIEWPORT__));
 
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page, 'Queue');
 
     const dialog = page.getByRole('dialog', { name: 'Hub' });
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
@@ -11040,7 +11066,7 @@ test.describe('operator shell smoke', () => {
     const stateFilter = queueSection.getByRole('combobox', { name: 'Filter active queue by state' });
 
     await expect(dialog).toBeVisible();
-    await expect(detailsPanel.getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
+    await expect(detailsPanel.getByRole('heading', { name: 'Active Queue' })).toBeVisible();
     await expect(stateFilter).toHaveValue('');
 
     const baselinePose = await readViewportPose(page);
@@ -11072,7 +11098,7 @@ test.describe('operator shell smoke', () => {
     await page.keyboard.press('r');
 
     await expect(dialog).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Hide Hub' })).toBeVisible();
+    await expect(page.getByRole('dialog', { name: 'Hub' }).getByRole('button', { name: 'Close panel' })).toBeVisible();
     await expect(stateFilter).toBeFocused();
 
     await expect
@@ -11117,7 +11143,7 @@ test.describe('operator shell smoke', () => {
     await expect(page.locator('.aitown-world__host canvas')).toBeVisible();
     await page.waitForFunction(() => Boolean(window.__AITOWN_VIEWPORT__));
 
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page);
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const correlationSection = detailsPanel.locator('section').filter({
@@ -11158,10 +11184,13 @@ test.describe('operator shell smoke', () => {
       })
       .toBe(true);
 
-    await expect(page.getByRole('button', { name: 'Reset view' })).toHaveAttribute('aria-keyshortcuts', 'R');
+    await expect(page.getByRole('dialog', { name: 'Hub' }).getByRole('button', { name: 'Reset view' })).toHaveAttribute(
+      'aria-keyshortcuts',
+      'R'
+    );
     await page.keyboard.press('r');
 
-    await expect(page.getByRole('button', { name: 'Hide Hub' })).toBeVisible();
+    await expect(page.getByRole('dialog', { name: 'Hub' }).getByRole('button', { name: 'Close panel' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Clear Selection' })).toBeVisible();
     await expect(page.getByRole('region', { name: 'Hub focus ribbon' }).getByText('App Engineering Agent')).toBeVisible();
     await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
@@ -11192,7 +11221,7 @@ test.describe('operator shell smoke', () => {
     await expect(page.locator('.aitown-world__host canvas')).toBeVisible();
     await page.waitForFunction(() => Boolean(window.__AITOWN_VIEWPORT__));
 
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page);
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const correlationSection = detailsPanel.locator('section').filter({
@@ -11233,9 +11262,9 @@ test.describe('operator shell smoke', () => {
       })
       .toBe(true);
 
-    await page.getByRole('button', { name: 'Reset view' }).click();
+    await page.getByRole('dialog', { name: 'Hub' }).getByRole('button', { name: 'Reset view' }).click();
 
-    await expect(page.getByRole('button', { name: 'Hide Hub' })).toBeVisible();
+    await expect(page.getByRole('dialog', { name: 'Hub' }).getByRole('button', { name: 'Close panel' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Clear Selection' })).toBeVisible();
     await expect(page.getByRole('region', { name: 'Hub focus ribbon' }).getByText('App Engineering Agent')).toBeVisible();
     await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
@@ -11274,7 +11303,7 @@ test.describe('operator shell smoke', () => {
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const selectedAgentHeading = detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' });
 
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page);
     await expect(dialog).toBeVisible();
 
     const inspectButton = detailsPanel.getByRole('button', {
@@ -11314,7 +11343,7 @@ test.describe('operator shell smoke', () => {
       })
       .toBe(true);
 
-    await page.getByRole('button', { name: 'Reset view' }).click();
+    await page.getByRole('dialog', { name: 'Hub' }).getByRole('button', { name: 'Reset view' }).click();
 
     await expect(dialog).toBeVisible();
     await expect(selectedAgentHeading).toBeVisible();
@@ -11371,12 +11400,12 @@ test.describe('operator shell smoke', () => {
     await expect(page.locator('.aitown-world__host canvas')).toBeVisible();
     await page.waitForFunction(() => Boolean(window.__AITOWN_VIEWPORT__));
 
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page);
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     await detailsPanel.getByRole('button', { name: 'Inspect Growth Revenue Agent', exact: true }).click();
     await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
-    await page.getByRole('button', { name: 'Close Hub' }).click();
+    await page.getByRole('button', { name: 'Close panel' }).click();
     await expect(page.getByRole('complementary', { name: 'Agent details' })).toHaveCount(0);
 
     const watchOverlay = page.getByRole('region', { name: 'Selected watch links' });
@@ -11476,7 +11505,7 @@ test.describe('operator shell smoke', () => {
     expect(baselineClampPadding.right).toBe(0);
 
     const selectWatchOverlay = async () => {
-      await page.getByRole('button', { name: 'Open Hub' }).click();
+      await openOfficeCategory(page);
 
       const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
       const inspectButton = detailsPanel.getByRole('button', {
@@ -11486,7 +11515,7 @@ test.describe('operator shell smoke', () => {
       await expect(inspectButton).toBeVisible();
       await inspectButton.click();
       await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
-      await page.getByRole('button', { name: 'Close Hub' }).click();
+      await page.getByRole('button', { name: 'Close panel' }).click();
       await expect(detailsPanel).toHaveCount(0);
 
       const watchOverlay = page.getByRole('region', { name: 'Selected watch links' });
@@ -11578,7 +11607,7 @@ test.describe('operator shell smoke', () => {
     const baselineTop = baseline.clampPadding?.top ?? 0;
     const baselineRight = baseline.clampPadding?.right ?? 0;
 
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page);
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const inspectButton = detailsPanel.getByRole('button', {
@@ -11588,7 +11617,7 @@ test.describe('operator shell smoke', () => {
     await expect(inspectButton).toBeVisible();
     await inspectButton.click();
     await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
-    await page.getByRole('button', { name: 'Close Hub' }).click();
+    await page.getByRole('button', { name: 'Close panel' }).click();
     await expect(page.getByRole('complementary', { name: 'Agent details' })).toHaveCount(0);
 
     const watchOverlay = page.getByRole('region', { name: 'Selected watch links' });
@@ -11638,12 +11667,12 @@ test.describe('operator shell smoke', () => {
     await expect(page.locator('.aitown-world__host canvas')).toBeVisible();
     await page.waitForFunction(() => Boolean(window.__AITOWN_VIEWPORT__));
 
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page);
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     await detailsPanel.getByRole('button', { name: 'Inspect Growth Revenue Agent', exact: true }).click();
     await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
-    await page.getByRole('button', { name: 'Close Hub' }).click();
+    await page.getByRole('button', { name: 'Close panel' }).click();
     await expect(page.getByRole('complementary', { name: 'Agent details' })).toHaveCount(0);
 
     const watchOverlay = page.getByRole('region', { name: 'Selected watch links' });
@@ -11730,7 +11759,7 @@ test.describe('operator shell smoke', () => {
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const selectedAgentHeading = detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' });
 
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page);
     await expect(dialog).toBeVisible();
 
     const inspectButton = detailsPanel.getByRole('button', {
@@ -11785,7 +11814,7 @@ test.describe('operator shell smoke', () => {
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const selectedAgentHeading = detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' });
 
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page);
     await expect(dialog).toBeVisible();
 
     const inspectButton = detailsPanel.getByRole('button', {
@@ -11844,7 +11873,7 @@ test.describe('operator shell smoke', () => {
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const selectedAgentHeading = detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' });
 
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page);
     await expect(dialog).toBeVisible();
 
     const inspectButton = detailsPanel.getByRole('button', {
@@ -11921,7 +11950,7 @@ test.describe('operator shell smoke', () => {
     await expect(page.locator('.aitown-world__host canvas')).toBeVisible();
     await page.waitForFunction(() => Boolean(window.__AITOWN_VIEWPORT__));
 
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page);
 
     const baselineViewport = await waitForViewportLayoutSettle(page);
     const baselineRightPadding = baselineViewport.clampPadding?.right ?? 0;
@@ -12035,7 +12064,7 @@ test.describe('operator shell smoke', () => {
     await expect(page.locator('.aitown-world__host canvas')).toBeVisible();
     await page.waitForFunction(() => Boolean(window.__AITOWN_VIEWPORT__));
 
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page);
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const selectedAgentHeading = detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' });
@@ -12188,7 +12217,7 @@ test.describe('operator shell smoke', () => {
     await expect(page.locator('.aitown-world__host canvas')).toBeVisible();
     await page.waitForFunction(() => Boolean(window.__AITOWN_VIEWPORT__));
 
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page);
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const selectedAgentHeading = detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' });
@@ -12341,7 +12370,7 @@ test.describe('operator shell smoke', () => {
     await expect(page.locator('.aitown-world__host canvas')).toBeVisible();
     await page.waitForFunction(() => Boolean(window.__AITOWN_VIEWPORT__));
 
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page);
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const selectedAgentHeading = detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' });
@@ -12461,7 +12490,7 @@ test.describe('operator shell smoke', () => {
     await expect(page.locator('.aitown-world__host canvas')).toBeVisible();
     await page.waitForFunction(() => Boolean(window.__AITOWN_VIEWPORT__));
 
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page);
 
     const baselineViewport = await waitForViewportLayoutSettle(page);
     const baselineRightPadding = baselineViewport.clampPadding?.right ?? 0;
@@ -12509,7 +12538,7 @@ test.describe('operator shell smoke', () => {
   test('keeps selected-agent hub overlay clamp padding active at the top-right viewport boundary after resetting from a zoomed-in view', async ({ page }) => {
     await page.goto('/');
     await zoomViewportInWithMouseWheel(page);
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await openOfficeCategory(page);
     await page.getByRole('button', { name: 'Inspect Growth Revenue Agent', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
 

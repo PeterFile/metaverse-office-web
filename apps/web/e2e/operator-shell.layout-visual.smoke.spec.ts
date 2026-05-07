@@ -248,10 +248,10 @@ test.describe('operator shell layout visual smoke', () => {
     await expect(worldHost).toBeVisible();
     await page.waitForFunction(() => Boolean(window.__AITOWN_VIEWPORT__));
 
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await page.getByRole('button', { name: 'Crew' }).click();
 
     const hub = page.getByRole('dialog', { name: 'Hub' });
-    const passiveTopline = page.locator('.aitown-panel__topline');
+    const passiveTopline = page.locator('.aitown-panel__chrome > .aitown-panel__hud-top > .aitown-panel__topline').first();
     await expect(hub).toBeVisible();
     await expect(passiveTopline).toBeVisible();
 
@@ -327,7 +327,7 @@ test.describe('operator shell layout visual smoke', () => {
     await expect(worldHost).toBeVisible();
     await page.waitForFunction(() => Boolean(window.__AITOWN_VIEWPORT__));
 
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await page.getByRole('button', { name: 'Queue' }).click();
 
     const hub = page.getByRole('dialog', { name: 'Hub' });
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
@@ -339,7 +339,6 @@ test.describe('operator shell layout visual smoke', () => {
     });
 
     await expect(hub).toBeVisible();
-    await expect(detailsPanel.getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
     await expect(activeQueueSection.getByRole('heading', { name: 'Active Queue' })).toBeVisible();
     await expect(firstActiveQueueAction).toBeVisible();
     await expect.poll(() => hub.evaluate((element) => element.scrollTop)).toBe(0);
@@ -356,7 +355,7 @@ test.describe('operator shell layout visual smoke', () => {
       'Hub sheet should leave the primary world drag lane visually clear'
     ).toBe(0);
 
-    await page.getByRole('button', { name: 'Close Hub' }).click();
+    await page.getByRole('button', { name: 'Close panel' }).click();
     await expect(hub).toHaveCount(0);
     await expectCanvasDragMovesViewport(page);
   });
@@ -378,7 +377,7 @@ test.describe('operator shell layout visual smoke', () => {
       initialOverflow.viewportWidth + 1
     );
 
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await page.getByRole('button', { name: 'Crew' }).click();
     const hub = page.getByRole('dialog', { name: 'Hub' });
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     await expect(hub).toBeVisible();
@@ -398,17 +397,17 @@ test.describe('operator shell layout visual smoke', () => {
     );
     expect(overflowingDetailItems).toEqual([]);
 
-    await page.getByRole('button', { name: 'Close Hub' }).click();
+    await page.getByRole('button', { name: 'Close panel' }).click();
     await expect(hub).toHaveCount(0);
 
-    const toolbar = page.locator('.aitown-panel__toolbar');
+    const toolbar = page.locator('.aitown-hub-category-bar');
     const statusLegend = page.locator('.aitown-status-legend');
     const watchOverlay = page.getByRole('region', { name: 'Selected watch links' });
     await expect(toolbar).toBeVisible();
     await expect(statusLegend).toBeVisible();
     await expect(watchOverlay).toBeVisible();
 
-    await expectLocatorInsideViewport(page, toolbar, 'mobile toolbar');
+    await expectLocatorInsideViewport(page, toolbar, 'mobile category menu');
     await expectLocatorInsideViewport(page, statusLegend, 'mobile status legend');
     await expectLocatorInsideViewport(page, watchOverlay, 'mobile selected-watch overlay');
 
@@ -509,7 +508,7 @@ test.describe('operator shell layout visual smoke', () => {
       'visible'
     );
 
-    await inspectPeek.getByRole('button', { name: 'Open selected agent in Hub' }).click();
+    await page.getByRole('button', { name: 'Crew' }).click();
     await expect(page.getByRole('dialog', { name: 'Hub' })).toBeVisible();
     await expect(page.getByRole('region', { name: 'Selected agent inspect peek' })).toHaveCount(0);
   });
@@ -521,7 +520,7 @@ test.describe('operator shell layout visual smoke', () => {
     await expect(worldHost).toBeVisible();
     await page.waitForFunction(() => Boolean(window.__AITOWN_VIEWPORT__));
 
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await page.getByRole('button', { name: 'Queue' }).click();
 
     const hub = page.getByRole('dialog', { name: 'Hub' });
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
@@ -530,7 +529,7 @@ test.describe('operator shell layout visual smoke', () => {
     });
 
     await expect(hub).toBeVisible();
-    await expect(detailsPanel.getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
+    await expect(detailsPanel.getByRole('heading', { name: 'Active Queue' })).toBeVisible();
     await expect(page.getByRole('region', { name: 'Hub focus ribbon' })).toHaveCount(0);
     await expectLocatorWithinScrollport(
       activeQueueSection.getByRole('heading', { name: 'Active Queue' }),
@@ -600,14 +599,14 @@ test.describe('operator shell layout visual smoke', () => {
     await expect(focusRibbon).toBeVisible();
     await expectLocatorInsideRect(focusRibbon, hub, 'Hub focus ribbon after no-op deck scroll');
 
-    await page.getByRole('button', { name: 'Close Hub' }).click();
+    await page.getByRole('button', { name: 'Close panel' }).click();
     await expect(hub).toHaveCount(0);
     await expect(page.getByRole('region', { name: 'Hub focus ribbon' })).toHaveCount(0);
     const inspectPeek = page.getByRole('region', { name: 'Selected agent inspect peek' });
     await expect(inspectPeek).toBeVisible();
     await expect(inspectPeek.getByText('Growth Revenue Agent')).toBeVisible();
 
-    await inspectPeek.getByRole('button', { name: 'Open selected agent in Hub' }).click();
+    await page.getByRole('button', { name: 'Crew' }).click();
     await expect(page.getByRole('region', { name: 'Selected agent inspect peek' })).toHaveCount(0);
     await expect(page.getByRole('dialog', { name: 'Hub' })).toBeVisible();
     await expect(page.getByRole('region', { name: 'Hub focus ribbon' })).toBeVisible();
@@ -622,7 +621,7 @@ test.describe('operator shell layout visual smoke', () => {
     await expect(worldHost).toBeVisible();
     await page.waitForFunction(() => Boolean(window.__AITOWN_VIEWPORT__));
 
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await page.getByRole('button', { name: 'Queue' }).click();
 
     const hub = page.getByRole('dialog', { name: 'Hub' });
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
@@ -631,7 +630,6 @@ test.describe('operator shell layout visual smoke', () => {
     });
 
     await expect(hub).toBeVisible();
-    await expect(detailsPanel.getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
     await expect(activeQueueSection.getByRole('heading', { name: 'Active Queue' })).toBeVisible();
     await expect(page.getByRole('tablist', { name: 'Selected agent drilldown' })).toHaveCount(0);
 
@@ -717,13 +715,13 @@ test.describe('operator shell layout visual smoke', () => {
     await expect(replayPanel.getByRole('heading', { name: 'Timeline Replay' })).toBeVisible();
     await expect(replayPanel.getByRole('heading', { name: 'Correlation Drilldown' })).toBeVisible();
 
-    await page.getByRole('button', { name: 'Close Hub' }).click();
+    await page.getByRole('button', { name: 'Close panel' }).click();
     await expect(hub).toHaveCount(0);
     await expect(page.getByRole('tablist', { name: 'Selected agent drilldown' })).toHaveCount(0);
     const inspectPeek = page.getByRole('region', { name: 'Selected agent inspect peek' });
     await expect(inspectPeek).toBeVisible();
 
-    await inspectPeek.getByRole('button', { name: 'Open selected agent in Hub' }).click();
+    await page.getByRole('button', { name: 'Crew' }).click();
     await expect(page.getByRole('dialog', { name: 'Hub' })).toBeVisible();
     await expect(page.getByRole('tablist', { name: 'Selected agent drilldown' })).toBeVisible();
     await expect(page.getByRole('tab', { name: 'Now' })).toHaveAttribute('aria-selected', 'true');

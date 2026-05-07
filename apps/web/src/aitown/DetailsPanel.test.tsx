@@ -640,6 +640,7 @@ function buildMemoryArtifacts(): MemoryArtifactIndex {
 
 function buildProps(overrides: Partial<DetailsPanelProps> = {}): DetailsPanelProps {
   return {
+    activeHubCategory: 'crew',
     collectorSnapshot: buildCollectorSnapshot(),
     collectorSnapshotError: null,
     collectorSnapshotState: 'ready',
@@ -764,6 +765,7 @@ describe('DetailsPanel collector-derived peer-watch provenance', () => {
     const { unmount } = render(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'supervision',
           selectedAgent: null,
           selectedCorrelationId: null,
           selectedOperation: null,
@@ -789,6 +791,7 @@ describe('DetailsPanel collector-derived peer-watch provenance', () => {
     const supervisionHistoryRender = render(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'supervision',
           selectedAgentSupervisionHistory: {
             items: [collectorAlert]
           }
@@ -815,7 +818,7 @@ describe('DetailsPanel collector-derived peer-watch provenance', () => {
       }
     };
 
-    render(<DetailsPanel {...buildProps({ workflow })} />);
+    render(<DetailsPanel {...buildProps({ activeHubCategory: 'supervision',  workflow })} />);
 
     const workflowSection = screen.getByRole('heading', { name: 'Workflow' }).closest('section');
     expect(workflowSection).not.toBeNull();
@@ -845,6 +848,7 @@ describe('DetailsPanel collector-derived peer-watch provenance', () => {
     render(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'supervision',
           selectedAgent: null,
           selectedCorrelationId: null,
           selectedOperation: null,
@@ -873,6 +877,7 @@ describe('DetailsPanel incident-feed correlation gating', () => {
     render(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'evidence',
           incidentFeed: {
             items: [
               {
@@ -1253,6 +1258,7 @@ describe('DetailsPanel accountability signals', () => {
     render(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'supervision',
           onSelectAgent,
           selectedAgent: null,
           selectedCorrelationId: 'corr-app-secondary',
@@ -1350,6 +1356,7 @@ describe('DetailsPanel accountability signals', () => {
     render(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'queue',
           onSelectCorrelation,
           onSelectOperation,
           operations,
@@ -1400,6 +1407,7 @@ describe('DetailsPanel accountability signals', () => {
     render(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'queue',
           onSelectCorrelation,
           selectedAgent: null,
           selectedCorrelationId: 'corr-app-review',
@@ -1430,6 +1438,7 @@ describe('DetailsPanel accountability signals', () => {
     render(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'supervision',
           onSelectCorrelation,
           selectedAgent: null,
           selectedCorrelationId: 'corr-app-review',
@@ -1485,6 +1494,7 @@ describe('DetailsPanel accountability signals', () => {
     render(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'supervision',
           onSelectAgent,
           selectedAgent: null,
           selectedCorrelationId: null,
@@ -1550,6 +1560,7 @@ describe('DetailsPanel accountability signals', () => {
     render(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'supervision',
           onSelectCrewOpenSupervisionSeverity,
           selectedAgent: null,
           selectedCorrelationId: null,
@@ -1603,6 +1614,7 @@ describe('DetailsPanel accountability signals', () => {
 
   it('renders open supervision alerts lifecycle copy for the selected severity', () => {
     const props = buildProps({
+      activeHubCategory: 'supervision',
       selectedAgent: null,
       selectedCorrelationId: null,
       selectedCrewOpenSupervisionSeverity: 'orange',
@@ -1723,6 +1735,7 @@ describe('DetailsPanel accountability signals', () => {
     const { rerender } = render(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'queue',
           onSelectAgent,
           operations,
           selectedAgent: null,
@@ -1773,6 +1786,7 @@ describe('DetailsPanel accountability signals', () => {
     rerender(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'queue',
           onSelectAgent,
           operations,
           selectedAgent: null,
@@ -1886,6 +1900,7 @@ describe('DetailsPanel accountability signals', () => {
     const { rerender } = render(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'queue',
           onSelectAgent,
           operations,
           selectedAgent: null,
@@ -1941,6 +1956,7 @@ describe('DetailsPanel accountability signals', () => {
     rerender(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'queue',
           onSelectAgent,
           operations,
           selectedAgent: null,
@@ -2049,6 +2065,7 @@ describe('DetailsPanel accountability signals', () => {
     const { rerender } = render(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'queue',
           onSelectAgent,
           onSelectOperation,
           operations,
@@ -2267,6 +2284,7 @@ describe('DetailsPanel accountability signals', () => {
     const { rerender } = render(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'queue',
           operations: null,
           operationsError: null,
           operationsState: 'loading',
@@ -2285,6 +2303,7 @@ describe('DetailsPanel accountability signals', () => {
     rerender(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'queue',
           operations: null,
           operationsError: 'queue request failed',
           operationsState: 'error',
@@ -2305,6 +2324,7 @@ describe('DetailsPanel accountability signals', () => {
     rerender(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'queue',
           operations: buildOperations(),
           operationsError: 'queue refresh failed',
           operationsState: 'ready',
@@ -2325,6 +2345,7 @@ describe('DetailsPanel accountability signals', () => {
     rerender(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'queue',
           operations: emptyOperations,
           operationsError: null,
           operationsState: 'ready',
@@ -2393,6 +2414,7 @@ describe('DetailsPanel accountability signals', () => {
     render(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'queue',
           operations,
           selectedAgent: null,
           selectedCorrelationId: null,
@@ -2486,6 +2508,7 @@ describe('DetailsPanel accountability signals', () => {
     render(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'queue',
           operations,
           selectedAgent: null,
           selectedCorrelationId: null,
@@ -2515,6 +2538,7 @@ describe('DetailsPanel accountability signals', () => {
     render(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'queue',
           onSelectOperationsState,
           operationsStateBuckets: {
             blocked: 1,
@@ -2552,6 +2576,7 @@ describe('DetailsPanel accountability signals', () => {
     render(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'queue',
           onSelectOperationsSeverity,
           operationsSeverityBuckets: {
             normal: 0,
@@ -2591,6 +2616,7 @@ describe('DetailsPanel accountability signals', () => {
     render(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'replay',
           onSelectCrewReplaySeverity,
           selectedAgent: null,
           selectedCorrelationId: null,
@@ -2630,6 +2656,7 @@ describe('DetailsPanel accountability signals', () => {
 
   it('renders crew-overview replay lifecycle copy that stays scoped to the selected severity and manual correlation', () => {
     const props = buildProps({
+      activeHubCategory: 'replay',
       selectedAgent: null,
       selectedCorrelationId: 'corr-app-secondary',
       selectedCrewReplaySeverity: 'orange',
@@ -2688,6 +2715,7 @@ describe('DetailsPanel accountability signals', () => {
     render(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'replay',
           selectedAgent: null,
           selectedCorrelationId: null,
           selectedOperation: null,
@@ -3151,11 +3179,12 @@ describe('DetailsPanel accountability signals', () => {
     expect(onSelectCorrelation).not.toHaveBeenCalled();
   });
 
-  it('jumps from matching active-queue evidence refs to shared memory while leaving non-matching refs as plain text and showing explicit fallbacks', async () => {
+  it('jumps active-queue evidence refs to shared memory exact focus without changing scope', async () => {
     const user = userEvent.setup();
     const onSelectAgent = vi.fn();
     const onSelectCorrelation = vi.fn();
     const onSelectOperation = vi.fn();
+    const onFocusSharedMemoryArtifact = vi.fn();
     const operations: OfficeOperations = {
       generated_at: '2026-03-16T09:00:00.000Z',
       summary: {
@@ -3235,9 +3264,11 @@ describe('DetailsPanel accountability signals', () => {
     render(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'queue',
           memoryArtifacts,
           onSelectAgent,
           onSelectCorrelation,
+          onFocusSharedMemoryArtifact,
           onSelectOperation,
           operations,
           selectedAgent: null,
@@ -3249,9 +3280,7 @@ describe('DetailsPanel accountability signals', () => {
     );
 
     const queueSection = screen.getByRole('heading', { name: 'Active Queue' }).closest('section');
-    const sharedMemorySection = screen.getByRole('heading', { name: 'Shared Memory' }).closest('section');
     expect(queueSection).not.toBeNull();
-    expect(sharedMemorySection).not.toBeNull();
 
     const appRecord = within(queueSection!)
       .getByRole('button', { name: 'Inspect App Engineering Agent from active queue' })
@@ -3259,10 +3288,8 @@ describe('DetailsPanel accountability signals', () => {
     const teamLeadRecord = within(queueSection!)
       .getByRole('button', { name: 'Inspect Team Lead from active queue' })
       .closest('li');
-    const artifactRecord = within(sharedMemorySection!).getByText('Ref · /evidence/review.md').closest('li');
     expect(appRecord).not.toBeNull();
     expect(teamLeadRecord).not.toBeNull();
-    expect(artifactRecord).not.toBeNull();
 
     expect(appRecord!).toHaveTextContent(
       'Evidence · /evidence/review.md, /evidence/missing.md'
@@ -3274,10 +3301,10 @@ describe('DetailsPanel accountability signals', () => {
       })
     ).toHaveTextContent('/evidence/review.md');
     expect(
-      within(appRecord!).queryByRole('button', {
+      within(appRecord!).getByRole('button', {
         name: 'Jump to shared memory artifact /evidence/missing.md'
       })
-    ).not.toBeInTheDocument();
+    ).toHaveTextContent('/evidence/missing.md');
 
     await user.click(
       within(appRecord!).getByRole('button', {
@@ -3285,7 +3312,7 @@ describe('DetailsPanel accountability signals', () => {
       })
     );
 
-    expect(document.activeElement).toBe(artifactRecord);
+    expect(onFocusSharedMemoryArtifact).toHaveBeenCalledWith('/evidence/review.md');
     expect(onSelectAgent).not.toHaveBeenCalled();
     expect(onSelectCorrelation).not.toHaveBeenCalled();
     expect(onSelectOperation).not.toHaveBeenCalled();
@@ -3295,6 +3322,7 @@ describe('DetailsPanel accountability signals', () => {
     render(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'memory',
           focusedSharedMemoryArtifactRef: 'artifact/review-note',
           memoryArtifacts: {
             ...buildMemoryArtifacts(),
@@ -3381,6 +3409,7 @@ describe('DetailsPanel accountability signals', () => {
     render(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'memory',
           focusedSharedMemoryArtifactRef: focusedArtifactRef,
           selectedAgent: null,
           selectedOperation: null,
@@ -3774,6 +3803,7 @@ describe('DetailsPanel accountability signals', () => {
     render(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'memory',
           focusedSharedMemoryArtifactRef: focusedArtifactRef,
           collectorSnapshot: null,
           correlation: null,
@@ -3959,6 +3989,7 @@ describe('DetailsPanel accountability signals', () => {
     render(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'memory',
           focusedSharedMemoryArtifactRef: focusedArtifactRef,
           collectorSnapshot,
           correlation: null,
@@ -4009,6 +4040,7 @@ describe('DetailsPanel accountability signals', () => {
     render(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'queue',
           operations: {
             ...buildOperations(),
             summary: {
@@ -4047,6 +4079,7 @@ describe('DetailsPanel accountability signals', () => {
     render(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'queue',
           operationsStateBuckets: {},
           operationsStateBucketsState: 'loading',
           selectedAgent: null,
@@ -4072,6 +4105,7 @@ describe('DetailsPanel accountability signals', () => {
     render(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'queue',
           operationsStateBuckets: {},
           operationsStateBucketsState: 'ready',
           selectedAgent: null,
@@ -4100,6 +4134,7 @@ describe('DetailsPanel accountability signals', () => {
     render(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'evidence',
           incidentFeed: {
             items: [
               {
@@ -4148,10 +4183,11 @@ describe('DetailsPanel accountability signals', () => {
     expect(onSelectAgent).toHaveBeenCalledWith('team-lead', 'corr-app-review');
   });
 
-  it('jumps from matching crew-overview incident feed evidence refs to shared memory while leaving non-matching refs as plain text', async () => {
+  it('jumps crew-overview incident feed evidence refs to shared memory exact focus without changing scope', async () => {
     const user = userEvent.setup();
     const onSelectAgent = vi.fn();
     const onSelectCorrelation = vi.fn();
+    const onFocusSharedMemoryArtifact = vi.fn();
     const memoryArtifacts: MemoryArtifactIndex = {
       generated_at: '2026-03-16T09:00:00.000Z',
       items: [
@@ -4175,6 +4211,7 @@ describe('DetailsPanel accountability signals', () => {
     render(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'evidence',
           incidentFeed: {
             items: [
               {
@@ -4196,6 +4233,7 @@ describe('DetailsPanel accountability signals', () => {
           memoryArtifacts,
           onSelectAgent,
           onSelectCorrelation,
+          onFocusSharedMemoryArtifact,
           selectedAgent: null,
           selectedOperation: null
         })}
@@ -4203,14 +4241,10 @@ describe('DetailsPanel accountability signals', () => {
     );
 
     const incidentSection = screen.getByRole('heading', { name: 'Incident Feed' }).closest('section');
-    const sharedMemorySection = screen.getByRole('heading', { name: 'Shared Memory' }).closest('section');
     expect(incidentSection).not.toBeNull();
-    expect(sharedMemorySection).not.toBeNull();
 
     const incidentRecord = within(incidentSection!).getByText('Lead is still waiting on workflow evidence').closest('li');
-    const artifactRecord = within(sharedMemorySection!).getByText('Ref · /evidence/review.md').closest('li');
     expect(incidentRecord).not.toBeNull();
-    expect(artifactRecord).not.toBeNull();
     expect(incidentRecord).toHaveTextContent('Evidence · /evidence/review.md, /evidence/missing.md');
     expect(
       within(incidentRecord!).getByRole('button', {
@@ -4218,10 +4252,10 @@ describe('DetailsPanel accountability signals', () => {
       })
     ).toHaveTextContent('/evidence/review.md');
     expect(
-      within(incidentRecord!).queryByRole('button', {
+      within(incidentRecord!).getByRole('button', {
         name: 'Jump to shared memory artifact /evidence/missing.md'
       })
-    ).not.toBeInTheDocument();
+    ).toHaveTextContent('/evidence/missing.md');
 
     await user.click(
       within(incidentRecord!).getByRole('button', {
@@ -4229,7 +4263,7 @@ describe('DetailsPanel accountability signals', () => {
       })
     );
 
-    expect(document.activeElement).toBe(artifactRecord);
+    expect(onFocusSharedMemoryArtifact).toHaveBeenCalledWith('/evidence/review.md');
     expect(onSelectAgent).not.toHaveBeenCalled();
     expect(onSelectCorrelation).not.toHaveBeenCalled();
   });
@@ -4325,6 +4359,7 @@ describe('DetailsPanel accountability signals', () => {
     render(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'evidence',
           incidentFeed: {
             items: [
               {
@@ -4958,6 +4993,7 @@ describe('DetailsPanel accountability signals', () => {
     render(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'replay',
           selectedAgent: null,
           selectedOperation: null,
           timelineReplay: {
@@ -5070,6 +5106,7 @@ describe('DetailsPanel accountability signals', () => {
     render(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'replay',
           onFocusWorldZone,
           onSelectAgent,
           onSelectCorrelation,
@@ -5164,6 +5201,7 @@ describe('DetailsPanel accountability signals', () => {
     render(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'replay',
           onSelectAgent,
           selectedAgent: null,
           selectedOperation: null,
@@ -5273,6 +5311,7 @@ describe('DetailsPanel accountability signals', () => {
     render(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'replay',
           onSelectAgent,
           selectedAgent: null,
           selectedOperation: null,
@@ -5322,6 +5361,7 @@ describe('DetailsPanel accountability signals', () => {
     render(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'replay',
           onSelectCorrelation,
           selectedAgent: null,
           selectedOperation: null,
@@ -5370,6 +5410,7 @@ describe('DetailsPanel accountability signals', () => {
     render(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'replay',
           onSelectAgent,
           selectedAgent: null,
           selectedOperation: null,
@@ -5453,10 +5494,11 @@ describe('DetailsPanel accountability signals', () => {
     expect(onSelectAgent).toHaveBeenCalledWith('team-lead', 'corr-app-secondary');
   });
 
-  it('jumps from matching timeline-replay evidence refs to shared memory while leaving non-matching refs as plain text', async () => {
+  it('jumps timeline-replay evidence refs to shared memory exact focus without changing scope', async () => {
     const user = userEvent.setup();
     const onSelectAgent = vi.fn();
     const onSelectCorrelation = vi.fn();
+    const onFocusSharedMemoryArtifact = vi.fn();
     const memoryArtifacts: MemoryArtifactIndex = {
       generated_at: '2026-03-16T09:00:00.000Z',
       items: [
@@ -5481,9 +5523,11 @@ describe('DetailsPanel accountability signals', () => {
     render(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'replay',
           memoryArtifacts,
           onSelectAgent,
           onSelectCorrelation,
+          onFocusSharedMemoryArtifact,
           selectedAgent: null,
           selectedOperation: null,
           timelineReplay: {
@@ -5510,18 +5554,14 @@ describe('DetailsPanel accountability signals', () => {
     );
 
     const replaySection = screen.getByRole('heading', { name: 'Timeline Replay' }).closest('section');
-    const sharedMemorySection = screen.getByRole('heading', { name: 'Shared Memory' }).closest('section');
     expect(replaySection).not.toBeNull();
-    expect(sharedMemorySection).not.toBeNull();
 
     const replayRecord = within(replaySection!)
       .getByRole('button', {
         name: 'Jump to shared memory artifact /evidence/replay.md'
       })
       .closest('li');
-    const artifactRecord = within(sharedMemorySection!).getByText('Ref · /evidence/replay.md').closest('li');
     expect(replayRecord).not.toBeNull();
-    expect(artifactRecord).not.toBeNull();
     expect(replayRecord).toHaveTextContent('Evidence · /evidence/replay.md, /evidence/missing.md');
     expect(
       within(replayRecord!).getByRole('button', {
@@ -5529,10 +5569,10 @@ describe('DetailsPanel accountability signals', () => {
       })
     ).toHaveTextContent('/evidence/replay.md');
     expect(
-      within(replayRecord!).queryByRole('button', {
+      within(replayRecord!).getByRole('button', {
         name: 'Jump to shared memory artifact /evidence/missing.md'
       })
-    ).not.toBeInTheDocument();
+    ).toHaveTextContent('/evidence/missing.md');
 
     await user.click(
       within(replayRecord!).getByRole('button', {
@@ -5540,7 +5580,7 @@ describe('DetailsPanel accountability signals', () => {
       })
     );
 
-    expect(document.activeElement).toBe(artifactRecord);
+    expect(onFocusSharedMemoryArtifact).toHaveBeenCalledWith('/evidence/replay.md');
     expect(onSelectAgent).not.toHaveBeenCalled();
     expect(onSelectCorrelation).not.toHaveBeenCalled();
   });
@@ -6545,6 +6585,7 @@ describe('DetailsPanel accountability signals', () => {
     render(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'replay',
           correlation,
           onSelectAgent,
           selectedAgent: null,
@@ -6694,6 +6735,7 @@ describe('DetailsPanel accountability signals', () => {
     render(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'replay',
           correlation,
           onSelectAgent,
           selectedAgent: null,
@@ -7099,6 +7141,7 @@ describe('DetailsPanel accountability signals', () => {
     const { rerender } = render(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'supervision',
           memoryArtifacts,
           onSelectAgent,
           onSelectCorrelation,
@@ -7127,7 +7170,7 @@ describe('DetailsPanel accountability signals', () => {
       })
     ).not.toBeInTheDocument();
 
-    rerender(<DetailsPanel {...buildProps({ memoryArtifacts, onSelectAgent, onSelectCorrelation })} />);
+    rerender(<DetailsPanel {...buildProps({ activeHubCategory: 'supervision',  memoryArtifacts, onSelectAgent, onSelectCorrelation })} />);
 
     const collectorObservationSection = screen.getByRole('heading', { name: 'Collector Observation' }).closest('section');
     const sharedMemorySection = screen.getByRole('heading', { name: 'Shared Memory' }).closest('section');
@@ -7163,8 +7206,9 @@ describe('DetailsPanel accountability signals', () => {
     expect(onSelectCorrelation).not.toHaveBeenCalled();
   });
 
-  it('renders crew-overview collector shared snapshot artifact rows as shared-memory jumps and locally focuses matching shared-memory artifacts', async () => {
+  it('renders crew-overview collector shared snapshot artifact rows as shared-memory jumps', async () => {
     const user = userEvent.setup();
+    const onFocusSharedMemoryArtifact = vi.fn();
     const sharedArtifactRef = '/evidence/collector-shared.md';
     const collectorSnapshot: CollectorSnapshot = {
       ...buildCollectorSnapshot(),
@@ -7205,8 +7249,10 @@ describe('DetailsPanel accountability signals', () => {
     render(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'supervision',
           collectorSnapshot,
           memoryArtifacts,
+          onFocusSharedMemoryArtifact,
           selectedAgent: null,
           selectedCorrelationId: null,
           selectedOperation: null,
@@ -7217,17 +7263,13 @@ describe('DetailsPanel accountability signals', () => {
     );
 
     const collectorSection = screen.getByRole('heading', { name: 'Collector Supervision' }).closest('section');
-    const memorySection = screen.getByRole('heading', { name: 'Shared Memory' }).closest('section');
     expect(collectorSection).not.toBeNull();
-    expect(memorySection).not.toBeNull();
     expect(
       within(collectorSection!).getByText('Shared snapshot artifacts · 1 shared artifact in latest collector snapshot')
     ).toBeVisible();
 
     const sharedArtifactRecord = within(collectorSection!).getByText('Agent count · 2').closest('li');
-    const focusedArtifactRecord = within(memorySection!).getByText(`Ref · ${sharedArtifactRef}`).closest('li');
     expect(sharedArtifactRecord).not.toBeNull();
-    expect(focusedArtifactRecord).not.toBeNull();
     expect(
       within(sharedArtifactRecord!).getByRole('button', {
         name: `Jump to shared memory artifact ${sharedArtifactRef}`
@@ -7244,7 +7286,7 @@ describe('DetailsPanel accountability signals', () => {
       })
     );
 
-    expect(document.activeElement).toBe(focusedArtifactRecord);
+    expect(onFocusSharedMemoryArtifact).toHaveBeenCalledWith(sharedArtifactRef);
   });
 
   it('shows explicit crew-overview collector shared snapshot artifact loading, empty, and degraded states', () => {
@@ -7259,6 +7301,7 @@ describe('DetailsPanel accountability signals', () => {
     const { rerender } = render(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'supervision',
           ...baseProps,
           collectorSnapshot: null,
           collectorSnapshotError: null,
@@ -7274,6 +7317,7 @@ describe('DetailsPanel accountability signals', () => {
     rerender(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'supervision',
           ...baseProps,
           collectorSnapshot: null,
           collectorSnapshotError: 'collector snapshot request failed',
@@ -7289,6 +7333,7 @@ describe('DetailsPanel accountability signals', () => {
     rerender(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'supervision',
           ...baseProps,
           collectorSnapshot: buildCollectorSnapshot(),
           collectorSnapshotError: null,
@@ -7304,6 +7349,7 @@ describe('DetailsPanel accountability signals', () => {
     rerender(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'supervision',
           ...baseProps,
           collectorSnapshot: {
             ...buildCollectorSnapshot(),
@@ -7393,6 +7439,7 @@ describe('DetailsPanel accountability signals', () => {
     render(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'supervision',
           collectorSnapshot,
           selectedAgent: null,
           selectedCorrelationId: null,
@@ -7424,6 +7471,7 @@ describe('DetailsPanel accountability signals', () => {
     render(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'supervision',
           selectedAgent: null,
           selectedCorrelationId: null,
           selectedOperation: null,
@@ -7449,6 +7497,7 @@ describe('DetailsPanel accountability signals', () => {
     const { rerender } = render(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'supervision',
           onSelectAgent,
           selectedAgent: null,
           selectedCorrelationId: 'corr-app-secondary',
@@ -7482,6 +7531,7 @@ describe('DetailsPanel accountability signals', () => {
     rerender(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'supervision',
           onSelectAgent,
           selectedAgent: null,
           selectedCorrelationId: null,
@@ -7508,6 +7558,7 @@ describe('DetailsPanel accountability signals', () => {
     const { rerender } = render(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'supervision',
           onSelectAgent,
           selectedAgent: null,
           selectedCorrelationId: 'corr-app-secondary',
@@ -7541,6 +7592,7 @@ describe('DetailsPanel accountability signals', () => {
     rerender(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'supervision',
           onSelectAgent,
           selectedAgent: null,
           selectedCorrelationId: null,
@@ -7565,6 +7617,7 @@ describe('DetailsPanel accountability signals', () => {
     const { rerender } = render(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'supervision',
           onSelectAgent,
           selectedAgent: null,
           selectedCorrelationId: 'corr-app-secondary',
@@ -7589,6 +7642,7 @@ describe('DetailsPanel accountability signals', () => {
     rerender(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'supervision',
           onSelectAgent,
           selectedAgent: null,
           selectedCorrelationId: null,
@@ -7614,6 +7668,7 @@ describe('DetailsPanel accountability signals', () => {
     const { rerender } = render(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'supervision',
           collectorSnapshot: {
             ...baseCollectorSnapshot,
             actor_id: 'team-lead'
@@ -7642,6 +7697,7 @@ describe('DetailsPanel accountability signals', () => {
     rerender(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'supervision',
           collectorSnapshot: {
             ...baseCollectorSnapshot,
             actor_id: 'team-lead'
@@ -7670,6 +7726,7 @@ describe('DetailsPanel accountability signals', () => {
     const { rerender } = render(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'supervision',
           selectedAgent: null,
           selectedOperation: null,
           collectorSnapshot: {
@@ -7701,6 +7758,7 @@ describe('DetailsPanel accountability signals', () => {
     rerender(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'supervision',
           selectedAgent: null,
           selectedOperation: null,
           collectorSnapshot: {
@@ -7737,6 +7795,7 @@ describe('DetailsPanel accountability signals', () => {
     render(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'supervision',
           selectedAgent: null,
           selectedOperation: null,
           collectorSnapshot: {
@@ -7774,6 +7833,7 @@ describe('DetailsPanel accountability signals', () => {
     const { rerender } = render(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'supervision',
           selectedAgent: null,
           selectedOperation: null,
           collectorSnapshot: {
@@ -7799,6 +7859,7 @@ describe('DetailsPanel accountability signals', () => {
     rerender(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'supervision',
           selectedAgent: null,
           selectedOperation: null,
           collectorSnapshot: {
@@ -7823,6 +7884,7 @@ describe('DetailsPanel accountability signals', () => {
     const { rerender } = render(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'supervision',
           selectedAgent: null,
           selectedOperation: null,
           collectorSnapshot: {
@@ -7854,6 +7916,7 @@ describe('DetailsPanel accountability signals', () => {
     rerender(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'supervision',
           selectedAgent: null,
           selectedOperation: null,
           collectorSnapshot: {
@@ -7885,6 +7948,7 @@ describe('DetailsPanel accountability signals', () => {
     rerender(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'supervision',
           selectedAgent: null,
           selectedOperation: null,
           collectorSnapshot: {
@@ -7920,6 +7984,7 @@ describe('DetailsPanel accountability signals', () => {
     render(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'supervision',
           selectedAgent: null,
           selectedCorrelationId: null,
           selectedOperation: null,
@@ -7978,6 +8043,7 @@ describe('DetailsPanel accountability signals', () => {
     render(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'supervision',
           selectedAgent: null,
           selectedCorrelationId: null,
           selectedOperation: null,
@@ -8462,6 +8528,7 @@ describe('DetailsPanel accountability signals', () => {
     const { unmount } = render(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'supervision',
           collectorSnapshot,
           selectedAgent: null,
           selectedCorrelationId: null,
@@ -8491,6 +8558,7 @@ describe('DetailsPanel accountability signals', () => {
     render(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'supervision',
           collectorSnapshot
         })}
       />
@@ -8552,6 +8620,7 @@ describe('DetailsPanel accountability signals', () => {
     const { unmount } = render(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'supervision',
           collectorSnapshot,
           selectedAgent: null,
           selectedCorrelationId: null,
@@ -8574,6 +8643,7 @@ describe('DetailsPanel accountability signals', () => {
     render(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'supervision',
           collectorSnapshot
         })}
       />
@@ -8587,10 +8657,11 @@ describe('DetailsPanel accountability signals', () => {
     expect(within(collectorObservationSection!).getByText('Tmux preview · None')).toBeVisible();
   });
 
-  it('renders matching collector workspace previews as shared-memory jumps while keeping non-matching previews as plain text', async () => {
+  it('renders matching collector workspace previews as shared-memory jumps without changing scope', async () => {
     const user = userEvent.setup();
     const onSelectAgent = vi.fn();
     const onSelectCorrelation = vi.fn();
+    const onFocusSharedMemoryArtifact = vi.fn();
     const baseCollectorSnapshot = buildCollectorSnapshot();
     const baseCollectorItem = baseCollectorSnapshot.items[0];
     const collectorSnapshot: CollectorSnapshot = {
@@ -8639,6 +8710,7 @@ describe('DetailsPanel accountability signals', () => {
     const { unmount } = render(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'supervision',
           collectorSnapshot,
           memoryArtifacts,
           selectedAgent: null,
@@ -8647,20 +8719,14 @@ describe('DetailsPanel accountability signals', () => {
           workflow: null,
           correlation: null,
           onSelectAgent,
-          onSelectCorrelation
+          onSelectCorrelation,
+          onFocusSharedMemoryArtifact
         })}
       />
     );
 
     const collectorSupervisionSection = screen.getByRole('heading', { name: 'Collector Supervision' }).closest('section');
-    const sharedMemorySection = screen.getByRole('heading', { name: 'Shared Memory' }).closest('section');
     expect(collectorSupervisionSection).not.toBeNull();
-    expect(sharedMemorySection).not.toBeNull();
-
-    const crewOverviewArtifactRecord = within(sharedMemorySection!).getByText(
-      'Ref · /workspace/app-engineering/src/collector-preview.ts'
-    ).closest('li');
-    expect(crewOverviewArtifactRecord).not.toBeNull();
     expect(
       within(collectorSupervisionSection!).getByRole('button', {
         name: 'Jump to shared memory artifact /workspace/app-engineering/src/collector-preview.ts collector-preview.ts · 2026-03-16T08:58:45.000Z'
@@ -8681,27 +8747,26 @@ describe('DetailsPanel accountability signals', () => {
       })
     );
 
-    expect(document.activeElement).toBe(crewOverviewArtifactRecord);
+    expect(onFocusSharedMemoryArtifact).toHaveBeenCalledWith('/workspace/app-engineering/src/collector-preview.ts');
 
+    onFocusSharedMemoryArtifact.mockClear();
     unmount();
 
     render(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'supervision',
           collectorSnapshot,
           memoryArtifacts,
           onSelectAgent,
-          onSelectCorrelation
+          onSelectCorrelation,
+          onFocusSharedMemoryArtifact
         })}
       />
     );
 
     const collectorObservationSection = screen.getByRole('heading', { name: 'Collector Observation' }).closest('section');
-    const selectedArtifactRecord = within(screen.getByRole('heading', { name: 'Shared Memory' }).closest('section')!).getByText(
-      'Ref · /workspace/app-engineering/src/collector-preview.ts'
-    ).closest('li');
     expect(collectorObservationSection).not.toBeNull();
-    expect(selectedArtifactRecord).not.toBeNull();
     expect(
       within(collectorObservationSection!).getByRole('button', {
         name: 'Jump to shared memory artifact /workspace/app-engineering/src/collector-preview.ts collector-preview.ts · 2026-03-16T08:58:45.000Z'
@@ -8722,7 +8787,7 @@ describe('DetailsPanel accountability signals', () => {
       })
     );
 
-    expect(document.activeElement).toBe(selectedArtifactRecord);
+    expect(onFocusSharedMemoryArtifact).toHaveBeenCalledWith('/workspace/app-engineering/src/collector-preview.ts');
     expect(onSelectAgent).not.toHaveBeenCalled();
     expect(onSelectCorrelation).not.toHaveBeenCalled();
   });
@@ -8731,6 +8796,7 @@ describe('DetailsPanel accountability signals', () => {
     const user = userEvent.setup();
     const onSelectAgent = vi.fn();
     const onSelectCorrelation = vi.fn();
+    const onFocusSharedMemoryArtifact = vi.fn();
     const tmuxArtifactRef = 'tmux://5-web3-app-engineering/0.1';
     const tmuxPreviewLabel = 'pnpm test · 2026-03-16T08:58:30.000Z';
     const baseCollectorSnapshot = buildCollectorSnapshot();
@@ -8792,6 +8858,7 @@ describe('DetailsPanel accountability signals', () => {
     const { unmount } = render(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'supervision',
           collectorSnapshot,
           memoryArtifacts,
           selectedAgent: null,
@@ -8800,18 +8867,14 @@ describe('DetailsPanel accountability signals', () => {
           workflow: null,
           correlation: null,
           onSelectAgent,
-          onSelectCorrelation
+          onSelectCorrelation,
+          onFocusSharedMemoryArtifact
         })}
       />
     );
 
     const collectorSupervisionSection = screen.getByRole('heading', { name: 'Collector Supervision' }).closest('section');
-    const sharedMemorySection = screen.getByRole('heading', { name: 'Shared Memory' }).closest('section');
     expect(collectorSupervisionSection).not.toBeNull();
-    expect(sharedMemorySection).not.toBeNull();
-
-    const crewOverviewArtifactRecord = within(sharedMemorySection!).getByText(`Ref · ${tmuxArtifactRef}`).closest('li');
-    expect(crewOverviewArtifactRecord).not.toBeNull();
     expect(
       within(collectorSupervisionSection!).getByRole('button', {
         name: `Jump to shared memory artifact ${tmuxArtifactRef} ${tmuxPreviewLabel}`
@@ -8825,29 +8888,29 @@ describe('DetailsPanel accountability signals', () => {
       })
     );
 
-    expect(document.activeElement).toBe(crewOverviewArtifactRecord);
+    expect(onFocusSharedMemoryArtifact).toHaveBeenCalledWith(tmuxArtifactRef);
     expect(onSelectAgent).not.toHaveBeenCalled();
     expect(onSelectCorrelation).not.toHaveBeenCalled();
+
+    onFocusSharedMemoryArtifact.mockClear();
 
     unmount();
 
     render(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'supervision',
           collectorSnapshot,
           memoryArtifacts,
           onSelectAgent,
-          onSelectCorrelation
+          onSelectCorrelation,
+          onFocusSharedMemoryArtifact
         })}
       />
     );
 
     const collectorObservationSection = screen.getByRole('heading', { name: 'Collector Observation' }).closest('section');
-    const selectedArtifactRecord = within(screen.getByRole('heading', { name: 'Shared Memory' }).closest('section')!).getByText(
-      `Ref · ${tmuxArtifactRef}`
-    ).closest('li');
     expect(collectorObservationSection).not.toBeNull();
-    expect(selectedArtifactRecord).not.toBeNull();
     expect(
       within(collectorObservationSection!).getByRole('button', {
         name: `Jump to shared memory artifact ${tmuxArtifactRef} ${tmuxPreviewLabel}`
@@ -8861,7 +8924,7 @@ describe('DetailsPanel accountability signals', () => {
       })
     );
 
-    expect(document.activeElement).toBe(selectedArtifactRecord);
+    expect(onFocusSharedMemoryArtifact).toHaveBeenCalledWith(tmuxArtifactRef);
     expect(onSelectAgent).not.toHaveBeenCalled();
     expect(onSelectCorrelation).not.toHaveBeenCalled();
   });
@@ -9162,6 +9225,7 @@ describe('DetailsPanel accountability signals', () => {
     const { unmount } = render(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'supervision',
           collectorSnapshot,
           selectedAgent: null,
           selectedCorrelationId: null,
@@ -9186,6 +9250,7 @@ describe('DetailsPanel accountability signals', () => {
     render(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'supervision',
           collectorSnapshot
         })}
       />
@@ -9201,10 +9266,11 @@ describe('DetailsPanel accountability signals', () => {
     ).toBeVisible();
   });
 
-  it('jumps from matching top-level correlation evidence refs to shared memory in crew overview while leaving non-matching refs as plain text', async () => {
+  it('jumps top-level correlation evidence refs to shared memory exact focus without changing scope', async () => {
     const user = userEvent.setup();
     const onSelectAgent = vi.fn();
     const onSelectCorrelation = vi.fn();
+    const onFocusSharedMemoryArtifact = vi.fn();
     const correlation: CorrelationDrilldown = {
       ...buildCorrelation(),
       evidence_refs: ['/evidence/correlation.md', '/evidence/missing.md']
@@ -9233,25 +9299,23 @@ describe('DetailsPanel accountability signals', () => {
     render(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'replay',
           correlation,
           memoryArtifacts,
           selectedAgent: null,
           selectedOperation: null,
           onSelectAgent,
-          onSelectCorrelation
+          onSelectCorrelation,
+          onFocusSharedMemoryArtifact
         })}
       />
     );
 
     const correlationSection = screen.getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
-    const sharedMemorySection = screen.getByRole('heading', { name: 'Shared Memory' }).closest('section');
     expect(correlationSection).not.toBeNull();
-    expect(sharedMemorySection).not.toBeNull();
 
     const correlationRecord = within(correlationSection!).getByText('corr-app-review').closest('li');
-    const artifactRecord = within(sharedMemorySection!).getByText('Ref · /evidence/correlation.md').closest('li');
     expect(correlationRecord).not.toBeNull();
-    expect(artifactRecord).not.toBeNull();
     expect(
       within(correlationRecord!).getByRole('button', {
         name: 'Jump to shared memory artifact /evidence/correlation.md'
@@ -9259,10 +9323,10 @@ describe('DetailsPanel accountability signals', () => {
     ).toHaveTextContent('/evidence/correlation.md');
     expect(correlationRecord).toHaveTextContent('Evidence · /evidence/correlation.md, /evidence/missing.md');
     expect(
-      within(correlationRecord!).queryByRole('button', {
+      within(correlationRecord!).getByRole('button', {
         name: 'Jump to shared memory artifact /evidence/missing.md'
       })
-    ).not.toBeInTheDocument();
+    ).toHaveTextContent('/evidence/missing.md');
 
     await user.click(
       within(correlationRecord!).getByRole('button', {
@@ -9270,7 +9334,7 @@ describe('DetailsPanel accountability signals', () => {
       })
     );
 
-    expect(document.activeElement).toBe(artifactRecord);
+    expect(onFocusSharedMemoryArtifact).toHaveBeenCalledWith('/evidence/correlation.md');
     expect(onSelectAgent).not.toHaveBeenCalled();
     expect(onSelectCorrelation).not.toHaveBeenCalled();
   });
@@ -11787,6 +11851,7 @@ describe('DetailsPanel shared memory', () => {
     render(
       <DetailsPanel
         {...buildProps({
+          activeHubCategory: 'memory',
           memoryArtifacts: {
             generated_at: '2026-03-16T09:00:00.000Z',
             items: [

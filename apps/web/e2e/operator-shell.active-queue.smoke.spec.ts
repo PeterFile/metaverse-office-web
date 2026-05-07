@@ -18,10 +18,10 @@ test.describe('operator shell active queue smoke', () => {
     });
 
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await page.getByRole('button', { name: 'Queue' }).click();
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
-    await expect(detailsPanel.getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
+    await expect(detailsPanel.getByRole('heading', { name: 'Active Queue' })).toBeVisible();
     await expect(detailsPanel.getByText('Loading operations queue...')).toBeVisible();
 
     expect(releaseOperations).not.toBeNull();
@@ -47,10 +47,10 @@ test.describe('operator shell active queue smoke', () => {
     });
 
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await page.getByRole('button', { name: 'Queue' }).click();
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
-    await expect(detailsPanel.getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
+    await expect(detailsPanel.getByRole('heading', { name: 'Active Queue' })).toBeVisible();
     await expect(detailsPanel.getByText('Unable to load active queue. operations refresh failed')).toBeVisible();
     await expect(detailsPanel.getByText('No active operations queue.')).toHaveCount(0);
   });
@@ -124,7 +124,7 @@ test.describe('operator shell active queue smoke', () => {
     });
 
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open Hub' }).click();
+    await page.getByRole('button', { name: 'Queue' }).click();
 
     const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
     const queueSection = detailsPanel.locator('section').filter({
@@ -132,7 +132,7 @@ test.describe('operator shell active queue smoke', () => {
     });
     const stateFilter = queueSection.getByRole('combobox', { name: 'Filter active queue by state' });
 
-    await expect(detailsPanel.getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
+    await expect(detailsPanel.getByRole('heading', { name: 'Active Queue' })).toBeVisible();
     await expect(stateFilter).toBeVisible();
     await expect(stateFilter).toContainText('All states (2)');
     await expect(stateFilter).toContainText('Planning (1)');

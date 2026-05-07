@@ -3,11 +3,11 @@ import { describe, expect, it } from 'vitest';
 import { resolveViewportClampPadding } from './viewportClampPadding';
 
 describe('resolveViewportClampPadding', () => {
-  it('keeps split top chrome from creating a global top gutter while still extending right travel', () => {
+  it('keeps split top category chrome from creating a global top gutter while still extending right travel', () => {
     document.body.innerHTML = `
       <section class="aitown-panel aitown-panel--game" id="panel">
         <div class="aitown-shell__brand" id="brand"></div>
-        <div class="aitown-panel__toolbar" id="toolbar"></div>
+        <div class="aitown-hub-category-bar" id="toolbar"></div>
         <div class="aitown-shell__stats" id="stats"></div>
         <div class="aitown-world__host" id="host"></div>
       </section>

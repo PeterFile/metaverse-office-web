@@ -1121,12 +1121,14 @@ describe('WorldScene watch overlay caption gating', () => {
       });
     });
 
-    const inspection = readViewportInspector()?.read();
-    const center = readViewportCenter();
-    const expectedBiasX = (280 - 320) / ((inspection?.scale ?? 1) * 2);
+    await waitFor(() => {
+      const inspection = readViewportInspector()?.read();
+      const center = readViewportCenter();
+      const expectedBiasX = (280 - 320) / ((inspection?.scale ?? 1) * 2);
 
-    expect(center.x).toBeCloseTo((selectedAgent?.position.x ?? 0) + expectedBiasX, 4);
-    expect(center.y).toBeCloseTo(selectedAgent?.position.y ?? 0, 4);
+      expect(center.x).toBeCloseTo((selectedAgent?.position.x ?? 0) + expectedBiasX, 4);
+      expect(center.y).toBeCloseTo(selectedAgent?.position.y ?? 0, 4);
+    });
   });
 
   it('re-applies selected-agent safe-area recenter when clamp padding changes for the same selection', async () => {

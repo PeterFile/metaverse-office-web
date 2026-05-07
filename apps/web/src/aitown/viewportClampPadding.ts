@@ -5,12 +5,14 @@ const topSelectors = [
   '.aitown-shell__stats',
   '.aitown-panel__topline > span',
   '.aitown-panel__toolbar',
+  '.aitown-hub-category-bar',
   '.aitown-panel__hot-zone-focus'
 ];
 const leftSelectors = ['.aitown-panel__topline > span:first-child'];
 const rightSelectors = [
   '.aitown-shell__stats',
   '.aitown-panel__toolbar',
+  '.aitown-hub-category-bar',
   '.aitown-panel__hot-zone-focus',
   '.aitown-panel__topline > span:last-child',
   '.aitown-hub-sheet',
@@ -23,6 +25,7 @@ const subtreeMutationContributorSelectors = [
   '.aitown-shell__stats',
   '.aitown-panel__topline',
   '.aitown-panel__toolbar',
+  '.aitown-hub-category-bar',
   '.aitown-panel__hot-zone-focus'
 ];
 const fixedWidthContributorSelectors = ['.aitown-hub-sheet', '.aitown-correlation-overlay', '.aitown-watch-overlay'];
@@ -32,6 +35,7 @@ const clampContributorRootClasses = new Set([
   'aitown-shell__stats',
   'aitown-panel__topline',
   'aitown-panel__toolbar',
+  'aitown-hub-category-bar',
   'aitown-panel__hot-zone-focus',
   'aitown-hub-sheet',
   'aitown-correlation-overlay',

@@ -56,15 +56,19 @@ describe('AI Town shell styles', () => {
     expect(styles).toMatch(/\.aitown-hub-overlay\s*\{[\s\S]*?position:\s*fixed;/);
     expect(styles).toMatch(/\.aitown-hub-overlay\s*\{[\s\S]*?align-items:\s*flex-end;[\s\S]*?justify-content:\s*center;/);
     expect(styles).toMatch(
-      /\.aitown-hub-sheet\s*\{[\s\S]*?width:\s*min\(1120px, calc\(100vw - 24px\)\);[\s\S]*?max-height:\s*min\(220px, 23dvh\);[\s\S]*?overflow:\s*hidden;/
+      /\.aitown-hub-overlay\s*\{[\s\S]*?padding:\s*0 12px calc\(var\(--aitown-edge\) \+ var\(--aitown-category-bar-reserve\) - 4px\);/
+    );
+    expect(styles).toMatch(
+      /\.aitown-hub-sheet\s*\{[\s\S]*?width:\s*min\(1120px, calc\(100vw - 24px\)\);[\s\S]*?max-height:\s*max\(96px, min\(220px, calc\(23dvh - var\(--aitown-category-bar-reserve\)\)\)\);[\s\S]*?overflow:\s*hidden;/
     );
     expect(styles).toMatch(/\.aitown-hub-sheet__body\s*\{[\s\S]*?display:\s*grid;[\s\S]*?overflow:\s*hidden;/);
     expect(styles).toMatch(/\.aitown-hub-sheet \.aitown-panel--details\s*\{[\s\S]*?grid-auto-flow:\s*column;[\s\S]*?overflow-x:\s*auto;[\s\S]*?overflow-y:\s*hidden;/);
     expect(styles).toMatch(
-      /\.aitown-hub-sheet \.aitown-details__section--active-queue\s*\{[\s\S]*?display:\s*flex;[\s\S]*?flex-direction:\s*column;[\s\S]*?min-height:\s*0;/
+      /\.aitown-hub-sheet \.aitown-details__section--active-queue\s*\{[\s\S]*?display:\s*grid;[\s\S]*?grid-template-columns:\s*minmax\(112px, 0\.34fr\) minmax\(0, 1fr\);[\s\S]*?min-height:\s*0;/
     );
-    expect(styles).toMatch(/\.aitown-hub-sheet \.aitown-details__section--active-queue > div\s*\{[\s\S]*?grid-template-columns:\s*auto minmax\(0, 1fr\);/);
-    expect(styles).toMatch(/\.aitown-hub-sheet \.aitown-details__section--active-queue \.aitown-records\s*\{[\s\S]*?flex:\s*1 1 auto;[\s\S]*?overflow-y:\s*auto;/);
+    expect(styles).toMatch(/\.aitown-hub-sheet \.aitown-details__section--active-queue > div\s*\{[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\);/);
+    expect(styles).toMatch(/\.aitown-hub-sheet \.aitown-details__section--active-queue select\s*\{[\s\S]*?height:\s*22px;/);
+    expect(styles).toMatch(/\.aitown-hub-sheet \.aitown-details__section--active-queue \.aitown-records\s*\{[\s\S]*?grid-column:\s*2;[\s\S]*?grid-row:\s*1 \/ 5;[\s\S]*?overflow-y:\s*auto;/);
     expect(styles).toMatch(/\.aitown-hub-sheet \.aitown-details__section--active-queue \.aitown-queue-record__meta\s*\{[\s\S]*?display:\s*block;[\s\S]*?text-overflow:\s*ellipsis;/);
     expect(styles).toMatch(/\.aitown-hub-sheet \.aitown-record\s*\{[\s\S]*?grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\);/);
   });
@@ -74,16 +78,24 @@ describe('AI Town shell styles', () => {
     expect(styles).toMatch(/\.aitown-world__host canvas\s*\{[\s\S]*?touch-action:\s*pinch-zoom;/);
   });
 
-  it('keeps header toolbar and HUD in one chrome flow instead of competing absolute offsets', () => {
+  it('keeps the category menu as a bottom game bar while top HUD stays in one chrome flow', () => {
     expect(styles).toMatch(
-      /\.aitown-panel__chrome\s*\{[\s\S]*?position:\s*absolute;[\s\S]*?grid-template-areas:\s*[\s\S]*?'header toolbar'[\s\S]*?'hud hud';[\s\S]*?pointer-events:\s*none;/
+      /\.aitown-panel__chrome\s*\{[\s\S]*?position:\s*absolute;[\s\S]*?grid-template-areas:\s*[\s\S]*?'header'[\s\S]*?'hud';[\s\S]*?pointer-events:\s*none;/
     );
     expect(styles).toMatch(/\.aitown-shell__header\s*\{[\s\S]*?grid-area:\s*header;/);
     expect(styles).toMatch(/\.aitown-panel__hud-top\s*\{[\s\S]*?grid-area:\s*hud;[\s\S]*?pointer-events:\s*none;/);
+    expect(styles).toMatch(/\.aitown-shell\s*\{[\s\S]*?--aitown-category-bar-reserve:\s*64px;/);
     expect(styles).toMatch(
-      /\.aitown-panel__toolbar\s*\{[\s\S]*?grid-area:\s*toolbar;[\s\S]*?display:\s*flex;[\s\S]*?pointer-events:\s*auto;/
+      /@media \(max-width:\s*1080px\)\s*\{[\s\S]*?\.aitown-shell\s*\{[\s\S]*?--aitown-category-bar-reserve:\s*140px;/
     );
-    expect(styles).not.toMatch(/\.aitown-panel__toolbar\s*\{[^}]*position:\s*absolute;/);
+    expect(styles).toMatch(
+      /@media \(max-width:\s*720px\)\s*\{[\s\S]*?\.aitown-shell\s*\{[\s\S]*?--aitown-category-bar-reserve:\s*112px;/
+    );
+    expect(styles).toMatch(
+      /\.aitown-hub-category-bar\s*\{[\s\S]*?position:\s*fixed;[\s\S]*?bottom:\s*var\(--aitown-edge\);[\s\S]*?z-index:\s*30;[\s\S]*?display:\s*grid;[\s\S]*?pointer-events:\s*auto;/
+    );
+    expect(styles).toMatch(/\.aitown-hub-category-bar__button\.is-active\s*\{[\s\S]*?border-color:\s*#f7d57b;/);
+    expect(styles).not.toMatch(/\.aitown-panel__chrome\s*\{[\s\S]*?'header toolbar'/);
   });
 
   it('collects viewport, zones, and evidence into one passive HUD cluster', () => {
@@ -114,7 +126,7 @@ describe('AI Town shell styles', () => {
 
   it('caps portrait chrome so mobile center drag remains a world lane', () => {
     expect(styles).toMatch(
-      /@media \(max-width:\s*720px\)\s*\{[\s\S]*?\.aitown-panel__chrome\s*\{[\s\S]*?grid-template-areas:\s*[\s\S]*?'toolbar'[\s\S]*?'header'[\s\S]*?'hud';[\s\S]*?max-height:\s*min\(34dvh, 288px\);[\s\S]*?overflow-y:\s*auto;/
+      /@media \(max-width:\s*720px\)\s*\{[\s\S]*?\.aitown-panel__chrome\s*\{[\s\S]*?grid-template-areas:\s*[\s\S]*?'header'[\s\S]*?'hud';[\s\S]*?max-height:\s*min\(34dvh, 288px\);[\s\S]*?overflow-y:\s*auto;/
     );
     expect(styles).toMatch(
       /@media \(max-width:\s*720px\)\s*\{[\s\S]*?\.aitown-shell__eyebrow,[\s\S]*?\.aitown-shell__brand p\s*\{[\s\S]*?display:\s*none;/

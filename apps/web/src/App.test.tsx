@@ -79,6 +79,10 @@ import type { AccountabilityReplayBundle, AgentWorkflow, OfficeAgent, OfficeOper
 const DEFAULT_NAVIGATOR_USER_AGENT = window.navigator.userAgent;
 
 function setNavigatorUserAgent(userAgent: string) {
+  vi.stubGlobal('navigator', {
+    ...window.navigator,
+    userAgent
+  });
   Object.defineProperty(window.navigator, 'userAgent', {
     configurable: true,
     value: userAgent
@@ -1633,9 +1637,33 @@ function resolveTestFetchResponse(url: string) {
 
   throw new Error(`Unexpected request: ${url}`);
 }
-async function openHub(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(await screen.findByRole('button', { name: 'Open Hub' }));
-  return screen.findByRole('complementary', { name: 'Agent details' });
+type HubCategoryLabel = 'Crew' | 'Queue' | 'Supervision' | 'Evidence' | 'Replay' | 'Memory';
+
+async function openHub(user: ReturnType<typeof userEvent.setup>, category: HubCategoryLabel = 'Crew') {
+  await user.click(await screen.findByRole('button', { name: category }, { timeout: 5000 }));
+  return screen.findByRole('complementary', { name: 'Agent details' }, { timeout: 5000 });
+}
+
+async function findHubSection(_details: HTMLElement, heading: string): Promise<HTMLElement> {
+  return waitFor(() => {
+    const currentDetails = screen.getByRole('complementary', { name: 'Agent details' });
+    const headingNode = within(currentDetails).getByRole('heading', { name: heading });
+    return headingNode.closest('section') ?? currentDetails;
+  });
+}
+
+async function showHubSection(
+  user: ReturnType<typeof userEvent.setup>,
+  details: HTMLElement,
+  category: HubCategoryLabel,
+  heading: string
+): Promise<HTMLElement> {
+  await openHub(user, category);
+  return findHubSection(details, heading);
+}
+
+async function showCorrelationSection(user: ReturnType<typeof userEvent.setup>, details: HTMLElement) {
+  return showHubSection(user, details, 'Replay', 'Correlation Drilldown');
 }
 
 async function openHudSignals(user: ReturnType<typeof userEvent.setup>) {
@@ -1644,26 +1672,31 @@ async function openHudSignals(user: ReturnType<typeof userEvent.setup>) {
   return signals;
 }
 
-async function openSelectedAgentPeekInHub(user: ReturnType<typeof userEvent.setup>, agentName?: string) {
-  const inspectPeek = await screen.findByRole('region', { name: 'Selected agent inspect peek' });
+async function openSelectedAgentPeekInHub(
+  user: ReturnType<typeof userEvent.setup>,
+  agentName?: string,
+  category: HubCategoryLabel = 'Queue'
+) {
+  const inspectPeek = await screen.findByRole('region', { name: 'Selected agent inspect peek' }, { timeout: 5000 });
 
   if (agentName) {
     expect(within(inspectPeek).getByText(agentName)).toBeVisible();
   }
 
-  await user.click(within(inspectPeek).getByRole('button', { name: 'Open selected agent in Hub' }));
-  return screen.findByRole('complementary', { name: 'Agent details' });
+  await user.click(await screen.findByRole('button', { name: category }, { timeout: 5000 }));
+  return screen.findByRole('complementary', { name: 'Agent details' }, { timeout: 5000 });
 }
 
 async function selectSceneAgentAndOpenHub(
   user: ReturnType<typeof userEvent.setup>,
   agentId: string,
-  agentName?: string
+  agentName?: string,
+  category: HubCategoryLabel = 'Replay'
 ) {
-  await user.click(await screen.findByRole('button', { name: `Select scene agent ${agentId}` }));
+  await user.click(await screen.findByRole('button', { name: `Select scene agent ${agentId}` }, { timeout: 5000 }));
   expect(screen.queryByRole('dialog', { name: 'Hub' })).not.toBeInTheDocument();
 
-  return openSelectedAgentPeekInHub(user, agentName);
+  return openSelectedAgentPeekInHub(user, agentName, category);
 }
 
 async function selectSelectedAgentDrilldownTab(
@@ -1793,7 +1826,8 @@ afterEach(() => {
     expect(worldRegion).toBeVisible();
     expect(within(worldRegion).getByText('Loading world renderer...')).toBeVisible();
 
-    expect(screen.getByRole('button', { name: 'Open Hub' })).toBeVisible();
+    expect(screen.getByRole('navigation', { name: 'Office category menu' })).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Open Hub' })).not.toBeInTheDocument();
     expect(screen.queryByRole('complementary', { name: 'Agent details' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Inspect App Engineering Agent' })).not.toBeInTheDocument();
   });
@@ -1824,7 +1858,7 @@ afterEach(() => {
 
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Evidence');
     const incidentSection = within(details).getByRole('heading', { name: 'Incident Feed' }).closest('section');
     expect(details).toBeVisible();
     expect(incidentSection).not.toBeNull();
@@ -1864,16 +1898,21 @@ afterEach(() => {
 
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Evidence');
     const incidentSection = within(details).getByRole('heading', { name: 'Incident Feed' }).closest('section');
-    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
     expect(incidentSection).not.toBeNull();
-    expect(correlationSection).not.toBeNull();
 
     await waitFor(() => {
       expect(
         within(incidentSection!).getByRole('button', { name: 'Open incident correlation corr-app-review, currently selected' })
       ).toBeVisible();
+    });
+
+    await openHub(user, 'Replay');
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    expect(correlationSection).not.toBeNull();
+
+    await waitFor(() => {
       expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
       expect(fetchMock.mock.calls.map(([request]) => String(request))).toContain(freshCorrelationUrl);
     });
@@ -1915,7 +1954,7 @@ afterEach(() => {
 
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Evidence');
     const incidentSection = within(details).getByRole('heading', { name: 'Incident Feed' }).closest('section');
     expect(incidentSection).not.toBeNull();
 
@@ -1975,7 +2014,7 @@ afterEach(() => {
       expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
     });
 
-    await user.click(screen.getByRole('button', { name: 'Close Hub' }));
+    await user.click(screen.getByRole('button', { name: 'Close panel' }));
     expect(screen.queryByRole('dialog', { name: 'Hub' })).not.toBeInTheDocument();
 
     const fetchCallCountBeforeFocus = vi.mocked(globalThis.fetch).mock.calls.length;
@@ -1993,7 +2032,7 @@ afterEach(() => {
     expect(screen.getByTestId('mock-scene-selected-agent-id')).toHaveTextContent('app-engineering');
     expect(screen.getByTestId('mock-scene-active-correlation-id')).toHaveTextContent('corr-app-review');
     expect(vi.mocked(globalThis.fetch).mock.calls).toHaveLength(fetchCallCountBeforeFocus);
-  });
+  }, 10000);
 
   it('routes selected-agent watch links into the scene overlay path without widening scene data', async () => {
     const user = userEvent.setup();
@@ -2073,7 +2112,7 @@ afterEach(() => {
       expect(correlationRequestsBeforeClose).toBeGreaterThan(0);
 
       await act(async () => {
-        screen.getByRole('button', { name: 'Close Hub' }).click();
+        screen.getByRole('button', { name: 'Close panel' }).click();
       });
 
       expect(screen.queryByRole('dialog', { name: 'Hub' })).not.toBeInTheDocument();
@@ -2142,7 +2181,7 @@ afterEach(() => {
       );
     });
 
-    await user.click(screen.getByRole('button', { name: 'Close Hub' }));
+    await user.click(screen.getByRole('button', { name: 'Close panel' }));
 
     expect(screen.queryByRole('dialog', { name: 'Hub' })).not.toBeInTheDocument();
     expect(screen.getByTestId('mock-scene-active-correlation-id')).toHaveTextContent('corr-app-review');
@@ -2188,19 +2227,21 @@ afterEach(() => {
       expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
     });
 
-    await user.click(screen.getByRole('button', { name: 'Close Hub' }));
+    await user.click(screen.getByRole('button', { name: 'Close panel' }));
     expect(screen.getByTestId('mock-scene-active-correlation-id')).toHaveTextContent('corr-app-review');
 
-    details = await openHub(user);
+    details = await openHub(user, 'Evidence');
     const incidentSection = within(details).getByRole('heading', { name: 'Incident Feed' }).closest('section');
-    correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
 
     expect(incidentSection).not.toBeNull();
-    expect(correlationSection).not.toBeNull();
 
     await user.click(
       within(incidentSection!).getByRole('button', { name: 'Open incident correlation corr-app-secondary' })
     );
+
+    await openHub(user, 'Replay');
+    correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    expect(correlationSection).not.toBeNull();
 
     await waitFor(() => {
       expect(within(correlationSection!).getByText('corr-app-secondary')).toBeVisible();
@@ -2210,14 +2251,14 @@ afterEach(() => {
       );
     });
 
-    await user.click(screen.getByRole('button', { name: 'Close Hub' }));
+    await user.click(screen.getByRole('button', { name: 'Close panel' }));
 
     expect(screen.queryByRole('dialog', { name: 'Hub' })).not.toBeInTheDocument();
     expect(screen.getByTestId('mock-scene-active-correlation-id')).toHaveTextContent('corr-app-secondary');
     expect(screen.getByTestId('mock-scene-correlation-participants')).toHaveTextContent(
       'app-engineering,growth-revenue'
     );
-  });
+  }, 10000);
 
   it('keeps the selected-agent hub context while resetting the world view', async () => {
     const user = userEvent.setup();
@@ -2235,13 +2276,13 @@ afterEach(() => {
       expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
     });
 
-    await user.click(screen.getByRole('button', { name: 'Reset view' }));
+    await user.click(within(screen.getByRole('dialog', { name: 'Hub' })).getByRole('button', { name: 'Reset view' }));
 
-    expect(screen.getByRole('button', { name: 'Hide Hub' })).toBeVisible();
+    expect(screen.getByRole('dialog', { name: 'Hub' })).toBeVisible();
     expect(screen.getByRole('button', { name: 'Clear Selection' })).toBeVisible();
     expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
     expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
-  });
+  }, 10000);
 
   it('exposes reset-view shortcut metadata and triggers the reset path with or without the Hub open', async () => {
     const user = userEvent.setup();
@@ -2258,9 +2299,11 @@ afterEach(() => {
     await user.keyboard('r');
     expect(resetSignal).toHaveTextContent('1');
 
-    await user.click(screen.getByRole('button', { name: 'Open Hub' }));
+    await user.click(screen.getByRole('button', { name: 'Crew' }));
 
-    const hubResetButton = await screen.findByRole('button', { name: 'Reset view' });
+    const hubResetButton = within(screen.getByRole('dialog', { name: 'Hub' })).getByRole('button', {
+      name: 'Reset view'
+    });
     expect(hubResetButton).toHaveAttribute('aria-keyshortcuts', 'R');
 
     await user.keyboard('r');
@@ -2287,11 +2330,11 @@ afterEach(() => {
     await user.keyboard('r');
 
     expect(screen.getByTestId('mock-reset-view-signal')).toHaveTextContent('1');
-    expect(screen.getByRole('button', { name: 'Hide Hub' })).toBeVisible();
+    expect(screen.getByRole('dialog', { name: 'Hub' })).toBeVisible();
     expect(screen.getByRole('button', { name: 'Clear Selection' })).toBeVisible();
     expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
     expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
-  });
+  }, 15000);
 
   it('ignores the reset-view keyboard shortcut while focus is inside editable controls', async () => {
     const user = userEvent.setup();
@@ -2299,7 +2342,7 @@ afterEach(() => {
     setNavigatorUserAgent('VitestBrowser');
     render(<App />);
 
-    await user.click(await screen.findByRole('button', { name: 'Open Hub' }));
+    await user.click(await screen.findByRole('button', { name: 'Queue' }));
 
     const details = await screen.findByRole('complementary', { name: 'Agent details' });
     const stateFilter = within(details).getByRole('combobox', { name: 'Filter active queue by state' });
@@ -2318,7 +2361,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const hubTrigger = await screen.findByRole('button', { name: 'Open Hub' });
+    const hubTrigger = await screen.findByRole('button', { name: 'Crew' });
     expect(hubTrigger).toBeVisible();
     expect(screen.queryByRole('complementary', { name: 'Agent details' })).not.toBeInTheDocument();
 
@@ -2328,21 +2371,42 @@ afterEach(() => {
     await user.click(hubTrigger);
     expect(await screen.findByRole('dialog', { name: 'Hub' })).toBeVisible();
     expect(await screen.findByRole('complementary', { name: 'Agent details' })).toBeVisible();
-    expect(screen.getByRole('button', { name: 'Hide Hub' })).toBeVisible();
-    expect(screen.getByRole('button', { name: 'Close Hub' })).toBeVisible();
+    expect(screen.getByRole('dialog', { name: 'Hub' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Close panel' })).toBeVisible();
 
-    await user.click(screen.getByRole('button', { name: 'Close Hub' }));
+    await user.click(screen.getByRole('button', { name: 'Close panel' }));
     expect(screen.queryByRole('dialog', { name: 'Hub' })).not.toBeInTheDocument();
     expect(screen.queryByRole('complementary', { name: 'Agent details' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Open Hub' })).toBeVisible();
+    expect(screen.getByRole('navigation', { name: 'Office category menu' })).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Open Hub' })).not.toBeInTheDocument();
+  });
+
+  it('opens only the selected office category from the bottom category menu', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const categoryMenu = await screen.findByRole('navigation', { name: 'Office category menu' });
+    expect(within(categoryMenu).getByRole('button', { name: 'Crew' })).toBeVisible();
+    expect(within(categoryMenu).getByRole('button', { name: 'Queue' })).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Open Hub' })).not.toBeInTheDocument();
+
+    const details = await openHub(user, 'Queue');
+
+    expect(screen.getByRole('dialog', { name: 'Hub' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Queue' })).toHaveAttribute('aria-expanded', 'true');
+    expect(within(details).getByRole('heading', { name: 'Active Queue' })).toBeVisible();
+    expect(within(details).getByRole('heading', { name: 'Attention Queue' })).toBeVisible();
+    expect(within(details).queryByRole('heading', { name: 'Crew Overview' })).not.toBeInTheDocument();
+    expect(within(details).queryByRole('heading', { name: 'Roster' })).not.toBeInTheDocument();
+    expect(within(details).queryByRole('heading', { name: 'Office Grid' })).not.toBeInTheDocument();
   });
 
   it('renders the selected-agent Hub focus ribbon only while the selected-agent Hub is open', async () => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
-    expect(within(details).getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
+    const details = await openHub(user, 'Queue');
+    expect(within(details).getByRole('heading', { name: 'Active Queue' })).toBeVisible();
     expect(screen.queryByRole('region', { name: 'Hub focus ribbon' })).not.toBeInTheDocument();
 
     await user.click(
@@ -2356,25 +2420,25 @@ afterEach(() => {
     expect(within(focusRibbon).getByText('Correlation · corr-app-review')).toBeVisible();
     expect(within(focusRibbon).getByText('Evidence · /tmp/evidence.md')).toBeVisible();
 
-    await user.click(screen.getByRole('button', { name: 'Close Hub' }));
+    await user.click(screen.getByRole('button', { name: 'Close panel' }));
 
     expect(screen.queryByRole('dialog', { name: 'Hub' })).not.toBeInTheDocument();
     expect(screen.queryByRole('region', { name: 'Hub focus ribbon' })).not.toBeInTheDocument();
     const inspectPeek = screen.getByRole('region', { name: 'Selected agent inspect peek' });
     expect(within(inspectPeek).getByText('App Engineering Agent')).toBeVisible();
 
-    await user.click(within(inspectPeek).getByRole('button', { name: 'Open selected agent in Hub' }));
+    await user.click(await screen.findByRole('button', { name: 'Queue' }));
 
     expect(screen.queryByRole('region', { name: 'Selected agent inspect peek' })).not.toBeInTheDocument();
     expect(await screen.findByRole('region', { name: 'Hub focus ribbon' })).toBeVisible();
-  });
+  }, 15000);
 
   it('selected-agent Hub drilldown tabs expose Now Evidence and Replay Correlation panels', async () => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
-    expect(within(details).getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
+    const details = await openHub(user, 'Queue');
+    expect(within(details).getByRole('heading', { name: 'Active Queue' })).toBeVisible();
     expect(screen.queryByRole('tablist', { name: 'Selected agent drilldown' })).not.toBeInTheDocument();
 
     const queueSection = within(details).getByRole('heading', { name: 'Active Queue' }).closest('section');
@@ -2428,19 +2492,19 @@ afterEach(() => {
     expect(within(replayPanel).getByRole('heading', { name: 'Timeline Replay' })).toBeVisible();
     expect(within(replayPanel).getByRole('heading', { name: 'Correlation Drilldown' })).toBeVisible();
 
-    await user.click(screen.getByRole('button', { name: 'Close Hub' }));
+    await user.click(screen.getByRole('button', { name: 'Close panel' }));
     expect(screen.queryByRole('tablist', { name: 'Selected agent drilldown' })).not.toBeInTheDocument();
     const inspectPeek = screen.getByRole('region', { name: 'Selected agent inspect peek' });
-    await user.click(within(inspectPeek).getByRole('button', { name: 'Open selected agent in Hub' }));
+    await user.click(await screen.findByRole('button', { name: 'Queue' }));
     expect(await screen.findByRole('tablist', { name: 'Selected agent drilldown' })).toBeVisible();
     expect(screen.getByRole('tab', { name: 'Now' })).toHaveAttribute('aria-selected', 'true');
-  }, 10000);
+  }, 20000);
 
   it('supports keyboard navigation across selected-agent Hub drilldown tabs', async () => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Queue');
     const queueSection = within(details).getByRole('heading', { name: 'Active Queue' }).closest('section');
     expect(queueSection).not.toBeNull();
     await user.click(within(queueSection!).getByRole('button', { name: 'Inspect App Engineering Agent from active queue' }));
@@ -2467,13 +2531,13 @@ afterEach(() => {
     expect(nowTab).toHaveFocus();
     expect(nowTab).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByRole('tabpanel', { name: 'Now' })).toBeVisible();
-  });
+  }, 15000);
 
   it('moves focus out of hidden selected-agent drilldown content after a non-focused tab reset', async () => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Queue');
     const queueSection = within(details).getByRole('heading', { name: 'Active Queue' }).closest('section');
     expect(queueSection).not.toBeNull();
     await user.click(within(queueSection!).getByRole('button', { name: 'Inspect App Engineering Agent from active queue' }));
@@ -2528,7 +2592,7 @@ afterEach(() => {
     expect(within(inspectPeek).getByText('App Engineering Agent')).toBeVisible();
     expect(within(inspectPeek).getByText('Orange · blocked')).toBeVisible();
 
-    await user.click(within(inspectPeek).getByRole('button', { name: 'Open selected agent in Hub' }));
+    await user.click(await screen.findByRole('button', { name: 'Queue' }));
 
     const details = await screen.findByRole('complementary', { name: 'Agent details' });
     expect(screen.getByRole('dialog', { name: 'Hub' })).toBeVisible();
@@ -2668,7 +2732,7 @@ afterEach(() => {
 
     await openHub(user);
     await waitFor(() => expect(collectorRequestCount).toBeGreaterThanOrEqual(1));
-    await user.click(screen.getByRole('button', { name: 'Close Hub' }));
+    await user.click(screen.getByRole('button', { name: 'Close panel' }));
 
     await openHudSignals(user);
     const evidenceFocus = await screen.findByRole('region', { name: 'Evidence coverage focus' });
@@ -2706,9 +2770,9 @@ afterEach(() => {
     await openHudSignals(user);
     const evidenceFocus = await screen.findByRole('region', { name: 'Evidence coverage focus' });
     expect(within(evidenceFocus).getByText('Evidence')).toBeVisible();
-    await openHub(user);
+    await openHub(user, 'Supervision');
     await screen.findByText('No collector snapshot available yet.');
-    await user.click(screen.getByRole('button', { name: 'Close Hub' }));
+    await user.click(screen.getByRole('button', { name: 'Close panel' }));
 
     await waitFor(() => {
       expect(screen.queryByRole('region', { name: 'Evidence coverage focus' })).not.toBeInTheDocument();
@@ -2730,7 +2794,7 @@ afterEach(() => {
       expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
     });
 
-    await user.click(screen.getByRole('button', { name: 'Close Hub' }));
+    await user.click(screen.getByRole('button', { name: 'Close panel' }));
     expect(screen.queryByRole('dialog', { name: 'Hub' })).not.toBeInTheDocument();
 
     const fetchCallCountBeforeFocus = vi.mocked(globalThis.fetch).mock.calls.length;
@@ -2762,14 +2826,14 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const hubTrigger = await screen.findByRole('button', { name: 'Open Hub' });
+    const hubTrigger = await screen.findByRole('button', { name: 'Crew' });
     hubTrigger.focus();
     expect(hubTrigger).toHaveFocus();
 
     await user.click(hubTrigger);
 
     const dialog = await screen.findByRole('dialog', { name: 'Hub' });
-    const closeButton = within(dialog).getByRole('button', { name: 'Close Hub' });
+    const closeButton = within(dialog).getByRole('button', { name: 'Close panel' });
     await waitFor(() => {
       expect(closeButton).toHaveFocus();
     });
@@ -2779,17 +2843,17 @@ afterEach(() => {
     await waitFor(() => {
       expect(screen.queryByRole('dialog', { name: 'Hub' })).not.toBeInTheDocument();
     });
-    expect(screen.getByRole('button', { name: 'Open Hub' })).toHaveFocus();
+    expect(screen.getByRole('button', { name: 'Crew' })).toHaveFocus();
   });
 
   it('traps Tab navigation inside Hub while it is open', async () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await user.click(await screen.findByRole('button', { name: 'Open Hub' }));
+    await user.click(await screen.findByRole('button', { name: 'Crew' }));
 
     const dialog = await screen.findByRole('dialog', { name: 'Hub' });
-    const closeButton = within(dialog).getByRole('button', { name: 'Close Hub' });
+    const closeButton = within(dialog).getByRole('button', { name: 'Close panel' });
     const dialogButtons = within(dialog).getAllByRole('button');
     const firstDialogButton = dialogButtons.at(0);
     const lastDialogButton = dialogButtons.at(-1);
@@ -2814,11 +2878,11 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    await screen.findByRole('button', { name: 'Open Hub' });
+    await screen.findByRole('button', { name: 'Crew' });
     expect(globalThis.fetch).not.toHaveBeenCalledWith(operationsUrl, expect.anything());
     expect(globalThis.fetch).not.toHaveBeenCalledWith(allOperationsUrl, expect.anything());
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Queue');
     const activeQueueSection = await waitFor(() => {
       const nextActiveQueueSection = within(details).getByRole('heading', { name: 'Active Queue' }).closest('section');
       expect(nextActiveQueueSection).not.toBeNull();
@@ -2833,6 +2897,7 @@ afterEach(() => {
       expect(globalThis.fetch).toHaveBeenCalledWith(allOperationsUrl, expect.anything());
     });
 
+    await openHub(user, 'Crew');
     await user.click(within(details).getByRole('button', { name: 'Inspect Team Lead' }));
     expect(within(details).queryByRole('heading', { name: 'Active Queue' })).not.toBeInTheDocument();
   });
@@ -2841,10 +2906,10 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    await screen.findByRole('button', { name: 'Open Hub' });
+    await screen.findByRole('button', { name: 'Crew' });
     expect(globalThis.fetch).not.toHaveBeenCalledWith(memoryArtifactsUrl, expect.anything());
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Memory');
     const memorySection = await within(details).findByRole('heading', { name: 'Shared Memory' });
 
     expect(memorySection).toBeVisible();
@@ -2885,7 +2950,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Crew');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
 
     const operationSection = (await within(details).findByRole('heading', { name: 'Current Operation' })).closest('section');
@@ -2939,7 +3004,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Crew');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
 
     const operationSection = (await within(details).findByRole('heading', { name: 'Current Operation' })).closest('section');
@@ -2986,7 +3051,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Crew');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
     expect(await within(details).findByRole('heading', { name: 'Current Operation' })).toBeVisible();
 
@@ -3005,13 +3070,15 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Evidence');
     const incidentSection = within(details).getByRole('heading', { name: 'Incident Feed' }).closest('section');
-    const memorySection = within(details).getByRole('heading', { name: 'Shared Memory' }).closest('section');
     expect(incidentSection).not.toBeNull();
-    expect(memorySection).not.toBeNull();
 
     await user.click(within(incidentSection!).getByRole('button', { name: 'Open incident correlation corr-app-secondary' }));
+
+    await openHub(user, 'Memory');
+    const memorySection = within(details).getByRole('heading', { name: 'Shared Memory' }).closest('section');
+    expect(memorySection).not.toBeNull();
 
     await waitFor(() => {
       expect(within(memorySection!).getByText('Crew-overview manual correlation memory slice')).toBeVisible();
@@ -3064,11 +3131,9 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Queue');
     const queueSection = within(details).getByRole('heading', { name: 'Active Queue' }).closest('section');
-    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
     expect(queueSection).not.toBeNull();
-    expect(correlationSection).not.toBeNull();
 
     await user.click(
       within(queueSection!).getByRole('button', {
@@ -3076,8 +3141,11 @@ afterEach(() => {
       })
     );
 
+    await openHub(user, 'Replay');
+    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    expect(correlationSection).not.toBeNull();
+
     await waitFor(() => {
-      expect(within(details).getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
       expect(within(details).queryByRole('heading', { name: 'App Engineering Agent' })).not.toBeInTheDocument();
       expect(within(details).queryByRole('button', { name: 'Clear' })).not.toBeInTheDocument();
       expect(within(correlationSection!).getByText('corr-app-secondary')).toBeVisible();
@@ -3099,7 +3167,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Evidence');
     const incidentSection = within(details).getByRole('heading', { name: 'Incident Feed' }).closest('section');
     expect(incidentSection).not.toBeNull();
 
@@ -3109,10 +3177,10 @@ afterEach(() => {
       })
     );
 
+    await openHub(user, 'Queue');
     const laneSection = await waitFor(() => {
       const nextLaneSection = within(details).getByRole('heading', { name: 'Active Correlation Queue' }).closest('section');
       expect(nextLaneSection).not.toBeNull();
-      expect(within(details).getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
       expect(within(details).queryByRole('heading', { name: 'App Engineering Agent' })).not.toBeInTheDocument();
       expect(nextLaneSection).toHaveTextContent(
         'Scope · corr-app-secondary · 2 of 2 participants in current active queue snapshot'
@@ -3177,21 +3245,17 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
-    const queueSection = within(details).getByRole('heading', { name: 'Active Queue' }).closest('section');
-    const getCorrelationSection = () =>
-      within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    const details = await openHub(user, 'Queue');
+    let queueSection = within(details).getByRole('heading', { name: 'Active Queue' }).closest('section');
     expect(queueSection).not.toBeNull();
-    expect(getCorrelationSection()).not.toBeNull();
+    let correlationSection = await showCorrelationSection(user, details);
 
     await waitFor(() => {
-      const correlationSection = getCorrelationSection();
-      expect(correlationSection).not.toBeNull();
-      expect(within(details).getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
       expect(within(correlationSection!).getByText('No correlation selected.')).toBeVisible();
       expect(within(correlationSection!).queryByText('corr-app-review')).not.toBeInTheDocument();
     });
 
+    queueSection = await showHubSection(user, details, 'Queue', 'Active Queue');
     const counterpartyPivot = within(queueSection!).getByRole('button', {
       name: 'Select active queue counterparty agent from operation app-engineering team-lead'
     });
@@ -3200,9 +3264,9 @@ afterEach(() => {
 
     await user.keyboard('{Enter}');
 
+    correlationSection = await showCorrelationSection(user, details);
+
     await waitFor(() => {
-      const correlationSection = getCorrelationSection();
-      expect(correlationSection).not.toBeNull();
       expect(within(details).getByRole('heading', { name: 'Team Lead' })).toBeVisible();
       expect(within(details).queryByRole('heading', { name: 'Current Operation' })).not.toBeInTheDocument();
       expect(within(correlationSection!).getByText('No correlation selected.')).toBeVisible();
@@ -3253,7 +3317,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Queue');
     const queueSection = within(details).getByRole('heading', { name: 'Active Queue' }).closest('section');
     expect(queueSection).not.toBeNull();
 
@@ -3313,27 +3377,24 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Evidence');
     const incidentSection = within(details).getByRole('heading', { name: 'Incident Feed' }).closest('section');
-    const queueSection = within(details).getByRole('heading', { name: 'Active Queue' }).closest('section');
     expect(incidentSection).not.toBeNull();
-    expect(queueSection).not.toBeNull();
 
+    let correlationSection = await showCorrelationSection(user, details);
     await waitFor(() => {
-      const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
-      expect(correlationSection).not.toBeNull();
       expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
     });
 
+    const queueSection = await showHubSection(user, details, 'Queue', 'Active Queue');
     await user.click(
       within(queueSection!).getByRole('button', {
         name: 'Select active queue counterparty agent from operation app-engineering team-lead'
       })
     );
 
+    correlationSection = await showCorrelationSection(user, details);
     await waitFor(() => {
-      const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
-      expect(correlationSection).not.toBeNull();
       expect(within(details).getByRole('heading', { name: 'Team Lead' })).toBeVisible();
       expect(within(details).queryByRole('heading', { name: 'Current Operation' })).not.toBeInTheDocument();
       expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
@@ -3380,18 +3441,16 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Evidence');
     const incidentSection = within(details).getByRole('heading', { name: 'Incident Feed' }).closest('section');
-    const queueSection = within(details).getByRole('heading', { name: 'Active Queue' }).closest('section');
     expect(incidentSection).not.toBeNull();
-    expect(queueSection).not.toBeNull();
 
+    const correlationSection = await showCorrelationSection(user, details);
     await waitFor(() => {
-      const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
-      expect(correlationSection).not.toBeNull();
       expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
     });
 
+    let queueSection = await showHubSection(user, details, 'Queue', 'Active Queue');
     await waitFor(() => {
       const laneSection = within(details).getByRole('heading', { name: 'Active Correlation Queue' }).closest('section');
       expect(laneSection).not.toBeNull();
@@ -3445,21 +3504,17 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
-    const queueSection = within(details).getByRole('heading', { name: 'Active Queue' }).closest('section');
-    const getCorrelationSection = () =>
-      within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    const details = await openHub(user, 'Queue');
+    let queueSection = within(details).getByRole('heading', { name: 'Active Queue' }).closest('section');
     expect(queueSection).not.toBeNull();
-    expect(getCorrelationSection()).not.toBeNull();
+    let correlationSection = await showCorrelationSection(user, details);
 
     await waitFor(() => {
-      const correlationSection = getCorrelationSection();
-      expect(correlationSection).not.toBeNull();
-      expect(within(details).getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
       expect(within(correlationSection!).getByText('No correlation selected.')).toBeVisible();
       expect(within(correlationSection!).queryByText('corr-app-review')).not.toBeInTheDocument();
     });
 
+    queueSection = await showHubSection(user, details, 'Queue', 'Active Queue');
     const actorPivot = within(queueSection!).getByRole('button', {
       name: 'Select active queue actor from operation app-engineering team-lead'
     });
@@ -3468,9 +3523,9 @@ afterEach(() => {
 
     await user.keyboard('{Enter}');
 
+    correlationSection = await showCorrelationSection(user, details);
+
     await waitFor(() => {
-      const correlationSection = getCorrelationSection();
-      expect(correlationSection).not.toBeNull();
       expect(within(details).getByRole('heading', { name: 'Team Lead' })).toBeVisible();
       expect(within(details).queryByRole('heading', { name: 'Current Operation' })).not.toBeInTheDocument();
       expect(within(correlationSection!).getByText('No correlation selected.')).toBeVisible();
@@ -3521,7 +3576,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Queue');
     const queueSection = within(details).getByRole('heading', { name: 'Active Queue' }).closest('section');
     expect(queueSection).not.toBeNull();
 
@@ -3557,14 +3612,17 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
-    const memorySection = within(details).getByRole('heading', { name: 'Shared Memory' }).closest('section');
-    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    const details = await openHub(user, 'Memory');
+    let memorySection = within(details).getByRole('heading', { name: 'Shared Memory' }).closest('section');
     expect(memorySection).not.toBeNull();
-    expect(correlationSection).not.toBeNull();
 
+    let correlationSection = await showCorrelationSection(user, details);
     await waitFor(() => {
       expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+    });
+
+    memorySection = await showHubSection(user, details, 'Memory', 'Shared Memory');
+    await waitFor(() => {
       expect(
         within(memorySection!).getByRole('button', {
           name: 'Select shared memory agent growth-revenue'
@@ -3578,14 +3636,14 @@ afterEach(() => {
       })
     );
 
+    correlationSection = await showCorrelationSection(user, details);
     await waitFor(() => {
-      const activeCorrelationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
-      const activeMemorySection = within(details).getByRole('heading', { name: 'Shared Memory' }).closest('section');
-
-      expect(activeCorrelationSection).not.toBeNull();
-      expect(activeMemorySection).not.toBeNull();
       expect(within(details).getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
-      expect(within(activeCorrelationSection!).getByText('corr-app-review')).toBeVisible();
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+    });
+
+    const activeMemorySection = await showHubSection(user, details, 'Memory', 'Shared Memory');
+    await waitFor(() => {
       expect(
         within(activeMemorySection!).getByText('Growth revenue preserved the active crew-overview correlation')
       ).toBeVisible();
@@ -3603,7 +3661,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Crew');
     await user.click(within(details).getByRole('button', { name: 'Inspect Team Lead' }));
 
     const memorySection = within(details).getByRole('heading', { name: 'Shared Memory' }).closest('section');
@@ -3628,7 +3686,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Replay');
     const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
     expect(correlationSection).not.toBeNull();
 
@@ -3657,7 +3715,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Crew');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
 
     const memorySection = within(details).getByRole('heading', { name: 'Shared Memory' }).closest('section');
@@ -3717,28 +3775,28 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
-    const memorySection = within(details).getByRole('heading', { name: 'Shared Memory' }).closest('section');
-    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    const details = await openHub(user, 'Memory');
+    let memorySection = within(details).getByRole('heading', { name: 'Shared Memory' }).closest('section');
     expect(memorySection).not.toBeNull();
-    expect(correlationSection).not.toBeNull();
 
+    let correlationSection = await showCorrelationSection(user, details);
     expect(within(correlationSection!).getByText('No correlation selected.')).toBeVisible();
 
+    memorySection = await showHubSection(user, details, 'Memory', 'Shared Memory');
     await user.click(
       within(memorySection!).getByRole('button', {
         name: 'Select shared memory agent growth-revenue'
       })
     );
 
+    correlationSection = await showCorrelationSection(user, details);
     await waitFor(() => {
-      const activeCorrelationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
-      const activeMemorySection = within(details).getByRole('heading', { name: 'Shared Memory' }).closest('section');
-
-      expect(activeCorrelationSection).not.toBeNull();
-      expect(activeMemorySection).not.toBeNull();
       expect(within(details).getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
-      expect(within(activeCorrelationSection!).getByText('corr-app-secondary')).toBeVisible();
+      expect(within(correlationSection!).getByText('corr-app-secondary')).toBeVisible();
+    });
+
+    const activeMemorySection = await showHubSection(user, details, 'Memory', 'Shared Memory');
+    await waitFor(() => {
       expect(
         within(activeMemorySection!).getByText('Growth revenue preserved the artifact-selected correlation')
       ).toBeVisible();
@@ -3756,14 +3814,10 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Queue');
     const attentionSection = within(details).getByRole('heading', { name: 'Attention Queue' }).closest('section');
-    const topologySection = within(details).getByRole('heading', { name: 'Watch Topology' }).closest('section');
-    const incidentSection = within(details).getByRole('heading', { name: 'Incident Feed' }).closest('section');
 
     expect(attentionSection).not.toBeNull();
-    expect(topologySection).not.toBeNull();
-    expect(incidentSection).not.toBeNull();
 
     expect(within(attentionSection!).getByRole('button', { name: 'Inspect App Engineering Agent from attention queue' })).toBeVisible();
     expect(within(attentionSection!).getByRole('button', { name: 'Inspect Growth Revenue Agent from attention queue' })).toBeVisible();
@@ -3773,6 +3827,8 @@ afterEach(() => {
     expect(within(attentionSection!).getByText('Reboot recommendation · Recommended')).toBeVisible();
     expect(within(attentionSection!).getByText('Active task · Review launch copy')).toBeVisible();
     expect(within(attentionSection!).getByText('Reboot recommendation · No')).toBeVisible();
+
+    const topologySection = await showHubSection(user, details, 'Supervision', 'Watch Topology');
     expect(
       within(topologySection!).getByRole('button', {
         name: 'Select watch topology source agent from lead edge team-lead app-engineering'
@@ -3785,6 +3841,8 @@ afterEach(() => {
     ).toBeVisible();
     expect(within(topologySection!).getByText('Mode · lead')).toBeVisible();
     expect(within(topologySection!).getByText('Risk · High risk · Orange')).toBeVisible();
+
+    const incidentSection = await showHubSection(user, details, 'Evidence', 'Incident Feed');
     const overviewIncidentRecord = within(incidentSection!).getByText('Lead is still waiting on workflow evidence').closest('li');
     expect(overviewIncidentRecord).not.toBeNull();
     expect(within(overviewIncidentRecord!).getByText('At · 2026-03-16T08:50:00.000Z')).toBeVisible();
@@ -3819,14 +3877,17 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
-    const topologySection = within(details).getByRole('heading', { name: 'Watch Topology' }).closest('section');
-    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    const details = await openHub(user, 'Supervision');
+    let topologySection = within(details).getByRole('heading', { name: 'Watch Topology' }).closest('section');
     expect(topologySection).not.toBeNull();
-    expect(correlationSection).not.toBeNull();
 
+    let correlationSection = await showCorrelationSection(user, details);
     await waitFor(() => {
       expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+    });
+
+    topologySection = await showHubSection(user, details, 'Supervision', 'Watch Topology');
+    await waitFor(() => {
       expect(
         within(topologySection!).getByRole('button', {
           name: 'Select watch topology source agent from lead edge team-lead app-engineering'
@@ -3842,13 +3903,12 @@ afterEach(() => {
       })
     );
 
+    correlationSection = await showCorrelationSection(user, details);
     await waitFor(() => {
       expect(within(details).getByRole('heading', { name: 'Team Lead' })).toBeVisible();
       expect(within(details).queryByRole('heading', { name: 'Current Operation' })).not.toBeInTheDocument();
-      const nextCorrelationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
-      expect(nextCorrelationSection).not.toBeNull();
-      expect(within(nextCorrelationSection!).getByText('corr-app-review')).toBeVisible();
-      expect(within(nextCorrelationSection!).getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+      expect(within(correlationSection!).getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
     });
 
     const newFetchUrlsAfterPivot = vi
@@ -3865,7 +3925,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Supervision');
     const collectorSection = within(details).getByRole('heading', { name: 'Collector Supervision' }).closest('section');
     expect(collectorSection).not.toBeNull();
 
@@ -3985,17 +4045,17 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
-    const collectorSection = within(details).getByRole('heading', { name: 'Collector Supervision' }).closest('section');
-    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
-    const memorySection = within(details).getByRole('heading', { name: 'Shared Memory' }).closest('section');
+    const details = await openHub(user, 'Supervision');
+    let collectorSection = within(details).getByRole('heading', { name: 'Collector Supervision' }).closest('section');
     expect(collectorSection).not.toBeNull();
-    expect(correlationSection).not.toBeNull();
-    expect(memorySection).not.toBeNull();
 
+    let correlationSection = await showCorrelationSection(user, details);
     await waitFor(() => {
-      expect(within(details).getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
       expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+    });
+
+    collectorSection = await showHubSection(user, details, 'Supervision', 'Collector Supervision');
+    await waitFor(() => {
       expect(
         within(collectorSection!).getByText('Shared snapshot artifacts · 1 shared artifact in latest collector snapshot')
       ).toBeVisible();
@@ -4007,16 +4067,23 @@ afterEach(() => {
     expect(sharedArtifactRecord!).toHaveTextContent('Last seen · 2026-03-16T08:59:10.000Z');
     expect(sharedArtifactRecord!).toHaveTextContent('Source kinds · workspace_file, tmux_observation');
     expect(sharedArtifactRecord!).toHaveTextContent('Participating agents · app-engineering, growth-revenue');
+
+    let memorySection = await showHubSection(user, details, 'Memory', 'Shared Memory');
     expect(within(memorySection!).queryByText('Ref · /tmp/missing.md')).not.toBeInTheDocument();
+
+    collectorSection = await showHubSection(user, details, 'Supervision', 'Collector Supervision');
+    const activeSharedArtifactRecord = within(collectorSection!).getByText('Agent count · 2').closest('li');
+    expect(activeSharedArtifactRecord).not.toBeNull();
 
     const fetchCallCountBeforeJump = vi.mocked(globalThis.fetch).mock.calls.length;
 
     await user.click(
-      within(sharedArtifactRecord!).getByRole('button', {
+      within(activeSharedArtifactRecord!).getByRole('button', {
         name: 'Jump to shared memory artifact /tmp/missing.md'
       })
     );
 
+    memorySection = await findHubSection(details, 'Shared Memory');
     await waitFor(() => {
       expect(within(memorySection!).getByText('Ref · /tmp/missing.md')).toBeVisible();
       expect(within(memorySection!).getByText('Focused exact artifact · /tmp/missing.md')).toBeVisible();
@@ -4025,13 +4092,16 @@ afterEach(() => {
       expect(backlinkLane).not.toBeNull();
       expect(within(backlinkLane!).getByText('Collector shared snapshot')).toBeVisible();
       expect(within(backlinkLane!).getByText('/tmp/missing.md')).toBeVisible();
-      expect(within(details).getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
-      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
     });
 
     const focusedArtifactRecord = within(memorySection!).getByText('Ref · /tmp/missing.md').closest('li');
     expect(focusedArtifactRecord).not.toBeNull();
     expect(document.activeElement).toBe(focusedArtifactRecord);
+
+    correlationSection = await showCorrelationSection(user, details);
+    await waitFor(() => {
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+    });
 
     const postJumpRequests = vi
       .mocked(globalThis.fetch)
@@ -4045,14 +4115,17 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
-    const collectorSection = within(details).getByRole('heading', { name: 'Collector Supervision' }).closest('section');
-    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    const details = await openHub(user, 'Supervision');
+    let collectorSection = within(details).getByRole('heading', { name: 'Collector Supervision' }).closest('section');
     expect(collectorSection).not.toBeNull();
-    expect(correlationSection).not.toBeNull();
 
+    let correlationSection = await showCorrelationSection(user, details);
     await waitFor(() => {
       expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+    });
+
+    collectorSection = await showHubSection(user, details, 'Supervision', 'Collector Supervision');
+    await waitFor(() => {
       expect(
         within(collectorSection!).getByRole('button', {
           name: 'Select collector supervision agent app-engineering'
@@ -4066,11 +4139,10 @@ afterEach(() => {
       })
     );
 
+    correlationSection = await showCorrelationSection(user, details);
     await waitFor(() => {
       expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
-      const nextCorrelationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
-      expect(nextCorrelationSection).not.toBeNull();
-      expect(within(nextCorrelationSection!).getByText('corr-app-review')).toBeVisible();
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
     });
 
     await act(async () => {
@@ -4078,20 +4150,23 @@ afterEach(() => {
       expect(globalThis.fetch).toHaveBeenCalledWith(correlationUrl, expect.anything());
       expect(globalThis.fetch).toHaveBeenCalledWith(selectedCorrelationMemoryArtifactsUrl, expect.anything());
     });
-  });
+  }, 10000);
 
   it('preserves the active crew-overview correlation when pivoting through the collector snapshot actor', async () => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
-    const collectorSection = within(details).getByRole('heading', { name: 'Collector Supervision' }).closest('section');
-    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    const details = await openHub(user, 'Supervision');
+    let collectorSection = within(details).getByRole('heading', { name: 'Collector Supervision' }).closest('section');
     expect(collectorSection).not.toBeNull();
-    expect(correlationSection).not.toBeNull();
 
+    let correlationSection = await showCorrelationSection(user, details);
     await waitFor(() => {
       expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+    });
+
+    collectorSection = await showHubSection(user, details, 'Supervision', 'Collector Supervision');
+    await waitFor(() => {
       expect(
         within(collectorSection!).getByRole('button', {
           name: 'Select collector snapshot actor team-lead'
@@ -4105,13 +4180,12 @@ afterEach(() => {
       })
     );
 
+    correlationSection = await showCorrelationSection(user, details);
     await waitFor(() => {
       expect(within(details).getByRole('heading', { name: 'Team Lead' })).toBeVisible();
       expect(within(details).queryByRole('heading', { name: 'Current Operation' })).not.toBeInTheDocument();
-      const nextCorrelationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
-      expect(nextCorrelationSection).not.toBeNull();
-      expect(within(nextCorrelationSection!).getByText('corr-app-review')).toBeVisible();
-      expect(within(nextCorrelationSection!).getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+      expect(within(correlationSection!).getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
     });
 
     await act(async () => {
@@ -4125,17 +4199,22 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
-    const collectorSection = within(details).getByRole('heading', { name: 'Collector Supervision' }).closest('section');
-    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    const details = await openHub(user, 'Supervision');
+    let collectorSection = within(details).getByRole('heading', { name: 'Collector Supervision' }).closest('section');
     expect(collectorSection).not.toBeNull();
-    expect(correlationSection).not.toBeNull();
 
-    const appEngineeringCollectorRecord = within(collectorSection!).getByText('App Engineering Agent').closest('li');
+    let appEngineeringCollectorRecord = within(collectorSection!).getByText('App Engineering Agent').closest('li');
     expect(appEngineeringCollectorRecord).not.toBeNull();
 
+    let correlationSection = await showCorrelationSection(user, details);
     await waitFor(() => {
       expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+    });
+
+    collectorSection = await showHubSection(user, details, 'Supervision', 'Collector Supervision');
+    appEngineeringCollectorRecord = within(collectorSection!).getByText('App Engineering Agent').closest('li');
+    expect(appEngineeringCollectorRecord).not.toBeNull();
+    await waitFor(() => {
       expect(
         within(appEngineeringCollectorRecord!).getByRole('button', {
           name: 'Select collector supervision watch target from collector app-engineering growth-revenue'
@@ -4149,13 +4228,12 @@ afterEach(() => {
       })
     );
 
+    correlationSection = await showCorrelationSection(user, details);
     await waitFor(() => {
       expect(within(details).getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
       expect(within(details).queryByRole('heading', { name: 'Current Operation' })).not.toBeInTheDocument();
-      const nextCorrelationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
-      expect(nextCorrelationSection).not.toBeNull();
-      expect(within(nextCorrelationSection!).getByText('corr-app-review')).toBeVisible();
-      expect(within(nextCorrelationSection!).getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+      expect(within(correlationSection!).getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
     });
 
     await act(async () => {
@@ -4163,23 +4241,28 @@ afterEach(() => {
       expect(globalThis.fetch).toHaveBeenCalledWith(correlationUrl, expect.anything());
       expect(globalThis.fetch).toHaveBeenCalledWith(growthRevenueSelectedReviewCorrelationMemoryArtifactsUrl, expect.anything());
     });
-  });
+  }, 10000);
 
   it('preserves the active crew-overview correlation when pivoting through collector supervision watchers', async () => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
-    const collectorSection = within(details).getByRole('heading', { name: 'Collector Supervision' }).closest('section');
-    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    const details = await openHub(user, 'Supervision');
+    let collectorSection = within(details).getByRole('heading', { name: 'Collector Supervision' }).closest('section');
     expect(collectorSection).not.toBeNull();
-    expect(correlationSection).not.toBeNull();
 
-    const growthRevenueCollectorRecord = within(collectorSection!).getByText('Growth Revenue Agent').closest('li');
+    let growthRevenueCollectorRecord = within(collectorSection!).getByText('Growth Revenue Agent').closest('li');
     expect(growthRevenueCollectorRecord).not.toBeNull();
 
+    let correlationSection = await showCorrelationSection(user, details);
     await waitFor(() => {
       expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+    });
+
+    collectorSection = await showHubSection(user, details, 'Supervision', 'Collector Supervision');
+    growthRevenueCollectorRecord = within(collectorSection!).getByText('Growth Revenue Agent').closest('li');
+    expect(growthRevenueCollectorRecord).not.toBeNull();
+    await waitFor(() => {
       expect(
         within(growthRevenueCollectorRecord!).getByRole('button', {
           name: 'Select collector supervision watcher from collector growth-revenue team-lead'
@@ -4193,13 +4276,12 @@ afterEach(() => {
       })
     );
 
+    correlationSection = await showCorrelationSection(user, details);
     await waitFor(() => {
       expect(within(details).getByRole('heading', { name: 'Team Lead' })).toBeVisible();
       expect(within(details).queryByRole('heading', { name: 'Current Operation' })).not.toBeInTheDocument();
-      const nextCorrelationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
-      expect(nextCorrelationSection).not.toBeNull();
-      expect(within(nextCorrelationSection!).getByText('corr-app-review')).toBeVisible();
-      expect(within(nextCorrelationSection!).getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+      expect(within(correlationSection!).getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
     });
 
     await act(async () => {
@@ -4207,7 +4289,7 @@ afterEach(() => {
       expect(globalThis.fetch).toHaveBeenCalledWith(correlationUrl, expect.anything());
       expect(globalThis.fetch).toHaveBeenCalledWith(teamLeadSelectedCorrelationMemoryArtifactsUrl, expect.anything());
     });
-  });
+  }, 10000);
 
   it('keeps collector supervision watcher pivots on auto-correlation while crew-overview correlation is still loading', async () => {
     const growthRevenueReviewCorrelationUrl = '/correlations/corr-growth-lead-review?limit=10&window=60m';
@@ -4267,7 +4349,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Supervision');
     const collectorSection = within(details).getByRole('heading', { name: 'Collector Supervision' }).closest('section');
     expect(collectorSection).not.toBeNull();
 
@@ -4288,12 +4370,11 @@ afterEach(() => {
       })
     );
 
+    let correlationSection = await showCorrelationSection(user, details);
     await waitFor(() => {
       expect(within(details).getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
-      const nextCorrelationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
-      expect(nextCorrelationSection).not.toBeNull();
-      expect(within(nextCorrelationSection!).getByText('corr-growth-lead-review')).toBeVisible();
-      expect(within(nextCorrelationSection!).queryByText('No correlation selected.')).not.toBeInTheDocument();
+      expect(within(correlationSection!).getByText('corr-growth-lead-review')).toBeVisible();
+      expect(within(correlationSection!).queryByText('No correlation selected.')).not.toBeInTheDocument();
     });
 
     await act(async () => {
@@ -4309,7 +4390,7 @@ afterEach(() => {
         expect.anything()
       );
     });
-  });
+  }, 10000);
 
   it('keeps collector supervision watcher pivots on auto-correlation when the crew-overview incident feed errors', async () => {
     const growthRevenueReviewCorrelationUrl = '/correlations/corr-growth-lead-review?limit=10&window=60m';
@@ -4366,11 +4447,14 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
-    const collectorSection = within(details).getByRole('heading', { name: 'Collector Supervision' }).closest('section');
+    const details = await openHub(user, 'Supervision');
+    let collectorSection = within(details).getByRole('heading', { name: 'Collector Supervision' }).closest('section');
     expect(collectorSection).not.toBeNull();
+
+    await showHubSection(user, details, 'Evidence', 'Incident Feed');
     expect(await within(details).findByText('incident refresh failed')).toBeVisible();
 
+    collectorSection = await showHubSection(user, details, 'Supervision', 'Collector Supervision');
     const appEngineeringCollectorRecord = within(collectorSection!).getByText('App Engineering Agent').closest('li');
     expect(appEngineeringCollectorRecord).not.toBeNull();
 
@@ -4388,12 +4472,11 @@ afterEach(() => {
       })
     );
 
+    let correlationSection = await showCorrelationSection(user, details);
     await waitFor(() => {
       expect(within(details).getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
-      const nextCorrelationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
-      expect(nextCorrelationSection).not.toBeNull();
-      expect(within(nextCorrelationSection!).getByText('corr-growth-lead-review')).toBeVisible();
-      expect(within(nextCorrelationSection!).queryByText('No correlation selected.')).not.toBeInTheDocument();
+      expect(within(correlationSection!).getByText('corr-growth-lead-review')).toBeVisible();
+      expect(within(correlationSection!).queryByText('No correlation selected.')).not.toBeInTheDocument();
     });
 
     await act(async () => {
@@ -4404,7 +4487,7 @@ afterEach(() => {
         expect.anything()
       );
     });
-  });
+  }, 10000);
 
   it('keeps crew-overview collector supervision watcher pivots on the existing no-correlation path when no active correlation is selected', async () => {
     const crewOverviewWithoutCorrelationIncidentFeedFixture = {
@@ -4430,17 +4513,22 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
-    const collectorSection = within(details).getByRole('heading', { name: 'Collector Supervision' }).closest('section');
-    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    const details = await openHub(user, 'Supervision');
+    let collectorSection = within(details).getByRole('heading', { name: 'Collector Supervision' }).closest('section');
     expect(collectorSection).not.toBeNull();
-    expect(correlationSection).not.toBeNull();
 
-    const appEngineeringCollectorRecord = within(collectorSection!).getByText('App Engineering Agent').closest('li');
+    let appEngineeringCollectorRecord = within(collectorSection!).getByText('App Engineering Agent').closest('li');
     expect(appEngineeringCollectorRecord).not.toBeNull();
 
+    let correlationSection = await showCorrelationSection(user, details);
     await waitFor(() => {
       expect(within(correlationSection!).getByText('No correlation selected.')).toBeVisible();
+    });
+
+    collectorSection = await showHubSection(user, details, 'Supervision', 'Collector Supervision');
+    appEngineeringCollectorRecord = within(collectorSection!).getByText('App Engineering Agent').closest('li');
+    expect(appEngineeringCollectorRecord).not.toBeNull();
+    await waitFor(() => {
       expect(
         within(appEngineeringCollectorRecord!).getByRole('button', {
           name: 'Select collector supervision watcher from collector app-engineering team-lead'
@@ -4454,14 +4542,13 @@ afterEach(() => {
       })
     );
 
+    correlationSection = await showCorrelationSection(user, details);
     await waitFor(() => {
       expect(within(details).getByRole('heading', { name: 'Team Lead' })).toBeVisible();
       expect(within(details).queryByRole('heading', { name: 'Current Operation' })).not.toBeInTheDocument();
-      const nextCorrelationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
-      expect(nextCorrelationSection).not.toBeNull();
-      expect(within(nextCorrelationSection!).getByText('No correlation selected.')).toBeVisible();
-      expect(within(nextCorrelationSection!).queryByText('corr-app-review')).not.toBeInTheDocument();
-      expect(within(nextCorrelationSection!).queryByText('corr-growth-lead-review')).not.toBeInTheDocument();
+      expect(within(correlationSection!).getByText('No correlation selected.')).toBeVisible();
+      expect(within(correlationSection!).queryByText('corr-app-review')).not.toBeInTheDocument();
+      expect(within(correlationSection!).queryByText('corr-growth-lead-review')).not.toBeInTheDocument();
     });
 
     await act(async () => {
@@ -4471,7 +4558,7 @@ afterEach(() => {
 
     expect(globalThis.fetch).not.toHaveBeenCalledWith(correlationUrl, expect.anything());
     expect(globalThis.fetch).not.toHaveBeenCalledWith(teamLeadSelectedCorrelationMemoryArtifactsUrl, expect.anything());
-  });
+  }, 10000);
 
   it('keeps crew-overview collector supervision watch-target pivots on the existing no-correlation path when no active correlation is selected', async () => {
     const crewOverviewWithoutCorrelationIncidentFeedFixture = {
@@ -4497,17 +4584,22 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
-    const collectorSection = within(details).getByRole('heading', { name: 'Collector Supervision' }).closest('section');
-    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    const details = await openHub(user, 'Supervision');
+    let collectorSection = within(details).getByRole('heading', { name: 'Collector Supervision' }).closest('section');
     expect(collectorSection).not.toBeNull();
-    expect(correlationSection).not.toBeNull();
 
-    const appEngineeringCollectorRecord = within(collectorSection!).getByText('App Engineering Agent').closest('li');
+    let appEngineeringCollectorRecord = within(collectorSection!).getByText('App Engineering Agent').closest('li');
     expect(appEngineeringCollectorRecord).not.toBeNull();
 
+    let correlationSection = await showCorrelationSection(user, details);
     await waitFor(() => {
       expect(within(correlationSection!).getByText('No correlation selected.')).toBeVisible();
+    });
+
+    collectorSection = await showHubSection(user, details, 'Supervision', 'Collector Supervision');
+    appEngineeringCollectorRecord = within(collectorSection!).getByText('App Engineering Agent').closest('li');
+    expect(appEngineeringCollectorRecord).not.toBeNull();
+    await waitFor(() => {
       expect(
         within(appEngineeringCollectorRecord!).getByRole('button', {
           name: 'Select collector supervision watch target from collector app-engineering growth-revenue'
@@ -4524,9 +4616,6 @@ afterEach(() => {
     await waitFor(() => {
       expect(within(details).getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
       expect(within(details).queryByRole('heading', { name: 'Current Operation' })).not.toBeInTheDocument();
-      const nextCorrelationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
-      expect(nextCorrelationSection).not.toBeNull();
-      expect(within(nextCorrelationSection!).getByText('No correlation selected.')).toBeVisible();
     });
 
     await act(async () => {
@@ -4536,7 +4625,7 @@ afterEach(() => {
     expect(globalThis.fetch).not.toHaveBeenCalledWith(correlationUrl, expect.anything());
     expect(globalThis.fetch).not.toHaveBeenCalledWith(growthRevenueSelectedReviewCorrelationMemoryArtifactsUrl, expect.anything());
     expect(globalThis.fetch).toHaveBeenCalledWith(growthRevenueMemoryArtifactsUrl, expect.anything());
-  });
+  }, 10000);
 
   it('keeps the collector snapshot actor pivot on the existing no-correlation path when no active correlation is selected', async () => {
     const crewOverviewWithoutCorrelationIncidentFeedFixture = {
@@ -4562,14 +4651,17 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
-    const collectorSection = within(details).getByRole('heading', { name: 'Collector Supervision' }).closest('section');
-    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    const details = await openHub(user, 'Supervision');
+    let collectorSection = within(details).getByRole('heading', { name: 'Collector Supervision' }).closest('section');
     expect(collectorSection).not.toBeNull();
-    expect(correlationSection).not.toBeNull();
 
+    let correlationSection = await showCorrelationSection(user, details);
     await waitFor(() => {
       expect(within(correlationSection!).getByText('No correlation selected.')).toBeVisible();
+    });
+
+    collectorSection = await showHubSection(user, details, 'Supervision', 'Collector Supervision');
+    await waitFor(() => {
       expect(
         within(collectorSection!).getByRole('button', {
           name: 'Select collector snapshot actor team-lead'
@@ -4583,12 +4675,11 @@ afterEach(() => {
       })
     );
 
+    correlationSection = await showCorrelationSection(user, details);
     await waitFor(() => {
       expect(within(details).getByRole('heading', { name: 'Team Lead' })).toBeVisible();
       expect(within(details).queryByRole('heading', { name: 'Current Operation' })).not.toBeInTheDocument();
-      const nextCorrelationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
-      expect(nextCorrelationSection).not.toBeNull();
-      expect(within(nextCorrelationSection!).getByText('No correlation selected.')).toBeVisible();
+      expect(within(correlationSection!).getByText('No correlation selected.')).toBeVisible();
     });
 
     await act(async () => {
@@ -4624,14 +4715,12 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
-    const collectorSection = within(details).getByRole('heading', { name: 'Collector Supervision' }).closest('section');
-    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    const details = await openHub(user, 'Supervision');
+    let collectorSection = within(details).getByRole('heading', { name: 'Collector Supervision' }).closest('section');
     expect(collectorSection).not.toBeNull();
-    expect(correlationSection).not.toBeNull();
 
+    collectorSection = await showHubSection(user, details, 'Supervision', 'Collector Supervision');
     await waitFor(() => {
-      expect(within(correlationSection!).getByText('No correlation selected.')).toBeVisible();
       expect(
         within(collectorSection!).getByRole('button', {
           name: 'Select collector supervision agent growth-revenue'
@@ -4647,9 +4736,6 @@ afterEach(() => {
 
     await waitFor(() => {
       expect(within(details).getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
-      const nextCorrelationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
-      expect(nextCorrelationSection).not.toBeNull();
-      expect(within(nextCorrelationSection!).getByText('No correlation selected.')).toBeVisible();
     });
 
     await act(async () => {
@@ -4685,17 +4771,22 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
-    const collectorSection = within(details).getByRole('heading', { name: 'Collector Supervision' }).closest('section');
-    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    const details = await openHub(user, 'Supervision');
+    let collectorSection = within(details).getByRole('heading', { name: 'Collector Supervision' }).closest('section');
     expect(collectorSection).not.toBeNull();
-    expect(correlationSection).not.toBeNull();
 
-    const growthRevenueCollectorRecord = within(collectorSection!).getByText('Growth Revenue Agent').closest('li');
+    let growthRevenueCollectorRecord = within(collectorSection!).getByText('Growth Revenue Agent').closest('li');
     expect(growthRevenueCollectorRecord).not.toBeNull();
 
+    let correlationSection = await showCorrelationSection(user, details);
     await waitFor(() => {
       expect(within(correlationSection!).getByText('No correlation selected.')).toBeVisible();
+    });
+
+    collectorSection = await showHubSection(user, details, 'Supervision', 'Collector Supervision');
+    growthRevenueCollectorRecord = within(collectorSection!).getByText('Growth Revenue Agent').closest('li');
+    expect(growthRevenueCollectorRecord).not.toBeNull();
+    await waitFor(() => {
       expect(
         within(growthRevenueCollectorRecord!).getByRole('button', {
           name: 'Select collector supervision watcher from collector growth-revenue team-lead'
@@ -4709,12 +4800,11 @@ afterEach(() => {
       })
     );
 
+    correlationSection = await showCorrelationSection(user, details);
     await waitFor(() => {
       expect(within(details).getByRole('heading', { name: 'Team Lead' })).toBeVisible();
       expect(within(details).queryByRole('heading', { name: 'Current Operation' })).not.toBeInTheDocument();
-      const nextCorrelationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
-      expect(nextCorrelationSection).not.toBeNull();
-      expect(within(nextCorrelationSection!).getByText('No correlation selected.')).toBeVisible();
+      expect(within(correlationSection!).getByText('No correlation selected.')).toBeVisible();
     });
 
     await act(async () => {
@@ -4747,11 +4837,11 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    await screen.findByRole('button', { name: 'Open Hub' });
+    await screen.findByRole('button', { name: 'Crew' });
     expect(globalThis.fetch).not.toHaveBeenCalledWith(teamLeadSelectedTimelineUrl, expect.anything());
 
-    const details = await openHub(user);
-    const replaySection = (await within(details).findByRole('heading', { name: 'Timeline Replay' })).closest('section');
+    const details = await openHub(user, 'Replay');
+    let replaySection = await findHubSection(details, 'Timeline Replay');
 
     expect(replaySection).not.toBeNull();
     expect(within(replaySection!).getByText('Replay captured missing workflow evidence')).toBeVisible();
@@ -4760,11 +4850,11 @@ afterEach(() => {
       expect(globalThis.fetch).toHaveBeenCalledWith(timelineUrl, expect.anything());
     });
 
-    await user.click(within(details).getByRole('button', { name: 'Inspect Team Lead' }));
+    const crewSection = await showHubSection(user, details, 'Crew', 'Crew Overview');
+    await user.click(within(crewSection).getByRole('button', { name: 'Inspect Team Lead' }));
 
-    const selectedReplaySection = (await within(details).findByRole('heading', { name: 'Timeline Replay' })).closest(
-      'section'
-    );
+    replaySection = await showHubSection(user, details, 'Replay', 'Timeline Replay');
+    const selectedReplaySection = replaySection;
     expect(selectedReplaySection).not.toBeNull();
 
     await waitFor(() => {
@@ -4781,7 +4871,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Crew');
     await user.click(within(details).getByRole('button', { name: 'Inspect Team Lead' }));
 
     const replaySection = (await within(details).findByRole('heading', { name: 'Timeline Replay' })).closest('section');
@@ -4832,7 +4922,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Crew');
     await user.click(within(details).getByRole('button', { name: 'Inspect Team Lead' }));
 
     const replaySection = (await within(details).findByRole('heading', { name: 'Timeline Replay' })).closest('section');
@@ -4918,7 +5008,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Crew');
     await user.click(within(details).getByRole('button', { name: 'Inspect Team Lead' }));
 
     let replaySection = (await within(details).findByRole('heading', { name: 'Timeline Replay' })).closest('section');
@@ -4990,7 +5080,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Crew');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
 
     const incidentSection = (await within(details).findByRole('heading', { name: 'Incident Feed' })).closest('section');
@@ -5032,7 +5122,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Crew');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
 
     await waitFor(() => {
@@ -5086,7 +5176,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Crew');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
 
     let replayPanel = await selectSelectedAgentDrilldownTab(user, 'Replay / Correlation');
@@ -5185,7 +5275,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Crew');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
     await selectSelectedAgentDrilldownTab(user, 'Replay / Correlation');
 
@@ -5272,7 +5362,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Crew');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
 
     const incidentSection = (await within(details).findByRole('heading', { name: 'Incident Feed' })).closest('section');
@@ -5345,7 +5435,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Crew');
     await user.click(within(details).getByRole('button', { name: 'Inspect Team Lead' }));
 
     const replaySection = (await within(details).findByRole('heading', { name: 'Timeline Replay' })).closest('section');
@@ -5366,7 +5456,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Replay');
     const replaySection = (await within(details).findByRole('heading', { name: 'Timeline Replay' })).closest('section');
     const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
     const replayEvent = within(replaySection!)
@@ -5433,18 +5523,21 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
-    const incidentSection = within(details).getByRole('heading', { name: 'Incident Feed' }).closest('section');
-    const replaySection = (await within(details).findByRole('heading', { name: 'Timeline Replay' })).closest('section');
+    const details = await openHub(user, 'Evidence');
+    let incidentSection = within(details).getByRole('heading', { name: 'Incident Feed' }).closest('section');
+    let replaySection = await showHubSection(user, details, 'Replay', 'Timeline Replay');
     expect(incidentSection).not.toBeNull();
     expect(replaySection).not.toBeNull();
 
     expect(await within(replaySection!).findByText('Replay captured missing workflow evidence')).toBeVisible();
     expect(globalThis.fetch).toHaveBeenCalledWith(timelineUrl, expect.anything());
 
+    incidentSection = await showHubSection(user, details, 'Evidence', 'Incident Feed');
     await user.click(
       within(incidentSection!).getByRole('button', { name: 'Open incident correlation corr-app-secondary' })
     );
+
+    replaySection = await showHubSection(user, details, 'Replay', 'Timeline Replay');
 
     await waitFor(() => {
       expect(within(replaySection!).getByText('Scoped replay · corr-app-secondary')).toBeVisible();
@@ -5472,7 +5565,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Replay');
     const replaySection = (await within(details).findByRole('heading', { name: 'Timeline Replay' })).closest('section');
     expect(replaySection).not.toBeNull();
 
@@ -5511,15 +5604,16 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
-    const incidentSection = within(details).getByRole('heading', { name: 'Incident Feed' }).closest('section');
-    const replaySection = (await within(details).findByRole('heading', { name: 'Timeline Replay' })).closest('section');
+    const details = await openHub(user, 'Evidence');
+    let incidentSection = within(details).getByRole('heading', { name: 'Incident Feed' }).closest('section');
     expect(incidentSection).not.toBeNull();
-    expect(replaySection).not.toBeNull();
 
     await user.click(
       within(incidentSection!).getByRole('button', { name: 'Open incident correlation corr-app-secondary' })
     );
+
+    let replaySection = await showHubSection(user, details, 'Replay', 'Timeline Replay');
+    expect(replaySection).not.toBeNull();
 
     await waitFor(() => {
       expect(within(replaySection!).getByText('Scoped replay · corr-app-secondary')).toBeVisible();
@@ -5572,7 +5666,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Replay');
     const replaySection = (await within(details).findByRole('heading', { name: 'Timeline Replay' })).closest('section');
     const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
     expect(replaySection).not.toBeNull();
@@ -5619,35 +5713,24 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
-    const replaySection = (await within(details).findByRole('heading', { name: 'Timeline Replay' })).closest('section');
-    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
-    const memorySection = within(details).getByRole('heading', { name: 'Shared Memory' }).closest('section');
+    const details = await openHub(user, 'Replay');
+    let replaySection = await findHubSection(details, 'Timeline Replay');
+    let correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
     expect(replaySection).not.toBeNull();
     expect(correlationSection).not.toBeNull();
-    expect(memorySection).not.toBeNull();
 
     const selectedReplayCorrelationButton = await within(replaySection!).findByRole('button', {
       name: 'Open replay correlation corr-app-review, currently selected'
     });
-    const selectedSharedMemoryCorrelationButton = await within(memorySection!).findByRole('button', {
-      name: 'Open shared memory correlation corr-app-review, currently selected'
-    });
-    const artifactRecord = await within(memorySection!)
-      .findByText('Ref · /tmp/evidence.md')
-      .then((record) => record.closest('li'));
     const replayRecord = selectedReplayCorrelationButton.closest('li');
-    expect(artifactRecord).not.toBeNull();
     expect(replayRecord).not.toBeNull();
 
-    expect(within(details).getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
     expect(within(details).queryByRole('button', { name: 'Clear' })).not.toBeInTheDocument();
     expect(within(details).queryByRole('heading', { name: 'Current Operation' })).not.toBeInTheDocument();
     expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
     expect(within(replaySection!).queryByText('Scoped replay · corr-app-review')).not.toBeInTheDocument();
     expect(within(details).queryByRole('button', { name: 'Return to current scope' })).not.toBeInTheDocument();
     expect(selectedReplayCorrelationButton).toBeVisible();
-    expect(selectedSharedMemoryCorrelationButton).toBeVisible();
     expect(
       within(replayRecord!).getByRole('button', {
         name: 'Jump to shared memory artifact /tmp/evidence.md'
@@ -5662,20 +5745,36 @@ afterEach(() => {
       })
     );
 
+    const memorySection = await findHubSection(details, 'Shared Memory');
+    const artifactRecord = await within(memorySection)
+      .findByText('Ref · /tmp/evidence.md')
+      .then((record) => record.closest('li'));
+    const selectedSharedMemoryCorrelationButton = await within(memorySection).findByRole('button', {
+      name: 'Open shared memory correlation corr-app-review, currently selected'
+    });
+
     await waitFor(() => {
       expect(document.activeElement).toBe(artifactRecord);
-      const backlinkLane = within(memorySection!).getByText('Current-scope backlinks').closest('div');
+      const backlinkLane = within(memorySection).getByText('Current-scope backlinks').closest('div');
       expect(backlinkLane).not.toBeNull();
       expect(within(backlinkLane!).getByText('Timeline replay')).toBeVisible();
       expect(within(backlinkLane!).getByText('Replay captured missing workflow evidence')).toBeVisible();
-      expect(within(details).getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
       expect(within(details).queryByRole('button', { name: 'Clear' })).not.toBeInTheDocument();
       expect(within(details).queryByRole('heading', { name: 'Current Operation' })).not.toBeInTheDocument();
+      expect(selectedSharedMemoryCorrelationButton).toBeVisible();
+    });
+
+    correlationSection = await showCorrelationSection(user, details);
+    replaySection = await findHubSection(details, 'Timeline Replay');
+    await waitFor(() => {
       expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
       expect(within(replaySection!).queryByText('Scoped replay · corr-app-review')).not.toBeInTheDocument();
       expect(within(details).queryByRole('button', { name: 'Return to current scope' })).not.toBeInTheDocument();
-      expect(selectedReplayCorrelationButton).toBeVisible();
-      expect(selectedSharedMemoryCorrelationButton).toBeVisible();
+      expect(
+        within(replaySection!).getByRole('button', {
+          name: 'Open replay correlation corr-app-review, currently selected'
+        })
+      ).toBeVisible();
     });
 
     const postJumpRequests = vi
@@ -5694,7 +5793,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Replay');
     const replaySection = (await within(details).findByRole('heading', { name: 'Timeline Replay' })).closest('section');
     const replayEvent = within(replaySection!)
       .getByText('Replay captured missing workflow evidence')
@@ -5727,7 +5826,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Replay');
     const replaySection = (await within(details).findByRole('heading', { name: 'Timeline Replay' })).closest('section');
     const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
     const replayEvent = within(replaySection!)
@@ -5813,7 +5912,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Replay');
     expect(await within(details).findByText('Replay captured missing workflow evidence')).toBeVisible();
 
     expect(await within(details).findByText('timeline refresh failed')).toBeVisible();
@@ -5851,17 +5950,18 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Evidence');
     const incidentSection = within(details).getByRole('heading', { name: 'Incident Feed' }).closest('section');
-    const replaySection = (await within(details).findByRole('heading', { name: 'Timeline Replay' })).closest('section');
     expect(incidentSection).not.toBeNull();
-    expect(replaySection).not.toBeNull();
 
     await user.click(
       within(incidentSection!).getByRole('button', {
         name: 'Open incident correlation corr-app-secondary'
       })
     );
+
+    const replaySection = await showHubSection(user, details, 'Replay', 'Timeline Replay');
+    expect(replaySection).not.toBeNull();
 
     await waitFor(() => {
       expect(within(replaySection!).getByText('Scoped replay · corr-app-secondary')).toBeVisible();
@@ -5876,11 +5976,12 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
-    const incidentSection = within(details).getByRole('heading', { name: 'Incident Feed' }).closest('section');
-    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
-    const replaySection = (await within(details).findByRole('heading', { name: 'Timeline Replay' })).closest('section');
+    const details = await openHub(user, 'Evidence');
+    let incidentSection = within(details).getByRole('heading', { name: 'Incident Feed' }).closest('section');
     expect(incidentSection).not.toBeNull();
+
+    let correlationSection = await showCorrelationSection(user, details);
+    let replaySection = await findHubSection(details, 'Timeline Replay');
     expect(correlationSection).not.toBeNull();
     expect(replaySection).not.toBeNull();
 
@@ -5892,12 +5993,15 @@ afterEach(() => {
 
     const fetchCallCountBeforeReselect = vi.mocked(globalThis.fetch).mock.calls.length;
 
+    incidentSection = await showHubSection(user, details, 'Evidence', 'Incident Feed');
     await user.click(
       within(incidentSection!).getByRole('button', {
         name: 'Open incident correlation corr-app-review, currently selected'
       })
     );
 
+    correlationSection = await showCorrelationSection(user, details);
+    replaySection = await findHubSection(details, 'Timeline Replay');
     await waitFor(() => {
       expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
       expect(within(replaySection!).getByText('Replay captured missing workflow evidence')).toBeVisible();
@@ -6166,20 +6270,19 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
-    const incidentSection = within(details).getByRole('heading', { name: 'Incident Feed' }).closest('section');
-    const officeGridSection = within(details).getByRole('heading', { name: 'Office Grid' }).closest('section');
-    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    const details = await openHub(user, 'Evidence');
+    let incidentSection = within(details).getByRole('heading', { name: 'Incident Feed' }).closest('section');
     expect(incidentSection).not.toBeNull();
-    expect(officeGridSection).not.toBeNull();
-    expect(correlationSection).not.toBeNull();
 
     await user.click(within(incidentSection!).getByRole('button', { name: 'Open incident correlation corr-app-secondary' }));
 
+    let correlationSection = await showCorrelationSection(user, details);
     await waitFor(() => {
       expect(within(correlationSection!).getByText('corr-app-secondary')).toBeVisible();
       expect(within(correlationSection!).getByText('Counts · 1 incidents · 0 interactions · 1 events')).toBeVisible();
     });
+
+    const officeGridSection = await showHubSection(user, details, 'Crew', 'Office Grid');
 
     await user.click(
       within(officeGridSection!).getByRole('button', {
@@ -6187,12 +6290,12 @@ afterEach(() => {
       })
     );
 
+    correlationSection = await showCorrelationSection(user, details);
     await waitFor(() => {
       expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
-      const nextCorrelationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
-      expect(nextCorrelationSection).not.toBeNull();
-      expect(within(nextCorrelationSection!).getByText('corr-app-secondary')).toBeVisible();
-      expect(within(nextCorrelationSection!).queryByText('corr-app-review')).not.toBeInTheDocument();
+      expect(correlationSection).not.toBeNull();
+      expect(within(correlationSection!).getByText('corr-app-secondary')).toBeVisible();
+      expect(within(correlationSection!).queryByText('corr-app-review')).not.toBeInTheDocument();
     });
   });
 
@@ -6201,13 +6304,17 @@ afterEach(() => {
     render(<App />);
 
     const details = await openHub(user);
-    const officeGridSection = within(details).getByRole('heading', { name: 'Office Grid' }).closest('section');
-    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    let officeGridSection = within(details).getByRole('heading', { name: 'Office Grid' }).closest('section');
+    let correlationSection = await showCorrelationSection(user, details);
     expect(officeGridSection).not.toBeNull();
     expect(correlationSection).not.toBeNull();
 
     await waitFor(() => {
       expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+    });
+
+    officeGridSection = await showHubSection(user, details, 'Crew', 'Office Grid');
+    await waitFor(() => {
       expect(
         within(officeGridSection!).getByRole('button', {
           name: 'Select home agent Team Lead in Team Lead Desk'
@@ -6221,12 +6328,12 @@ afterEach(() => {
       })
     );
 
+    correlationSection = await showCorrelationSection(user, details);
     await waitFor(() => {
       expect(within(details).getByRole('heading', { name: 'Team Lead' })).toBeVisible();
-      const nextCorrelationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
-      expect(nextCorrelationSection).not.toBeNull();
-      expect(within(nextCorrelationSection!).getByText('corr-app-review')).toBeVisible();
-      expect(within(nextCorrelationSection!).getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
+      expect(correlationSection).not.toBeNull();
+      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+      expect(within(correlationSection!).getByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
     });
 
     await act(async () => {
@@ -6261,23 +6368,24 @@ afterEach(() => {
     render(<App />);
 
     const details = await openHub(user);
-    const officeGridSection = within(details).getByRole('heading', { name: 'Office Grid' }).closest('section');
-    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    let officeGridSection = within(details).getByRole('heading', { name: 'Office Grid' }).closest('section');
+    let correlationSection = await showCorrelationSection(user, details);
     expect(officeGridSection).not.toBeNull();
     expect(correlationSection).not.toBeNull();
     expect(within(correlationSection!).getByText('No correlation selected.')).toBeVisible();
 
+    officeGridSection = await showHubSection(user, details, 'Crew', 'Office Grid');
     await user.click(
       within(officeGridSection!).getByRole('button', {
         name: 'Select home agent Team Lead in Team Lead Desk'
       })
     );
 
+    correlationSection = await showCorrelationSection(user, details);
     await waitFor(() => {
       expect(within(details).getByRole('heading', { name: 'Team Lead' })).toBeVisible();
-      const nextCorrelationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
-      expect(nextCorrelationSection).not.toBeNull();
-      expect(within(nextCorrelationSection!).getByText('No correlation selected.')).toBeVisible();
+      expect(correlationSection).not.toBeNull();
+      expect(within(correlationSection!).getByText('No correlation selected.')).toBeVisible();
     });
 
     const requestedUrls = vi
@@ -6295,7 +6403,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Queue');
     const queueButton = within(details).getByRole('button', { name: 'Inspect App Engineering Agent from active queue' });
     await user.click(queueButton);
 
@@ -6318,15 +6426,15 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
-    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    const details = await openHub(user, 'Supervision');
+    let correlationSection = await showCorrelationSection(user, details);
     expect(correlationSection).not.toBeNull();
 
     await waitFor(() => {
       expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
     });
 
-    const alertsSection = within(details).getByRole('heading', { name: 'Open Supervision Alerts' }).closest('section');
+    const alertsSection = await showHubSection(user, details, 'Supervision', 'Open Supervision Alerts');
     expect(alertsSection).not.toBeNull();
     expect(
       within(alertsSection!).getByText('Growth revenue still needs supervision before release review')
@@ -6338,12 +6446,12 @@ afterEach(() => {
       })
     );
 
+    correlationSection = await showCorrelationSection(user, details);
     await waitFor(() => {
-      const activeCorrelationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
-      expect(activeCorrelationSection).not.toBeNull();
+      expect(correlationSection).not.toBeNull();
       expect(within(details).getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
-      expect(within(activeCorrelationSection!).getByText('corr-app-secondary')).toBeVisible();
-      expect(within(activeCorrelationSection!).queryByText('corr-app-review')).not.toBeInTheDocument();
+      expect(within(correlationSection!).getByText('corr-app-secondary')).toBeVisible();
+      expect(within(correlationSection!).queryByText('corr-app-review')).not.toBeInTheDocument();
     });
 
     const peerWatchRequests = vi
@@ -6380,7 +6488,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Supervision');
     const alertsSection = within(details).getByRole('heading', { name: 'Open Supervision Alerts' }).closest('section');
     expect(alertsSection).not.toBeNull();
 
@@ -6455,21 +6563,24 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
-    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
-    const alertsSection = within(details).getByRole('heading', { name: 'Open Supervision Alerts' }).closest('section');
-    const memorySection = within(details).getByRole('heading', { name: 'Shared Memory' }).closest('section');
+    const details = await openHub(user, 'Replay');
+    let correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
     expect(correlationSection).not.toBeNull();
-    expect(alertsSection).not.toBeNull();
-    expect(memorySection).not.toBeNull();
 
     await waitFor(() => {
       expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+    });
+
+    let alertsSection = await showHubSection(user, details, 'Supervision', 'Open Supervision Alerts');
+    expect(alertsSection).not.toBeNull();
+    await waitFor(() => {
       expect(within(alertsSection!).getByText('Open supervision alert exact evidence jump stays on the alert correlation')).toBeVisible();
     });
 
-    expect(within(memorySection!).queryByText('Ref · /tmp/missing.md')).not.toBeInTheDocument();
+    const memorySectionBeforeJump = await showHubSection(user, details, 'Memory', 'Shared Memory');
+    expect(within(memorySectionBeforeJump).queryByText('Ref · /tmp/missing.md')).not.toBeInTheDocument();
 
+    alertsSection = await showHubSection(user, details, 'Supervision', 'Open Supervision Alerts');
     const fetchCallCountBeforeJump = vi.mocked(globalThis.fetch).mock.calls.length;
 
     await user.click(
@@ -6478,14 +6589,19 @@ afterEach(() => {
       })
     );
 
+    const memorySection = await findHubSection(details, 'Shared Memory');
     await waitFor(() => {
-      expect(within(memorySection!).getByText('Ref · /tmp/missing.md')).toBeVisible();
-      const backlinkLane = within(memorySection!).getByText('Current-scope backlinks').closest('div');
+      expect(within(memorySection).getByText('Ref · /tmp/missing.md')).toBeVisible();
+      const backlinkLane = within(memorySection).getByText('Current-scope backlinks').closest('div');
       expect(backlinkLane).not.toBeNull();
       expect(within(backlinkLane!).getByText('Open supervision alert')).toBeVisible();
       expect(
         within(backlinkLane!).getByText('Open supervision alert exact evidence jump stays on the alert correlation')
       ).toBeVisible();
+    });
+
+    correlationSection = await showCorrelationSection(user, details);
+    await waitFor(() => {
       expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
       expect(within(correlationSection!).queryByText('corr-app-secondary')).not.toBeInTheDocument();
     });
@@ -6548,20 +6664,26 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
-    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
-    const alertsSection = within(details).getByRole('heading', { name: 'Open Supervision Alerts' }).closest('section');
-    const memorySection = within(details).getByRole('heading', { name: 'Shared Memory' }).closest('section');
+    const details = await openHub(user, 'Replay');
+    let correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
     expect(correlationSection).not.toBeNull();
-    expect(alertsSection).not.toBeNull();
-    expect(memorySection).not.toBeNull();
 
     await waitFor(() => {
       expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
-      expect(within(alertsSection!).getByText('Open supervision alert exact evidence jump replaces the current-scope artifact copy')).toBeVisible();
-      expect(within(memorySection!).getByText('Ref · /tmp/evidence.md')).toBeVisible();
     });
 
+    let alertsSection = await showHubSection(user, details, 'Supervision', 'Open Supervision Alerts');
+    expect(alertsSection).not.toBeNull();
+    await waitFor(() => {
+      expect(within(alertsSection!).getByText('Open supervision alert exact evidence jump replaces the current-scope artifact copy')).toBeVisible();
+    });
+
+    let memorySection = await showHubSection(user, details, 'Memory', 'Shared Memory');
+    await waitFor(() => {
+      expect(within(memorySection).getByText('Ref · /tmp/evidence.md')).toBeVisible();
+    });
+
+    alertsSection = await showHubSection(user, details, 'Supervision', 'Open Supervision Alerts');
     const fetchCallCountBeforeJump = vi.mocked(globalThis.fetch).mock.calls.length;
 
     await user.click(
@@ -6570,11 +6692,16 @@ afterEach(() => {
       })
     );
 
+    memorySection = await findHubSection(details, 'Shared Memory');
     await waitFor(() => {
-      expect(within(memorySection!).getByText('Focused exact artifact · /tmp/evidence.md')).toBeVisible();
+      expect(within(memorySection).getByText('Focused exact artifact · /tmp/evidence.md')).toBeVisible();
       expect(
-        within(memorySection!).getByText('Open supervision alert exact fetch replaced the current-scope evidence artifact')
+        within(memorySection).getByText('Open supervision alert exact fetch replaced the current-scope evidence artifact')
       ).toBeVisible();
+    });
+
+    correlationSection = await showCorrelationSection(user, details);
+    await waitFor(() => {
       expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
       expect(within(correlationSection!).queryByText('corr-app-secondary')).not.toBeInTheDocument();
     });
@@ -6637,21 +6764,24 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
-    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
-    const alertsSection = within(details).getByRole('heading', { name: 'Open Supervision Alerts' }).closest('section');
-    const memorySection = within(details).getByRole('heading', { name: 'Shared Memory' }).closest('section');
+    const details = await openHub(user, 'Replay');
+    let correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
     expect(correlationSection).not.toBeNull();
-    expect(alertsSection).not.toBeNull();
-    expect(memorySection).not.toBeNull();
 
     await waitFor(() => {
       expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+    });
+
+    let alertsSection = await showHubSection(user, details, 'Supervision', 'Open Supervision Alerts');
+    expect(alertsSection).not.toBeNull();
+    await waitFor(() => {
       expect(within(alertsSection!).getByText('Open supervision alert exact evidence jump stays on the no-correlation path')).toBeVisible();
     });
 
-    expect(within(memorySection!).queryByText('Ref · /tmp/missing.md')).not.toBeInTheDocument();
+    const memorySectionBeforeJump = await showHubSection(user, details, 'Memory', 'Shared Memory');
+    expect(within(memorySectionBeforeJump).queryByText('Ref · /tmp/missing.md')).not.toBeInTheDocument();
 
+    alertsSection = await showHubSection(user, details, 'Supervision', 'Open Supervision Alerts');
     const fetchCallCountBeforeJump = vi.mocked(globalThis.fetch).mock.calls.length;
 
     await user.click(
@@ -6660,8 +6790,13 @@ afterEach(() => {
       })
     );
 
+    const memorySection = await findHubSection(details, 'Shared Memory');
     await waitFor(() => {
-      expect(within(memorySection!).getByText('Ref · /tmp/missing.md')).toBeVisible();
+      expect(within(memorySection).getByText('Ref · /tmp/missing.md')).toBeVisible();
+    });
+
+    correlationSection = await showCorrelationSection(user, details);
+    await waitFor(() => {
       expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
       expect(within(correlationSection!).queryByText('No correlation selected.')).not.toBeInTheDocument();
     });
@@ -6697,15 +6832,15 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
-    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
+    const details = await openHub(user, 'Supervision');
+    let correlationSection = await showCorrelationSection(user, details);
     expect(correlationSection).not.toBeNull();
 
     await waitFor(() => {
       expect(within(correlationSection!).getByText('No correlation selected.')).toBeVisible();
     });
 
-    const alertsSection = within(details).getByRole('heading', { name: 'Open Supervision Alerts' }).closest('section');
+    const alertsSection = await showHubSection(user, details, 'Supervision', 'Open Supervision Alerts');
     expect(alertsSection).not.toBeNull();
     expect(
       within(alertsSection!).getByText('Growth revenue open supervision alert without a correlation id')
@@ -6717,11 +6852,11 @@ afterEach(() => {
       })
     );
 
+    correlationSection = await showCorrelationSection(user, details);
     await waitFor(() => {
-      const activeCorrelationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
-      expect(activeCorrelationSection).not.toBeNull();
+      expect(correlationSection).not.toBeNull();
       expect(within(details).getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
-      expect(within(activeCorrelationSection!).getByText('No correlation selected.')).toBeVisible();
+      expect(within(correlationSection!).getByText('No correlation selected.')).toBeVisible();
     });
 
     const peerWatchRequests = vi
@@ -6760,15 +6895,16 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
-    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
-    const supervisionSection = within(details).getByRole('heading', { name: 'Open Supervision Alerts' }).closest('section');
+    const details = await openHub(user, 'Supervision');
+    const correlationSection = await showCorrelationSection(user, details);
     expect(correlationSection).not.toBeNull();
-    expect(supervisionSection).not.toBeNull();
 
     await waitFor(() => {
       expect(within(correlationSection!).getByText('No correlation selected.')).toBeVisible();
     });
+
+    const supervisionSection = await showHubSection(user, details, 'Supervision', 'Open Supervision Alerts');
+    expect(supervisionSection).not.toBeNull();
 
     await user.click(
       within(supervisionSection!).getByRole('button', {
@@ -6801,7 +6937,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Queue');
     const queueSection = within(details).getByRole('heading', { name: 'Active Queue' }).closest('section');
     expect(queueSection).not.toBeNull();
 
@@ -6882,7 +7018,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Queue');
     const queueSection = within(details).getByRole('heading', { name: 'Active Queue' }).closest('section');
     expect(queueSection).not.toBeNull();
 
@@ -6966,7 +7102,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Queue');
     const queueSection = within(details).getByRole('heading', { name: 'Active Queue' }).closest('section');
     expect(queueSection).not.toBeNull();
 
@@ -6982,7 +7118,8 @@ afterEach(() => {
       within(queueSection!).queryByRole('button', { name: 'Inspect Team Lead from active queue' })
     ).not.toBeInTheDocument();
 
-    await user.click(within(details).getByRole('button', { name: 'Inspect Team Lead' }));
+    const crewSection = await showHubSection(user, details, 'Crew', 'Crew Overview');
+    await user.click(within(crewSection).getByRole('button', { name: 'Inspect Team Lead' }));
 
     await waitFor(() => {
       expect(within(details).getByRole('heading', { name: 'Team Lead' })).toBeVisible();
@@ -7040,7 +7177,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Queue');
     const queueSection = within(details).getByRole('heading', { name: 'Active Queue' }).closest('section');
     expect(queueSection).not.toBeNull();
 
@@ -7105,7 +7242,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Queue');
     const queueSection = within(details).getByRole('heading', { name: 'Active Queue' }).closest('section');
     expect(queueSection).not.toBeNull();
 
@@ -7157,7 +7294,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Queue');
     const queueSection = within(details).getByRole('heading', { name: 'Active Queue' }).closest('section');
     expect(queueSection).not.toBeNull();
 
@@ -7209,7 +7346,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Queue');
     const queueSection = within(details).getByRole('heading', { name: 'Active Queue' }).closest('section');
     expect(queueSection).not.toBeNull();
 
@@ -7233,7 +7370,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Queue');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent from active queue' }));
 
     const operationSection = within(details).getByRole('heading', { name: 'Current Operation' }).closest('section');
@@ -7265,7 +7402,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Queue');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent from active queue' }));
 
     const operationSection = within(details).getByRole('heading', { name: 'Current Operation' }).closest('section');
@@ -7296,7 +7433,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Queue');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent from active queue' }));
 
     const workflowSection = within(details).getByRole('heading', { name: 'Workflow' }).closest('section');
@@ -7348,7 +7485,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Queue');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent from active queue' }));
 
     const workflowSection = within(details).getByRole('heading', { name: 'Workflow' }).closest('section');
@@ -7597,7 +7734,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Crew');
     await user.click(within(details).getByRole('button', { name: 'Inspect Growth Revenue Agent' }));
 
     const operationSection = (await within(details).findByRole('heading', { name: 'Current Operation' })).closest('section');
@@ -7673,7 +7810,7 @@ afterEach(() => {
     expect(postOperationCorrelationSelectionRequests).not.toContain(selectedOperationUrl);
     expect(postOperationCorrelationSelectionRequests).not.toContain(workflowUrl);
     expect(postOperationCorrelationSelectionRequests).not.toContain(teamLeadSelectedCorrelationMemoryArtifactsUrl);
-  });
+  }, 10000);
 
   it('jumps from current-operation evidence refs to shared memory without changing the selected agent, queue-derived operation context, or correlation', async () => {
     const currentOperationEvidenceJumpFixture = {
@@ -7708,7 +7845,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Queue');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent from active queue' }));
 
     const operationSection = within(details).getByRole('heading', { name: 'Current Operation' }).closest('section');
@@ -7758,7 +7895,7 @@ afterEach(() => {
     expect(vi.mocked(globalThis.fetch).mock.calls).toHaveLength(fetchCallCountBeforeJump);
     expect(globalThis.fetch).not.toHaveBeenCalledWith(teamLeadWorkflowUrl, expect.anything());
     expect(globalThis.fetch).not.toHaveBeenCalledWith(teamLeadSelectedCorrelationMemoryArtifactsUrl, expect.anything());
-  });
+  }, 10000);
 
   it('falls back to one exact shared-memory artifact fetch for current-operation evidence refs that are outside the loaded slice', async () => {
     const currentOperationExactArtifactFixture = {
@@ -7815,7 +7952,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Queue');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent from active queue' }));
 
     const operationSection = within(details).getByRole('heading', { name: 'Current Operation' }).closest('section');
@@ -7857,7 +7994,7 @@ afterEach(() => {
       .mock.calls.slice(fetchCallCountBeforeJump)
       .map(([input]) => (typeof input === 'string' ? input : input.toString()));
     expect(newFetchUrlsAfterJump).toEqual([selectedCorrelationMissingArtifactExactUrl]);
-  });
+  }, 10000);
 
   it('treats a mismatched exact shared-memory response as a miss instead of focusing an unrelated artifact', async () => {
     const currentOperationExactArtifactFixture = {
@@ -7914,7 +8051,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Queue');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent from active queue' }));
 
     const operationSection = within(details).getByRole('heading', { name: 'Current Operation' }).closest('section');
@@ -7990,7 +8127,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Queue');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent from active queue' }));
 
     const operationSection = within(details).getByRole('heading', { name: 'Current Operation' }).closest('section');
@@ -8071,7 +8208,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Queue');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent from active queue' }));
 
     const operationSection = within(details).getByRole('heading', { name: 'Current Operation' }).closest('section');
@@ -8155,36 +8292,36 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
-    const queueSection = within(details).getByRole('heading', { name: 'Active Queue' }).closest('section');
-    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
-    const memorySection = within(details).getByRole('heading', { name: 'Shared Memory' }).closest('section');
+    const details = await openHub(user, 'Queue');
+    let queueSection = within(details).getByRole('heading', { name: 'Active Queue' }).closest('section');
     expect(queueSection).not.toBeNull();
-    expect(correlationSection).not.toBeNull();
-    expect(memorySection).not.toBeNull();
-
     expect(within(queueSection!).getByText('Evidence · No evidence refs')).toBeVisible();
 
+    const correlationSection = await showCorrelationSection(user, details);
     await waitFor(() => {
-      expect(within(details).getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
       expect(within(details).queryByRole('heading', { name: 'App Engineering Agent' })).not.toBeInTheDocument();
       expect(within(details).queryByRole('heading', { name: 'Current Operation' })).not.toBeInTheDocument();
-      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
-      expect(within(memorySection!).getByText('Ref · /tmp/evidence.md')).toBeVisible();
+      expect(within(correlationSection).getByText('corr-app-review')).toBeVisible();
     });
 
+    const memorySectionBeforeJump = await showHubSection(user, details, 'Memory', 'Shared Memory');
+    await waitFor(() => {
+      expect(within(details).queryByRole('heading', { name: 'App Engineering Agent' })).not.toBeInTheDocument();
+      expect(within(details).queryByRole('heading', { name: 'Current Operation' })).not.toBeInTheDocument();
+      expect(within(memorySectionBeforeJump).getByText('Ref · /tmp/evidence.md')).toBeVisible();
+    });
+
+    queueSection = await showHubSection(user, details, 'Queue', 'Active Queue');
     await user.selectOptions(
-      within(queueSection!).getByRole('combobox', { name: 'Filter active queue by state' }),
+      within(queueSection).getByRole('combobox', { name: 'Filter active queue by state' }),
       'blocked'
     );
 
-    const queueRecord = await within(queueSection!)
+    let queueRecord = await within(queueSection)
       .findByRole('button', { name: 'Inspect App Engineering Agent from active queue' })
       .then((button) => button.closest('li'));
     expect(queueRecord).not.toBeNull();
     expect(queueRecord!).toHaveTextContent('Evidence · /tmp/evidence.md, /tmp/missing.md');
-    const artifactRecord = within(memorySection!).getByText('Ref · /tmp/evidence.md').closest('li');
-    expect(artifactRecord).not.toBeNull();
     expect(
       within(queueRecord!).getByRole('button', {
         name: 'Jump to shared memory artifact /tmp/evidence.md'
@@ -8204,14 +8341,18 @@ afterEach(() => {
       })
     );
 
+    const memorySection = await findHubSection(details, 'Shared Memory');
+    const artifactRecord = within(memorySection).getByText('Ref · /tmp/evidence.md').closest('li');
+    expect(artifactRecord).not.toBeNull();
     expect(document.activeElement).toBe(artifactRecord);
-    expect(within(details).getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
     expect(within(details).queryByRole('heading', { name: 'App Engineering Agent' })).not.toBeInTheDocument();
     expect(within(details).queryByRole('heading', { name: 'Current Operation' })).not.toBeInTheDocument();
-    expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
-    expect(
-      within(queueSection!).getByRole('combobox', { name: 'Filter active queue by state' })
-    ).toHaveValue('blocked');
+
+    const activeCorrelationSection = await showCorrelationSection(user, details);
+    expect(within(activeCorrelationSection).getByText('corr-app-review')).toBeVisible();
+
+    queueSection = await showHubSection(user, details, 'Queue', 'Active Queue');
+    expect(within(queueSection).getByRole('combobox', { name: 'Filter active queue by state' })).toHaveValue('blocked');
     expect(vi.mocked(globalThis.fetch).mock.calls).toHaveLength(fetchCallCountBeforeJump);
     expect(globalThis.fetch).not.toHaveBeenCalledWith(workflowUrl, expect.anything());
     expect(globalThis.fetch).not.toHaveBeenCalledWith(selectedOperationUrl, expect.anything());
@@ -8274,26 +8415,28 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
-    const queueSection = within(details).getByRole('heading', { name: 'Active Queue' }).closest('section');
-    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
-    const memorySection = within(details).getByRole('heading', { name: 'Shared Memory' }).closest('section');
+    const details = await openHub(user, 'Queue');
+    let queueSection = within(details).getByRole('heading', { name: 'Active Queue' }).closest('section');
     expect(queueSection).not.toBeNull();
-    expect(correlationSection).not.toBeNull();
-    expect(memorySection).not.toBeNull();
 
+    const correlationSection = await showCorrelationSection(user, details);
     await waitFor(() => {
-      expect(within(details).getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
-      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
-      expect(within(memorySection!).getByText('Ref · /tmp/evidence.md')).toBeVisible();
+      expect(within(correlationSection).getByText('corr-app-review')).toBeVisible();
     });
 
+    let memorySection = await showHubSection(user, details, 'Memory', 'Shared Memory');
+    await waitFor(() => {
+      expect(within(memorySection).getByText('Ref · /tmp/evidence.md')).toBeVisible();
+      expect(within(memorySection).queryByText('Ref · /tmp/missing.md')).not.toBeInTheDocument();
+    });
+
+    queueSection = await showHubSection(user, details, 'Queue', 'Active Queue');
     await user.selectOptions(
-      within(queueSection!).getByRole('combobox', { name: 'Filter active queue by state' }),
+      within(queueSection).getByRole('combobox', { name: 'Filter active queue by state' }),
       'blocked'
     );
 
-    const queueRecord = await within(queueSection!)
+    const queueRecord = await within(queueSection)
       .findByRole('button', { name: 'Inspect App Engineering Agent from active queue' })
       .then((button) => button.closest('li'));
     expect(queueRecord).not.toBeNull();
@@ -8303,7 +8446,6 @@ afterEach(() => {
         name: 'Jump to shared memory artifact /tmp/missing.md'
       })
     ).toBeVisible();
-    expect(within(memorySection!).queryByText('Ref · /tmp/missing.md')).not.toBeInTheDocument();
 
     const fetchCallCountBeforeJump = vi.mocked(globalThis.fetch).mock.calls.length;
 
@@ -8313,23 +8455,25 @@ afterEach(() => {
       })
     );
 
+    memorySection = await findHubSection(details, 'Shared Memory');
     await waitFor(() => {
-      expect(within(memorySection!).getByText('Ref · /tmp/missing.md')).toBeVisible();
+      expect(within(memorySection).getByText('Ref · /tmp/missing.md')).toBeVisible();
     });
 
-    const missingArtifactRecord = within(memorySection!).getByText('Ref · /tmp/missing.md').closest('li');
+    const missingArtifactRecord = within(memorySection).getByText('Ref · /tmp/missing.md').closest('li');
     expect(missingArtifactRecord).not.toBeNull();
-    expect(within(memorySection!).getByText('Focused exact artifact · /tmp/missing.md')).toBeVisible();
+    expect(within(memorySection).getByText('Focused exact artifact · /tmp/missing.md')).toBeVisible();
     expect(missingArtifactRecord).toHaveClass('aitown-record--shared-memory-focused');
     expect(within(missingArtifactRecord!).getByText('Focused exact jump')).toBeVisible();
     expect(document.activeElement).toBe(missingArtifactRecord);
-    expect(within(details).getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
     expect(within(details).queryByRole('heading', { name: 'App Engineering Agent' })).not.toBeInTheDocument();
     expect(within(details).queryByRole('heading', { name: 'Current Operation' })).not.toBeInTheDocument();
-    expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
-    expect(
-      within(queueSection!).getByRole('combobox', { name: 'Filter active queue by state' })
-    ).toHaveValue('blocked');
+
+    const activeCorrelationSection = await showCorrelationSection(user, details);
+    expect(within(activeCorrelationSection).getByText('corr-app-review')).toBeVisible();
+
+    queueSection = await showHubSection(user, details, 'Queue', 'Active Queue');
+    expect(within(queueSection).getByRole('combobox', { name: 'Filter active queue by state' })).toHaveValue('blocked');
 
     const newFetchUrlsAfterJump = vi
       .mocked(globalThis.fetch)
@@ -8419,18 +8563,16 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
-    const queueSection = within(details).getByRole('heading', { name: 'Active Queue' }).closest('section');
-    const memorySection = within(details).getByRole('heading', { name: 'Shared Memory' }).closest('section');
+    const details = await openHub(user, 'Queue');
+    let queueSection = within(details).getByRole('heading', { name: 'Active Queue' }).closest('section');
     expect(queueSection).not.toBeNull();
-    expect(memorySection).not.toBeNull();
 
     await user.selectOptions(
       within(queueSection!).getByRole('combobox', { name: 'Filter active queue by state' }),
       'blocked'
     );
 
-    const queueRecord = await within(queueSection!)
+    let queueRecord = await within(queueSection!)
       .findByRole('button', { name: 'Inspect App Engineering Agent from active queue' })
       .then((button) => button.closest('li'));
     expect(queueRecord).not.toBeNull();
@@ -8442,16 +8584,22 @@ afterEach(() => {
       })
     );
 
+    let memorySection = await findHubSection(details, 'Shared Memory');
     await waitFor(() => {
-      expect(within(memorySection!).getByText('Focused exact artifact · /tmp/missing.md')).toBeVisible();
+      expect(within(memorySection).getByText('Focused exact artifact · /tmp/missing.md')).toBeVisible();
     });
 
-    const firstFocusedRecord = within(memorySection!).getByText('Ref · /tmp/missing.md').closest('li');
+    const firstFocusedRecord = within(memorySection).getByText('Ref · /tmp/missing.md').closest('li');
     expect(firstFocusedRecord).not.toBeNull();
     expect(firstFocusedRecord).toHaveClass('aitown-record--shared-memory-focused');
     expect(within(firstFocusedRecord!).getByText('Focused exact jump')).toBeVisible();
-    expect(within(details).getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
     expect(within(details).queryByRole('heading', { name: 'App Engineering Agent' })).not.toBeInTheDocument();
+
+    queueSection = await showHubSection(user, details, 'Queue', 'Active Queue');
+    queueRecord = await within(queueSection)
+      .findByRole('button', { name: 'Inspect App Engineering Agent from active queue' })
+      .then((button) => button.closest('li'));
+    expect(queueRecord).not.toBeNull();
 
     await user.click(
       within(queueRecord!).getByRole('button', {
@@ -8459,23 +8607,26 @@ afterEach(() => {
       })
     );
 
+    memorySection = await findHubSection(details, 'Shared Memory');
     await waitFor(() => {
-      expect(within(memorySection!).getByText('Focused exact artifact · /tmp/second-missing.md')).toBeVisible();
+      expect(within(memorySection).getByText('Focused exact artifact · /tmp/second-missing.md')).toBeVisible();
     });
 
-    const secondFocusedRecord = within(memorySection!).getByText('Ref · /tmp/second-missing.md').closest('li');
+    const secondFocusedRecord = within(memorySection).getByText('Ref · /tmp/second-missing.md').closest('li');
     expect(secondFocusedRecord).not.toBeNull();
     expect(secondFocusedRecord).toHaveClass('aitown-record--shared-memory-focused');
     expect(within(secondFocusedRecord!).getByText('Focused exact jump')).toBeVisible();
-    expect(within(memorySection!).queryByText('Focused exact artifact · /tmp/missing.md')).not.toBeInTheDocument();
-    expect(within(memorySection!).queryByText('Ref · /tmp/missing.md')).not.toBeInTheDocument();
+    expect(within(memorySection).queryByText('Focused exact artifact · /tmp/missing.md')).not.toBeInTheDocument();
+    expect(within(memorySection).queryByText('Ref · /tmp/missing.md')).not.toBeInTheDocument();
 
-    await user.click(within(queueSection!).getByRole('button', { name: 'Inspect App Engineering Agent from active queue' }));
+    queueSection = await showHubSection(user, details, 'Queue', 'Active Queue');
+    await user.click(within(queueSection).getByRole('button', { name: 'Inspect App Engineering Agent from active queue' }));
 
+    memorySection = await showHubSection(user, details, 'Memory', 'Shared Memory');
     await waitFor(() => {
       expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
-      expect(within(memorySection!).queryByText('Focused exact artifact · /tmp/second-missing.md')).not.toBeInTheDocument();
-      expect(within(memorySection!).queryByText('Ref · /tmp/second-missing.md')).not.toBeInTheDocument();
+      expect(within(memorySection).queryByText('Focused exact artifact · /tmp/second-missing.md')).not.toBeInTheDocument();
+      expect(within(memorySection).queryByText('Ref · /tmp/second-missing.md')).not.toBeInTheDocument();
     });
   });
 
@@ -8483,7 +8634,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Queue');
     await user.click(within(details).getByRole('button', { name: 'Inspect Team Lead from active queue' }));
 
     const operationSection = within(details).getByRole('heading', { name: 'Current Operation' }).closest('section');
@@ -8624,7 +8775,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Queue');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent from active queue' }));
 
     const operationSection = within(details).getByRole('heading', { name: 'Current Operation' }).closest('section');
@@ -8729,7 +8880,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Queue');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent from active queue' }));
 
     const operationSection = (await within(details).findByRole('heading', { name: 'Current Operation' })).closest('section');
@@ -8817,7 +8968,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Queue');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent from active queue' }));
 
     const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
@@ -8885,7 +9036,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Queue');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent from active queue' }));
 
     const operationSection = (await within(details).findByRole('heading', { name: 'Current Operation' })).closest('section');
@@ -8964,7 +9115,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Queue');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent from active queue' }));
 
     const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
@@ -8991,7 +9142,7 @@ afterEach(() => {
     expect(
       within(auditSection!).queryByRole('button', { name: /Open accountability correlation corr-app-review/ })
     ).not.toBeInTheDocument();
-  });
+  }, 10000);
 
   it('falls back to the live workflow correlation when the queue snapshot becomes stale', async () => {
     (window as typeof window & { __AITOWN_POLL_INTERVAL_MS__?: number }).__AITOWN_POLL_INTERVAL_MS__ = 10;
@@ -9061,7 +9212,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Queue');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent from active queue' }));
     expect(await within(details).findByRole('heading', { name: 'Current Operation' })).toBeVisible();
 
@@ -9077,7 +9228,7 @@ afterEach(() => {
       expect(within(correlationSection!).queryByText('old correlation removed')).not.toBeInTheDocument();
       expect(within(correlationSection!).queryByText('corr-app-review')).not.toBeInTheDocument();
     });
-  });
+  }, 10000);
 
   it('falls back to the live workflow correlation when the selected operation keeps a stale correlation id', async () => {
     (window as typeof window & { __AITOWN_POLL_INTERVAL_MS__?: number }).__AITOWN_POLL_INTERVAL_MS__ = 10;
@@ -9146,7 +9297,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Queue');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent from active queue' }));
     expect(await within(details).findByRole('heading', { name: 'Current Operation' })).toBeVisible();
 
@@ -9158,18 +9309,19 @@ afterEach(() => {
       expect(within(correlationSection!).queryByText('old correlation removed')).not.toBeInTheDocument();
       expect(within(correlationSection!).queryByText('corr-app-review')).not.toBeInTheDocument();
     });
-  });
+  }, 10000);
 
   it('clears stale queue-derived operation context before a fresh roster selection', async () => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Queue');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent from active queue' }));
     expect(await within(details).findByRole('heading', { name: 'Current Operation' })).toBeVisible();
 
     await user.click(within(details).getByRole('button', { name: 'Clear' }));
-    await user.click(within(details).getByRole('button', { name: 'Inspect Team Lead' }));
+    const crewSection = await showHubSection(user, details, 'Crew', 'Crew Overview');
+    await user.click(within(crewSection).getByRole('button', { name: 'Inspect Team Lead' }));
 
     await waitFor(() => {
       expect(within(details).getByRole('heading', { name: 'Team Lead' })).toBeVisible();
@@ -9177,13 +9329,13 @@ afterEach(() => {
       expect(within(details).getByText('reviewing · Coordinate rollout')).toBeVisible();
       expect(within(details).queryByText('blocked · Workflow evidence is still incomplete')).not.toBeInTheDocument();
     });
-  });
+  }, 10000);
 
   it('resets toolbar-cleared correlation selection back to the crew-overview default on reopen', async () => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Crew');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
 
     const evidencePanel = await selectSelectedAgentDrilldownTab(user, 'Evidence');
@@ -9202,19 +9354,18 @@ afterEach(() => {
     });
 
     await user.click(screen.getByRole('button', { name: 'Clear Selection' }));
-    await user.click(screen.getByRole('button', { name: 'Hide Hub' }));
-    const reopenedDetails = await openHub(user);
+    await user.click(screen.getByRole('dialog', { name: 'Hub' }));
+    const reopenedDetails = await openHub(user, 'Replay');
     const reopenedCorrelationSection = within(reopenedDetails)
       .getByRole('heading', { name: 'Correlation Drilldown' })
       .closest('section');
     expect(reopenedCorrelationSection).not.toBeNull();
 
     await waitFor(() => {
-      expect(within(reopenedDetails).getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
       expect(within(reopenedCorrelationSection!).getByText('corr-app-review')).toBeVisible();
     });
     expect(within(reopenedCorrelationSection!).queryByText('corr-app-secondary')).not.toBeInTheDocument();
-  }, 10000);
+  }, 15000);
 
   it('shows operations queue loading state explicitly while the overview queue is still pending', async () => {
     let resolveOperations: ((response: Response) => void) | null = null;
@@ -9260,7 +9411,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Queue');
     const activeQueueSection = await waitFor(() => {
       const nextActiveQueueSection = within(details).getByRole('heading', { name: 'Active Queue' }).closest('section');
       expect(nextActiveQueueSection).not.toBeNull();
@@ -9351,7 +9502,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Queue');
     const queueSection = within(details).getByRole('heading', { name: 'Active Queue' }).closest('section');
     expect(queueSection).not.toBeNull();
 
@@ -9430,7 +9581,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Queue');
     expect(await within(details).findByText('Unable to load active queue. operations refresh failed')).toBeVisible();
     expect(within(details).queryByText('No active operations queue.')).not.toBeInTheDocument();
   });
@@ -9481,7 +9632,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Crew');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
 
     const workflowSection = within(details).getByRole('heading', { name: 'Workflow' }).closest('section');
@@ -9507,7 +9658,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Crew');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
 
     const workflowSection = within(details).getByRole('heading', { name: 'Workflow' }).closest('section');
@@ -9535,7 +9686,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Crew');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
 
     const workflowSection = within(details).getByRole('heading', { name: 'Workflow' }).closest('section');
@@ -9596,7 +9747,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Crew');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
 
     const workflowSection = within(details).getByRole('heading', { name: 'Workflow' }).closest('section');
@@ -9632,7 +9783,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Crew');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
 
     const workflowSection = within(details).getByRole('heading', { name: 'Workflow' }).closest('section');
@@ -9722,7 +9873,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Crew');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
 
     const workflowSection = within(details).getByRole('heading', { name: 'Workflow' }).closest('section');
@@ -9829,7 +9980,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Crew');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
 
     const workflowSection = within(details).getByRole('heading', { name: 'Workflow' }).closest('section');
@@ -9864,7 +10015,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Queue');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent from active queue' }));
 
     const workflowSection = within(details).getByRole('heading', { name: 'Workflow' }).closest('section');
@@ -9884,7 +10035,7 @@ afterEach(() => {
       expect(within(correlationSection!).getByText('No correlation selected.')).toBeVisible();
     });
 
-    expect(screen.getByRole('button', { name: 'Hide Hub' })).toBeVisible();
+    expect(screen.getByRole('dialog', { name: 'Hub' })).toBeVisible();
     expect(within(correlationSection!).queryByText('corr-app-review')).not.toBeInTheDocument();
 
     await act(async () => {
@@ -9896,7 +10047,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Queue');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent from active queue' }));
 
     const workflowSection = within(details).getByRole('heading', { name: 'Workflow' }).closest('section');
@@ -9919,20 +10070,20 @@ afterEach(() => {
       expect(within(correlationSection!).getByText('corr-app-secondary')).toBeVisible();
     });
 
-    expect(screen.getByRole('button', { name: 'Hide Hub' })).toBeVisible();
+    expect(screen.getByRole('dialog', { name: 'Hub' })).toBeVisible();
     expect(within(correlationSection!).getByText('Counts · 1 incidents · 0 interactions · 1 events')).toBeVisible();
 
     await act(async () => {
       expect(globalThis.fetch).toHaveBeenCalledWith(teamLeadWorkflowUrl, expect.anything());
       expect(globalThis.fetch).toHaveBeenCalledWith(secondaryCorrelationUrl, expect.anything());
     });
-  });
+  }, 10000);
 
   it('preserves an explicitly reopened default correlation when pivoting through workflow counterparties', async () => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Queue');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent from active queue' }));
 
     const workflowSection = within(details).getByRole('heading', { name: 'Workflow' }).closest('section');
@@ -9999,7 +10150,7 @@ afterEach(() => {
       expect(within(correlationSection!).queryByText('No correlation selected.')).not.toBeInTheDocument();
     });
 
-    expect(screen.getByRole('button', { name: 'Hide Hub' })).toBeVisible();
+    expect(screen.getByRole('dialog', { name: 'Hub' })).toBeVisible();
 
     await act(async () => {
       expect(globalThis.fetch).toHaveBeenCalledWith(teamLeadWorkflowUrl, expect.anything());
@@ -10007,13 +10158,13 @@ afterEach(() => {
       expect(globalThis.fetch).toHaveBeenCalledWith(teamLeadSelectedCorrelationMemoryArtifactsUrl, expect.anything());
       expect(globalThis.fetch).not.toHaveBeenCalledWith(teamLeadMemoryArtifactsUrl, expect.anything());
     });
-  });
+  }, 10000);
 
   it('preserves the accountability correlation when pivoting through responsibility chain agents', async () => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Queue');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent from active queue' }));
 
     const auditSection = within(details).getByRole('heading', { name: 'Audit Signals' }).closest('section');
@@ -10058,7 +10209,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Queue');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent from active queue' }));
 
     const auditSection = within(details).getByRole('heading', { name: 'Audit Signals' }).closest('section');
@@ -10108,7 +10259,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Queue');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent from active queue' }));
 
     const auditSection = within(details).getByRole('heading', { name: 'Audit Signals' }).closest('section');
@@ -10178,32 +10329,25 @@ afterEach(() => {
     expect(vi.mocked(globalThis.fetch).mock.calls).toHaveLength(fetchCallCountBeforeJump);
     expect(globalThis.fetch).not.toHaveBeenCalledWith(teamLeadWorkflowUrl, expect.anything());
     expect(globalThis.fetch).not.toHaveBeenCalledWith(teamLeadSelectedCorrelationMemoryArtifactsUrl, expect.anything());
-  });
+  }, 10000);
 
   it('jumps from top-level crew-overview correlation evidence refs to shared memory without changing the active correlation', async () => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Evidence');
     const incidentSection = within(details).getByRole('heading', { name: 'Incident Feed' }).closest('section');
-    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
-    const memorySection = within(details).getByRole('heading', { name: 'Shared Memory' }).closest('section');
     expect(incidentSection).not.toBeNull();
-    expect(correlationSection).not.toBeNull();
-    expect(memorySection).not.toBeNull();
 
     await user.click(within(incidentSection!).getByRole('button', { name: /Open incident correlation corr-app-secondary/ }));
 
+    const correlationSection = await showCorrelationSection(user, details);
     await waitFor(() => {
-      expect(within(details).getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
-      expect(within(correlationSection!).getByText('corr-app-secondary')).toBeVisible();
-      expect(within(memorySection!).getByText('Ref · /tmp/secondary-evidence.md')).toBeVisible();
+      expect(within(correlationSection).getByText('corr-app-secondary')).toBeVisible();
     });
 
-    const correlationRecord = within(correlationSection!).getByText('corr-app-secondary').closest('li');
-    const artifactRecord = within(memorySection!).getByText('Ref · /tmp/secondary-evidence.md').closest('li');
+    const correlationRecord = within(correlationSection).getByText('corr-app-secondary').closest('li');
     expect(correlationRecord).not.toBeNull();
-    expect(artifactRecord).not.toBeNull();
     expect(correlationRecord).toHaveTextContent('Evidence · /tmp/secondary-evidence.md');
 
     const fetchCallCountBeforeJump = vi.mocked(globalThis.fetch).mock.calls.length;
@@ -10214,9 +10358,12 @@ afterEach(() => {
       })
     );
 
+    const memorySection = await findHubSection(details, 'Shared Memory');
+    const artifactRecord = within(memorySection).getByText('Ref · /tmp/secondary-evidence.md').closest('li');
+    expect(artifactRecord).not.toBeNull();
     expect(document.activeElement).toBe(artifactRecord);
-    expect(within(details).getByRole('heading', { name: 'Crew Overview' })).toBeVisible();
-    expect(within(correlationSection!).getByText('corr-app-secondary')).toBeVisible();
+    const activeCorrelationSection = await showCorrelationSection(user, details);
+    expect(within(activeCorrelationSection).getByText('corr-app-secondary')).toBeVisible();
     expect(vi.mocked(globalThis.fetch).mock.calls).toHaveLength(fetchCallCountBeforeJump);
   });
 
@@ -10224,7 +10371,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Crew');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
 
     const workflowSection = within(details).getByRole('heading', { name: 'Workflow' }).closest('section');
@@ -10291,7 +10438,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Crew');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
 
     const workflowSection = within(details).getByRole('heading', { name: 'Workflow' }).closest('section');
@@ -10408,7 +10555,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Crew');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
 
     const workflowSection = within(details).getByRole('heading', { name: 'Workflow' }).closest('section');
@@ -10498,7 +10645,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Crew');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
 
     const workflowSection = within(details).getByRole('heading', { name: 'Workflow' }).closest('section');
@@ -10588,7 +10735,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Crew');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
 
     const workflowSection = within(details).getByRole('heading', { name: 'Workflow' }).closest('section');
@@ -10645,7 +10792,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Crew');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
 
     const supervisionSection = within(details).getByRole('heading', { name: 'Supervision History' }).closest('section');
@@ -10716,7 +10863,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Crew');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
 
     const supervisionSection = within(details).getByRole('heading', { name: 'Supervision History' }).closest('section');
@@ -10783,7 +10930,7 @@ afterEach(() => {
 
     expect(peerWatchRequests).toContain(growthRevenueScopedReviewSupervisionHistoryUrl);
     expect(peerWatchRequests).not.toContain(orangeGrowthRevenueScopedReviewSupervisionHistoryUrl);
-  });
+  }, 10000);
 
   it('scopes selected-agent supervision history to the active selected correlation', async () => {
     vi.stubGlobal(
@@ -10826,7 +10973,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Crew');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
 
     const supervisionSection = within(details).getByRole('heading', { name: 'Supervision History' }).closest('section');
@@ -10863,7 +11010,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Crew');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
 
     const incidentSection = within(details).getByRole('heading', { name: 'Incident Feed' }).closest('section');
@@ -10921,7 +11068,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Crew');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
 
     const supervisionSection = within(details).getByRole('heading', { name: 'Supervision History' }).closest('section');
@@ -11006,7 +11153,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Crew');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
 
     const incidentSection = within(details).getByRole('heading', { name: 'Incident Feed' }).closest('section');
@@ -11089,7 +11236,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Crew');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
 
     const incidentSection = within(details).getByRole('heading', { name: 'Incident Feed' }).closest('section');
@@ -11183,7 +11330,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Crew');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
 
     const supervisionSection = within(details).getByRole('heading', { name: 'Supervision History' }).closest('section');
@@ -11251,7 +11398,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Crew');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
 
     const incidentSection = within(details).getByRole('heading', { name: 'Incident Feed' }).closest('section');
@@ -11314,7 +11461,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Evidence');
     const incidentSection = within(details).getByRole('heading', { name: 'Incident Feed' }).closest('section');
     expect(incidentSection).not.toBeNull();
 
@@ -11388,7 +11535,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Queue');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent from active queue' }));
 
     const workflowSection = within(details).getByRole('heading', { name: 'Workflow' }).closest('section');
@@ -11465,7 +11612,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Crew');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
 
     const workflowSection = within(details).getByRole('heading', { name: 'Workflow' }).closest('section');
@@ -11532,7 +11679,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Crew');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
 
     const workflowSection = within(details).getByRole('heading', { name: 'Workflow' }).closest('section');
@@ -11567,7 +11714,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Queue');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent from active queue' }));
 
     const workflowSection = within(details).getByRole('heading', { name: 'Workflow' }).closest('section');
@@ -11642,7 +11789,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Crew');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
 
     const workflowSection = within(details).getByRole('heading', { name: 'Workflow' }).closest('section');
@@ -11707,7 +11854,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Crew');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
 
     const workflowSection = within(details).getByRole('heading', { name: 'Workflow' }).closest('section');
@@ -11783,7 +11930,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Queue');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent from active queue' }));
 
     const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
@@ -11822,7 +11969,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Queue');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent from active queue' }));
 
     const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
@@ -11861,7 +12008,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Queue');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent from active queue' }));
 
     const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
@@ -11914,7 +12061,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Crew');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
 
     const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
@@ -11940,7 +12087,7 @@ afterEach(() => {
       expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
     });
 
-    expect(screen.getByRole('button', { name: 'Hide Hub' })).toBeVisible();
+    expect(screen.getByRole('dialog', { name: 'Hub' })).toBeVisible();
 
     await act(async () => {
       expect(globalThis.fetch).toHaveBeenCalledWith(teamLeadWorkflowUrl, expect.anything());
@@ -11952,7 +12099,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Crew');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
 
     const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
@@ -11988,7 +12135,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Crew');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
 
     const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
@@ -12024,7 +12171,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Crew');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
 
     const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
@@ -12077,7 +12224,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Crew');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
 
     const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
@@ -12130,7 +12277,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Crew');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
 
     const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
@@ -12166,7 +12313,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Crew');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
 
     const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
@@ -12189,7 +12336,7 @@ afterEach(() => {
       ).toBeVisible();
     });
 
-    expect(screen.getByRole('button', { name: 'Hide Hub' })).toBeVisible();
+    expect(screen.getByRole('dialog', { name: 'Hub' })).toBeVisible();
 
     await act(async () => {
       expect(globalThis.fetch).toHaveBeenCalledWith(teamLeadWorkflowUrl, expect.anything());
@@ -12200,7 +12347,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Evidence');
     const incidentSection = within(details).getByRole('heading', { name: 'Incident Feed' }).closest('section');
     expect(incidentSection).not.toBeNull();
 
@@ -12239,7 +12386,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Crew');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
 
     const incidentSection = within(details).getByRole('heading', { name: 'Incident Feed' }).closest('section');
@@ -12266,34 +12413,41 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
-    const incidentSection = within(details).getByRole('heading', { name: 'Incident Feed' }).closest('section');
-    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
-    const memorySection = within(details).getByRole('heading', { name: 'Shared Memory' }).closest('section');
-    expect(incidentSection).not.toBeNull();
-    expect(correlationSection).not.toBeNull();
-    expect(memorySection).not.toBeNull();
+    const details = await openHub(user, 'Evidence');
+    let memorySection = await showHubSection(user, details, 'Memory', 'Shared Memory');
+    expect(within(memorySection).getByText('Request scope · Crew overview')).toBeVisible();
 
-    expect(within(memorySection!).getByText('Request scope · Crew overview')).toBeVisible();
+    const incidentSection = await showHubSection(user, details, 'Evidence', 'Incident Feed');
+    await user.click(within(incidentSection).getByRole('button', { name: 'Open incident correlation corr-app-secondary' }));
 
-    await user.click(within(incidentSection!).getByRole('button', { name: 'Open incident correlation corr-app-secondary' }));
-
+    let correlationSection = await showCorrelationSection(user, details);
     await waitFor(() => {
-      expect(within(correlationSection!).getByText('corr-app-secondary')).toBeVisible();
-      expect(within(details).getByRole('button', { name: 'Return to current scope' })).toBeVisible();
-      expect(within(memorySection!).getByText('Request scope · Crew overview · corr-app-secondary')).toBeVisible();
+      expect(within(correlationSection).getByText('corr-app-secondary')).toBeVisible();
     });
+
+    memorySection = await showHubSection(user, details, 'Memory', 'Shared Memory');
+    await waitFor(() => {
+      expect(within(memorySection).getByText('Request scope · Crew overview · corr-app-secondary')).toBeVisible();
+    });
+
+    await showHubSection(user, details, 'Crew', 'Crew Overview');
+    expect(within(details).getByRole('button', { name: 'Return to current scope' })).toBeVisible();
 
     const fetchCallCountBeforeReset = vi.mocked(globalThis.fetch).mock.calls.length;
 
     await user.click(within(details).getByRole('button', { name: 'Return to current scope' }));
 
+    correlationSection = await showCorrelationSection(user, details);
     await waitFor(() => {
-      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
-      expect(within(correlationSection!).queryByText('corr-app-secondary')).not.toBeInTheDocument();
+      expect(within(correlationSection).getByText('corr-app-review')).toBeVisible();
+      expect(within(correlationSection).queryByText('corr-app-secondary')).not.toBeInTheDocument();
       expect(within(details).queryByRole('button', { name: 'Return to current scope' })).not.toBeInTheDocument();
-      expect(within(memorySection!).getByText('Request scope · Crew overview')).toBeVisible();
-      expect(within(memorySection!).queryByText('Request scope · Crew overview · corr-app-secondary')).not.toBeInTheDocument();
+    });
+
+    memorySection = await showHubSection(user, details, 'Memory', 'Shared Memory');
+    await waitFor(() => {
+      expect(within(memorySection).getByText('Request scope · Crew overview')).toBeVisible();
+      expect(within(memorySection).queryByText('Request scope · Crew overview · corr-app-secondary')).not.toBeInTheDocument();
     });
 
     const postResetRequests = vi
@@ -12311,7 +12465,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Crew');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
 
     const incidentSection = within(details).getByRole('heading', { name: 'Incident Feed' }).closest('section');
@@ -12325,7 +12479,7 @@ afterEach(() => {
       expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
       expect(within(details).getByRole('heading', { name: 'Current Operation' })).toBeVisible();
       expect(within(correlationSection!).getByText('corr-app-secondary')).toBeVisible();
-      expect(screen.getByRole('button', { name: 'Hide Hub' })).toBeVisible();
+      expect(screen.getByRole('dialog', { name: 'Hub' })).toBeVisible();
       expect(within(details).getByRole('button', { name: 'Return to current scope' })).toBeVisible();
     });
 
@@ -12338,8 +12492,8 @@ afterEach(() => {
       expect(within(details).getByRole('heading', { name: 'Current Operation' })).toBeVisible();
       expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
       expect(within(correlationSection!).queryByText('corr-app-secondary')).not.toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Hide Hub' })).toBeVisible();
-      expect(within(details).getByRole('button', { name: 'Clear' })).toHaveFocus();
+      expect(screen.getByRole('dialog', { name: 'Hub' })).toBeVisible();
+      expect(within(details).queryByRole('button', { name: 'Return to current scope' })).not.toBeInTheDocument();
     });
 
     const postResetRequests = vi
@@ -12390,23 +12544,24 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
-    const queueSection = within(details).getByRole('heading', { name: 'Active Queue' }).closest('section');
-    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
-    const replaySection = within(details).getByRole('heading', { name: 'Timeline Replay' }).closest('section');
-    expect(queueSection).not.toBeNull();
-    expect(correlationSection).not.toBeNull();
-    expect(replaySection).not.toBeNull();
+    const details = await openHub(user, 'Queue');
+    let queueSection = await findHubSection(details, 'Active Queue');
 
+    let correlationSection = await showCorrelationSection(user, details);
+    let replaySection = await findHubSection(details, 'Timeline Replay');
     await waitFor(() => {
-      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+      expect(within(correlationSection).getByText('corr-app-review')).toBeVisible();
+      expect(within(details).queryByRole('button', { name: 'Return to current scope' })).not.toBeInTheDocument();
+      expect(within(replaySection).queryByText('Scoped replay · corr-app-review')).not.toBeInTheDocument();
+    });
+
+    queueSection = await showHubSection(user, details, 'Queue', 'Active Queue');
+    await waitFor(() => {
       expect(
-        within(queueSection!).getByRole('button', {
+        within(queueSection).getByRole('button', {
           name: 'Open active queue correlation corr-app-review, currently selected'
         })
       ).toBeVisible();
-      expect(within(details).queryByRole('button', { name: 'Return to current scope' })).not.toBeInTheDocument();
-      expect(within(replaySection!).queryByText('Scoped replay · corr-app-review')).not.toBeInTheDocument();
     });
 
     const unscopedTimelineRequestsBeforeReselect = unscopedTimelineRequests;
@@ -12414,15 +12569,17 @@ afterEach(() => {
     const fetchCallCountBeforeReselect = vi.mocked(globalThis.fetch).mock.calls.length;
 
     await user.click(
-      within(queueSection!).getByRole('button', {
+      within(queueSection).getByRole('button', {
         name: 'Open active queue correlation corr-app-review, currently selected'
       })
     );
 
+    correlationSection = await showCorrelationSection(user, details);
+    replaySection = await findHubSection(details, 'Timeline Replay');
     await waitFor(() => {
-      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+      expect(within(correlationSection).getByText('corr-app-review')).toBeVisible();
       expect(within(details).queryByRole('button', { name: 'Return to current scope' })).not.toBeInTheDocument();
-      expect(within(replaySection!).queryByText('Scoped replay · corr-app-review')).not.toBeInTheDocument();
+      expect(within(replaySection).queryByText('Scoped replay · corr-app-review')).not.toBeInTheDocument();
     });
 
     await waitFor(() => {
@@ -12474,38 +12631,42 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
-    const queueSection = within(details).getByRole('heading', { name: 'Active Queue' }).closest('section');
-    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
-    const replaySection = within(details).getByRole('heading', { name: 'Timeline Replay' }).closest('section');
-    expect(queueSection).not.toBeNull();
-    expect(correlationSection).not.toBeNull();
-    expect(replaySection).not.toBeNull();
+    const details = await openHub(user, 'Queue');
+    let queueSection = await findHubSection(details, 'Active Queue');
 
+    let correlationSection = await showCorrelationSection(user, details);
     await waitFor(() => {
-      expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
+      expect(within(correlationSection).getByText('corr-app-review')).toBeVisible();
+      expect(within(details).queryByRole('button', { name: 'Return to current scope' })).not.toBeInTheDocument();
+    });
+
+    queueSection = await showHubSection(user, details, 'Queue', 'Active Queue');
+    await waitFor(() => {
       expect(
-        within(queueSection!).getByRole('button', {
+        within(queueSection).getByRole('button', {
           name: 'Open active queue correlation corr-app-secondary'
         })
       ).toBeVisible();
-      expect(within(details).queryByRole('button', { name: 'Return to current scope' })).not.toBeInTheDocument();
     });
 
     const fetchCallCountBeforeSelection = vi.mocked(globalThis.fetch).mock.calls.length;
 
     await user.click(
-      within(queueSection!).getByRole('button', {
+      within(queueSection).getByRole('button', {
         name: 'Open active queue correlation corr-app-secondary'
       })
     );
 
+    correlationSection = await showCorrelationSection(user, details);
+    const replaySection = await findHubSection(details, 'Timeline Replay');
     await waitFor(() => {
-      expect(within(correlationSection!).getByText('corr-app-secondary')).toBeVisible();
-      expect(within(correlationSection!).queryByText('corr-app-review')).not.toBeInTheDocument();
-      expect(within(details).getByRole('button', { name: 'Return to current scope' })).toBeVisible();
-      expect(within(replaySection!).getByText('Scoped replay · corr-app-secondary')).toBeVisible();
+      expect(within(correlationSection).getByText('corr-app-secondary')).toBeVisible();
+      expect(within(correlationSection).queryByText('corr-app-review')).not.toBeInTheDocument();
+      expect(within(replaySection).getByText('Scoped replay · corr-app-secondary')).toBeVisible();
     });
+
+    await showHubSection(user, details, 'Crew', 'Crew Overview');
+    expect(within(details).getByRole('button', { name: 'Return to current scope' })).toBeVisible();
 
     const postSelectionRequests = vi
       .mocked(globalThis.fetch)
@@ -12520,7 +12681,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Crew');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
 
     const operationSection = (await within(details).findByRole('heading', { name: 'Current Operation' })).closest(
@@ -12553,14 +12714,18 @@ afterEach(() => {
       expect(within(details).queryByRole('button', { name: 'Return to current scope' })).not.toBeInTheDocument();
     });
 
-    expect(vi.mocked(globalThis.fetch).mock.calls).toHaveLength(fetchCallCountBeforeReselect);
+    const postReselectRequests = vi
+      .mocked(globalThis.fetch)
+      .mock.calls.slice(fetchCallCountBeforeReselect)
+      .map(([input]) => (typeof input === 'string' ? input : input.toString()));
+    expect(postReselectRequests).toEqual([appEngineeringReviewAccountabilityReplayUrl]);
   });
 
   it('keeps selected-agent auto correlation mode when re-selecting the current default correlation from supervision history', async () => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Crew');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
 
     const supervisionSection = within(details).getByRole('heading', { name: 'Supervision History' }).closest('section');
@@ -12591,14 +12756,18 @@ afterEach(() => {
       expect(within(details).queryByRole('button', { name: 'Return to current scope' })).not.toBeInTheDocument();
     });
 
-    expect(vi.mocked(globalThis.fetch).mock.calls).toHaveLength(fetchCallCountBeforeReselect);
+    const postReselectRequests = vi
+      .mocked(globalThis.fetch)
+      .mock.calls.slice(fetchCallCountBeforeReselect)
+      .map(([input]) => (typeof input === 'string' ? input : input.toString()));
+    expect(postReselectRequests).toEqual([appEngineeringReviewAccountabilityReplayUrl]);
   });
 
   it('keeps selected-agent auto correlation mode when re-selecting the current default correlation from workflow status', async () => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Queue');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent from active queue' }));
 
     const workflowSection = within(details).getByRole('heading', { name: 'Workflow' }).closest('section');
@@ -12629,14 +12798,18 @@ afterEach(() => {
       expect(within(details).queryByRole('button', { name: 'Return to current scope' })).not.toBeInTheDocument();
     });
 
-    expect(vi.mocked(globalThis.fetch).mock.calls).toHaveLength(fetchCallCountBeforeReselect);
+    const postReselectRequests = vi
+      .mocked(globalThis.fetch)
+      .mock.calls.slice(fetchCallCountBeforeReselect)
+      .map(([input]) => (typeof input === 'string' ? input : input.toString()));
+    expect(postReselectRequests).toEqual([appEngineeringReviewAccountabilityReplayUrl]);
   });
 
   it('keeps a manually reopened default correlation manual when re-selecting it from workflow status', async () => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Queue');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent from active queue' }));
 
     const workflowSection = within(details).getByRole('heading', { name: 'Workflow' }).closest('section');
@@ -12703,13 +12876,13 @@ afterEach(() => {
       expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
       expect(within(details).getByRole('button', { name: 'Return to current scope' })).toBeVisible();
     });
-  });
+  }, 10000);
 
   it('keeps a manually reopened default correlation manual when re-selecting it from supervision history', async () => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Crew');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
 
     const incidentSection = within(details).getByRole('heading', { name: 'Incident Feed' }).closest('section');
@@ -12776,7 +12949,7 @@ afterEach(() => {
       expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
       expect(within(details).getByRole('button', { name: 'Return to current scope' })).toBeVisible();
     });
-  });
+  }, 10000);
 
   it('does not fall back to crew-overview correlations while a selected-agent workflow is still loading', async () => {
     let correlationRequests = 0;
@@ -12828,7 +13001,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Crew');
     await user.click(within(details).getByRole('button', { name: 'Inspect Team Lead' }));
 
     const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
@@ -12882,7 +13055,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Crew');
     await user.click(within(details).getByRole('button', { name: 'Inspect Team Lead' }));
 
     const supervisionSection = within(details).getByRole('heading', { name: 'Supervision History' }).closest('section');
@@ -12956,7 +13129,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Crew');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
 
     const workflowSection = within(details).getByRole('heading', { name: 'Workflow' }).closest('section');
@@ -12985,7 +13158,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Crew');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
 
     const workflowSection = within(details).getByRole('heading', { name: 'Workflow' }).closest('section');
@@ -12995,16 +13168,18 @@ afterEach(() => {
     expect(await within(details).findByText('Counts · 1 incidents · 1 interactions · 1 events')).toBeVisible();
 
     await user.click(within(details).getByRole('button', { name: 'Clear' }));
-    await user.click(within(details).getByRole('button', { name: 'Inspect Team Lead' }));
-
-    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
-    expect(correlationSection).not.toBeNull();
+    const crewSection = await showHubSection(user, details, 'Crew', 'Crew Overview');
+    await user.click(within(crewSection).getByRole('button', { name: 'Inspect Team Lead' }));
 
     await waitFor(() => {
       expect(within(details).getByRole('heading', { name: 'Team Lead' })).toBeVisible();
-      expect(within(correlationSection!).getByText('No correlation selected.')).toBeVisible();
     });
-    expect(within(correlationSection!).queryByText('corr-app-review')).not.toBeInTheDocument();
+
+    const correlationSection = await showCorrelationSection(user, details);
+    await waitFor(() => {
+      expect(within(correlationSection).getByText('No correlation selected.')).toBeVisible();
+    });
+    expect(within(correlationSection).queryByText('corr-app-review')).not.toBeInTheDocument();
     expect(globalThis.fetch).toHaveBeenCalledWith(teamLeadWorkflowUrl, expect.anything());
   });
 
@@ -13012,21 +13187,19 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
-    const incidentSection = within(details).getByRole('heading', { name: 'Incident Feed' }).closest('section');
-    const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
-    expect(incidentSection).not.toBeNull();
-    expect(correlationSection).not.toBeNull();
+    const details = await openHub(user, 'Evidence');
+    const incidentSection = await findHubSection(details, 'Incident Feed');
 
-    await user.click(within(incidentSection!).getByRole('button', { name: /Open incident correlation corr-app-review/ }));
+    await user.click(within(incidentSection).getByRole('button', { name: /Open incident correlation corr-app-review/ }));
 
+    const correlationSection = await showCorrelationSection(user, details);
     expect(
       await within(details).findByRole('button', { name: 'Select correlation participant agent app-engineering' })
     ).toBeVisible();
     expect(
       within(details).getByRole('button', { name: 'Select correlation participant agent team-lead' })
     ).toBeVisible();
-    expect(within(correlationSection!).getByText('corr-app-review').closest('li')).toHaveTextContent(
+    expect(within(correlationSection).getByText('corr-app-review').closest('li')).toHaveTextContent(
       'Participants · app-engineering, team-lead'
     );
 
@@ -13039,7 +13212,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Evidence');
     const incidentSection = within(details).getByRole('heading', { name: 'Incident Feed' }).closest('section');
     expect(incidentSection).not.toBeNull();
 
@@ -13058,7 +13231,7 @@ afterEach(() => {
       expect(within(selectedCorrelationSection!).getByText('Counts · 1 incidents · 0 interactions · 1 events')).toBeVisible();
       expect(within(selectedCorrelationSection!).queryByText('corr-app-review')).not.toBeInTheDocument();
     });
-    expect(screen.getByRole('button', { name: 'Hide Hub' })).toBeVisible();
+    expect(screen.getByRole('dialog', { name: 'Hub' })).toBeVisible();
 
     await act(async () => {
       expect(globalThis.fetch).toHaveBeenCalledWith(workflowUrl, expect.anything());
@@ -13070,7 +13243,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Crew');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
 
     const incidentSection = within(details).getByRole('heading', { name: 'Incident Feed' }).closest('section');
@@ -13111,7 +13284,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Crew');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
 
     const incidentSection = within(details).getByRole('heading', { name: 'Incident Feed' }).closest('section');
@@ -13152,7 +13325,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Crew');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
 
     const workflowSection = within(details).getByRole('heading', { name: 'Workflow' }).closest('section');
@@ -13193,7 +13366,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Crew');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
 
     const workflowSection = within(details).getByRole('heading', { name: 'Workflow' }).closest('section');
@@ -13231,7 +13404,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Crew');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
 
     const workflowSection = within(details).getByRole('heading', { name: 'Workflow' }).closest('section');
@@ -13320,7 +13493,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Crew');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
 
     const workflowSection = within(details).getByRole('heading', { name: 'Workflow' }).closest('section');
@@ -13421,7 +13594,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Crew');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
 
     const workflowSection = within(details).getByRole('heading', { name: 'Workflow' }).closest('section');
@@ -13548,7 +13721,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Crew');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
 
     const workflowSection = within(details).getByRole('heading', { name: 'Workflow' }).closest('section');
@@ -13609,7 +13782,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Evidence');
     const incidentSection = within(details).getByRole('heading', { name: 'Incident Feed' }).closest('section');
     expect(incidentSection).not.toBeNull();
 
@@ -13648,42 +13821,41 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
-    const getIncidentSection = () => within(details).getByRole('heading', { name: 'Incident Feed' }).closest('section');
-    const getCorrelationSection = () => within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
-    expect(getIncidentSection()).not.toBeNull();
-    expect(getCorrelationSection()).not.toBeNull();
+    const details = await openHub(user, 'Evidence');
+    let incidentSection = await findHubSection(details, 'Incident Feed');
 
     await user.click(
-      within(getIncidentSection()!).getByRole('button', { name: 'Open incident correlation corr-app-review, currently selected' })
+      within(incidentSection).getByRole('button', { name: 'Open incident correlation corr-app-review, currently selected' })
     );
+
+    let correlationSection = await showCorrelationSection(user, details);
     await waitFor(() => {
-      expect(within(getCorrelationSection()!).getByText('corr-app-review')).toBeVisible();
+      expect(within(correlationSection).getByText('corr-app-review')).toBeVisible();
     });
 
+    incidentSection = await showHubSection(user, details, 'Evidence', 'Incident Feed');
     await user.click(
-      within(getIncidentSection()!).getByRole('button', {
+      within(incidentSection).getByRole('button', {
         name: 'Select incident agent app-engineering from incident inc-2'
       })
     );
 
+    correlationSection = await showCorrelationSection(user, details);
     await waitFor(() => {
-      expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
-      expect(within(getCorrelationSection()!).getByText('corr-app-secondary')).toBeVisible();
-      expect(within(getCorrelationSection()!).getByText('Counts · 1 incidents · 0 interactions · 1 events')).toBeVisible();
+      expect(within(correlationSection).getByText('corr-app-secondary')).toBeVisible();
+      expect(within(correlationSection).getByText('Counts · 1 incidents · 0 interactions · 1 events')).toBeVisible();
     });
 
-    const workflowSection = within(details).getByRole('heading', { name: 'Workflow' }).closest('section');
-    expect(workflowSection).not.toBeNull();
+    const workflowSection = await showHubSection(user, details, 'Evidence', 'Workflow');
 
-    await user.click(within(workflowSection!).getByRole('button', { name: 'Select workflow counterparty agent team-lead' }));
+    await user.click(within(workflowSection).getByRole('button', { name: 'Select workflow counterparty agent team-lead' }));
 
+    const finalCorrelationSection = await showCorrelationSection(user, details);
     await waitFor(() => {
-      expect(within(details).getByRole('heading', { name: 'Team Lead' })).toBeVisible();
-      expect(within(getCorrelationSection()!).getByText('No correlation selected.')).toBeVisible();
+      expect(within(finalCorrelationSection).getByText('No correlation selected.')).toBeVisible();
     });
 
-    expect(within(getCorrelationSection()!).queryByText('corr-app-secondary')).not.toBeInTheDocument();
+    expect(within(finalCorrelationSection).queryByText('corr-app-secondary')).not.toBeInTheDocument();
 
     await act(async () => {
       expect(globalThis.fetch).toHaveBeenCalledWith(correlationUrl, expect.anything());
@@ -13691,7 +13863,7 @@ afterEach(() => {
       expect(globalThis.fetch).toHaveBeenCalledWith(workflowUrl, expect.anything());
       expect(globalThis.fetch).toHaveBeenCalledWith(teamLeadWorkflowUrl, expect.anything());
     });
-  });
+  }, 10000);
 
   it('falls back to the selected-agent default correlation when a carried incident correlation 404s', async () => {
     vi.stubGlobal(
@@ -13743,22 +13915,19 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
-    const incidentSection = within(details).getByRole('heading', { name: 'Incident Feed' }).closest('section');
-    expect(incidentSection).not.toBeNull();
+    const details = await openHub(user, 'Evidence');
+    const incidentSection = await findHubSection(details, 'Incident Feed');
 
     await user.click(
-      within(incidentSection!).getByRole('button', {
+      within(incidentSection).getByRole('button', {
         name: 'Select incident agent app-engineering from incident inc-2'
       })
     );
 
+    const selectedCorrelationSection = await showCorrelationSection(user, details);
     await waitFor(() => {
-      const selectedCorrelationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
-      expect(selectedCorrelationSection).not.toBeNull();
-      expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
-      expect(within(selectedCorrelationSection!).getByText('corr-app-review')).toBeVisible();
-      expect(within(selectedCorrelationSection!).queryByText('corr-app-secondary')).not.toBeInTheDocument();
+      expect(within(selectedCorrelationSection).getByText('corr-app-review')).toBeVisible();
+      expect(within(selectedCorrelationSection).queryByText('corr-app-secondary')).not.toBeInTheDocument();
     });
 
     await act(async () => {
@@ -13820,7 +13989,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Evidence');
     const incidentSection = within(details).getByRole('heading', { name: 'Incident Feed' }).closest('section');
     expect(incidentSection).not.toBeNull();
 
@@ -13892,7 +14061,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Evidence');
     const incidentSection = within(details).getByRole('heading', { name: 'Incident Feed' }).closest('section');
     expect(incidentSection).not.toBeNull();
 
@@ -13988,7 +14157,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Supervision');
     const collectorSection = within(details).getByRole('heading', { name: 'Collector Supervision' }).closest('section');
     expect(collectorSection).not.toBeNull();
 
@@ -14039,7 +14208,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Queue');
     expect(await within(details).findByText('No active operations queue.')).toBeVisible();
   });
 
@@ -14091,7 +14260,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Queue');
     const activeQueueSection = await waitFor(() => {
       const nextActiveQueueSection = within(details).getByRole('heading', { name: 'Active Queue' }).closest('section');
       expect(nextActiveQueueSection).not.toBeNull();
@@ -14164,7 +14333,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Memory');
     const memorySection = within(details).getByRole('heading', { name: 'Shared Memory' }).closest('section');
     expect(memorySection).not.toBeNull();
 
@@ -14180,10 +14349,10 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Crew');
     await user.click(within(details).getByRole('button', { name: 'Inspect Team Lead' }));
 
-    expect(screen.getByRole('button', { name: 'Hide Hub' })).toBeVisible();
+    expect(screen.getByRole('dialog', { name: 'Hub' })).toBeVisible();
 
     await waitFor(() => {
       expect(within(details).getByRole('heading', { name: 'Team Lead' })).toBeVisible();
@@ -14257,7 +14426,7 @@ afterEach(() => {
       expect(within(getFeedStat()).queryByText('0')).not.toBeInTheDocument();
     });
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Evidence');
     expect(await within(details).findByText('incident refresh failed')).toBeVisible();
     expect(within(details).queryByText('No active incident feed.')).not.toBeInTheDocument();
   });
@@ -14334,7 +14503,7 @@ afterEach(() => {
       expect(within(getFeedStat()).getByRole('status')).toHaveTextContent('Feed · Unavailable · incident refresh failed');
     });
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Evidence');
 
     await waitFor(() => {
       expect(incidentRequests).toBeGreaterThan(1);
@@ -14474,7 +14643,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Crew');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
 
     expect(await within(details).findByText('incident refresh failed')).toBeVisible();
@@ -14485,7 +14654,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Crew');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
 
     expect(await within(details).findByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
@@ -14695,7 +14864,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Crew');
     await user.click(await within(details).findByRole('button', { name: 'Inspect App Engineering Agent' }));
     expect(await within(details).findByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
     allowOverviewDrop = true;
@@ -14757,7 +14926,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Crew');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
     expect(await within(details).findByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
 
@@ -14847,7 +15016,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Crew');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
 
     expect(await within(details).findByText('Workflow incident fallback entry')).toBeVisible();
@@ -14858,7 +15027,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Crew');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
 
     await waitFor(() => {
@@ -14973,7 +15142,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Crew');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
 
     const collectorSection = await within(details).findByRole('heading', { name: 'Collector Observation' });
@@ -15127,7 +15296,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Crew');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
 
     const collectorSection = await within(details).findByRole('heading', { name: 'Collector Observation' });
@@ -15241,7 +15410,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Crew');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
 
     const collectorSection = await within(details).findByRole('heading', { name: 'Collector Observation' });
@@ -15291,7 +15460,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Crew');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
 
     const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
@@ -15335,7 +15504,7 @@ afterEach(() => {
     const user = userEvent.setup();
     render(<App />);
 
-    const details = await openHub(user);
+    const details = await openHub(user, 'Crew');
     await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
 
     const correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');

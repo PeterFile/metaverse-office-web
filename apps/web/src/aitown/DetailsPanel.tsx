@@ -37,6 +37,8 @@ import {
 } from './accountabilitySignals';
 import { deriveAgentDetailEvidenceFacets } from './agentDetailEvidenceFacets';
 
+export type HubCategory = 'crew' | 'queue' | 'supervision' | 'evidence' | 'replay' | 'memory';
+
 export type SelectedAgentDrilldownTab = 'now' | 'evidence' | 'replay';
 
 export const SELECTED_AGENT_DRILLDOWN_TABS: ReadonlyArray<{
@@ -62,6 +64,7 @@ type SharedMemoryJumpScope = {
 };
 
 type DetailsPanelProps = {
+  activeHubCategory: HubCategory;
   collectorSnapshot: CollectorSnapshot | null;
   collectorSnapshotError: string | null;
   collectorSnapshotState: LoadState;
@@ -3688,6 +3691,7 @@ function summarizeZoneSeverity(severities: Array<keyof typeof SEVERITY_LABELS>) 
 }
 
 export function DetailsPanel({
+  activeHubCategory,
   collectorSnapshot,
   collectorSnapshotError,
   collectorSnapshotState,
@@ -3911,7 +3915,7 @@ export function DetailsPanel({
   const activeReplayCheckpointEventId = replayCheckpointEventId?.trim() || null;
   const activeCorrelationQueueSection = shouldRenderActiveCorrelationQueueSection && activeCorrelationQueueCorrelation ? (
     <section
-      className={`aitown-details__section${selectedAgent ? ' aitown-details__section--selected-evidence' : ''}`}
+      className={`aitown-details__section${selectedAgent ? ' aitown-details__section--selected-now aitown-details__section--selected-evidence' : ''}`}
     >
       <h3>Active Correlation Queue</h3>
       {activeCorrelationQueueScopeLabel ? <p>{activeCorrelationQueueScopeLabel}</p> : null}
@@ -4026,24 +4030,35 @@ export function DetailsPanel({
         </span>
       </>
     ) : null;
+  const shouldRenderCrewCategory = activeHubCategory === 'crew';
+  const shouldRenderQueueCategory = activeHubCategory === 'queue';
+  const shouldRenderSupervisionCategory = activeHubCategory === 'supervision';
+  const shouldRenderEvidenceCategory = activeHubCategory === 'evidence';
+  const shouldRenderReplayCategory = activeHubCategory === 'replay';
+  const shouldRenderMemoryCategory = activeHubCategory === 'memory';
 
   if (!selectedAgent) {
     return (
       <aside className="aitown-panel aitown-panel--details" role="complementary" aria-label="Agent details">
-        <div className="aitown-details__head">
-          <div>
-            <h2>Crew Overview</h2>
-            <p>Pick an agent in the town or start from the roster.</p>
-          </div>
-        </div>
+        {shouldRenderCrewCategory ? (
+          <>
+            <div className="aitown-details__head">
+              <div>
+                <h2>Crew Overview</h2>
+                <p>Pick an agent in the town or start from the roster.</p>
+              </div>
+            </div>
 
-        <div className="aitown-details__summary">
-          <p>
-            {world.summary.total_agents} active agents, {world.summary.blocked_count} blocked, highest
-            severity {SEVERITY_LABELS[world.summary.highest_severity]}.{manualCorrelationResetAction}
-          </p>
-        </div>
+            <div className="aitown-details__summary">
+              <p>
+                {world.summary.total_agents} active agents, {world.summary.blocked_count} blocked, highest
+                severity {SEVERITY_LABELS[world.summary.highest_severity]}.{manualCorrelationResetAction}
+              </p>
+            </div>
+          </>
+        ) : null}
 
+        {shouldRenderQueueCategory ? (
         <section className="aitown-details__section aitown-details__section--active-queue">
           <h3>Active Queue</h3>
           {activeQueueStateBucketsStatus ? <p role="status">{activeQueueStateBucketsStatus}</p> : null}
@@ -4142,7 +4157,9 @@ export function DetailsPanel({
             ) : null}
           </ul>
         </section>
+        ) : null}
 
+        {shouldRenderSupervisionCategory ? (
         <section className="aitown-details__section">
           <h3>Collector Supervision</h3>
           {collectorWarning ? <p role="status">{collectorWarning}</p> : null}
@@ -4298,7 +4315,9 @@ export function DetailsPanel({
             ) : null}
           </ul>
         </section>
+        ) : null}
 
+        {shouldRenderCrewCategory ? (
         <section className="aitown-details__section">
           <h3>Roster</h3>
           <div className="aitown-roster">
@@ -4316,7 +4335,9 @@ export function DetailsPanel({
             ))}
           </div>
         </section>
+        ) : null}
 
+        {shouldRenderQueueCategory ? (
         <section className="aitown-details__section">
           <h3>Attention Queue</h3>
           <ul className="aitown-records">
@@ -4344,7 +4365,9 @@ export function DetailsPanel({
             {attentionQueue.length === 0 ? <li className="aitown-record">No agents need attention.</li> : null}
           </ul>
         </section>
+        ) : null}
 
+        {shouldRenderCrewCategory ? (
         <section className="aitown-details__section">
           <h3>Office Grid</h3>
           <ul className="aitown-records">
@@ -4399,7 +4422,9 @@ export function DetailsPanel({
             {officeGrid.length === 0 ? <li className="aitown-record">No office zones available.</li> : null}
           </ul>
         </section>
+        ) : null}
 
+        {shouldRenderSupervisionCategory ? (
         <section className="aitown-details__section">
           <h3>Watch Topology</h3>
           <ul className="aitown-records">
@@ -4443,9 +4468,11 @@ export function DetailsPanel({
             {world.watch_edges.length === 0 ? <li className="aitown-record">No active watch edges.</li> : null}
           </ul>
         </section>
+        ) : null}
 
-        {activeCorrelationQueueSection}
+        {shouldRenderQueueCategory ? activeCorrelationQueueSection : null}
 
+        {shouldRenderSupervisionCategory ? (
         <section className="aitown-details__section">
           <h3>Open Supervision Alerts</h3>
           {openSupervisionAlertsWarning ? <p role="status">{openSupervisionAlertsWarning}</p> : null}
@@ -4501,8 +4528,9 @@ export function DetailsPanel({
             ) : null}
           </ul>
         </section>
+        ) : null}
 
-        {renderSharedMemorySection({
+        {shouldRenderMemoryCategory ? renderSharedMemorySection({
           memoryArtifacts,
           memoryArtifactsError,
           memoryArtifactsState,
@@ -4517,8 +4545,9 @@ export function DetailsPanel({
           onOpenReplayCheckpoint,
           onSelectAgent,
           onSelectCorrelation
-        })}
+        }) : null}
 
+        {shouldRenderEvidenceCategory ? (
         <section className="aitown-details__section">
           <h3>Incident Feed</h3>
           <ul className="aitown-records">
@@ -4554,8 +4583,9 @@ export function DetailsPanel({
             ) : null}
           </ul>
         </section>
+        ) : null}
 
-        {renderTimelineReplaySection({
+        {shouldRenderReplayCategory ? renderTimelineReplaySection({
           scopedReplayCorrelationId: manualCorrelationOverrideActive ? selectedCorrelationId : null,
           replayCheckpointEventId: activeReplayCheckpointEventId,
           selectedSeverity: selectedCrewReplaySeverity,
@@ -4600,8 +4630,9 @@ export function DetailsPanel({
           onFocusWorldZone,
           onSelectAgent,
           onSelectCorrelation
-        })}
+        }) : null}
 
+        {shouldRenderReplayCategory ? (
         <section className="aitown-details__section">
           <h3>Correlation Drilldown</h3>
           <ul className="aitown-records">
@@ -4690,6 +4721,7 @@ export function DetailsPanel({
             ) : null}
           </ul>
         </section>
+        ) : null}
       </aside>
     );
   }
@@ -5151,7 +5183,7 @@ export function DetailsPanel({
             </ul>
           </section>
           {selectedOperation ? (
-            <section className="aitown-details__section aitown-details__section--selected-evidence">
+            <section className="aitown-details__section aitown-details__section--selected-now aitown-details__section--selected-evidence">
               <h3>Run Context</h3>
               <ul className="aitown-records">
                 <li className={`aitown-record severity-${selectedOperation.effective_severity}`}>

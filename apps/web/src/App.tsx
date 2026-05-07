@@ -30,6 +30,7 @@ import {
   SELECTED_AGENT_DRILLDOWN_TABS,
   resolveSelectedAgentDrilldownPanelId,
   resolveSelectedAgentDrilldownTabId,
+  type HubCategory,
   type SelectedAgentDrilldownTab
 } from './aitown/DetailsPanel';
 import { SceneStatusLegend } from './aitown/SceneStatusLegend';
@@ -116,6 +117,29 @@ const MEMORY_ARTIFACT_LIMIT = 4;
 const SELECTED_AGENT_SUPERVISION_HISTORY_LIMIT = 4;
 const RESET_VIEW_SHORTCUT_KEY = 'r';
 const RESET_VIEW_SHORTCUT_ARIA = 'R';
+
+const HUB_CATEGORIES: ReadonlyArray<{
+  id: HubCategory;
+  label: string;
+  hint: string;
+  selectedAgentTab: SelectedAgentDrilldownTab;
+}> = [
+  { id: 'crew', label: 'Crew', hint: 'Roster and crew overview', selectedAgentTab: 'now' },
+  { id: 'queue', label: 'Queue', hint: 'Active work and attention queue', selectedAgentTab: 'now' },
+  { id: 'supervision', label: 'Supervision', hint: 'Collector and watch signals', selectedAgentTab: 'evidence' },
+  { id: 'evidence', label: 'Evidence', hint: 'Incidents and workflow evidence', selectedAgentTab: 'evidence' },
+  { id: 'replay', label: 'Replay', hint: 'Timeline and correlation drilldown', selectedAgentTab: 'replay' },
+  { id: 'memory', label: 'Memory', hint: 'Shared memory artifacts', selectedAgentTab: 'evidence' }
+];
+
+function resolveHubCategoryLabel(category: HubCategory) {
+  return HUB_CATEGORIES.find((item) => item.id === category)?.label ?? 'Crew';
+}
+
+function resolveHubCategorySelectedAgentTab(category: HubCategory): SelectedAgentDrilldownTab {
+  return HUB_CATEGORIES.find((item) => item.id === category)?.selectedAgentTab ?? 'now';
+}
+
 const EMPTY_SEVERITY_BUCKETS: Record<Severity, number> = {
   normal: 0,
   yellow: 0,
@@ -722,6 +746,7 @@ export function resolveSelectedAgentPeekEvidenceRef({
 function AppInner() {
   const { selectedAgentId, setSelectedAgentId, setWorld } = useWorld();
   const [hubOpen, setHubOpen] = useState(false);
+  const [activeHubCategory, setActiveHubCategory] = useState<HubCategory>('crew');
   const [resetViewSignal, setResetViewSignal] = useState(0);
   const [zoneFocusRequest, setZoneFocusRequest] = useState<ZoneFocusRequest | null>(null);
   const [selectedCorrelationId, setSelectedCorrelationId] = useState<string | null>(null);
@@ -1563,6 +1588,17 @@ function AppInner() {
     setHubOpen(false);
   }, []);
 
+  const openHubCategory = useCallback(
+    (category: HubCategory) => {
+      setActiveHubCategory(category);
+      if (selectedAgentId !== null) {
+        setSelectedAgentDrilldownTab(resolveHubCategorySelectedAgentTab(category));
+      }
+      setHubOpen(true);
+    },
+    [selectedAgentId]
+  );
+
   const handleSelectCorrelation = useCallback(
     (
       correlationId: string | null,
@@ -1582,6 +1618,7 @@ function AppInner() {
       setSelectedCorrelationWasExplicit(isExplicitSelection);
       setSelectedCorrelationCarryForward(correlationId !== null && !keepAutoSelection);
       if (correlationId) {
+        setActiveHubCategory('replay');
         setHubOpen(true);
       }
     },
@@ -1607,22 +1644,18 @@ function AppInner() {
     });
   }, []);
 
-  const toggleHub = useCallback(() => {
-    setHubOpen((open) => !open);
-  }, []);
-
   useEffect(() => {
     if (hubOpen && selectedAgentId !== null) {
       const requestedTab = requestedSelectedAgentDrilldownTabRef.current;
       requestedSelectedAgentDrilldownTabRef.current = null;
-      setSelectedAgentDrilldownTab(requestedTab ?? 'now');
+      setSelectedAgentDrilldownTab(requestedTab ?? resolveHubCategorySelectedAgentTab(activeHubCategory));
       return;
     }
 
     if (!hubOpen) {
       requestedSelectedAgentDrilldownTabRef.current = null;
     }
-  }, [hubOpen, selectedAgentId]);
+  }, [activeHubCategory, hubOpen, selectedAgentId]);
 
   const handleSelectSelectedAgentDrilldownTab = useCallback((tab: SelectedAgentDrilldownTab) => {
     setSelectedAgentDrilldownTab(tab);
@@ -1970,6 +2003,7 @@ function AppInner() {
   const handleEvidenceCoverageFocusAgent = useCallback(
     (agentId: string) => {
       requestedSelectedAgentDrilldownTabRef.current = 'evidence';
+      setActiveHubCategory('evidence');
       handleSceneSelectAgent(agentId);
       setSelectedAgentDrilldownTab('evidence');
       setHubOpen(true);
@@ -2002,6 +2036,7 @@ function AppInner() {
         preserveActiveCorrelation && selectedCorrelationCarryForward,
         operation
       );
+      setActiveHubCategory('queue');
       setHubOpen(true);
     },
     [
@@ -2020,9 +2055,11 @@ function AppInner() {
         preserveNullCorrelation?: boolean;
       }
     ) => {
+      setActiveHubCategory('memory');
       if (selectedAgentId !== null) {
         setSelectedAgentDrilldownTab('evidence');
       }
+      setHubOpen(true);
 
       setSharedMemoryJumpStatus(null);
 
@@ -2154,6 +2191,7 @@ function AppInner() {
   ]
     .filter(Boolean)
     .join(' / ');
+  const activeHubCategoryLabel = resolveHubCategoryLabel(activeHubCategory);
 
   return (
     <main className="aitown-shell game-background">
@@ -2311,35 +2349,43 @@ function AppInner() {
             </div>
 
           </div>
-          <div className="aitown-panel__toolbar">
+          </div>
+          <nav className="aitown-hub-category-bar" aria-label="Office category menu">
+            {HUB_CATEGORIES.map((category, index) => {
+              const active = hubOpen && activeHubCategory === category.id;
+
+              return (
+                <button
+                  key={category.id}
+                  ref={index === 0 ? hubTriggerRef : undefined}
+                  type="button"
+                  className={`aitown-hub-category-bar__button${active ? ' is-active' : ''}`}
+                  aria-label={category.label}
+                  aria-expanded={active}
+                  aria-current={active ? 'page' : undefined}
+                  aria-controls="aitown-hub"
+                  aria-haspopup="dialog"
+                  onClick={() => openHubCategory(category.id)}
+                >
+                  <strong>{category.label}</strong>
+                  <span>{category.hint}</span>
+                </button>
+              );
+            })}
             <button
-              ref={hubTriggerRef}
               type="button"
-              className="aitown-button"
-              aria-expanded={hubOpen}
-              aria-controls="aitown-hub"
-              aria-haspopup="dialog"
-              onClick={toggleHub}
+              className="aitown-button aitown-hub-category-bar__reset"
+              aria-keyshortcuts={RESET_VIEW_SHORTCUT_ARIA}
+              onClick={handleResetView}
             >
-              {hubOpen ? 'Hide Hub' : 'Open Hub'}
+              Reset view
             </button>
-            {!hubOpen ? (
-              <button
-                type="button"
-                className="aitown-button"
-                aria-keyshortcuts={RESET_VIEW_SHORTCUT_ARIA}
-                onClick={handleResetView}
-              >
-                Reset view
-              </button>
-            ) : null}
             {selectedAgent ? (
-              <button type="button" className="aitown-button" onClick={() => selectAgent(null, null)}>
+              <button type="button" className="aitown-button aitown-hub-category-bar__clear" onClick={() => selectAgent(null, null)}>
                 Clear Selection
               </button>
             ) : null}
-          </div>
-          </div>
+          </nav>
           <SceneStatusLegend onFocusWorldZone={handleFocusWorldZone} world={projectedWorld} />
 
           {selectedAgent && !hubOpen ? (
@@ -2362,15 +2408,6 @@ function AppInner() {
                 ) : null}
                 {selectedAgentPeekEvidenceRef ? <span>{`Evidence · ${selectedAgentPeekEvidenceRef}`}</span> : null}
               </details>
-              <button
-                type="button"
-                className="aitown-button aitown-selected-agent-peek__action"
-                aria-controls="aitown-hub"
-                aria-haspopup="dialog"
-                onClick={() => setHubOpen(true)}
-              >
-                Open selected agent in Hub
-              </button>
             </aside>
           ) : null}
 
@@ -2410,12 +2447,12 @@ function AppInner() {
             className="aitown-hub-sheet"
             role="dialog"
             aria-modal="true"
-            aria-labelledby="aitown-hub-title"
+            aria-label="Hub"
             tabIndex={-1}
             onClick={(event) => event.stopPropagation()}
           >
             <div className="aitown-hub-sheet__header">
-              <span id="aitown-hub-title" className="aitown-hub-sheet__title">Hub</span>
+              <span id="aitown-hub-title" className="aitown-hub-sheet__title">{activeHubCategoryLabel}</span>
               <div className="aitown-hub-sheet__actions">
                 <button
                   type="button"
@@ -2426,7 +2463,7 @@ function AppInner() {
                   Reset view
                 </button>
                 <button ref={hubCloseButtonRef} type="button" className="aitown-button" onClick={closeHub}>
-                  Close Hub
+                  Close panel
                 </button>
               </div>
             </div>
@@ -2497,6 +2534,7 @@ function AppInner() {
               }
             >
               <DetailsPanel
+                activeHubCategory={activeHubCategory}
                 collectorSnapshot={visibleCollectorSnapshot}
               collectorSnapshotError={collectorSnapshotResource.error}
               collectorSnapshotState={collectorSnapshotResource.state}

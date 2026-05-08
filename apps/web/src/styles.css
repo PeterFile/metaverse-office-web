@@ -84,11 +84,15 @@ button {
   overflow: hidden;
   color: #f7f0d2;
   --aitown-edge: clamp(8px, 1.4vw, 18px);
-  --aitown-category-bar-reserve: 64px;
+  --aitown-category-bar-reserve: 58px;
   --aitown-panel-gap: clamp(8px, 1.1vw, 14px);
   --aitown-frame-width: clamp(2px, 0.35vw, 4px);
   --aitown-box-border: clamp(1px, 0.25vw, 3px);
   --aitown-token-border: 1px;
+  --aitown-readable-font: ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+  --aitown-game-font: 'VCR OSD Mono', monospace;
+  font-family: var(--aitown-readable-font);
+  font-weight: 400;
 }
 
 .aitown-panel__chrome {
@@ -146,28 +150,28 @@ button {
 
 .aitown-agent-roster {
   pointer-events: auto;
-  flex: 1 1 min(520px, 38vw);
+  flex: 0 1 auto;
   min-width: 0;
-  max-width: min(620px, 42vw);
+  max-width: min(560px, 48vw);
   align-self: flex-start;
-  padding: 4px;
-  border-style: solid;
-  border-width: var(--aitown-token-border);
-  border-image-source: url('/ai-town/assets/ui/box.svg');
-  border-image-repeat: stretch;
-  border-image-slice: 12.5%;
-  background: rgba(33, 24, 34, 0.76);
-  backdrop-filter: blur(8px);
+  padding: 0;
+  border: 0;
+  background: transparent;
   overflow-x: auto;
-  overflow-y: hidden;
+  overflow-y: visible;
   overscroll-behavior-x: contain;
-  scrollbar-width: thin;
+  scrollbar-width: none;
+}
+
+.aitown-agent-roster::-webkit-scrollbar {
+  display: none;
 }
 
 .aitown-agent-roster__list {
   display: flex;
   min-width: max-content;
-  gap: 5px;
+  align-items: flex-start;
+  gap: 4px;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -178,18 +182,20 @@ button {
 }
 
 .aitown-agent-roster__button {
+  position: relative;
   display: grid;
-  grid-template-columns: 34px minmax(0, 1fr);
-  align-items: center;
-  gap: 5px;
-  width: 90px;
-  min-height: 48px;
-  padding: 3px 5px;
-  border: 1px solid rgba(215, 192, 161, 0.68);
-  border-radius: 3px;
+  grid-template-columns: 1fr;
+  grid-template-rows: 47px 15px;
+  place-items: center;
+  width: 54px;
+  min-height: 64px;
+  padding: 0 2px 2px;
+  border: 0;
+  border-radius: 0;
   color: #fff7df;
-  background: rgba(46, 35, 41, 0.92);
-  box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.22);
+  background: transparent;
+  box-shadow: none;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.95);
   cursor: pointer;
 }
 
@@ -203,35 +209,42 @@ button {
 }
 
 .aitown-agent-roster__button.is-active {
-  border-color: #ffd785;
-  background: rgba(93, 59, 42, 0.96);
-  box-shadow:
-    inset 0 -2px 0 rgba(0, 0, 0, 0.22),
-    0 0 0 2px rgba(255, 215, 133, 0.25);
+  background: transparent;
+  box-shadow: none;
 }
 
 .aitown-agent-roster__portrait {
   position: relative;
   display: grid;
-  width: 34px;
-  height: 40px;
+  width: 46px;
+  height: 47px;
   place-items: center;
-  align-self: end;
-  border: 1px solid rgba(255, 229, 168, 0.62);
-  border-radius: 2px;
-  background: linear-gradient(180deg, rgba(67, 54, 54, 0.78), rgba(22, 16, 21, 0.7));
-  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.26);
+  align-self: start;
+  border: 1px solid rgba(222, 222, 222, 0.78);
+  border-radius: 2px 2px 0 0;
+  background: linear-gradient(180deg, rgba(54, 61, 63, 0.86), rgba(17, 19, 22, 0.88));
+  box-shadow:
+    inset 0 -7px 0 rgba(0, 0, 0, 0.24),
+    0 1px 2px rgba(0, 0, 0, 0.72);
   overflow: hidden;
+}
+
+.aitown-agent-roster__button.is-active .aitown-agent-roster__portrait {
+  border-color: #fffdf1;
+  box-shadow:
+    inset 0 -7px 0 rgba(0, 0, 0, 0.24),
+    0 0 0 1px #111,
+    0 0 0 3px rgba(255, 255, 255, 0.86);
 }
 
 .aitown-agent-roster__portrait img {
   display: block;
-  width: 100%;
-  height: 100%;
+  width: 112%;
+  height: 112%;
   object-fit: contain;
   object-position: center bottom;
   image-rendering: pixelated;
-  filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.72));
+  filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.86));
   user-select: none;
 }
 
@@ -244,34 +257,59 @@ button {
 }
 
 .aitown-agent-roster__copy {
-  display: grid;
-  min-width: 0;
-  gap: 1px;
-  line-height: 1.05;
+  position: absolute;
+  inset: 0;
+  display: block;
+  pointer-events: none;
 }
 
 .aitown-agent-roster__copy strong,
 .aitown-agent-roster__copy span {
+  position: absolute;
   display: block;
   min-width: 0;
   overflow: hidden;
+  font-family: var(--aitown-readable-font);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .aitown-agent-roster__copy strong {
-  font-size: 0.68rem;
+  right: 1px;
+  bottom: 0;
+  left: 1px;
+  height: 15px;
+  padding: 0 2px;
+  background: rgba(6, 8, 10, 0.82);
+  color: #fffdf3;
+  font-size: 0.58rem;
+  font-weight: 500;
+  line-height: 15px;
+  text-align: center;
 }
 
 .aitown-agent-roster__copy span {
-  justify-self: start;
-  padding: 0 4px;
-  border: 1px solid rgba(247, 213, 123, 0.38);
+  top: 1px;
+  right: 0;
+  display: grid;
+  min-width: 15px;
+  height: 15px;
+  place-items: center;
+  padding: 0 3px;
+  border: 1px solid rgba(14, 15, 16, 0.86);
   border-radius: 999px;
-  color: #f5cf79;
-  background: rgba(20, 15, 20, 0.58);
-  font-size: 0.58rem;
-  letter-spacing: 0.08em;
+  background: rgba(21, 30, 25, 0.9);
+  color: #d7f6b2;
+  font-size: 0.62rem;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.aitown-agent-roster__button.severity-yellow .aitown-agent-roster__copy span,
+.aitown-agent-roster__button.severity-orange .aitown-agent-roster__copy span,
+.aitown-agent-roster__button.severity-red .aitown-agent-roster__copy span {
+  background: rgba(105, 30, 28, 0.94);
+  color: #ffe076;
 }
 
 .aitown-shell__eyebrow {
@@ -690,8 +728,8 @@ button {
   display: grid;
   width: min(1180px, calc(100vw - (var(--aitown-edge) * 2)));
   transform: translateX(-50%);
-  grid-template-columns: repeat(6, minmax(82px, 1fr)) auto auto;
-  gap: 6px;
+  grid-template-columns: repeat(6, minmax(92px, 1fr)) auto auto;
+  gap: 2px;
   align-items: stretch;
   pointer-events: auto;
 }
@@ -699,49 +737,46 @@ button {
 .aitown-hub-category-bar__button {
   display: flex;
   min-width: 0;
-  flex-direction: column;
-  gap: 2px;
-  padding: 7px 8px;
-  border: 1px solid rgba(247, 213, 123, 0.28);
-  background: rgba(41, 25, 34, 0.9);
-  color: #f1ddb0;
+  min-height: 38px;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 10px 7px;
+  border: 1px solid rgba(190, 203, 207, 0.38);
+  background: linear-gradient(180deg, rgba(35, 45, 51, 0.96), rgba(16, 22, 27, 0.96));
+  color: #e9edf0;
   font: inherit;
-  text-align: left;
-  box-shadow: inset 0 -2px 0 rgba(247, 213, 123, 0.14);
+  text-align: center;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
   cursor: pointer;
 }
 
 .aitown-hub-category-bar__button:hover,
 .aitown-hub-category-bar__button:focus-visible {
   border-color: rgba(247, 213, 123, 0.78);
-  background: rgba(73, 43, 42, 0.96);
+  background: linear-gradient(180deg, rgba(63, 72, 76, 0.98), rgba(24, 30, 35, 0.98));
   outline: none;
 }
 
 .aitown-hub-category-bar__button.is-active {
-  border-color: #f7d57b;
-  background: rgba(91, 58, 57, 0.97);
-  color: #fff7df;
+  border-color: #f3e4bf;
+  background: linear-gradient(180deg, rgba(77, 83, 83, 0.98), rgba(29, 35, 39, 0.98));
+  color: #fffdf3;
 }
 
 .aitown-hub-category-bar__button strong {
   min-width: 0;
   overflow: hidden;
   color: inherit;
-  font-size: 0.78rem;
-  letter-spacing: 0.08em;
+  font-size: 0.84rem;
+  font-weight: 500;
+  letter-spacing: 0;
   text-overflow: ellipsis;
-  text-transform: uppercase;
+  text-transform: none;
   white-space: nowrap;
 }
 
 .aitown-hub-category-bar__button span {
-  min-width: 0;
-  overflow: hidden;
-  color: #dccca4;
-  font-size: 0.66rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  display: none;
 }
 
 .aitown-hub-category-bar__reset,
@@ -1585,29 +1620,31 @@ button {
   z-index: 20;
   display: flex;
   align-items: flex-end;
-  justify-content: center;
-  padding: 0 12px calc(var(--aitown-edge) + var(--aitown-category-bar-reserve) - 4px);
-  background: linear-gradient(180deg, rgba(13, 9, 15, 0.18), rgba(13, 9, 15, 0.46));
-  backdrop-filter: blur(2px);
+  justify-content: flex-start;
+  padding: 0 16px calc(var(--aitown-edge) + var(--aitown-category-bar-reserve) + 2px) max(16px, var(--aitown-edge));
+  background: linear-gradient(180deg, rgba(10, 12, 14, 0.06), rgba(10, 12, 14, 0.24));
   pointer-events: none;
 }
 
 .aitown-hub-sheet {
   display: flex;
-  width: min(1120px, calc(100vw - 24px));
-  height: clamp(300px, 42dvh, 430px);
-  max-height: calc(100dvh - var(--aitown-category-bar-reserve) - (var(--aitown-edge) * 2));
-  min-height: min(300px, calc(100dvh - var(--aitown-category-bar-reserve) - (var(--aitown-edge) * 2)));
+  width: min(860px, calc(100vw - 32px));
+  height: clamp(420px, 64dvh, 560px);
+  max-height: calc(100dvh - var(--aitown-category-bar-reserve) - (var(--aitown-edge) * 4));
+  min-height: min(360px, calc(100dvh - var(--aitown-category-bar-reserve) - (var(--aitown-edge) * 4)));
   flex-direction: column;
   overflow: hidden;
-  padding: 8px;
-  border-style: solid;
-  border-width: var(--aitown-box-border);
-  border-image-source: url('/ai-town/assets/ui/box.svg');
-  border-image-repeat: stretch;
-  border-image-slice: 12.5%;
-  background: rgba(30, 22, 30, 0.96);
-  box-shadow: var(--mo-shadow-panel);
+  padding: 6px;
+  border: 1px solid rgba(206, 214, 216, 0.72);
+  border-radius: 2px;
+  background: rgba(22, 27, 32, 0.97);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  color: #eef2f3;
+  font-family: var(--aitown-readable-font);
+  font-size: 0.86rem;
+  font-weight: 400;
+  line-height: 1.35;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.86);
   pointer-events: auto;
 }
 
@@ -1728,7 +1765,11 @@ button {
 .aitown-hub-drilldown__panel--crew {
   grid-column: 1 / -1;
   height: 100%;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 3px;
+  scrollbar-width: thin;
 }
 
 .aitown-hub-focus-ribbon__head,
@@ -1775,198 +1816,198 @@ button {
 }
 
 .aitown-hub-sheet .aitown-panel--details {
-  display: grid;
-  grid-template-columns: minmax(150px, 0.55fr) minmax(340px, 1.25fr) repeat(4, minmax(240px, 0.85fr));
-  grid-template-rows: auto minmax(0, 1fr);
-  grid-auto-flow: column;
-  grid-auto-columns: minmax(240px, 0.85fr);
+  display: flex;
   min-height: 0;
-  height: 100%;
-  gap: 6px 8px;
-  padding: 3px 6px 6px;
-  overflow-x: auto;
-  overflow-y: hidden;
-  overscroll-behavior-x: contain;
-  scrollbar-width: thin;
+  height: auto;
+  flex-direction: column;
+  gap: 9px;
+  padding: 2px 4px 10px 2px;
+  border: 0;
+  background: transparent;
+  overflow: visible;
 }
 
 .aitown-hub-sheet .aitown-details__head {
-  grid-column: 1;
-  grid-row: 1;
+  flex: 0 0 auto;
+  padding: 6px 8px;
+  border: 1px solid rgba(206, 214, 216, 0.32);
+  background: rgba(10, 13, 16, 0.42);
 }
 
 .aitown-hub-sheet .aitown-details__summary {
-  grid-column: 1;
-  grid-row: 2;
+  flex: 0 0 auto;
   min-height: 0;
   max-height: none;
-  padding: 0;
+  padding: 7px 9px;
+  border: 1px solid rgba(206, 214, 216, 0.32);
+  background: rgba(44, 53, 60, 0.58);
 }
 
 .aitown-hub-sheet .aitown-details__head h2 {
-  font-size: 0.86rem;
+  color: #f5d98d;
+  font-size: 1rem;
+  font-weight: 500;
+  letter-spacing: 0;
 }
 
 .aitown-hub-sheet .aitown-details__head p,
 .aitown-hub-sheet .aitown-details__summary p {
-  font-size: 0.72rem;
-  line-height: 1.25;
+  margin: 0;
+  color: #e1e6e8;
+  font-size: 0.86rem;
+  line-height: 1.35;
 }
 
 .aitown-hub-sheet .aitown-details__section {
-  grid-row: 1 / span 2;
+  flex: 0 0 auto;
   min-height: 0;
-  max-height: 100%;
-  gap: 5px;
+  max-height: none;
+  padding: 8px;
+  border: 1px solid rgba(206, 214, 216, 0.26);
+  background: rgba(10, 13, 16, 0.36);
+  overflow: visible;
+}
+
+.aitown-hub-sheet .aitown-details__section > h3 {
+  margin-bottom: 2px;
+  color: #f5d98d;
+  font-size: 0.95rem;
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+.aitown-hub-sheet .aitown-details__section > p {
+  margin: 0;
+  color: #d6dcde;
+  font-size: 0.84rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.aitown-hub-sheet .aitown-details__section > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 4px;
+  color: #d6dcde;
+  font-size: 0.84rem;
+  line-height: 1.3;
+}
+
+.aitown-hub-sheet .aitown-details__section label {
+  color: #cbd2d5;
+}
+
+.aitown-hub-sheet .aitown-details__section select {
+  min-width: 0;
+  max-width: 100%;
+  height: 28px;
+  padding: 2px 6px;
+  border: 1px solid rgba(206, 214, 216, 0.36);
+  background: rgba(13, 17, 20, 0.92);
+  color: #eef2f3;
+  font: inherit;
+}
+
+.aitown-hub-sheet .aitown-records {
+  gap: 7px;
+  max-height: min(35dvh, 300px);
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
+  padding-right: 3px;
   scrollbar-width: thin;
 }
 
 .aitown-hub-sheet .aitown-details__section--active-queue {
-  grid-column: 2;
-  display: grid;
-  grid-template-columns: minmax(112px, 0.34fr) minmax(0, 1fr);
-  grid-auto-rows: min-content;
-  align-items: start;
-  gap: 3px 6px;
-  min-height: 0;
-}
-
-.aitown-hub-sheet .aitown-details__section--active-queue > h3,
-.aitown-hub-sheet .aitown-details__section--active-queue > p,
-.aitown-hub-sheet .aitown-details__section--active-queue > div {
-  grid-column: 1;
-}
-
-.aitown-hub-sheet .aitown-details__section--active-queue > h3 {
-  font-size: 0.78rem;
-  line-height: 1.1;
-}
-
-.aitown-hub-sheet .aitown-details__section--active-queue > p {
-  margin: 0;
-  overflow: hidden;
-  font-size: 0.68rem;
-  line-height: 1.15;
-  text-overflow: ellipsis;
-}
-
-.aitown-hub-sheet .aitown-details__section--active-queue > div {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 2px;
-  font-size: 0.68rem;
-  line-height: 1.1;
-}
-
-.aitown-hub-sheet .aitown-details__section--active-queue select {
-  min-width: 0;
-  max-width: 100%;
-  height: 22px;
-  padding: 0 4px;
-  font-size: 0.68rem;
-}
-
-.aitown-hub-sheet .aitown-details__section:not(.aitown-details__section--active-queue) .aitown-records {
-  max-height: none;
-  overflow: visible;
-}
-
-.aitown-hub-sheet .aitown-records {
-  gap: 5px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
 }
 
 .aitown-hub-sheet .aitown-details__section--active-queue .aitown-records {
-  display: grid;
-  grid-column: 2;
-  grid-row: 1 / 5;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  align-self: stretch;
+  display: flex;
+  height: auto;
   min-height: 0;
-  height: 100%;
+  max-height: min(38dvh, 320px);
   overflow-x: hidden;
   overflow-y: auto;
-  overscroll-behavior: contain;
-  scrollbar-width: thin;
 }
 
 .aitown-hub-sheet .aitown-details__section--active-queue .aitown-queue-record {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  display: flex;
   min-height: 0;
-  max-height: 100%;
-  gap: 1px 5px;
-  overflow: hidden;
+  max-height: none;
+  flex-direction: column;
+  gap: 3px;
+  overflow: visible;
 }
 
 .aitown-hub-sheet .aitown-details__section--active-queue .aitown-queue-record__button {
-  grid-column: 1 / -1;
   min-height: 0;
-  max-height: 44px;
-  gap: 1px;
-  padding: 2px 5px 3px;
-  overflow: hidden;
+  max-height: none;
+  gap: 4px;
+  padding: 5px 8px;
+  overflow: visible;
 }
 
 .aitown-hub-sheet .aitown-details__section--active-queue .aitown-queue-record__status {
   display: block;
   max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow: visible;
+  white-space: normal;
 }
 
 .aitown-hub-sheet .aitown-details__section--active-queue .aitown-queue-record__preview {
-  -webkit-line-clamp: 1;
+  -webkit-line-clamp: unset;
 }
 
 .aitown-hub-sheet .aitown-details__section--active-queue .aitown-queue-record__meta {
   display: block;
   min-width: 0;
   padding: 0 2px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow: visible;
+  white-space: normal;
 }
 
 .aitown-hub-sheet .aitown-record {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  display: flex;
   align-content: start;
-  gap: 1px 8px;
-  padding: 2px 6px 3px;
-  overflow: hidden;
+  gap: 3px;
+  padding: 6px 8px;
+  border: 1px solid rgba(206, 214, 216, 0.22);
+  background: rgba(38, 44, 50, 0.74);
+  overflow: visible;
 }
 
 .aitown-hub-sheet .aitown-record strong {
   display: block;
-  grid-column: 1 / -1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow: visible;
+  color: #fffdf3;
+  font-size: 0.88rem;
+  font-weight: 500;
+  line-height: 1.25;
+  white-space: normal;
 }
 
 .aitown-hub-sheet .aitown-record span,
 .aitown-hub-sheet .aitown-queue-record__preview,
 .aitown-hub-sheet .aitown-queue-record__meta {
-  font-size: 0.72rem;
-  line-height: 1.2;
+  color: #d6dcde;
+  font-size: 0.82rem;
+  line-height: 1.32;
 }
 
-.aitown-hub-sheet .aitown-record strong,
 .aitown-hub-sheet .aitown-link-button {
-  font-size: 0.74rem;
-  line-height: 1.2;
+  font-size: 0.82rem;
+  line-height: 1.25;
 }
 
 .aitown-hub-sheet .aitown-queue-record__preview,
 .aitown-hub-sheet .aitown-record span:not(:first-child) {
   display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
 }
 
 .aitown-panel--details[data-selected-agent-drilldown-tab='now']
@@ -2099,12 +2140,13 @@ button {
   }
 
   .aitown-hub-sheet {
-    width: min(1120px, calc(100vw - 24px));
-    padding: 8px;
+    width: min(860px, calc(100vw - 24px));
+    padding: 6px;
   }
 
   .aitown-hub-sheet .aitown-panel--details {
-    grid-template-columns: minmax(140px, 0.55fr) minmax(280px, 1.2fr) repeat(3, minmax(220px, 0.85fr));
+    display: flex;
+    flex-direction: column;
   }
 
   .aitown-hub-sheet__body--selected-agent {
@@ -2126,8 +2168,8 @@ button {
     --aitown-edge: 6px;
     --aitown-category-bar-reserve: 112px;
     --aitown-panel-gap: 6px;
-    --aitown-box-border: 6px;
-    --aitown-token-border: 5px;
+    --aitown-box-border: 2px;
+    --aitown-token-border: 1px;
   }
 
   .aitown-panel__chrome {
@@ -2164,27 +2206,31 @@ button {
   }
 
   .aitown-agent-roster {
-    padding: 3px;
+    max-width: 100%;
+    padding: 0;
   }
 
   .aitown-agent-roster__button {
-    grid-template-columns: 28px minmax(0, 1fr);
-    width: 78px;
-    min-height: 40px;
-    padding: 2px 4px;
+    grid-template-columns: 1fr;
+    grid-template-rows: 42px 14px;
+    width: 50px;
+    min-height: 58px;
+    padding: 0 2px 2px;
   }
 
   .aitown-agent-roster__portrait {
-    width: 28px;
-    height: 34px;
+    width: 42px;
+    height: 42px;
   }
 
   .aitown-agent-roster__copy strong {
-    font-size: 0.6rem;
+    font-size: 0.54rem;
   }
 
   .aitown-agent-roster__copy span {
-    font-size: 0.52rem;
+    min-width: 14px;
+    height: 14px;
+    font-size: 0.56rem;
   }
 
   .aitown-shell__stats {

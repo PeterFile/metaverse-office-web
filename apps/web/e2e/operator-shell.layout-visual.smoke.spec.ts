@@ -44,10 +44,10 @@ function resolveUpperWorldDragLane(rect: RectSnapshot): RectSnapshot {
   return {
     left: rect.left + rect.width * 0.25,
     right: rect.left + rect.width * 0.60,
-    top: rect.top + rect.height * 0.20,
-    bottom: rect.top + rect.height * 0.42,
+    top: rect.top + rect.height * 0.12,
+    bottom: rect.top + rect.height * 0.20,
     width: rect.width * 0.35,
-    height: rect.height * 0.22
+    height: rect.height * 0.08
   };
 }
 
@@ -206,12 +206,20 @@ test.describe('operator shell layout visual smoke', () => {
     await expect(signalsSummary.getByText(/Evidence · 1/)).toBeVisible();
     await expect(evidenceFocus).toBeHidden();
     const roster = page.getByRole('navigation', { name: 'Agent roster' });
+    const appEngineeringButton = roster.getByRole('button', { name: 'Select and locate App Engineering Agent' });
     const appEngineeringPortrait = roster.locator(
       '.aitown-agent-roster__portrait img[src="/assets/generated/pawn_app_eng.png"]'
     );
     await expect(roster).toBeVisible();
+    await expect(appEngineeringButton).toBeVisible();
     await expect(appEngineeringPortrait).toBeVisible();
     await expect(roster.locator('.aitown-agent-roster__portrait').first()).not.toContainText('AE');
+    const [rosterButtonRect, rosterPortraitRect] = await Promise.all([
+      readRect(appEngineeringButton),
+      readRect(roster.locator('.aitown-agent-roster__portrait').first())
+    ]);
+    expect(rosterButtonRect.width, 'roster should use compact RimWorld portrait cards, not wide info buttons').toBeLessThanOrEqual(60);
+    expect(rosterPortraitRect.height, 'portrait should be the dominant roster card element').toBeGreaterThanOrEqual(40);
     await expect(page.getByRole('dialog', { name: 'Hub' })).toHaveCount(0);
 
     await signalsSummary.click();
@@ -277,29 +285,23 @@ test.describe('operator shell layout visual smoke', () => {
     expect(before).not.toBeNull();
     expectViewportWithinHorizontalWorldBounds(before!, 'initial Hub-open viewport');
 
-    const [worldRect, hubRect, toplineRect] = await Promise.all([readRect(worldHost), readRect(hub), readRect(passiveTopline)]);
+    const worldRect = await readRect(worldHost);
+    const upperDragLane = resolveUpperWorldDragLane(worldRect);
     const dragStart = {
-      x: Math.min(
-        Math.max(toplineRect.left + toplineRect.width * 0.5, worldRect.left + 64),
-        toplineRect.right - 1,
-        worldRect.right - 64
-      ),
-      y: Math.min(
-        Math.max(toplineRect.top + toplineRect.height * 0.5, worldRect.top + 64),
-        worldRect.bottom - 64
-      )
+      x: upperDragLane.left + upperDragLane.width * 0.5,
+      y: upperDragLane.top + upperDragLane.height * 0.5
     };
-    expect(dragStart.x, 'drag should start inside the passive HUD topline lane').toBeGreaterThanOrEqual(
-      toplineRect.left + 1
+    expect(dragStart.x, 'drag should start inside the upper world lane').toBeGreaterThanOrEqual(
+      upperDragLane.left + 1
     );
-    expect(dragStart.x, 'drag should start inside the passive HUD topline lane').toBeLessThanOrEqual(
-      toplineRect.right - 1
+    expect(dragStart.x, 'drag should start inside the upper world lane').toBeLessThanOrEqual(
+      upperDragLane.right - 1
     );
-    expect(dragStart.y, 'drag should start inside the passive HUD topline lane').toBeGreaterThanOrEqual(
-      toplineRect.top + 1
+    expect(dragStart.y, 'drag should start inside the upper world lane').toBeGreaterThanOrEqual(
+      upperDragLane.top + 1
     );
-    expect(dragStart.y, 'drag should start inside the passive HUD topline lane').toBeLessThanOrEqual(
-      toplineRect.bottom - 1
+    expect(dragStart.y, 'drag should start inside the upper world lane').toBeLessThanOrEqual(
+      upperDragLane.bottom - 1
     );
 
     const hitTarget = await page.evaluate(({ x, y }) => {
@@ -338,7 +340,7 @@ test.describe('operator shell layout visual smoke', () => {
     await expect(hub).toBeVisible();
   });
 
-  test('keeps the Hub first fold readable while leaving the upper world drag lane', async ({ page }) => {
+  test('keeps the RimWorld window first fold readable while leaving the upper world drag lane', async ({ page }) => {
     await page.goto('/');
 
     const worldHost = page.locator('.aitown-world__host');
@@ -365,12 +367,12 @@ test.describe('operator shell layout visual smoke', () => {
 
     const [worldRect, hubRect] = await Promise.all([readRect(worldHost), readRect(hub)]);
     const hubWorldObstructionRatio = resolveIntersectionArea(worldRect, hubRect) / (worldRect.width * worldRect.height);
-    expect(hubWorldObstructionRatio, 'Hub deck should stay bounded, not a world-covering modal').toBeLessThanOrEqual(
-      0.43
+    expect(hubWorldObstructionRatio, 'RimWorld window should stay bounded, not a world-covering modal').toBeLessThanOrEqual(
+      0.45
     );
     expect(
       resolveIntersectionArea(resolveUpperWorldDragLane(worldRect), hubRect),
-      'Hub sheet should leave the upper world drag lane visually clear'
+      'RimWorld window should leave the upper world drag lane visually clear'
     ).toBe(0);
 
     await page.getByRole('button', { name: 'Close panel' }).click();
@@ -531,7 +533,7 @@ test.describe('operator shell layout visual smoke', () => {
     await expect(page.getByRole('region', { name: 'Selected agent inspect peek' })).toHaveCount(0);
   });
 
-  test('keeps the selected-agent Hub focus ribbon compact inside the bottom deck', async ({ page }) => {
+  test('keeps the selected-agent Hub focus ribbon compact inside the RimWorld window', async ({ page }) => {
     await page.goto('/');
 
     const worldHost = page.locator('.aitown-world__host');
@@ -615,7 +617,7 @@ test.describe('operator shell layout visual smoke', () => {
     });
     await expect.poll(() => hub.evaluate((element) => element.scrollTop)).toBe(0);
     await expect(focusRibbon).toBeVisible();
-    await expectLocatorInsideRect(focusRibbon, hub, 'Hub focus ribbon after no-op deck scroll');
+    await expectLocatorInsideRect(focusRibbon, hub, 'Hub focus ribbon after no-op window scroll');
 
     await page.getByRole('button', { name: 'Close panel' }).click();
     await expect(hub).toHaveCount(0);
@@ -630,7 +632,7 @@ test.describe('operator shell layout visual smoke', () => {
     await expect(page.getByRole('region', { name: 'Hub focus ribbon' })).toBeVisible();
   });
 
-  test('selected-agent Hub drilldown tabs split Now Evidence and Replay Correlation inside the bottom deck', async ({
+  test('selected-agent Hub drilldown tabs split Now Evidence and Replay Correlation inside the RimWorld window', async ({
     page
   }) => {
     await page.goto('/');
@@ -692,13 +694,16 @@ test.describe('operator shell layout visual smoke', () => {
       readRect(focusRibbon),
       readRect(drilldown)
     ]);
-    expect(hubRect.width, 'Hub deck should stay bounded by the wide bottom deck contract').toBeLessThanOrEqual(
-      Math.min(1120, page.viewportSize()!.width - 24) + 1
+    expect(hubRect.width, 'RimWorld window should stay bounded by its readable-window width contract').toBeLessThanOrEqual(
+      Math.min(860, page.viewportSize()!.width - 32) + 1
     );
-    expect(hubRect.height, 'Hub deck should be tall enough to read opened category content').toBeGreaterThanOrEqual(
-      296
+    expect(hubRect.height, 'RimWorld window should be tall enough to read opened category content').toBeGreaterThanOrEqual(
+      419
     );
-    expect(hubRect.height, 'Hub deck should stay bounded instead of becoming a full modal on desktop').toBeLessThanOrEqual(430);
+    expect(
+      hubRect.height,
+      'RimWorld window should stay bounded instead of becoming a full modal on desktop'
+    ).toBeLessThanOrEqual(561);
     expect(
       focusRibbonRect.height + drilldownRect.height,
       'Hub focus ribbon plus drilldown tabs should stay compact'

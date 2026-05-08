@@ -165,6 +165,15 @@ const HOT_ZONE_SEVERITY_LABELS: Record<Severity, string> = {
   orange: 'Orange',
   red: 'Red'
 };
+const AGENT_ROSTER_SHORT_LABELS: Record<string, string> = {
+  'team-lead': 'Lead',
+  'market-intel': 'Intel',
+  'product-pmf': 'PMF',
+  tokenomics: 'Token',
+  'protocol-engineering': 'Protocol',
+  'app-engineering': 'App Eng',
+  'growth-revenue': 'Growth'
+};
 
 function normalizeAgentNameTokens(displayName: string, fallbackId: string) {
   const cleanedDisplayName = displayName.trim().replace(/\s+agent$/i, '').trim();
@@ -178,6 +187,11 @@ function truncateRosterToken(token: string, maxLength: number) {
 }
 
 function resolveAgentRosterName(displayName: string, fallbackId: string) {
+  const configuredShortLabel = AGENT_ROSTER_SHORT_LABELS[fallbackId];
+  if (configuredShortLabel) {
+    return configuredShortLabel;
+  }
+
   const tokens = normalizeAgentNameTokens(displayName, fallbackId);
   const [firstToken = 'Agent', secondToken] = tokens;
 
@@ -190,11 +204,11 @@ function resolveAgentRosterName(displayName: string, fallbackId: string) {
 
 function resolveAgentRosterStatus(agent: AgentRosterStatusState) {
   if (agent.rebootRecommended || agent.phase === 'reboot_recommended' || agent.phase === 'rebooting') {
-    return 'R';
+    return '↻';
   }
 
   if (agent.phase === 'blocked') {
-    return 'BLK';
+    return '×';
   }
 
   if (agent.openAlertCount > 0) {
@@ -206,22 +220,22 @@ function resolveAgentRosterStatus(agent: AgentRosterStatusState) {
   }
 
   if (agent.runtimeFreshnessSeverity && agent.runtimeFreshnessSeverity !== 'normal') {
-    return 'S';
+    return '◷';
   }
 
   if (agent.severity !== 'normal') {
-    return agent.severity[0]?.toUpperCase() ?? '⚠';
+    return '!';
   }
 
   if (agent.phase === 'sleeping') {
-    return 'ZZ';
+    return 'z';
   }
 
   if (agent.phase === 'active' || agent.phase === 'reviewing' || agent.phase === 'handoff_active') {
-    return 'ACT';
+    return '●';
   }
 
-  return 'OK';
+  return '✓';
 }
 
 function AgentRoster({ agents, selectedAgentId, onSelectAgent }: AgentRosterProps) {

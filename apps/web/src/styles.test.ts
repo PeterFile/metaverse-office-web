@@ -52,25 +52,18 @@ describe('AI Town shell styles', () => {
     expect(styles).not.toContain('border-width: clamp(10px, 1.4vw, 16px);');
   });
 
-  it('renders Hub as a readable bottom deck with internal scrollports', () => {
+  it('renders Hub as a RimWorld-style readable bottom-left window with wrapped event rows', () => {
     expect(styles).toMatch(/\.aitown-hub-overlay\s*\{[\s\S]*?position:\s*fixed;/);
-    expect(styles).toMatch(/\.aitown-hub-overlay\s*\{[\s\S]*?align-items:\s*flex-end;[\s\S]*?justify-content:\s*center;/);
+    expect(styles).toMatch(/\.aitown-hub-overlay\s*\{[\s\S]*?align-items:\s*flex-end;[\s\S]*?justify-content:\s*flex-start;/);
     expect(styles).toMatch(
-      /\.aitown-hub-overlay\s*\{[\s\S]*?padding:\s*0 12px calc\(var\(--aitown-edge\) \+ var\(--aitown-category-bar-reserve\) - 4px\);/
+      /\.aitown-hub-sheet\s*\{[\s\S]*?width:\s*min\(860px, calc\(100vw - 32px\)\);[\s\S]*?height:\s*clamp\(420px, 64dvh, 560px\);[\s\S]*?max-height:\s*calc\(100dvh - var\(--aitown-category-bar-reserve\) - \(var\(--aitown-edge\) \* 4\)\);[\s\S]*?font-family:\s*var\(--aitown-readable-font\);/
     );
-    expect(styles).toMatch(
-      /\.aitown-hub-sheet\s*\{[\s\S]*?width:\s*min\(1120px, calc\(100vw - 24px\)\);[\s\S]*?height:\s*clamp\(300px, 42dvh, 430px\);[\s\S]*?max-height:\s*calc\(100dvh - var\(--aitown-category-bar-reserve\) - \(var\(--aitown-edge\) \* 2\)\);[\s\S]*?overflow:\s*hidden;/
-    );
-    expect(styles).toMatch(/\.aitown-hub-sheet__body\s*\{[\s\S]*?display:\s*grid;[\s\S]*?overflow:\s*hidden;/);
-    expect(styles).toMatch(/\.aitown-hub-sheet \.aitown-panel--details\s*\{[\s\S]*?grid-auto-flow:\s*column;[\s\S]*?overflow-x:\s*auto;[\s\S]*?overflow-y:\s*hidden;/);
-    expect(styles).toMatch(
-      /\.aitown-hub-sheet \.aitown-details__section--active-queue\s*\{[\s\S]*?display:\s*grid;[\s\S]*?grid-template-columns:\s*minmax\(112px, 0\.34fr\) minmax\(0, 1fr\);[\s\S]*?min-height:\s*0;/
-    );
-    expect(styles).toMatch(/\.aitown-hub-sheet \.aitown-details__section--active-queue > div\s*\{[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\);/);
-    expect(styles).toMatch(/\.aitown-hub-sheet \.aitown-details__section--active-queue select\s*\{[\s\S]*?height:\s*22px;/);
-    expect(styles).toMatch(/\.aitown-hub-sheet \.aitown-details__section--active-queue \.aitown-records\s*\{[\s\S]*?grid-column:\s*2;[\s\S]*?grid-row:\s*1 \/ 5;[\s\S]*?overflow-y:\s*auto;/);
-    expect(styles).toMatch(/\.aitown-hub-sheet \.aitown-details__section--active-queue \.aitown-queue-record__meta\s*\{[\s\S]*?display:\s*block;[\s\S]*?text-overflow:\s*ellipsis;/);
-    expect(styles).toMatch(/\.aitown-hub-sheet \.aitown-record\s*\{[\s\S]*?grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\);/);
+    expect(styles).toMatch(/\.aitown-hub-drilldown__panel--crew\s*\{[\s\S]*?overflow-y:\s*auto;/);
+    expect(styles).toMatch(/\.aitown-hub-sheet \.aitown-panel--details\s*\{[\s\S]*?display:\s*flex;[\s\S]*?flex-direction:\s*column;[\s\S]*?overflow:\s*visible;/);
+    expect(styles).toMatch(/\.aitown-hub-sheet \.aitown-details__section--active-queue\s*\{[\s\S]*?display:\s*flex;[\s\S]*?flex-direction:\s*column;/);
+    expect(styles).toMatch(/\.aitown-hub-sheet \.aitown-details__section--active-queue \.aitown-queue-record__button\s*\{[\s\S]*?max-height:\s*none;[\s\S]*?overflow:\s*visible;/);
+    expect(styles).toMatch(/\.aitown-hub-sheet \.aitown-record\s*\{[\s\S]*?display:\s*flex;[\s\S]*?overflow:\s*visible;/);
+    expect(styles).toMatch(/\.aitown-hub-sheet \.aitown-record span:not\(:first-child\)\s*\{[\s\S]*?white-space:\s*normal;/);
   });
 
   it('keeps browser pinch zoom available on the fullscreen world host and canvas', () => {
@@ -84,7 +77,7 @@ describe('AI Town shell styles', () => {
     );
     expect(styles).toMatch(/\.aitown-shell__header\s*\{[\s\S]*?grid-area:\s*header;/);
     expect(styles).toMatch(/\.aitown-panel__hud-top\s*\{[\s\S]*?grid-area:\s*hud;[\s\S]*?pointer-events:\s*none;/);
-    expect(styles).toMatch(/\.aitown-shell\s*\{[\s\S]*?--aitown-category-bar-reserve:\s*64px;/);
+    expect(styles).toMatch(/\.aitown-shell\s*\{[\s\S]*?--aitown-category-bar-reserve:\s*58px;/);
     expect(styles).toMatch(
       /@media \(max-width:\s*1080px\)\s*\{[\s\S]*?\.aitown-shell\s*\{[\s\S]*?--aitown-category-bar-reserve:\s*140px;/
     );
@@ -94,7 +87,7 @@ describe('AI Town shell styles', () => {
     expect(styles).toMatch(
       /\.aitown-hub-category-bar\s*\{[\s\S]*?position:\s*fixed;[\s\S]*?bottom:\s*var\(--aitown-edge\);[\s\S]*?z-index:\s*30;[\s\S]*?display:\s*grid;[\s\S]*?pointer-events:\s*auto;/
     );
-    expect(styles).toMatch(/\.aitown-hub-category-bar__button\.is-active\s*\{[\s\S]*?border-color:\s*#f7d57b;/);
+    expect(styles).toMatch(/\.aitown-hub-category-bar__button\.is-active\s*\{[\s\S]*?border-color:\s*#f3e4bf;/);
     expect(styles).not.toMatch(/\.aitown-panel__chrome\s*\{[\s\S]*?'header toolbar'/);
   });
 

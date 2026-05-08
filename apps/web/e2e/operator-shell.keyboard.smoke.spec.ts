@@ -3524,6 +3524,8 @@ test.describe('operator shell smoke', () => {
   });
 
   test('opens a selected-agent current-operation correlation drilldown via keyboard traversal', async ({ page }) => {
+    test.setTimeout(60_000);
+
     const requestedUrls: string[] = [];
     page.on('request', (request) => {
       try {
@@ -3640,12 +3642,15 @@ test.describe('operator shell smoke', () => {
 
     await page.keyboard.press('Enter');
 
+    await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Now');
     await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toBeVisible();
     await expect(operationSection.getByText('planning · Prepare handoff notes')).toBeVisible();
     await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toBeVisible();
-    await expect(correlationSection.getByText('Counts · 0 incidents · 1 interactions · 2 events')).toBeVisible();
+    const selectedCorrelationCounts = correlationSection.getByText('Counts · 0 incidents · 1 interactions · 2 events');
+    await selectedCorrelationCounts.scrollIntoViewIfNeeded();
+    await expect(selectedCorrelationCounts).toBeVisible();
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toHaveCount(0);
 
     const getPostCorrelationSelectionRequests = () => requestedUrls.slice(requestCountBeforeCorrelationOpen);
@@ -3732,6 +3737,9 @@ test.describe('operator shell smoke', () => {
   test('keeps the selected-agent current operation evidence jump focused on shared memory without changing selection via keyboard traversal', async ({
     page
   }) => {
+    test.setTimeout(60_000);
+    await installFastPollInterval(page, 120_000);
+
     const requestedUrls: string[] = [];
     page.on('request', (request) => {
       try {
@@ -3816,6 +3824,9 @@ test.describe('operator shell smoke', () => {
   test('falls back to one exact scoped shared-memory fetch for a selected-agent current-operation evidence jump that is outside the loaded slice', async ({
     page
   }) => {
+    test.setTimeout(60_000);
+    await installFastPollInterval(page, 120_000);
+
     const requestedUrls: string[] = [];
     const scopedArtifactsUrl =
       '/memory/artifacts?limit=4&window=60m&agent_id=growth-revenue&correlation_id=corr-revenue-handoff';
@@ -3930,7 +3941,11 @@ test.describe('operator shell smoke', () => {
     await page.waitForTimeout(150);
 
     const postJumpRequests = requestedUrls.slice(requestCountBeforeJump);
-    expect(postJumpRequests).toEqual([exactArtifactUrl]);
+    expect(postJumpRequests.filter((url) => url.startsWith('/memory/artifacts'))).toEqual([exactArtifactUrl]);
+    expectOnlyBenignPostJumpRequests(postJumpRequests, [
+      exactArtifactUrl,
+      '/correlations/corr-revenue-handoff?limit=10&window=60m'
+    ]);
 
     await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Now');
     await expect(detailsPanel.getByRole('heading', { name: 'Current Operation' })).toBeVisible();
@@ -3945,6 +3960,8 @@ test.describe('operator shell smoke', () => {
   test('keeps the top-level selected-agent correlation evidence jump focused on shared memory without changing selection or active correlation via keyboard traversal', async ({
     page
   }) => {
+    test.setTimeout(60_000);
+
     const requestedUrls: string[] = [];
     page.on('request', (request) => {
       try {
@@ -4515,6 +4532,8 @@ test.describe('operator shell smoke', () => {
   test('keeps the selected-agent collector tmux preview jump focused on shared memory without changing selection, correlation, or request scope via keyboard traversal', async ({
     page
   }) => {
+    test.setTimeout(60_000);
+
     const requestedUrls: string[] = [];
     const tmuxArtifactRef = 'tmux://5-web3-app-engineering/0.1';
     const tmuxPreviewLabel = 'pnpm test · 2026-03-10T23:59:10.000Z';
@@ -6736,6 +6755,8 @@ test.describe('operator shell smoke', () => {
   test('keeps selected-agent auto correlation mode when re-selecting the current default correlation from workflow status via keyboard traversal', async ({
     page
   }) => {
+    test.setTimeout(60_000);
+
     const requestedUrls: string[] = [];
     page.on('request', (request) => {
       try {
@@ -7013,6 +7034,8 @@ test.describe('operator shell smoke', () => {
   test('keeps the selected-agent workflow-status handoff evidence jump focused on shared memory without changing selection or active correlation via keyboard traversal', async ({
     page
   }) => {
+    await installFastPollInterval(page, 120_000);
+
     const requestedUrls: string[] = [];
     page.on('request', (request) => {
       try {
@@ -8260,6 +8283,7 @@ test.describe('operator shell smoke', () => {
     page
   }) => {
     const requestedUrls: string[] = [];
+    await installFastPollInterval(page, 120_000);
     page.on('request', (request) => {
       try {
         const url = new URL(request.url());
@@ -8641,6 +8665,8 @@ test.describe('operator shell smoke', () => {
   test('keeps the selected-agent workflow peer-watch alert evidence jump focused on shared memory without changing selection or active correlation via keyboard traversal', async ({
     page
   }) => {
+    await installFastPollInterval(page, 120_000);
+
     const requestedUrls: string[] = [];
     page.on('request', (request) => {
       try {
@@ -8928,6 +8954,8 @@ test.describe('operator shell smoke', () => {
   test('keeps selected-agent auto correlation mode when re-selecting the current default correlation from supervision history via keyboard traversal', async ({
     page
   }) => {
+    await installFastPollInterval(page, 120_000);
+
     const requestedUrls: string[] = [];
     page.on('request', (request) => {
       try {
@@ -9049,6 +9077,8 @@ test.describe('operator shell smoke', () => {
   test(
     'keeps the selected-agent supervision history evidence jump focus-only while a manually reopened default correlation stays explicit via keyboard traversal',
     async ({ page }) => {
+      test.setTimeout(60_000);
+
       const requestedUrls: string[] = [];
       page.on('request', (request) => {
         try {

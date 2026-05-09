@@ -3393,6 +3393,82 @@ function resolveSelectableIncidentCorrelationId(
   return selectableIds.has(incident.incident_id) ? incident.correlation_id : null;
 }
 
+const HUB_CATEGORY_ORIENTATION: Record<
+  HubCategory,
+  {
+    title: string;
+    crewScope: string;
+    crewFocus: string;
+    selectedScope: (agent: OfficeAgent) => string;
+    selectedFocus: string;
+  }
+> = {
+  crew: {
+    title: 'Crew focus',
+    crewScope: 'Roster, office grid, and current town state.',
+    crewFocus: 'Focus: choose the next agent or room to inspect.',
+    selectedScope: (agent) => `${agent.display_name} · current operation and town context.`,
+    selectedFocus: 'Focus: read the pawn state before drilling into proof.'
+  },
+  queue: {
+    title: 'Queue focus',
+    crewScope: 'Live work queue and attention lane for the crew.',
+    crewFocus: 'Focus: find blocked work and choose the next inspect target.',
+    selectedScope: (agent) => `${agent.display_name} · queue position and active-correlation lane.`,
+    selectedFocus: 'Focus: compare this agent against queued work without leaving the inspect window.'
+  },
+  supervision: {
+    title: 'Supervision focus',
+    crewScope: 'Collector state, watch topology, and open supervision alerts.',
+    crewFocus: 'Focus: see who is watching whom and which signals need intervention.',
+    selectedScope: (agent) => `${agent.display_name} · supervision and collector observation.`,
+    selectedFocus: 'Focus: verify watcher context before acting on the agent.'
+  },
+  evidence: {
+    title: 'Evidence focus',
+    crewScope: 'Incident feed and shared memory refs for the crew.',
+    crewFocus: 'Focus: prove what happened, who touched it, and where the trail lives.',
+    selectedScope: (agent) => `${agent.display_name} · active evidence view.`,
+    selectedFocus: "Focus: isolate this agent's proof, incidents, and memory anchors."
+  },
+  replay: {
+    title: 'Replay focus',
+    crewScope: 'Timeline replay and correlation drilldown.',
+    crewFocus: 'Focus: walk the event order before changing scope.',
+    selectedScope: (agent) => `${agent.display_name} · replay and correlation context.`,
+    selectedFocus: 'Focus: reconstruct the chain for this agent and active correlation.'
+  },
+  memory: {
+    title: 'Memory focus',
+    crewScope: 'Shared artifacts and exact evidence refs.',
+    crewFocus: 'Focus: jump from proof refs to the stored artifact.',
+    selectedScope: (agent) => `${agent.display_name} · scoped shared memory artifacts.`,
+    selectedFocus: 'Focus: keep memory refs tied to this agent and correlation.'
+  }
+};
+
+function renderHubCategoryOrientation({
+  activeHubCategory,
+  selectedAgent
+}: {
+  activeHubCategory: HubCategory;
+  selectedAgent: OfficeAgent | null;
+}) {
+  const orientation = HUB_CATEGORY_ORIENTATION[activeHubCategory];
+
+  return (
+    <section
+      className="aitown-hub-category-orientation"
+      data-active-hub-category={activeHubCategory}
+      aria-label={orientation.title}
+    >
+      <h3>{orientation.title}</h3>
+      <p>{selectedAgent ? orientation.selectedScope(selectedAgent) : orientation.crewScope}</p>
+      <p>{selectedAgent ? orientation.selectedFocus : orientation.crewFocus}</p>
+    </section>
+  );
+}
+
 function renderIncidentRecord({
   incident,
   activeCorrelationId,
@@ -3409,7 +3485,8 @@ function renderIncidentRecord({
   includeCounterpartyPivots = false,
   counterpartyPivotAriaLabelPrefix = 'Select correlation incident counterparty agent',
   includeCorrelationPivot = true,
-  selectableCorrelationId = incident.correlation_id
+  selectableCorrelationId = incident.correlation_id,
+  layout = 'flat'
 }: {
   incident: WorkflowIncident;
   activeCorrelationId: string | null;
@@ -3427,24 +3504,98 @@ function renderIncidentRecord({
   counterpartyPivotAriaLabelPrefix?: string;
   includeCorrelationPivot?: boolean;
   selectableCorrelationId?: string | null;
+  layout?: 'flat' | 'evidence-card';
 }) {
   const { onJump, allowExactFallback } = resolveSharedMemoryEvidenceJumpBehavior(onFocusSharedMemoryArtifact);
   const pivotCorrelationId = selectableCorrelationId ?? activeCorrelationId;
+  const renderedAgent =
+    navigableAgentIds.has(incident.agent_id) && incident.agent_id !== currentAgentId
+      ? renderAgentPivotButton({
+          agentId: incident.agent_id,
+          ariaLabel: `Select incident agent ${incident.agent_id} from incident ${incident.incident_id}`,
+          correlationId: pivotCorrelationId,
+          onSelectAgent
+        })
+      : incident.agent_id;
+  const renderedActor =
+    includeActorPivot && incident.actor_id !== currentAgentId && navigableAgentIds.has(incident.actor_id)
+      ? renderAgentPivotButton({
+          agentId: incident.actor_id,
+          ariaLabel: `${actorPivotAriaLabelPrefix} ${incident.incident_id} ${incident.actor_id}`,
+          correlationId: pivotCorrelationId,
+          onSelectAgent
+        })
+      : incident.actor_id;
+  const renderedCounterparties = includeCounterpartyPivots
+    ? renderAgentPivotList({
+        agentIds: incident.counterparty_agent_ids,
+        currentAgentId,
+        navigableAgentIds,
+        emptyLabel: 'No counterparties',
+        ariaLabelPrefix: counterpartyPivotAriaLabelPrefix,
+        correlationId: pivotCorrelationId,
+        onSelectAgent
+      })
+    : renderCounterparties(incident.counterparty_agent_ids);
+  const renderedEvidence = enableSharedMemoryEvidenceJump
+    ? renderSharedMemoryEvidenceRefs({
+        evidenceRefs: incident.evidence_refs,
+        sharedMemoryArtifactRefs,
+        onJump,
+        allowExactFallback
+      })
+    : renderEvidenceRefs(incident.evidence_refs);
+
+  if (layout === 'evidence-card') {
+    const timestampLabel = renderTimestamp(incident.ts, 'No incident timestamp');
+
+    return (
+      <li key={incident.incident_id} className={`aitown-record aitown-evidence-card severity-${incident.severity}`}>
+        <div className="aitown-evidence-card__header">
+          <span className="aitown-evidence-card__title">
+            <span className="aitown-evidence-card__eyebrow">
+              {`${SEVERITY_LABELS[incident.severity]} · ${incident.kind} · ${incident.status} · ${timestampLabel}`}
+            </span>
+            <strong>{incident.summary}</strong>
+          </span>
+          {includeCorrelationPivot ? (
+            <span className="aitown-evidence-card__correlation">
+              <span className="aitown-evidence-card__eyebrow">Correlation</span>
+              {renderCorrelationButton({
+                correlationId: selectableCorrelationId,
+                label: incident.correlation_id ?? 'No correlation id',
+                buttonLabel: 'Open incident correlation',
+                activeCorrelationId,
+                preserveAutoOnDefaultReselect: true,
+                onSelectCorrelation
+              })}
+            </span>
+          ) : null}
+        </div>
+        <div className="aitown-evidence-card__facts" aria-label={`Evidence facts for ${incident.summary}`}>
+          <span className="aitown-evidence-card__fact">Agent · {renderedAgent}</span>
+          <span className="aitown-evidence-card__fact">Actor · {renderedActor}</span>
+          <span className="aitown-evidence-card__fact">{`At · ${timestampLabel}`}</span>
+          <span className="aitown-evidence-card__fact">{`Incident · ${incident.kind} · ${incident.status}`}</span>
+          <span className="aitown-evidence-card__fact">{`Severity · ${SEVERITY_LABELS[incident.severity]}`}</span>
+          <span className="aitown-evidence-card__fact aitown-evidence-card__fact--wide">
+            Counterparties · {renderedCounterparties}
+          </span>
+          <span className="aitown-evidence-card__fact aitown-evidence-card__fact--wide">
+            Evidence · {renderedEvidence}
+          </span>
+          <span className="aitown-evidence-card__fact aitown-evidence-card__fact--wide">{`Source · ${incident.source_kind}`}</span>
+        </div>
+      </li>
+    );
+  }
 
   return (
     <li key={incident.incident_id} className={`aitown-record severity-${incident.severity}`}>
       <strong>{incident.summary}</strong>
       {includeAgentPivot ? (
         <span>
-          Agent ·{' '}
-          {navigableAgentIds.has(incident.agent_id) && incident.agent_id !== currentAgentId
-            ? renderAgentPivotButton({
-                agentId: incident.agent_id,
-                ariaLabel: `Select incident agent ${incident.agent_id} from incident ${incident.incident_id}`,
-                correlationId: pivotCorrelationId,
-                onSelectAgent
-              })
-            : incident.agent_id}
+          Agent · {renderedAgent}
         </span>
       ) : null}
       {includeCorrelationPivot
@@ -3458,46 +3609,11 @@ function renderIncidentRecord({
           })
         : null}
       <span>{`At · ${renderTimestamp(incident.ts, 'No incident timestamp')}`}</span>
-      <span>
-        Actor ·{' '}
-        {includeActorPivot && incident.actor_id !== currentAgentId && navigableAgentIds.has(incident.actor_id)
-          ? renderAgentPivotButton({
-              agentId: incident.actor_id,
-              ariaLabel: `${actorPivotAriaLabelPrefix} ${incident.incident_id} ${incident.actor_id}`,
-              correlationId: pivotCorrelationId,
-              onSelectAgent
-            })
-          : incident.actor_id}
-      </span>
+      <span>Actor · {renderedActor}</span>
       <span>{`Incident · ${incident.kind} · ${incident.status}`}</span>
       <span>{`Severity · ${SEVERITY_LABELS[incident.severity]}`}</span>
-      <span>
-        Counterparties ·{' '}
-        {includeCounterpartyPivots
-          ? renderAgentPivotList({
-              agentIds: incident.counterparty_agent_ids,
-              currentAgentId,
-              navigableAgentIds,
-              emptyLabel: 'No counterparties',
-              ariaLabelPrefix: counterpartyPivotAriaLabelPrefix,
-              correlationId: pivotCorrelationId,
-              onSelectAgent
-            })
-          : renderCounterparties(incident.counterparty_agent_ids)}
-      </span>
-      {enableSharedMemoryEvidenceJump ? (
-        <span>
-          Evidence ·{' '}
-          {renderSharedMemoryEvidenceRefs({
-            evidenceRefs: incident.evidence_refs,
-            sharedMemoryArtifactRefs,
-            onJump,
-            allowExactFallback
-          })}
-        </span>
-      ) : (
-        <span>{`Evidence · ${renderEvidenceRefs(incident.evidence_refs)}`}</span>
-      )}
+      <span>Counterparties · {renderedCounterparties}</span>
+      <span>Evidence · {renderedEvidence}</span>
       <span>{`Source · ${incident.source_kind}`}</span>
     </li>
   );
@@ -4048,7 +4164,12 @@ export function DetailsPanel({
 
   if (!selectedAgent) {
     return (
-      <aside className="aitown-panel aitown-panel--details" role="complementary" aria-label="Agent details">
+      <aside
+        className="aitown-panel aitown-panel--details"
+        role="complementary"
+        aria-label="Agent details"
+        data-active-hub-category={activeHubCategory}
+      >
         {shouldRenderCrewCategory ? (
           <>
             <div className="aitown-details__head">
@@ -4066,6 +4187,8 @@ export function DetailsPanel({
             </div>
           </>
         ) : null}
+
+        {!shouldRenderCrewCategory ? renderHubCategoryOrientation({ activeHubCategory, selectedAgent: null }) : null}
 
         {shouldRenderQueueCategory ? (
         <section className="aitown-details__section aitown-details__section--active-queue">
@@ -4584,7 +4707,8 @@ export function DetailsPanel({
                 selectableCorrelationId: resolveSelectableIncidentCorrelationId(
                   incident,
                   crewIncidentCorrelationSelectableIds
-                )
+                ),
+                layout: 'evidence-card'
               })
             )}
             {incidentFeedState === 'ready' && !incidentFeedError && !incidentFeed?.items.length ? (
@@ -4949,6 +5073,7 @@ export function DetailsPanel({
       className="aitown-panel aitown-panel--details"
       role="complementary"
       aria-label="Agent details"
+      data-active-hub-category={activeHubCategory}
       data-selected-agent-drilldown-tab={selectedAgentDrilldownTab ?? undefined}
     >
       <div className="aitown-details__head">
@@ -4967,6 +5092,8 @@ export function DetailsPanel({
           {manualCorrelationResetAction}
         </p>
       </div>
+
+      {renderHubCategoryOrientation({ activeHubCategory, selectedAgent })}
 
       <div className="aitown-details__grid">
         <div className="aitown-stat-card">
@@ -5547,7 +5674,8 @@ export function DetailsPanel({
               counterpartyPivotAriaLabelPrefix: `Select incident feed counterparty agent from incident ${incident.incident_id}`,
               selectableCorrelationId: relatedIncidentsFromWorkflow
                 ? incident.correlation_id
-                : resolveSelectableIncidentCorrelationId(incident, crewIncidentCorrelationSelectableIds)
+                : resolveSelectableIncidentCorrelationId(incident, crewIncidentCorrelationSelectableIds),
+              layout: 'evidence-card'
             })
           )}
           {incidentFeedState === 'ready' && !incidentFeedError && relatedIncidents.length === 0 ? (

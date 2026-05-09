@@ -4166,8 +4166,12 @@ describe('DetailsPanel accountability signals', () => {
     const incidentCard = within(section!).getByText('Lead is still waiting on workflow evidence').closest('li');
     expect(incidentCard).not.toBeNull();
 
+    expect(incidentCard).toHaveClass('aitown-evidence-card');
     expect(within(incidentCard!).getByText('At · 2026-03-16T08:50:00.000Z')).toBeVisible();
     expect(incidentCard!).toHaveTextContent('Actor · team-lead');
+    expect(incidentCard!).toHaveTextContent('Counterparties · team-lead');
+    expect(incidentCard!).toHaveTextContent('Evidence · /evidence/review.md');
+    expect(incidentCard!).toHaveTextContent('Source · controller_event');
     expect(
       within(incidentCard!).getByRole('button', {
         name: 'Select incident feed actor from incident inc-feed-1 team-lead'
@@ -4450,6 +4454,7 @@ describe('DetailsPanel accountability signals', () => {
       .getByText('App engineering finished the secondary review handoff')
       .closest('li');
     expect(incidentRecord).not.toBeNull();
+    expect(incidentRecord).toHaveClass('aitown-evidence-card');
     expect(incidentRecord).toHaveTextContent('Counterparties · app-engineering, growth-revenue, ghost-agent');
     expect(
       within(incidentRecord!).queryByRole('button', {
@@ -4474,6 +4479,38 @@ describe('DetailsPanel accountability signals', () => {
     );
 
     expect(onSelectAgent).toHaveBeenCalledWith('growth-revenue', 'corr-app-secondary');
+  });
+
+  it('renders category orientation for no-selected evidence and selected-agent evidence scopes', () => {
+    const { rerender } = render(
+      <DetailsPanel
+        {...buildProps({
+          activeHubCategory: 'evidence',
+          selectedAgent: null,
+          selectedOperation: null
+        })}
+      />
+    );
+
+    const noSelectedOrientation = screen.getByRole('heading', { name: 'Evidence focus' }).closest('section');
+    expect(noSelectedOrientation).not.toBeNull();
+    expect(noSelectedOrientation).toHaveTextContent('Incident feed and shared memory refs for the crew.');
+    expect(noSelectedOrientation).toHaveTextContent('Focus: prove what happened, who touched it, and where the trail lives.');
+
+    rerender(
+      <DetailsPanel
+        {...buildProps({
+          activeHubCategory: 'evidence'
+        })}
+      />
+    );
+
+    const panel = screen.getByRole('complementary', { name: 'Agent details' });
+    expect(panel).toHaveAttribute('data-active-hub-category', 'evidence');
+    const selectedOrientation = screen.getByRole('heading', { name: 'Evidence focus' }).closest('section');
+    expect(selectedOrientation).not.toBeNull();
+    expect(selectedOrientation).toHaveTextContent('App Engineering Agent · active evidence view.');
+    expect(selectedOrientation).toHaveTextContent("Focus: isolate this agent's proof, incidents, and memory anchors.");
   });
 
   it('renders selected-agent incident feed actors as pivots only for navigable non-current agents', async () => {

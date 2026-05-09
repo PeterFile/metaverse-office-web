@@ -55,6 +55,16 @@ async function readViewportState(page: Page) {
   return page.evaluate(() => window.__AITOWN_VIEWPORT__?.read() ?? null);
 }
 
+function resolveWorldPointScreenProjection(
+  state: NonNullable<Awaited<ReturnType<typeof readViewportState>>>,
+  point: { x: number; y: number }
+) {
+  return {
+    x: ((point.x - state.left) / Math.max(state.right - state.left, Number.EPSILON)) * state.screenWidth,
+    y: ((point.y - state.top) / Math.max(state.bottom - state.top, Number.EPSILON)) * state.screenHeight
+  };
+}
+
 async function expectLocatorWithinScrollport(locator: Locator, scrollport: Locator, label: string) {
   const [locatorRect, scrollportRect] = await Promise.all([readRect(locator), readRect(scrollport)]);
   const epsilon = 1;
@@ -149,6 +159,48 @@ function expectViewportWithinHorizontalWorldBounds(
 }
 
 test.describe('operator shell layout visual smoke', () => {
+  test('centers explicit agent locate requests on the viewport midpoint despite right-side chrome', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.goto('/');
+
+    const worldHost = page.locator('.aitown-world__host');
+    await expect(worldHost).toBeVisible();
+    await page.waitForFunction(() => Boolean(window.__AITOWN_VIEWPORT__));
+
+    await page
+      .getByRole('navigation', { name: 'Agent roster' })
+      .getByRole('button', { name: 'Select and locate Protocol Engineering Agent' })
+      .click();
+
+    await expect
+      .poll(async () => (await readViewportState(page))?.selectedAgent?.agentId ?? null)
+      .toBe('protocol-engineering');
+
+    const state = await readViewportState(page);
+    expect(state).not.toBeNull();
+    expect(state!.selectedAgent).not.toBeNull();
+    expect(state!.clampPadding.right).toBeGreaterThan(0);
+
+    const projection = resolveWorldPointScreenProjection(state!, {
+      x: state!.selectedAgent!.x,
+      y: state!.selectedAgent!.y
+    });
+    const biasedSafeLaneX = state!.screenWidth / 2 - state!.clampPadding.right / 2;
+
+    expect(
+      Math.abs(projection.x - state!.screenWidth / 2),
+      'explicit agent focus should use screen X center'
+    ).toBeLessThanOrEqual(4);
+    expect(
+      Math.abs(projection.y - state!.screenHeight / 2),
+      'explicit agent focus should use screen Y center'
+    ).toBeLessThanOrEqual(4);
+    expect(
+      Math.abs(projection.x - biasedSafeLaneX),
+      'explicit agent focus should not reuse the right-safe-lane bias'
+    ).toBeGreaterThan(20);
+  });
+
   test('keeps compact HUD signals disclosure from blocking non-chip world drag', async ({ page }) => {
     const evidenceCoverage = {
       evidence_ref_count: 1,

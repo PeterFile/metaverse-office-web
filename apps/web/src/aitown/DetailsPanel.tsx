@@ -2982,67 +2982,76 @@ function renderSelectedAgentSupervisionAlert({
   const { onJump, allowExactFallback } = resolveSharedMemoryEvidenceJumpBehavior(onFocusSharedMemoryArtifact);
 
   return (
-    <li key={alert.alert_id} className={`aitown-record severity-${alert.severity}`}>
-      <strong>{alert.summary}</strong>
-      {renderCorrelationButton({
-        correlationId: alert.correlation_id,
-        label: alert.correlation_id ?? 'No correlation id',
-        buttonLabel: 'Open supervision history correlation',
-        activeCorrelationId,
-        preserveAutoOnDefaultReselect: true,
-        onSelectCorrelation
-      })}
-      <span>{`At · ${renderTimestamp(alert.ts, 'No alert timestamp')}`}</span>
-      <span>{`Severity · ${alert.severity}`}</span>
-      <span>{`Status · ${alert.status}`}</span>
-      <span>{`Workflow status · ${alert.current_state}`}</span>
-      <span>{`Task · ${alert.active_task}`}</span>
-      {renderCollectorDerivedPeerWatchMetadata(alert.metadata)}
-      <span>
-        Actor ·{' '}
-        {canNavigateToActor
-          ? renderAgentPivotButton({
-              agentId: alert.actor_id,
-              ariaLabel: `Select supervision history actor from alert ${alert.alert_id} ${alert.actor_id}`,
-              correlationId: preservedCorrelationId,
-              onSelectAgent
-            })
-          : alert.actor_id}
-      </span>
-      <span>
-        Observer ·{' '}
-        {canNavigateToObserver
-          ? renderAgentPivotButton({
-              agentId: alert.observer_agent_id,
-              ariaLabel: `Select supervision history observer from alert ${alert.alert_id} ${alert.observer_agent_id}`,
-              correlationId: preservedCorrelationId,
-              onSelectAgent
-            })
-          : alert.observer_agent_id}
-      </span>
-      <span>
-        Watchers ·{' '}
-        {renderAgentPivotList({
-          agentIds: alert.watcher_agent_ids,
-          currentAgentId,
-          navigableAgentIds,
-          emptyLabel: 'No watchers',
-          ariaLabelPrefix: `Select supervision history watcher from alert ${alert.alert_id}`,
-          correlationId: preservedCorrelationId,
-          onSelectAgent
-        })}
-      </span>
-      <span>
-        Evidence ·{' '}
-        {renderSharedMemoryEvidenceRefs({
-          evidenceRefs: alert.evidence_refs,
-          sharedMemoryArtifactRefs,
-          onJump,
-          allowExactFallback
-        })}
-      </span>
-      <span>{`Evidence count · ${alert.evidence_count}`}</span>
-      <span>{`Source · ${alert.source_kind}`}</span>
+    <li key={alert.alert_id} className={`aitown-record aitown-evidence-card severity-${alert.severity}`}>
+      <div className="aitown-evidence-card__header">
+        <span className="aitown-evidence-card__title">
+          <span className="aitown-evidence-card__eyebrow">Peer watch supervision</span>
+          <strong>{alert.summary}</strong>
+        </span>
+        <span className="aitown-evidence-card__correlation">
+          {renderCorrelationButton({
+            correlationId: alert.correlation_id,
+            label: alert.correlation_id ?? 'No correlation id',
+            buttonLabel: 'Open supervision history correlation',
+            activeCorrelationId,
+            preserveAutoOnDefaultReselect: true,
+            onSelectCorrelation
+          })}
+        </span>
+      </div>
+      <div className="aitown-evidence-card__facts" aria-label={`Evidence facts for ${alert.summary}`}>
+        <span className="aitown-evidence-card__fact">{`At · ${renderTimestamp(alert.ts, 'No alert timestamp')}`}</span>
+        <span className="aitown-evidence-card__fact">{`Severity · ${alert.severity}`}</span>
+        <span className="aitown-evidence-card__fact">{`Status · ${alert.status}`}</span>
+        <span className="aitown-evidence-card__fact">{`Workflow status · ${alert.current_state}`}</span>
+        <span className="aitown-evidence-card__fact aitown-evidence-card__fact--wide">{`Task · ${alert.active_task}`}</span>
+        {renderCollectorDerivedPeerWatchMetadata(alert.metadata)}
+        <span className="aitown-evidence-card__fact">
+          Actor ·{' '}
+          {canNavigateToActor
+            ? renderAgentPivotButton({
+                agentId: alert.actor_id,
+                ariaLabel: `Select supervision history actor from alert ${alert.alert_id} ${alert.actor_id}`,
+                correlationId: preservedCorrelationId,
+                onSelectAgent
+              })
+            : alert.actor_id}
+        </span>
+        <span className="aitown-evidence-card__fact">
+          Observer ·{' '}
+          {canNavigateToObserver
+            ? renderAgentPivotButton({
+                agentId: alert.observer_agent_id,
+                ariaLabel: `Select supervision history observer from alert ${alert.alert_id} ${alert.observer_agent_id}`,
+                correlationId: preservedCorrelationId,
+                onSelectAgent
+              })
+            : alert.observer_agent_id}
+        </span>
+        <span className="aitown-evidence-card__fact aitown-evidence-card__fact--wide">
+          Watchers ·{' '}
+          {renderAgentPivotList({
+            agentIds: alert.watcher_agent_ids,
+            currentAgentId,
+            navigableAgentIds,
+            emptyLabel: 'No watchers',
+            ariaLabelPrefix: `Select supervision history watcher from alert ${alert.alert_id}`,
+            correlationId: preservedCorrelationId,
+            onSelectAgent
+          })}
+        </span>
+        <span className="aitown-evidence-card__fact aitown-evidence-card__fact--wide">
+          Evidence ·{' '}
+          {renderSharedMemoryEvidenceRefs({
+            evidenceRefs: alert.evidence_refs,
+            sharedMemoryArtifactRefs,
+            onJump,
+            allowExactFallback
+          })}
+        </span>
+        <span className="aitown-evidence-card__fact">{`Evidence count · ${alert.evidence_count}`}</span>
+        <span className="aitown-evidence-card__fact">{`Source · ${alert.source_kind}`}</span>
+      </div>
     </li>
   );
 }
@@ -5060,25 +5069,27 @@ export function DetailsPanel({
       <section className="aitown-details__section aitown-details__section--selected-evidence">
         <h3>Supervision History</h3>
         {supervisionHistoryWarning ? <p role="status">{supervisionHistoryWarning}</p> : null}
-        <p>
-          <span>{`Request scope · ${selectedAgentSupervisionHistoryRequestScopeLabel}`}</span>{' '}
-          <label htmlFor="aitown-selected-agent-supervision-history-severity-filter">Severity filter</label>{' '}
-          <select
-            id="aitown-selected-agent-supervision-history-severity-filter"
-            aria-label="Filter supervision history by severity"
-            value={selectedAgentSupervisionHistorySeverity ?? ''}
-            onChange={(event) =>
-              onSelectSelectedAgentSupervisionHistorySeverity(
-                event.target.value ? (event.target.value as Severity) : null
-              )
-            }
-          >
-            <option value="">All severities</option>
-            <option value="normal">Normal</option>
-            <option value="yellow">Yellow</option>
-            <option value="orange">Orange</option>
-            <option value="red">Red</option>
-          </select>
+        <p className="aitown-evidence-toolbar">
+          <span className="aitown-evidence-toolbar__scope">{`Request scope · ${selectedAgentSupervisionHistoryRequestScopeLabel}`}</span>
+          <span className="aitown-evidence-toolbar__filter">
+            <label htmlFor="aitown-selected-agent-supervision-history-severity-filter">Severity filter</label>
+            <select
+              id="aitown-selected-agent-supervision-history-severity-filter"
+              aria-label="Filter supervision history by severity"
+              value={selectedAgentSupervisionHistorySeverity ?? ''}
+              onChange={(event) =>
+                onSelectSelectedAgentSupervisionHistorySeverity(
+                  event.target.value ? (event.target.value as Severity) : null
+                )
+              }
+            >
+              <option value="">All severities</option>
+              <option value="normal">Normal</option>
+              <option value="yellow">Yellow</option>
+              <option value="orange">Orange</option>
+              <option value="red">Red</option>
+            </select>
+          </span>
         </p>
         <ul className="aitown-records">
           {selectedAgentSupervisionHistoryState === 'loading' && !selectedAgentSupervisionHistory ? (

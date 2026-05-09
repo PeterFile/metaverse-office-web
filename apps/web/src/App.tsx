@@ -86,6 +86,11 @@ type OperationSelection = {
   agentId: string;
 };
 
+type AgentFocusRequest = {
+  agentId: string;
+  requestId: number;
+};
+
 type ZoneFocusRequest = {
   zoneId: string;
   requestId: number;
@@ -884,6 +889,7 @@ function AppInner() {
   const [hubOpen, setHubOpen] = useState(false);
   const [activeHubCategory, setActiveHubCategory] = useState<HubCategory>('crew');
   const [resetViewSignal, setResetViewSignal] = useState(0);
+  const [agentFocusRequest, setAgentFocusRequest] = useState<AgentFocusRequest | null>(null);
   const [zoneFocusRequest, setZoneFocusRequest] = useState<ZoneFocusRequest | null>(null);
   const [selectedCorrelationId, setSelectedCorrelationId] = useState<string | null>(null);
   const [selectedCorrelationWasExplicit, setSelectedCorrelationWasExplicit] = useState(false);
@@ -934,6 +940,7 @@ function AppInner() {
   const hubFocusReturnRef = useRef<HTMLElement | null>(null);
   const pendingSharedMemoryFocusRef = useRef<string | null>(null);
   const sharedMemoryJumpRequestIdRef = useRef(0);
+  const agentFocusRequestIdRef = useRef(0);
   const zoneFocusRequestIdRef = useRef(0);
   const wasHubOpenRef = useRef(false);
 
@@ -2059,6 +2066,7 @@ function AppInner() {
     ) => {
       if (!agentId) {
         lastSelectedAgentRef.current = null;
+        setAgentFocusRequest(null);
       } else {
         const overviewMatch = overviewResource.data?.agents.find((agent) => agent.agent_id === agentId) ?? null;
         if (overviewMatch) {
@@ -2080,6 +2088,14 @@ function AppInner() {
     },
     [overviewResource.data, selectedAgentId, setSelectedAgentId]
   );
+
+  const requestAgentFocus = useCallback((agentId: string) => {
+    agentFocusRequestIdRef.current += 1;
+    setAgentFocusRequest({
+      agentId,
+      requestId: agentFocusRequestIdRef.current
+    });
+  }, []);
 
   const selectAgentWithSnapshot = useCallback(
     (
@@ -2124,11 +2140,15 @@ function AppInner() {
           selectedCorrelationCarryForward,
         resolveOperationSnapshotSeed(agentId, crewOverviewOperationSeedData)
       );
+      if (agentId) {
+        requestAgentFocus(agentId);
+      }
     },
     [
       activeCorrelationParticipantAgentIds,
       activeCorrelationSpotlight?.correlation_id,
       crewOverviewOperationSeedData,
+      requestAgentFocus,
       selectAgentWithSnapshot,
       selectedCorrelationCarryForward,
       selectedCorrelationId,
@@ -2573,6 +2593,7 @@ function AppInner() {
                 scene={scene}
                 onSelectAgent={handleSceneSelectAgent}
                 resetViewSignal={resetViewSignal}
+                agentFocusRequest={agentFocusRequest}
                 zoneFocusRequest={zoneFocusRequest}
                 showActiveCorrelationOverlay={hubOpen}
               />

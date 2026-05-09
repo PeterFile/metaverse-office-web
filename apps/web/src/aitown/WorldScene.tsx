@@ -601,7 +601,7 @@ function createAgentSprite(
 
   container.on('pointertap', (event) => {
     event.stopPropagation();
-    onSelect(agent.selected ? null : agent.agentId);
+    onSelect(agent.agentId);
   });
 
   container.addChild(shadow, correlationSpotlight, aura, emphasisRing, character, statusDot, nameLabel);
@@ -616,6 +616,10 @@ type WorldSceneProps = {
   scene: AiTownSceneModel;
   onSelectAgent: (agentId: string | null) => void;
   resetViewSignal?: number;
+  agentFocusRequest?: {
+    agentId: string;
+    requestId: number;
+  } | null;
   zoneFocusRequest?: {
     zoneId: string;
     requestId: number;
@@ -629,10 +633,16 @@ type CenteredAgentState = {
   y: number;
 };
 
+type DirectFocusedAgentState = CenteredAgentState & {
+  scale: number;
+  clampPadding: Required<Pick<ViewportClampPadding, 'left' | 'top' | 'right'>>;
+};
+
 export default function WorldScene({
   scene,
   onSelectAgent,
   resetViewSignal = 0,
+  agentFocusRequest = null,
   zoneFocusRequest = null,
   showActiveCorrelationOverlay = true
 }: WorldSceneProps) {
@@ -647,6 +657,7 @@ export default function WorldScene({
   const lastCenteredAgentRef = useRef<CenteredAgentState | null>(null);
   const selectedAgentRef = useRef<CenteredAgentState | null>(null);
   const selectedAgentFollowRef = useRef(false);
+  const selectedAgentDirectFocusRef = useRef<DirectFocusedAgentState | null>(null);
   const selectedAgentManualReselectRef = useRef(false);
   const selectedAgentManualReselectEligibleRef = useRef(false);
   const selectedAgentManualReselectLayoutChangedRef = useRef(false);
@@ -663,6 +674,7 @@ export default function WorldScene({
   const viewportInspectorRef = useRef<ViewportInspector | null>(null);
   const resetViewportToContextDefaultRef = useRef<(() => void) | null>(null);
   const appliedResetViewSignalRef = useRef(resetViewSignal);
+  const appliedAgentFocusRequestIdRef = useRef<number | null>(null);
   const appliedZoneFocusRequestIdRef = useRef<number | null>(null);
   const [ready, setReady] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -693,6 +705,16 @@ export default function WorldScene({
     viewport.moveCenter(x + safeAreaCenterBias.x, y + safeAreaCenterBias.y);
   };
 
+  const moveViewportCenterDirectly = (viewport: Viewport, x: number, y: number) => {
+    viewport.moveCenter(x, y);
+  };
+
+  const snapshotCurrentClampPadding = () => ({
+    left: clampPaddingRef.current.left ?? 0,
+    top: clampPaddingRef.current.top ?? 0,
+    right: clampPaddingRef.current.right ?? 0
+  });
+
   const rememberSelectedAgentState = (selectedAgent: CenteredAgentState) => {
     lastCenteredAgentRef.current = {
       agentId: selectedAgent.agentId,
@@ -703,6 +725,7 @@ export default function WorldScene({
 
   const stopSelectedAgentFollowState = () => {
     selectedAgentFollowRef.current = false;
+    selectedAgentDirectFocusRef.current = null;
   };
 
   const clearSelectedAgentFollowState = () => {
@@ -712,15 +735,45 @@ export default function WorldScene({
     selectedAgentManualReselectLayoutChangedRef.current = false;
     selectedAgentManualReselectGeometryRef.current = null;
     lastCenteredAgentRef.current = null;
+    selectedAgentDirectFocusRef.current = null;
   };
 
   const markSelectedAgentFollowState = (selectedAgent: CenteredAgentState) => {
     selectedAgentFollowRef.current = true;
+    selectedAgentDirectFocusRef.current = null;
     selectedAgentManualReselectRef.current = false;
     selectedAgentManualReselectEligibleRef.current = false;
     selectedAgentManualReselectLayoutChangedRef.current = false;
     selectedAgentManualReselectGeometryRef.current = null;
     rememberSelectedAgentState(selectedAgent);
+  };
+
+  const markSelectedAgentDirectFocusState = (viewport: Viewport, selectedAgent: CenteredAgentState) => {
+    markSelectedAgentFollowState(selectedAgent);
+    selectedAgentDirectFocusRef.current = {
+      ...selectedAgent,
+      scale: viewport.scale.x,
+      clampPadding: snapshotCurrentClampPadding()
+    };
+  };
+
+  const directFocusMatchesCurrentGeometry = (
+    directFocus: DirectFocusedAgentState | null,
+    selectedAgent: CenteredAgentState,
+    scale: number
+  ) => {
+    const clampPadding = snapshotCurrentClampPadding();
+
+    return (
+      !!directFocus &&
+      directFocus.agentId === selectedAgent.agentId &&
+      directFocus.x === selectedAgent.x &&
+      directFocus.y === selectedAgent.y &&
+      directFocus.scale === scale &&
+      directFocus.clampPadding.left === clampPadding.left &&
+      directFocus.clampPadding.top === clampPadding.top &&
+      directFocus.clampPadding.right === clampPadding.right
+    );
   };
 
   useEffect(() => {
@@ -1060,6 +1113,15 @@ export default function WorldScene({
         viewport.setZoom(Math.min(maxScale, Math.max(minScale, targetScale)), true);
         suppressSelectedAgentFollowResetRef.current = false;
         if ((shouldRecenterSelectedAgent || pendingManualReselectGeometryChanged) && selectedAgent) {
+          if (
+            shouldRecenterSelectedAgent &&
+            directFocusMatchesCurrentGeometry(selectedAgentDirectFocusRef.current, selectedAgent, viewport.scale.x)
+          ) {
+            moveViewportCenterDirectly(viewport, selectedAgent.x, selectedAgent.y);
+            markSelectedAgentDirectFocusState(viewport, selectedAgent);
+            return;
+          }
+
           moveViewportCenterIntoSafeArea(viewport, selectedAgent.x, selectedAgent.y);
           markSelectedAgentFollowState(selectedAgent);
           return;
@@ -1332,6 +1394,32 @@ export default function WorldScene({
     appliedResetViewSignalRef.current = resetViewSignal;
     resetViewportToContextDefaultRef.current?.();
   }, [ready, resetViewSignal]);
+
+  useEffect(() => {
+    if (!ready) {
+      return;
+    }
+
+    if (!agentFocusRequest || appliedAgentFocusRequestIdRef.current === agentFocusRequest.requestId) {
+      return;
+    }
+
+    const viewport = viewportRef.current;
+    const targetAgent = scene.agents.find((candidate) => candidate.agentId === agentFocusRequest.agentId);
+
+    if (!viewport || !targetAgent) {
+      return;
+    }
+
+    appliedAgentFocusRequestIdRef.current = agentFocusRequest.requestId;
+    const selectedAgent = {
+      agentId: targetAgent.agentId,
+      x: targetAgent.position.x,
+      y: targetAgent.position.y
+    };
+    moveViewportCenterDirectly(viewport, selectedAgent.x, selectedAgent.y);
+    markSelectedAgentDirectFocusState(viewport, selectedAgent);
+  }, [agentFocusRequest, ready, scene.agents]);
 
   useEffect(() => {
     if (!ready || !zoneFocusRequest || appliedZoneFocusRequestIdRef.current === zoneFocusRequest.requestId) {

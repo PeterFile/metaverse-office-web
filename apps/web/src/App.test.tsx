@@ -7,6 +7,7 @@ vi.mock('./aitown/WorldScene', () => ({
     scene,
     onSelectAgent,
     resetViewSignal = 0,
+    agentFocusRequest = null,
     zoneFocusRequest = null,
     showActiveCorrelationOverlay = true
   }: {
@@ -27,6 +28,7 @@ vi.mock('./aitown/WorldScene', () => ({
     };
     onSelectAgent: (agentId: string | null) => void;
     resetViewSignal?: number;
+    agentFocusRequest?: { agentId: string; requestId: number } | null;
     zoneFocusRequest?: { zoneId: string; requestId: number } | null;
     showActiveCorrelationOverlay?: boolean;
   }) {
@@ -35,6 +37,9 @@ vi.mock('./aitown/WorldScene', () => ({
     return (
       <div data-testid="mock-world-scene">
         <output data-testid="mock-reset-view-signal">{resetViewSignal}</output>
+        <output data-testid="mock-agent-focus-request">
+          {agentFocusRequest ? `${agentFocusRequest.agentId}:${agentFocusRequest.requestId}` : ''}
+        </output>
         <output data-testid="mock-zone-focus-request">
           {zoneFocusRequest ? `${zoneFocusRequest.zoneId}:${zoneFocusRequest.requestId}` : ''}
         </output>
@@ -2052,6 +2057,48 @@ afterEach(() => {
     expect(items[0]).toHaveTextContent('Team Lead');
     expect(items[0]).toHaveTextContent('App Engineering Agent');
     expect(items[0]).toHaveTextContent('orange');
+  });
+
+  it('emits a fresh agent focus request every time a scene agent is clicked', async () => {
+    const user = userEvent.setup();
+
+    setNavigatorUserAgent('VitestBrowser');
+    render(<App />);
+
+    const selectButton = await screen.findByRole('button', { name: 'Select scene agent app-engineering' });
+
+    expect(screen.getByTestId('mock-agent-focus-request')).toHaveTextContent('');
+
+    await user.click(selectButton);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('mock-agent-focus-request')).toHaveTextContent('app-engineering:1');
+    });
+
+    await user.click(selectButton);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('mock-agent-focus-request')).toHaveTextContent('app-engineering:2');
+      expect(screen.getByTestId('mock-scene-selected-agent-id')).toHaveTextContent('app-engineering');
+    });
+  });
+
+  it('keeps Hub inspect pivots on the safe-area selected-agent path without direct focus requests', async () => {
+    const user = userEvent.setup();
+
+    setNavigatorUserAgent('VitestBrowser');
+    render(<App />);
+
+    const details = await openHub(user, 'Crew');
+    expect(screen.getByTestId('mock-agent-focus-request')).toHaveTextContent('');
+
+    await user.click(within(details).getByRole('button', { name: /^Inspect Growth Revenue Agent$/ }));
+
+    await waitFor(() => {
+      expect(within(details).getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+      expect(screen.getByTestId('mock-scene-selected-agent-id')).toHaveTextContent('growth-revenue');
+      expect(screen.getByTestId('mock-agent-focus-request')).toHaveTextContent('');
+    });
   });
 
   it('passes the active correlation spotlight ids into the scene model when drilldown data is loaded', async () => {

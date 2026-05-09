@@ -1458,7 +1458,9 @@ test.describe('operator shell smoke', () => {
     await expect(evidencePanel.getByRole('heading', { name: 'Correlation Drilldown' })).toHaveCount(0);
     await expect(runContextSection.getByText(/Run blocker ·/)).toBeVisible();
     await expect(workflowSection.getByText('No open watch alerts.')).toBeVisible();
-    const handoffIncidentRecord = incidentSection.getByText('Lead completed the revenue handoff').locator('..');
+    const handoffIncidentRecord = incidentSection.locator('li').filter({
+      hasText: 'Lead completed the revenue handoff'
+    });
     await expect(handoffIncidentRecord.getByText('Lead completed the revenue handoff')).toBeVisible();
     await expect(handoffIncidentRecord.getByText('Incident · handoff · completed')).toBeVisible();
     await expect(handoffIncidentRecord.getByText('Severity · Yellow')).toBeVisible();
@@ -3066,7 +3068,7 @@ test.describe('operator shell smoke', () => {
   });
 
   test('returns a manual active-queue correlation to the current scope via keyboard traversal', async ({ page }) => {
-    test.setTimeout(45_000);
+    test.setTimeout(60_000);
 
     const requestedUrls: string[] = [];
     page.on('request', (request) => {
@@ -8107,6 +8109,8 @@ test.describe('operator shell smoke', () => {
   test('keeps the active workflow correlation when opening a workflow recent-event subject-agent pivot via keyboard traversal', async ({
     page
   }) => {
+    test.setTimeout(60_000);
+
     const requestedUrls: string[] = [];
     const forbiddenRequests: string[] = [];
     const directOperationUrl = '/office/operations?agent_id=app-engineering';

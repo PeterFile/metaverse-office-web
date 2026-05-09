@@ -1885,6 +1885,33 @@ button {
   line-height: 1.35;
 }
 
+.aitown-hub-category-orientation {
+  flex: 0 0 auto;
+  padding: 7px 9px;
+  border: 1px solid rgba(245, 217, 141, 0.34);
+  background: rgba(31, 38, 42, 0.64);
+}
+
+.aitown-hub-category-orientation h3 {
+  margin: 0 0 4px;
+  color: #f5d98d;
+  font-size: 0.95rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.aitown-hub-category-orientation p {
+  margin: 0;
+  color: #d6dcde;
+  font-size: 0.84rem;
+  line-height: 1.35;
+}
+
+.aitown-hub-category-orientation p + p {
+  margin-top: 2px;
+  color: #fff3d0;
+}
+
 .aitown-hub-sheet .aitown-details__section {
   flex: 0 0 auto;
   min-height: 0;
@@ -2125,6 +2152,16 @@ button {
 
 .aitown-hub-sheet .aitown-evidence-card__fact--wide {
   grid-column: 1 / -1;
+}
+
+@media (max-width: 700px) {
+  .aitown-evidence-card__header {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .aitown-evidence-card__correlation {
+    align-items: flex-start;
+  }
 }
 
 .aitown-panel--details[data-selected-agent-drilldown-tab='now']

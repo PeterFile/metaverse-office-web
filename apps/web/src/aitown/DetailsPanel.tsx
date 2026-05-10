@@ -3096,85 +3096,94 @@ function renderCrewOpenSupervisionAlert({
   const allowExactFallback = Boolean(onFocusSharedMemoryArtifact);
 
   return (
-    <li key={alert.alert_id} className={`aitown-record severity-${alert.severity}`}>
-      <strong>{alert.summary}</strong>
-      {renderCorrelationButton({
-        correlationId: alert.correlation_id,
-        label: alert.correlation_id ?? 'No correlation id',
-        buttonLabel: 'Open supervision queue correlation',
-        activeCorrelationId,
-        preserveAutoOnDefaultReselect: true,
-        onSelectCorrelation
-      })}
-      <span>{`At · ${renderTimestamp(alert.ts, 'No alert timestamp')}`}</span>
-      <span>{`Severity · ${alert.severity}`}</span>
-      <span>{`Status · ${alert.status}`}</span>
-      <span>{`Workflow status · ${alert.current_state}`}</span>
-      <span>{`Task · ${alert.active_task}`}</span>
-      {renderCollectorDerivedPeerWatchMetadata(alert.metadata)}
-      <span>
-        Target ·{' '}
-        {canNavigateToTarget
-          ? renderAgentPivotButton({
-              agentId: alert.target_agent_id,
-              label: targetLabel,
-              ariaLabel: `Inspect ${targetLabel} from open supervision alerts queue`,
-              correlationId: preservedCorrelationId,
-              preserveNullCorrelation,
-              onSelectAgent
-            })
-          : targetLabel}
-      </span>
-      <span>
-        Actor ·{' '}
-        {canNavigateToActor
-          ? renderAgentPivotButton({
-              agentId: alert.actor_id,
-              label: actorLabel,
-              ariaLabel: `Select open supervision alert actor from alert ${alert.alert_id} ${alert.actor_id}`,
-              correlationId: preservedCorrelationId,
-              preserveNullCorrelation,
-              onSelectAgent
-            })
-          : actorLabel}
-      </span>
-      <span>
-        Observer ·{' '}
-        {canNavigateToObserver
-          ? renderAgentPivotButton({
-              agentId: alert.observer_agent_id,
-              label: observerLabel,
-              ariaLabel: `Select open supervision alert observer from alert ${alert.alert_id} ${alert.observer_agent_id}`,
-              correlationId: preservedCorrelationId,
-              preserveNullCorrelation,
-              onSelectAgent
-            })
-          : observerLabel}
-      </span>
-      <span>
-        Watchers ·{' '}
-        {renderAgentPivotList({
-          agentIds: alert.watcher_agent_ids,
-          currentAgentId: null,
-          navigableAgentIds,
-          emptyLabel: 'No watchers',
-          ariaLabelPrefix: `Select open supervision alert watcher from alert ${alert.alert_id}`,
-          correlationId: preservedCorrelationId,
-          preserveNullCorrelation,
-          onSelectAgent
-        })}
-      </span>
-      <span>
-        Evidence ·{' '}
-        {renderSharedMemoryEvidenceRefs({
-          evidenceRefs: alert.evidence_refs,
-          sharedMemoryArtifactRefs,
-          onJump: openSupervisionAlertEvidenceJump,
-          allowExactFallback
-        })}
-      </span>
-      <span>{`Evidence count · ${alert.evidence_count}`}</span>
-      <span>{`Source · ${alert.source_kind}`}</span>
+    <li key={alert.alert_id} className={`aitown-record aitown-evidence-card aitown-supervision-alert-card severity-${alert.severity}`}>
+      <div className="aitown-evidence-card__header">
+        <span className="aitown-evidence-card__title">
+          <span className="aitown-evidence-card__eyebrow">Open peer watch</span>
+          <strong>{alert.summary}</strong>
+        </span>
+        <span className="aitown-evidence-card__correlation">
+          {renderCorrelationButton({
+            correlationId: alert.correlation_id,
+            label: alert.correlation_id ?? 'No correlation id',
+            buttonLabel: 'Open supervision queue correlation',
+            activeCorrelationId,
+            preserveAutoOnDefaultReselect: true,
+            onSelectCorrelation
+          })}
+        </span>
+      </div>
+      <div className="aitown-evidence-card__facts" aria-label={`Open supervision facts for ${alert.summary}`}>
+        <span className="aitown-evidence-card__fact">{`At · ${renderTimestamp(alert.ts, 'No alert timestamp')}`}</span>
+        <span className="aitown-evidence-card__fact">{`Severity · ${alert.severity}`}</span>
+        <span className="aitown-evidence-card__fact">{`Status · ${alert.status}`}</span>
+        <span className="aitown-evidence-card__fact">{`Workflow status · ${alert.current_state}`}</span>
+        <span className="aitown-evidence-card__fact aitown-evidence-card__fact--wide">{`Task · ${alert.active_task}`}</span>
+        {renderCollectorDerivedPeerWatchMetadata(alert.metadata)}
+        <span className="aitown-evidence-card__fact">
+          Target ·{' '}
+          {canNavigateToTarget
+            ? renderAgentPivotButton({
+                agentId: alert.target_agent_id,
+                label: targetLabel,
+                ariaLabel: `Inspect ${targetLabel} from open supervision alerts queue`,
+                correlationId: preservedCorrelationId,
+                preserveNullCorrelation,
+                onSelectAgent
+              })
+            : targetLabel}
+        </span>
+        <span className="aitown-evidence-card__fact">
+          Actor ·{' '}
+          {canNavigateToActor
+            ? renderAgentPivotButton({
+                agentId: alert.actor_id,
+                label: actorLabel,
+                ariaLabel: `Select open supervision alert actor from alert ${alert.alert_id} ${alert.actor_id}`,
+                correlationId: preservedCorrelationId,
+                preserveNullCorrelation,
+                onSelectAgent
+              })
+            : actorLabel}
+        </span>
+        <span className="aitown-evidence-card__fact">
+          Observer ·{' '}
+          {canNavigateToObserver
+            ? renderAgentPivotButton({
+                agentId: alert.observer_agent_id,
+                label: observerLabel,
+                ariaLabel: `Select open supervision alert observer from alert ${alert.alert_id} ${alert.observer_agent_id}`,
+                correlationId: preservedCorrelationId,
+                preserveNullCorrelation,
+                onSelectAgent
+              })
+            : observerLabel}
+        </span>
+        <span className="aitown-evidence-card__fact aitown-evidence-card__fact--wide">
+          Watchers ·{' '}
+          {renderAgentPivotList({
+            agentIds: alert.watcher_agent_ids,
+            currentAgentId: null,
+            navigableAgentIds,
+            emptyLabel: 'No watchers',
+            ariaLabelPrefix: `Select open supervision alert watcher from alert ${alert.alert_id}`,
+            correlationId: preservedCorrelationId,
+            preserveNullCorrelation,
+            onSelectAgent
+          })}
+        </span>
+        <span className="aitown-evidence-card__fact aitown-evidence-card__fact--wide">
+          Evidence ·{' '}
+          {renderSharedMemoryEvidenceRefs({
+            evidenceRefs: alert.evidence_refs,
+            sharedMemoryArtifactRefs,
+            onJump: openSupervisionAlertEvidenceJump,
+            allowExactFallback
+          })}
+        </span>
+        <span className="aitown-evidence-card__fact">{`Evidence count · ${alert.evidence_count}`}</span>
+        <span className="aitown-evidence-card__fact">{`Source · ${alert.source_kind}`}</span>
+      </div>
     </li>
   );
 }
@@ -4040,7 +4049,7 @@ export function DetailsPanel({
   const activeReplayCheckpointEventId = replayCheckpointEventId?.trim() || null;
   const activeCorrelationQueueSection = shouldRenderActiveCorrelationQueueSection && activeCorrelationQueueCorrelation ? (
     <section
-      className={`aitown-details__section${selectedAgent ? ' aitown-details__section--selected-now aitown-details__section--selected-evidence' : ''}`}
+      className={`aitown-details__section${selectedAgent ? ' aitown-details__section--selected-now aitown-details__section--selected-evidence aitown-details__section--selected-supervision-queue' : ''}`}
     >
       <h3>Active Correlation Queue</h3>
       {activeCorrelationQueueScopeLabel ? <p>{activeCorrelationQueueScopeLabel}</p> : null}
@@ -4161,11 +4170,17 @@ export function DetailsPanel({
   const shouldRenderEvidenceCategory = activeHubCategory === 'evidence';
   const shouldRenderReplayCategory = activeHubCategory === 'replay';
   const shouldRenderMemoryCategory = activeHubCategory === 'memory';
+  const detailsPanelClassName = [
+    'aitown-panel',
+    'aitown-panel--details',
+    `aitown-panel--details-category-${activeHubCategory}`,
+    selectedAgent ? 'aitown-panel--details-selected-agent' : 'aitown-panel--details-crew-overview'
+  ].join(' ');
 
   if (!selectedAgent) {
     return (
       <aside
-        className="aitown-panel aitown-panel--details"
+        className={detailsPanelClassName}
         role="complementary"
         aria-label="Agent details"
         data-active-hub-category={activeHubCategory}
@@ -4185,10 +4200,50 @@ export function DetailsPanel({
                 severity {SEVERITY_LABELS[world.summary.highest_severity]}.{manualCorrelationResetAction}
               </p>
             </div>
+
+            <div className="aitown-crew-summary-grid" aria-label="Crew overview summary">
+              <div className="aitown-stat-card aitown-stat-card--crew">
+                <span>Agents</span>
+                <strong>{world.summary.total_agents}</strong>
+              </div>
+              <div className="aitown-stat-card aitown-stat-card--crew">
+                <span>Blocked</span>
+                <strong>{world.summary.blocked_count}</strong>
+              </div>
+              <div className="aitown-stat-card aitown-stat-card--crew">
+                <span>Reboots</span>
+                <strong>{world.summary.reboot_count}</strong>
+              </div>
+              <div className="aitown-stat-card aitown-stat-card--crew">
+                <span>Watch edges</span>
+                <strong>{world.watch_edges.length}</strong>
+              </div>
+            </div>
           </>
         ) : null}
 
         {!shouldRenderCrewCategory ? renderHubCategoryOrientation({ activeHubCategory, selectedAgent: null }) : null}
+
+        {shouldRenderSupervisionCategory ? (
+          <div className="aitown-supervision-summary-grid" aria-label="Supervision overview summary">
+            <div className="aitown-stat-card aitown-stat-card--supervision">
+              <span>Watch edges</span>
+              <strong>{world.watch_edges.length}</strong>
+            </div>
+            <div className="aitown-stat-card aitown-stat-card--supervision">
+              <span>Open alerts</span>
+              <strong>{openSupervisionAlerts?.items.length ?? 0}</strong>
+            </div>
+            <div className="aitown-stat-card aitown-stat-card--supervision">
+              <span>Collector flags</span>
+              <strong>{collectorSignalItems.length}</strong>
+            </div>
+            <div className="aitown-stat-card aitown-stat-card--supervision">
+              <span>Reboot flags</span>
+              <strong>{collectorSnapshot?.summary.reboot_recommended_count ?? world.summary.reboot_count}</strong>
+            </div>
+          </div>
+        ) : null}
 
         {shouldRenderQueueCategory ? (
         <section className="aitown-details__section aitown-details__section--active-queue">
@@ -4292,7 +4347,7 @@ export function DetailsPanel({
         ) : null}
 
         {shouldRenderSupervisionCategory ? (
-        <section className="aitown-details__section">
+        <section className="aitown-details__section aitown-details__section--supervision-collector">
           <h3>Collector Supervision</h3>
           {collectorWarning ? <p role="status">{collectorWarning}</p> : null}
           <ul className="aitown-records">
@@ -4450,7 +4505,7 @@ export function DetailsPanel({
         ) : null}
 
         {shouldRenderCrewCategory ? (
-        <section className="aitown-details__section">
+        <section className="aitown-details__section aitown-details__section--crew-roster">
           <h3>Roster</h3>
           <div className="aitown-roster">
             {agents.map((agent) => (
@@ -4500,7 +4555,7 @@ export function DetailsPanel({
         ) : null}
 
         {shouldRenderCrewCategory ? (
-        <section className="aitown-details__section">
+        <section className="aitown-details__section aitown-details__section--crew-office-grid">
           <h3>Office Grid</h3>
           <ul className="aitown-records">
             {officeGrid.map(({ zone, occupants, homeAgentLabel, severitySummary }) => {
@@ -4557,7 +4612,7 @@ export function DetailsPanel({
         ) : null}
 
         {shouldRenderSupervisionCategory ? (
-        <section className="aitown-details__section">
+        <section className="aitown-details__section aitown-details__section--supervision-topology">
           <h3>Watch Topology</h3>
           <ul className="aitown-records">
             {world.watch_edges.map((edge) => {
@@ -4605,7 +4660,7 @@ export function DetailsPanel({
         {shouldRenderQueueCategory ? activeCorrelationQueueSection : null}
 
         {shouldRenderSupervisionCategory ? (
-        <section className="aitown-details__section">
+        <section className="aitown-details__section aitown-details__section--supervision-open-alerts">
           <h3>Open Supervision Alerts</h3>
           {openSupervisionAlertsWarning ? <p role="status">{openSupervisionAlertsWarning}</p> : null}
           <p>
@@ -5070,7 +5125,7 @@ export function DetailsPanel({
 
   return (
     <aside
-      className="aitown-panel aitown-panel--details"
+      className={detailsPanelClassName}
       role="complementary"
       aria-label="Agent details"
       data-active-hub-category={activeHubCategory}
@@ -5114,7 +5169,28 @@ export function DetailsPanel({
         </div>
       </div>
 
-      <section className="aitown-details__section aitown-details__section--selected-evidence">
+      {activeHubCategory === 'supervision' ? (
+        <div className="aitown-selected-supervision-summary-grid" aria-label="Selected agent supervision summary">
+          <div className="aitown-stat-card aitown-stat-card--supervision">
+            <span>Observed by</span>
+            <strong>{inboundWatchers.length}</strong>
+          </div>
+          <div className="aitown-stat-card aitown-stat-card--supervision">
+            <span>Watches</span>
+            <strong>{outboundWatchers.length}</strong>
+          </div>
+          <div className="aitown-stat-card aitown-stat-card--supervision">
+            <span>History rows</span>
+            <strong>{selectedAgentSupervisionHistory?.items.length ?? 0}</strong>
+          </div>
+          <div className="aitown-stat-card aitown-stat-card--supervision">
+            <span>Collector flag</span>
+            <strong>{selectedCollectorItem?.supervision.needs_attention ? 'Yes' : 'No'}</strong>
+          </div>
+        </div>
+      ) : null}
+
+      <section className="aitown-details__section aitown-details__section--selected-evidence aitown-details__section--selected-supervision-observation">
         <h3>Collector Observation</h3>
         {collectorWarning ? <p role="status">{collectorWarning}</p> : null}
         <ul className="aitown-records">
@@ -5193,7 +5269,7 @@ export function DetailsPanel({
         </ul>
       </section>
 
-      <section className="aitown-details__section aitown-details__section--selected-evidence">
+      <section className="aitown-details__section aitown-details__section--selected-evidence aitown-details__section--selected-supervision-history">
         <h3>Supervision History</h3>
         {supervisionHistoryWarning ? <p role="status">{supervisionHistoryWarning}</p> : null}
         <p className="aitown-evidence-toolbar">
@@ -5358,7 +5434,7 @@ export function DetailsPanel({
 
       {activeCorrelationQueueSection}
 
-      <section className="aitown-details__section aitown-details__section--selected-now aitown-details__section--selected-evidence">
+      <section className="aitown-details__section aitown-details__section--selected-now aitown-details__section--selected-evidence aitown-details__section--selected-supervision-audit">
         <h3>Audit Signals</h3>
         <ul className="aitown-records">
           <li className={`aitown-record severity-${selectedAgent.effective_severity}`}>
@@ -5414,7 +5490,7 @@ export function DetailsPanel({
         </ul>
       </section>
 
-      <section className="aitown-details__section aitown-details__section--selected-evidence">
+      <section className="aitown-details__section aitown-details__section--selected-evidence aitown-details__section--selected-supervision-workflow">
         <h3>Workflow</h3>
         {workflowWarning ? <p role="status">{workflowWarning}</p> : null}
         <ul className="aitown-records">
@@ -5631,7 +5707,7 @@ export function DetailsPanel({
       </section>
 
       {renderSharedMemorySection({
-        sectionClassName: 'aitown-details__section--selected-evidence',
+        sectionClassName: 'aitown-details__section--selected-evidence aitown-details__section--selected-supervision-memory',
         memoryArtifacts,
         memoryArtifactsError,
         memoryArtifactsState,
@@ -5648,7 +5724,7 @@ export function DetailsPanel({
         onSelectCorrelation
       })}
 
-      <section className="aitown-details__section aitown-details__section--selected-evidence">
+      <section className="aitown-details__section aitown-details__section--selected-evidence aitown-details__section--selected-supervision-incidents">
         <h3>Incident Feed</h3>
         <ul className="aitown-records">
           {incidentFeedState === 'loading' && !incidentFeed ? (

@@ -3219,6 +3219,93 @@ describe('WorldScene watch overlay caption gating', () => {
     expect(onSelectAgent).not.toHaveBeenCalled();
   });
 
+  it('keeps agentFocusRequest direct-centered after the selected-agent redraw under right clamp', async () => {
+    appInitMock.mockReset().mockResolvedValue(undefined);
+    vi.mocked(loadAiTownAssets).mockResolvedValue(makeAssets());
+
+    const baseScene = makeWideSelectedAgentScene();
+    const initialScene = {
+      ...baseScene,
+      watchEdges: [],
+      selectedAgentId: null,
+      agents: baseScene.agents.map((agent) => ({
+        ...agent,
+        selected: false
+      }))
+    } satisfies AiTownSceneModel;
+    const tokenomicsAgent = makeAgent({
+      agentId: 'tokenomics',
+      displayName: 'Tokenomics Agent',
+      characterKey: 'f3',
+      rolePawnKey: undefined,
+      position: { x: 2600, y: 800 },
+      selected: true,
+      severity: 'yellow',
+      phase: 'active'
+    });
+    const selectedScene = {
+      ...initialScene,
+      selectedAgentId: tokenomicsAgent.agentId,
+      agents: [
+        ...initialScene.agents,
+        tokenomicsAgent
+      ]
+    } satisfies AiTownSceneModel;
+    const onSelectAgent = vi.fn();
+    const { container, rerender } = render(
+      <main className="aitown-shell">
+        <section className="aitown-panel aitown-panel--game">
+          <div className="aitown-shell__stats">Stats</div>
+          <WorldScene scene={initialScene} onSelectAgent={onSelectAgent} />
+        </section>
+      </main>
+    );
+
+    const host = container.querySelector('.aitown-world__host');
+    const stats = container.querySelector('.aitown-shell__stats');
+
+    expect(host).toBeInstanceOf(HTMLDivElement);
+    expect(stats).toBeInstanceOf(HTMLElement);
+
+    setElementRect(host as HTMLDivElement, { left: 0, top: 0, width: 1000, height: 800 });
+    setElementRect(stats as HTMLElement, { left: 760, top: 80, width: 240, height: 140 });
+
+    await waitFor(() => {
+      expect(readViewportInspector()?.read().clampPadding).toEqual({
+        top: 0,
+        right: 240
+      });
+      expect(readAgentLayer()?.children).toHaveLength(initialScene.agents.length);
+    });
+
+    rerender(
+      <main className="aitown-shell">
+        <section className="aitown-panel aitown-panel--game">
+          <div className="aitown-shell__stats">Stats</div>
+          <WorldScene
+            scene={selectedScene}
+            onSelectAgent={onSelectAgent}
+            agentFocusRequest={{ agentId: tokenomicsAgent.agentId, requestId: 1 }}
+          />
+        </section>
+      </main>
+    );
+
+    await waitFor(() => {
+      expect(readAgentLayer()?.children).toHaveLength(selectedScene.agents.length);
+    });
+
+    const inspection = readViewportInspector()?.read();
+    const center = readViewportCenter();
+    const safeAreaBiasX = (inspection?.clampPadding.right ?? 0) / ((inspection?.scale ?? 1) * 2);
+
+    expect(safeAreaBiasX).toBeGreaterThan(0);
+    expect(center.x).toBeCloseTo(tokenomicsAgent.position.x, 4);
+    expect(center.y).toBeCloseTo(tokenomicsAgent.position.y, 4);
+    expect(center.x).not.toBeCloseTo(tokenomicsAgent.position.x + safeAreaBiasX, 4);
+    expect(onSelectAgent).not.toHaveBeenCalled();
+  });
+
   it('focuses a requested zone anchor through the current safe-area lane', async () => {
     appInitMock.mockReset().mockResolvedValue(undefined);
     vi.mocked(loadAiTownAssets).mockResolvedValue(makeAssets());

@@ -1515,8 +1515,13 @@ export default function WorldScene({
         selectedAgent &&
         (selectedAgentChanged || (selectedAgentFollowRef.current && selectedAgentMoved) || shouldRecenterPendingReselect)
       ) {
-        moveViewportCenterIntoSafeArea(viewport, selectedAgent.x, selectedAgent.y);
-        markSelectedAgentFollowState(selectedAgent);
+        if (directFocusMatchesCurrentGeometry(selectedAgentDirectFocusRef.current, selectedAgent, viewport.scale.x)) {
+          moveViewportCenterDirectly(viewport, selectedAgent.x, selectedAgent.y);
+          markSelectedAgentDirectFocusState(viewport, selectedAgent);
+        } else {
+          moveViewportCenterIntoSafeArea(viewport, selectedAgent.x, selectedAgent.y);
+          markSelectedAgentFollowState(selectedAgent);
+        }
       } else if (selectedAgent) {
         rememberSelectedAgentState(selectedAgent);
       }

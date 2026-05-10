@@ -2120,7 +2120,7 @@ function AppInner() {
     [selectAgent]
   );
 
-  const handleSceneSelectAgent = useCallback(
+  const handleSelectAgentForInspection = useCallback(
     (agentId: string | null) => {
       const preservedCorrelationId =
         agentId !== null && activeCorrelationParticipantAgentIds.includes(agentId)
@@ -2140,15 +2140,11 @@ function AppInner() {
           selectedCorrelationCarryForward,
         resolveOperationSnapshotSeed(agentId, crewOverviewOperationSeedData)
       );
-      if (agentId) {
-        requestAgentFocus(agentId);
-      }
     },
     [
       activeCorrelationParticipantAgentIds,
       activeCorrelationSpotlight?.correlation_id,
       crewOverviewOperationSeedData,
-      requestAgentFocus,
       selectAgentWithSnapshot,
       selectedCorrelationCarryForward,
       selectedCorrelationId,
@@ -2156,15 +2152,33 @@ function AppInner() {
     ]
   );
 
+  const handleSceneSelectAgent = useCallback(
+    (agentId: string | null) => {
+      handleSelectAgentForInspection(agentId);
+      if (agentId) {
+        requestAgentFocus(agentId);
+      }
+    },
+    [handleSelectAgentForInspection, requestAgentFocus]
+  );
+
+  const handleRosterSelectAgent = useCallback(
+    (agentId: string) => {
+      handleSceneSelectAgent(agentId);
+      setHubOpen(false);
+    },
+    [handleSceneSelectAgent]
+  );
+
   const handleEvidenceCoverageFocusAgent = useCallback(
     (agentId: string) => {
       requestedSelectedAgentDrilldownTabRef.current = 'evidence';
       setActiveHubCategory('evidence');
-      handleSceneSelectAgent(agentId);
+      handleSelectAgentForInspection(agentId);
       setSelectedAgentDrilldownTab('evidence');
       setHubOpen(true);
     },
-    [handleSceneSelectAgent]
+    [handleSelectAgentForInspection]
   );
 
   const handleSelectOperation = useCallback(
@@ -2364,7 +2378,7 @@ function AppInner() {
             <AgentRoster
               agents={scene.agents}
               selectedAgentId={selectedAgentId}
-              onSelectAgent={handleSceneSelectAgent}
+              onSelectAgent={handleRosterSelectAgent}
             />
 
             <div className="aitown-shell__stats" aria-label="Office summary">
@@ -2410,7 +2424,7 @@ function AppInner() {
                           type="button"
                           className={`aitown-focus-chip severity-${agent.severity}${selectedAgentId === agent.agent_id ? ' is-active' : ''}`}
                           aria-label={`Inspect live focus agent ${agent.display_name}`}
-                          onClick={() => handleSceneSelectAgent(agent.agent_id)}
+                          onClick={() => handleSelectAgentForInspection(agent.agent_id)}
                         >
                           <strong>{agent.display_name}</strong>
                           <span>{resolveLiveFocusAgentMeta(agent)}</span>

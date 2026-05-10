@@ -2083,6 +2083,26 @@ afterEach(() => {
     });
   });
 
+  it('keeps live focus inspect chips on the safe-area selected-agent path without direct focus requests', async () => {
+    const user = userEvent.setup();
+
+    setNavigatorUserAgent('VitestBrowser');
+    render(<App />);
+
+    const liveFocusButton = await screen.findByRole('button', {
+      name: 'Inspect live focus agent Growth Revenue Agent'
+    });
+
+    expect(screen.getByTestId('mock-agent-focus-request')).toHaveTextContent('');
+
+    await user.click(liveFocusButton);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('mock-scene-selected-agent-id')).toHaveTextContent('growth-revenue');
+      expect(screen.getByTestId('mock-agent-focus-request')).toHaveTextContent('');
+    });
+  });
+
   it('keeps Hub inspect pivots on the safe-area selected-agent path without direct focus requests', async () => {
     const user = userEvent.setup();
 
@@ -2683,6 +2703,33 @@ afterEach(() => {
     const inspectPeek = await screen.findByRole('region', { name: 'Selected agent inspect peek' });
     expect(within(inspectPeek).getByText('App Engineering Agent')).toBeVisible();
     expect(appEngineeringButton).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('closes an open Hub when the top roster is used as a locate control', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const roster = await screen.findByRole('navigation', { name: 'Agent roster' });
+    await user.click(await screen.findByRole('button', { name: 'Supervision' }));
+    expect(await screen.findByRole('dialog', { name: 'Hub' })).toBeVisible();
+
+    await user.click(
+      within(roster).getByRole('button', {
+        name: 'Select and locate App Engineering Agent'
+      })
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog', { name: 'Hub' })).not.toBeInTheDocument();
+      expect(
+        within(roster).getByRole('button', {
+          name: 'Select and locate App Engineering Agent'
+        })
+      ).toHaveAttribute('aria-pressed', 'true');
+    });
+    expect(await screen.findByRole('region', { name: 'Selected agent inspect peek' })).toHaveTextContent(
+      'App Engineering Agent'
+    );
   });
 
   it('surfaces evidence coverage focus on the default world shell before Hub opens from the lightweight projection', async () => {

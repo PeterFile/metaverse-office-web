@@ -759,6 +759,106 @@ function buildCollectorDerivedPeerWatchAlert(
   };
 }
 
+describe('DetailsPanel category-specific layout hooks', () => {
+  it('marks the crew category with its own deck hooks instead of the generic category shape', () => {
+    const { container } = render(
+      <DetailsPanel
+        {...buildProps({
+          activeHubCategory: 'crew',
+          selectedAgent: null,
+          selectedCorrelationId: null,
+          selectedOperation: null,
+          workflow: null
+        })}
+      />
+    );
+
+    const panel = container.querySelector('aside.aitown-panel--details');
+    expect(panel).not.toBeNull();
+    expect(panel!).toHaveAttribute('data-active-hub-category', 'crew');
+    expect(panel!).toHaveClass('aitown-panel--details-category-crew');
+    expect(panel!).toHaveClass('aitown-panel--details-crew-overview');
+    expect(panel!).not.toHaveClass('aitown-panel--details-category-supervision');
+    expect(panel!.querySelector('.aitown-crew-summary-grid')).toBeInstanceOf(HTMLElement);
+    expect(screen.getByRole('heading', { name: 'Roster' }).closest('section')).toHaveClass(
+      'aitown-details__section--crew-roster'
+    );
+    expect(screen.getByRole('heading', { name: 'Office Grid' }).closest('section')).toHaveClass(
+      'aitown-details__section--crew-office-grid'
+    );
+  });
+
+  it('marks supervision overview as a separate operator deck with alert/topology lanes', () => {
+    const { container } = render(
+      <DetailsPanel
+        {...buildProps({
+          activeHubCategory: 'supervision',
+          selectedAgent: null,
+          selectedCorrelationId: null,
+          selectedOperation: null,
+          workflow: null,
+          openSupervisionAlerts: {
+            items: [buildCollectorDerivedPeerWatchAlert()]
+          }
+        })}
+      />
+    );
+
+    const panel = container.querySelector('aside.aitown-panel--details');
+    expect(panel).not.toBeNull();
+    expect(panel!).toHaveAttribute('data-active-hub-category', 'supervision');
+    expect(panel!).toHaveClass('aitown-panel--details-category-supervision');
+    expect(panel!).toHaveClass('aitown-panel--details-crew-overview');
+    expect(panel!.querySelector('.aitown-supervision-summary-grid')).toBeInstanceOf(HTMLElement);
+    expect(screen.getByRole('heading', { name: 'Collector Supervision' }).closest('section')).toHaveClass(
+      'aitown-details__section--supervision-collector'
+    );
+    expect(screen.getByRole('heading', { name: 'Watch Topology' }).closest('section')).toHaveClass(
+      'aitown-details__section--supervision-topology'
+    );
+    expect(screen.getByRole('heading', { name: 'Open Supervision Alerts' }).closest('section')).toHaveClass(
+      'aitown-details__section--supervision-open-alerts'
+    );
+    expect(screen.getByText('Collector observed blocked app engineering work').closest('li')).toHaveClass(
+      'aitown-supervision-alert-card'
+    );
+  });
+
+  it('marks selected-agent supervision with supervision-specific lanes and summary cards', () => {
+    const { container } = render(
+      <DetailsPanel
+        {...buildProps({
+          activeHubCategory: 'supervision',
+          selectedAgentDrilldownTab: 'evidence',
+          selectedAgentSupervisionHistory: {
+            items: [buildCollectorDerivedPeerWatchAlert()]
+          }
+        })}
+      />
+    );
+
+    const panel = container.querySelector('aside.aitown-panel--details');
+    expect(panel).not.toBeNull();
+    expect(panel!).toHaveAttribute('data-active-hub-category', 'supervision');
+    expect(panel!).toHaveAttribute('data-selected-agent-drilldown-tab', 'evidence');
+    expect(panel!).toHaveClass('aitown-panel--details-category-supervision');
+    expect(panel!).toHaveClass('aitown-panel--details-selected-agent');
+    expect(panel!.querySelector('.aitown-selected-supervision-summary-grid')).toBeInstanceOf(HTMLElement);
+    expect(screen.getByRole('heading', { name: 'Collector Observation' }).closest('section')).toHaveClass(
+      'aitown-details__section--selected-supervision-observation'
+    );
+    expect(screen.getByRole('heading', { name: 'Supervision History' }).closest('section')).toHaveClass(
+      'aitown-details__section--selected-supervision-history'
+    );
+    expect(screen.getByRole('heading', { name: 'Workflow' }).closest('section')).toHaveClass(
+      'aitown-details__section--selected-supervision-workflow'
+    );
+    expect(screen.getByRole('heading', { name: 'Shared Memory' }).closest('section')).toHaveClass(
+      'aitown-details__section--selected-supervision-memory'
+    );
+  });
+});
+
 describe('DetailsPanel collector-derived peer-watch provenance', () => {
   it('renders compact provenance and basis copy in peer-watch supervision surfaces', () => {
     const collectorAlert = buildCollectorDerivedPeerWatchAlert();

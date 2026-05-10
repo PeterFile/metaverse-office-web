@@ -60,6 +60,9 @@ describe('AI Town shell styles', () => {
     );
     expect(styles).toMatch(/\.aitown-hub-drilldown__panel--crew\s*\{[\s\S]*?overflow-y:\s*auto;/);
     expect(styles).toMatch(/\.aitown-hub-sheet \.aitown-panel--details\s*\{[\s\S]*?display:\s*flex;[\s\S]*?flex-direction:\s*column;[\s\S]*?overflow:\s*visible;/);
+    expect(styles).toMatch(
+      /\.aitown-hub-sheet \.aitown-panel--details-selected-agent\.aitown-panel--details-category-supervision\s*\{[\s\S]*?height:\s*100%;[\s\S]*?max-height:\s*100%;[\s\S]*?overflow-y:\s*auto;/
+    );
     expect(styles).toMatch(/\.aitown-hub-sheet \.aitown-details__section--active-queue\s*\{[\s\S]*?display:\s*flex;[\s\S]*?flex-direction:\s*column;/);
     expect(styles).toMatch(/\.aitown-hub-sheet \.aitown-details__section--active-queue \.aitown-queue-record__button\s*\{[\s\S]*?max-height:\s*none;[\s\S]*?overflow:\s*visible;/);
     expect(styles).toMatch(/\.aitown-hub-sheet \.aitown-record\s*\{[\s\S]*?display:\s*flex;[\s\S]*?overflow:\s*visible;/);

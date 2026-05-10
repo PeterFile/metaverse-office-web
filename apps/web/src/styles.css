@@ -996,7 +996,9 @@ button {
 }
 
 .aitown-selected-agent-peek__facts {
-  max-height: 92px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  max-height: 132px;
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -1040,6 +1042,13 @@ button {
   font-size: 0.74rem;
   line-height: 1.25;
   overflow-wrap: anywhere;
+}
+
+.aitown-selected-agent-peek__facts span {
+  min-width: 0;
+  padding: 3px 6px;
+  border-left: 2px solid rgba(139, 233, 213, 0.35);
+  background: rgba(7, 12, 15, 0.24);
 }
 
 .aitown-selected-agent-peek__action {
@@ -1807,7 +1816,9 @@ button {
 }
 
 .aitown-hub-focus-ribbon__facts {
-  max-height: 58px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+  max-height: 108px;
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -1839,6 +1850,13 @@ button {
   font-size: 0.72rem;
   line-height: 1.25;
   overflow-wrap: anywhere;
+}
+
+.aitown-hub-focus-ribbon__facts span {
+  min-width: 0;
+  padding: 3px 6px;
+  border-left: 2px solid rgba(139, 233, 213, 0.35);
+  background: rgba(7, 12, 15, 0.24);
 }
 
 .aitown-hub-sheet .aitown-panel--details {
@@ -2089,7 +2107,9 @@ button {
 }
 
 .aitown-hub-sheet .aitown-details__section > h3 {
-  margin-bottom: 2px;
+  margin: 0 0 6px;
+  padding-bottom: 5px;
+  border-bottom: 1px solid rgba(245, 217, 141, 0.22);
   color: #f5d98d;
   font-size: 0.95rem;
   font-weight: 500;
@@ -2104,16 +2124,18 @@ button {
   overflow-wrap: anywhere;
 }
 
-.aitown-hub-sheet .aitown-details__section > div {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 4px;
+.aitown-hub-sheet .aitown-details__section--active-queue > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
   color: #d6dcde;
   font-size: 0.84rem;
   line-height: 1.3;
 }
 
 .aitown-hub-sheet .aitown-details__section label {
+  min-width: 0;
   color: #cbd2d5;
 }
 
@@ -2151,19 +2173,20 @@ button {
 }
 
 .aitown-hub-sheet .aitown-details__section--active-queue .aitown-queue-record {
-  display: flex;
+  display: grid;
   min-height: 0;
   max-height: none;
-  flex-direction: column;
-  gap: 3px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 6px;
   overflow: visible;
 }
 
 .aitown-hub-sheet .aitown-details__section--active-queue .aitown-queue-record__button {
+  grid-column: 1 / -1;
   min-height: 0;
   max-height: none;
-  gap: 4px;
-  padding: 5px 8px;
+  gap: 5px;
+  padding: 7px 9px;
   overflow: visible;
 }
 
@@ -2181,29 +2204,53 @@ button {
 .aitown-hub-sheet .aitown-details__section--active-queue .aitown-queue-record__meta {
   display: block;
   min-width: 0;
-  padding: 0 2px;
+  padding: 5px 7px;
+  border-left: 2px solid rgba(139, 233, 213, 0.26);
+  background: rgba(7, 12, 15, 0.22);
   overflow: visible;
   white-space: normal;
 }
 
-.aitown-hub-sheet .aitown-record {
-  display: flex;
+.aitown-hub-sheet .aitown-record:not(.aitown-evidence-card) {
+  display: grid;
   align-content: start;
-  gap: 3px;
-  padding: 6px 8px;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 6px;
+  padding: 7px 9px;
   border: 1px solid rgba(206, 214, 216, 0.22);
   background: rgba(38, 44, 50, 0.74);
   overflow: visible;
 }
 
-.aitown-hub-sheet .aitown-record strong {
+.aitown-hub-sheet .aitown-record:not(.aitown-evidence-card) > strong,
+.aitown-hub-sheet .aitown-record:not(.aitown-evidence-card) > header {
   display: block;
+  grid-column: 1 / -1;
   overflow: visible;
   color: #fffdf3;
   font-size: 0.88rem;
   font-weight: 500;
   line-height: 1.25;
   white-space: normal;
+}
+
+.aitown-hub-sheet .aitown-record:not(.aitown-evidence-card) > span:first-of-type {
+  grid-column: 1 / -1;
+  color: #e1e6e8;
+}
+
+.aitown-hub-sheet .aitown-record:not(.aitown-evidence-card) > span:not(:first-of-type) {
+  display: block;
+  min-width: 0;
+  padding: 5px 7px;
+  border-left: 2px solid rgba(139, 233, 213, 0.26);
+  background: rgba(7, 12, 15, 0.22);
+}
+
+.aitown-hub-sheet .aitown-record:not(.aitown-evidence-card) > .aitown-roster__button,
+.aitown-hub-sheet .aitown-record:not(.aitown-evidence-card) > .aitown-link-button,
+.aitown-hub-sheet .aitown-record:not(.aitown-evidence-card) > div {
+  grid-column: 1 / -1;
 }
 
 .aitown-hub-sheet .aitown-record span,
@@ -2217,6 +2264,40 @@ button {
 .aitown-hub-sheet .aitown-link-button {
   font-size: 0.82rem;
   line-height: 1.25;
+}
+
+.aitown-hub-sheet .aitown-roster {
+  gap: 7px;
+}
+
+.aitown-hub-sheet .aitown-roster__button {
+  min-height: 0;
+  padding: 7px 9px;
+  align-items: flex-start;
+  background: rgba(38, 44, 50, 0.78);
+  overflow-wrap: anywhere;
+}
+
+.aitown-hub-sheet .aitown-shared-memory-backlink-lane {
+  max-height: min(28dvh, 220px);
+  min-width: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+
+.aitown-hub-sheet .aitown-shared-memory-backlink-chips {
+  max-width: 100%;
+  max-height: min(24dvh, 184px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.aitown-hub-sheet .aitown-shared-memory-backlink-chip {
+  flex: 1 1 168px;
+  max-width: 100%;
 }
 
 .aitown-evidence-toolbar {
@@ -2342,6 +2423,21 @@ button {
 .aitown-panel--details[data-selected-agent-drilldown-tab='replay'] > .aitown-details__head,
 .aitown-panel--details[data-selected-agent-drilldown-tab='replay'] > .aitown-details__summary,
 .aitown-panel--details[data-selected-agent-drilldown-tab='replay'] > .aitown-details__grid {
+  display: none;
+}
+
+.aitown-panel--details[data-selected-agent-drilldown-tab][data-active-hub-category='crew']
+  .aitown-details__section:not(.aitown-details__section--hub-crew),
+.aitown-panel--details[data-selected-agent-drilldown-tab][data-active-hub-category='queue']
+  .aitown-details__section:not(.aitown-details__section--hub-queue),
+.aitown-panel--details[data-selected-agent-drilldown-tab][data-active-hub-category='supervision']
+  .aitown-details__section:not(.aitown-details__section--hub-supervision),
+.aitown-panel--details[data-selected-agent-drilldown-tab][data-active-hub-category='evidence']
+  .aitown-details__section:not(.aitown-details__section--hub-evidence),
+.aitown-panel--details[data-selected-agent-drilldown-tab][data-active-hub-category='replay']
+  .aitown-details__section:not(.aitown-details__section--hub-replay),
+.aitown-panel--details[data-selected-agent-drilldown-tab][data-active-hub-category='memory']
+  .aitown-details__section:not(.aitown-details__section--hub-memory) {
   display: none;
 }
 

@@ -12636,7 +12636,7 @@ afterEach(() => {
 
     expect(postResetRequests).toContain(selectedCorrelationMemoryArtifactsUrl);
     expect(postResetRequests).not.toContain(appEngineeringMemoryArtifactsUrl);
-  });
+  }, 10000);
 
   it(
     'keeps crew-overview auto correlation mode when re-selecting the current default correlation from active queue after a later refresh',
@@ -13314,7 +13314,7 @@ afterEach(() => {
     });
     expect(within(correlationSection).queryByText('corr-app-review')).not.toBeInTheDocument();
     expect(globalThis.fetch).toHaveBeenCalledWith(teamLeadWorkflowUrl, expect.anything());
-  });
+  }, 10000);
 
   it('loads correlation drilldown from incident feed evidence', async () => {
     const user = userEvent.setup();

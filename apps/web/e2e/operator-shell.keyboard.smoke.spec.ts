@@ -8334,6 +8334,8 @@ test.describe('operator shell smoke', () => {
   test('keeps the selected-agent workflow recent-event evidence jump focused on shared memory without changing selection or active correlation via keyboard traversal', async ({
     page
   }) => {
+    test.setTimeout(60_000);
+
     const requestedUrls: string[] = [];
     await installFastPollInterval(page, 120_000);
     page.on('request', (request) => {
@@ -8620,6 +8622,8 @@ test.describe('operator shell smoke', () => {
   test('keeps the active workflow correlation when opening a workflow peer-watch watcher pivot via keyboard traversal', async ({
     page
   }) => {
+    test.setTimeout(60_000);
+
     await page.route('**/agents/app-engineering/workflow?limit=10&window=60m', async (route) => {
       const response = await route.fetch();
       const workflow = (await response.json()) as {

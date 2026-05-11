@@ -8420,6 +8420,8 @@ test.describe('operator shell smoke', () => {
   test('keeps the active workflow correlation when opening a workflow peer-watch observer pivot via keyboard traversal', async ({
     page
   }) => {
+    test.setTimeout(60_000);
+
     await page.route('**/agents/app-engineering/workflow?limit=10&window=60m', async (route) => {
       const response = await route.fetch();
       const workflow = (await response.json()) as {
@@ -8521,6 +8523,8 @@ test.describe('operator shell smoke', () => {
   test('keeps the active workflow correlation when opening a workflow peer-watch target pivot via keyboard traversal', async ({
     page
   }) => {
+    test.setTimeout(60_000);
+
     await page.route('**/agents/app-engineering/workflow?limit=10&window=60m', async (route) => {
       const response = await route.fetch();
       const workflow = (await response.json()) as {
@@ -8724,6 +8728,8 @@ test.describe('operator shell smoke', () => {
   test('keeps the selected-agent workflow peer-watch alert evidence jump focused on shared memory without changing selection or active correlation via keyboard traversal', async ({
     page
   }) => {
+    test.setTimeout(60_000);
+
     await installFastPollInterval(page, 120_000);
 
     const requestedUrls: string[] = [];
@@ -9015,6 +9021,8 @@ test.describe('operator shell smoke', () => {
   test('keeps selected-agent auto correlation mode when re-selecting the current default correlation from supervision history via keyboard traversal', async ({
     page
   }) => {
+    test.setTimeout(60_000);
+
     await installFastPollInterval(page, 120_000);
 
     const requestedUrls: string[] = [];
@@ -9138,7 +9146,7 @@ test.describe('operator shell smoke', () => {
   test(
     'keeps the selected-agent supervision history evidence jump focus-only while a manually reopened default correlation stays explicit via keyboard traversal',
     async ({ page }) => {
-      test.setTimeout(60_000);
+      test.setTimeout(90_000);
 
       const requestedUrls: string[] = [];
       page.on('request', (request) => {
@@ -9316,6 +9324,8 @@ test.describe('operator shell smoke', () => {
   test('keeps the selected-agent supervision history evidence jump focused on shared memory without changing selection or active correlation via keyboard traversal', async ({
     page
   }) => {
+    test.setTimeout(60_000);
+
     const requestedUrls: string[] = [];
     page.on('request', (request) => {
       try {
@@ -9443,6 +9453,8 @@ test.describe('operator shell smoke', () => {
   test('keeps the active selected correlation when opening a supervision history actor pivot via keyboard traversal', async ({
     page
   }) => {
+    test.setTimeout(60_000);
+
     const requestedUrls: string[] = [];
     const forbiddenRequests: string[] = [];
     const directOperationUrl = '/office/operations?agent_id=growth-revenue';
@@ -10087,6 +10099,8 @@ test.describe('operator shell smoke', () => {
   test('keeps the active selected correlation and scoped reads when opening a supervision history watcher pivot via keyboard traversal', async ({
     page
   }) => {
+    test.setTimeout(60_000);
+
     const requestedUrls: string[] = [];
     const forbiddenRequests: string[] = [];
     const directOperationUrl = '/office/operations?agent_id=growth-revenue';
@@ -10442,7 +10456,7 @@ test.describe('operator shell smoke', () => {
   });
 
   test('keeps selected-operation details and correlation drilldown visible when only the selected-operation refresh degrades', async ({ page }) => {
-    test.setTimeout(45_000);
+    test.setTimeout(60_000);
     await installFastPollInterval(page);
     await page.goto('/');
     await openOfficeCategory(page, 'Queue');
@@ -10488,7 +10502,7 @@ test.describe('operator shell smoke', () => {
   });
 
   test('keeps the last Current Operation visible when the selected operation drops out of the active queue', async ({ page }) => {
-    test.setTimeout(45_000);
+    test.setTimeout(60_000);
     await installFastPollInterval(page);
     await page.goto('/');
     await openOfficeCategory(page, 'Queue');

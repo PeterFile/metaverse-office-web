@@ -2083,6 +2083,27 @@ afterEach(() => {
     });
   });
 
+  it('emits a direct agent focus request when the top roster locates an agent', async () => {
+    const user = userEvent.setup();
+
+    setNavigatorUserAgent('VitestBrowser');
+    render(<App />);
+
+    const roster = await screen.findByRole('navigation', { name: 'Agent roster' });
+    const appEngineeringButton = within(roster).getByRole('button', {
+      name: 'Select and locate App Engineering Agent'
+    });
+
+    expect(screen.getByTestId('mock-agent-focus-request')).toHaveTextContent('');
+
+    await user.click(appEngineeringButton);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('mock-scene-selected-agent-id')).toHaveTextContent('app-engineering');
+      expect(screen.getByTestId('mock-agent-focus-request')).toHaveTextContent('app-engineering:1');
+    });
+  });
+
   it('keeps live focus inspect chips on the safe-area selected-agent path without direct focus requests', async () => {
     const user = userEvent.setup();
 
@@ -2566,6 +2587,36 @@ afterEach(() => {
     expect(await screen.findByRole('tablist', { name: 'Selected agent drilldown' })).toBeVisible();
     expect(screen.getByRole('tab', { name: 'Now' })).toHaveAttribute('aria-selected', 'true');
   }, 20000);
+
+  it.each(['Evidence', 'Replay'] satisfies HubCategoryLabel[])(
+    'resets selected-agent drilldown content when switching bottom %s to Supervision',
+    async (initialCategory) => {
+      const user = userEvent.setup();
+      render(<App />);
+
+      const details = await openHub(user, 'Queue');
+      const queueSection = within(details).getByRole('heading', { name: 'Active Queue' }).closest('section');
+      expect(queueSection).not.toBeNull();
+      await user.click(
+        within(queueSection!).getByRole('button', { name: 'Inspect App Engineering Agent from active queue' })
+      );
+
+      await openHub(user, initialCategory);
+      await openHub(user, 'Supervision');
+
+      const currentDetails = screen.getByRole('complementary', { name: 'Agent details' });
+      const tablist = screen.getByRole('tablist', { name: 'Selected agent drilldown' });
+      expect(screen.getByRole('dialog', { name: 'Hub' })).toHaveTextContent('Supervision');
+      await waitFor(() => {
+        expect(currentDetails).toHaveAttribute('data-active-hub-category', 'supervision');
+        expect(currentDetails).toHaveAttribute('data-selected-agent-drilldown-tab', 'evidence');
+        expect(within(tablist).getByRole('tab', { name: 'Evidence' })).toHaveAttribute('aria-selected', 'true');
+      });
+      expect(within(currentDetails).getByRole('heading', { name: 'Collector Observation' })).toBeVisible();
+      expect(within(currentDetails).getByRole('heading', { name: 'Supervision History' })).toBeVisible();
+    },
+    20000
+  );
 
   it('supports keyboard navigation across selected-agent Hub drilldown tabs', async () => {
     const user = userEvent.setup();

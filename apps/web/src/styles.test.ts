@@ -81,6 +81,18 @@ describe('AI Town shell styles', () => {
     expect(styles).toMatch(/data-active-hub-category='evidence'[\s\S]*?aitown-details__section--hub-evidence/);
     expect(styles).toMatch(/data-active-hub-category='replay'[\s\S]*?aitown-details__section--hub-replay/);
     expect(styles).toMatch(/data-active-hub-category='memory'[\s\S]*?aitown-details__section--hub-memory/);
+    expect(styles).toMatch(
+      /data-active-hub-category='supervision'\]\[data-selected-agent-drilldown-tab='replay'\][\s\S]*?\.aitown-details__section--hub-supervision\s*\{[\s\S]*?display:\s*flex;/
+    );
+    expect(styles).toMatch(
+      /\.aitown-panel--details-category-supervision \.aitown-details__section--selected-supervision-audit,[\s\S]*?\.aitown-panel--details-category-supervision \.aitown-details__section--selected-supervision-memory,[\s\S]*?\{[\s\S]*?min-height:\s*clamp\(118px, 18dvh, 176px\);[\s\S]*?overflow:\s*hidden;/
+    );
+    expect(styles).toMatch(
+      /\.aitown-panel--details-category-supervision \.aitown-details__section--selected-supervision-history\s*\{[\s\S]*?min-height:\s*clamp\(180px, 30dvh, 260px\);[\s\S]*?overflow:\s*hidden;/
+    );
+    expect(styles).toMatch(
+      /\.aitown-panel--details-category-supervision \.aitown-details__section--selected-supervision-observation \.aitown-records,[\s\S]*?\.aitown-panel--details-category-supervision \.aitown-details__section--selected-supervision-queue \.aitown-records\s*\{[\s\S]*?flex:\s*1 1 auto;[\s\S]*?min-height:\s*52px;[\s\S]*?overflow-y:\s*auto;/
+    );
   });
 
   it('keeps browser pinch zoom available on the fullscreen world host and canvas', () => {

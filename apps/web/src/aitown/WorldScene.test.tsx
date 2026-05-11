@@ -135,7 +135,8 @@ const { MockDisplayObject, MockTicker, appInitMock, appDestroyMock, appInstances
     }
   }
 
-  const appInstances: Array<{ stage: MockDisplayObject; ticker: MockTicker }> = [];
+  type MockRenderer = { events: Record<string, never>; resize: ReturnType<typeof vi.fn> };
+  const appInstances: Array<{ stage: MockDisplayObject; ticker: MockTicker; renderer: MockRenderer }> = [];
 
   return {
     MockDisplayObject,
@@ -149,7 +150,7 @@ const { MockDisplayObject, MockTicker, appInitMock, appDestroyMock, appInstances
 vi.mock('pixi.js', () => {
   class Application {
     canvas = document.createElement('canvas');
-    renderer = { events: {} };
+    renderer = { events: {}, resize: vi.fn() };
     stage = new Container();
     ticker = new MockTicker();
     init = appInitMock;
@@ -165,7 +166,12 @@ vi.mock('pixi.js', () => {
   class Graphics extends MockDisplayObject {}
 
   class Rectangle {
-    constructor(..._args: unknown[]) {}
+    constructor(
+      public x: number,
+      public y: number,
+      public width: number,
+      public height: number
+    ) {}
   }
 
   class Sprite extends MockDisplayObject {
@@ -437,6 +443,19 @@ function readViewportCenter() {
     x: ((inspection?.left ?? 0) + (inspection?.right ?? 0)) / 2,
     y: ((inspection?.top ?? 0) + (inspection?.bottom ?? 0)) / 2
   };
+}
+
+function readMapContainer() {
+  const app = appInstances.at(-1);
+  expect(app).toBeDefined();
+
+  const viewport = app?.stage.children[0];
+  expect(viewport).toBeDefined();
+
+  const mapContainer = viewport?.children[0];
+  expect(mapContainer).toBeDefined();
+
+  return mapContainer;
 }
 
 function readAgentLayer() {
@@ -806,6 +825,34 @@ describe('WorldScene watch overlay caption gating', () => {
     });
   });
 
+  it('keeps the Pixi renderer buffer synchronized with the host size for canvas hit testing', async () => {
+    appInitMock.mockReset().mockResolvedValue(undefined);
+    vi.mocked(loadAiTownAssets).mockResolvedValue(makeAssets());
+
+    const scene = makeScene();
+    const { container } = render(<WorldScene scene={scene} onSelectAgent={vi.fn()} />);
+    const host = container.querySelector('.aitown-world__host');
+
+    expect(host).toBeInstanceOf(HTMLDivElement);
+    await waitFor(() => {
+      expect(readViewportInspector()).toBeDefined();
+      expect(appInstances.at(-1)).toBeDefined();
+    });
+
+    act(() => {
+      setElementRect(host as HTMLDivElement, { left: 0, top: 0, width: 1272, height: 712 });
+      MockResizeObserver.triggerAll();
+    });
+
+    await waitFor(() => {
+      expect(appInstances.at(-1)?.renderer.resize).toHaveBeenLastCalledWith(1272, 712);
+      expect(readViewportInspector()?.read()).toMatchObject({
+        screenWidth: 1272,
+        screenHeight: 712
+      });
+    });
+  });
+
   it('emits the agent id when an already-selected agent sprite is tapped', async () => {
     appInitMock.mockReset().mockResolvedValue(undefined);
     vi.mocked(loadAiTownAssets).mockResolvedValue(makeAssets());
@@ -822,16 +869,217 @@ describe('WorldScene watch overlay caption gating', () => {
     });
 
     const selectedAgentSprite = readAgentLayer()?.children[selectedAgentIndex] as
-      | { emit: (event: string) => { stopPropagation: ReturnType<typeof vi.fn> } }
+      | {
+          emit: (event: string) => { stopPropagation: ReturnType<typeof vi.fn> };
+          eventMode?: string;
+          hitArea?: { x: number; y: number; width: number; height: number };
+        }
       | undefined;
 
     expect(selectedAgentSprite).toBeDefined();
+    expect(selectedAgentSprite?.eventMode).toBe('static');
+    expect(selectedAgentSprite?.hitArea).toMatchObject({
+      x: -24,
+      y: -32,
+      width: 48,
+      height: 56
+    });
 
     const event = selectedAgentSprite?.emit('pointertap');
 
     expect(event?.stopPropagation).toHaveBeenCalledTimes(1);
     expect(onSelectAgent).toHaveBeenCalledWith('app-engineering');
     expect(onSelectAgent).not.toHaveBeenCalledWith(null);
+  });
+
+  it('does not capture pointer or pan for click jitter before an agent sprite tap', async () => {
+    appInitMock.mockReset().mockResolvedValue(undefined);
+    vi.mocked(loadAiTownAssets).mockResolvedValue(makeAssets());
+
+    const scene = makeScene();
+    const selectedAgentIndex = scene.agents.findIndex((agent) => agent.agentId === scene.selectedAgentId);
+    const onSelectAgent = vi.fn();
+    const { container } = render(<WorldScene scene={scene} onSelectAgent={onSelectAgent} />);
+
+    const host = container.querySelector('.aitown-world__host');
+    expect(host).toBeInstanceOf(HTMLDivElement);
+    (host as HTMLDivElement).setPointerCapture = vi.fn();
+    (host as HTMLDivElement).releasePointerCapture = vi.fn();
+    (host as HTMLDivElement).hasPointerCapture = vi.fn(() => false);
+    setElementRect(host as HTMLDivElement, { left: 0, top: 0, width: 1000, height: 800 });
+
+    await waitFor(() => {
+      expect(readAgentLayer()?.children).toHaveLength(scene.agents.length);
+    });
+
+    const initialCenter = readViewportCenter();
+    fireEvent.pointerDown(host as HTMLDivElement, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      button: 0,
+      buttons: 1,
+      clientX: 500,
+      clientY: 320
+    });
+    fireEvent.pointerMove(host as HTMLDivElement, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      buttons: 1,
+      clientX: 502,
+      clientY: 322
+    });
+    fireEvent.pointerUp(host as HTMLDivElement, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      button: 0,
+      clientX: 502,
+      clientY: 322
+    });
+
+    const selectedAgentSprite = readAgentLayer()?.children[selectedAgentIndex] as
+      | { emit: (event: string) => { stopPropagation: ReturnType<typeof vi.fn> } }
+      | undefined;
+    const event = selectedAgentSprite?.emit('pointertap');
+    const center = readViewportCenter();
+
+    expect((host as HTMLDivElement).setPointerCapture).not.toHaveBeenCalled();
+    expect((host as HTMLDivElement).releasePointerCapture).not.toHaveBeenCalled();
+    expect(center.x).toBeCloseTo(initialCenter.x, 4);
+    expect(center.y).toBeCloseTo(initialCenter.y, 4);
+    expect(event?.stopPropagation).toHaveBeenCalledTimes(1);
+    expect(onSelectAgent).toHaveBeenCalledWith('app-engineering');
+    expect(onSelectAgent).not.toHaveBeenCalledWith(null);
+  });
+
+  it('captures pointer only after drag movement exceeds the viewport pan threshold', async () => {
+    appInitMock.mockReset().mockResolvedValue(undefined);
+    vi.mocked(loadAiTownAssets).mockResolvedValue(makeAssets());
+
+    const scene = makeScene();
+    const onSelectAgent = vi.fn();
+    const { container } = render(<WorldScene scene={scene} onSelectAgent={onSelectAgent} />);
+
+    const host = container.querySelector('.aitown-world__host');
+    expect(host).toBeInstanceOf(HTMLDivElement);
+
+    let capturedPointerId: number | null = null;
+    (host as HTMLDivElement).setPointerCapture = vi.fn((pointerId: number) => {
+      capturedPointerId = pointerId;
+    });
+    (host as HTMLDivElement).releasePointerCapture = vi.fn((pointerId: number) => {
+      if (capturedPointerId === pointerId) {
+        capturedPointerId = null;
+      }
+    });
+    (host as HTMLDivElement).hasPointerCapture = vi.fn((pointerId: number) => capturedPointerId === pointerId);
+    setElementRect(host as HTMLDivElement, { left: 0, top: 0, width: 1000, height: 800 });
+
+    await waitFor(() => {
+      expect(readAgentLayer()?.children).toHaveLength(scene.agents.length);
+    });
+
+    const initialCenter = readViewportCenter();
+    fireEvent.pointerDown(host as HTMLDivElement, {
+      pointerId: 7,
+      pointerType: 'mouse',
+      button: 0,
+      buttons: 1,
+      clientX: 500,
+      clientY: 320
+    });
+
+    expect((host as HTMLDivElement).setPointerCapture).not.toHaveBeenCalled();
+
+    fireEvent.pointerMove(host as HTMLDivElement, {
+      pointerId: 7,
+      pointerType: 'mouse',
+      buttons: 1,
+      clientX: 502,
+      clientY: 322
+    });
+
+    expect((host as HTMLDivElement).setPointerCapture).not.toHaveBeenCalled();
+    expect(readViewportCenter().x).toBeCloseTo(initialCenter.x, 4);
+
+    fireEvent.pointerMove(host as HTMLDivElement, {
+      pointerId: 7,
+      pointerType: 'mouse',
+      buttons: 1,
+      clientX: 512,
+      clientY: 322
+    });
+
+    expect((host as HTMLDivElement).setPointerCapture).toHaveBeenCalledWith(7);
+    expect(readViewportCenter().x).not.toBeCloseTo(initialCenter.x, 4);
+
+    fireEvent.pointerUp(host as HTMLDivElement, {
+      pointerId: 7,
+      pointerType: 'mouse',
+      button: 0,
+      clientX: 512,
+      clientY: 322
+    });
+
+    expect((host as HTMLDivElement).releasePointerCapture).toHaveBeenCalledWith(7);
+    expect(onSelectAgent).not.toHaveBeenCalled();
+  });
+
+  it('clears a pending mouse drag when the pointer returns without the primary button pressed', async () => {
+    appInitMock.mockReset().mockResolvedValue(undefined);
+    vi.mocked(loadAiTownAssets).mockResolvedValue(makeAssets());
+
+    const scene = makeScene();
+    const onSelectAgent = vi.fn();
+    const { container } = render(<WorldScene scene={scene} onSelectAgent={onSelectAgent} />);
+
+    const host = container.querySelector('.aitown-world__host');
+    expect(host).toBeInstanceOf(HTMLDivElement);
+
+    (host as HTMLDivElement).setPointerCapture = vi.fn();
+    (host as HTMLDivElement).releasePointerCapture = vi.fn();
+    (host as HTMLDivElement).hasPointerCapture = vi.fn(() => false);
+    setElementRect(host as HTMLDivElement, { left: 0, top: 0, width: 1000, height: 800 });
+
+    await waitFor(() => {
+      expect(readAgentLayer()?.children).toHaveLength(scene.agents.length);
+    });
+
+    const initialCenter = readViewportCenter();
+    fireEvent.pointerDown(host as HTMLDivElement, {
+      pointerId: 11,
+      pointerType: 'mouse',
+      button: 0,
+      buttons: 1,
+      clientX: 500,
+      clientY: 320
+    });
+    fireEvent.pointerMove(host as HTMLDivElement, {
+      pointerId: 11,
+      pointerType: 'mouse',
+      buttons: 1,
+      clientX: 502,
+      clientY: 322
+    });
+    fireEvent.pointerMove(host as HTMLDivElement, {
+      pointerId: 11,
+      pointerType: 'mouse',
+      buttons: 0,
+      clientX: 560,
+      clientY: 360
+    });
+    fireEvent.pointerMove(host as HTMLDivElement, {
+      pointerId: 11,
+      pointerType: 'mouse',
+      buttons: 1,
+      clientX: 620,
+      clientY: 360
+    });
+
+    expect((host as HTMLDivElement).setPointerCapture).not.toHaveBeenCalled();
+    expect((host as HTMLDivElement).releasePointerCapture).not.toHaveBeenCalled();
+    expect(readViewportCenter().x).toBeCloseTo(initialCenter.x, 4);
+    expect(readViewportCenter().y).toBeCloseTo(initialCenter.y, 4);
+    expect(onSelectAgent).not.toHaveBeenCalled();
   });
 
   it('throttles employee motion on the Pixi ticker without capping the renderer frame rate', async () => {
@@ -3188,6 +3436,9 @@ describe('WorldScene watch overlay caption gating', () => {
     );
 
     expect(targetAgent).toBeDefined();
+    if (!targetAgent) {
+      throw new Error('missing target agent');
+    }
 
     const host = container.querySelector('.aitown-world__host');
     const stats = container.querySelector('.aitown-shell__stats');
@@ -3214,6 +3465,276 @@ describe('WorldScene watch overlay caption gating', () => {
       expect(center.x).toBeCloseTo(targetAgent?.position.x ?? 0, 4);
       expect(center.y).toBeCloseTo(targetAgent?.position.y ?? 0, 4);
       expect(center.x).not.toBeCloseTo((targetAgent?.position.x ?? 0) + safeAreaBiasX, 4);
+    });
+
+    expect(onSelectAgent).not.toHaveBeenCalled();
+  });
+
+  it('centers explicit agent focus requests on the current visual sprite position', async () => {
+    appInitMock.mockReset().mockResolvedValue(undefined);
+    vi.mocked(loadAiTownAssets).mockResolvedValue(makeAssets());
+
+    const baseScene = makeWideSelectedAgentScene();
+    const scene = {
+      ...baseScene,
+      watchEdges: [],
+      selectedAgentId: null,
+      agents: baseScene.agents.map((agent) => ({
+        ...agent,
+        selected: false
+      }))
+    } satisfies AiTownSceneModel;
+    const targetAgentIndex = scene.agents.findIndex((agent) => agent.agentId === 'app-engineering');
+    const targetAgent = scene.agents[targetAgentIndex];
+    const onSelectAgent = vi.fn();
+    const { container, rerender } = render(
+      <main className="aitown-shell">
+        <section className="aitown-panel aitown-panel--game">
+          <div className="aitown-shell__stats">Stats</div>
+          <WorldScene scene={scene} onSelectAgent={onSelectAgent} />
+        </section>
+      </main>
+    );
+
+    expect(targetAgent).toBeDefined();
+    if (!targetAgent) {
+      throw new Error('missing target agent');
+    }
+
+    const host = container.querySelector('.aitown-world__host');
+    const stats = container.querySelector('.aitown-shell__stats');
+
+    expect(host).toBeInstanceOf(HTMLDivElement);
+    expect(stats).toBeInstanceOf(HTMLElement);
+
+    setElementRect(host as HTMLDivElement, { left: 0, top: 0, width: 1000, height: 800 });
+    setElementRect(stats as HTMLElement, { left: 760, top: 80, width: 240, height: 140 });
+
+    await waitFor(() => {
+      expect(readAgentLayer()?.children).toHaveLength(scene.agents.length);
+    });
+
+    act(() => {
+      appInstances.at(-1)?.ticker.tick(1000);
+    });
+
+    const targetSprite = readAgentLayer()?.children[targetAgentIndex];
+    const visualX = targetSprite?.x ?? targetAgent.position.x;
+    const visualY = targetSprite?.y ?? targetAgent.position.y;
+
+    expect(Math.hypot(visualX - targetAgent.position.x, visualY - targetAgent.position.y)).toBeGreaterThan(0.1);
+
+    rerender(
+      <main className="aitown-shell">
+        <section className="aitown-panel aitown-panel--game">
+          <div className="aitown-shell__stats">Stats</div>
+          <WorldScene
+            scene={scene}
+            onSelectAgent={onSelectAgent}
+            agentFocusRequest={{ agentId: targetAgent.agentId, requestId: 1 }}
+          />
+        </section>
+      </main>
+    );
+
+    await waitFor(() => {
+      const center = readViewportCenter();
+
+      expect(center.x).toBeCloseTo(visualX, 4);
+      expect(center.y).toBeCloseTo(visualY, 4);
+      expect(Math.hypot(center.x - targetAgent.position.x, center.y - targetAgent.position.y)).toBeGreaterThan(0.1);
+    });
+
+    expect(onSelectAgent).not.toHaveBeenCalled();
+  });
+
+  it('clears direct focus when a map tap deselects after an explicit focus request with no selected agent', async () => {
+    appInitMock.mockReset().mockResolvedValue(undefined);
+    vi.mocked(loadAiTownAssets).mockResolvedValue(makeAssets());
+
+    const baseScene = makeWideSelectedAgentScene();
+    const scene = {
+      ...baseScene,
+      watchEdges: [],
+      selectedAgentId: null,
+      agents: baseScene.agents.map((agent) => ({
+        ...agent,
+        selected: false
+      }))
+    } satisfies AiTownSceneModel;
+    const targetAgent = scene.agents.find((agent) => agent.agentId === 'app-engineering');
+    const selectedScene = {
+      ...scene,
+      selectedAgentId: targetAgent?.agentId ?? null,
+      agents: scene.agents.map((agent) => ({
+        ...agent,
+        selected: agent.agentId === targetAgent?.agentId
+      }))
+    } satisfies AiTownSceneModel;
+    const onSelectAgent = vi.fn();
+    const { container, rerender } = render(
+      <main className="aitown-shell">
+        <section className="aitown-panel aitown-panel--game">
+          <div className="aitown-shell__stats">Stats</div>
+          <WorldScene scene={scene} onSelectAgent={onSelectAgent} />
+        </section>
+      </main>
+    );
+
+    expect(targetAgent).toBeDefined();
+    if (!targetAgent) {
+      throw new Error('missing target agent');
+    }
+
+    const host = container.querySelector('.aitown-world__host');
+    const stats = container.querySelector('.aitown-shell__stats');
+
+    expect(host).toBeInstanceOf(HTMLDivElement);
+    expect(stats).toBeInstanceOf(HTMLElement);
+
+    setElementRect(host as HTMLDivElement, { left: 0, top: 0, width: 1000, height: 800 });
+    setElementRect(stats as HTMLElement, { left: 760, top: 80, width: 240, height: 140 });
+
+    await waitFor(() => {
+      expect(readAgentLayer()?.children).toHaveLength(scene.agents.length);
+    });
+
+    rerender(
+      <main className="aitown-shell">
+        <section className="aitown-panel aitown-panel--game">
+          <div className="aitown-shell__stats">Stats</div>
+          <WorldScene
+            scene={scene}
+            onSelectAgent={onSelectAgent}
+            agentFocusRequest={{ agentId: targetAgent.agentId, requestId: 1 }}
+          />
+        </section>
+      </main>
+    );
+
+    await waitFor(() => {
+      const center = readViewportCenter();
+      expect(center.x).toBeCloseTo(targetAgent.position.x, 4);
+      expect(center.y).toBeCloseTo(targetAgent.position.y, 4);
+    });
+
+    readMapContainer()?.emit('pointertap');
+
+    expect(onSelectAgent).toHaveBeenCalledWith(null);
+
+    rerender(
+      <main className="aitown-shell">
+        <section className="aitown-panel aitown-panel--game">
+          <div className="aitown-shell__stats">Stats</div>
+          <WorldScene scene={selectedScene} onSelectAgent={onSelectAgent} />
+        </section>
+      </main>
+    );
+
+    const selectedHost = container.querySelector('.aitown-world__host');
+    const selectedStats = container.querySelector('.aitown-shell__stats');
+
+    expect(selectedHost).toBeInstanceOf(HTMLDivElement);
+    expect(selectedStats).toBeInstanceOf(HTMLElement);
+
+    setElementRect(selectedHost as HTMLDivElement, { left: 0, top: 0, width: 1000, height: 800 });
+    setElementRect(selectedStats as HTMLElement, { left: 760, top: 80, width: 240, height: 140 });
+    act(() => {
+      MockResizeObserver.triggerAll();
+    });
+
+    await waitFor(() => {
+      const inspection = readViewportInspector()?.read();
+      const center = readViewportCenter();
+      const safeAreaBiasX = (inspection?.clampPadding.right ?? 0) / ((inspection?.scale ?? 1) * 2);
+
+      expect(safeAreaBiasX).toBeGreaterThan(0);
+      expect(center.x).toBeCloseTo(targetAgent.position.x + safeAreaBiasX, 4);
+      expect(center.y).toBeCloseTo(targetAgent.position.y, 4);
+      expect(center.x).not.toBeCloseTo(targetAgent.position.x, 4);
+    });
+  });
+
+  it('ignores stale sprite motion state when a focus request arrives with updated agent coordinates', async () => {
+    appInitMock.mockReset().mockResolvedValue(undefined);
+    vi.mocked(loadAiTownAssets).mockResolvedValue(makeAssets());
+
+    const baseScene = makeWideSelectedAgentScene();
+    const initialScene = {
+      ...baseScene,
+      watchEdges: [],
+      selectedAgentId: null,
+      agents: baseScene.agents.map((agent) => ({
+        ...agent,
+        selected: false
+      }))
+    } satisfies AiTownSceneModel;
+    const initialAgentIndex = initialScene.agents.findIndex((agent) => agent.agentId === 'app-engineering');
+    const initialAgent = initialScene.agents[initialAgentIndex];
+
+    expect(initialAgent).toBeDefined();
+    if (!initialAgent) {
+      throw new Error('missing initial agent');
+    }
+
+    const movedAgent = makeAgent({
+      ...initialAgent,
+      position: { x: initialAgent.position.x + 700, y: initialAgent.position.y + 260 }
+    });
+    const movedScene = {
+      ...initialScene,
+      agents: initialScene.agents.map((agent) => (agent.agentId === movedAgent.agentId ? movedAgent : agent))
+    } satisfies AiTownSceneModel;
+    const onSelectAgent = vi.fn();
+    const { container, rerender } = render(
+      <main className="aitown-shell">
+        <section className="aitown-panel aitown-panel--game">
+          <WorldScene scene={initialScene} onSelectAgent={onSelectAgent} />
+        </section>
+      </main>
+    );
+
+    expect(initialAgent).toBeDefined();
+
+    const host = container.querySelector('.aitown-world__host');
+    expect(host).toBeInstanceOf(HTMLDivElement);
+    setElementRect(host as HTMLDivElement, { left: 0, top: 0, width: 1000, height: 800 });
+
+    await waitFor(() => {
+      expect(readAgentLayer()?.children).toHaveLength(initialScene.agents.length);
+    });
+
+    act(() => {
+      appInstances.at(-1)?.ticker.tick(1000);
+    });
+
+    const staleSprite = readAgentLayer()?.children[initialAgentIndex];
+    const staleVisualX = staleSprite?.x ?? initialAgent.position.x;
+    const staleVisualY = staleSprite?.y ?? initialAgent.position.y;
+
+    expect(Math.hypot(staleVisualX - initialAgent.position.x, staleVisualY - initialAgent.position.y)).toBeGreaterThan(0.1);
+    expect(staleVisualX).not.toBeCloseTo(movedAgent.position.x, 4);
+    expect(staleVisualY).not.toBeCloseTo(movedAgent.position.y, 4);
+
+    rerender(
+      <main className="aitown-shell">
+        <section className="aitown-panel aitown-panel--game">
+          <WorldScene
+            scene={movedScene}
+            onSelectAgent={onSelectAgent}
+            agentFocusRequest={{ agentId: movedAgent.agentId, requestId: 1 }}
+          />
+        </section>
+      </main>
+    );
+
+    await waitFor(() => {
+      const center = readViewportCenter();
+
+      expect(center.x).toBeCloseTo(movedAgent.position.x, 4);
+      expect(center.y).toBeCloseTo(movedAgent.position.y, 4);
+      expect(center.x).not.toBeCloseTo(staleVisualX, 4);
+      expect(center.y).not.toBeCloseTo(staleVisualY, 4);
     });
 
     expect(onSelectAgent).not.toHaveBeenCalled();
@@ -3373,6 +3894,159 @@ describe('WorldScene watch overlay caption gating', () => {
     expect(center.y).toBeCloseTo(selectedAgent?.position.y ?? 0, 4);
     expect(center.x).not.toBeCloseTo((selectedAgent?.position.x ?? 0) + safeAreaBiasX, 4);
     expect(onSelectAgent).not.toHaveBeenCalled();
+  });
+
+  it('clears direct focus after an ordinary sprite tap of the same selected agent', async () => {
+    appInitMock.mockReset().mockResolvedValue(undefined);
+    vi.mocked(loadAiTownAssets).mockResolvedValue(makeAssets());
+
+    const baseScene = makeWideSelectedAgentScene();
+    const selectedAgentIndex = baseScene.agents.findIndex((agent) => agent.agentId === baseScene.selectedAgentId);
+    const selectedAgent = baseScene.agents[selectedAgentIndex];
+    const onSelectAgent = vi.fn();
+    const { container } = render(
+      <main className="aitown-shell">
+        <section className="aitown-panel aitown-panel--game">
+          <div className="aitown-shell__stats">Stats</div>
+          <WorldScene
+            scene={baseScene}
+            onSelectAgent={onSelectAgent}
+            agentFocusRequest={{ agentId: selectedAgent?.agentId ?? 'app-engineering', requestId: 1 }}
+          />
+        </section>
+      </main>
+    );
+
+    expect(selectedAgent).toBeDefined();
+
+    const host = container.querySelector('.aitown-world__host');
+    const stats = container.querySelector('.aitown-shell__stats');
+
+    expect(host).toBeInstanceOf(HTMLDivElement);
+    expect(stats).toBeInstanceOf(HTMLElement);
+
+    setElementRect(host as HTMLDivElement, { left: 0, top: 0, width: 1000, height: 800 });
+    setElementRect(stats as HTMLElement, { left: 760, top: 80, width: 240, height: 140 });
+
+    await waitFor(() => {
+      expect(readViewportInspector()?.read().clampPadding).toEqual({
+        top: 0,
+        right: 240
+      });
+      expect(readAgentLayer()?.children).toHaveLength(baseScene.agents.length);
+    });
+
+    await waitFor(() => {
+      const center = readViewportCenter();
+
+      expect(center.x).toBeCloseTo(selectedAgent?.position.x ?? 0, 4);
+      expect(center.y).toBeCloseTo(selectedAgent?.position.y ?? 0, 4);
+    });
+
+    const selectedAgentSprite = readAgentLayer()?.children[selectedAgentIndex] as
+      | { emit: (event: string) => { stopPropagation: ReturnType<typeof vi.fn> } }
+      | undefined;
+    const event = selectedAgentSprite?.emit('pointertap');
+
+    expect(event?.stopPropagation).toHaveBeenCalledTimes(1);
+    expect(onSelectAgent).toHaveBeenCalledWith(selectedAgent?.agentId);
+
+    setElementRect(stats as HTMLElement, { left: 680, top: 80, width: 320, height: 140 });
+    act(() => {
+      MockResizeObserver.triggerAll();
+    });
+
+    await waitFor(() => {
+      expect(readViewportInspector()?.read().clampPadding).toEqual({
+        top: 0,
+        right: 320
+      });
+    });
+
+    const inspection = readViewportInspector()?.read();
+    const center = readViewportCenter();
+    const safeAreaBiasX = (inspection?.clampPadding.right ?? 0) / ((inspection?.scale ?? 1) * 2);
+
+    expect(safeAreaBiasX).toBeGreaterThan(0);
+    expect(center.x).toBeCloseTo((selectedAgent?.position.x ?? 0) + safeAreaBiasX, 4);
+    expect(center.y).toBeCloseTo(selectedAgent?.position.y ?? 0, 4);
+    expect(center.x).not.toBeCloseTo(selectedAgent?.position.x ?? 0, 4);
+  });
+
+  it('clears direct focus after active correlation overlay inspect of the same selected agent', async () => {
+    appInitMock.mockReset().mockResolvedValue(undefined);
+    vi.mocked(loadAiTownAssets).mockResolvedValue(makeAssets());
+
+    const baseScene = {
+      ...makeWideSelectedAgentScene(),
+      activeCorrelationId: 'corr-app-review',
+      correlationParticipantAgentIds: ['app-engineering', 'team-lead']
+    } satisfies AiTownSceneModel;
+    const selectedAgent = baseScene.agents.find((agent) => agent.agentId === baseScene.selectedAgentId);
+    const onSelectAgent = vi.fn();
+    const { container } = render(
+      <main className="aitown-shell">
+        <section className="aitown-panel aitown-panel--game">
+          <div className="aitown-shell__stats">Stats</div>
+          <WorldScene
+            scene={baseScene}
+            onSelectAgent={onSelectAgent}
+            agentFocusRequest={{ agentId: selectedAgent?.agentId ?? 'app-engineering', requestId: 1 }}
+          />
+        </section>
+      </main>
+    );
+
+    expect(selectedAgent).toBeDefined();
+
+    const host = container.querySelector('.aitown-world__host');
+    const stats = container.querySelector('.aitown-shell__stats');
+
+    expect(host).toBeInstanceOf(HTMLDivElement);
+    expect(stats).toBeInstanceOf(HTMLElement);
+
+    setElementRect(host as HTMLDivElement, { left: 0, top: 0, width: 1000, height: 800 });
+    setElementRect(stats as HTMLElement, { left: 760, top: 80, width: 240, height: 140 });
+
+    await waitFor(() => {
+      expect(readViewportInspector()?.read().clampPadding).toEqual({
+        top: 0,
+        right: 240
+      });
+      expect(screen.getByRole('region', { name: 'Active correlation' })).toBeVisible();
+    });
+
+    await waitFor(() => {
+      const center = readViewportCenter();
+
+      expect(center.x).toBeCloseTo(selectedAgent?.position.x ?? 0, 4);
+      expect(center.y).toBeCloseTo(selectedAgent?.position.y ?? 0, 4);
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Inspect App Engineering Agent from active correlation' }));
+
+    expect(onSelectAgent).toHaveBeenCalledWith(selectedAgent?.agentId);
+
+    setElementRect(stats as HTMLElement, { left: 680, top: 80, width: 320, height: 140 });
+    act(() => {
+      MockResizeObserver.triggerAll();
+    });
+
+    await waitFor(() => {
+      expect(readViewportInspector()?.read().clampPadding).toEqual({
+        top: 0,
+        right: 320
+      });
+    });
+
+    const inspection = readViewportInspector()?.read();
+    const center = readViewportCenter();
+    const safeAreaBiasX = (inspection?.clampPadding.right ?? 0) / ((inspection?.scale ?? 1) * 2);
+
+    expect(safeAreaBiasX).toBeGreaterThan(0);
+    expect(center.x).toBeCloseTo((selectedAgent?.position.x ?? 0) + safeAreaBiasX, 4);
+    expect(center.y).toBeCloseTo(selectedAgent?.position.y ?? 0, 4);
+    expect(center.x).not.toBeCloseTo(selectedAgent?.position.x ?? 0, 4);
   });
 
   it('focuses a requested zone anchor through the current safe-area lane', async () => {

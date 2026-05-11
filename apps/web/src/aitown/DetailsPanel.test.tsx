@@ -1,7 +1,7 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
-import { DetailsPanel } from './DetailsPanel';
+import { DetailsPanel, type HubCategory } from './DetailsPanel';
 import type {
   AccountabilityReplayBundle,
   AgentWorkflow,
@@ -721,6 +721,58 @@ const COLLECTOR_PROVENANCE_LINE =
   'Provenance · Collector snapshot · blocked · collected 2026-03-09T18:59:00.000Z';
 const COLLECTOR_BASIS_LINE =
   'Basis · Last output 2026-03-09T18:20:00.000Z · Staleness Orange · Blocker Waiting on evidence · Reboot Recommended · Signature collector:block:app-engineering:orange';
+
+const SELECTED_AGENT_CATEGORY_TABS: Record<HubCategory, NonNullable<DetailsPanelProps['selectedAgentDrilldownTab']>> = {
+  crew: 'now',
+  queue: 'now',
+  supervision: 'evidence',
+  evidence: 'evidence',
+  replay: 'replay',
+  memory: 'evidence'
+};
+
+describe('DetailsPanel selected-agent category IA', () => {
+  it('marks every selected-agent detail section with a concrete hub category lane', () => {
+    const { container } = render(
+      <DetailsPanel
+        {...buildProps({
+          activeHubCategory: 'evidence',
+          selectedAgentDrilldownTab: 'evidence'
+        })}
+      />
+    );
+
+    const sections = Array.from(container.querySelectorAll('.aitown-details__section'));
+    expect(sections.length).toBeGreaterThan(0);
+    expect(
+      sections.every((section) =>
+        Array.from(section.classList).some((className) => className.startsWith('aitown-details__section--hub-'))
+      )
+    ).toBe(true);
+  });
+
+  it.each([
+    ['crew', 'Current Operation', 'aitown-details__section--hub-crew'],
+    ['queue', 'Run Context', 'aitown-details__section--hub-queue'],
+    ['supervision', 'Collector Observation', 'aitown-details__section--hub-supervision'],
+    ['evidence', 'Incident Feed', 'aitown-details__section--hub-evidence'],
+    ['replay', 'Timeline Replay', 'aitown-details__section--hub-replay'],
+    ['memory', 'Shared Memory', 'aitown-details__section--hub-memory']
+  ] satisfies Array<[HubCategory, string, string]>)('maps selected-agent %s to a specific section lane', (activeHubCategory, heading, className) => {
+    render(
+      <DetailsPanel
+        {...buildProps({
+          activeHubCategory,
+          selectedAgentDrilldownTab: SELECTED_AGENT_CATEGORY_TABS[activeHubCategory]
+        })}
+      />
+    );
+
+    const section = screen.getByRole('heading', { name: heading }).closest('section');
+    expect(section).not.toBeNull();
+    expect(section).toHaveClass(className);
+  });
+});
 
 function buildCollectorDerivedPeerWatchAlert(
   overrides: Partial<WorkflowPeerWatchAlert> = {}

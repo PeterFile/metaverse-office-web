@@ -158,6 +158,18 @@ function resolveHubCategorySelectedAgentTab(category: HubCategory): SelectedAgen
   return HUB_CATEGORIES.find((item) => item.id === category)?.selectedAgentTab ?? 'now';
 }
 
+function resolveSelectedAgentTabHubCategory(tab: SelectedAgentDrilldownTab, currentCategory: HubCategory): HubCategory {
+  if (tab === 'replay') {
+    return 'replay';
+  }
+
+  if (tab === 'evidence') {
+    return 'evidence';
+  }
+
+  return currentCategory === 'queue' ? 'queue' : 'crew';
+}
+
 const EMPTY_SEVERITY_BUCKETS: Record<Severity, number> = {
   normal: 0,
   yellow: 0,
@@ -930,6 +942,7 @@ function AppInner() {
   const [defaultEvidenceCoverage, setDefaultEvidenceCoverage] =
     useState<CollectorEvidenceCoverage | null>(null);
   const requestedSelectedAgentDrilldownTabRef = useRef<SelectedAgentDrilldownTab | null>(null);
+  const activeHubCategoryFromSelectedAgentTabRef = useRef(false);
   const defaultEvidenceCoverageRequestedRef = useRef(false);
   const lastSelectedAgentRef = useRef<OfficeAgent | null>(null);
   const correlationSelectionModeRef = useRef<'auto' | 'manual' | 'preserved'>('auto');
@@ -1733,6 +1746,7 @@ function AppInner() {
 
   const openHubCategory = useCallback(
     (category: HubCategory) => {
+      activeHubCategoryFromSelectedAgentTabRef.current = false;
       setActiveHubCategory(category);
       if (selectedAgentId !== null) {
         setSelectedAgentDrilldownTab(resolveHubCategorySelectedAgentTab(category));
@@ -1761,6 +1775,7 @@ function AppInner() {
       setSelectedCorrelationWasExplicit(isExplicitSelection);
       setSelectedCorrelationCarryForward(correlationId !== null && !keepAutoSelection);
       if (correlationId) {
+        activeHubCategoryFromSelectedAgentTabRef.current = false;
         setActiveHubCategory('replay');
         setHubOpen(true);
       }
@@ -1802,6 +1817,8 @@ function AppInner() {
 
   const handleSelectSelectedAgentDrilldownTab = useCallback((tab: SelectedAgentDrilldownTab) => {
     setSelectedAgentDrilldownTab(tab);
+    activeHubCategoryFromSelectedAgentTabRef.current = true;
+    setActiveHubCategory((currentCategory) => resolveSelectedAgentTabHubCategory(tab, currentCategory));
 
     if (typeof window === 'undefined' || typeof document === 'undefined') {
       return;
@@ -2083,6 +2100,11 @@ function AppInner() {
       if (agentId !== selectedAgentId) {
         setSelectedAgentReplayFilter(null);
         setSelectedAgentSupervisionHistoryFilter(null);
+        if (activeHubCategoryFromSelectedAgentTabRef.current) {
+          activeHubCategoryFromSelectedAgentTabRef.current = false;
+          setSelectedAgentDrilldownTab('now');
+          setActiveHubCategory((currentCategory) => resolveSelectedAgentTabHubCategory('now', currentCategory));
+        }
       }
       setSelectedAgentId(agentId);
     },
@@ -2173,6 +2195,7 @@ function AppInner() {
   const handleEvidenceCoverageFocusAgent = useCallback(
     (agentId: string) => {
       requestedSelectedAgentDrilldownTabRef.current = 'evidence';
+      activeHubCategoryFromSelectedAgentTabRef.current = false;
       setActiveHubCategory('evidence');
       handleSelectAgentForInspection(agentId);
       setSelectedAgentDrilldownTab('evidence');
@@ -2195,6 +2218,7 @@ function AppInner() {
         ? activeCorrelationSpotlight!.correlation_id
         : operation.correlation_id;
 
+      activeHubCategoryFromSelectedAgentTabRef.current = false;
       selectAgentWithSnapshot(
         operation.agent_id,
         preservedCorrelationId,
@@ -2225,6 +2249,7 @@ function AppInner() {
         preserveNullCorrelation?: boolean;
       }
     ) => {
+      activeHubCategoryFromSelectedAgentTabRef.current = false;
       setActiveHubCategory('memory');
       if (selectedAgentId !== null) {
         setSelectedAgentDrilldownTab('evidence');

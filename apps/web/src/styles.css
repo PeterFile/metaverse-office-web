@@ -1335,6 +1335,10 @@ button {
   gap: 8px;
 }
 
+.aitown-details__section[hidden] {
+  display: none !important;
+}
+
 .aitown-records {
   display: flex;
   flex-direction: column;
@@ -2052,6 +2056,58 @@ button {
   overscroll-behavior: contain;
   padding-right: 4px;
   scrollbar-width: thin;
+}
+
+.aitown-selected-supervision-deck {
+  display: grid;
+  min-width: 0;
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
+  gap: 6px;
+}
+
+.aitown-selected-supervision-deck__button {
+  display: grid;
+  gap: 5px;
+  min-height: 58px;
+  padding: 7px 8px;
+  border: 1px solid rgba(139, 233, 213, 0.34);
+  border-radius: 4px;
+  color: inherit;
+  background: rgba(20, 29, 35, 0.82);
+  text-align: left;
+  cursor: pointer;
+}
+
+.aitown-selected-supervision-deck__button:hover,
+.aitown-selected-supervision-deck__button:focus-visible {
+  border-color: rgba(245, 217, 141, 0.72);
+  background: rgba(30, 43, 51, 0.92);
+  outline: none;
+}
+
+.aitown-selected-supervision-deck__button:disabled,
+.aitown-selected-supervision-deck__button:disabled:hover,
+.aitown-selected-supervision-deck__button:disabled:focus-visible {
+  border-color: rgba(139, 233, 213, 0.18);
+  color: rgba(230, 238, 232, 0.48);
+  background: rgba(20, 29, 35, 0.48);
+  cursor: not-allowed;
+}
+
+.aitown-selected-supervision-deck__button strong,
+.aitown-selected-supervision-deck__button span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.aitown-selected-supervision-deck__button span {
+  color: rgba(230, 238, 232, 0.74);
+}
+
+.aitown-selected-supervision-panel__back {
+  width: fit-content;
+  margin-bottom: 6px;
 }
 
 .aitown-hub-sheet .aitown-panel--details-category-supervision .aitown-details__section--selected-supervision-observation,

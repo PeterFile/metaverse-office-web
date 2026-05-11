@@ -633,10 +633,7 @@ type CenteredAgentState = {
   y: number;
 };
 
-type DirectFocusedAgentState = CenteredAgentState & {
-  scale: number;
-  clampPadding: Required<Pick<ViewportClampPadding, 'left' | 'top' | 'right'>>;
-};
+type DirectFocusedAgentState = CenteredAgentState;
 
 export default function WorldScene({
   scene,
@@ -748,31 +745,22 @@ export default function WorldScene({
     rememberSelectedAgentState(selectedAgent);
   };
 
-  const markSelectedAgentDirectFocusState = (viewport: Viewport, selectedAgent: CenteredAgentState) => {
+  const markSelectedAgentDirectFocusState = (selectedAgent: CenteredAgentState) => {
     markSelectedAgentFollowState(selectedAgent);
     selectedAgentDirectFocusRef.current = {
-      ...selectedAgent,
-      scale: viewport.scale.x,
-      clampPadding: snapshotCurrentClampPadding()
+      ...selectedAgent
     };
   };
 
   const directFocusMatchesCurrentGeometry = (
     directFocus: DirectFocusedAgentState | null,
-    selectedAgent: CenteredAgentState,
-    scale: number
+    selectedAgent: CenteredAgentState
   ) => {
-    const clampPadding = snapshotCurrentClampPadding();
-
     return (
       !!directFocus &&
       directFocus.agentId === selectedAgent.agentId &&
       directFocus.x === selectedAgent.x &&
-      directFocus.y === selectedAgent.y &&
-      directFocus.scale === scale &&
-      directFocus.clampPadding.left === clampPadding.left &&
-      directFocus.clampPadding.top === clampPadding.top &&
-      directFocus.clampPadding.right === clampPadding.right
+      directFocus.y === selectedAgent.y
     );
   };
 
@@ -1115,10 +1103,10 @@ export default function WorldScene({
         if ((shouldRecenterSelectedAgent || pendingManualReselectGeometryChanged) && selectedAgent) {
           if (
             shouldRecenterSelectedAgent &&
-            directFocusMatchesCurrentGeometry(selectedAgentDirectFocusRef.current, selectedAgent, viewport.scale.x)
+            directFocusMatchesCurrentGeometry(selectedAgentDirectFocusRef.current, selectedAgent)
           ) {
             moveViewportCenterDirectly(viewport, selectedAgent.x, selectedAgent.y);
-            markSelectedAgentDirectFocusState(viewport, selectedAgent);
+            markSelectedAgentDirectFocusState(selectedAgent);
             return;
           }
 
@@ -1418,7 +1406,7 @@ export default function WorldScene({
       y: targetAgent.position.y
     };
     moveViewportCenterDirectly(viewport, selectedAgent.x, selectedAgent.y);
-    markSelectedAgentDirectFocusState(viewport, selectedAgent);
+    markSelectedAgentDirectFocusState(selectedAgent);
   }, [agentFocusRequest, ready, scene.agents]);
 
   useEffect(() => {
@@ -1515,9 +1503,9 @@ export default function WorldScene({
         selectedAgent &&
         (selectedAgentChanged || (selectedAgentFollowRef.current && selectedAgentMoved) || shouldRecenterPendingReselect)
       ) {
-        if (directFocusMatchesCurrentGeometry(selectedAgentDirectFocusRef.current, selectedAgent, viewport.scale.x)) {
+        if (directFocusMatchesCurrentGeometry(selectedAgentDirectFocusRef.current, selectedAgent)) {
           moveViewportCenterDirectly(viewport, selectedAgent.x, selectedAgent.y);
-          markSelectedAgentDirectFocusState(viewport, selectedAgent);
+          markSelectedAgentDirectFocusState(selectedAgent);
         } else {
           moveViewportCenterIntoSafeArea(viewport, selectedAgent.x, selectedAgent.y);
           markSelectedAgentFollowState(selectedAgent);

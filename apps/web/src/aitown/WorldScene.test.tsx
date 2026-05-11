@@ -3306,6 +3306,75 @@ describe('WorldScene watch overlay caption gating', () => {
     expect(onSelectAgent).not.toHaveBeenCalled();
   });
 
+  it('keeps agentFocusRequest direct-centered when clamp padding changes for the same selected agent', async () => {
+    appInitMock.mockReset().mockResolvedValue(undefined);
+    vi.mocked(loadAiTownAssets).mockResolvedValue(makeAssets());
+
+    const baseScene = makeWideSelectedAgentScene();
+    const selectedAgent = baseScene.agents.find((agent) => agent.agentId === baseScene.selectedAgentId);
+    const onSelectAgent = vi.fn();
+    const { container } = render(
+      <main className="aitown-shell">
+        <section className="aitown-panel aitown-panel--game">
+          <div className="aitown-shell__stats">Stats</div>
+          <WorldScene
+            scene={baseScene}
+            onSelectAgent={onSelectAgent}
+            agentFocusRequest={{ agentId: selectedAgent?.agentId ?? 'app-engineering', requestId: 1 }}
+          />
+        </section>
+      </main>
+    );
+
+    expect(selectedAgent).toBeDefined();
+
+    const host = container.querySelector('.aitown-world__host');
+    const stats = container.querySelector('.aitown-shell__stats');
+
+    expect(host).toBeInstanceOf(HTMLDivElement);
+    expect(stats).toBeInstanceOf(HTMLElement);
+
+    setElementRect(host as HTMLDivElement, { left: 0, top: 0, width: 1000, height: 800 });
+    setElementRect(stats as HTMLElement, { left: 760, top: 80, width: 240, height: 140 });
+
+    await waitFor(() => {
+      expect(readViewportInspector()?.read().clampPadding).toEqual({
+        top: 0,
+        right: 240
+      });
+      expect(readAgentLayer()?.children).toHaveLength(baseScene.agents.length);
+    });
+
+    await waitFor(() => {
+      const center = readViewportCenter();
+
+      expect(center.x).toBeCloseTo(selectedAgent?.position.x ?? 0, 4);
+      expect(center.y).toBeCloseTo(selectedAgent?.position.y ?? 0, 4);
+    });
+
+    setElementRect(stats as HTMLElement, { left: 680, top: 80, width: 320, height: 140 });
+    act(() => {
+      MockResizeObserver.triggerAll();
+    });
+
+    await waitFor(() => {
+      expect(readViewportInspector()?.read().clampPadding).toEqual({
+        top: 0,
+        right: 320
+      });
+    });
+
+    const inspection = readViewportInspector()?.read();
+    const center = readViewportCenter();
+    const safeAreaBiasX = (inspection?.clampPadding.right ?? 0) / ((inspection?.scale ?? 1) * 2);
+
+    expect(safeAreaBiasX).toBeGreaterThan(0);
+    expect(center.x).toBeCloseTo(selectedAgent?.position.x ?? 0, 4);
+    expect(center.y).toBeCloseTo(selectedAgent?.position.y ?? 0, 4);
+    expect(center.x).not.toBeCloseTo((selectedAgent?.position.x ?? 0) + safeAreaBiasX, 4);
+    expect(onSelectAgent).not.toHaveBeenCalled();
+  });
+
   it('focuses a requested zone anchor through the current safe-area lane', async () => {
     appInitMock.mockReset().mockResolvedValue(undefined);
     vi.mocked(loadAiTownAssets).mockResolvedValue(makeAssets());

@@ -2083,11 +2083,30 @@ button {
   grid-column: 1 / -1;
 }
 
+.aitown-hub-sheet .aitown-panel--details-category-supervision .aitown-details__section--selected-supervision-observation,
+.aitown-hub-sheet .aitown-panel--details-category-supervision .aitown-details__section--selected-supervision-audit,
+.aitown-hub-sheet .aitown-panel--details-category-supervision .aitown-details__section--selected-supervision-memory,
+.aitown-hub-sheet .aitown-panel--details-category-supervision .aitown-details__section--selected-supervision-workflow,
+.aitown-hub-sheet .aitown-panel--details-category-supervision .aitown-details__section--selected-supervision-incidents,
+.aitown-hub-sheet .aitown-panel--details-category-supervision .aitown-details__section--selected-supervision-queue {
+  min-height: clamp(118px, 18dvh, 176px);
+  overflow: hidden;
+}
+
+.aitown-hub-sheet .aitown-panel--details-category-supervision .aitown-details__section--selected-supervision-history {
+  min-height: clamp(180px, 30dvh, 260px);
+  overflow: hidden;
+}
+
+.aitown-hub-sheet .aitown-panel--details-category-supervision .aitown-details__section--selected-supervision-observation .aitown-records,
+.aitown-hub-sheet .aitown-panel--details-category-supervision .aitown-details__section--selected-supervision-audit .aitown-records,
 .aitown-hub-sheet .aitown-panel--details-category-supervision .aitown-details__section--selected-supervision-history .aitown-records,
 .aitown-hub-sheet .aitown-panel--details-category-supervision .aitown-details__section--selected-supervision-workflow .aitown-records,
 .aitown-hub-sheet .aitown-panel--details-category-supervision .aitown-details__section--selected-supervision-incidents .aitown-records,
 .aitown-hub-sheet .aitown-panel--details-category-supervision .aitown-details__section--selected-supervision-memory .aitown-records,
 .aitown-hub-sheet .aitown-panel--details-category-supervision .aitown-details__section--selected-supervision-queue .aitown-records {
+  flex: 1 1 auto;
+  min-height: 52px;
   max-height: min(42dvh, 380px);
   overflow-x: hidden;
   overflow-y: auto;
@@ -2439,6 +2458,11 @@ button {
 .aitown-panel--details[data-selected-agent-drilldown-tab][data-active-hub-category='memory']
   .aitown-details__section:not(.aitown-details__section--hub-memory) {
   display: none;
+}
+
+.aitown-panel--details[data-active-hub-category='supervision'][data-selected-agent-drilldown-tab='replay']
+  .aitown-details__section.aitown-details__section--hub-supervision {
+  display: flex;
 }
 
 @media (max-width: 1080px) {

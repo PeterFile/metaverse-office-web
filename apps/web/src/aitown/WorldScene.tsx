@@ -67,6 +67,7 @@ const AGENT_MOTION_TAU = Math.PI * 2;
 const AGENT_MOTION_MAX_FRAMES_PER_SECOND = 12;
 const AGENT_MOTION_MAX_DELTA_SECONDS = 0.12;
 const AGENT_MOTION_FRAME_INTERVAL_SECONDS = 1 / AGENT_MOTION_MAX_FRAMES_PER_SECOND;
+const VIEWPORT_DRAG_START_THRESHOLD_PX = 4;
 
 type AgentMotionProfile = {
   radiusX: number;
@@ -86,6 +87,7 @@ type AgentMotionProfile = {
 };
 
 type AgentMotionState = {
+  agentId: string;
   container: Container;
   homeX: number;
   homeY: number;
@@ -239,6 +241,7 @@ function createAgentMotionState(agent: SceneAgent, container: Container): AgentM
   const profile = resolveAgentMotionProfile(agent);
 
   return {
+    agentId: agent.agentId,
     container,
     homeX: agent.position.x,
     homeY: agent.position.y,
@@ -525,6 +528,7 @@ function createAgentSprite(
   container.eventMode = 'static';
   container.cursor = 'pointer';
   container.zIndex = agent.position.y;
+  container.hitArea = new Rectangle(-24, -32, 48, 56);
 
   const severityColor = SEVERITY_COLORS[agent.severity];
   const emphasized = emphasis !== 'none';
@@ -633,7 +637,14 @@ type CenteredAgentState = {
   y: number;
 };
 
-type DirectFocusedAgentState = CenteredAgentState;
+type DirectFocusedAgentState = CenteredAgentState & {
+  homeX: number;
+  homeY: number;
+};
+type AgentFocusTarget = CenteredAgentState & {
+  homeX: number;
+  homeY: number;
+};
 
 export default function WorldScene({
   scene,
@@ -745,10 +756,39 @@ export default function WorldScene({
     rememberSelectedAgentState(selectedAgent);
   };
 
-  const markSelectedAgentDirectFocusState = (selectedAgent: CenteredAgentState) => {
-    markSelectedAgentFollowState(selectedAgent);
+  const markAgentDirectFocusState = (focusTarget: AgentFocusTarget) => {
+    selectedAgentFollowRef.current = true;
+    selectedAgentManualReselectRef.current = false;
+    selectedAgentManualReselectEligibleRef.current = false;
+    selectedAgentManualReselectLayoutChangedRef.current = false;
+    selectedAgentManualReselectGeometryRef.current = null;
+    lastCenteredAgentRef.current = {
+      agentId: focusTarget.agentId,
+      x: focusTarget.homeX,
+      y: focusTarget.homeY
+    };
     selectedAgentDirectFocusRef.current = {
-      ...selectedAgent
+      agentId: focusTarget.agentId,
+      x: focusTarget.x,
+      y: focusTarget.y,
+      homeX: focusTarget.homeX,
+      homeY: focusTarget.homeY
+    };
+  };
+
+  const resolveCurrentAgentFocusTarget = (agent: SceneAgent): AgentFocusTarget => {
+    const motionState = agentMotionStatesRef.current.find((state) => state.agentId === agent.agentId);
+    const motionStateMatchesAgentHome =
+      motionState?.homeX === agent.position.x && motionState.homeY === agent.position.y;
+    const visualX = motionStateMatchesAgentHome ? motionState?.container.x : undefined;
+    const visualY = motionStateMatchesAgentHome ? motionState?.container.y : undefined;
+
+    return {
+      agentId: agent.agentId,
+      x: typeof visualX === 'number' && Number.isFinite(visualX) ? visualX : agent.position.x,
+      y: typeof visualY === 'number' && Number.isFinite(visualY) ? visualY : agent.position.y,
+      homeX: agent.position.x,
+      homeY: agent.position.y
     };
   };
 
@@ -759,8 +799,8 @@ export default function WorldScene({
     return (
       !!directFocus &&
       directFocus.agentId === selectedAgent.agentId &&
-      directFocus.x === selectedAgent.x &&
-      directFocus.y === selectedAgent.y
+      directFocus.homeX === selectedAgent.x &&
+      directFocus.homeY === selectedAgent.y
     );
   };
 
@@ -773,6 +813,7 @@ export default function WorldScene({
     const currentSelectedAgentId = selectedSceneAgent?.agentId ?? null;
 
     if (previousSelectedAgentId && currentSelectedAgentId === null) {
+      selectedAgentDirectFocusRef.current = null;
       if (selectedAgentFollowRef.current) {
         selectedAgentManualReselectRef.current = false;
         selectedAgentManualReselectEligibleRef.current = false;
@@ -817,6 +858,7 @@ export default function WorldScene({
     let agentMotionAccumulatorSeconds = 0;
     let activePointerId: number | null = null;
     let activeTouchPointerIds = new Set<number>();
+    let initialPointerPosition: { x: number; y: number } | null = null;
     let lastPointerPosition: { x: number; y: number } | null = null;
     let pointerDragged = false;
     let clearActivePointerDrag = (pointerId: number | null | undefined = activePointerId) => {
@@ -832,6 +874,7 @@ export default function WorldScene({
       }
 
       activePointerId = null;
+      initialPointerPosition = null;
       lastPointerPosition = null;
       pointerDragged = false;
     };
@@ -988,9 +1031,9 @@ export default function WorldScene({
         }
 
         activePointerId = event.pointerId;
-        lastPointerPosition = { x: event.clientX, y: event.clientY };
+        initialPointerPosition = { x: event.clientX, y: event.clientY };
+        lastPointerPosition = initialPointerPosition;
         pointerDragged = false;
-        host.setPointerCapture(event.pointerId);
       };
 
       handleHostPointerMove = (event: PointerEvent) => {
@@ -1002,11 +1045,29 @@ export default function WorldScene({
           return;
         }
 
+        if (event.pointerType === 'mouse' && (event.buttons & 1) === 0) {
+          clearActivePointerDrag(event.pointerId);
+          return;
+        }
+
         const nextPosition = { x: event.clientX, y: event.clientY };
         const deltaX = nextPosition.x - lastPointerPosition.x;
         const deltaY = nextPosition.y - lastPointerPosition.y;
+        const totalDeltaX = nextPosition.x - (initialPointerPosition?.x ?? nextPosition.x);
+        const totalDeltaY = nextPosition.y - (initialPointerPosition?.y ?? nextPosition.y);
 
         lastPointerPosition = nextPosition;
+
+        if (!pointerDragged) {
+          if (Math.hypot(totalDeltaX, totalDeltaY) <= VIEWPORT_DRAG_START_THRESHOLD_PX) {
+            return;
+          }
+
+          pointerDragged = true;
+          if (!host.hasPointerCapture(event.pointerId)) {
+            host.setPointerCapture(event.pointerId);
+          }
+        }
 
         if (!moveViewportCornerAfterScreenDrag(viewport, deltaX, deltaY)) {
           return;
@@ -1020,7 +1081,6 @@ export default function WorldScene({
             clampPadding: { ...clampPaddingRef.current }
           };
         }
-        pointerDragged = true;
         event.preventDefault();
       };
 
@@ -1058,6 +1118,7 @@ export default function WorldScene({
         const previousCenter = preserveView ? viewport.center : entryCenter;
         const previousScale = viewport.scale.x || nextBaseScale;
 
+        app.renderer.resize(hostWidth, hostHeight);
         viewport.resize(hostWidth, hostHeight, scene.pixelWidth, scene.pixelHeight);
         const { minScale, maxScale } = syncViewportConstraints(
           hostWidth,
@@ -1105,8 +1166,15 @@ export default function WorldScene({
             shouldRecenterSelectedAgent &&
             directFocusMatchesCurrentGeometry(selectedAgentDirectFocusRef.current, selectedAgent)
           ) {
-            moveViewportCenterDirectly(viewport, selectedAgent.x, selectedAgent.y);
-            markSelectedAgentDirectFocusState(selectedAgent);
+            const directFocus = selectedAgentDirectFocusRef.current!;
+            moveViewportCenterDirectly(viewport, directFocus.x, directFocus.y);
+            markAgentDirectFocusState({
+              agentId: selectedAgent.agentId,
+              x: directFocus.x,
+              y: directFocus.y,
+              homeX: selectedAgent.x,
+              homeY: selectedAgent.y
+            });
             return;
           }
 
@@ -1169,6 +1237,7 @@ export default function WorldScene({
         );
         const selectedAgent = selectedAgentRef.current;
 
+        app.renderer.resize(hostWidth, hostHeight);
         viewport.resize(hostWidth, hostHeight, scene.pixelWidth, scene.pixelHeight);
         const { minScale, maxScale } = syncViewportConstraints(
           hostWidth,
@@ -1241,6 +1310,7 @@ export default function WorldScene({
           return;
         }
 
+        selectedAgentDirectFocusRef.current = null;
         onSelectAgentRef.current(null);
       });
 
@@ -1400,13 +1470,9 @@ export default function WorldScene({
     }
 
     appliedAgentFocusRequestIdRef.current = agentFocusRequest.requestId;
-    const selectedAgent = {
-      agentId: targetAgent.agentId,
-      x: targetAgent.position.x,
-      y: targetAgent.position.y
-    };
-    moveViewportCenterDirectly(viewport, selectedAgent.x, selectedAgent.y);
-    markSelectedAgentDirectFocusState(selectedAgent);
+    const focusTarget = resolveCurrentAgentFocusTarget(targetAgent);
+    moveViewportCenterDirectly(viewport, focusTarget.x, focusTarget.y);
+    markAgentDirectFocusState(focusTarget);
   }, [agentFocusRequest, ready, scene.agents]);
 
   useEffect(() => {
@@ -1471,6 +1537,7 @@ export default function WorldScene({
               return;
             }
 
+            selectedAgentDirectFocusRef.current = null;
             onSelectAgentRef.current(agentId);
           },
           assets.characterAnimations[agent.characterKey],
@@ -1504,8 +1571,15 @@ export default function WorldScene({
         (selectedAgentChanged || (selectedAgentFollowRef.current && selectedAgentMoved) || shouldRecenterPendingReselect)
       ) {
         if (directFocusMatchesCurrentGeometry(selectedAgentDirectFocusRef.current, selectedAgent)) {
-          moveViewportCenterDirectly(viewport, selectedAgent.x, selectedAgent.y);
-          markSelectedAgentDirectFocusState(selectedAgent);
+          const directFocus = selectedAgentDirectFocusRef.current!;
+          moveViewportCenterDirectly(viewport, directFocus.x, directFocus.y);
+          markAgentDirectFocusState({
+            agentId: selectedAgent.agentId,
+            x: directFocus.x,
+            y: directFocus.y,
+            homeX: selectedAgent.x,
+            homeY: selectedAgent.y
+          });
         } else {
           moveViewportCenterIntoSafeArea(viewport, selectedAgent.x, selectedAgent.y);
           markSelectedAgentFollowState(selectedAgent);
@@ -1562,7 +1636,10 @@ export default function WorldScene({
                         agentSelected ? ' is-active' : ''
                       }`}
                       aria-label={`Inspect ${agent.displayName} from active correlation`}
-                      onClick={() => onSelectAgentRef.current(agent.agentId)}
+                      onClick={() => {
+                        selectedAgentDirectFocusRef.current = null;
+                        onSelectAgentRef.current(agent.agentId);
+                      }}
                     >
                       <span className="aitown-correlation-overlay__agent-copy">
                         <strong>{agent.displayName}</strong>

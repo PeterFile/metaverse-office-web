@@ -2612,8 +2612,14 @@ afterEach(() => {
         expect(currentDetails).toHaveAttribute('data-selected-agent-drilldown-tab', 'evidence');
         expect(within(tablist).getByRole('tab', { name: 'Evidence' })).toHaveAttribute('aria-selected', 'true');
       });
-      expect(within(currentDetails).getByRole('heading', { name: 'Collector Observation' })).toBeVisible();
-      expect(within(currentDetails).getByRole('heading', { name: 'Supervision History' })).toBeVisible();
+      const supervisionDeck = within(currentDetails).getByRole('group', { name: 'Selected agent supervision deck' });
+      expect(supervisionDeck).toBeVisible();
+      expect(
+        within(supervisionDeck).getByRole('button', { name: 'Open Collector Observation supervision panel' })
+      ).toBeVisible();
+      expect(within(supervisionDeck).getByRole('button', { name: 'Open Supervision History supervision panel' })).toBeVisible();
+      expect(within(currentDetails).queryByRole('heading', { name: 'Collector Observation' })).not.toBeInTheDocument();
+      expect(within(currentDetails).queryByRole('heading', { name: 'Supervision History' })).not.toBeInTheDocument();
     },
     20000
   );
@@ -7096,9 +7102,21 @@ afterEach(() => {
       })
     );
 
-    const selectedSupervisionSection = within(details)
-      .getByRole('heading', { name: 'Supervision History' })
-      .closest('section');
+    let selectedSupervisionSection: HTMLElement | null = null;
+    await waitFor(() => {
+      const deck = within(details).getByRole('group', { name: 'Selected agent supervision deck' });
+      expect(deck).toBeVisible();
+      selectedSupervisionSection = within(details)
+        .getByRole('button', { name: 'Open Supervision History supervision panel' })
+        .closest('.aitown-selected-supervision-deck');
+      expect(selectedSupervisionSection).not.toBeNull();
+    });
+
+    await user.click(
+      within(details).getByRole('button', { name: 'Open Supervision History supervision panel' })
+    );
+
+    selectedSupervisionSection = within(details).getByRole('heading', { name: 'Supervision History' }).closest('section');
     expect(selectedSupervisionSection).not.toBeNull();
 
     await waitFor(() => {

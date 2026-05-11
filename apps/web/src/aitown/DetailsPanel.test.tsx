@@ -768,10 +768,148 @@ describe('DetailsPanel selected-agent category IA', () => {
       />
     );
 
-    const section = screen.getByRole('heading', { name: heading }).closest('section');
+    const section = screen.getByRole('heading', { name: heading, hidden: true }).closest('section');
     expect(section).not.toBeNull();
     expect(section).toHaveClass(className);
   });
+
+  it('opens selected-agent supervision details from a compact deck and returns to the deck', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          activeHubCategory: 'supervision',
+          selectedAgentDrilldownTab: 'evidence',
+          selectedAgentSupervisionHistory: {
+            items: [
+              {
+                alert_id: 'alert-history-deck',
+                ts: '2026-03-16T08:55:00.000Z',
+                agent_id: 'app-engineering',
+                target_agent_id: 'app-engineering',
+                actor_id: 'team-lead',
+                observer_agent_id: 'team-lead',
+                watcher_agent_ids: ['growth-revenue'],
+                severity: 'orange',
+                status: 'resolved',
+                current_state: 'blocked',
+                active_task: 'Fix workflow issue',
+                summary: 'Deck-opened supervision history evidence',
+                evidence_refs: ['/evidence/review.md'],
+                evidence_count: 1,
+                correlation_id: 'corr-app-review',
+                source_kind: 'controller_event',
+                metadata: {}
+              }
+            ]
+          }
+        })}
+      />
+    );
+
+    expect(screen.getByRole('group', { name: 'Selected agent supervision deck' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Open Supervision History supervision panel' })).toBeVisible();
+    expect(screen.queryByRole('heading', { name: 'Workflow' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Shared Memory' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Incident Feed' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Supervision History' })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Open Supervision History supervision panel' }));
+
+    expect(screen.getByRole('heading', { name: 'Supervision History' })).toBeVisible();
+    expect(screen.getByText('Deck-opened supervision history evidence')).toBeVisible();
+    expect(screen.queryByRole('heading', { name: 'Workflow' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Shared Memory' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Back to supervision deck' })).toBeVisible();
+
+    await user.click(screen.getByRole('button', { name: 'Back to supervision deck' }));
+
+    expect(screen.getByRole('group', { name: 'Selected agent supervision deck' })).toBeVisible();
+    expect(screen.queryByRole('heading', { name: 'Supervision History' })).not.toBeInTheDocument();
+  });
+
+  it('opens the active correlation queue from the selected-agent supervision deck and returns to the deck', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          activeHubCategory: 'supervision',
+          selectedAgentDrilldownTab: 'evidence'
+        })}
+      />
+    );
+
+    const deck = screen.getByRole('group', { name: 'Selected agent supervision deck' });
+    expect(within(deck).getByRole('button', { name: 'Open Active Correlation Queue supervision panel' })).toBeVisible();
+    expect(within(deck).getByText('1 of 2 participants')).toBeVisible();
+    expect(screen.queryByRole('heading', { name: 'Active Correlation Queue' })).not.toBeInTheDocument();
+
+    await user.click(within(deck).getByRole('button', { name: 'Open Active Correlation Queue supervision panel' }));
+
+    expect(screen.getByRole('heading', { name: 'Active Correlation Queue' })).toBeVisible();
+    expect(screen.getByText('Scope · corr-app-review · 1 of 2 participants in current active queue snapshot')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Back to supervision deck' })).toBeVisible();
+
+    await user.click(screen.getByRole('button', { name: 'Back to supervision deck' }));
+
+    expect(screen.getByRole('group', { name: 'Selected agent supervision deck' })).toBeVisible();
+    expect(screen.queryByRole('heading', { name: 'Active Correlation Queue' })).not.toBeInTheDocument();
+  });
+
+  it.each([
+    { activeCorrelationQueueState: 'idle', activeCorrelationQueueError: null },
+    { activeCorrelationQueueState: 'loading', activeCorrelationQueueError: null },
+    { activeCorrelationQueueState: 'error', activeCorrelationQueueError: 'queue request failed' }
+  ] satisfies Array<Pick<DetailsPanelProps, 'activeCorrelationQueueState' | 'activeCorrelationQueueError'>>)(
+    'does not open a blank active-correlation queue panel before a queue snapshot exists when state is $activeCorrelationQueueState',
+    async ({ activeCorrelationQueueState, activeCorrelationQueueError }) => {
+      const user = userEvent.setup();
+
+      render(
+        <DetailsPanel
+          {...buildProps({
+            activeHubCategory: 'supervision',
+            activeCorrelationQueueOperations: null,
+            activeCorrelationQueueError,
+            activeCorrelationQueueState,
+            selectedAgentDrilldownTab: 'evidence'
+          })}
+        />
+      );
+
+      const deck = screen.getByRole('group', { name: 'Selected agent supervision deck' });
+      const queueButton = within(deck).getByRole('button', {
+        name: 'Open Active Correlation Queue supervision panel'
+      });
+
+      expect(queueButton).toBeDisabled();
+      expect(within(queueButton).getByText('Queue snapshot not loaded')).toBeVisible();
+
+      await user.click(queueButton);
+
+      expect(screen.getByRole('group', { name: 'Selected agent supervision deck' })).toBeVisible();
+      expect(screen.queryByRole('heading', { name: 'Active Correlation Queue' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Back to supervision deck' })).not.toBeInTheDocument();
+    }
+  );
+
+  it.each(['now', 'replay'] satisfies Array<NonNullable<DetailsPanelProps['selectedAgentDrilldownTab']>>)(
+    'does not leak the selected-agent supervision deck into the %s drilldown tab',
+    (selectedAgentDrilldownTab) => {
+      render(
+        <DetailsPanel
+          {...buildProps({
+            activeHubCategory: 'supervision',
+            selectedAgentDrilldownTab
+          })}
+        />
+      );
+
+      expect(screen.queryByRole('group', { name: 'Selected agent supervision deck' })).not.toBeInTheDocument();
+    }
+  );
 });
 
 function buildCollectorDerivedPeerWatchAlert(
@@ -896,16 +1034,18 @@ describe('DetailsPanel category-specific layout hooks', () => {
     expect(panel!).toHaveClass('aitown-panel--details-category-supervision');
     expect(panel!).toHaveClass('aitown-panel--details-selected-agent');
     expect(panel!.querySelector('.aitown-selected-supervision-summary-grid')).toBeInstanceOf(HTMLElement);
-    expect(screen.getByRole('heading', { name: 'Collector Observation' }).closest('section')).toHaveClass(
+    expect(screen.getByRole('group', { name: 'Selected agent supervision deck' })).toBeVisible();
+    expect(screen.queryByRole('heading', { name: 'Collector Observation' })).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Collector Observation', hidden: true }).closest('section')).toHaveClass(
       'aitown-details__section--selected-supervision-observation'
     );
-    expect(screen.getByRole('heading', { name: 'Supervision History' }).closest('section')).toHaveClass(
+    expect(screen.getByRole('heading', { name: 'Supervision History', hidden: true }).closest('section')).toHaveClass(
       'aitown-details__section--selected-supervision-history'
     );
-    expect(screen.getByRole('heading', { name: 'Workflow' }).closest('section')).toHaveClass(
+    expect(screen.getByRole('heading', { name: 'Workflow', hidden: true }).closest('section')).toHaveClass(
       'aitown-details__section--selected-supervision-workflow'
     );
-    expect(screen.getByRole('heading', { name: 'Shared Memory' }).closest('section')).toHaveClass(
+    expect(screen.getByRole('heading', { name: 'Shared Memory', hidden: true }).closest('section')).toHaveClass(
       'aitown-details__section--selected-supervision-memory'
     );
   });

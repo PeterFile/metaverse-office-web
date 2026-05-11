@@ -93,6 +93,18 @@ describe('AI Town shell styles', () => {
     expect(styles).toMatch(
       /\.aitown-panel--details-category-supervision \.aitown-details__section--selected-supervision-observation \.aitown-records,[\s\S]*?\.aitown-panel--details-category-supervision \.aitown-details__section--selected-supervision-queue \.aitown-records\s*\{[\s\S]*?flex:\s*1 1 auto;[\s\S]*?min-height:\s*52px;[\s\S]*?overflow-y:\s*auto;/
     );
+    expect(styles).toMatch(
+      /\.aitown-details__section\[hidden\]\s*\{[\s\S]*?display:\s*none !important;/
+    );
+    expect(styles).toMatch(
+      /\.aitown-selected-supervision-deck\s*\{[\s\S]*?display:\s*grid;[\s\S]*?min-width:\s*0;[\s\S]*?grid-column:\s*1 \/ -1;[\s\S]*?grid-template-columns:\s*repeat\(auto-fit, minmax\(148px, 1fr\)\);/
+    );
+    expect(styles).toMatch(
+      /\.aitown-selected-supervision-deck__button\s*\{[\s\S]*?min-height:\s*58px;[\s\S]*?text-align:\s*left;/
+    );
+    expect(styles).toMatch(
+      /\.aitown-selected-supervision-deck__button:disabled,[\s\S]*?\.aitown-selected-supervision-deck__button:disabled:focus-visible\s*\{[\s\S]*?cursor:\s*not-allowed;/
+    );
   });
 
   it('keeps browser pinch zoom available on the fullscreen world host and canvas', () => {

@@ -1,4 +1,4 @@
-import { Fragment } from 'react';
+import { Fragment, useState, type ReactNode } from 'react';
 
 import type {
   AccountabilityReplayBundle,
@@ -40,6 +40,15 @@ import { deriveAgentDetailEvidenceFacets } from './agentDetailEvidenceFacets';
 export type HubCategory = 'crew' | 'queue' | 'supervision' | 'evidence' | 'replay' | 'memory';
 
 export type SelectedAgentDrilldownTab = 'now' | 'evidence' | 'replay';
+
+type SelectedAgentSupervisionPanel =
+  | 'collector'
+  | 'history'
+  | 'audit'
+  | 'workflow'
+  | 'memory'
+  | 'incidents'
+  | 'queue';
 
 export const SELECTED_AGENT_DRILLDOWN_TABS: ReadonlyArray<{
   id: SelectedAgentDrilldownTab;
@@ -195,6 +204,16 @@ const EMPTY_SEVERITY_BUCKETS: Record<Severity, number> = {
 
 const SHARED_MEMORY_BACKLINK_LIMIT = 4;
 const STRUCTURED_EVIDENCE_FACET_TOKEN_LIMIT = 3;
+
+const SELECTED_AGENT_SUPERVISION_PANEL_LABELS: Record<SelectedAgentSupervisionPanel, string> = {
+  collector: 'Collector Observation',
+  history: 'Supervision History',
+  audit: 'Audit / Responsibility Chain',
+  workflow: 'Workflow',
+  memory: 'Shared Memory',
+  incidents: 'Incident Feed',
+  queue: 'Active Correlation Queue'
+};
 
 type SharedMemoryBacklink = {
   key: string;
@@ -3309,6 +3328,8 @@ function renderFocusedSharedMemoryBacklinkLane({
 
 function renderSharedMemorySection({
   sectionClassName = '',
+  hidden = false,
+  headerAction = null,
   memoryArtifacts,
   memoryArtifactsError,
   memoryArtifactsState,
@@ -3325,6 +3346,8 @@ function renderSharedMemorySection({
   onSelectCorrelation
 }: {
   sectionClassName?: string;
+  hidden?: boolean;
+  headerAction?: ReactNode;
   memoryArtifacts: MemoryArtifactIndex | null;
   memoryArtifactsError: string | null;
   memoryArtifactsState: LoadState;
@@ -3346,8 +3369,9 @@ function renderSharedMemorySection({
       : null;
 
   return (
-    <section className={`aitown-details__section${sectionClassName ? ` ${sectionClassName}` : ''}`}>
+    <section className={`aitown-details__section${sectionClassName ? ` ${sectionClassName}` : ''}`} hidden={hidden}>
       <h3>Shared Memory</h3>
+      {headerAction}
       <span>{`Request scope · ${sharedMemoryRequestScopeLabel}`}</span>
       {focusedSharedMemoryArtifactRef ? (
         <>
@@ -4044,6 +4068,39 @@ export function DetailsPanel({
       activeCorrelationQueueOperations !== null ||
       activeCorrelationQueueState !== 'idle' ||
       activeCorrelationQueueError !== null);
+  const canOpenActiveCorrelationQueuePanel = Boolean(
+    shouldRenderActiveCorrelationQueueSection && activeCorrelationQueueCorrelation && activeCorrelationQueueOperations !== null
+  );
+  const [selectedAgentSupervisionPanel, setSelectedAgentSupervisionPanel] =
+    useState<SelectedAgentSupervisionPanel | null>(null);
+  const selectedAgentSupervisionDeckEnabled = Boolean(
+    selectedAgent && activeHubCategory === 'supervision' && selectedAgentDrilldownTab === 'evidence'
+  );
+  const selectedAgentSupervisionPanelMode =
+    selectedAgentSupervisionDeckEnabled &&
+    selectedAgentSupervisionPanel !== null &&
+    (selectedAgentSupervisionPanel !== 'queue' || canOpenActiveCorrelationQueuePanel)
+      ? selectedAgentSupervisionPanel
+      : null;
+  const shouldShowSelectedAgentSupervisionPanel = (panel: SelectedAgentSupervisionPanel) =>
+    !selectedAgentSupervisionDeckEnabled || selectedAgentSupervisionPanelMode === panel;
+  const renderSelectedAgentSupervisionPanelBackButton = (panel: SelectedAgentSupervisionPanel) =>
+    selectedAgentSupervisionPanelMode === panel ? (
+      <button
+        type="button"
+        className="aitown-link-button aitown-selected-supervision-panel__back"
+        aria-label="Back to supervision deck"
+        autoFocus
+        onClick={() => setSelectedAgentSupervisionPanel(null)}
+      >
+        Back to deck
+      </button>
+    ) : null;
+  const activeCorrelationQueueDeckSummary = activeCorrelationQueueCorrelation
+    ? canOpenActiveCorrelationQueuePanel
+      ? `${activeCorrelationQueueItems.length} of ${activeCorrelationQueueParticipantAgentIds.length} participants`
+      : 'Queue snapshot not loaded'
+    : 'No active correlation';
   const sharedMemoryActiveCorrelationId = selectedCorrelationId;
   const sharedMemoryArtifactRefs = new Set((memoryArtifacts?.items ?? []).map((artifact) => artifact.artifact_ref));
   const activeReplayCheckpointEventId = replayCheckpointEventId?.trim() || null;
@@ -4052,6 +4109,7 @@ export function DetailsPanel({
       className={`aitown-details__section aitown-details__section--hub-queue aitown-details__section--hub-evidence aitown-details__section--hub-supervision${selectedAgent ? ' aitown-details__section--selected-now aitown-details__section--selected-evidence aitown-details__section--selected-supervision-queue' : ''}`}
     >
       <h3>Active Correlation Queue</h3>
+      {renderSelectedAgentSupervisionPanelBackButton('queue')}
       {activeCorrelationQueueScopeLabel ? <p>{activeCorrelationQueueScopeLabel}</p> : null}
       <ul className="aitown-records">
         {activeCorrelationQueueState === 'loading' && !activeCorrelationQueueOperations ? (
@@ -5190,8 +5248,52 @@ export function DetailsPanel({
         </div>
       ) : null}
 
-      <section className="aitown-details__section aitown-details__section--selected-evidence aitown-details__section--hub-supervision aitown-details__section--hub-evidence aitown-details__section--selected-supervision-observation">
+      {selectedAgentSupervisionDeckEnabled && selectedAgentSupervisionPanelMode === null ? (
+        <div className="aitown-selected-supervision-deck" role="group" aria-label="Selected agent supervision deck">
+          {(
+            [
+              ['collector', selectedCollectorItem ? selectedCollectorItem.heartbeat.current_state : 'No collector row', true],
+              [
+                'history',
+                `${selectedAgentSupervisionHistory?.items.length ?? 0} history row${
+                  (selectedAgentSupervisionHistory?.items.length ?? 0) === 1 ? '' : 's'
+                }`,
+                true
+              ],
+              ['audit', accountabilityWhat ?? 'No live accountability signal', true],
+              [
+                'workflow',
+                workflowSummaryFacets
+                  ? `${workflowSummaryFacets.counts.incident_count} incidents · ${workflowSummaryFacets.counts.event_count} events`
+                  : 'No workflow summary',
+                true
+              ],
+              ['memory', `${memoryArtifacts?.items.length ?? 0} artifact${(memoryArtifacts?.items.length ?? 0) === 1 ? '' : 's'}`, true],
+              ['incidents', `${relatedIncidents.length} incident${relatedIncidents.length === 1 ? '' : 's'}`, true],
+              ['queue', activeCorrelationQueueDeckSummary, canOpenActiveCorrelationQueuePanel]
+            ] satisfies Array<[SelectedAgentSupervisionPanel, string, boolean]>
+          ).map(([panel, summary, enabled]) => (
+            <button
+              key={panel}
+              type="button"
+              className="aitown-selected-supervision-deck__button"
+              aria-label={`Open ${SELECTED_AGENT_SUPERVISION_PANEL_LABELS[panel]} supervision panel`}
+              disabled={!enabled}
+              onClick={enabled ? () => setSelectedAgentSupervisionPanel(panel) : undefined}
+            >
+              <strong>{SELECTED_AGENT_SUPERVISION_PANEL_LABELS[panel]}</strong>
+              <span>{summary}</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+
+      <section
+        className="aitown-details__section aitown-details__section--selected-evidence aitown-details__section--hub-supervision aitown-details__section--hub-evidence aitown-details__section--selected-supervision-observation"
+        hidden={!shouldShowSelectedAgentSupervisionPanel('collector')}
+      >
         <h3>Collector Observation</h3>
+        {renderSelectedAgentSupervisionPanelBackButton('collector')}
         {collectorWarning ? <p role="status">{collectorWarning}</p> : null}
         <ul className="aitown-records">
           {collectorSnapshotState === 'loading' && !collectorSnapshot ? (
@@ -5269,8 +5371,12 @@ export function DetailsPanel({
         </ul>
       </section>
 
-      <section className="aitown-details__section aitown-details__section--selected-evidence aitown-details__section--hub-supervision aitown-details__section--hub-evidence aitown-details__section--selected-supervision-history">
+      <section
+        className="aitown-details__section aitown-details__section--selected-evidence aitown-details__section--hub-supervision aitown-details__section--hub-evidence aitown-details__section--selected-supervision-history"
+        hidden={!shouldShowSelectedAgentSupervisionPanel('history')}
+      >
         <h3>Supervision History</h3>
+        {renderSelectedAgentSupervisionPanelBackButton('history')}
         {supervisionHistoryWarning ? <p role="status">{supervisionHistoryWarning}</p> : null}
         <p className="aitown-evidence-toolbar">
           <span className="aitown-evidence-toolbar__scope">{`Request scope · ${selectedAgentSupervisionHistoryRequestScopeLabel}`}</span>
@@ -5432,10 +5538,14 @@ export function DetailsPanel({
         </>
       ) : null}
 
-      {activeCorrelationQueueSection}
+      {shouldShowSelectedAgentSupervisionPanel('queue') ? activeCorrelationQueueSection : null}
 
-      <section className="aitown-details__section aitown-details__section--selected-now aitown-details__section--selected-evidence aitown-details__section--hub-crew aitown-details__section--hub-supervision aitown-details__section--hub-evidence aitown-details__section--selected-supervision-audit">
+      <section
+        className="aitown-details__section aitown-details__section--selected-now aitown-details__section--selected-evidence aitown-details__section--hub-crew aitown-details__section--hub-supervision aitown-details__section--hub-evidence aitown-details__section--selected-supervision-audit"
+        hidden={!shouldShowSelectedAgentSupervisionPanel('audit')}
+      >
         <h3>Audit Signals</h3>
+        {renderSelectedAgentSupervisionPanelBackButton('audit')}
         <ul className="aitown-records">
           <li className={`aitown-record severity-${selectedAgent.effective_severity}`}>
             <strong>Responsibility chain</strong>
@@ -5490,8 +5600,12 @@ export function DetailsPanel({
         </ul>
       </section>
 
-      <section className="aitown-details__section aitown-details__section--selected-evidence aitown-details__section--hub-supervision aitown-details__section--hub-evidence aitown-details__section--selected-supervision-workflow">
+      <section
+        className="aitown-details__section aitown-details__section--selected-evidence aitown-details__section--hub-supervision aitown-details__section--hub-evidence aitown-details__section--selected-supervision-workflow"
+        hidden={!shouldShowSelectedAgentSupervisionPanel('workflow')}
+      >
         <h3>Workflow</h3>
+        {renderSelectedAgentSupervisionPanelBackButton('workflow')}
         {workflowWarning ? <p role="status">{workflowWarning}</p> : null}
         <ul className="aitown-records">
           {workflowState === 'loading' && !workflow ? (
@@ -5709,6 +5823,8 @@ export function DetailsPanel({
       {renderSharedMemorySection({
         sectionClassName:
           'aitown-details__section--selected-evidence aitown-details__section--hub-memory aitown-details__section--hub-supervision aitown-details__section--hub-evidence aitown-details__section--selected-supervision-memory',
+        hidden: !shouldShowSelectedAgentSupervisionPanel('memory'),
+        headerAction: renderSelectedAgentSupervisionPanelBackButton('memory'),
         memoryArtifacts,
         memoryArtifactsError,
         memoryArtifactsState,
@@ -5725,8 +5841,12 @@ export function DetailsPanel({
         onSelectCorrelation
       })}
 
-      <section className="aitown-details__section aitown-details__section--selected-evidence aitown-details__section--hub-supervision aitown-details__section--hub-evidence aitown-details__section--selected-supervision-incidents">
+      <section
+        className="aitown-details__section aitown-details__section--selected-evidence aitown-details__section--hub-supervision aitown-details__section--hub-evidence aitown-details__section--selected-supervision-incidents"
+        hidden={!shouldShowSelectedAgentSupervisionPanel('incidents')}
+      >
         <h3>Incident Feed</h3>
+        {renderSelectedAgentSupervisionPanelBackButton('incidents')}
         <ul className="aitown-records">
           {incidentFeedState === 'loading' && !incidentFeed ? (
             <li className="aitown-record">Loading incident feed...</li>

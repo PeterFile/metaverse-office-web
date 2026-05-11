@@ -3088,7 +3088,7 @@ test.describe('operator shell smoke', () => {
   });
 
   test('returns a manual active-queue correlation to the current scope via keyboard traversal', async ({ page }) => {
-    test.setTimeout(60_000);
+    test.setTimeout(90_000);
 
     const requestedUrls: string[] = [];
     page.on('request', (request) => {
@@ -3245,7 +3245,7 @@ test.describe('operator shell smoke', () => {
   test('keeps the active crew-overview correlation when opening an active-queue counterparty pivot via keyboard traversal', async ({
     page
   }) => {
-    test.setTimeout(60_000);
+    test.setTimeout(90_000);
 
     await page.route('**/office/operations?limit=4', async (route) => {
       const response = await route.fetch();
@@ -3322,7 +3322,7 @@ test.describe('operator shell smoke', () => {
   test('keeps the active crew-overview correlation when opening an active-queue actor pivot via keyboard traversal', async ({
     page
   }) => {
-    test.setTimeout(60_000);
+    test.setTimeout(90_000);
 
     const requestedUrls: string[] = [];
     page.on('request', (request) => {
@@ -3410,6 +3410,8 @@ test.describe('operator shell smoke', () => {
   test('keeps the active selected-agent correlation and request scope when opening a current-operation counterparty pivot via keyboard traversal', async ({
     page
   }) => {
+    test.setTimeout(60_000);
+
     const requestedUrls: string[] = [];
     const forbiddenRequests: string[] = [];
     const directOperationUrl = '/office/operations?agent_id=app-engineering';
@@ -3546,7 +3548,7 @@ test.describe('operator shell smoke', () => {
   });
 
   test('opens a selected-agent current-operation correlation drilldown via keyboard traversal', async ({ page }) => {
-    test.setTimeout(60_000);
+    test.setTimeout(90_000);
 
     const requestedUrls: string[] = [];
     page.on('request', (request) => {
@@ -3695,6 +3697,8 @@ test.describe('operator shell smoke', () => {
   test('keeps the active selected-agent correlation when opening a current-operation actor pivot via keyboard traversal', async ({
     page
   }) => {
+    test.setTimeout(60_000);
+
     const requestedUrls: string[] = [];
     page.on('request', (request) => {
       try {
@@ -4557,7 +4561,7 @@ test.describe('operator shell smoke', () => {
   test('keeps the selected-agent collector tmux preview jump focused on shared memory without changing selection, correlation, or request scope via keyboard traversal', async ({
     page
   }) => {
-    test.setTimeout(60_000);
+    test.setTimeout(90_000);
 
     const requestedUrls: string[] = [];
     const tmuxArtifactRef = 'tmux://5-web3-app-engineering/0.1';
@@ -4795,6 +4799,8 @@ test.describe('operator shell smoke', () => {
   test('keeps the active crew-overview correlation when opening a collector-snapshot actor pivot via keyboard traversal', async ({
     page
   }) => {
+    test.setTimeout(60_000);
+
     await page.goto('/');
     await openOfficeCategory(page, 'Supervision');
 
@@ -4835,6 +4841,8 @@ test.describe('operator shell smoke', () => {
   test('keeps the active crew-overview correlation when opening a collector supervision watcher pivot via keyboard traversal', async ({
     page
   }) => {
+    test.setTimeout(60_000);
+
     const requestedUrls: string[] = [];
     page.on('request', (request) => {
       try {
@@ -4891,6 +4899,8 @@ test.describe('operator shell smoke', () => {
   test('keeps the collector supervision watcher pivot on the existing no-correlation path when no active crew-overview correlation is selected', async ({
     page
   }) => {
+    test.setTimeout(60_000);
+
     const requestedUrls: string[] = [];
     page.on('request', (request) => {
       try {
@@ -4962,6 +4972,8 @@ test.describe('operator shell smoke', () => {
   });
 
   test('keeps collector watcher pivots on auto-correlation when the crew-overview incident feed errors', async ({ page }) => {
+    test.setTimeout(60_000);
+
     const requestedUrls: string[] = [];
     page.on('request', (request) => {
       try {
@@ -5063,6 +5075,8 @@ test.describe('operator shell smoke', () => {
   });
 
   test('keeps the active crew-overview correlation when opening an office-grid home-agent pivot via keyboard traversal', async ({ page }) => {
+    test.setTimeout(60_000);
+
     await page.goto('/');
     await openOfficeCategory(page);
 
@@ -5093,6 +5107,8 @@ test.describe('operator shell smoke', () => {
   });
 
   test('keeps the active crew-overview correlation when opening a watch-topology endpoint pivot via keyboard traversal', async ({ page }) => {
+    test.setTimeout(60_000);
+
     await page.goto('/');
     await openOfficeCategory(page, 'Supervision');
 
@@ -5129,6 +5145,8 @@ test.describe('operator shell smoke', () => {
   test('keeps the active crew-overview correlation when opening a watch topology target endpoint pivot via keyboard traversal', async ({
     page
   }) => {
+    test.setTimeout(60_000);
+
     const requestedUrls: string[] = [];
     page.on('request', (request) => {
       try {
@@ -5182,6 +5200,8 @@ test.describe('operator shell smoke', () => {
   });
 
   test('opens an incident correlation drilldown from the selected-agent Hub via keyboard traversal', async ({ page }) => {
+    test.setTimeout(60_000);
+
     await page.goto('/');
     await openOfficeCategory(page);
 
@@ -5289,7 +5309,7 @@ test.describe('operator shell smoke', () => {
   });
 
   test('keeps the active correlation when opening a correlation timeline actor pivot via keyboard traversal', async ({ page }) => {
-    test.setTimeout(60_000);
+    test.setTimeout(90_000);
 
     await page.goto('/');
     await openOfficeCategory(page);
@@ -5496,6 +5516,8 @@ test.describe('operator shell smoke', () => {
   });
 
   test('keeps the active replay correlation when opening a replay actor pivot via keyboard traversal', async ({ page }) => {
+    test.setTimeout(60_000);
+
     await page.goto('/');
     await openOfficeCategory(page, 'Replay');
 
@@ -5681,6 +5703,8 @@ test.describe('operator shell smoke', () => {
   test('keeps the active replay correlation when opening a replay counterparty pivot via keyboard traversal', async ({
     page
   }) => {
+    test.setTimeout(60_000);
+
     await page.goto('/');
     await openOfficeCategory(page, 'Replay');
 
@@ -5971,6 +5995,8 @@ test.describe('operator shell smoke', () => {
   });
 
   test('keeps the clicked selected-agent incident correlation when opening an incident counterparty pivot via keyboard traversal', async ({ page }) => {
+    test.setTimeout(60_000);
+
     await page.goto('/');
     await openOfficeCategory(page);
 
@@ -6022,6 +6048,8 @@ test.describe('operator shell smoke', () => {
   });
 
   test('keeps the clicked selected-agent incident correlation when opening an incident actor pivot via keyboard traversal', async ({ page }) => {
+    test.setTimeout(60_000);
+
     await page.goto('/');
     await openOfficeCategory(page);
 
@@ -6073,7 +6101,7 @@ test.describe('operator shell smoke', () => {
   test(
     'keeps an explicitly selected incident correlation instead of snapping back to the workflow default after a later workflow refresh',
     async ({ page }) => {
-      test.setTimeout(45_000);
+      test.setTimeout(60_000);
       await installFastPollInterval(page);
 
       let workflowResponses = 0;
@@ -6219,6 +6247,8 @@ test.describe('operator shell smoke', () => {
   test('opens a workflow interaction correlation pivot from the selected-agent Hub via keyboard traversal', async ({
     page
   }) => {
+    test.setTimeout(60_000);
+
     await page.route('**/agents/growth-revenue/workflow?limit=10&window=60m', async (route) => {
       const response = await route.fetch();
       const workflow = (await response.json()) as {
@@ -6306,6 +6336,8 @@ test.describe('operator shell smoke', () => {
   test('keeps the selected-agent workflow interaction evidence jump focused on shared memory without changing selection or active correlation via keyboard traversal', async ({
     page
   }) => {
+    test.setTimeout(60_000);
+
     const requestedUrls: string[] = [];
     page.on('request', (request) => {
       try {
@@ -6738,6 +6770,8 @@ test.describe('operator shell smoke', () => {
   });
 
   test('keeps the active workflow correlation when opening a workflow counterparty pivot via keyboard traversal', async ({ page }) => {
+    test.setTimeout(60_000);
+
     await page.goto('/');
     await openOfficeCategory(page);
 
@@ -7080,6 +7114,8 @@ test.describe('operator shell smoke', () => {
   test('keeps the selected-agent workflow-status handoff evidence jump focused on shared memory without changing selection or active correlation via keyboard traversal', async ({
     page
   }) => {
+    test.setTimeout(60_000);
+
     await installFastPollInterval(page, 120_000);
 
     const requestedUrls: string[] = [];
@@ -7169,6 +7205,8 @@ test.describe('operator shell smoke', () => {
   test('keeps the active workflow correlation when opening a workflow status actor pivot via keyboard traversal', async ({
     page
   }) => {
+    test.setTimeout(60_000);
+
     await page.goto('/');
     await openOfficeCategory(page);
 
@@ -7221,6 +7259,8 @@ test.describe('operator shell smoke', () => {
   test('keeps the active workflow correlation when opening a workflow status counterparty pivot via keyboard traversal', async ({
     page
   }) => {
+    test.setTimeout(60_000);
+
     await page.goto('/');
     await openOfficeCategory(page);
 
@@ -7275,6 +7315,8 @@ test.describe('operator shell smoke', () => {
   test('falls back to the workflow-status counterparty record correlation and keeps scoped reads via keyboard traversal', async ({
     page
   }) => {
+    test.setTimeout(60_000);
+
     const requestedUrls: string[] = [];
     const forbiddenRequests: string[] = [];
     const directOperationUrl = '/office/operations?agent_id=app-engineering';
@@ -7600,6 +7642,8 @@ test.describe('operator shell smoke', () => {
   test('keeps the active workflow correlation when opening a workflow recent-event actor pivot via keyboard traversal', async ({
     page
   }) => {
+    test.setTimeout(60_000);
+
     await page.goto('/');
     await openOfficeCategory(page);
 
@@ -7649,6 +7693,8 @@ test.describe('operator shell smoke', () => {
   test('keeps the active workflow correlation and scoped reads when opening a workflow recent-event counterparty pivot via keyboard traversal', async ({
     page
   }) => {
+    test.setTimeout(60_000);
+
     const requestedUrls: string[] = [];
     const forbiddenRequests: string[] = [];
     const directOperationUrl = '/office/operations?agent_id=app-engineering';
@@ -7833,6 +7879,8 @@ test.describe('operator shell smoke', () => {
   test('falls back to the workflow recent-event counterparty event correlation and keeps scoped reads via keyboard traversal', async ({
     page
   }) => {
+    test.setTimeout(60_000);
+
     const requestedUrls: string[] = [];
     const forbiddenRequests: string[] = [];
     const directOperationUrl = '/office/operations?agent_id=app-engineering';

@@ -1082,12 +1082,12 @@ describe('WorldScene watch overlay caption gating', () => {
     expect(onSelectAgent).not.toHaveBeenCalled();
   });
 
-  it('throttles employee motion on the Pixi ticker without capping the renderer frame rate', async () => {
+  it('walks active employee sprites on throttled Pixi ticker frames without capping the renderer frame rate', async () => {
     appInitMock.mockReset().mockResolvedValue(undefined);
     vi.mocked(loadAiTownAssets).mockResolvedValue(makeAssets());
 
     const scene = makeScene();
-    const homeAgent = scene.agents.find((agent) => agent.agentId === 'app-engineering');
+    const homeAgent = scene.agents.find((agent) => agent.agentId === 'team-lead');
     const { unmount } = render(<WorldScene scene={scene} onSelectAgent={vi.fn()} />);
 
     expect(homeAgent).toBeDefined();
@@ -1128,14 +1128,66 @@ describe('WorldScene watch overlay caption gating', () => {
     const offsetY = (agentSprite?.y ?? 0) - (homeAgent?.position.y ?? 0);
     const distanceFromHome = Math.hypot(offsetX, offsetY);
 
-    expect(distanceFromHome).toBeGreaterThan(0.1);
-    expect(distanceFromHome).toBeLessThanOrEqual(3.1);
-    expect(homeAgent?.position).toEqual({ x: 120, y: 180 });
+    expect(Math.abs(offsetX)).toBeGreaterThan(1);
+    expect(Math.abs(offsetY)).toBeGreaterThan(1);
+    expect(distanceFromHome).toBeGreaterThan(3.1);
+    expect(distanceFromHome).toBeLessThanOrEqual(10.1);
+    expect(homeAgent?.position).toEqual({ x: 80, y: 120 });
 
     unmount();
 
     expect(app?.ticker.remove).toHaveBeenCalledTimes(1);
     expect(app?.ticker.listeners.size).toBe(0);
+  });
+
+  it('preserves visual continuity for unchanged agent homes across scene rerenders', async () => {
+    appInitMock.mockReset().mockResolvedValue(undefined);
+    vi.mocked(loadAiTownAssets).mockResolvedValue(makeAssets());
+
+    const scene = makeScene();
+    const activeAgent = scene.agents.find((agent) => agent.agentId === 'team-lead');
+    const { rerender } = render(<WorldScene scene={scene} onSelectAgent={vi.fn()} />);
+
+    expect(activeAgent).toBeDefined();
+
+    await waitFor(() => {
+      expect(readViewportInspector()).toBeDefined();
+      expect(readAgentLayer()?.children).toHaveLength(scene.agents.length);
+    });
+
+    const activeAgentIndex = scene.agents.findIndex((agent) => agent.agentId === activeAgent?.agentId);
+    const firstSprite = readAgentLayer()?.children[activeAgentIndex];
+
+    act(() => {
+      appInstances.at(-1)?.ticker.tick(1000);
+    });
+
+    const visualX = firstSprite?.x ?? activeAgent?.position.x ?? 0;
+    const visualY = firstSprite?.y ?? activeAgent?.position.y ?? 0;
+
+    expect(visualX).not.toBeCloseTo(activeAgent?.position.x ?? 0, 4);
+    expect(visualY).not.toBeCloseTo(activeAgent?.position.y ?? 0, 4);
+
+    rerender(
+      <WorldScene
+        scene={{
+          ...scene,
+          activeCorrelationId: 'corr-rerender',
+          correlationParticipantAgentIds: ['team-lead']
+        }}
+        onSelectAgent={vi.fn()}
+      />
+    );
+
+    await waitFor(() => {
+      expect(readAgentLayer()?.children).toHaveLength(scene.agents.length);
+      const nextSprite = readAgentLayer()?.children[activeAgentIndex];
+
+      expect(nextSprite?.x).toBeCloseTo(visualX, 4);
+      expect(nextSprite?.y).toBeCloseTo(visualY, 4);
+    });
+
+    expect(activeAgent?.position).toEqual({ x: 80, y: 120 });
   });
 
   it('routes active correlation overlay clamp padding into the viewport inspector and clears it when the overlay disappears', async () => {

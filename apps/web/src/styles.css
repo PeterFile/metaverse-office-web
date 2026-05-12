@@ -1706,7 +1706,8 @@ button {
 }
 
 .aitown-hub-sheet__body--selected-agent {
-  grid-template-columns: minmax(220px, 300px) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
 }
 
 .aitown-hub-sheet__title {
@@ -1723,10 +1724,9 @@ button {
 }
 
 .aitown-hub-selected-agent-chrome {
-  display: flex;
+  display: grid;
   min-width: 0;
-  max-height: 100%;
-  flex-direction: column;
+  grid-template-columns: minmax(260px, 1fr) minmax(220px, 0.45fr);
   gap: 8px;
   overflow: hidden;
   overscroll-behavior: contain;
@@ -1737,7 +1737,7 @@ button {
   top: 0;
   z-index: 2;
   display: flex;
-  max-height: 132px;
+  max-height: min(22dvh, 184px);
   min-width: 0;
   flex-direction: column;
   gap: 5px;
@@ -1821,8 +1821,8 @@ button {
 
 .aitown-hub-focus-ribbon__facts {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
-  max-height: 108px;
+  grid-template-columns: repeat(auto-fit, minmax(156px, 1fr));
+  max-height: 136px;
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -1861,6 +1861,15 @@ button {
   padding: 3px 6px;
   border-left: 2px solid rgba(139, 233, 213, 0.35);
   background: rgba(7, 12, 15, 0.24);
+}
+
+.aitown-hub-focus-ribbon__facts .aitown-hub-focus-ribbon__facts-label {
+  grid-column: 1 / -1;
+  border-left-color: rgba(245, 217, 141, 0.48);
+  color: #f7d57b;
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
 .aitown-hub-sheet .aitown-panel--details {
@@ -2110,6 +2119,34 @@ button {
   margin-bottom: 6px;
 }
 
+.aitown-hub-sheet
+  .aitown-panel--details-selected-agent.aitown-panel--details-category-supervision[data-selected-agent-supervision-panel]
+  .aitown-details__section--selected-supervision-observation,
+.aitown-hub-sheet
+  .aitown-panel--details-selected-agent.aitown-panel--details-category-supervision[data-selected-agent-supervision-panel]
+  .aitown-details__section--selected-supervision-audit,
+.aitown-hub-sheet
+  .aitown-panel--details-selected-agent.aitown-panel--details-category-supervision[data-selected-agent-supervision-panel]
+  .aitown-details__section--selected-supervision-memory,
+.aitown-hub-sheet
+  .aitown-panel--details-selected-agent.aitown-panel--details-category-supervision[data-selected-agent-supervision-panel]
+  .aitown-details__section--selected-supervision-history,
+.aitown-hub-sheet
+  .aitown-panel--details-selected-agent.aitown-panel--details-category-supervision[data-selected-agent-supervision-panel]
+  .aitown-details__section--selected-supervision-workflow,
+.aitown-hub-sheet
+  .aitown-panel--details-selected-agent.aitown-panel--details-category-supervision[data-selected-agent-supervision-panel]
+  .aitown-details__section--selected-supervision-incidents,
+.aitown-hub-sheet
+  .aitown-panel--details-selected-agent.aitown-panel--details-category-supervision[data-selected-agent-supervision-panel]
+  .aitown-details__section--selected-supervision-queue {
+  grid-column: 1 / -1;
+  grid-row: auto;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
 .aitown-hub-sheet .aitown-panel--details-category-supervision .aitown-details__section--selected-supervision-observation,
 .aitown-hub-sheet .aitown-panel--details-category-supervision .aitown-details__section--selected-supervision-audit,
 .aitown-hub-sheet .aitown-panel--details-category-supervision .aitown-details__section--selected-supervision-memory {
@@ -2169,6 +2206,13 @@ button {
   overscroll-behavior: contain;
   padding-right: 3px;
   scrollbar-width: thin;
+}
+
+.aitown-hub-sheet
+  .aitown-panel--details-selected-agent.aitown-panel--details-category-supervision[data-selected-agent-supervision-panel]
+  .aitown-details__section[class*='aitown-details__section--selected-supervision-']
+  .aitown-records {
+  max-height: none;
 }
 
 .aitown-hub-sheet .aitown-details__section {
@@ -2516,11 +2560,6 @@ button {
   display: none;
 }
 
-.aitown-panel--details[data-active-hub-category='supervision'][data-selected-agent-drilldown-tab='replay']
-  .aitown-details__section.aitown-details__section--hub-supervision {
-  display: flex;
-}
-
 @media (max-width: 1080px) {
   .aitown-shell {
     height: 100dvh;
@@ -2646,6 +2685,10 @@ button {
   }
 
   .aitown-hub-sheet__body--selected-agent {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .aitown-hub-selected-agent-chrome {
     grid-template-columns: minmax(0, 1fr);
   }
 

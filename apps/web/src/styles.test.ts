@@ -81,7 +81,7 @@ describe('AI Town shell styles', () => {
     expect(styles).toMatch(/data-active-hub-category='evidence'[\s\S]*?aitown-details__section--hub-evidence/);
     expect(styles).toMatch(/data-active-hub-category='replay'[\s\S]*?aitown-details__section--hub-replay/);
     expect(styles).toMatch(/data-active-hub-category='memory'[\s\S]*?aitown-details__section--hub-memory/);
-    expect(styles).toMatch(
+    expect(styles).not.toMatch(
       /data-active-hub-category='supervision'\]\[data-selected-agent-drilldown-tab='replay'\][\s\S]*?\.aitown-details__section--hub-supervision\s*\{[\s\S]*?display:\s*flex;/
     );
     expect(styles).toMatch(
@@ -104,6 +104,12 @@ describe('AI Town shell styles', () => {
     );
     expect(styles).toMatch(
       /\.aitown-selected-supervision-deck__button:disabled,[\s\S]*?\.aitown-selected-supervision-deck__button:disabled:focus-visible\s*\{[\s\S]*?cursor:\s*not-allowed;/
+    );
+    expect(styles).toMatch(
+      /data-selected-agent-supervision-panel\][\s\S]*?\.aitown-details__section--selected-supervision-history,[\s\S]*?\{[\s\S]*?grid-column:\s*1 \/ -1;[\s\S]*?height:\s*100%;[\s\S]*?overflow:\s*hidden;/
+    );
+    expect(styles).toMatch(
+      /data-selected-agent-supervision-panel\][\s\S]*?\.aitown-details__section\[class\*='aitown-details__section--selected-supervision-'\][\s\S]*?\.aitown-records\s*\{[\s\S]*?max-height:\s*none;/
     );
   });
 
@@ -156,7 +162,12 @@ describe('AI Town shell styles', () => {
     expect(styles).toMatch(/\.aitown-status-legend\s*\{[\s\S]*?overflow-y:\s*auto;[\s\S]*?scrollbar-gutter:\s*stable;/);
     expect(styles).toMatch(/\.aitown-selected-agent-peek\s*\{[\s\S]*?overflow-y:\s*auto;[\s\S]*?overscroll-behavior:\s*contain;/);
     expect(styles).toMatch(/\.aitown-selected-agent-peek__facts\s*\{[\s\S]*?display:\s*grid;[\s\S]*?grid-template-columns:\s*repeat\(auto-fit, minmax\(132px, 1fr\)\);[\s\S]*?max-height:\s*132px;[\s\S]*?overflow-y:\s*auto;/);
-    expect(styles).toMatch(/\.aitown-hub-focus-ribbon__facts\s*\{[\s\S]*?display:\s*grid;[\s\S]*?grid-template-columns:\s*repeat\(auto-fit, minmax\(118px, 1fr\)\);[\s\S]*?max-height:\s*108px;[\s\S]*?overflow-y:\s*auto;/);
+    expect(styles).toMatch(/\.aitown-hub-sheet__body--selected-agent\s*\{[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\);[\s\S]*?grid-template-rows:\s*auto minmax\(0, 1fr\);/);
+    expect(styles).not.toContain('grid-template-columns: minmax(220px, 300px) minmax(0, 1fr);');
+    expect(styles).toMatch(/\.aitown-hub-selected-agent-chrome\s*\{[\s\S]*?display:\s*grid;[\s\S]*?grid-template-columns:\s*minmax\(260px, 1fr\) minmax\(220px, 0\.45fr\);/);
+    expect(styles).toMatch(/\.aitown-hub-focus-ribbon\s*\{[\s\S]*?max-height:\s*min\(22dvh, 184px\);/);
+    expect(styles).toMatch(/\.aitown-hub-focus-ribbon__facts\s*\{[\s\S]*?display:\s*grid;[\s\S]*?grid-template-columns:\s*repeat\(auto-fit, minmax\(156px, 1fr\)\);[\s\S]*?max-height:\s*136px;[\s\S]*?overflow-y:\s*auto;/);
+    expect(styles).toMatch(/\.aitown-hub-focus-ribbon__facts \.aitown-hub-focus-ribbon__facts-label\s*\{[\s\S]*?grid-column:\s*1 \/ -1;/);
     expect(styles).toMatch(/\.aitown-details__summary\s*\{[\s\S]*?max-height:\s*min\(22dvh, 180px\);[\s\S]*?overflow-y:\s*auto;/);
   });
 

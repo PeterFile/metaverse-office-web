@@ -2618,11 +2618,47 @@ afterEach(() => {
         within(supervisionDeck).getByRole('button', { name: 'Open Collector Observation supervision panel' })
       ).toBeVisible();
       expect(within(supervisionDeck).getByRole('button', { name: 'Open Supervision History supervision panel' })).toBeVisible();
-      expect(within(currentDetails).queryByRole('heading', { name: 'Collector Observation' })).not.toBeInTheDocument();
-      expect(within(currentDetails).queryByRole('heading', { name: 'Supervision History' })).not.toBeInTheDocument();
+      expect(currentDetails).not.toHaveAttribute('data-selected-agent-supervision-panel');
     },
     20000
   );
+
+  it('bottom category clicks clear an opened selected-agent supervision subpanel before showing the clicked category', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user, 'Queue');
+    const queueSection = within(details).getByRole('heading', { name: 'Active Queue' }).closest('section');
+    expect(queueSection).not.toBeNull();
+    await user.click(
+      within(queueSection!).getByRole('button', { name: 'Inspect App Engineering Agent from active queue' })
+    );
+
+    await openHub(user, 'Supervision');
+    let currentDetails = screen.getByRole('complementary', { name: 'Agent details' });
+    await user.click(
+      within(currentDetails).getByRole('button', { name: 'Open Supervision History supervision panel' })
+    );
+    expect(within(currentDetails).getByRole('heading', { name: 'Supervision History' })).toBeVisible();
+
+    await openHub(user, 'Memory');
+    currentDetails = screen.getByRole('complementary', { name: 'Agent details' });
+    await waitFor(() => {
+      expect(currentDetails).toHaveAttribute('data-active-hub-category', 'memory');
+      expect(currentDetails).toHaveAttribute('data-selected-agent-drilldown-tab', 'evidence');
+    });
+    expect(within(currentDetails).getByRole('heading', { name: 'Shared Memory' })).toBeVisible();
+    expect(currentDetails).not.toHaveAttribute('data-selected-agent-supervision-panel');
+
+    await openHub(user, 'Supervision');
+    currentDetails = screen.getByRole('complementary', { name: 'Agent details' });
+    await waitFor(() => {
+      expect(currentDetails).toHaveAttribute('data-active-hub-category', 'supervision');
+      expect(currentDetails).toHaveAttribute('data-selected-agent-drilldown-tab', 'evidence');
+    });
+    expect(within(currentDetails).getByRole('group', { name: 'Selected agent supervision deck' })).toBeVisible();
+    expect(currentDetails).not.toHaveAttribute('data-selected-agent-supervision-panel');
+  }, 20000);
 
   it('supports keyboard navigation across selected-agent Hub drilldown tabs', async () => {
     const user = userEvent.setup();

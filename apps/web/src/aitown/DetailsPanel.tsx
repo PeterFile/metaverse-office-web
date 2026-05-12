@@ -1,4 +1,4 @@
-import { Fragment, useState, type ReactNode } from 'react';
+import { Fragment, useEffect, useState, type ReactNode } from 'react';
 
 import type {
   AccountabilityReplayBundle,
@@ -4073,6 +4073,9 @@ export function DetailsPanel({
   );
   const [selectedAgentSupervisionPanel, setSelectedAgentSupervisionPanel] =
     useState<SelectedAgentSupervisionPanel | null>(null);
+  useEffect(() => {
+    setSelectedAgentSupervisionPanel(null);
+  }, [activeHubCategory, selectedAgent?.agent_id, selectedAgentDrilldownTab]);
   const selectedAgentSupervisionDeckEnabled = Boolean(
     selectedAgent && activeHubCategory === 'supervision' && selectedAgentDrilldownTab === 'evidence'
   );
@@ -5188,6 +5191,7 @@ export function DetailsPanel({
       aria-label="Agent details"
       data-active-hub-category={activeHubCategory}
       data-selected-agent-drilldown-tab={selectedAgentDrilldownTab ?? undefined}
+      data-selected-agent-supervision-panel={selectedAgentSupervisionPanelMode ?? undefined}
     >
       <div className="aitown-details__head">
         <div>

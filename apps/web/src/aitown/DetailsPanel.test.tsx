@@ -776,7 +776,7 @@ describe('DetailsPanel selected-agent category IA', () => {
   it('opens selected-agent supervision details from a compact deck and returns to the deck', async () => {
     const user = userEvent.setup();
 
-    render(
+    const { container, rerender } = render(
       <DetailsPanel
         {...buildProps({
           activeHubCategory: 'supervision',
@@ -813,11 +813,19 @@ describe('DetailsPanel selected-agent category IA', () => {
     expect(screen.queryByRole('heading', { name: 'Workflow' })).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Shared Memory' })).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Incident Feed' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'Supervision History' })).not.toBeInTheDocument();
+    expect(container.querySelector('aside.aitown-panel--details')).not.toHaveAttribute(
+      'data-selected-agent-supervision-panel'
+    );
 
     await user.click(screen.getByRole('button', { name: 'Open Supervision History supervision panel' }));
 
+    const detailsPanel = container.querySelector('aside.aitown-panel--details');
+    expect(detailsPanel).not.toBeNull();
+    expect(detailsPanel!).toHaveAttribute('data-selected-agent-supervision-panel', 'history');
     expect(screen.getByRole('heading', { name: 'Supervision History' })).toBeVisible();
+    expect(screen.getByRole('heading', { name: 'Supervision History' }).closest('section')).toHaveClass(
+      'aitown-details__section--selected-supervision-history'
+    );
     expect(screen.getByText('Deck-opened supervision history evidence')).toBeVisible();
     expect(screen.queryByRole('heading', { name: 'Workflow' })).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Shared Memory' })).not.toBeInTheDocument();
@@ -826,7 +834,23 @@ describe('DetailsPanel selected-agent category IA', () => {
     await user.click(screen.getByRole('button', { name: 'Back to supervision deck' }));
 
     expect(screen.getByRole('group', { name: 'Selected agent supervision deck' })).toBeVisible();
-    expect(screen.queryByRole('heading', { name: 'Supervision History' })).not.toBeInTheDocument();
+    expect(detailsPanel!).not.toHaveAttribute('data-selected-agent-supervision-panel');
+
+    await user.click(screen.getByRole('button', { name: 'Open Supervision History supervision panel' }));
+    expect(detailsPanel!).toHaveAttribute('data-selected-agent-supervision-panel', 'history');
+
+    rerender(
+      <DetailsPanel
+        {...buildProps({
+          activeHubCategory: 'memory',
+          selectedAgentDrilldownTab: 'evidence'
+        })}
+      />
+    );
+
+    expect(container.querySelector('aside.aitown-panel--details')).not.toHaveAttribute(
+      'data-selected-agent-supervision-panel'
+    );
   });
 
   it('opens the active correlation queue from the selected-agent supervision deck and returns to the deck', async () => {

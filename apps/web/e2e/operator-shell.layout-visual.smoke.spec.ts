@@ -623,6 +623,7 @@ test.describe('operator shell layout visual smoke', () => {
     await expect(focusRibbon).toBeVisible();
     await expect(focusRibbon.getByText('Growth Revenue Agent')).toBeVisible();
     await expect(focusRibbon.getByText(/Yellow .* planning/)).toBeVisible();
+    await expect(focusRibbon.getByText('Loaded context facts')).toBeVisible();
     await expect(focusRibbon.getByText('Operation · Prepare handoff notes')).toBeVisible();
     await expect(focusRibbon.getByText('Correlation · corr-revenue-handoff')).toBeVisible();
     await expect(focusRibbon.getByText('Evidence · /tmp/revenue-handoff.md')).toBeVisible();
@@ -632,7 +633,9 @@ test.describe('operator shell layout visual smoke', () => {
       readRect(hub),
       readRect(focusRibbon)
     ]);
-    expect(ribbonRect.height, 'Hub focus ribbon should stay compact').toBeLessThanOrEqual(132);
+    expect(ribbonRect.height, 'Hub focus ribbon should stay compact').toBeLessThanOrEqual(
+      Math.min(184, page.viewportSize()!.height * 0.22) + 1
+    );
     expect(ribbonRect.width, 'Hub focus ribbon should stay bounded by the Hub sheet').toBeLessThanOrEqual(
       hubRect.width
     );
@@ -756,9 +759,11 @@ test.describe('operator shell layout visual smoke', () => {
       hubRect.height,
       'RimWorld window should stay bounded instead of becoming a full modal on desktop'
     ).toBeLessThanOrEqual(561);
+    const selectedAgentChromeVerticalFootprint =
+      Math.max(focusRibbonRect.bottom, drilldownRect.bottom) - Math.min(focusRibbonRect.top, drilldownRect.top);
     expect(
-      focusRibbonRect.height + drilldownRect.height,
-      'Hub focus ribbon plus drilldown tabs should stay compact'
+      selectedAgentChromeVerticalFootprint,
+      'Hub focus ribbon and desktop drilldown tabs should keep a compact vertical footprint'
     ).toBeLessThanOrEqual(198);
     expect(
       resolveIntersectionArea(resolveUpperWorldDragLane(worldRect), drilldownRect),

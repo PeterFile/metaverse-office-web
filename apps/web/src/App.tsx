@@ -1746,6 +1746,7 @@ function AppInner() {
 
   const openHubCategory = useCallback(
     (category: HubCategory) => {
+      requestedSelectedAgentDrilldownTabRef.current = null;
       activeHubCategoryFromSelectedAgentTabRef.current = false;
       setActiveHubCategory(category);
       if (selectedAgentId !== null) {
@@ -1816,6 +1817,7 @@ function AppInner() {
   }, [activeHubCategory, hubOpen, selectedAgentId]);
 
   const handleSelectSelectedAgentDrilldownTab = useCallback((tab: SelectedAgentDrilldownTab) => {
+    requestedSelectedAgentDrilldownTabRef.current = null;
     setSelectedAgentDrilldownTab(tab);
     activeHubCategoryFromSelectedAgentTabRef.current = true;
     setActiveHubCategory((currentCategory) => resolveSelectedAgentTabHubCategory(tab, currentCategory));
@@ -2683,6 +2685,7 @@ function AppInner() {
                     <span>{`${HOT_ZONE_SEVERITY_LABELS[selectedAgentPeekSeverity]} · ${selectedAgentPeekStatus}`}</span>
                   </div>
                   <div className="aitown-hub-focus-ribbon__facts">
+                    <span className="aitown-hub-focus-ribbon__facts-label">Loaded context facts</span>
                     {selectedAgentPeekZone ? <span>{`Zone · ${selectedAgentPeekZone}`}</span> : null}
                     {selectedAgentPeekOperation ? <span>{`Operation · ${selectedAgentPeekOperation}`}</span> : null}
                     {selectedAgentPeekCorrelationId ? (

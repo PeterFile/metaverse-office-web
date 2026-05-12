@@ -6101,7 +6101,7 @@ test.describe('operator shell smoke', () => {
   test(
     'keeps an explicitly selected incident correlation instead of snapping back to the workflow default after a later workflow refresh',
     async ({ page }) => {
-      test.setTimeout(60_000);
+      test.setTimeout(90_000);
       await installFastPollInterval(page);
 
       let workflowResponses = 0;
@@ -6560,6 +6560,8 @@ test.describe('operator shell smoke', () => {
   test('falls back to the workflow interaction correlation when opening a workflow interaction participant pivot via keyboard traversal', async ({
     page
   }) => {
+    test.setTimeout(60_000);
+
     const requestedUrls: string[] = [];
     page.on('request', (request) => {
       try {

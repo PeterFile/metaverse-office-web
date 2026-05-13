@@ -14,7 +14,7 @@ import {
 import { Viewport } from 'pixi-viewport';
 
 import { loadAiTownAssets } from './assetLoader';
-import type { AiTownSceneModel, SceneAgent } from './types';
+import type { AiTownSceneModel, Facing, SceneAgent } from './types';
 import {
   DEFAULT_ALLOW_VIEWPORT_DRAG_OUTSIDE,
   DEFAULT_MAX_VIEWPORT_SCALE,
@@ -63,24 +63,28 @@ const statusBadgeStyle = new TextStyle({
 
 const WATCH_PARTICIPANT_HIGHLIGHT_COLOR = 0xffd785;
 const CORRELATION_PARTICIPANT_HIGHLIGHT_COLOR = 0x8be9d5;
-const AGENT_MOTION_TAU = Math.PI * 2;
 const AGENT_MOTION_MAX_FRAMES_PER_SECOND = 12;
 const AGENT_MOTION_MAX_DELTA_SECONDS = 0.12;
 const AGENT_MOTION_FRAME_INTERVAL_SECONDS = 1 / AGENT_MOTION_MAX_FRAMES_PER_SECOND;
-const AGENT_MOTION_MAX_WAYPOINT_ADVANCES_PER_FRAME = 8;
+const AGENT_MOTION_RUN_DISTANCE_PX = 128;
+const AGENT_MOTION_RUN_SPEED_MULTIPLIER = 1.55;
 const VIEWPORT_DRAG_START_THRESHOLD_PX = 4;
 
 type AgentMotionProfile = {
   seed: number;
-  walkRadius: number;
-  maxDistance: number;
   speedPixelsPerSecond: number;
+  animationSpeed: number;
   arrivalDistance: number;
+};
+
+type AgentSpriteContainer = Container & {
+  agentCharacter?: AnimatedSprite;
+  agentCharacterTextures?: Record<Facing, Texture[]>;
 };
 
 type AgentMotionState = {
   agentId: string;
-  container: Container;
+  container: AgentSpriteContainer;
   homeX: number;
   homeY: number;
   visualX: number;
@@ -88,8 +92,10 @@ type AgentMotionState = {
   targetX: number;
   targetY: number;
   elapsedSeconds: number;
-  waypointIndex: number;
   profile: AgentMotionProfile;
+  facing: Facing;
+  animationFacing: Facing;
+  homeChangedThisFrame: boolean;
 };
 
 function resolveWatchModeLabel(watchMode: 'lead' | 'peer') {
@@ -154,40 +160,22 @@ function resolveAgentMotionProfile(agent: SceneAgent): AgentMotionProfile {
     orange: 0.76,
     red: 0.52
   }[agent.severity];
-  const severityRadiusScale = {
-    normal: 1,
-    yellow: 0.96,
-    orange: 0.82,
-    red: 0.58
-  }[agent.severity];
   const unit = (salt: number) => deriveAgentMotionUnit(seed, salt);
   const criticalPhase = agent.phase === 'blocked' || agent.phase === 'reboot_recommended' || agent.phase === 'rebooting';
-  let walkRadius = 5 + unit(0) * 2;
-  let speedPixelsPerSecond = 22 + unit(1) * 5;
-  let maxDistance = 7.5;
+  let speedPixelsPerSecond = 38 + unit(1) * 8;
 
   if (agent.phase === 'active' || agent.phase === 'reviewing' || agent.phase === 'handoff_active') {
-    walkRadius = 8 + unit(0) * 2;
-    speedPixelsPerSecond = 42 + unit(1) * 8;
-    maxDistance = 10;
+    speedPixelsPerSecond = 56 + unit(1) * 10;
   } else if (agent.phase === 'handoff_pending' || agent.phase === 'handoff_done' || agent.phase === 'recovered') {
-    walkRadius = 6 + unit(0) * 1.5;
-    speedPixelsPerSecond = 26 + unit(1) * 5;
-    maxDistance = 8;
+    speedPixelsPerSecond = 44 + unit(1) * 8;
   } else if (agent.phase === 'waiting' || agent.phase === 'idle' || agent.phase === 'unknown') {
-    walkRadius = 3.5 + unit(0) * 1.2;
-    speedPixelsPerSecond = 13 + unit(1) * 4;
-    maxDistance = 5.2;
+    speedPixelsPerSecond = 30 + unit(1) * 6;
   } else if (agent.phase === 'sleeping') {
-    walkRadius = 0.6 + unit(0) * 0.4;
-    speedPixelsPerSecond = 2.6 + unit(1) * 1.2;
-    maxDistance = 1.1;
+    speedPixelsPerSecond = 12 + unit(1) * 3;
   }
 
   if (criticalPhase) {
-    walkRadius = 2 + unit(0) * 0.8;
-    speedPixelsPerSecond = 5 + unit(1) * 2.2;
-    maxDistance = 3;
+    speedPixelsPerSecond = 20 + unit(1) * 5;
     if (agent.rebootRecommended) {
       speedPixelsPerSecond *= 0.75;
     }
@@ -195,88 +183,109 @@ function resolveAgentMotionProfile(agent: SceneAgent): AgentMotionProfile {
 
   return {
     seed,
-    walkRadius: Math.min(walkRadius * severityRadiusScale, maxDistance),
-    maxDistance,
     speedPixelsPerSecond: speedPixelsPerSecond * severitySpeedScale,
+    animationSpeed: resolveAgentAnimationSpeed(agent),
     arrivalDistance: 0.25
   };
 }
 
-function resolveAgentMotionWaypoint(
-  profile: AgentMotionProfile,
-  homeX: number,
-  homeY: number,
-  waypointIndex: number
-) {
-  const angle =
-    ((deriveAgentMotionUnit(profile.seed, waypointIndex * 3) + waypointIndex * 0.38196601125) % 1) *
-    AGENT_MOTION_TAU;
-  const radius = profile.walkRadius * (0.62 + deriveAgentMotionUnit(profile.seed, waypointIndex * 3 + 1) * 0.38);
-  let unitX = Math.cos(angle);
-  let unitY = Math.sin(angle);
-  const minimumComponent = 0.42;
-
-  if (Math.abs(unitX) < minimumComponent) {
-    unitX = unitX < 0 ? -minimumComponent : minimumComponent;
-  }
-  if (Math.abs(unitY) < minimumComponent) {
-    unitY = unitY < 0 ? -minimumComponent : minimumComponent;
-  }
-
-  const unitDistance = Math.hypot(unitX, unitY);
-
-  return {
-    x: homeX + (unitX / unitDistance) * radius,
-    y: homeY + (unitY / unitDistance) * radius
-  };
+function resolveAgentTravelSpeed(profile: AgentMotionProfile, distanceToTarget: number) {
+  return distanceToTarget >= AGENT_MOTION_RUN_DISTANCE_PX
+    ? profile.speedPixelsPerSecond * AGENT_MOTION_RUN_SPEED_MULTIPLIER
+    : profile.speedPixelsPerSecond;
 }
 
-function clampAgentMotionToHome(state: AgentMotionState) {
-  const offsetX = state.visualX - state.homeX;
-  const offsetY = state.visualY - state.homeY;
-  const distance = Math.hypot(offsetX, offsetY);
+function resolveAgentTravelFacing(deltaX: number, deltaY: number, fallback: Facing): Facing {
+  if (Math.hypot(deltaX, deltaY) <= 0.0001) {
+    return fallback;
+  }
 
-  if (distance <= state.profile.maxDistance) {
+  if (Math.abs(deltaX) >= Math.abs(deltaY)) {
+    return deltaX >= 0 ? 'right' : 'left';
+  }
+
+  return deltaY >= 0 ? 'down' : 'up';
+}
+
+function syncAgentCharacterAnimation(
+  state: AgentMotionState,
+  moving: boolean,
+  deltaX: number,
+  deltaY: number,
+  travelSpeed: number
+) {
+  const character = state.container.agentCharacter;
+  const characterTextures = state.container.agentCharacterTextures;
+
+  if (!character || !characterTextures) {
     return;
   }
 
-  const scale = state.profile.maxDistance / distance;
-  state.visualX = state.homeX + offsetX * scale;
-  state.visualY = state.homeY + offsetY * scale;
+  const nextFacing = moving ? resolveAgentTravelFacing(deltaX, deltaY, state.facing) : state.facing;
+  const textures = characterTextures[nextFacing] ?? characterTextures.down;
+
+  if (state.animationFacing !== nextFacing) {
+    character.textures = textures;
+    state.animationFacing = nextFacing;
+  }
+
+  if (moving) {
+    character.animationSpeed =
+      travelSpeed >= profileRunSpeedThreshold(state.profile)
+        ? Math.max(state.profile.animationSpeed, 0.13)
+        : Math.max(state.profile.animationSpeed, 0.08);
+    character.play();
+    return;
+  }
+
+  character.animationSpeed = 0;
+  if ('gotoAndStop' in character && typeof character.gotoAndStop === 'function') {
+    character.gotoAndStop(1);
+  }
+}
+
+function profileRunSpeedThreshold(profile: AgentMotionProfile) {
+  return profile.speedPixelsPerSecond * AGENT_MOTION_RUN_SPEED_MULTIPLIER * 0.95;
 }
 
 function createAgentMotionState(
   agent: SceneAgent,
-  container: Container,
+  container: AgentSpriteContainer,
   previousState?: AgentMotionState
 ): AgentMotionState {
   const profile = resolveAgentMotionProfile(agent);
-  const canReusePreviousState =
-    previousState?.agentId === agent.agentId &&
-    previousState.homeX === agent.position.x &&
-    previousState.homeY === agent.position.y;
-  const canReusePreviousTarget = canReusePreviousState && previousState.profile.seed === profile.seed;
-  const waypointIndex = canReusePreviousTarget ? previousState.waypointIndex : 0;
-  const target = canReusePreviousTarget
-    ? { x: previousState.targetX, y: previousState.targetY }
-    : resolveAgentMotionWaypoint(profile, agent.position.x, agent.position.y, waypointIndex);
+  const canReusePreviousState = previousState?.agentId === agent.agentId;
+  const visualX = canReusePreviousState ? previousState.visualX : agent.position.x;
+  const visualY = canReusePreviousState ? previousState.visualY : agent.position.y;
   const state = {
     agentId: agent.agentId,
     container,
     homeX: agent.position.x,
     homeY: agent.position.y,
-    visualX: canReusePreviousState ? previousState.visualX : agent.position.x,
-    visualY: canReusePreviousState ? previousState.visualY : agent.position.y,
-    targetX: target.x,
-    targetY: target.y,
+    visualX,
+    visualY,
+    targetX: agent.position.x,
+    targetY: agent.position.y,
     elapsedSeconds: canReusePreviousState ? previousState.elapsedSeconds : 0,
-    waypointIndex,
-    profile
+    profile,
+    facing: agent.facing,
+    animationFacing: agent.facing,
+    homeChangedThisFrame:
+      canReusePreviousState && (previousState.homeX !== agent.position.x || previousState.homeY !== agent.position.y)
   };
 
-  clampAgentMotionToHome(state);
   container.position.set(state.visualX, state.visualY);
   container.zIndex = state.visualY;
+  const deltaX = state.targetX - state.visualX;
+  const deltaY = state.targetY - state.visualY;
+  const distanceToTarget = Math.hypot(deltaX, deltaY);
+  syncAgentCharacterAnimation(
+    state,
+    distanceToTarget > state.profile.arrivalDistance,
+    deltaX,
+    deltaY,
+    resolveAgentTravelSpeed(state.profile, distanceToTarget)
+  );
 
   return state;
 }
@@ -288,43 +297,34 @@ function applyAgentMotionFrame(states: AgentMotionState[], deltaSeconds: number)
 
   for (const state of states) {
     state.elapsedSeconds += safeDeltaSeconds;
-    let remainingDistance = state.profile.speedPixelsPerSecond * safeDeltaSeconds;
-    let waypointAdvances = 0;
+    const deltaX = state.targetX - state.visualX;
+    const deltaY = state.targetY - state.visualY;
+    const distanceToTarget = Math.hypot(deltaX, deltaY);
 
-    while (remainingDistance > 0) {
-      const deltaX = state.targetX - state.visualX;
-      const deltaY = state.targetY - state.visualY;
-      const distanceToTarget = Math.hypot(deltaX, deltaY);
-
-      if (distanceToTarget <= state.profile.arrivalDistance) {
-        state.visualX = state.targetX;
-        state.visualY = state.targetY;
-        remainingDistance = Math.max(remainingDistance - distanceToTarget, 0);
-        waypointAdvances += 1;
-        state.waypointIndex += 1;
-        const target = resolveAgentMotionWaypoint(
-          state.profile,
-          state.homeX,
-          state.homeY,
-          state.waypointIndex
-        );
-        state.targetX = target.x;
-        state.targetY = target.y;
-
-        if (waypointAdvances >= AGENT_MOTION_MAX_WAYPOINT_ADVANCES_PER_FRAME) {
-          break;
-        }
-
-        continue;
-      }
-
-      const stepDistance = Math.min(remainingDistance, distanceToTarget);
-      state.visualX += (deltaX / distanceToTarget) * stepDistance;
-      state.visualY += (deltaY / distanceToTarget) * stepDistance;
-      remainingDistance -= stepDistance;
+    if (distanceToTarget <= state.profile.arrivalDistance) {
+      state.visualX = state.targetX;
+      state.visualY = state.targetY;
+      state.homeChangedThisFrame = false;
+      state.container.position.set(state.visualX, state.visualY);
+      state.container.zIndex = state.visualY;
+      syncAgentCharacterAnimation(state, false, 0, 0, 0);
+      continue;
     }
 
-    clampAgentMotionToHome(state);
+    const travelSpeed = resolveAgentTravelSpeed(state.profile, distanceToTarget);
+    const stepDistance = Math.min(travelSpeed * safeDeltaSeconds, distanceToTarget);
+    state.visualX += (deltaX / distanceToTarget) * stepDistance;
+    state.visualY += (deltaY / distanceToTarget) * stepDistance;
+
+    if (Math.hypot(state.targetX - state.visualX, state.targetY - state.visualY) <= state.profile.arrivalDistance) {
+      state.visualX = state.targetX;
+      state.visualY = state.targetY;
+      syncAgentCharacterAnimation(state, false, 0, 0, 0);
+    } else {
+      syncAgentCharacterAnimation(state, true, deltaX, deltaY, travelSpeed);
+    }
+    state.homeChangedThisFrame = false;
+
     state.container.position.set(state.visualX, state.visualY);
     state.container.zIndex = state.visualY;
   }
@@ -560,15 +560,15 @@ function createAgentSprite(
   emphasis: WatchOverlayAgentEmphasis | 'none',
   correlationHighlighted: boolean,
   onSelect: (agentId: string | null) => void,
-  characterTextures: Record<string, Texture[]>,
-  rolePawnTexture?: Texture
+  characterTextures: Record<Facing, Texture[]>
 ) {
-  const container = new Container();
+  const container = new Container() as AgentSpriteContainer;
   container.position.set(agent.position.x, agent.position.y);
   container.eventMode = 'static';
   container.cursor = 'pointer';
   container.zIndex = agent.position.y;
   container.hitArea = new Rectangle(-24, -32, 48, 56);
+  container.agentCharacterTextures = characterTextures;
 
   const severityColor = SEVERITY_COLORS[agent.severity];
   const emphasized = emphasis !== 'none';
@@ -617,16 +617,15 @@ function createAgentSprite(
     });
   }
 
-  const character = rolePawnTexture
-    ? new Sprite(rolePawnTexture)
-    : new AnimatedSprite(characterTextures[agent.facing] ?? characterTextures.down);
+  const character = new AnimatedSprite(characterTextures[agent.facing] ?? characterTextures.down);
   character.anchor.set(0.5, 1);
   character.y = 10;
-  character.scale.set(rolePawnTexture ? 0.32 : 1.1);
-  if (character instanceof AnimatedSprite) {
-    character.animationSpeed = resolveAgentAnimationSpeed(agent);
-    character.play();
+  character.scale.set(1.1);
+  character.animationSpeed = 0;
+  if ('gotoAndStop' in character && typeof character.gotoAndStop === 'function') {
+    character.gotoAndStop(1);
   }
+  container.agentCharacter = character;
 
   const nameLabel = new Text({
     text: resolveAgentWorldLabel(agent.displayName, agent.agentId),
@@ -820,8 +819,9 @@ export default function WorldScene({
     const motionState = agentMotionStatesRef.current.find((state) => state.agentId === agent.agentId);
     const motionStateMatchesAgentHome =
       motionState?.homeX === agent.position.x && motionState.homeY === agent.position.y;
-    const visualX = motionStateMatchesAgentHome ? motionState?.container.x : undefined;
-    const visualY = motionStateMatchesAgentHome ? motionState?.container.y : undefined;
+    const visualFocusIsCurrent = motionStateMatchesAgentHome && !motionState?.homeChangedThisFrame;
+    const visualX = visualFocusIsCurrent ? motionState?.container.x : undefined;
+    const visualY = visualFocusIsCurrent ? motionState?.container.y : undefined;
 
     return {
       agentId: agent.agentId,
@@ -1581,8 +1581,7 @@ export default function WorldScene({
             selectedAgentDirectFocusRef.current = null;
             onSelectAgentRef.current(agentId);
           },
-          assets.characterAnimations[agent.characterKey],
-          agent.rolePawnKey ? assets.rolePawnTextures[agent.rolePawnKey] : undefined
+          assets.characterAnimations[agent.characterKey]
         );
 
         agentLayer.addChild(agentSprite);

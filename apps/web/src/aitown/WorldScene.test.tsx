@@ -656,7 +656,7 @@ function makeWideSelectedAgentScene() {
 }
 
 describe('WorldScene watch overlay caption gating', () => {
-  it('renders generated role pawn textures before falling back to 32x32folk animations', async () => {
+  it('uses directional 32x32folk walking frames for role agents instead of static pawn portraits', async () => {
     appInitMock.mockReset().mockResolvedValue(undefined);
     const assets = makeAssets();
     vi.mocked(loadAiTownAssets).mockResolvedValue(assets);
@@ -692,7 +692,8 @@ describe('WorldScene watch overlay caption gating', () => {
     const pawnVisual = pawnAgent?.children[4] as { texture?: unknown } | undefined;
     const fallbackVisual = fallbackAgent?.children[4] as { texture?: unknown } | undefined;
 
-    expect(pawnVisual?.texture).toBe(assets.rolePawnTextures.app_eng);
+    expect(pawnVisual?.texture).toEqual(assets.characterAnimations.f1.down);
+    expect(pawnVisual?.texture).not.toBe(assets.rolePawnTextures.app_eng);
     expect(fallbackVisual?.texture).toEqual(assets.characterAnimations.f2.down);
   });
 
@@ -1082,7 +1083,7 @@ describe('WorldScene watch overlay caption gating', () => {
     expect(onSelectAgent).not.toHaveBeenCalled();
   });
 
-  it('walks active employee sprites on throttled Pixi ticker frames without capping the renderer frame rate', async () => {
+  it('does not fake walking by wobbling active employee sprites around their current coordinate', async () => {
     appInitMock.mockReset().mockResolvedValue(undefined);
     vi.mocked(loadAiTownAssets).mockResolvedValue(makeAssets());
 
@@ -1115,23 +1116,11 @@ describe('WorldScene watch overlay caption gating', () => {
 
     act(() => {
       app?.ticker.tick(10);
-    });
-
-    expect(agentSprite?.x).toBe(startX);
-    expect(agentSprite?.y).toBe(startY);
-
-    act(() => {
       app?.ticker.tick(1000);
     });
 
-    const offsetX = (agentSprite?.x ?? 0) - (homeAgent?.position.x ?? 0);
-    const offsetY = (agentSprite?.y ?? 0) - (homeAgent?.position.y ?? 0);
-    const distanceFromHome = Math.hypot(offsetX, offsetY);
-
-    expect(Math.abs(offsetX)).toBeGreaterThan(1);
-    expect(Math.abs(offsetY)).toBeGreaterThan(1);
-    expect(distanceFromHome).toBeGreaterThan(3.1);
-    expect(distanceFromHome).toBeLessThanOrEqual(10.1);
+    expect(agentSprite?.x).toBeCloseTo(startX, 4);
+    expect(agentSprite?.y).toBeCloseTo(startY, 4);
     expect(homeAgent?.position).toEqual({ x: 80, y: 120 });
 
     unmount();
@@ -1140,12 +1129,26 @@ describe('WorldScene watch overlay caption gating', () => {
     expect(app?.ticker.listeners.size).toBe(0);
   });
 
-  it('preserves visual continuity for unchanged agent homes across scene rerenders', async () => {
+  it('preserves in-flight travel continuity across scene rerenders for the same destination', async () => {
     appInitMock.mockReset().mockResolvedValue(undefined);
     vi.mocked(loadAiTownAssets).mockResolvedValue(makeAssets());
 
     const scene = makeScene();
     const activeAgent = scene.agents.find((agent) => agent.agentId === 'team-lead');
+    const activeAgentIndex = scene.agents.findIndex((agent) => agent.agentId === activeAgent?.agentId);
+    const destination = { x: 336, y: 248 };
+    const movedScene = {
+      ...scene,
+      agents: scene.agents.map((agent) =>
+        agent.agentId === activeAgent?.agentId
+          ? {
+              ...agent,
+              position: destination,
+              facing: 'right' as const
+            }
+          : agent
+      )
+    } satisfies AiTownSceneModel;
     const { rerender } = render(<WorldScene scene={scene} onSelectAgent={vi.fn()} />);
 
     expect(activeAgent).toBeDefined();
@@ -1155,7 +1158,12 @@ describe('WorldScene watch overlay caption gating', () => {
       expect(readAgentLayer()?.children).toHaveLength(scene.agents.length);
     });
 
-    const activeAgentIndex = scene.agents.findIndex((agent) => agent.agentId === activeAgent?.agentId);
+    rerender(<WorldScene scene={movedScene} onSelectAgent={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(readAgentLayer()?.children).toHaveLength(movedScene.agents.length);
+    });
+
     const firstSprite = readAgentLayer()?.children[activeAgentIndex];
 
     act(() => {
@@ -1165,13 +1173,15 @@ describe('WorldScene watch overlay caption gating', () => {
     const visualX = firstSprite?.x ?? activeAgent?.position.x ?? 0;
     const visualY = firstSprite?.y ?? activeAgent?.position.y ?? 0;
 
-    expect(visualX).not.toBeCloseTo(activeAgent?.position.x ?? 0, 4);
-    expect(visualY).not.toBeCloseTo(activeAgent?.position.y ?? 0, 4);
+    expect(visualX).toBeGreaterThan(activeAgent?.position.x ?? 0);
+    expect(visualX).toBeLessThan(destination.x);
+    expect(visualY).toBeGreaterThan(activeAgent?.position.y ?? 0);
+    expect(visualY).toBeLessThan(destination.y);
 
     rerender(
       <WorldScene
         scene={{
-          ...scene,
+          ...movedScene,
           activeCorrelationId: 'corr-rerender',
           correlationParticipantAgentIds: ['team-lead']
         }}
@@ -1180,7 +1190,7 @@ describe('WorldScene watch overlay caption gating', () => {
     );
 
     await waitFor(() => {
-      expect(readAgentLayer()?.children).toHaveLength(scene.agents.length);
+      expect(readAgentLayer()?.children).toHaveLength(movedScene.agents.length);
       const nextSprite = readAgentLayer()?.children[activeAgentIndex];
 
       expect(nextSprite?.x).toBeCloseTo(visualX, 4);
@@ -1188,6 +1198,135 @@ describe('WorldScene watch overlay caption gating', () => {
     });
 
     expect(activeAgent?.position).toEqual({ x: 80, y: 120 });
+  });
+
+  it('resynchronizes directional walking frames after recreating an in-flight sprite', async () => {
+    appInitMock.mockReset().mockResolvedValue(undefined);
+    const assets = makeAssets();
+    vi.mocked(loadAiTownAssets).mockResolvedValue(assets);
+
+    const scene = makeScene();
+    const activeAgent = scene.agents.find((agent) => agent.agentId === 'team-lead');
+    const activeAgentIndex = scene.agents.findIndex((agent) => agent.agentId === activeAgent?.agentId);
+    const destination = { x: 336, y: activeAgent?.position.y ?? 120 };
+    const movedScene = {
+      ...scene,
+      agents: scene.agents.map((agent) =>
+        agent.agentId === activeAgent?.agentId
+          ? {
+              ...agent,
+              position: destination,
+              facing: 'down' as const
+            }
+          : agent
+      )
+    } satisfies AiTownSceneModel;
+    const { rerender } = render(<WorldScene scene={scene} onSelectAgent={vi.fn()} />);
+
+    expect(activeAgent).toBeDefined();
+
+    await waitFor(() => {
+      expect(readViewportInspector()).toBeDefined();
+      expect(readAgentLayer()?.children).toHaveLength(scene.agents.length);
+    });
+
+    rerender(<WorldScene scene={movedScene} onSelectAgent={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(readAgentLayer()?.children).toHaveLength(movedScene.agents.length);
+    });
+
+    act(() => {
+      appInstances.at(-1)?.ticker.tick(1000);
+    });
+
+    const firstTraveller = readAgentLayer()?.children[activeAgentIndex];
+    const firstCharacter = firstTraveller?.children[4] as { textures?: unknown } | undefined;
+    expect(firstCharacter?.textures).toBe(assets.characterAnimations.f1.right);
+
+    rerender(
+      <WorldScene
+        scene={{
+          ...movedScene,
+          activeCorrelationId: 'corr-keep-walking',
+          correlationParticipantAgentIds: ['team-lead']
+        }}
+        onSelectAgent={vi.fn()}
+      />
+    );
+
+    await waitFor(() => {
+      expect(readAgentLayer()?.children).toHaveLength(movedScene.agents.length);
+    });
+
+    const recreatedTraveller = readAgentLayer()?.children[activeAgentIndex];
+    const recreatedCharacter = recreatedTraveller?.children[4] as { textures?: unknown } | undefined;
+    expect(recreatedCharacter?.textures).toBe(assets.characterAnimations.f1.right);
+  });
+
+  it('walks an agent from its previous scene coordinate to an updated coordinate instead of snapping', async () => {
+    appInitMock.mockReset().mockResolvedValue(undefined);
+    vi.mocked(loadAiTownAssets).mockResolvedValue(makeAssets());
+
+    const scene = makeScene();
+    const movingAgentIndex = scene.agents.findIndex((agent) => agent.agentId === 'team-lead');
+    const movingAgent = scene.agents[movingAgentIndex];
+    const destination = { x: 336, y: 248 };
+    const { rerender } = render(<WorldScene scene={scene} onSelectAgent={vi.fn()} />);
+
+    expect(movingAgent).toBeDefined();
+
+    await waitFor(() => {
+      expect(readViewportInspector()).toBeDefined();
+      expect(readAgentLayer()?.children).toHaveLength(scene.agents.length);
+    });
+
+    const startSprite = readAgentLayer()?.children[movingAgentIndex];
+    const startX = startSprite?.x ?? 0;
+    const startY = startSprite?.y ?? 0;
+    expect({ x: startX, y: startY }).toEqual(movingAgent?.position);
+
+    const nextScene = {
+      ...scene,
+      agents: scene.agents.map((agent) =>
+        agent.agentId === movingAgent?.agentId
+          ? {
+              ...agent,
+              position: destination,
+              facing: 'right' as const
+            }
+          : agent
+      )
+    } satisfies AiTownSceneModel;
+
+    rerender(<WorldScene scene={nextScene} onSelectAgent={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(readAgentLayer()?.children).toHaveLength(nextScene.agents.length);
+    });
+
+    const travellingSprite = readAgentLayer()?.children[movingAgentIndex];
+    expect(travellingSprite?.x).toBeCloseTo(startX, 4);
+    expect(travellingSprite?.y).toBeCloseTo(startY, 4);
+
+    act(() => {
+      appInstances.at(-1)?.ticker.tick(1000);
+    });
+
+    expect(travellingSprite?.x).toBeGreaterThan(startX + 2);
+    expect(travellingSprite?.x).toBeLessThan(destination.x - 2);
+    expect(travellingSprite?.y).toBeGreaterThan(startY + 1);
+    expect(travellingSprite?.y).toBeLessThan(destination.y - 1);
+
+    act(() => {
+      for (let index = 0; index < 80; index += 1) {
+        appInstances.at(-1)?.ticker.tick(1000);
+      }
+    });
+
+    expect(travellingSprite?.x).toBeCloseTo(destination.x, 1);
+    expect(travellingSprite?.y).toBeCloseTo(destination.y, 1);
+    expect(nextScene.agents[movingAgentIndex]?.position).toEqual(destination);
   });
 
   it('routes active correlation overlay clamp padding into the viewport inspector and clears it when the overlay disappears', async () => {
@@ -3538,6 +3677,17 @@ describe('WorldScene watch overlay caption gating', () => {
     } satisfies AiTownSceneModel;
     const targetAgentIndex = scene.agents.findIndex((agent) => agent.agentId === 'app-engineering');
     const targetAgent = scene.agents[targetAgentIndex];
+    const movedAgent = targetAgent
+      ? {
+          ...targetAgent,
+          position: { x: targetAgent.position.x + 420, y: targetAgent.position.y + 160 },
+          facing: 'right' as const
+        }
+      : null;
+    const travellingScene = {
+      ...scene,
+      agents: scene.agents.map((agent) => (agent.agentId === movedAgent?.agentId ? movedAgent : agent))
+    } satisfies AiTownSceneModel;
     const onSelectAgent = vi.fn();
     const { container, rerender } = render(
       <main className="aitown-shell">
@@ -3549,7 +3699,8 @@ describe('WorldScene watch overlay caption gating', () => {
     );
 
     expect(targetAgent).toBeDefined();
-    if (!targetAgent) {
+    expect(movedAgent).toBeDefined();
+    if (!targetAgent || !movedAgent) {
       throw new Error('missing target agent');
     }
 
@@ -3566,6 +3717,19 @@ describe('WorldScene watch overlay caption gating', () => {
       expect(readAgentLayer()?.children).toHaveLength(scene.agents.length);
     });
 
+    rerender(
+      <main className="aitown-shell">
+        <section className="aitown-panel aitown-panel--game">
+          <div className="aitown-shell__stats">Stats</div>
+          <WorldScene scene={travellingScene} onSelectAgent={onSelectAgent} />
+        </section>
+      </main>
+    );
+
+    await waitFor(() => {
+      expect(readAgentLayer()?.children).toHaveLength(travellingScene.agents.length);
+    });
+
     act(() => {
       appInstances.at(-1)?.ticker.tick(1000);
     });
@@ -3575,13 +3739,14 @@ describe('WorldScene watch overlay caption gating', () => {
     const visualY = targetSprite?.y ?? targetAgent.position.y;
 
     expect(Math.hypot(visualX - targetAgent.position.x, visualY - targetAgent.position.y)).toBeGreaterThan(0.1);
+    expect(Math.hypot(visualX - movedAgent.position.x, visualY - movedAgent.position.y)).toBeGreaterThan(0.1);
 
     rerender(
       <main className="aitown-shell">
         <section className="aitown-panel aitown-panel--game">
           <div className="aitown-shell__stats">Stats</div>
           <WorldScene
-            scene={scene}
+            scene={travellingScene}
             onSelectAgent={onSelectAgent}
             agentFocusRequest={{ agentId: targetAgent.agentId, requestId: 1 }}
           />
@@ -3594,7 +3759,7 @@ describe('WorldScene watch overlay caption gating', () => {
 
       expect(center.x).toBeCloseTo(visualX, 4);
       expect(center.y).toBeCloseTo(visualY, 4);
-      expect(Math.hypot(center.x - targetAgent.position.x, center.y - targetAgent.position.y)).toBeGreaterThan(0.1);
+      expect(Math.hypot(center.x - movedAgent.position.x, center.y - movedAgent.position.y)).toBeGreaterThan(0.1);
     });
 
     expect(onSelectAgent).not.toHaveBeenCalled();
@@ -3729,6 +3894,16 @@ describe('WorldScene watch overlay caption gating', () => {
       throw new Error('missing initial agent');
     }
 
+    const intermediateAgent = makeAgent({
+      ...initialAgent,
+      position: { x: initialAgent.position.x + 220, y: initialAgent.position.y + 90 }
+    });
+    const intermediateScene = {
+      ...initialScene,
+      agents: initialScene.agents.map((agent) =>
+        agent.agentId === intermediateAgent.agentId ? intermediateAgent : agent
+      )
+    } satisfies AiTownSceneModel;
     const movedAgent = makeAgent({
       ...initialAgent,
       position: { x: initialAgent.position.x + 700, y: initialAgent.position.y + 260 }
@@ -3754,6 +3929,18 @@ describe('WorldScene watch overlay caption gating', () => {
 
     await waitFor(() => {
       expect(readAgentLayer()?.children).toHaveLength(initialScene.agents.length);
+    });
+
+    rerender(
+      <main className="aitown-shell">
+        <section className="aitown-panel aitown-panel--game">
+          <WorldScene scene={intermediateScene} onSelectAgent={onSelectAgent} />
+        </section>
+      </main>
+    );
+
+    await waitFor(() => {
+      expect(readAgentLayer()?.children).toHaveLength(intermediateScene.agents.length);
     });
 
     act(() => {

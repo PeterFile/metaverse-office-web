@@ -14,7 +14,7 @@ import {
 import { Viewport } from 'pixi-viewport';
 
 import { loadAiTownAssets } from './assetLoader';
-import type { AiTownSceneModel, Facing, SceneAgent } from './types';
+import type { AiTownSceneModel, Facing, SceneAgent, ScenePoint } from './types';
 import {
   DEFAULT_ALLOW_VIEWPORT_DRAG_OUTSIDE,
   DEFAULT_MAX_VIEWPORT_SCALE,
@@ -68,6 +68,8 @@ const AGENT_MOTION_MAX_DELTA_SECONDS = 0.12;
 const AGENT_MOTION_FRAME_INTERVAL_SECONDS = 1 / AGENT_MOTION_MAX_FRAMES_PER_SECOND;
 const AGENT_MOTION_RUN_DISTANCE_PX = 128;
 const AGENT_MOTION_RUN_SPEED_MULTIPLIER = 1.55;
+const AGENT_MOTION_MIN_PATROL_DISTANCE_PX = 48;
+const AGENT_MOTION_MAX_WAYPOINT_ADVANCES_PER_FRAME = 4;
 const VIEWPORT_DRAG_START_THRESHOLD_PX = 4;
 
 type AgentMotionProfile = {
@@ -91,6 +93,9 @@ type AgentMotionState = {
   visualY: number;
   targetX: number;
   targetY: number;
+  route: ScenePoint[];
+  routeKey: string;
+  routeIndex: number;
   elapsedSeconds: number;
   profile: AgentMotionProfile;
   facing: Facing;
@@ -248,15 +253,90 @@ function profileRunSpeedThreshold(profile: AgentMotionProfile) {
   return profile.speedPixelsPerSecond * AGENT_MOTION_RUN_SPEED_MULTIPLIER * 0.95;
 }
 
+function pointsAreClose(left: ScenePoint, right: ScenePoint, tolerance = 0.001) {
+  return Math.hypot(left.x - right.x, left.y - right.y) <= tolerance;
+}
+
+function routePointKey(point: ScenePoint) {
+  return `${point.x.toFixed(3)}:${point.y.toFixed(3)}`;
+}
+
+function serializeAgentMotionRoute(route: ScenePoint[]) {
+  return route.map(routePointKey).join('|');
+}
+
+function findRouteIndex(route: ScenePoint[], point: ScenePoint) {
+  return route.findIndex((candidate) => pointsAreClose(candidate, point));
+}
+
+function zoneAnchorToPixel(zone: AiTownSceneModel['zones'][number], tileDim: number): ScenePoint {
+  return {
+    x: zone.anchor.x * tileDim,
+    y: zone.anchor.y * tileDim
+  };
+}
+
+function compareAgentPatrolCandidates(agent: SceneAgent, left: ScenePoint, right: ScenePoint) {
+  const leftScore = deriveAgentMotionUnit(hashAgentMotionKey(`${agent.agentId}:${routePointKey(left)}`), 0);
+  const rightScore = deriveAgentMotionUnit(hashAgentMotionKey(`${agent.agentId}:${routePointKey(right)}`), 0);
+
+  return leftScore - rightScore || left.x - right.x || left.y - right.y;
+}
+
+function resolveAgentMotionRoute(agent: SceneAgent, scene: AiTownSceneModel): ScenePoint[] {
+  const home = { x: agent.position.x, y: agent.position.y };
+  const seen = new Set([routePointKey(home)]);
+  const candidates: ScenePoint[] = [];
+
+  for (const zone of scene.zones) {
+    const candidate = zoneAnchorToPixel(zone, scene.map.tileDim);
+    const candidateKey = routePointKey(candidate);
+    const distanceFromHome = Math.hypot(candidate.x - home.x, candidate.y - home.y);
+
+    if (seen.has(candidateKey) || distanceFromHome < AGENT_MOTION_MIN_PATROL_DISTANCE_PX) {
+      continue;
+    }
+
+    seen.add(candidateKey);
+    candidates.push(candidate);
+  }
+
+  candidates.sort((left, right) => compareAgentPatrolCandidates(agent, left, right));
+
+  return [home, ...candidates.slice(0, 3)];
+}
+
 function createAgentMotionState(
   agent: SceneAgent,
+  scene: AiTownSceneModel,
   container: AgentSpriteContainer,
   previousState?: AgentMotionState
 ): AgentMotionState {
   const profile = resolveAgentMotionProfile(agent);
+  const route = resolveAgentMotionRoute(agent, scene);
+  const routeKey = serializeAgentMotionRoute(route);
   const canReusePreviousState = previousState?.agentId === agent.agentId;
+  const homeChangedThisFrame =
+    canReusePreviousState && (previousState.homeX !== agent.position.x || previousState.homeY !== agent.position.y);
+  const canReuseTarget =
+    canReusePreviousState &&
+    !homeChangedThisFrame &&
+    previousState.routeKey === routeKey &&
+    previousState.profile.seed === profile.seed;
   const visualX = canReusePreviousState ? previousState.visualX : agent.position.x;
   const visualY = canReusePreviousState ? previousState.visualY : agent.position.y;
+  const initialTarget =
+    homeChangedThisFrame || route.length === 1
+      ? route[0]
+      : canReuseTarget
+        ? { x: previousState.targetX, y: previousState.targetY }
+        : route[1];
+  const initialRouteIndex =
+    canReuseTarget
+      ? Math.max(0, findRouteIndex(route, initialTarget))
+      : homeChangedThisFrame || route.length === 1
+        ? 0
+        : 1;
   const state = {
     agentId: agent.agentId,
     container,
@@ -264,14 +344,16 @@ function createAgentMotionState(
     homeY: agent.position.y,
     visualX,
     visualY,
-    targetX: agent.position.x,
-    targetY: agent.position.y,
+    targetX: initialTarget.x,
+    targetY: initialTarget.y,
+    route,
+    routeKey,
+    routeIndex: initialRouteIndex,
     elapsedSeconds: canReusePreviousState ? previousState.elapsedSeconds : 0,
     profile,
     facing: agent.facing,
     animationFacing: agent.facing,
-    homeChangedThisFrame:
-      canReusePreviousState && (previousState.homeX !== agent.position.x || previousState.homeY !== agent.position.y)
+    homeChangedThisFrame
   };
 
   container.position.set(state.visualX, state.visualY);
@@ -290,6 +372,25 @@ function createAgentMotionState(
   return state;
 }
 
+function advanceAgentMotionWaypoint(state: AgentMotionState) {
+  if (state.route.length <= 1) {
+    return false;
+  }
+
+  for (let attempts = 0; attempts < AGENT_MOTION_MAX_WAYPOINT_ADVANCES_PER_FRAME; attempts += 1) {
+    state.routeIndex = (state.routeIndex + 1) % state.route.length;
+    const nextTarget = state.route[state.routeIndex];
+    state.targetX = nextTarget.x;
+    state.targetY = nextTarget.y;
+
+    if (Math.hypot(state.targetX - state.visualX, state.targetY - state.visualY) > state.profile.arrivalDistance) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 function applyAgentMotionFrame(states: AgentMotionState[], deltaSeconds: number) {
   const safeDeltaSeconds = Number.isFinite(deltaSeconds)
     ? Math.min(Math.max(deltaSeconds, 0), AGENT_MOTION_MAX_DELTA_SECONDS)
@@ -297,18 +398,25 @@ function applyAgentMotionFrame(states: AgentMotionState[], deltaSeconds: number)
 
   for (const state of states) {
     state.elapsedSeconds += safeDeltaSeconds;
-    const deltaX = state.targetX - state.visualX;
-    const deltaY = state.targetY - state.visualY;
-    const distanceToTarget = Math.hypot(deltaX, deltaY);
+    let deltaX = state.targetX - state.visualX;
+    let deltaY = state.targetY - state.visualY;
+    let distanceToTarget = Math.hypot(deltaX, deltaY);
 
     if (distanceToTarget <= state.profile.arrivalDistance) {
       state.visualX = state.targetX;
       state.visualY = state.targetY;
       state.homeChangedThisFrame = false;
+      const hasNextWaypoint = advanceAgentMotionWaypoint(state);
+      deltaX = state.targetX - state.visualX;
+      deltaY = state.targetY - state.visualY;
+      distanceToTarget = Math.hypot(deltaX, deltaY);
       state.container.position.set(state.visualX, state.visualY);
       state.container.zIndex = state.visualY;
-      syncAgentCharacterAnimation(state, false, 0, 0, 0);
-      continue;
+
+      if (!hasNextWaypoint || distanceToTarget <= state.profile.arrivalDistance) {
+        syncAgentCharacterAnimation(state, false, 0, 0, 0);
+        continue;
+      }
     }
 
     const travelSpeed = resolveAgentTravelSpeed(state.profile, distanceToTarget);
@@ -316,10 +424,21 @@ function applyAgentMotionFrame(states: AgentMotionState[], deltaSeconds: number)
     state.visualX += (deltaX / distanceToTarget) * stepDistance;
     state.visualY += (deltaY / distanceToTarget) * stepDistance;
 
-    if (Math.hypot(state.targetX - state.visualX, state.targetY - state.visualY) <= state.profile.arrivalDistance) {
+    const remainingDistance = Math.hypot(state.targetX - state.visualX, state.targetY - state.visualY);
+    if (remainingDistance <= state.profile.arrivalDistance) {
       state.visualX = state.targetX;
       state.visualY = state.targetY;
-      syncAgentCharacterAnimation(state, false, 0, 0, 0);
+      const hasNextWaypoint = advanceAgentMotionWaypoint(state);
+      const nextDeltaX = state.targetX - state.visualX;
+      const nextDeltaY = state.targetY - state.visualY;
+      const nextDistance = Math.hypot(nextDeltaX, nextDeltaY);
+      syncAgentCharacterAnimation(
+        state,
+        hasNextWaypoint && nextDistance > state.profile.arrivalDistance,
+        nextDeltaX,
+        nextDeltaY,
+        resolveAgentTravelSpeed(state.profile, nextDistance)
+      );
     } else {
       syncAgentCharacterAnimation(state, true, deltaX, deltaY, travelSpeed);
     }
@@ -842,6 +961,21 @@ export default function WorldScene({
       directFocus.homeX === selectedAgent.x &&
       directFocus.homeY === selectedAgent.y
     );
+  };
+
+  const resolveViewportInspectionSelectedAgent = () => {
+    const selectedAgent = selectedAgentRef.current;
+    const directFocus = selectedAgentDirectFocusRef.current;
+
+    if (selectedAgent && directFocus && directFocusMatchesCurrentGeometry(directFocus, selectedAgent)) {
+      return {
+        agentId: selectedAgent.agentId,
+        x: directFocus.x,
+        y: directFocus.y
+      };
+    }
+
+    return selectedAgent;
   };
 
   useEffect(() => {
@@ -1389,7 +1523,7 @@ export default function WorldScene({
         viewport,
         getClampPadding: () => clampPaddingRef.current,
         getScaleBounds: () => ({ minScale: currentBaseScale, maxScale: currentMaxScale }),
-        getSelectedAgent: () => selectedAgentRef.current,
+        getSelectedAgent: resolveViewportInspectionSelectedAgent,
         afterZoom: () => {
           viewportZoomHandler?.();
         }
@@ -1588,6 +1722,7 @@ export default function WorldScene({
         nextAgentMotionStates.push(
           createAgentMotionState(
             agent,
+            scene,
             agentSprite,
             previousAgentMotionStates.find((state) => state.agentId === agent.agentId)
           )

@@ -1083,11 +1083,99 @@ describe('WorldScene watch overlay caption gating', () => {
     expect(onSelectAgent).not.toHaveBeenCalled();
   });
 
+  it('moves active agents toward another scene coordinate when their business position is static', async () => {
+    appInitMock.mockReset().mockResolvedValue(undefined);
+    vi.mocked(loadAiTownAssets).mockResolvedValue(makeAssets());
+
+    const homePosition = { x: 80, y: 120 };
+    const destination = { x: 384, y: 288 };
+    const scene = {
+      ...makeScene(),
+      selectedAgentId: null,
+      zones: [
+        {
+          zoneId: 'lead-desk',
+          label: 'Lead Desk',
+          kind: 'desk' as const,
+          anchor: { x: 5, y: 7.5 },
+          occupantIds: ['team-lead']
+        },
+        {
+          zoneId: 'meeting-zone',
+          label: 'Meeting Zone',
+          kind: 'shared' as const,
+          anchor: { x: 24, y: 18 },
+          occupantIds: []
+        }
+      ],
+      agents: [
+        makeAgent({
+          agentId: 'team-lead',
+          displayName: 'Team Lead',
+          kind: 'lead',
+          zoneId: 'lead-desk',
+          rawLocation: 'lead-desk',
+          position: homePosition,
+          selected: false,
+          severity: 'yellow',
+          phase: 'active'
+        })
+      ]
+    } satisfies AiTownSceneModel;
+    const { unmount } = render(<WorldScene scene={scene} onSelectAgent={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(readViewportInspector()).toBeDefined();
+      expect(readAgentLayer()?.children).toHaveLength(scene.agents.length);
+    });
+
+    const app = appInstances.at(-1);
+    expect(app).toBeDefined();
+    expect(app?.ticker.maxFPS).toBe(0);
+
+    const agentSprite = readAgentLayer()?.children[0];
+    const character = agentSprite?.children[4] as { animationSpeed?: number } | undefined;
+    expect(agentSprite?.x).toBe(homePosition.x);
+    expect(agentSprite?.y).toBe(homePosition.y);
+
+    act(() => {
+      for (let frame = 0; frame < 6; frame += 1) {
+        app?.ticker.tick(1000);
+      }
+    });
+
+    const startDistance = Math.hypot(destination.x - homePosition.x, destination.y - homePosition.y);
+    const currentDistance = Math.hypot(destination.x - (agentSprite?.x ?? 0), destination.y - (agentSprite?.y ?? 0));
+    const travelledDistance = Math.hypot((agentSprite?.x ?? 0) - homePosition.x, (agentSprite?.y ?? 0) - homePosition.y);
+
+    expect(travelledDistance).toBeGreaterThan(40);
+    expect(currentDistance).toBeLessThan(startDistance);
+    expect(character?.animationSpeed).toBeGreaterThan(0);
+    expect(scene.agents[0]?.position).toEqual(homePosition);
+
+    unmount();
+
+    expect(app?.ticker.remove).toHaveBeenCalledTimes(1);
+    expect(app?.ticker.listeners.size).toBe(0);
+  });
+
   it('does not fake walking by wobbling active employee sprites around their current coordinate', async () => {
     appInitMock.mockReset().mockResolvedValue(undefined);
     vi.mocked(loadAiTownAssets).mockResolvedValue(makeAssets());
 
-    const scene = makeScene();
+    const scene = {
+      ...makeScene(),
+      zones: [
+        ...makeScene().zones,
+        {
+          zoneId: 'meeting-zone',
+          label: 'Meeting Zone',
+          kind: 'shared' as const,
+          anchor: { x: 24, y: 18 },
+          occupantIds: []
+        }
+      ]
+    } satisfies AiTownSceneModel;
     const homeAgent = scene.agents.find((agent) => agent.agentId === 'team-lead');
     const { unmount } = render(<WorldScene scene={scene} onSelectAgent={vi.fn()} />);
 
@@ -1116,11 +1204,19 @@ describe('WorldScene watch overlay caption gating', () => {
 
     act(() => {
       app?.ticker.tick(10);
-      app?.ticker.tick(1000);
     });
 
     expect(agentSprite?.x).toBeCloseTo(startX, 4);
     expect(agentSprite?.y).toBeCloseTo(startY, 4);
+
+    act(() => {
+      for (let frame = 0; frame < 6; frame += 1) {
+        app?.ticker.tick(1000);
+      }
+    });
+
+    const travelledDistance = Math.hypot((agentSprite?.x ?? 0) - startX, (agentSprite?.y ?? 0) - startY);
+    expect(travelledDistance).toBeGreaterThan(40);
     expect(homeAgent?.position).toEqual({ x: 80, y: 120 });
 
     unmount();
@@ -1321,6 +1417,9 @@ describe('WorldScene watch overlay caption gating', () => {
     act(() => {
       for (let index = 0; index < 80; index += 1) {
         appInstances.at(-1)?.ticker.tick(1000);
+        if (Math.hypot((travellingSprite?.x ?? 0) - destination.x, (travellingSprite?.y ?? 0) - destination.y) <= 0.5) {
+          break;
+        }
       }
     });
 

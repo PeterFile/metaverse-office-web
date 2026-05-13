@@ -963,6 +963,21 @@ export default function WorldScene({
     );
   };
 
+  const resolveViewportInspectionSelectedAgent = () => {
+    const selectedAgent = selectedAgentRef.current;
+    const directFocus = selectedAgentDirectFocusRef.current;
+
+    if (selectedAgent && directFocus && directFocusMatchesCurrentGeometry(directFocus, selectedAgent)) {
+      return {
+        agentId: selectedAgent.agentId,
+        x: directFocus.x,
+        y: directFocus.y
+      };
+    }
+
+    return selectedAgent;
+  };
+
   useEffect(() => {
     onSelectAgentRef.current = onSelectAgent;
   }, [onSelectAgent]);
@@ -1508,7 +1523,7 @@ export default function WorldScene({
         viewport,
         getClampPadding: () => clampPaddingRef.current,
         getScaleBounds: () => ({ minScale: currentBaseScale, maxScale: currentMaxScale }),
-        getSelectedAgent: () => selectedAgentRef.current,
+        getSelectedAgent: resolveViewportInspectionSelectedAgent,
         afterZoom: () => {
           viewportZoomHandler?.();
         }

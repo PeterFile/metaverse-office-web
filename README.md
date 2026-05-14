@@ -253,6 +253,8 @@ This keeps employee writes self-scoped and reserves cross-agent task dispatch pl
 - evidence coverage can be filtered by exact `agent_id`, collector evidence `source_kind`, `confidence_level`, and post-filter `limit`; blank filters are ignored and invalid limits use the existing read-model default
 - evidence coverage responses include only `collected_at`, `actor_id`, aggregate coverage counts, source-kind buckets, low-confidence agent ids, and bounded `agent_items`; the route does not touch tmux, the filesystem, or collector write paths
 - collector heartbeats are derived from real `inbox.md`, `outbox.md`, `todo.md` mtimes plus tmux pane metadata
+- collector items include additive `source_health` for `workspace_root`, workspace files, and the expected `tmux_session`; missing sessions are reported with the expected `session_ref`
+- collector reports include additive `runtime_source_evidence.unmapped_tmux_sessions` for observed tmux sessions outside the seeded roster
 - collector-derived supervision reuses canonical `peer_watch_alert_raised` / `peer_watch_alert_resolved`
 - collector snapshots also append deduped canonical `agent_state_changed` and `agent_wrote_file` events when evidence shows a new state or a newer file write
 - yellow/orange staleness comes from `last_meaningful_output_at` only: `<20m = normal`, `>=20m = yellow`, `>=30m = orange`

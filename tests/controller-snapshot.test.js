@@ -267,6 +267,72 @@ test('collector reports evidence coverage across workspace roots, files, and tmu
   assert.deepEqual(report.shared_artifacts, []);
 });
 
+test('collector reports source health for missing tmux sessions and unmapped tmux evidence', async () => {
+  const appAgent = {
+    ...SEED_AGENTS.find((agent) => agent.agent_id === 'app-engineering'),
+    workspace_root: '/tmp/source-health/app-engineering'
+  };
+  const statsByPath = new Map([
+    [appAgent.workspace_root, { mtime: '2026-03-09T18:00:00.000Z' }],
+    [path.join(appAgent.workspace_root, 'inbox.md'), { mtime: '2026-03-09T18:01:00.000Z' }]
+  ]);
+
+  const report = await collectControllerSnapshot({
+    agents: [appAgent],
+    collectedAt: '2026-03-09T18:05:00.000Z',
+    readPathStat: async (targetPath) => statsByPath.get(targetPath) || null,
+    listTmuxPanes: async () => [
+      {
+        session_name: 'unseeded-runtime-session',
+        window_index: '0',
+        pane_index: '0',
+        pane_id: '%99',
+        pane_title: 'outside seeded roster',
+        pane_current_command: 'bash',
+        pane_active: true,
+        pane_dead: false,
+        pane_activity_at: '2026-03-09T18:04:00.000Z'
+      }
+    ]
+  });
+
+  const appEngineering = report.items[0];
+  assert.deepEqual(appEngineering.source_health, {
+    workspace_root: {
+      status: 'observed',
+      path: appAgent.workspace_root,
+      last_observed_at: '2026-03-09T18:00:00.000Z',
+      degraded_reasons: []
+    },
+    workspace_files: {
+      status: 'degraded',
+      expected_files: ['inbox.md', 'outbox.md', 'todo.md'],
+      observed_count: 1,
+      missing_count: 2,
+      error_count: 0,
+      last_observed_at: '2026-03-09T18:01:00.000Z',
+      degraded_reasons: ['missing workspace files: outbox.md, todo.md']
+    },
+    tmux_session: {
+      status: 'missing',
+      expected_session_ref: appAgent.session_ref,
+      observed_count: 0,
+      last_observed_at: null,
+      degraded_reasons: ['tmux session not observed']
+    }
+  });
+  assert.deepEqual(report.runtime_source_evidence, {
+    unmapped_tmux_sessions: [
+      {
+        session_name: 'unseeded-runtime-session',
+        observed_count: 1,
+        last_observed_at: '2026-03-09T18:04:00.000Z',
+        pane_refs: ['tmux://unseeded-runtime-session/0.0']
+      }
+    ]
+  });
+});
+
 test('store appends collector heartbeats and exposes the latest collector report', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'metaverse-office-store-'));
   const storeFile = path.join(root, 'prototype-store.jsonl');

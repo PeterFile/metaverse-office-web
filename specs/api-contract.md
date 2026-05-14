@@ -49,6 +49,8 @@ This is the current API/read-model contract for Metaverse Office Web. It grew ou
 - the latest collector report is an in-memory read model; heartbeat storage stays backward compatible as append-only `heartbeat` records
 - the latest collector report also exposes `shared_artifacts`, a top-level per-snapshot rollup derived only from the current collected items
 - `shared_artifacts` entries appear only when at least two agents in the same snapshot mention the same `artifact_ref` and expose `artifact_ref`, `artifact_kind`, optional `file_name`, `agent_ids`, `agent_count`, `mention_count`, `last_seen_at`, and `source_kinds`
+- each collector item exposes additive `source_health` for `workspace_root`, observed workspace files among `inbox.md`/`outbox.md`/`todo.md`, and the expected `tmux_session`; missing tmux sessions must be explicit with `expected_session_ref`
+- the latest collector report exposes additive `runtime_source_evidence.unmapped_tmux_sessions` for observed tmux sessions that do not match any seeded agent session
 - `GET /collectors/controller-snapshot/evidence-coverage` is a bounded read-only projection of the latest report's `evidence_coverage`; it does not trigger collection and does not read tmux or the filesystem
 - when no latest report or no latest `evidence_coverage` exists, `GET /collectors/controller-snapshot/evidence-coverage` returns `200` with `{ "item": null }`
 - `agent_id`, `source_kind`, and `confidence_level` filters exact-match coverage `agent_items`; blank filter values are ignored, and `source_kind` matches collector evidence source kinds only (`workspace_file`, `workspace_root`, `tmux_observation`)
@@ -576,9 +578,36 @@ This is the current API/read-model contract for Metaverse Office Web. It grew ou
         }
       ]
     },
+    "runtime_source_evidence": {
+      "unmapped_tmux_sessions": []
+    },
     "items": [
       {
         "agent_id": "app-engineering",
+        "source_health": {
+          "workspace_root": {
+            "status": "observed",
+            "path": "/Users/cwp/.hermes/teams/web3-company/agents/app-engineering/workspace",
+            "last_observed_at": "2026-03-09T18:00:00.000Z",
+            "degraded_reasons": []
+          },
+          "workspace_files": {
+            "status": "degraded",
+            "expected_files": ["inbox.md", "outbox.md", "todo.md"],
+            "observed_count": 1,
+            "missing_count": 2,
+            "error_count": 0,
+            "last_observed_at": "2026-03-09T18:04:00.000Z",
+            "degraded_reasons": ["missing workspace files: inbox.md, outbox.md"]
+          },
+          "tmux_session": {
+            "status": "observed",
+            "expected_session_ref": "5-web3-app-engineering",
+            "observed_count": 1,
+            "last_observed_at": "2026-03-09T18:04:30.000Z",
+            "degraded_reasons": []
+          }
+        },
         "evidence_refs": [
           "/Users/cwp/.hermes/teams/web3-company/agents/app-engineering/workspace/todo.md",
           "tmux://5-web3-app-engineering/0.1"

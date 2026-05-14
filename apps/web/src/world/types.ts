@@ -57,6 +57,7 @@ export interface WorldAgent {
   // observed facts — directly from API
   raw_state: string;
   raw_location: string;
+  current_map_id?: string;
   active_task: string;
   reboot_recommended: boolean;
 

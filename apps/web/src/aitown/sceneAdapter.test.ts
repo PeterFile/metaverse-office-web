@@ -191,6 +191,23 @@ describe('adaptWorldToScene', () => {
     expect(appEngineering?.position.y).toBeGreaterThan(0);
   });
 
+  it('projects current_map_id from world agents as the scene current map identity', () => {
+    const mappedWorld: WorldState = {
+      ...world,
+      agents: new Map(world.agents).set('app-engineering', {
+        ...world.agents.get('app-engineering')!,
+        current_map_id: 'data-bar-safehouse'
+      })
+    };
+
+    const scene = adaptWorldToScene(mappedWorld, 'app-engineering');
+    const appEngineering = scene.agents.find((agent) => agent.agentId === 'app-engineering');
+    const teamLead = scene.agents.find((agent) => agent.agentId === 'team-lead');
+
+    expect(appEngineering?.mapId).toBe('data-bar-safehouse');
+    expect(teamLead?.mapId).toBe(DEFAULT_AI_TOWN_MAP_ID);
+  });
+
   it('assigns distinct generated role pawn keys while preserving old character fallbacks', () => {
     const roleWorld: WorldState = {
       ...world,

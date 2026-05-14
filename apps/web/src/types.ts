@@ -53,6 +53,7 @@ export interface OfficeAgent {
   current_state: string;
   active_task: string;
   current_location: string;
+  current_map_id?: string;
   effective_severity: Severity;
   reported_severity: Severity;
   severity: Severity;

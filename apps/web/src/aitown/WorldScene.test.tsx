@@ -471,6 +471,10 @@ function readAgentLayer() {
   return agentLayer;
 }
 
+function readAgentSprites() {
+  return readAgentLayer()?.children.filter((child) => child.cursor === 'pointer') ?? [];
+}
+
 function readZoneLayer() {
   const app = appInstances.at(-1);
   expect(app).toBeDefined();
@@ -801,6 +805,53 @@ describe('WorldScene watch overlay caption gating', () => {
     });
   });
 
+  it('renders agents only on their current map when manually traversing map controls', async () => {
+    appInitMock.mockReset().mockResolvedValue(undefined);
+    vi.mocked(loadAiTownAssets).mockResolvedValue(makeGeneratedAssets());
+    const scene = {
+      ...makeGeneratedScene(),
+      agents: [
+        makeAgent({
+          agentId: 'map-a-agent',
+          displayName: 'Map A Agent',
+          mapId: 'map-a',
+          position: { x: 320, y: 420 }
+        }),
+        makeAgent({
+          agentId: 'map-b-agent',
+          displayName: 'Map B Agent',
+          mapId: 'map-b',
+          position: { x: 120, y: 520 },
+          selected: false
+        })
+      ],
+      selectedAgentId: 'map-a-agent'
+    } satisfies AiTownSceneModel;
+
+    render(<WorldScene scene={scene} onSelectAgent={vi.fn()} />);
+
+    const gatewayRegion = await screen.findByRole('region', { name: 'Map gateways' });
+
+    await waitFor(() => {
+      const [agentSprite] = readAgentSprites();
+
+      expect(readAgentSprites()).toHaveLength(1);
+      expect(agentSprite?.x).toBe(320);
+      expect(agentSprite?.y).toBe(420);
+    });
+
+    fireEvent.click(within(gatewayRegion).getByRole('button', { name: 'Enter Map B through A to B' }));
+
+    await waitFor(() => {
+      const [agentSprite] = readAgentSprites();
+
+      expect(screen.getByText('Map B')).toBeInTheDocument();
+      expect(readAgentSprites()).toHaveLength(1);
+      expect(agentSprite?.x).toBe(120);
+      expect(agentSprite?.y).toBe(520);
+    });
+  });
+
   it('lets the selected agent cross generated maps through gateway pathing', async () => {
     appInitMock.mockReset().mockResolvedValue(undefined);
     vi.mocked(loadAiTownAssets).mockResolvedValue(makeGeneratedAssets());
@@ -832,9 +883,27 @@ describe('WorldScene watch overlay caption gating', () => {
 
     await waitFor(() => {
       const mapGround = readMapContainer()?.children[0] as { texture?: { source?: { assetId?: string } } } | undefined;
+      const [agentSprite] = readAgentSprites();
 
       expect(screen.getByText('Map B')).toBeInTheDocument();
       expect(mapGround?.texture?.source?.assetId).toBe('map-b:groundBase');
+      expect(agentSprite?.x).toBe(120);
+      expect(agentSprite?.y).toBe(520);
+    });
+  });
+
+  it('scales generated agent bodies down to match layered map props', async () => {
+    appInitMock.mockReset().mockResolvedValue(undefined);
+    vi.mocked(loadAiTownAssets).mockResolvedValue(makeGeneratedAssets());
+
+    render(<WorldScene scene={makeGeneratedScene()} onSelectAgent={vi.fn()} />);
+
+    await waitFor(() => {
+      const [agentSprite] = readAgentSprites();
+      const character = agentSprite?.children[4];
+
+      expect(character?.scale.x).toBe(0.46);
+      expect(character?.scale.y).toBe(0.46);
     });
   });
 

@@ -19,6 +19,11 @@ const { MockDisplayObject, MockTicker, appInitMock, appDestroyMock, appInstances
     width = 0;
     height = 0;
     animationSpeed = 0;
+    visible = true;
+    renderable = true;
+    cullable = false;
+    cullableChildren = true;
+    cullArea?: unknown;
     position = {
       set: (x: number, y: number) => {
         this.x = x;
@@ -37,6 +42,7 @@ const { MockDisplayObject, MockTicker, appInitMock, appDestroyMock, appInstances
       set: (_x: number, _y?: number) => {}
     };
     handlers = new Map<string, Set<(event: { stopPropagation: () => void }) => void>>();
+    destroyCalls: unknown[] = [];
 
     addChild(...children: MockDisplayObject[]) {
       this.children.push(...children);
@@ -55,6 +61,14 @@ const { MockDisplayObject, MockTicker, appInitMock, appDestroyMock, appInstances
     }
 
     sortChildren() {}
+
+    cacheAsTexture(_options?: unknown) {
+      return this;
+    }
+
+    updateCacheTexture() {
+      return this;
+    }
 
     moveTo(_x: number, _y: number) {
       return this;
@@ -111,7 +125,9 @@ const { MockDisplayObject, MockTicker, appInitMock, appDestroyMock, appInstances
 
     play() {}
 
-    destroy(_options?: unknown) {}
+    destroy(options?: unknown) {
+      this.destroyCalls.push(options);
+    }
   }
 
   class MockTicker {
@@ -475,6 +491,34 @@ function readAgentSprites() {
   return readAgentLayer()?.children.filter((child) => child.cursor === 'pointer') ?? [];
 }
 
+type PixiTestNode = {
+  children?: PixiTestNode[];
+  scale?: { x?: number; y?: number };
+  texture?: unknown;
+  textures?: unknown;
+  animationSpeed?: number;
+};
+
+function findAgentCharacter(node: PixiTestNode | undefined): PixiTestNode | undefined {
+  if (!node) {
+    return undefined;
+  }
+
+  if (node.scale?.x === 0.46 && node.scale?.y === 0.46) {
+    return node;
+  }
+
+  for (const child of node.children ?? []) {
+    const candidate = findAgentCharacter(child);
+
+    if (candidate) {
+      return candidate;
+    }
+  }
+
+  return undefined;
+}
+
 function readZoneLayer() {
   const app = appInstances.at(-1);
   expect(app).toBeDefined();
@@ -693,13 +737,13 @@ function makeLayeredMap(id: string, label: string): AiTownLayeredMapData {
     objectTiles: [],
     animatedSprites: [],
     layerUrls: {
-      groundBase: `/assets/generated/maps/${id}/${id}_ground_base.png`,
-      dressedRef: `/assets/generated/maps/${id}/${id}_dressed_ref.png`,
-      propPack: `/assets/generated/maps/${id}/${id}_prop_pack.png`,
-      propsTransparent: `/assets/generated/maps/${id}/${id}_props_transparent.png`,
-      collision: `/assets/generated/maps/${id}/${id}_collision.png`,
-      regions: `/assets/generated/maps/${id}/${id}_regions.png`,
-      preview: `/assets/generated/maps/${id}/${id}_preview.png`
+      groundBase: `/assets/generated/maps/${id}/${id}_ground_base.webp`,
+      dressedRef: `/assets/generated/maps/${id}/${id}_dressed_ref.webp`,
+      propPack: `/assets/generated/maps/${id}/${id}_prop_pack.webp`,
+      propsTransparent: `/assets/generated/maps/${id}/${id}_props_transparent.webp`,
+      collision: `/assets/generated/maps/${id}/${id}_collision.webp`,
+      regions: `/assets/generated/maps/${id}/${id}_regions.webp`,
+      preview: `/assets/generated/maps/${id}/${id}_preview.webp`
     },
     ySortProps: [
       {
@@ -805,6 +849,71 @@ describe('WorldScene watch overlay caption gating', () => {
     });
   });
 
+  it('switches generated maps without recreating the Pixi application', async () => {
+    appInitMock.mockReset().mockResolvedValue(undefined);
+    vi.mocked(loadAiTownAssets).mockResolvedValue(makeGeneratedAssets());
+
+    render(<WorldScene scene={makeGeneratedScene()} onSelectAgent={vi.fn()} />);
+
+    const gatewayRegion = await screen.findByRole('region', { name: 'Map gateways' });
+
+    await waitFor(() => {
+      expect(readMapContainer()?.children[0]).toBeDefined();
+    });
+
+    const initialYSortProp = readAgentLayer()?.children.find((child) => child.zIndex === 192) as
+      | { destroyCalls?: unknown[] }
+      | undefined;
+
+    const initialApp = appInstances.at(-1);
+    const initialMapContainer = readMapContainer();
+
+    fireEvent.click(within(gatewayRegion).getByRole('button', { name: 'Enter Map B through A to B' }));
+
+    await waitFor(() => {
+      const mapGround = readMapContainer()?.children[0] as { texture?: { source?: { assetId?: string } } } | undefined;
+
+      expect(mapGround?.texture?.source?.assetId).toBe('map-b:groundBase');
+    });
+
+    expect(appInstances).toHaveLength(1);
+    expect(appInstances.at(-1)).toBe(initialApp);
+    expect(readMapContainer()).toBe(initialMapContainer);
+    expect(initialYSortProp?.destroyCalls).toContainEqual({
+      children: true,
+      texture: true,
+      textureSource: false
+    });
+    expect(appDestroyMock).not.toHaveBeenCalled();
+  });
+
+  it('loads only the active generated map texture set while switching maps', async () => {
+    appInitMock.mockReset().mockResolvedValue(undefined);
+    vi.mocked(loadAiTownAssets).mockResolvedValue(makeGeneratedAssets());
+
+    render(<WorldScene scene={makeGeneratedScene()} onSelectAgent={vi.fn()} />);
+
+    const gatewayRegion = await screen.findByRole('region', { name: 'Map gateways' });
+
+    await waitFor(() => {
+      expect(readMapContainer()?.children[0]).toBeDefined();
+    });
+
+    expect(vi.mocked(loadAiTownAssets)).toHaveBeenCalledWith({
+      evictExceptMapIds: ['map-a'],
+      mapIds: ['map-a']
+    });
+
+    fireEvent.click(within(gatewayRegion).getByRole('button', { name: 'Enter Map B through A to B' }));
+
+    await waitFor(() => {
+      expect(vi.mocked(loadAiTownAssets)).toHaveBeenCalledWith({
+        evictExceptMapIds: ['map-b'],
+        mapIds: ['map-b']
+      });
+    });
+  });
+
   it('renders agents only on their current map when manually traversing map controls', async () => {
     appInitMock.mockReset().mockResolvedValue(undefined);
     vi.mocked(loadAiTownAssets).mockResolvedValue(makeGeneratedAssets());
@@ -900,10 +1009,10 @@ describe('WorldScene watch overlay caption gating', () => {
 
     await waitFor(() => {
       const [agentSprite] = readAgentSprites();
-      const character = agentSprite?.children[4];
+      const character = findAgentCharacter(agentSprite);
 
-      expect(character?.scale.x).toBe(0.46);
-      expect(character?.scale.y).toBe(0.46);
+      expect(character?.scale?.x).toBe(0.46);
+      expect(character?.scale?.y).toBe(0.46);
     });
   });
 
@@ -940,8 +1049,8 @@ describe('WorldScene watch overlay caption gating', () => {
     });
 
     const [pawnAgent, fallbackAgent] = readAgentLayer()?.children ?? [];
-    const pawnVisual = pawnAgent?.children[4] as { texture?: unknown } | undefined;
-    const fallbackVisual = fallbackAgent?.children[4] as { texture?: unknown } | undefined;
+    const pawnVisual = findAgentCharacter(pawnAgent);
+    const fallbackVisual = findAgentCharacter(fallbackAgent);
 
     expect(pawnVisual?.texture).toEqual(assets.characterAnimations.f1.down);
     expect(pawnVisual?.texture).not.toBe(assets.rolePawnTextures.app_eng);
@@ -1385,7 +1494,7 @@ describe('WorldScene watch overlay caption gating', () => {
     expect(app?.ticker.maxFPS).toBe(0);
 
     const agentSprite = readAgentLayer()?.children[0];
-    const character = agentSprite?.children[4] as { animationSpeed?: number } | undefined;
+    const character = findAgentCharacter(agentSprite);
     expect(agentSprite?.x).toBe(homePosition.x);
     expect(agentSprite?.y).toBe(homePosition.y);
 
@@ -1547,6 +1656,28 @@ describe('WorldScene watch overlay caption gating', () => {
     expect(activeAgent?.position).toEqual({ x: 80, y: 120 });
   });
 
+  it('reuses an unchanged agent sprite across scene rerenders', async () => {
+    appInitMock.mockReset().mockResolvedValue(undefined);
+    vi.mocked(loadAiTownAssets).mockResolvedValue(makeAssets());
+
+    const scene = makeScene();
+    const { rerender } = render(<WorldScene scene={scene} onSelectAgent={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(readAgentLayer()?.children).toHaveLength(scene.agents.length);
+    });
+
+    const initialSprites = [...(readAgentLayer()?.children ?? [])];
+
+    rerender(<WorldScene scene={{ ...scene }} onSelectAgent={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(readAgentLayer()?.children).toHaveLength(scene.agents.length);
+    });
+
+    expect(readAgentLayer()?.children).toEqual(initialSprites);
+  });
+
   it('resynchronizes directional walking frames after recreating an in-flight sprite', async () => {
     appInitMock.mockReset().mockResolvedValue(undefined);
     const assets = makeAssets();
@@ -1588,7 +1719,7 @@ describe('WorldScene watch overlay caption gating', () => {
     });
 
     const firstTraveller = readAgentLayer()?.children[activeAgentIndex];
-    const firstCharacter = firstTraveller?.children[4] as { textures?: unknown } | undefined;
+    const firstCharacter = findAgentCharacter(firstTraveller);
     expect(firstCharacter?.textures).toBe(assets.characterAnimations.f1.right);
 
     rerender(
@@ -1607,7 +1738,7 @@ describe('WorldScene watch overlay caption gating', () => {
     });
 
     const recreatedTraveller = readAgentLayer()?.children[activeAgentIndex];
-    const recreatedCharacter = recreatedTraveller?.children[4] as { textures?: unknown } | undefined;
+    const recreatedCharacter = findAgentCharacter(recreatedTraveller);
     expect(recreatedCharacter?.textures).toBe(assets.characterAnimations.f1.right);
   });
 

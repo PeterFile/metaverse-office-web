@@ -10,7 +10,14 @@ import windmill from './data/animations/windmill.json';
 import type { AiTownMapLayerUrls, CharacterKey, Facing, RolePawnKey } from './types';
 
 type CharacterAnimations = Record<Facing, Texture[]>;
-type GeneratedMapLayerTextures = Record<keyof AiTownMapLayerUrls, Texture>;
+type GeneratedMapLayerTextures = Pick<Record<keyof AiTownMapLayerUrls, Texture>, 'groundBase' | 'propsTransparent'> &
+  Partial<Record<keyof AiTownMapLayerUrls, Texture>>;
+type SharedAiTownAssets = Omit<AiTownAssets, 'generatedMapTextures'>;
+
+export type AiTownAssetLoadOptions = {
+  mapIds?: string[];
+  evictExceptMapIds?: string[];
+};
 
 export interface AiTownAssets {
   characterAnimations: Record<CharacterKey, CharacterAnimations>;
@@ -57,6 +64,11 @@ const GENERATED_CHARACTER_TEXTURE_URLS: Record<CharacterKey, string> = {
 const GENERATED_WALK_DIRECTIONS: Facing[] = ['down', 'left', 'right', 'up'];
 const GENERATED_WALK_FRAMES_PER_DIRECTION = 4;
 const GENERATED_WALK_FRAME_SIZE = 256;
+const GENERATED_MAP_RENDER_LAYER_KEYS = [
+  'groundBase',
+  'propsTransparent'
+] as const satisfies Array<keyof AiTownMapLayerUrls>;
+const GENERATED_MAP_BY_ID = new Map(AI_TOWN_GENERATED_MAPS.map((map) => [map.id, map]));
 
 function buildGeneratedWalkSpritesheetData(imageUrl: string): PixiSpritesheetData {
   const frames: PixiSpritesheetData['frames'] = {};
@@ -108,8 +120,10 @@ function buildGeneratedWalkSpritesheetData(imageUrl: string): PixiSpritesheetDat
   };
 }
 
-let cache: AiTownAssets | null = null;
-let loading: Promise<AiTownAssets> | null = null;
+let sharedCache: SharedAiTownAssets | null = null;
+let sharedLoading: Promise<SharedAiTownAssets> | null = null;
+const generatedMapTextureCache = new Map<string, GeneratedMapLayerTextures>();
+const generatedMapLoading = new Map<string, Promise<GeneratedMapLayerTextures | null>>();
 
 async function loadTexture(url: string) {
   const texture = Assets.cache.has(url) ? Assets.cache.get<Texture>(url)! : await Assets.load<Texture>(url);
@@ -121,17 +135,21 @@ async function loadTexture(url: string) {
   return texture;
 }
 
-export async function loadAiTownAssets() {
-  if (cache) {
-    return cache;
+function normalizeMapIds(mapIds: string[] | undefined) {
+  return [...new Set((mapIds ?? []).filter((mapId) => mapId.trim().length > 0))];
+}
+
+async function loadSharedAiTownAssets() {
+  if (sharedCache) {
+    return sharedCache;
   }
 
-  if (loading) {
-    return loading;
+  if (sharedLoading) {
+    return sharedLoading;
   }
 
-  loading = (async () => {
-    const tileSetTexture = await loadTexture('/assets/generated/maps/neon-commercial-district/neon-commercial-district_preview.png');
+  sharedLoading = (async () => {
+    const tileSetTexture = await loadTexture('/assets/generated/maps/neon-commercial-district/neon-commercial-district_preview.webp');
 
     const characterAnimations = {} as Record<CharacterKey, CharacterAnimations>;
 
@@ -152,22 +170,9 @@ export async function loadAiTownAssets() {
 
     const animationSheets = {} as Record<string, Spritesheet>;
     const rolePawnTextures: Partial<Record<RolePawnKey, Texture>> = {};
-    const generatedMapTextures: Record<string, GeneratedMapLayerTextures> = {};
 
     for (const [rolePawnKey, url] of Object.entries(ROLE_PAWN_TEXTURE_URLS) as Array<[RolePawnKey, string]>) {
       rolePawnTextures[rolePawnKey] = await loadTexture(url);
-    }
-
-    for (const map of AI_TOWN_GENERATED_MAPS) {
-      generatedMapTextures[map.id] = {
-        groundBase: await loadTexture(map.layerUrls.groundBase),
-        dressedRef: await loadTexture(map.layerUrls.dressedRef),
-        propPack: await loadTexture(map.layerUrls.propPack),
-        propsTransparent: await loadTexture(map.layerUrls.propsTransparent),
-        collision: await loadTexture(map.layerUrls.collision),
-        regions: await loadTexture(map.layerUrls.regions),
-        preview: await loadTexture(map.layerUrls.preview)
-      };
     }
 
     for (const [sheetName, manifest] of Object.entries(animationManifests)) {
@@ -177,21 +182,104 @@ export async function loadAiTownAssets() {
       animationSheets[sheetName] = spritesheet;
     }
 
-    cache = {
+    sharedCache = {
       characterAnimations,
       rolePawnTextures,
       tileSetTexture,
-      animationSheets,
-      generatedMapTextures
+      animationSheets
     };
 
-    return cache;
+    return sharedCache;
   })();
+
+  try {
+    return await sharedLoading;
+  } catch (error) {
+    sharedLoading = null;
+    throw error;
+  }
+}
+
+async function loadGeneratedMapTextures(mapId: string) {
+  const cachedTextures = generatedMapTextureCache.get(mapId);
+  if (cachedTextures) {
+    return cachedTextures;
+  }
+
+  const existingLoad = generatedMapLoading.get(mapId);
+  if (existingLoad) {
+    return existingLoad;
+  }
+
+  const map = GENERATED_MAP_BY_ID.get(mapId);
+  if (!map) {
+    return null;
+  }
+
+  const loading = (async () => {
+    const entries = await Promise.all(
+      GENERATED_MAP_RENDER_LAYER_KEYS.map(async (layerKey) => [
+        layerKey,
+        await loadTexture(map.layerUrls[layerKey])
+      ] as const)
+    );
+    const textures = Object.fromEntries(entries) as GeneratedMapLayerTextures;
+    generatedMapTextureCache.set(mapId, textures);
+    generatedMapLoading.delete(mapId);
+    return textures;
+  })();
+
+  generatedMapLoading.set(mapId, loading);
 
   try {
     return await loading;
   } catch (error) {
-    loading = null;
+    generatedMapLoading.delete(mapId);
     throw error;
   }
+}
+
+async function unloadTextureUrl(url: string, texture?: Texture) {
+  try {
+    await Assets.unload(url);
+  } catch {
+    texture?.source?.unload?.();
+  }
+}
+
+async function evictGeneratedMapTexturesExcept(retainedMapIds: Set<string>) {
+  const evictions = [...generatedMapTextureCache.entries()].filter(([mapId]) => !retainedMapIds.has(mapId));
+
+  await Promise.all(
+    evictions.map(async ([mapId, textures]) => {
+      const map = GENERATED_MAP_BY_ID.get(mapId);
+      if (map) {
+        await Promise.all(
+          GENERATED_MAP_RENDER_LAYER_KEYS.map((layerKey) => unloadTextureUrl(map.layerUrls[layerKey], textures[layerKey]))
+        );
+      }
+
+      generatedMapTextureCache.delete(mapId);
+    })
+  );
+}
+
+function snapshotGeneratedMapTextures() {
+  return Object.fromEntries(generatedMapTextureCache.entries()) as Record<string, GeneratedMapLayerTextures>;
+}
+
+export async function loadAiTownAssets(options: AiTownAssetLoadOptions = {}) {
+  const sharedAssets = await loadSharedAiTownAssets();
+  const mapIds = normalizeMapIds(options.mapIds);
+
+  await Promise.all(mapIds.map((mapId) => loadGeneratedMapTextures(mapId)));
+
+  if (options.evictExceptMapIds) {
+    await evictGeneratedMapTexturesExcept(new Set(normalizeMapIds(options.evictExceptMapIds)));
+  }
+
+  return {
+    ...sharedAssets,
+    generatedMapTextures: snapshotGeneratedMapTextures()
+  };
 }

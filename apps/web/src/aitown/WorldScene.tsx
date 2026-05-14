@@ -13,7 +13,7 @@ import {
 } from 'pixi.js';
 import { Viewport } from 'pixi-viewport';
 
-import { loadAiTownAssets } from './assetLoader';
+import { loadAiTownAssets, type AiTownAssetLoadOptions } from './assetLoader';
 import { findTriggeredGateway, resolveAgentNavigationRoute, type AgentNavigationRoutePoint } from './navigation';
 import type { AiTownSceneModel, Facing, SceneAgent, ScenePoint } from './types';
 import {
@@ -64,7 +64,7 @@ const statusBadgeStyle = new TextStyle({
 
 const WATCH_PARTICIPANT_HIGHLIGHT_COLOR = 0xffd785;
 const CORRELATION_PARTICIPANT_HIGHLIGHT_COLOR = 0x8be9d5;
-const AGENT_MOTION_MAX_FRAMES_PER_SECOND = 12;
+const AGENT_MOTION_MAX_FRAMES_PER_SECOND = 10;
 const AGENT_MOTION_MAX_DELTA_SECONDS = 0.12;
 const AGENT_MOTION_FRAME_INTERVAL_SECONDS = 1 / AGENT_MOTION_MAX_FRAMES_PER_SECOND;
 const AGENT_MOTION_RUN_DISTANCE_PX = 128;
@@ -72,6 +72,10 @@ const AGENT_MOTION_RUN_SPEED_MULTIPLIER = 1.55;
 const AGENT_MOTION_MIN_PATROL_DISTANCE_PX = 48;
 const AGENT_MOTION_MAX_WAYPOINT_ADVANCES_PER_FRAME = 4;
 const VIEWPORT_DRAG_START_THRESHOLD_PX = 4;
+const VIEWPORT_CULL_OVERSCAN_PX = 96;
+const AGENT_SPRITE_CULL_WIDTH = 64;
+const AGENT_SPRITE_CULL_HEIGHT = 96;
+const AGENT_SPRITE_RETIRED_POOL_LIMIT = 96;
 
 type AgentMotionProfile = {
   seed: number;
@@ -81,8 +85,15 @@ type AgentMotionProfile = {
 };
 
 type AgentSpriteContainer = Container & {
+  agentId?: string;
   agentCharacter?: AnimatedSprite;
   agentCharacterTextures?: Record<Facing, Texture[]>;
+  agentRenderKey?: string;
+};
+
+type AgentSpritePoolEntry = {
+  renderKey: string;
+  sprite: AgentSpriteContainer;
 };
 
 type AgentMotionRoutePoint = AgentNavigationRoutePoint & {
@@ -122,6 +133,7 @@ type AgentMotionState = {
   profile: AgentMotionProfile;
   facing: Facing;
   animationFacing: Facing;
+  gatewayArrivedThisFrame: boolean;
   homeChangedThisFrame: boolean;
 };
 
@@ -443,14 +455,30 @@ function createAgentMotionState(
   const route = resolveAgentMotionRoute(agent, scene, currentPosition);
   const routeKey = serializeAgentMotionRoute(route);
   const homeChangedThisFrame =
-    canReusePreviousState && (previousState.homeX !== agent.position.x || previousState.homeY !== agent.position.y);
+    canReusePreviousState &&
+    !previousState.gatewayArrivedThisFrame &&
+    (previousState.homeX !== agent.position.x || previousState.homeY !== agent.position.y);
+  const shouldUseGatewayArrivalPosition =
+    canReusePreviousState &&
+    previousState.gatewayArrivedThisFrame &&
+    previousState.currentMapId === currentMapId &&
+    previousState.targetX === agent.position.x &&
+    previousState.targetY === agent.position.y;
   const canReuseTarget =
     canReusePreviousState &&
     !homeChangedThisFrame &&
     previousState.routeKey === routeKey &&
     previousState.profile.seed === profile.seed;
-  const visualX = canReusePreviousPosition ? previousState.visualX : agent.position.x;
-  const visualY = canReusePreviousPosition ? previousState.visualY : agent.position.y;
+  const visualX = shouldUseGatewayArrivalPosition
+    ? agent.position.x
+    : canReusePreviousPosition
+      ? previousState.visualX
+      : agent.position.x;
+  const visualY = shouldUseGatewayArrivalPosition
+    ? agent.position.y
+    : canReusePreviousPosition
+      ? previousState.visualY
+      : agent.position.y;
   const initialTarget =
     homeChangedThisFrame || route.length === 1
       ? route[0]
@@ -480,6 +508,7 @@ function createAgentMotionState(
     profile,
     facing: agent.facing,
     animationFacing: agent.facing,
+    gatewayArrivedThisFrame: false,
     homeChangedThisFrame
   };
 
@@ -512,9 +541,20 @@ function applyAgentGatewayArrival(
   state.currentMapId = target.targetMapId;
   state.visualX = target.arrival.x;
   state.visualY = target.arrival.y;
+  state.homeX = target.arrival.x;
+  state.homeY = target.arrival.y;
   state.targetX = target.arrival.x;
   state.targetY = target.arrival.y;
+  state.route = [
+    {
+      ...target.arrival,
+      kind: 'home',
+      mapId: target.targetMapId
+    }
+  ];
+  state.routeKey = serializeAgentMotionRoute(state.route);
   state.routeIndex = 0;
+  state.gatewayArrivedThisFrame = true;
   state.container.position.set(state.visualX, state.visualY);
   state.container.zIndex = state.visualY;
   syncAgentCharacterAnimation(state, false, 0, 0, 0);
@@ -595,6 +635,7 @@ function applyAgentMotionFrame(
   deltaSeconds: number,
   options: {
     gateways?: AiTownSceneModel['gateways'];
+    isAgentVisible?: (state: AgentMotionState) => boolean;
     onGatewayTravel?: (travel: AgentGatewayTravel) => void;
   } = {}
 ) {
@@ -603,6 +644,14 @@ function applyAgentMotionFrame(
     : 1 / 60;
 
   for (const state of states) {
+    const visible = options.isAgentVisible?.(state) ?? true;
+    setDisplayObjectRendering(state.container, visible);
+
+    if (!visible) {
+      syncAgentCharacterAnimation(state, false, 0, 0, 0);
+      continue;
+    }
+
     state.elapsedSeconds += safeDeltaSeconds;
     let deltaX = state.targetX - state.visualX;
     let deltaY = state.targetY - state.visualY;
@@ -764,6 +813,60 @@ function isLayeredRasterMap(scene: AiTownSceneModel) {
   return scene.map.renderMode === 'layered-raster' && !!scene.map.id;
 }
 
+function resolveSceneMapAssetLoadOptions(scene: AiTownSceneModel): AiTownAssetLoadOptions {
+  if (!isLayeredRasterMap(scene)) {
+    return {
+      evictExceptMapIds: [],
+      mapIds: []
+    };
+  }
+
+  const mapId = scene.map.id!;
+  return {
+    evictExceptMapIds: [mapId],
+    mapIds: [mapId]
+  };
+}
+
+function resolveSceneMapIdentity(scene: AiTownSceneModel) {
+  return scene.map.id ?? `${scene.map.width}:${scene.map.height}:${scene.map.tileDim}`;
+}
+
+function setDisplayObjectRendering(target: Container | Sprite, visible: boolean) {
+  target.visible = visible;
+  target.renderable = visible;
+}
+
+function isWorldRectVisible(
+  viewport: Viewport,
+  left: number,
+  top: number,
+  right: number,
+  bottom: number
+) {
+  if (viewport.screenWidth <= 1 || viewport.screenHeight <= 1) {
+    return true;
+  }
+
+  return (
+    right >= viewport.left - VIEWPORT_CULL_OVERSCAN_PX &&
+    left <= viewport.right + VIEWPORT_CULL_OVERSCAN_PX &&
+    bottom >= viewport.top - VIEWPORT_CULL_OVERSCAN_PX &&
+    top <= viewport.bottom + VIEWPORT_CULL_OVERSCAN_PX
+  );
+}
+
+function isAgentMotionStateVisible(viewport: Viewport, state: AgentMotionState) {
+  const halfWidth = AGENT_SPRITE_CULL_WIDTH / 2;
+  return isWorldRectVisible(
+    viewport,
+    state.visualX - halfWidth,
+    state.visualY - AGENT_SPRITE_CULL_HEIGHT,
+    state.visualX + halfWidth,
+    state.visualY + 16
+  );
+}
+
 function buildTileTextures(
   texture: Texture,
   tileDim: number,
@@ -903,6 +1006,26 @@ function buildStaticMap(
   return container;
 }
 
+function syncStaticMapContainer(
+  mapContainer: Container,
+  nextMap: Container,
+  scene: AiTownSceneModel
+) {
+  mapContainer.cacheAsTexture(false);
+  mapContainer.removeChildren().forEach((child) => child.destroy({ children: true }));
+  mapContainer.addChild(...nextMap.removeChildren());
+  nextMap.destroy();
+  mapContainer.eventMode = 'static';
+  mapContainer.hitArea = new Rectangle(0, 0, scene.pixelWidth, scene.pixelHeight);
+  mapContainer.cullable = true;
+  mapContainer.cullableChildren = false;
+  mapContainer.cullArea = new Rectangle(0, 0, scene.pixelWidth, scene.pixelHeight);
+
+  if (!isLayeredRasterMap(scene) && scene.map.animatedSprites.length === 0) {
+    mapContainer.cacheAsTexture(true);
+  }
+}
+
 function createMapDepthSprites(
   scene: AiTownSceneModel,
   generatedMapTextures: Record<string, Record<string, Texture>>
@@ -928,9 +1051,38 @@ function createMapDepthSprites(
     sprite.height = prop.h;
     sprite.zIndex = prop.sortY;
     sprite.eventMode = 'none';
+    sprite.cullable = true;
+    sprite.cullArea = new Rectangle(0, 0, prop.w, prop.h);
 
     return sprite;
   });
+}
+
+function destroyMapDepthSprite(sprite: Sprite) {
+  sprite.destroy({ children: true, texture: true, textureSource: false });
+}
+
+function syncSceneObjectVisibility(
+  viewport: Viewport,
+  agentStates: AgentMotionState[],
+  mapDepthSprites: Sprite[]
+) {
+  for (const state of agentStates) {
+    setDisplayObjectRendering(state.container, isAgentMotionStateVisible(viewport, state));
+  }
+
+  for (const sprite of mapDepthSprites) {
+    setDisplayObjectRendering(
+      sprite,
+      isWorldRectVisible(
+        viewport,
+        sprite.x,
+        sprite.y,
+        sprite.x + sprite.width,
+        sprite.y + sprite.height
+      )
+    );
+  }
 }
 
 function createAgentStatusBadge(agent: SceneAgent) {
@@ -969,6 +1121,36 @@ function createAgentStatusBadge(agent: SceneAgent) {
   return container;
 }
 
+function createCachedAgentChrome(...children: Array<Container | Graphics | Text>) {
+  const chrome = new Container();
+  chrome.eventMode = 'none';
+  chrome.addChild(...children);
+  chrome.cacheAsTexture(true);
+
+  return chrome;
+}
+
+function resolveAgentSpriteRenderKey(
+  agent: SceneAgent,
+  emphasis: WatchOverlayAgentEmphasis | 'none',
+  correlationHighlighted: boolean
+) {
+  return [
+    agent.agentId,
+    agent.displayName,
+    agent.characterKey,
+    agent.facing,
+    agent.phase,
+    agent.severity,
+    agent.selected ? 'selected' : 'idle',
+    agent.rebootRecommended ? 'reboot' : 'ok',
+    agent.openAlertCount,
+    agent.hasOpenIncidents ? 'incidents' : 'clear',
+    emphasis,
+    correlationHighlighted ? 'correlated' : 'uncorrelated'
+  ].join('|');
+}
+
 function createAgentSprite(
   agent: SceneAgent,
   emphasis: WatchOverlayAgentEmphasis | 'none',
@@ -976,13 +1158,23 @@ function createAgentSprite(
   onSelect: (agentId: string | null) => void,
   characterTextures: Record<Facing, Texture[]>
 ) {
+  const renderKey = resolveAgentSpriteRenderKey(agent, emphasis, correlationHighlighted);
   const container = new Container() as AgentSpriteContainer;
+  container.agentId = agent.agentId;
+  container.agentRenderKey = renderKey;
   container.position.set(agent.position.x, agent.position.y);
   container.eventMode = 'static';
   container.cursor = 'pointer';
   container.zIndex = agent.position.y;
   container.hitArea = new Rectangle(-24, -32, 48, 56);
   container.agentCharacterTextures = characterTextures;
+  container.cullable = true;
+  container.cullArea = new Rectangle(
+    -AGENT_SPRITE_CULL_WIDTH / 2,
+    -AGENT_SPRITE_CULL_HEIGHT,
+    AGENT_SPRITE_CULL_WIDTH,
+    AGENT_SPRITE_CULL_HEIGHT + 16
+  );
 
   const severityColor = SEVERITY_COLORS[agent.severity];
   const emphasized = emphasis !== 'none';
@@ -1061,9 +1253,18 @@ function createAgentSprite(
     onSelect(agent.agentId);
   });
 
-  container.addChild(shadow, correlationSpotlight, aura, emphasisRing, character, statusDot, nameLabel);
   if (statusBadge) {
-    container.addChild(statusBadge);
+    container.addChild(
+      createCachedAgentChrome(shadow, correlationSpotlight, aura, emphasisRing),
+      character,
+      createCachedAgentChrome(statusDot, nameLabel, statusBadge)
+    );
+  } else {
+    container.addChild(
+      createCachedAgentChrome(shadow, correlationSpotlight, aura, emphasisRing),
+      character,
+      createCachedAgentChrome(statusDot, nameLabel)
+    );
   }
 
   return container;
@@ -1121,10 +1322,14 @@ export default function WorldScene({
   const hostRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<Application | null>(null);
   const viewportRef = useRef<Viewport | null>(null);
+  const mapContainerRef = useRef<Container | null>(null);
   const zoneLayerRef = useRef<Container | null>(null);
   const watchLayerRef = useRef<Container | null>(null);
   const agentLayerRef = useRef<Container | null>(null);
   const agentMotionStatesRef = useRef<AgentMotionState[]>([]);
+  const agentSpritePoolRef = useRef(new Map<string, AgentSpritePoolEntry>());
+  const retiredAgentSpritePoolRef = useRef(new Map<string, AgentSpriteContainer[]>());
+  const mapDepthSpritesRef = useRef<Sprite[]>([]);
   const onSelectAgentRef = useRef(onSelectAgent);
   const lastCenteredAgentRef = useRef<CenteredAgentState | null>(null);
   const selectedAgentRef = useRef<CenteredAgentState | null>(null);
@@ -1149,8 +1354,11 @@ export default function WorldScene({
   const suppressSceneTapRef = useRef(false);
   const clampPaddingRef = useRef<ViewportClampPadding>({ left: 0, top: 0, right: 0 });
   const viewportInspectorRef = useRef<ViewportInspector | null>(null);
+  const applyViewportLayoutRef = useRef<((preserveView?: boolean) => void) | null>(null);
   const resetViewportToContextDefaultRef = useRef<(() => void) | null>(null);
   const pendingGatewayArrivalRef = useRef<ScenePoint | null>(null);
+  const renderedMapIdRef = useRef<string | null>(null);
+  const renderSceneRef = useRef(renderScene);
   const appliedResetViewSignalRef = useRef(resetViewSignal);
   const appliedAgentFocusRequestIdRef = useRef<number | null>(null);
   const appliedZoneFocusRequestIdRef = useRef<number | null>(null);
@@ -1160,6 +1368,7 @@ export default function WorldScene({
   const watchOverlayCaptionItems = resolveWatchOverlayCaptionItems(renderScene);
   const currentSelectedHasWatchOverlay = watchOverlayCaptionItems.length > 0;
   currentSelectedHasWatchOverlayRef.current = currentSelectedHasWatchOverlay;
+  renderSceneRef.current = renderScene;
   selectedAgentIdRef.current = scene.selectedAgentId;
   activeMapIdRef.current = activeMapId;
   sceneAgentsRef.current = scene.agents;
@@ -1317,6 +1526,74 @@ export default function WorldScene({
     return selectedAgent;
   };
 
+  const retireAgentSprite = (entry: AgentSpritePoolEntry) => {
+    setDisplayObjectRendering(entry.sprite, false);
+    const pool = retiredAgentSpritePoolRef.current.get(entry.renderKey) ?? [];
+
+    if (pool.length >= AGENT_SPRITE_RETIRED_POOL_LIMIT) {
+      entry.sprite.destroy({ children: true });
+      return;
+    }
+
+    pool.push(entry.sprite);
+    retiredAgentSpritePoolRef.current.set(entry.renderKey, pool);
+  };
+
+  const acquireAgentSprite = (
+    agent: SceneAgent,
+    emphasis: WatchOverlayAgentEmphasis | 'none',
+    correlationHighlighted: boolean,
+    characterTextures: Record<Facing, Texture[]>,
+    activeSprites: Map<string, AgentSpritePoolEntry>,
+    retiredSprites: Set<AgentSpriteContainer>
+  ) => {
+    const renderKey = resolveAgentSpriteRenderKey(agent, emphasis, correlationHighlighted);
+    const activeEntry = activeSprites.get(agent.agentId);
+
+    if (activeEntry?.renderKey === renderKey) {
+      setDisplayObjectRendering(activeEntry.sprite, true);
+      return activeEntry;
+    }
+
+    if (activeEntry) {
+      retiredSprites.add(activeEntry.sprite);
+      retireAgentSprite(activeEntry);
+    }
+
+    const retiredPool = retiredAgentSpritePoolRef.current.get(renderKey);
+    const pooledSprite = retiredPool?.pop();
+    if (retiredPool && retiredPool.length === 0) {
+      retiredAgentSpritePoolRef.current.delete(renderKey);
+    }
+
+    const sprite =
+      pooledSprite ??
+      createAgentSprite(
+        agent,
+        emphasis,
+        correlationHighlighted,
+        (agentId) => {
+          if (suppressSceneTapRef.current) {
+            suppressSceneTapRef.current = false;
+            return;
+          }
+
+          selectedAgentDirectFocusRef.current = null;
+          onSelectAgentRef.current(agentId);
+        },
+        characterTextures
+      );
+
+    sprite.agentId = agent.agentId;
+    sprite.agentRenderKey = renderKey;
+    setDisplayObjectRendering(sprite, true);
+
+    return {
+      renderKey,
+      sprite
+    };
+  };
+
   useEffect(() => {
     onSelectAgentRef.current = onSelectAgent;
   }, [onSelectAgent]);
@@ -1419,6 +1696,7 @@ export default function WorldScene({
           backgroundColor: 0x211822,
           antialias: false,
           autoDensity: true,
+          preference: 'canvas',
           resolution: window.devicePixelRatio || 1
         });
       } catch (error) {
@@ -1445,7 +1723,7 @@ export default function WorldScene({
 
       let assets;
       try {
-        assets = await loadAiTownAssets();
+        assets = await loadAiTownAssets(resolveSceneMapAssetLoadOptions(renderSceneRef.current));
       } catch (error) {
         if (disposed) {
           return;
@@ -1464,14 +1742,18 @@ export default function WorldScene({
         return;
       }
 
+      const initialScene = renderSceneRef.current;
       const viewport = new Viewport({
         screenWidth: host.clientWidth,
         screenHeight: host.clientHeight,
-        worldWidth: renderScene.pixelWidth,
-        worldHeight: renderScene.pixelHeight,
+        worldWidth: initialScene.pixelWidth,
+        worldHeight: initialScene.pixelHeight,
         events: app.renderer.events,
         allowPreserveDragOutside: DEFAULT_ALLOW_VIEWPORT_DRAG_OUTSIDE
       });
+      const syncVisibleObjectsForViewport = () => {
+        syncSceneObjectVisibility(viewport, agentMotionStatesRef.current, mapDepthSpritesRef.current);
+      };
 
       let currentBaseScale = 1;
       let currentMaxScale = DEFAULT_MAX_VIEWPORT_SCALE;
@@ -1489,6 +1771,7 @@ export default function WorldScene({
       };
 
       const syncViewportConstraints = (hostWidth: number, hostHeight: number, capabilities?: ViewportInputCapabilities) => {
+        const currentScene = renderSceneRef.current;
         const clampPadding = resolveViewportClampPadding(host);
         const nextClampPadding: ViewportClampPadding = {
           left: clampPadding.left ?? 0,
@@ -1500,8 +1783,8 @@ export default function WorldScene({
         const { minScale, maxScale } = resolveViewportScaleBounds(
           hostWidth,
           hostHeight,
-          renderScene.pixelWidth,
-          renderScene.pixelHeight,
+          currentScene.pixelWidth,
+          currentScene.pixelHeight,
           DEFAULT_MAX_VIEWPORT_SCALE,
           capabilities
         );
@@ -1510,8 +1793,8 @@ export default function WorldScene({
         viewport.plugins.remove('clamp');
         viewport.clamp({
             ...resolveViewportClampOptions(
-            renderScene.pixelWidth,
-            renderScene.pixelHeight,
+            currentScene.pixelWidth,
+            currentScene.pixelHeight,
             hostWidth,
             hostHeight,
             viewport.scale.x,
@@ -1586,6 +1869,7 @@ export default function WorldScene({
           return;
         }
 
+        syncVisibleObjectsForViewport();
         stopSelectedAgentFollowState();
         if (selectedAgentManualReselectRef.current) {
           selectedAgentManualReselectLayoutChangedRef.current = false;
@@ -1610,29 +1894,30 @@ export default function WorldScene({
       };
 
       const applyViewportLayout = (preserveView = false) => {
+        const currentScene = renderSceneRef.current;
         const hostWidth = Math.max(host.clientWidth, 1);
         const hostHeight = Math.max(host.clientHeight, 1);
         const capabilities = resolveViewportInputCapabilities();
         const { baseScale: nextBaseScale } = resolveViewportScaleBounds(
           hostWidth,
           hostHeight,
-          renderScene.pixelWidth,
-          renderScene.pixelHeight,
+          currentScene.pixelWidth,
+          currentScene.pixelHeight,
           DEFAULT_MAX_VIEWPORT_SCALE,
           capabilities
         );
         const entryCenter = resolveViewportEntryCenter(
           hostWidth,
           hostHeight,
-          renderScene.pixelWidth,
-          renderScene.pixelHeight,
+          currentScene.pixelWidth,
+          currentScene.pixelHeight,
           capabilities
         );
         const previousCenter = preserveView ? viewport.center : entryCenter;
         const previousScale = viewport.scale.x || nextBaseScale;
 
         app.renderer.resize(hostWidth, hostHeight);
-        viewport.resize(hostWidth, hostHeight, renderScene.pixelWidth, renderScene.pixelHeight);
+        viewport.resize(hostWidth, hostHeight, currentScene.pixelWidth, currentScene.pixelHeight);
         const { minScale, maxScale } = syncViewportConstraints(
           hostWidth,
           hostHeight,
@@ -1688,11 +1973,13 @@ export default function WorldScene({
               homeX: selectedAgent.x,
               homeY: selectedAgent.y
             });
+            syncVisibleObjectsForViewport();
             return;
           }
 
           moveViewportCenterIntoSafeArea(viewport, selectedAgent.x, selectedAgent.y);
           markSelectedAgentFollowState(selectedAgent);
+          syncVisibleObjectsForViewport();
           return;
         }
 
@@ -1727,31 +2014,33 @@ export default function WorldScene({
           selectedAgentManualReselectLayoutChangedRef.current = false;
           selectedAgentManualReselectGeometryRef.current = null;
         }
+        syncVisibleObjectsForViewport();
       };
 
       const resetViewportToContextDefault = () => {
+        const currentScene = renderSceneRef.current;
         const hostWidth = Math.max(host.clientWidth, 1);
         const hostHeight = Math.max(host.clientHeight, 1);
         const capabilities = resolveViewportInputCapabilities();
         const { baseScale: nextBaseScale } = resolveViewportScaleBounds(
           hostWidth,
           hostHeight,
-          renderScene.pixelWidth,
-          renderScene.pixelHeight,
+          currentScene.pixelWidth,
+          currentScene.pixelHeight,
           DEFAULT_MAX_VIEWPORT_SCALE,
           capabilities
         );
         const entryCenter = resolveViewportEntryCenter(
           hostWidth,
           hostHeight,
-          renderScene.pixelWidth,
-          renderScene.pixelHeight,
+          currentScene.pixelWidth,
+          currentScene.pixelHeight,
           capabilities
         );
         const selectedAgent = selectedAgentRef.current;
 
         app.renderer.resize(hostWidth, hostHeight);
-        viewport.resize(hostWidth, hostHeight, renderScene.pixelWidth, renderScene.pixelHeight);
+        viewport.resize(hostWidth, hostHeight, currentScene.pixelWidth, currentScene.pixelHeight);
         const { minScale, maxScale } = syncViewportConstraints(
           hostWidth,
           hostHeight,
@@ -1766,11 +2055,13 @@ export default function WorldScene({
         if (selectedAgent) {
           moveViewportCenterIntoSafeArea(viewport, selectedAgent.x, selectedAgent.y);
           markSelectedAgentFollowState(selectedAgent);
+          syncVisibleObjectsForViewport();
           return;
         }
 
         viewport.moveCenter(entryCenter.x, entryCenter.y);
         clearSelectedAgentFollowState();
+        syncVisibleObjectsForViewport();
       };
 
       viewportZoomHandler = () => {
@@ -1789,6 +2080,7 @@ export default function WorldScene({
           viewport.setZoom(targetScale, true);
           suppressSelectedAgentFollowResetRef.current = false;
           syncViewportConstraints(viewport.screenWidth, viewport.screenHeight, capabilities);
+          syncVisibleObjectsForViewport();
           if (zoomWasUserInitiated && selectedAgentManualReselectRef.current) {
             selectedAgentManualReselectLayoutChangedRef.current = false;
             selectedAgentManualReselectGeometryRef.current = {
@@ -1800,6 +2092,7 @@ export default function WorldScene({
         }
 
         syncViewportConstraints(viewport.screenWidth, viewport.screenHeight, capabilities);
+        syncVisibleObjectsForViewport();
         if (zoomWasUserInitiated && selectedAgentManualReselectRef.current) {
           selectedAgentManualReselectLayoutChangedRef.current = false;
           selectedAgentManualReselectGeometryRef.current = {
@@ -1816,12 +2109,7 @@ export default function WorldScene({
 
       applyViewportLayout();
 
-      const mapContainer = buildStaticMap(
-        renderScene,
-        assets.tileSetTexture,
-        assets.animationSheets,
-        assets.generatedMapTextures
-      );
+      const mapContainer = new Container();
       mapContainer.on('pointertap', () => {
         if (suppressSceneTapRef.current) {
           suppressSceneTapRef.current = false;
@@ -1837,6 +2125,17 @@ export default function WorldScene({
       const agentLayer = new Container();
       watchLayer.eventMode = 'none';
       agentLayer.sortableChildren = true;
+      syncStaticMapContainer(
+        mapContainer,
+        buildStaticMap(
+          renderSceneRef.current,
+          assets.tileSetTexture,
+          assets.animationSheets,
+          assets.generatedMapTextures
+        ),
+        renderSceneRef.current
+      );
+      renderedMapIdRef.current = resolveSceneMapIdentity(renderSceneRef.current);
 
       viewport.addChild(mapContainer, zoneLayer, watchLayer, agentLayer);
       app.stage.addChild(viewport);
@@ -1858,7 +2157,8 @@ export default function WorldScene({
         }
 
         applyAgentMotionFrame(agentMotionStatesRef.current, agentMotionAccumulatorSeconds, {
-          gateways: renderScene.gateways,
+          gateways: renderSceneRef.current.gateways,
+          isAgentVisible: (state) => isAgentMotionStateVisible(viewport, state),
           onGatewayTravel: (travel) => {
             const selectedAgentId = selectedAgentIdRef.current;
 
@@ -1895,6 +2195,7 @@ export default function WorldScene({
           }
         });
         agentMotionAccumulatorSeconds = 0;
+        syncVisibleObjectsForViewport();
         agentLayer.sortChildren();
       };
       app.ticker.add(agentMotionTicker);
@@ -1910,10 +2211,12 @@ export default function WorldScene({
       });
 
       viewportRef.current = viewport;
+      mapContainerRef.current = mapContainer;
       zoneLayerRef.current = zoneLayer;
       watchLayerRef.current = watchLayer;
       agentLayerRef.current = agentLayer;
       viewportInspectorRef.current = viewportInspector;
+      applyViewportLayoutRef.current = applyViewportLayout;
       resetViewportToContextDefaultRef.current = resetViewportToContextDefault;
       (window as typeof window & { __AITOWN_VIEWPORT__?: ViewportInspector }).__AITOWN_VIEWPORT__ = viewportInspector;
       host.addEventListener('pointerdown', handleHostPointerDown);
@@ -1973,14 +2276,25 @@ export default function WorldScene({
       host.removeEventListener('pointercancel', handleHostPointerUp);
       clearActivePointerDrag();
       activeTouchPointerIds.clear();
+      mapContainerRef.current = null;
       zoneLayerRef.current = null;
       watchLayerRef.current = null;
       agentLayerRef.current = null;
+      mapDepthSpritesRef.current = [];
       viewportRef.current = null;
       viewportInspectorRef.current = null;
+      applyViewportLayoutRef.current = null;
       resetViewportToContextDefaultRef.current = null;
+      renderedMapIdRef.current = null;
       (window as typeof window & { __AITOWN_VIEWPORT__?: ViewportInspector }).__AITOWN_VIEWPORT__ = undefined;
       clearSelectedAgentFollowState();
+      for (const retiredSprites of retiredAgentSpritePoolRef.current.values()) {
+        for (const sprite of retiredSprites) {
+          sprite.destroy({ children: true });
+        }
+      }
+      agentSpritePoolRef.current.clear();
+      retiredAgentSpritePoolRef.current.clear();
       setReady(false);
 
       if (appRef.current) {
@@ -1992,7 +2306,7 @@ export default function WorldScene({
         appRef.current = null;
       }
     };
-  }, [loadAttempt, renderScene.map.id, renderScene.pixelHeight, renderScene.pixelWidth]);
+  }, [loadAttempt]);
 
   useEffect(() => {
     if (!ready) {
@@ -2002,7 +2316,7 @@ export default function WorldScene({
     const pendingGatewayArrival = pendingGatewayArrivalRef.current;
     const viewport = viewportRef.current;
 
-    if (!pendingGatewayArrival || !viewport) {
+    if (!pendingGatewayArrival || !viewport || renderedMapIdRef.current !== activeMapId) {
       return;
     }
 
@@ -2069,67 +2383,116 @@ export default function WorldScene({
 
   useEffect(() => {
     if (!ready) {
-      return;
+      return undefined;
     }
 
+    let cancelled = false;
+
     void (async () => {
-      const assets = await loadAiTownAssets();
+      const sceneForRender = renderScene;
+      const assets = await loadAiTownAssets(resolveSceneMapAssetLoadOptions(sceneForRender));
+      if (cancelled) {
+        return;
+      }
+
+      const mapContainer = mapContainerRef.current;
       const zoneLayer = zoneLayerRef.current;
       const watchLayer = watchLayerRef.current;
       const agentLayer = agentLayerRef.current;
       const viewport = viewportRef.current;
 
-      if (!zoneLayer || !watchLayer || !agentLayer || !viewport) {
+      if (!mapContainer || !zoneLayer || !watchLayer || !agentLayer || !viewport) {
         return;
       }
 
+      const nextRenderedMapId = resolveSceneMapIdentity(sceneForRender);
+      const mapChanged = renderedMapIdRef.current !== nextRenderedMapId;
+      if (mapChanged || mapContainer.children.length === 0) {
+        syncStaticMapContainer(
+          mapContainer,
+          buildStaticMap(
+            sceneForRender,
+            assets.tileSetTexture,
+            assets.animationSheets,
+            assets.generatedMapTextures
+          ),
+          sceneForRender
+        );
+        renderedMapIdRef.current = nextRenderedMapId;
+        applyViewportLayoutRef.current?.(!mapChanged);
+      }
+
+      const pendingGatewayArrival = pendingGatewayArrivalRef.current;
+      if (pendingGatewayArrival && renderedMapIdRef.current === activeMapIdRef.current) {
+        pendingGatewayArrivalRef.current = null;
+        moveViewportCenterDirectly(viewport, pendingGatewayArrival.x, pendingGatewayArrival.y);
+        stopSelectedAgentFollowState();
+      }
+
       const previousAgentMotionStates = agentMotionStatesRef.current;
+      const previousMapDepthSprites = new Set(mapDepthSpritesRef.current);
+      const previousActiveSprites = agentSpritePoolRef.current;
+      const nextActiveSprites = new Map<string, AgentSpritePoolEntry>();
+      const retiredSprites = new Set<AgentSpriteContainer>();
       zoneLayer.removeChildren().forEach((child) => child.destroy({ children: true }));
       watchLayer.removeChildren().forEach((child) => child.destroy({ children: true }));
-      agentLayer.removeChildren().forEach((child) => child.destroy({ children: true }));
+      const removedAgentLayerChildren = agentLayer.removeChildren();
       agentMotionStatesRef.current = [];
 
       const emphasisByAgentId = resolveWatchOverlayAgentEmphasisById(
-        renderScene.selectedAgentId,
-        renderScene.watchEdges
+        sceneForRender.selectedAgentId,
+        sceneForRender.watchEdges
       );
-      const correlationParticipantIds = new Set(renderScene.correlationParticipantAgentIds);
+      const correlationParticipantIds = new Set(sceneForRender.correlationParticipantAgentIds);
 
-      watchLayer.addChild(createWatchOverlay(renderScene));
-      for (const propSprite of createMapDepthSprites(renderScene, assets.generatedMapTextures)) {
+      watchLayer.addChild(createWatchOverlay(sceneForRender));
+      mapDepthSpritesRef.current = createMapDepthSprites(sceneForRender, assets.generatedMapTextures);
+      for (const propSprite of mapDepthSpritesRef.current) {
         agentLayer.addChild(propSprite);
       }
 
       const nextAgentMotionStates: AgentMotionState[] = [];
-      for (const agent of renderScene.agents) {
-        const agentSprite = createAgentSprite(
+      for (const agent of sceneForRender.agents) {
+        const emphasis = emphasisByAgentId.get(agent.agentId) ?? 'none';
+        const agentSpriteEntry = acquireAgentSprite(
           agent,
-          emphasisByAgentId.get(agent.agentId) ?? 'none',
+          emphasis,
           correlationParticipantIds.has(agent.agentId),
-          (agentId) => {
-            if (suppressSceneTapRef.current) {
-              suppressSceneTapRef.current = false;
-              return;
-            }
-
-            selectedAgentDirectFocusRef.current = null;
-            onSelectAgentRef.current(agentId);
-          },
-          assets.characterAnimations[agent.characterKey]
+          assets.characterAnimations[agent.characterKey],
+          previousActiveSprites,
+          retiredSprites
         );
+        const agentSprite = agentSpriteEntry.sprite;
 
         agentLayer.addChild(agentSprite);
+        nextActiveSprites.set(agent.agentId, agentSpriteEntry);
         nextAgentMotionStates.push(
           createAgentMotionState(
             agent,
-            renderScene,
+            sceneForRender,
             agentSprite,
             previousAgentMotionStates.find((state) => state.agentId === agent.agentId)
           )
         );
       }
 
+      for (const child of removedAgentLayerChildren) {
+        if (previousMapDepthSprites.has(child as Sprite)) {
+          destroyMapDepthSprite(child as Sprite);
+        } else if (!(child as AgentSpriteContainer).agentId) {
+          child.destroy({ children: true });
+        }
+      }
+
+      for (const [agentId, entry] of previousActiveSprites) {
+        if (!nextActiveSprites.has(agentId) && !retiredSprites.has(entry.sprite)) {
+          retireAgentSprite(entry);
+        }
+      }
+
+      agentSpritePoolRef.current = nextActiveSprites;
       agentMotionStatesRef.current = nextAgentMotionStates;
+      syncSceneObjectVisibility(viewport, nextAgentMotionStates, mapDepthSpritesRef.current);
       agentLayer.sortChildren();
 
       const selectedAgent = selectedAgentRef.current;
@@ -2187,6 +2550,10 @@ export default function WorldScene({
         clearSelectedAgentFollowState();
       }
     })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [ready, renderScene]);
 
   return (

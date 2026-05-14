@@ -47,13 +47,13 @@ function makeScene(): AiTownSceneModel {
     objectTiles: [],
     animatedSprites: [],
     layerUrls: {
-      groundBase: '/assets/generated/maps/map-a/map-a_ground_base.png',
-      dressedRef: '/assets/generated/maps/map-a/map-a_dressed_ref.png',
-      propPack: '/assets/generated/maps/map-a/map-a_prop_pack.png',
-      propsTransparent: '/assets/generated/maps/map-a/map-a_props_transparent.png',
-      collision: '/assets/generated/maps/map-a/map-a_collision.png',
-      regions: '/assets/generated/maps/map-a/map-a_regions.png',
-      preview: '/assets/generated/maps/map-a/map-a_preview.png'
+      groundBase: '/assets/generated/maps/map-a/map-a_ground_base.webp',
+      dressedRef: '/assets/generated/maps/map-a/map-a_dressed_ref.webp',
+      propPack: '/assets/generated/maps/map-a/map-a_prop_pack.webp',
+      propsTransparent: '/assets/generated/maps/map-a/map-a_props_transparent.webp',
+      collision: '/assets/generated/maps/map-a/map-a_collision.webp',
+      regions: '/assets/generated/maps/map-a/map-a_regions.webp',
+      preview: '/assets/generated/maps/map-a/map-a_preview.webp'
     },
     ySortProps: []
   };
@@ -62,13 +62,13 @@ function makeScene(): AiTownSceneModel {
     id: 'map-b',
     label: 'Map B',
     layerUrls: {
-      groundBase: '/assets/generated/maps/map-b/map-b_ground_base.png',
-      dressedRef: '/assets/generated/maps/map-b/map-b_dressed_ref.png',
-      propPack: '/assets/generated/maps/map-b/map-b_prop_pack.png',
-      propsTransparent: '/assets/generated/maps/map-b/map-b_props_transparent.png',
-      collision: '/assets/generated/maps/map-b/map-b_collision.png',
-      regions: '/assets/generated/maps/map-b/map-b_regions.png',
-      preview: '/assets/generated/maps/map-b/map-b_preview.png'
+      groundBase: '/assets/generated/maps/map-b/map-b_ground_base.webp',
+      dressedRef: '/assets/generated/maps/map-b/map-b_dressed_ref.webp',
+      propPack: '/assets/generated/maps/map-b/map-b_prop_pack.webp',
+      propsTransparent: '/assets/generated/maps/map-b/map-b_props_transparent.webp',
+      collision: '/assets/generated/maps/map-b/map-b_collision.webp',
+      regions: '/assets/generated/maps/map-b/map-b_regions.webp',
+      preview: '/assets/generated/maps/map-b/map-b_preview.webp'
     }
   };
 

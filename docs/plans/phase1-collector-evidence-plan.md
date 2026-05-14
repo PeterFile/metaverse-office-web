@@ -1,5 +1,7 @@
 # Phase 1 Collector / Evidence Adapter Plan
 
+> Historical archive notice: this document records an already-completed Phase 1 slice. It is not the current roadmap. Current product direction lives in `docs/current-direction.md`; current API/read-model semantics live in `specs/api-contract.md`. Future product/API/storage/runtime/UI progress must update the current docs in the same PR.
+
 > For Hermes: keep implementation minimal, schema-first, reversible, and tied to the current append-only prototype. Do not start UI work.
 
 **Goal:** Add a controller-driven snapshot collector that converts real workspace file activity and tmux pane observations into store-backed heartbeats/evidence metadata for the seven-actor office model.

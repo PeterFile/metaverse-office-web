@@ -1,5 +1,7 @@
 # Phase 1 Operator Overview API Plan
 
+> Historical archive notice: this document records an already-completed Phase 1 slice. It is not the current roadmap. Current product direction lives in `docs/current-direction.md`; current API/read-model semantics live in `specs/api-contract.md`. Future product/API/storage/runtime/UI progress must update the current docs in the same PR.
+
 > For Hermes: keep implementation minimal, schema-first, and reversible. Do not start UI work; land operator-facing query surfaces only.
 
 **Goal:** Add a backend office-overview query that exposes layout, occupants, watch topology, and derived staleness signals for the future operator UI.

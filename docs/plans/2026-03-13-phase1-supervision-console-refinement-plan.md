@@ -1,10 +1,12 @@
-# Phase 1 Supervision Console Refinement Plan
+# Historical Phase 1 Supervision Console Refinement Plan
+
+> Historical archive notice: this document records an already-completed Phase 1 refinement slice. It is not the current roadmap. Current product direction lives in `docs/current-direction.md`; current API/read-model semantics live in `specs/api-contract.md`. Future product/API/storage/runtime/UI progress must update the current docs in the same PR.
 
 > For Hermes: use subagent-driven-development or Codex to implement this plan task-by-task. Keep the slice evidence-first, supervision-first, and reversible.
 
 **Goal:** Strengthen the React operator shell so a lead can see who needs attention, who supervises whom, and what evidence supports that state without opening raw transcripts.
 
-**Architecture:** Stay inside the existing read-only Phase 1 contract. Reuse `GET /office/overview`, `GET /agents/:id/workflow`, `GET /incidents`, and `GET /correlations/:correlation_id` only. Add thin derived UI projections in the frontend; do not add backend writes, new routes, or fake liveness.
+**Architecture:** This archived refinement stayed inside the then-current read-only Phase 1 contract. Current work must check `docs/current-direction.md` and `specs/api-contract.md` before reusing these constraints. Reuse current read models; do not add backend writes, new routes, or fake liveness without updating the current docs first.
 
 **Tech Stack:** React, TypeScript, Vite, Vitest, existing pnpm workspace.
 

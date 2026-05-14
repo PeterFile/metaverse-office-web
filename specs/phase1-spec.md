@@ -1,11 +1,12 @@
-# Repo-local Phase 1 Spec Mirror
+# Historical Phase 1 Spec Mirror
 
-Source of truth: `/Users/cwp/.hermes/teams/web3-company/controller/phase1-spec-package.md`
+Archived source: `/Users/cwp/.hermes/teams/web3-company/controller/phase1-spec-package.md`
 Last mirrored: 2026-03-12T00:19:57+08:00
+Archived in this repo as historical context on 2026-05-14.
 
-This repository mirrors the controller-approved Phase 1 scope so implementation stays under `/Users/cwp/Projects/metaverse-office-web` instead of `~/.hermes/teams/...`.
+This file records the original controller-approved Phase 1 scope. It is not the current project roadmap. Current product direction lives in `docs/current-direction.md`; current route/read-model semantics live in `specs/api-contract.md`. Future work must update those current documents instead of treating this archive as live authority.
 
-## Frozen decisions
+## Frozen Phase 1 decisions
 - Phase 1 is a real-event-driven 2D office observability console
 - Primary user is the internal team lead
 - No 3D, no fake animation, no token layer, no onchain requirement
@@ -138,6 +139,6 @@ This repository mirrors the controller-approved Phase 1 scope so implementation 
 - the shell consumes the existing `GET /office/overview`, `GET /office/operations`, `GET /agents/:id/workflow`, `GET /incidents`, `GET /timeline`, `GET /collectors/controller-snapshot`, and `GET /correlations/:correlation_id` read models only
 - same-origin reads are the default; the shell may optionally prefix them with `VITE_API_BASE_URL` when the backend explicitly allows that frontend origin via `CORS_ALLOWED_ORIGINS`, and local dev may still proxy `/office`, `/agents`, `/incidents`, `/timeline`, `/correlations`, and `/collectors` from Vite without changing backend semantics
 - workflow and incident surfaces may open correlation drill-down by reusing the existing read-only routes; no new write path or contract is introduced
-- shell refresh stays polling-based in Phase 1; no websocket or SSE requirement is introduced by this slice
+- shell refresh stayed polling-based in the archived Phase 1 scope; current refresh/transport direction must be checked in `docs/current-direction.md` and `specs/api-contract.md`
 - UI must render explicit loading, empty, and error states instead of fabricating motion, severity, or productivity
 - once an overview, workflow, incident, or correlation slice has loaded successfully, later poll failures keep the last-good read surface visible; explicit fatal error states are reserved for initial loads that have no prior good data

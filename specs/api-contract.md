@@ -1,4 +1,8 @@
-# Phase 1 API Contract Draft
+# Current API Contract
+
+Updated: 2026-05-14T16:23:11+08:00
+
+This is the current API/read-model contract for Metaverse Office Web. It grew out of the Phase 1 contract, but it is no longer a Phase 1 draft. Update this file in the same PR as any route, response shape, filter, event schema, source-kind, storage, or request-surface change. Current product direction lives in `docs/current-direction.md`.
 
 ## Read APIs
 - `GET /health`
@@ -214,7 +218,7 @@
 
 
 ## React operator shell consumption notes
-- the first Phase 1 UI shell consumes `GET /office/overview`, `GET /office/operations`, `GET /agents/:id/workflow`, `GET /incidents`, `GET /timeline`, `GET /collectors/controller-snapshot`, and `GET /correlations/:correlation_id` only
+- the current operator surface consumes `GET /office/overview`, `GET /office/operations`, `GET /agents/:id/workflow`, `GET /incidents`, `GET /timeline`, `GET /collectors/controller-snapshot`, and `GET /correlations/:correlation_id` as its baseline read models; newer evidence/replay/memory views are additive read-only surfaces, not a Phase 1-only shell
 - the shell defaults to `GET /agents/:id/workflow?limit=10&window=60m` for the operator drawer slice, `GET /incidents?limit=10&window=60m` for the global incident feed, `GET /timeline?limit=10&window=60m` for replay pivots, `GET /collectors/controller-snapshot` for the latest controller snapshot, and `GET /correlations/:correlation_id?limit=10&window=60m` when an operator opens a correlation drill-down
 - requests stay same-origin by default; the React shell may optionally prefix them with `VITE_API_BASE_URL` when the backend explicitly allows that frontend origin via `CORS_ALLOWED_ORIGINS`, and local Vite development may still proxy `/office`, `/agents`, `/incidents`, `/timeline`, `/correlations`, and `/collectors` to the backend via an env-configurable target
 - the shell may poll these read-only routes on a ~15s cadence; no websocket or SSE contract is introduced by this slice
@@ -799,10 +803,10 @@
   "agent_role": "app-engineering",
   "event_type": "agent_wrote_file",
   "current_state": "coding",
-  "active_task": "Draft Phase 1 API handlers",
+  "active_task": "Draft evidence-spine API handlers",
   "summary": "Updated server.js",
   "severity": "normal",
-  "correlation_id": "phase1-backend",
+  "correlation_id": "evidence-spine-backend",
   "counterparty_agent_ids": [],
   "evidence_refs": [
     "/Users/cwp/Projects/metaverse-office-web/src/server.js"
@@ -830,7 +834,7 @@
 {
   "agent_id": "app-engineering",
   "current_state": "coding",
-  "active_task": "Draft Phase 1 API handlers",
+  "active_task": "Draft evidence-spine API handlers",
   "last_meaningful_output_at": "2026-03-09T18:00:00+08:00",
   "last_file_write_at": "2026-03-09T18:00:00+08:00",
   "current_blocker": "",

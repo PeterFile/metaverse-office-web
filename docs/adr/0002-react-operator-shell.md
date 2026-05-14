@@ -1,18 +1,20 @@
-# ADR 0002: React operator shell for Phase 1 office surface
+# ADR 0002: React operator shell for the office surface
 
 Date: 2026-03-11
 Status: accepted
 
+Current note: this ADR records the React/Vite frontend stack decision that remains active. It was accepted during Phase 1, but current product direction now lives in `docs/current-direction.md`.
+
 ## Context
-The user explicitly approved React for the frontend while keeping the existing Phase 1 rule intact: UI must not outrun the event/state architecture. The backend already exposes read-only office overview, agent workflow, incident feed, and correlation drill-down routes that can power a first operator shell without new event types or write paths.
+The user explicitly approved React for the frontend while keeping the evidence-first rule intact: UI must not outrun the event/state/storage/query architecture. The backend exposes read-only office overview, operations, agent workflow, incident feed, timeline, collector, and correlation routes that power the operator shell without requiring UI-owned write paths.
 
 ## Decision
 - use a pnpm workspace rooted in the existing repository
 - add a React + TypeScript + Vite web app at `apps/web`
 - keep the backend entrypoint and append-only read/write model unchanged
-- drive the first UI shell from the existing read-only operator routes: `GET /office/overview`, `GET /office/operations`, `GET /agents/:id/workflow`, `GET /incidents`, `GET /timeline`, `GET /collectors/controller-snapshot`, and `GET /correlations/:correlation_id`
+- drive the operator shell from the existing read-only routes: `GET /office/overview`, `GET /office/operations`, `GET /agents/:id/workflow`, `GET /incidents`, `GET /timeline`, `GET /collectors/controller-snapshot`, and `GET /correlations/:correlation_id`; newer evidence/replay/memory routes remain additive read-only surfaces
 - allow cross-origin GET requests from the React shell when configured, using the `CORS_ALLOWED_ORIGINS` environment variable (comma-separated list of allowed origins) for the backend.
-- use polling for freshness in Phase 1; do not add websocket or SSE requirements in this slice
+- keep polling as the current freshness mechanism unless `docs/current-direction.md` and `specs/api-contract.md` introduce a new transport contract
 - keep local development same-origin by default, allow an optional `VITE_API_BASE_URL` prefix for the shell only when the backend explicitly allows that origin via `CORS_ALLOWED_ORIGINS`, and keep the Vite proxy for `/office`, `/agents`, `/incidents`, `/timeline`, `/correlations`, and `/collectors` optional
 
 ## Consequences

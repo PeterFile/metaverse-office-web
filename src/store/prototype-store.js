@@ -203,6 +203,10 @@ class PrototypeStore {
     return projectCollectorEvidenceCoverage(this.getLatestCollectorReport(), filters);
   }
 
+  getLatestCollectorSourceHealth(filters = {}) {
+    return projectCollectorSourceHealth(this.getLatestCollectorReport(), filters);
+  }
+
   getCounts() {
     return {
       agent_count: SEED_AGENTS.length,
@@ -2086,6 +2090,197 @@ function projectCollectorEvidenceCoverage(report, filters = {}) {
     source_kind_buckets: aggregate.source_kind_buckets,
     agent_items: aggregate.agent_items.map(projectEvidenceCoverageAgentItem)
   };
+}
+
+function projectCollectorSourceHealth(report, filters = {}) {
+  if (!report || !Array.isArray(report.items)) {
+    return null;
+  }
+
+  const agentId = normalizeFilterValue(filters.agent_id);
+  const requestedSourceKind = normalizeFilterValue(filters.source_kind);
+  const sourceHealthKeys = resolveSourceHealthKeys(requestedSourceKind);
+  const requestedStatus = normalizeFilterValue(filters.status);
+  const status = normalizeSourceHealthStatus(requestedStatus);
+  const hasUnknownStatus = Boolean(requestedStatus) && !status;
+  const limit = parseLimit(filters.limit);
+  const evidenceCoverageRows = new Map(
+    (report.evidence_coverage?.agent_items || [])
+      .filter(isEvidenceCoverageAgentItem)
+      .map((item) => [item.agent_id, item])
+  );
+  const selectedItems = hasUnknownStatus
+    ? []
+    : report.items
+        .filter((item) => item && typeof item.agent_id === 'string' && item.agent_id.length > 0)
+        .filter((item) => !agentId || item.agent_id === agentId)
+        .filter(
+          (item) => sourceHealthKeys.length > 0 && matchesSourceHealthStatus(item, sourceHealthKeys, status)
+        )
+        .slice(0, limit);
+
+  return {
+    collected_at: report.collected_at || null,
+    actor_id: report.actor_id || null,
+    summary: createSourceHealthSummary(selectedItems, sourceHealthKeys, status),
+    runtime_source_evidence: {
+      unmapped_tmux_sessions: cloneUnmappedTmuxSessions(
+        report.runtime_source_evidence?.unmapped_tmux_sessions
+      )
+    },
+    agent_items: selectedItems.map((item) =>
+      projectSourceHealthAgentItem({
+        item,
+        sourceHealthKeys,
+        status,
+        evidenceCoverageRow: evidenceCoverageRows.get(item.agent_id) || null
+      })
+    )
+  };
+}
+
+const SOURCE_HEALTH_KEY_BY_SOURCE_KIND = Object.freeze({
+  workspace_root: 'workspace_root',
+  workspace_file: 'workspace_files',
+  workspace_files: 'workspace_files',
+  tmux_observation: 'tmux_session',
+  tmux_session: 'tmux_session'
+});
+const SOURCE_HEALTH_KEYS = Object.freeze(['workspace_root', 'workspace_files', 'tmux_session']);
+const SOURCE_HEALTH_STATUSES = Object.freeze(['observed', 'degraded', 'missing', 'error']);
+
+function resolveSourceHealthKeys(sourceKind) {
+  if (!sourceKind) {
+    return SOURCE_HEALTH_KEYS.slice();
+  }
+
+  const sourceHealthKey = SOURCE_HEALTH_KEY_BY_SOURCE_KIND[sourceKind];
+  return sourceHealthKey ? [sourceHealthKey] : [];
+}
+
+function matchesSourceHealthStatus(item, sourceHealthKeys, status) {
+  const sourceHealth = item.source_health || {};
+  return sourceHealthKeys.some((key) => {
+    const health = sourceHealth[key] || null;
+    if (!health) {
+      return false;
+    }
+
+    return !status || health.status === status;
+  });
+}
+
+function createSourceHealthSummary(items, sourceHealthKeys, statusFilter = null) {
+  const sourceKindBuckets = Object.fromEntries(
+    SOURCE_HEALTH_KEYS.map((key) => [key, createEmptySourceHealthStatusBucket()])
+  );
+  const statusBuckets = createEmptySourceHealthStatusBucket();
+
+  for (const item of items) {
+    const sourceHealth = item.source_health || {};
+    for (const key of sourceHealthKeys) {
+      const status = normalizeSourceHealthStatus(sourceHealth[key]?.status);
+      if (!status || (statusFilter && status !== statusFilter)) {
+        continue;
+      }
+
+      sourceKindBuckets[key][status] += 1;
+      statusBuckets[status] += 1;
+    }
+  }
+
+  return {
+    agent_count: items.length,
+    source_kind_buckets: sourceKindBuckets,
+    status_buckets: statusBuckets
+  };
+}
+
+function createEmptySourceHealthStatusBucket() {
+  return Object.fromEntries(SOURCE_HEALTH_STATUSES.map((status) => [status, 0]));
+}
+
+function normalizeSourceHealthStatus(status) {
+  return SOURCE_HEALTH_STATUSES.includes(status) ? status : null;
+}
+
+function projectSourceHealthAgentItem({ item, sourceHealthKeys, status, evidenceCoverageRow }) {
+  const evidenceRefs = normalizeEvidenceRefs(item.evidence_refs);
+
+  return {
+    agent_id: item.agent_id,
+    workspace_root: item.workspace_root || item.source_health?.workspace_root?.path || null,
+    session_ref: item.session_ref || item.source_health?.tmux_session?.expected_session_ref || null,
+    source_health: projectSourceHealth(item.source_health, sourceHealthKeys, status),
+    evidence_ref_count: evidenceCoverageRow
+      ? normalizeCount(evidenceCoverageRow.evidence_ref_count)
+      : evidenceRefs.length,
+    evidence_refs: evidenceRefs,
+    latest_evidence_at: evidenceCoverageRow?.latest_evidence_at || deriveLatestCollectorEvidenceAt(item)
+  };
+}
+
+function projectSourceHealth(sourceHealth = {}, sourceHealthKeys, statusFilter = null) {
+  const projected = {};
+
+  for (const key of sourceHealthKeys) {
+    const health = sourceHealth[key];
+    if (!health || (statusFilter && health.status !== statusFilter)) {
+      continue;
+    }
+
+    projected[key] = cloneSourceHealthEntry(health);
+  }
+
+  return projected;
+}
+
+function cloneSourceHealthEntry(health) {
+  const cloned = { ...health };
+
+  if (Array.isArray(cloned.expected_files)) {
+    cloned.expected_files = cloned.expected_files.slice();
+  }
+
+  if (Array.isArray(cloned.degraded_reasons)) {
+    cloned.degraded_reasons = cloned.degraded_reasons.slice();
+  }
+
+  return cloned;
+}
+
+function cloneUnmappedTmuxSessions(sessions) {
+  if (!Array.isArray(sessions)) {
+    return [];
+  }
+
+  return sessions.map((session) => ({
+    ...session,
+    pane_refs: Array.isArray(session.pane_refs) ? session.pane_refs.slice() : []
+  }));
+}
+
+function deriveLatestCollectorEvidenceAt(item = {}) {
+  return maxCollectorIsoTimestamp([
+    ...(Array.isArray(item.workspace_observations) ? item.workspace_observations : [])
+      .map((observation) => observation.last_modified_at),
+    ...(Array.isArray(item.tmux_observations) ? item.tmux_observations : [])
+      .map((observation) => observation.pane_activity_at),
+    item.heartbeat?.last_meaningful_output_at,
+    item.heartbeat?.last_file_write_at
+  ]);
+}
+
+function maxCollectorIsoTimestamp(values = []) {
+  const timestamps = values
+    .filter((value) => typeof value === 'string' && value.length > 0)
+    .filter((value) => !Number.isNaN(Date.parse(value)));
+
+  if (timestamps.length === 0) {
+    return null;
+  }
+
+  return timestamps.sort((left, right) => Date.parse(right) - Date.parse(left))[0];
 }
 
 function createEvidenceCoverageAggregate(report, agentRows) {

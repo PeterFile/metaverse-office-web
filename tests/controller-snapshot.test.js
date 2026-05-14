@@ -662,6 +662,225 @@ test('store keeps heartbeat-only JSONL replay backward compatible without a late
   });
 });
 
+test('store projects latest collector source health with filters and bounded rows', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'metaverse-office-store-'));
+  const storeFile = path.join(root, 'prototype-store.jsonl');
+  const store = await createPrototypeStore({ filePath: storeFile });
+
+  assert.equal(store.getLatestCollectorSourceHealth(), null);
+
+  await store.appendCollectorReport(
+    createCollectorReport({
+      collectedAt: '2026-03-09T18:05:00.000Z',
+      evidenceCoverage: {
+        evidence_ref_count: 2,
+        covered_agent_count: 1,
+        low_confidence_agent_ids: ['growth-revenue'],
+        source_kind_buckets: {
+          workspace_file: 1,
+          workspace_root: 0,
+          tmux_observation: 1
+        },
+        agent_items: [
+          {
+            agent_id: 'app-engineering',
+            evidence_ref_count: 2,
+            source_kinds: ['workspace_file', 'tmux_observation'],
+            latest_evidence_at: '2026-03-09T18:04:30.000Z',
+            confidence_level: 'high'
+          },
+          {
+            agent_id: 'growth-revenue',
+            evidence_ref_count: 0,
+            source_kinds: [],
+            latest_evidence_at: null,
+            confidence_level: 'low'
+          }
+        ]
+      },
+      items: [
+        {
+          ...createReportItem({
+            collectedAt: '2026-03-09T18:05:00.000Z',
+            agentId: 'app-engineering',
+            evidenceRefs: ['/tmp/app-engineering/outbox.md', 'tmux://5-web3-app-engineering/0.1'],
+            currentState: 'coding',
+            activeTask: 'Implement HTTP handlers',
+            lastMeaningfulOutputAt: '2026-03-09T18:04:30.000Z',
+            lastFileWriteAt: '2026-03-09T18:04:00.000Z'
+          }),
+          source_health: {
+            workspace_root: {
+              status: 'observed',
+              path: '/tmp/app-engineering',
+              last_observed_at: '2026-03-09T18:04:00.000Z',
+              degraded_reasons: []
+            },
+            workspace_files: {
+              status: 'degraded',
+              expected_files: ['inbox.md', 'outbox.md', 'todo.md'],
+              observed_count: 1,
+              missing_count: 2,
+              error_count: 0,
+              last_observed_at: '2026-03-09T18:04:00.000Z',
+              degraded_reasons: ['missing workspace files: inbox.md, todo.md']
+            },
+            tmux_session: {
+              status: 'observed',
+              expected_session_ref: '5-web3-app-engineering',
+              observed_count: 1,
+              last_observed_at: '2026-03-09T18:04:30.000Z',
+              degraded_reasons: []
+            }
+          }
+        },
+        {
+          ...createReportItem({
+            collectedAt: '2026-03-09T18:05:00.000Z',
+            agentId: 'growth-revenue',
+            evidenceRefs: [],
+            currentState: 'unknown',
+            activeTask: '',
+            lastMeaningfulOutputAt: null,
+            lastFileWriteAt: null,
+            confidenceLevel: 'low'
+          }),
+          source_health: {
+            workspace_root: {
+              status: 'missing',
+              path: '/tmp/growth-revenue',
+              last_observed_at: null,
+              degraded_reasons: ['workspace root not observed']
+            },
+            workspace_files: {
+              status: 'missing',
+              expected_files: ['inbox.md', 'outbox.md', 'todo.md'],
+              observed_count: 0,
+              missing_count: 3,
+              error_count: 0,
+              last_observed_at: null,
+              degraded_reasons: ['missing workspace files: inbox.md, outbox.md, todo.md']
+            },
+            tmux_session: {
+              status: 'missing',
+              expected_session_ref: '5-web3-growth-revenue',
+              observed_count: 0,
+              last_observed_at: null,
+              degraded_reasons: ['tmux session not observed']
+            }
+          }
+        }
+      ]
+    })
+  );
+
+  const all = store.getLatestCollectorSourceHealth();
+  assert.deepEqual(all.summary.status_buckets, {
+    observed: 2,
+    degraded: 1,
+    missing: 3,
+    error: 0
+  });
+  assert.deepEqual(all.summary.source_kind_buckets.workspace_files, {
+    observed: 0,
+    degraded: 1,
+    missing: 1,
+    error: 0
+  });
+  assert.deepEqual(all.agent_items.map((item) => item.agent_id), [
+    'app-engineering',
+    'growth-revenue'
+  ]);
+  assert.deepEqual(all.agent_items[0], {
+    agent_id: 'app-engineering',
+    workspace_root: '/tmp/app-engineering',
+    session_ref: '5-web3-app-engineering',
+    source_health: {
+      workspace_root: {
+        status: 'observed',
+        path: '/tmp/app-engineering',
+        last_observed_at: '2026-03-09T18:04:00.000Z',
+        degraded_reasons: []
+      },
+      workspace_files: {
+        status: 'degraded',
+        expected_files: ['inbox.md', 'outbox.md', 'todo.md'],
+        observed_count: 1,
+        missing_count: 2,
+        error_count: 0,
+        last_observed_at: '2026-03-09T18:04:00.000Z',
+        degraded_reasons: ['missing workspace files: inbox.md, todo.md']
+      },
+      tmux_session: {
+        status: 'observed',
+        expected_session_ref: '5-web3-app-engineering',
+        observed_count: 1,
+        last_observed_at: '2026-03-09T18:04:30.000Z',
+        degraded_reasons: []
+      }
+    },
+    evidence_ref_count: 2,
+    evidence_refs: ['/tmp/app-engineering/outbox.md', 'tmux://5-web3-app-engineering/0.0'],
+    latest_evidence_at: '2026-03-09T18:04:30.000Z'
+  });
+
+  const missingTmux = store.getLatestCollectorSourceHealth({
+    source_kind: 'tmux_observation',
+    status: 'missing'
+  });
+  assert.deepEqual(missingTmux.agent_items.map((item) => item.agent_id), ['growth-revenue']);
+  assert.deepEqual(Object.keys(missingTmux.agent_items[0].source_health), ['tmux_session']);
+  assert.deepEqual(missingTmux.summary.status_buckets, {
+    observed: 0,
+    degraded: 0,
+    missing: 1,
+    error: 0
+  });
+
+  const missingAnySource = store.getLatestCollectorSourceHealth({ status: 'missing' });
+  assert.deepEqual(missingAnySource.agent_items.map((item) => item.agent_id), ['growth-revenue']);
+  assert.deepEqual(Object.keys(missingAnySource.agent_items[0].source_health), [
+    'workspace_root',
+    'workspace_files',
+    'tmux_session'
+  ]);
+  assert.deepEqual(missingAnySource.summary.status_buckets, {
+    observed: 0,
+    degraded: 0,
+    missing: 3,
+    error: 0
+  });
+
+  const unknownStatus = store.getLatestCollectorSourceHealth({ status: 'warning' });
+  assert.deepEqual(unknownStatus.agent_items, []);
+  assert.deepEqual(unknownStatus.summary.status_buckets, {
+    observed: 0,
+    degraded: 0,
+    missing: 0,
+    error: 0
+  });
+
+  const projected = store.getLatestCollectorSourceHealth();
+  projected.agent_items[0].source_health.workspace_files.expected_files.push('mutated.md');
+  projected.agent_items[0].source_health.workspace_files.degraded_reasons.push('mutated reason');
+  const reread = store.getLatestCollectorSourceHealth();
+  assert.equal(
+    reread.agent_items[0].source_health.workspace_files.expected_files.includes('mutated.md'),
+    false
+  );
+  assert.equal(
+    reread.agent_items[0].source_health.workspace_files.degraded_reasons.includes('mutated reason'),
+    false
+  );
+
+  const blankLimit = store.getLatestCollectorSourceHealth({
+    source_kind: '',
+    status: '',
+    limit: 'not-a-number'
+  });
+  assert.equal(blankLimit.agent_items.length, 2);
+});
+
 test('store appends collector report with pane-id-only tmux observation', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'metaverse-office-store-'));
   const storeFile = path.join(root, 'prototype-store.jsonl');

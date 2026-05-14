@@ -352,6 +352,18 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
     return;
   }
 
+  if (method === 'GET' && pathname === '/collectors/controller-snapshot/source-health') {
+    sendJson(res, 200, {
+      item: store.getLatestCollectorSourceHealth({
+        agent_id: url.searchParams.get('agent_id'),
+        source_kind: url.searchParams.get('source_kind'),
+        status: url.searchParams.get('status'),
+        limit: url.searchParams.get('limit')
+      })
+    });
+    return;
+  }
+
   if (method === 'GET' && pathname === '/memory/artifacts') {
     sendJson(res, 200, {
       generated_at: now(),

@@ -1,0 +1,59 @@
+{
+  "map": "token-leaderboard-plaza",
+  "coordinate_space": "pixels",
+  "render_order": "ascending_sortY",
+  "props": [
+    {
+      "id": "token-leaderboard-plaza_prop_2",
+      "source_cell": 2,
+      "x": 1043,
+      "y": 358,
+      "left": 944,
+      "top": 218,
+      "w": 198,
+      "h": 140,
+      "anchor": "center-bottom",
+      "sortY": 358,
+      "collision": "blocker"
+    },
+    {
+      "id": "token-leaderboard-plaza_prop_1",
+      "source_cell": 1,
+      "x": 319,
+      "y": 369,
+      "left": 239,
+      "top": 171,
+      "w": 161,
+      "h": 198,
+      "anchor": "center-bottom",
+      "sortY": 369,
+      "collision": "blocker"
+    },
+    {
+      "id": "token-leaderboard-plaza_prop_3",
+      "source_cell": 3,
+      "x": 492,
+      "y": 749,
+      "left": 414,
+      "top": 551,
+      "w": 156,
+      "h": 198,
+      "anchor": "center-bottom",
+      "sortY": 749,
+      "collision": "blocker"
+    },
+    {
+      "id": "token-leaderboard-plaza_prop_4",
+      "source_cell": 4,
+      "x": 956,
+      "y": 782,
+      "left": 861,
+      "top": 584,
+      "w": 190,
+      "h": 198,
+      "anchor": "center-bottom",
+      "sortY": 782,
+      "collision": "blocker"
+    }
+  ]
+}

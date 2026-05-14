@@ -1,7 +1,7 @@
 import type { WorldAgent, WorldState } from '../world/types';
 
 import { CHARACTER_KEYS } from './characters';
-import { GENTLE_MAP } from './mapData';
+import { AI_TOWN_GENERATED_MAPS, AI_TOWN_GATEWAYS, AI_TOWN_MAP_BY_ID, DEFAULT_AI_TOWN_MAP_ID, GENTLE_MAP } from './mapData';
 import type {
   AiTownSceneModel,
   CharacterKey,
@@ -127,6 +127,10 @@ function agentRolePawn(agent: WorldAgent): RolePawnKey | undefined {
   return undefined;
 }
 
+function agentMapId(_agent: WorldAgent) {
+  return DEFAULT_AI_TOWN_MAP_ID;
+}
+
 function findFallbackZone(agent: WorldAgent, zones: SceneZone[]) {
   const directMatch = zones.find((zone) => zone.zoneId === agent.zone);
   if (directMatch) {
@@ -161,6 +165,7 @@ export function adaptWorldToScene(
   activeCorrelationId: string | null = null,
   correlationParticipantAgentIds: string[] = []
 ): AiTownSceneModel {
+  const map = AI_TOWN_MAP_BY_ID.get(DEFAULT_AI_TOWN_MAP_ID) ?? GENTLE_MAP;
   const sceneZones: SceneZone[] = world.zones.map((zone) => ({
     zoneId: zone.zone_id,
     label: zone.label,
@@ -202,6 +207,7 @@ export function adaptWorldToScene(
       displayName: agent.display_name,
       kind: agent.kind,
       zoneId: agent.zone,
+      mapId: agentMapId(agent),
       position: toPixel(laidOut),
       characterKey: agentCharacter(agent.agent_id),
       rolePawnKey: agentRolePawn(agent),
@@ -242,14 +248,16 @@ export function adaptWorldToScene(
     : [];
 
   return {
-    map: GENTLE_MAP,
+    map,
+    maps: AI_TOWN_GENERATED_MAPS,
+    gateways: AI_TOWN_GATEWAYS,
     zones,
     agents,
     watchEdges,
     selectedAgentId,
     activeCorrelationId,
     correlationParticipantAgentIds: visibleCorrelationParticipantAgentIds,
-    pixelWidth: GENTLE_MAP.width * GENTLE_MAP.tileDim,
-    pixelHeight: GENTLE_MAP.height * GENTLE_MAP.tileDim
+    pixelWidth: map.pixelWidth ?? map.width * map.tileDim,
+    pixelHeight: map.pixelHeight ?? map.height * map.tileDim
   };
 }

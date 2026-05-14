@@ -1,0 +1,59 @@
+{
+  "map": "agent-sleep-pod-room",
+  "coordinate_space": "pixels",
+  "render_order": "ascending_sortY",
+  "props": [
+    {
+      "id": "agent-sleep-pod-room_prop_2",
+      "source_cell": 2,
+      "x": 1043,
+      "y": 358,
+      "left": 948,
+      "top": 160,
+      "w": 191,
+      "h": 198,
+      "anchor": "center-bottom",
+      "sortY": 358,
+      "collision": "blocker"
+    },
+    {
+      "id": "agent-sleep-pod-room_prop_1",
+      "source_cell": 1,
+      "x": 319,
+      "y": 369,
+      "left": 220,
+      "top": 195,
+      "w": 198,
+      "h": 174,
+      "anchor": "center-bottom",
+      "sortY": 369,
+      "collision": "blocker"
+    },
+    {
+      "id": "agent-sleep-pod-room_prop_3",
+      "source_cell": 3,
+      "x": 492,
+      "y": 749,
+      "left": 393,
+      "top": 567,
+      "w": 198,
+      "h": 182,
+      "anchor": "center-bottom",
+      "sortY": 749,
+      "collision": "blocker"
+    },
+    {
+      "id": "agent-sleep-pod-room_prop_4",
+      "source_cell": 4,
+      "x": 956,
+      "y": 782,
+      "left": 853,
+      "top": 580,
+      "w": 207,
+      "h": 202,
+      "anchor": "center-bottom",
+      "sortY": 782,
+      "collision": "blocker"
+    }
+  ]
+}

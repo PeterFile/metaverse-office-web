@@ -1,0 +1,59 @@
+{
+  "map": "data-bar-safehouse",
+  "coordinate_space": "pixels",
+  "render_order": "ascending_sortY",
+  "props": [
+    {
+      "id": "data-bar-safehouse_prop_2",
+      "source_cell": 2,
+      "x": 1039,
+      "y": 360,
+      "left": 937,
+      "top": 152,
+      "w": 204,
+      "h": 208,
+      "anchor": "center-bottom",
+      "sortY": 360,
+      "collision": "blocker"
+    },
+    {
+      "id": "data-bar-safehouse_prop_1",
+      "source_cell": 1,
+      "x": 317,
+      "y": 371,
+      "left": 227,
+      "top": 173,
+      "w": 180,
+      "h": 198,
+      "anchor": "center-bottom",
+      "sortY": 371,
+      "collision": "blocker"
+    },
+    {
+      "id": "data-bar-safehouse_prop_3",
+      "source_cell": 3,
+      "x": 491,
+      "y": 752,
+      "left": 394,
+      "top": 564,
+      "w": 194,
+      "h": 188,
+      "anchor": "center-bottom",
+      "sortY": 752,
+      "collision": "blocker"
+    },
+    {
+      "id": "data-bar-safehouse_prop_4",
+      "source_cell": 4,
+      "x": 952,
+      "y": 785,
+      "left": 853,
+      "top": 611,
+      "w": 198,
+      "h": 174,
+      "anchor": "center-bottom",
+      "sortY": 785,
+      "collision": "blocker"
+    }
+  ]
+}

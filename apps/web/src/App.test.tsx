@@ -2784,7 +2784,7 @@ afterEach(() => {
     }
     expect(appEngineeringButton).toHaveTextContent('↻');
     expect(rosterPortrait).toBeInstanceOf(HTMLImageElement);
-    expect(rosterPortrait).toHaveAttribute('src', '/assets/generated/pawn_app_eng.png');
+    expect(rosterPortrait).toHaveAttribute('src', '/assets/generated/sprites/agent-normal/idle-1.png');
     expect(roster).not.toHaveTextContent('AE');
     expect(roster).not.toHaveTextContent('Meeting Zone');
     expect(roster).not.toHaveTextContent('Team Lead Desk');

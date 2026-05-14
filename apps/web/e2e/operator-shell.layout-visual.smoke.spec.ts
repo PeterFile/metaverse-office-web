@@ -260,7 +260,7 @@ test.describe('operator shell layout visual smoke', () => {
     const roster = page.getByRole('navigation', { name: 'Agent roster' });
     const appEngineeringButton = roster.getByRole('button', { name: 'Select and locate App Engineering Agent' });
     const appEngineeringPortrait = roster.locator(
-      '.aitown-agent-roster__portrait img[src="/assets/generated/pawn_app_eng.png"]'
+      '.aitown-agent-roster__portrait img[src="/assets/generated/sprites/agent-normal/idle-1.png"]'
     );
     await expect(roster).toBeVisible();
     await expect(appEngineeringButton).toBeVisible();

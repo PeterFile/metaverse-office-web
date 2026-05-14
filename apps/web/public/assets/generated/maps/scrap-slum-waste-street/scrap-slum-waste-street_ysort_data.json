@@ -1,0 +1,59 @@
+{
+  "map": "scrap-slum-waste-street",
+  "coordinate_space": "pixels",
+  "render_order": "ascending_sortY",
+  "props": [
+    {
+      "id": "scrap-slum-waste-street_prop_2",
+      "source_cell": 2,
+      "x": 1043,
+      "y": 358,
+      "left": 944,
+      "top": 216,
+      "w": 198,
+      "h": 142,
+      "anchor": "center-bottom",
+      "sortY": 358,
+      "collision": "blocker"
+    },
+    {
+      "id": "scrap-slum-waste-street_prop_1",
+      "source_cell": 1,
+      "x": 319,
+      "y": 369,
+      "left": 213,
+      "top": 157,
+      "w": 212,
+      "h": 212,
+      "anchor": "center-bottom",
+      "sortY": 369,
+      "collision": "blocker"
+    },
+    {
+      "id": "scrap-slum-waste-street_prop_3",
+      "source_cell": 3,
+      "x": 492,
+      "y": 749,
+      "left": 393,
+      "top": 559,
+      "w": 198,
+      "h": 190,
+      "anchor": "center-bottom",
+      "sortY": 749,
+      "collision": "blocker"
+    },
+    {
+      "id": "scrap-slum-waste-street_prop_4",
+      "source_cell": 4,
+      "x": 956,
+      "y": 782,
+      "left": 857,
+      "top": 593,
+      "w": 198,
+      "h": 189,
+      "anchor": "center-bottom",
+      "sortY": 782,
+      "collision": "blocker"
+    }
+  ]
+}

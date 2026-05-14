@@ -3,7 +3,7 @@ import { type ComponentType } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { AiTownAssets } from './assetLoader';
-import type { AiTownSceneModel, SceneAgent } from './types';
+import type { AiTownLayeredMapData, AiTownSceneModel, SceneAgent } from './types';
 import type { ViewportInspector } from './viewport';
 
 const { MockDisplayObject, MockTicker, appInitMock, appDestroyMock, appInstances } = vi.hoisted(() => {
@@ -550,7 +550,42 @@ function makeAssets(): AiTownAssets {
       lead: leadPawn as unknown as AiTownAssets['rolePawnTextures']['lead']
     },
     tileSetTexture: textureFrame as AiTownAssets['tileSetTexture'],
-    animationSheets: {}
+    animationSheets: {},
+    generatedMapTextures: {}
+  };
+}
+
+function makeGeneratedTexture(assetId: string) {
+  return {
+    source: { assetId }
+  } as unknown as AiTownAssets['tileSetTexture'];
+}
+
+function makeGeneratedAssets(): AiTownAssets {
+  const baseAssets = makeAssets();
+
+  return {
+    ...baseAssets,
+    generatedMapTextures: {
+      'map-a': {
+        groundBase: makeGeneratedTexture('map-a:groundBase'),
+        dressedRef: makeGeneratedTexture('map-a:dressedRef'),
+        propPack: makeGeneratedTexture('map-a:propPack'),
+        propsTransparent: makeGeneratedTexture('map-a:propsTransparent'),
+        collision: makeGeneratedTexture('map-a:collision'),
+        regions: makeGeneratedTexture('map-a:regions'),
+        preview: makeGeneratedTexture('map-a:preview')
+      },
+      'map-b': {
+        groundBase: makeGeneratedTexture('map-b:groundBase'),
+        dressedRef: makeGeneratedTexture('map-b:dressedRef'),
+        propPack: makeGeneratedTexture('map-b:propPack'),
+        propsTransparent: makeGeneratedTexture('map-b:propsTransparent'),
+        collision: makeGeneratedTexture('map-b:collision'),
+        regions: makeGeneratedTexture('map-b:regions'),
+        preview: makeGeneratedTexture('map-b:preview')
+      }
+    }
   };
 }
 
@@ -637,6 +672,71 @@ function makeScene(): AiTownSceneModel {
   };
 }
 
+function makeLayeredMap(id: string, label: string): AiTownLayeredMapData {
+  return {
+    id,
+    label,
+    renderMode: 'layered-raster',
+    width: 40,
+    height: 30,
+    pixelWidth: 1280,
+    pixelHeight: 960,
+    tileSetUrl: '',
+    tileSetDimX: 0,
+    tileSetDimY: 0,
+    tileDim: 32,
+    bgTiles: [],
+    objectTiles: [],
+    animatedSprites: [],
+    layerUrls: {
+      groundBase: `/assets/generated/maps/${id}/${id}_ground_base.png`,
+      dressedRef: `/assets/generated/maps/${id}/${id}_dressed_ref.png`,
+      propPack: `/assets/generated/maps/${id}/${id}_prop_pack.png`,
+      propsTransparent: `/assets/generated/maps/${id}/${id}_props_transparent.png`,
+      collision: `/assets/generated/maps/${id}/${id}_collision.png`,
+      regions: `/assets/generated/maps/${id}/${id}_regions.png`,
+      preview: `/assets/generated/maps/${id}/${id}_preview.png`
+    },
+    ySortProps: [
+      {
+        id: `${id}-prop`,
+        left: 120,
+        top: 96,
+        w: 64,
+        h: 96,
+        x: 152,
+        y: 192,
+        sortY: 192,
+        collision: 'blocker'
+      }
+    ]
+  };
+}
+
+function makeGeneratedScene(): AiTownSceneModel {
+  const mapA = makeLayeredMap('map-a', 'Map A');
+  const mapB = makeLayeredMap('map-b', 'Map B');
+
+  return {
+    ...makeScene(),
+    map: mapA,
+    maps: [mapA, mapB],
+    gateways: [
+      {
+        gatewayId: 'map-a-to-map-b',
+        label: 'A to B',
+        fromMapId: 'map-a',
+        toMapId: 'map-b',
+        entry: { x: 1180, y: 520 },
+        arrival: { x: 120, y: 520 },
+        triggerRadius: 34
+      }
+    ],
+    pixelWidth: mapA.pixelWidth,
+    pixelHeight: mapA.pixelHeight
+  };
+}
+
 function makeWideSelectedAgentScene() {
   const scene = makeScene();
 
@@ -656,7 +756,89 @@ function makeWideSelectedAgentScene() {
 }
 
 describe('WorldScene watch overlay caption gating', () => {
-  it('uses directional 32x32folk walking frames for role agents instead of static pawn portraits', async () => {
+  it('renders generated map ground and y-sort props through the same depth layer as agents', async () => {
+    appInitMock.mockReset().mockResolvedValue(undefined);
+    vi.mocked(loadAiTownAssets).mockResolvedValue(makeGeneratedAssets());
+
+    render(<WorldScene scene={makeGeneratedScene()} onSelectAgent={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(readViewportInspector()).toBeDefined();
+      expect(readAgentLayer()?.children.length).toBeGreaterThan(0);
+    });
+
+    const mapGround = readMapContainer()?.children[0] as { texture?: { source?: { assetId?: string } } } | undefined;
+    const agentLayer = readAgentLayer();
+    const ySortProp = agentLayer?.children.find((child) => child.zIndex === 192) as
+      | { texture?: { source?: { assetId?: string } }; x?: number; y?: number }
+      | undefined;
+
+    expect(mapGround?.texture?.source?.assetId).toBe('map-a:groundBase');
+    expect(agentLayer?.sortableChildren).toBe(true);
+    expect(ySortProp?.texture?.source?.assetId).toBe('map-a:propsTransparent');
+    expect(ySortProp?.x).toBe(120);
+    expect(ySortProp?.y).toBe(96);
+  });
+
+  it('switches generated maps through visible gateway controls', async () => {
+    appInitMock.mockReset().mockResolvedValue(undefined);
+    vi.mocked(loadAiTownAssets).mockResolvedValue(makeGeneratedAssets());
+
+    render(<WorldScene scene={makeGeneratedScene()} onSelectAgent={vi.fn()} />);
+
+    const gatewayRegion = await screen.findByRole('region', { name: 'Map gateways' });
+
+    expect(within(gatewayRegion).getByText('Map A')).toBeVisible();
+    expect(within(gatewayRegion).getByRole('button', { name: 'Enter Map B through A to B' })).toBeVisible();
+
+    fireEvent.click(within(gatewayRegion).getByRole('button', { name: 'Enter Map B through A to B' }));
+
+    await waitFor(() => {
+      const mapGround = readMapContainer()?.children[0] as { texture?: { source?: { assetId?: string } } } | undefined;
+
+      expect(screen.getByText('Map B')).toBeInTheDocument();
+      expect(mapGround?.texture?.source?.assetId).toBe('map-b:groundBase');
+    });
+  });
+
+  it('lets the selected agent cross generated maps through gateway pathing', async () => {
+    appInitMock.mockReset().mockResolvedValue(undefined);
+    vi.mocked(loadAiTownAssets).mockResolvedValue(makeGeneratedAssets());
+    const scene = {
+      ...makeGeneratedScene(),
+      zones: [],
+      agents: [
+        makeAgent({
+          position: { x: 1120, y: 520 },
+          mapId: 'map-a',
+          phase: 'active',
+          severity: 'normal'
+        })
+      ],
+      selectedAgentId: 'app-engineering'
+    } satisfies AiTownSceneModel;
+
+    render(<WorldScene scene={scene} onSelectAgent={vi.fn()} />);
+
+    await screen.findByText('Map A');
+
+    act(() => {
+      const ticker = appInstances.at(-1)?.ticker;
+
+      for (let frame = 0; frame < 120; frame += 1) {
+        ticker?.tick(1000 / 12);
+      }
+    });
+
+    await waitFor(() => {
+      const mapGround = readMapContainer()?.children[0] as { texture?: { source?: { assetId?: string } } } | undefined;
+
+      expect(screen.getByText('Map B')).toBeInTheDocument();
+      expect(mapGround?.texture?.source?.assetId).toBe('map-b:groundBase');
+    });
+  });
+
+  it('uses directional generated walking frames for role agents instead of static roster portraits', async () => {
     appInitMock.mockReset().mockResolvedValue(undefined);
     const assets = makeAssets();
     vi.mocked(loadAiTownAssets).mockResolvedValue(assets);

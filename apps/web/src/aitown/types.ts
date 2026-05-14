@@ -11,9 +11,38 @@ export interface AnimatedMapSprite {
   animation: string;
 }
 
+export type AiTownMapRenderMode = 'tilemap' | 'layered-raster';
+
+export type AiTownMapLayerUrls = {
+  groundBase: string;
+  dressedRef: string;
+  propPack: string;
+  propsTransparent: string;
+  collision: string;
+  regions: string;
+  preview: string;
+};
+
+export interface AiTownYSortProp {
+  id: string;
+  left: number;
+  top: number;
+  w: number;
+  h: number;
+  x: number;
+  y: number;
+  sortY: number;
+  collision: 'blocker' | 'none' | string;
+}
+
 export interface AiTownMapData {
+  id?: string;
+  label?: string;
+  renderMode?: AiTownMapRenderMode;
   width: number;
   height: number;
+  pixelWidth?: number;
+  pixelHeight?: number;
   tileSetUrl: string;
   tileSetDimX: number;
   tileSetDimY: number;
@@ -21,6 +50,18 @@ export interface AiTownMapData {
   bgTiles: number[][][];
   objectTiles: number[][][];
   animatedSprites: AnimatedMapSprite[];
+  layerUrls?: AiTownMapLayerUrls;
+  ySortProps?: AiTownYSortProp[];
+}
+
+export interface AiTownLayeredMapData extends AiTownMapData {
+  id: string;
+  label: string;
+  renderMode: 'layered-raster';
+  pixelWidth: number;
+  pixelHeight: number;
+  layerUrls: AiTownMapLayerUrls;
+  ySortProps: AiTownYSortProp[];
 }
 
 export type CharacterKey = 'f1' | 'f2' | 'f3' | 'f4' | 'f5' | 'f6' | 'f7' | 'f8';
@@ -54,6 +95,7 @@ export interface SceneAgent {
   displayName: string;
   kind: 'lead' | 'employee';
   zoneId: string;
+  mapId?: string;
   position: ScenePoint;
   characterKey: CharacterKey;
   rolePawnKey?: RolePawnKey;
@@ -76,8 +118,20 @@ export interface SceneWatchEdge {
   riskLevel: Severity;
 }
 
+export interface AiTownGateway {
+  gatewayId: string;
+  label: string;
+  fromMapId: string;
+  toMapId: string;
+  entry: ScenePoint;
+  arrival: ScenePoint;
+  triggerRadius: number;
+}
+
 export interface AiTownSceneModel {
   map: AiTownMapData;
+  maps?: AiTownMapData[];
+  gateways?: AiTownGateway[];
   zones: SceneZone[];
   agents: SceneAgent[];
   watchEdges: SceneWatchEdge[];

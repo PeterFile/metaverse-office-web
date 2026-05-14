@@ -160,7 +160,10 @@ function expectViewportWithinHorizontalWorldBounds(
 
 test.describe('operator shell layout visual smoke', () => {
   test('centers explicit agent locate requests on the viewport midpoint despite right-side chrome', async ({ page }) => {
-    await page.setViewportSize({ width: 1280, height: 720 });
+    // Keep the explicit locate target within pan bounds; at 1280x720 the
+    // Protocol Engineering desk sits near the bottom edge, so world clamp makes
+    // exact Y centering impossible and the smoke stops testing direct focus.
+    await page.setViewportSize({ width: 1280, height: 600 });
     await page.goto('/');
 
     const worldHost = page.locator('.aitown-world__host');

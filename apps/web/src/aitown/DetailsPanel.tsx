@@ -36,6 +36,11 @@ import {
   formatCollectorDerivedPeerWatchMetadata
 } from './accountabilitySignals';
 import { deriveAgentDetailEvidenceFacets } from './agentDetailEvidenceFacets';
+import {
+  deriveCollectorItemSourceHealthFacts,
+  deriveRuntimeSourceEvidenceFacts,
+  type SourceHealthFact
+} from './sourceHealth';
 
 export type HubCategory = 'crew' | 'queue' | 'supervision' | 'evidence' | 'replay' | 'memory';
 
@@ -3717,6 +3722,24 @@ function renderCollectorEvidenceCoverageItem({
   );
 }
 
+function renderSourceHealthFacts(facts: SourceHealthFact[], labelPrefix: string | null = 'Source health') {
+  if (facts.length === 0) {
+    return null;
+  }
+
+  return facts.map((fact) => (
+    <span key={fact.key}>{labelPrefix ? `${labelPrefix} · ${fact.label}` : fact.label}</span>
+  ));
+}
+
+function hasSourceHealthGap(facts: SourceHealthFact[]) {
+  return facts.some((fact) => fact.status !== 'observed');
+}
+
+function hasCollectorSourceHealthGap(item: CollectorItem) {
+  return hasSourceHealthGap(deriveCollectorItemSourceHealthFacts(item));
+}
+
 function resolveCollectorSeverity(item: CollectorItem): keyof typeof SEVERITY_LABELS {
   if (item.supervision.needs_attention) {
     return 'orange';
@@ -4178,6 +4201,9 @@ export function DetailsPanel({
   const workflowSummaryFacets = workflow ? selectWorkflowSummaryFacets(workflow.summary) : null;
   const selectedAgentDetailEvidenceFacets = deriveAgentDetailEvidenceFacets(workflow?.detail);
   const collectorEvidenceCoverage = collectorSnapshot?.evidence_coverage ?? null;
+  const collectorRuntimeSourceEvidenceFacts = deriveRuntimeSourceEvidenceFacts(
+    collectorSnapshot?.runtime_source_evidence
+  );
   const collectorEvidenceCoverageLowAgentIds = new Set(
     collectorEvidenceCoverage?.low_confidence_agent_ids ?? []
   );
@@ -4191,7 +4217,8 @@ export function DetailsPanel({
         item.heartbeat.reboot_recommended ||
         item.supervision.watch_target !== null ||
         item.supervision.watched_by.length > 0 ||
-        collectorEvidenceCoverageLowAgentIds.has(item.agent_id)
+        collectorEvidenceCoverageLowAgentIds.has(item.agent_id) ||
+        hasCollectorSourceHealthGap(item)
     )
     .sort((left, right) => compareCollectorItems(left, right, collectorEvidenceCoverageLowAgentIds))
     .slice(0, 3);
@@ -4447,6 +4474,7 @@ export function DetailsPanel({
                   coverage: collectorEvidenceCoverage,
                   agentCount: collectorSnapshot.summary.agent_count
                 })}
+                {renderSourceHealthFacts(collectorRuntimeSourceEvidenceFacts, null)}
               </li>
             ) : null}
             {collectorSnapshot && collectorSharedArtifacts !== undefined ? (
@@ -4480,6 +4508,7 @@ export function DetailsPanel({
               const canNavigateToCollectorAgent = navigableAgentIds.has(item.agent_id);
               const watchGraphAlignment = resolveCollectorWatchGraphAlignment(item, world);
               const collectorEvidenceCoverageItem = collectorEvidenceCoverageByAgentId.get(item.agent_id) ?? null;
+              const sourceHealthFacts = deriveCollectorItemSourceHealthFacts(item);
 
               return (
                 <li key={item.agent_id} className={`aitown-record severity-${resolveCollectorSeverity(item)}`}>
@@ -4502,6 +4531,7 @@ export function DetailsPanel({
                     sharedMemoryArtifactRefs,
                     onJump: onFocusSharedMemoryArtifact ?? focusSharedMemoryArtifact
                   })}
+                  {renderSourceHealthFacts(sourceHealthFacts)}
                   {collectorEvidenceCoverageItem
                     ? renderCollectorEvidenceCoverageItem({
                         coverageItem: collectorEvidenceCoverageItem,
@@ -5019,6 +5049,9 @@ export function DetailsPanel({
   const workflowHasAdditionalPivots =
     workflowPivotCorrelationIds.length > 0 || (workflow?.counterparty_agent_ids.length ?? 0) > 0;
   const selectedCollectorEvidenceRefs = selectedCollectorItem ? resolveCollectorEvidenceRefs(selectedCollectorItem) : [];
+  const selectedCollectorSourceHealthFacts = selectedCollectorItem
+    ? deriveCollectorItemSourceHealthFacts(selectedCollectorItem)
+    : [];
   const selectedCollectorWatchGraphAlignment = selectedCollectorItem
     ? resolveCollectorWatchGraphAlignment(selectedCollectorItem, world)
     : null;
@@ -5321,6 +5354,7 @@ export function DetailsPanel({
                 sharedMemoryArtifactRefs,
                 onJump: onFocusSharedMemoryArtifact ?? focusSharedMemoryArtifact
               })}
+              {renderSourceHealthFacts(selectedCollectorSourceHealthFacts)}
               {collectorEvidenceCoverageByAgentId.has(selectedCollectorItem.agent_id)
                 ? renderCollectorEvidenceCoverageItem({
                     coverageItem: collectorEvidenceCoverageByAgentId.get(selectedCollectorItem.agent_id)!,

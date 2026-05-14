@@ -88,6 +88,50 @@ export interface CollectorTmuxObservation {
   pane_activity_at: string | null;
 }
 
+export type CollectorSourceHealthStatus = 'observed' | 'degraded' | 'missing' | 'error';
+
+export interface CollectorWorkspaceRootSourceHealth {
+  status: CollectorSourceHealthStatus;
+  path: string;
+  last_observed_at: string | null;
+  degraded_reasons: string[];
+}
+
+export interface CollectorWorkspaceFilesSourceHealth {
+  status: CollectorSourceHealthStatus;
+  expected_files: string[];
+  observed_count: number;
+  missing_count: number;
+  error_count: number;
+  last_observed_at: string | null;
+  degraded_reasons: string[];
+}
+
+export interface CollectorTmuxSessionSourceHealth {
+  status: CollectorSourceHealthStatus;
+  expected_session_ref: string;
+  observed_count: number;
+  last_observed_at: string | null;
+  degraded_reasons: string[];
+}
+
+export interface CollectorSourceHealth {
+  workspace_root?: CollectorWorkspaceRootSourceHealth;
+  workspace_files?: CollectorWorkspaceFilesSourceHealth;
+  tmux_session?: CollectorTmuxSessionSourceHealth;
+}
+
+export interface CollectorUnmappedTmuxSession {
+  session_name: string;
+  observed_count: number;
+  last_observed_at: string | null;
+  pane_refs: string[];
+}
+
+export interface CollectorRuntimeSourceEvidence {
+  unmapped_tmux_sessions?: CollectorUnmappedTmuxSession[];
+}
+
 export interface CollectorSupervision {
   watch_target: string | null;
   watched_by: string[];
@@ -113,6 +157,7 @@ export interface CollectorItem {
   agent_id: string;
   workspace_root: string;
   session_ref: string;
+  source_health?: CollectorSourceHealth;
   evidence_refs: string[];
   workspace_observations: CollectorWorkspaceObservation[];
   tmux_observations: CollectorTmuxObservation[];
@@ -168,6 +213,7 @@ export interface CollectorSnapshot {
   summary: CollectorSnapshotSummary;
   evidence_coverage?: CollectorEvidenceCoverage;
   shared_artifacts?: CollectorSharedArtifact[];
+  runtime_source_evidence?: CollectorRuntimeSourceEvidence;
   items: CollectorItem[];
 }
 

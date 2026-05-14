@@ -1,6 +1,6 @@
 # Current Direction: Live Evidence Spine
 
-Updated: 2026-05-14T16:23:11+08:00
+Updated: 2026-05-15T00:31:24+08:00
 
 ## Product vision
 
@@ -17,7 +17,7 @@ This project is not a flashy dashboard, not a manual task-dispatch UI, and not a
 - Controlled writes are limited to `POST /events`, `POST /heartbeats`, and `POST /collectors/controller-snapshot` with `x-actor-id` validation.
 - The domain still uses the canonical seven-actor office model: `team-lead` plus `market-intel`, `product-pmf`, `tokenomics`, `protocol-engineering`, `app-engineering`, and `growth-revenue`.
 - Collector snapshots expose source health for workspace roots, watched workspace files, and expected tmux sessions; missing/degraded sources are explicit evidence state, and inbound `inbox.md`/workspace-root presence does not imply agent output.
-- The frontend is React + TypeScript + Vite under `apps/web`, with PixiJS AI Town rendering, world projection, roster, category Hub, selected-agent drilldowns, supervision/evidence/replay/memory surfaces, and browser smoke coverage.
+- The frontend is React + TypeScript + Vite under `apps/web`, with PixiJS AI Town rendering, world projection, roster, category Hub, selected-agent drilldowns, supervision/evidence/replay/memory surfaces, collector source-health/source-gap surfacing, and browser smoke coverage.
 - The UI consumes read models. It must not infer productivity, liveness, severity, or provenance that is absent from the API.
 
 ## Next milestone

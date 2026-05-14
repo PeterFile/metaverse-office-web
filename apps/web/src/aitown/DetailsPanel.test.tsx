@@ -7820,6 +7820,185 @@ describe('DetailsPanel accountability signals', () => {
     expect(growthRevenueRecord!).toHaveTextContent('Latest evidence · No recent evidence');
   });
 
+  it('renders source health facts and unmapped tmux source gaps in crew-overview collector supervision', () => {
+    const baseCollectorSnapshot = buildCollectorSnapshot();
+    const growthRevenueItem: CollectorSnapshot['items'][number] = {
+      agent_id: 'growth-revenue',
+      workspace_root: '/workspace/growth-revenue',
+      session_ref: 'sess-growth',
+      source_health: {
+        workspace_root: {
+          status: 'missing',
+          path: '/workspace/growth-revenue',
+          last_observed_at: null,
+          degraded_reasons: ['workspace root not observed']
+        },
+        workspace_files: {
+          status: 'observed',
+          expected_files: ['inbox.md', 'outbox.md'],
+          observed_count: 2,
+          missing_count: 0,
+          error_count: 0,
+          last_observed_at: '2026-03-16T08:56:00.000Z',
+          degraded_reasons: []
+        },
+        tmux_session: {
+          status: 'observed',
+          expected_session_ref: 'sess-growth',
+          observed_count: 2,
+          last_observed_at: '2026-03-16T08:57:00.000Z',
+          degraded_reasons: []
+        }
+      },
+      evidence_refs: [],
+      workspace_observations: [],
+      tmux_observations: [],
+      supervision: {
+        watch_target: null,
+        watched_by: [],
+        needs_attention: false
+      },
+      heartbeat: {
+        agent_id: 'growth-revenue',
+        actor_id: 'collector-watch',
+        received_at: '2026-03-16T08:59:15.000Z',
+        current_state: 'planning',
+        active_task: 'Review copy',
+        current_location: 'growth-desk',
+        last_meaningful_output_at: null,
+        last_file_write_at: null,
+        current_blocker: '',
+        confidence_level: 'medium',
+        reboot_recommended: false,
+        evidence_refs: []
+      }
+    };
+    const collectorSnapshot: CollectorSnapshot = {
+      ...baseCollectorSnapshot,
+      runtime_source_evidence: {
+        unmapped_tmux_sessions: [
+          {
+            session_name: 'outside-tools',
+            observed_count: 2,
+            last_observed_at: '2026-03-16T08:58:00.000Z',
+            pane_refs: ['tmux://outside-tools/0.0', 'tmux://outside-tools/0.1']
+          }
+        ]
+      },
+      items: [
+        {
+          ...baseCollectorSnapshot.items[0],
+          source_health: {
+            workspace_root: {
+              status: 'observed',
+              path: '/workspace/app-engineering',
+              last_observed_at: '2026-03-16T08:55:00.000Z',
+              degraded_reasons: []
+            },
+            workspace_files: {
+              status: 'degraded',
+              expected_files: ['inbox.md', 'outbox.md', 'todo.md'],
+              observed_count: 1,
+              missing_count: 1,
+              error_count: 1,
+              last_observed_at: '2026-03-16T08:56:00.000Z',
+              degraded_reasons: ['workspace file source incomplete']
+            },
+            tmux_session: {
+              status: 'missing',
+              expected_session_ref: 'sess-1',
+              observed_count: 0,
+              last_observed_at: null,
+              degraded_reasons: ['tmux session not observed']
+            }
+          }
+        },
+        growthRevenueItem
+      ]
+    };
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          activeHubCategory: 'supervision',
+          collectorSnapshot,
+          selectedAgent: null,
+          selectedCorrelationId: null,
+          selectedOperation: null,
+          workflow: null,
+          correlation: null
+        })}
+      />
+    );
+
+    const collectorSection = screen.getByRole('heading', { name: 'Collector Supervision' }).closest('section');
+    expect(collectorSection).not.toBeNull();
+    expect(within(collectorSection!).getByText('Unmapped tmux source gap · 1 session, 2 panes')).toBeVisible();
+
+    const appEngineeringRecord = within(collectorSection!).getByText('App Engineering Agent').closest('li');
+    expect(appEngineeringRecord).not.toBeNull();
+    expect(appEngineeringRecord!).toHaveTextContent('Source health · Workspace source · Observed');
+    expect(appEngineeringRecord!).toHaveTextContent('Source health · Workspace files source gap · 1 missing, 1 error, 1 observed');
+    expect(appEngineeringRecord!).toHaveTextContent('Source health · Tmux source gap · Expected sess-1 missing');
+
+    const growthRevenueRecord = within(collectorSection!).getByText('Growth Revenue Agent').closest('li');
+    expect(growthRevenueRecord).not.toBeNull();
+    expect(growthRevenueRecord!).toHaveTextContent('Source health · Workspace source gap · Root missing');
+    expect(growthRevenueRecord!).toHaveTextContent('Source health · Workspace files source · Observed 2/2');
+    expect(growthRevenueRecord!).toHaveTextContent('Source health · Tmux source · Observed 2 panes');
+  });
+
+  it('renders selected-agent collector observation source health facts', () => {
+    const baseCollectorSnapshot = buildCollectorSnapshot();
+    const collectorSnapshot: CollectorSnapshot = {
+      ...baseCollectorSnapshot,
+      items: [
+        {
+          ...baseCollectorSnapshot.items[0],
+          source_health: {
+            workspace_root: {
+              status: 'observed',
+              path: '/workspace/app-engineering',
+              last_observed_at: '2026-03-16T08:55:00.000Z',
+              degraded_reasons: []
+            },
+            workspace_files: {
+              status: 'observed',
+              expected_files: ['inbox.md', 'outbox.md', 'todo.md'],
+              observed_count: 3,
+              missing_count: 0,
+              error_count: 0,
+              last_observed_at: '2026-03-16T08:56:00.000Z',
+              degraded_reasons: []
+            },
+            tmux_session: {
+              status: 'degraded',
+              expected_session_ref: 'sess-1',
+              observed_count: 1,
+              last_observed_at: '2026-03-16T08:57:00.000Z',
+              degraded_reasons: ['expected tmux pane missing']
+            }
+          }
+        }
+      ]
+    };
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          activeHubCategory: 'supervision',
+          collectorSnapshot
+        })}
+      />
+    );
+
+    const collectorObservationSection = screen.getByRole('heading', { name: 'Collector Observation' }).closest('section');
+    expect(collectorObservationSection).not.toBeNull();
+    expect(collectorObservationSection!).toHaveTextContent('Source health · Workspace source · Observed');
+    expect(collectorObservationSection!).toHaveTextContent('Source health · Workspace files source · Observed 3/3');
+    expect(collectorObservationSection!).toHaveTextContent('Source health · Tmux source gap · Expected sess-1 degraded');
+  });
+
   it('keeps the legacy collector supervision surface when evidence coverage is absent', () => {
     render(
       <DetailsPanel
@@ -7841,6 +8020,8 @@ describe('DetailsPanel accountability signals', () => {
     expect(within(collectorSection!).queryByText(/^Evidence sources ·/)).not.toBeInTheDocument();
     expect(within(collectorSection!).queryByText(/^Coverage low\/no recent evidence ·/)).not.toBeInTheDocument();
     expect(within(collectorSection!).queryByText(/^Coverage status ·/)).not.toBeInTheDocument();
+    expect(within(collectorSection!).queryByText(/^Source health ·/)).not.toBeInTheDocument();
+    expect(within(collectorSection!).queryByText(/source gap/i)).not.toBeInTheDocument();
   });
 
   it('renders crew-overview collector supervision watchers as pivots and carries the active correlation when present, otherwise keeps no-correlation behavior', async () => {

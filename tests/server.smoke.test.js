@@ -4619,6 +4619,15 @@ test('GET /collectors/controller-snapshot/evidence-coverage projects latest cove
   });
   assert.equal(collected.response.status, 201);
   assert.equal(collectCount, 1);
+  const collectedApp = collected.body.item.items.find((item) => item.agent_id === 'app-engineering');
+  assert.equal(collectedApp.source_health.tmux_session.expected_session_ref, appAgent.session_ref);
+  assert.equal(collectedApp.source_health.tmux_session.status, 'observed');
+  assert.equal(collectedApp.source_health.workspace_files.missing_count, 2);
+  const collectedGrowth = collected.body.item.items.find((item) => item.agent_id === 'growth-revenue');
+  assert.equal(collectedGrowth.source_health.tmux_session.status, 'missing');
+  assert.deepEqual(collected.body.item.runtime_source_evidence, {
+    unmapped_tmux_sessions: []
+  });
 
   const latestBeforeRead = store.getLatestCollectorReport();
   const coverage = await requestJson(`${baseUrl}/collectors/controller-snapshot/evidence-coverage`);

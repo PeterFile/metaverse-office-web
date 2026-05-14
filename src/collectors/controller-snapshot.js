@@ -62,15 +62,22 @@ async function collectControllerSnapshot(options = {}) {
   const items = [];
 
   for (const agent of agents) {
-    const workspaceObservations = await collectWorkspaceObservations({ agent, readPathStat });
+    const workspaceSources = await collectWorkspaceSources({ agent, readPathStat });
     const tmuxObservations = panesBySession.get(agent.session_ref) || [];
     items.push(
       createCollectorItem({
         actorId,
         agent,
         collectedAt,
-        workspaceObservations,
-        tmuxObservations
+        workspaceObservations: workspaceSources.observations,
+        tmuxObservations,
+        sourceHealth: {
+          ...workspaceSources.source_health,
+          tmux_session: createTmuxSessionHealth({
+            expectedSessionRef: agent.session_ref,
+            tmuxObservations
+          })
+        }
       })
     );
   }
@@ -81,25 +88,70 @@ async function collectControllerSnapshot(options = {}) {
     summary: createCollectorSummary(items),
     shared_artifacts: createSharedArtifactRollup(items),
     evidence_coverage: createEvidenceCoverageLedger(items),
+    runtime_source_evidence: createRuntimeSourceEvidence({
+      panesBySession,
+      expectedSessionRefs: new Set(agents.map((agent) => agent.session_ref))
+    }),
     items
   };
 }
 
-async function collectWorkspaceObservations({ agent, readPathStat }) {
-  const targets = [agent.workspace_root].concat(
-    OBSERVED_WORKSPACE_PATHS.map((fileName) => path.join(agent.workspace_root, fileName))
-  );
+async function collectWorkspaceSources({ agent, readPathStat }) {
+  const targets = [
+    {
+      path: agent.workspace_root,
+      file_name: path.basename(agent.workspace_root),
+      kind: 'workspace_root'
+    },
+    ...OBSERVED_WORKSPACE_PATHS.map((fileName) => ({
+      path: path.join(agent.workspace_root, fileName),
+      file_name: fileName,
+      kind: 'workspace_file'
+    }))
+  ];
   const observations = [];
+  const sourceRecords = [];
 
-  for (const targetPath of targets) {
-    const statResult = await readPathStat(targetPath);
-    const observation = normalizeWorkspaceObservation(targetPath, statResult);
+  for (const target of targets) {
+    const sourceRecord = await collectWorkspaceSourceRecord({ target, readPathStat });
+    sourceRecords.push(sourceRecord);
+
+    const observation = normalizeWorkspaceObservation(target.path, sourceRecord.stat_result);
     if (observation) {
       observations.push(observation);
     }
   }
 
-  return observations.sort(compareObservationRecency);
+  return {
+    observations: observations.sort(compareObservationRecency),
+    source_health: createWorkspaceSourceHealth({
+      workspaceRoot: agent.workspace_root,
+      sourceRecords
+    })
+  };
+}
+
+async function collectWorkspaceSourceRecord({ target, readPathStat }) {
+  try {
+    const statResult = await readPathStat(target.path);
+    const lastObservedAt = normalizeIsoTimestamp(statResult?.mtime || statResult?.last_modified_at);
+
+    return {
+      ...target,
+      stat_result: statResult,
+      status: lastObservedAt ? 'observed' : 'missing',
+      last_observed_at: lastObservedAt,
+      error: null
+    };
+  } catch (error) {
+    return {
+      ...target,
+      stat_result: null,
+      status: 'error',
+      last_observed_at: null,
+      error: sanitizeText(error?.message) || 'stat failed'
+    };
+  }
 }
 
 function normalizeWorkspaceObservation(targetPath, statResult) {
@@ -164,7 +216,14 @@ function normalizeTmuxObservation(pane) {
   };
 }
 
-function createCollectorItem({ actorId, agent, collectedAt, workspaceObservations, tmuxObservations }) {
+function createCollectorItem({
+  actorId,
+  agent,
+  collectedAt,
+  workspaceObservations,
+  tmuxObservations,
+  sourceHealth
+}) {
   const latestWorkspaceFile = workspaceObservations.find(
     (observation) => observation.kind === 'workspace_file'
   );
@@ -193,6 +252,7 @@ function createCollectorItem({ actorId, agent, collectedAt, workspaceObservation
     agent_id: agent.agent_id,
     workspace_root: agent.workspace_root,
     session_ref: agent.session_ref,
+    source_health: sourceHealth,
     evidence_refs: createEvidenceRefs({
       workspaceObservations,
       tmuxObservations
@@ -220,6 +280,127 @@ function createCollectorItem({ actorId, agent, collectedAt, workspaceObservation
         tmuxObservations
       })
     }
+  };
+}
+
+function createWorkspaceSourceHealth({ workspaceRoot, sourceRecords }) {
+  const rootRecord =
+    sourceRecords.find((record) => record.kind === 'workspace_root') || null;
+  const fileRecords = sourceRecords.filter((record) => record.kind === 'workspace_file');
+  const missingFiles = fileRecords
+    .filter((record) => record.status === 'missing')
+    .map((record) => record.file_name);
+  const errorFiles = fileRecords
+    .filter((record) => record.status === 'error')
+    .map((record) => record.file_name);
+  const observedFileCount = fileRecords.filter((record) => record.status === 'observed').length;
+  const workspaceFileReasons = [];
+
+  if (missingFiles.length > 0) {
+    workspaceFileReasons.push(`missing workspace files: ${missingFiles.join(', ')}`);
+  }
+
+  if (errorFiles.length > 0) {
+    workspaceFileReasons.push(`workspace file stat errors: ${errorFiles.join(', ')}`);
+  }
+
+  return {
+    workspace_root: {
+      status: rootRecord?.status || 'missing',
+      path: workspaceRoot,
+      last_observed_at: rootRecord?.last_observed_at || null,
+      degraded_reasons: createWorkspaceRootDegradedReasons(rootRecord)
+    },
+    workspace_files: {
+      status: deriveWorkspaceFilesStatus({ observedFileCount, missingFiles, errorFiles }),
+      expected_files: OBSERVED_WORKSPACE_PATHS.slice(),
+      observed_count: observedFileCount,
+      missing_count: missingFiles.length,
+      error_count: errorFiles.length,
+      last_observed_at: maxIsoTimestamp(fileRecords.map((record) => record.last_observed_at)),
+      degraded_reasons: workspaceFileReasons
+    }
+  };
+}
+
+function createWorkspaceRootDegradedReasons(rootRecord) {
+  if (!rootRecord || rootRecord.status === 'missing') {
+    return ['workspace root not observed'];
+  }
+
+  if (rootRecord.status === 'error') {
+    return ['workspace root stat error'];
+  }
+
+  return [];
+}
+
+function deriveWorkspaceFilesStatus({ observedFileCount, missingFiles, errorFiles }) {
+  if (errorFiles.length > 0) {
+    return 'error';
+  }
+
+  if (missingFiles.length > 0) {
+    return observedFileCount > 0 ? 'degraded' : 'missing';
+  }
+
+  return 'observed';
+}
+
+function createTmuxSessionHealth({ expectedSessionRef, tmuxObservations }) {
+  const observedCount = tmuxObservations.length;
+  const degradedReasons = [];
+
+  if (observedCount === 0) {
+    degradedReasons.push('tmux session not observed');
+  } else if (tmuxObservations.some((pane) => pane.pane_dead)) {
+    degradedReasons.push('tmux pane marked dead');
+  }
+
+  return {
+    status: deriveTmuxSessionStatus({ observedCount, degradedReasons }),
+    expected_session_ref: expectedSessionRef,
+    observed_count: observedCount,
+    last_observed_at: maxIsoTimestamp(tmuxObservations.map((pane) => pane.pane_activity_at)),
+    degraded_reasons: degradedReasons
+  };
+}
+
+function deriveTmuxSessionStatus({ observedCount, degradedReasons }) {
+  if (observedCount === 0) {
+    return 'missing';
+  }
+
+  if (degradedReasons.length > 0) {
+    return 'degraded';
+  }
+
+  return 'observed';
+}
+
+function createRuntimeSourceEvidence({ panesBySession, expectedSessionRefs }) {
+  const unmappedTmuxSessions = [];
+
+  for (const [sessionName, observations] of panesBySession.entries()) {
+    if (expectedSessionRefs.has(sessionName)) {
+      continue;
+    }
+
+    unmappedTmuxSessions.push({
+      session_name: sessionName,
+      observed_count: observations.length,
+      last_observed_at: maxIsoTimestamp(observations.map((pane) => pane.pane_activity_at)),
+      pane_refs: observations
+        .map((pane) => pane.artifact_ref || deriveTmuxArtifactRef(pane))
+        .filter(Boolean)
+        .sort()
+    });
+  }
+
+  return {
+    unmapped_tmux_sessions: unmappedTmuxSessions.sort((left, right) =>
+      left.session_name.localeCompare(right.session_name)
+    )
   };
 }
 

@@ -1,5 +1,7 @@
 # Phase 1 Agent Workflow Slice Plan
 
+> Historical archive notice: this document records an already-completed Phase 1 slice. It is not the current roadmap. Current product direction lives in `docs/current-direction.md`; current API/read-model semantics live in `specs/api-contract.md`. Future product/API/storage/runtime/UI progress must update the current docs in the same PR.
+
 > Keep this milestone backend-first, read-only, and reversible. Reuse existing agent detail / incident / interaction / timeline read models before any UI work.
 
 Updated: 2026-03-10T09:20:14+08:00

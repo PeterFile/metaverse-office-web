@@ -1,5 +1,7 @@
 # ADR 0001: Phase 1 stack and sequencing
 
+> Historical archive notice: this document records an already-completed Phase 1 slice. It is not the current roadmap. Current product direction lives in `docs/current-direction.md`; current API/read-model semantics live in `specs/api-contract.md`. Future product/API/storage/runtime/UI progress must update the current docs in the same PR.
+
 Date: 2026-03-09
 Status: accepted
 

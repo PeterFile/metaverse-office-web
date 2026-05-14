@@ -1,50 +1,39 @@
 # Metaverse Office Web
 
-Updated: 2026-03-11T00:35:00+08:00
+Updated: 2026-05-14T16:23:11+08:00
 
 This repository is the implementation home for the Hermes-Agent metaverse-office project.
 
+## Current direction
+Metaverse Office Web is a live evidence spine and operator world for a real Hermes-agent company. The product goal is to make multi-agent work observable, replayable, and accountable: who is active, what they are doing, why the system thinks they are blocked or degraded, and which session/task/file/tmux evidence proves it. It is not a flashy dashboard, not a manual task-dispatch UI, and not a Kanban control plane.
+
+The next product milestone is `Live Evidence Spine`: connect the current read models and AI Town UI to real Hermes team runtime facts, then persist those facts in a stronger append-only event store with stable provenance. See `docs/current-direction.md`.
+
 ## Project rules
 - repo root must stay under `/Users/cwp/Projects/metaverse-office-web`
-- implementation follows `/Users/cwp/.hermes/teams/web3-company/controller/phase1-spec-package.md`
-- Phase 1 is schema-first and evidence-first
-- UI work must not outrun event/state/storage/query architecture
-- no fake animation, no token layer, no onchain dependency for Phase 1
+- current product direction is tracked in `docs/current-direction.md`; Phase 1 documents are historical archive unless explicitly cited by that document
+- evidence-first is still mandatory: no fake productivity, no fabricated liveness, no decorative motion presented as work
+- UI work must not outrun event/state/storage/query architecture or its documentation
+- every PR that changes product behavior, API contracts, storage semantics, event schemas, runtime ingestion, or operator workflows must update the relevant docs in the same change
+- no task-dispatch/control-plane semantics inside this repo unless a current-direction/spec update explicitly changes that boundary
+- no token layer or onchain dependency unless a current-direction/spec update explicitly introduces it
 
-## Current milestone
-- Phase 1 spec is review-ready in the controller workspace
-- repo-local spec mirror and implementation plan exist
-- minimal Phase 1 backend scaffold now exists for agent/event/timeline queries
-- scaffold is aligned to the canonical seven-actor roster and controlled write boundaries
-- office overview query now exposes zone layout, occupants, watch edges, and derived staleness for future UI work
-- controller snapshot collector now derives evidence-backed heartbeats from workspace/tmux metadata and appends collector-backed peer-watch alerts into the existing event log
-- collector snapshots now also append deduped canonical `agent_state_changed` and `agent_wrote_file` events when observed state or file-write evidence advances
-- derived interaction read models now expose communication records without adding a new write path
-- enriched agent detail and peer-watch alert queries now expose current evidence surfaces without adding new writes
-- timeline replay slices now support evidence-first filtering by agent, exact event id, event type, severity, correlation, and recent slice limit
-- operator incident feed now exposes a descending read-only view over peer-watch alerts, handoffs, and reboots without adding new persistence
-- correlation drill-down now exposes one read-only evidence/replay surface per `correlation_id` by aggregating existing incident, interaction, and timeline read models
-- agent detail and agent-scoped incident queries now expose recent incident evidence by reusing the same read-only incident feed semantics
-- agent workflow query now exposes one read-only operator slice per agent by aggregating existing detail, incident, interaction, and timeline read models
-- office operations query now exposes the first live-operations queue by deriving active work from the existing append-only events, heartbeats, and agent projections
-- shared memory artifact index now exposes a read-only engineering memory surface over evidence refs and collector observations so operators can inspect what workspace/tmux artifacts are anchoring the office state without relying on markdown dumps
-- pnpm workspace bootstrap now exists with a React + TypeScript operator shell in `apps/web` that reuses the frozen read-only office/workflow/incident/correlation queries for triage
+## Current implementation snapshot
+- backend exposes evidence-first read models for office overview, operations, agent workflow/detail, incidents, timeline replay, accountability replay, correlation drill-down, shared memory artifacts, peer-watch alerts, handoffs, reboots, and collector evidence coverage
+- controlled writes remain limited to `POST /events`, `POST /heartbeats`, and `POST /collectors/controller-snapshot`
+- storage is still the local append-only JSONL prototype at `data/prototype-store.jsonl`, replayed into memory; it is not yet the target production-grade event store
+- domain still uses the canonical seven-actor office model: six employee agents plus `team-lead`
+- frontend is a React + TypeScript + PixiJS AI Town operator world with roster, category Hub, selected-agent drilldowns, supervision/evidence/replay/memory surfaces, and real browser smoke coverage
 
 ## Key documents
-- `specs/phase1-spec.md`
-- `specs/api-contract.md`
-- `docs/plans/phase1-kickoff-plan.md`
-- `docs/plans/phase1-react-operator-shell-plan.md`
-- `docs/adr/0002-react-operator-shell.md`
-- `docs/plans/phase1-incident-feed-plan.md`
-- `docs/plans/phase1-agent-incident-evidence-plan.md`
-- `docs/plans/phase1-correlation-drilldown-plan.md`
-- `docs/plans/phase1-timeline-replay-plan.md`
-- `docs/plans/phase1-supervision-events-plan.md`
-- `docs/adr/0001-phase1-stack.md`
+- `docs/current-direction.md` — current vision, implementation facts, next milestone, and documentation discipline
+- `specs/api-contract.md` — current API/read-model contract; update when routes or semantics change
+- `README.md` — setup, API index, and current implementation snapshot
+- `docs/adr/0002-react-operator-shell.md` and `docs/adr/0003-hub-openhub-hud-visual-acceptance.md` — active UI architecture decisions
+- `specs/phase1-spec.md`, `docs/plans/phase1-*.md`, and `docs/adr/0001-phase1-stack.md` — historical Phase 1 archive, not the current roadmap
 - `notes/source-documents.md`
 
-## Backend scaffold
+## Current backend and frontend scaffold
 - runtime: plain Node.js built-ins only
 - frontend shell: React + TypeScript via Vite under `apps/web`
 - workspace manager: pnpm 10.28.2
@@ -275,7 +264,7 @@ This keeps employee writes self-scoped and reserves cross-agent task dispatch pl
 
 
 ### React operator shell notes
-- `apps/web` is the first living office surface for Phase 1 and stays strictly evidence-first
+- `apps/web` is the current living office surface and stays strictly evidence-first; do not describe it as a Phase 1-only shell
 - the shell consumes `GET /office/overview`, `GET /office/operations?limit=&state=&agent_id=&severity=`, `GET /agents/:id/workflow?limit=&window=`, `GET /incidents?limit=&window=`, `GET /timeline?limit=&window=`, `GET /collectors/controller-snapshot`, and `GET /correlations/:correlation_id?limit=&window=` only
 - API calls are same-origin by default; cross-origin `VITE_API_BASE_URL` deployment requires the backend to allow that frontend origin via `CORS_ALLOWED_ORIGINS`, and local development may still proxy `/office`, `/agents`, `/incidents`, `/timeline`, `/correlations`, and `/collectors` through Vite via `VITE_DEV_PROXY_TARGET`
 - workflow and incident surfaces can open correlation drill-down without introducing a new backend contract or write path

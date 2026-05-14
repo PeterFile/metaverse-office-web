@@ -1,5 +1,7 @@
 # Phase 1 Kickoff Implementation Plan
 
+> Historical archive notice: this document records an already-completed Phase 1 slice. It is not the current roadmap. Current product direction lives in `docs/current-direction.md`; current API/read-model semantics live in `specs/api-contract.md`. Future product/API/storage/runtime/UI progress must update the current docs in the same PR.
+
 > For Hermes: keep implementation minimal, schema-first, and reversible. UI must not outrun the event/state architecture.
 
 Updated: 2026-03-10T08:28:21+08:00

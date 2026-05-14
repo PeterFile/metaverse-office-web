@@ -1,5 +1,7 @@
 # Phase 1 Incident Feed Plan
 
+> Historical archive notice: this document records an already-completed Phase 1 slice. It is not the current roadmap. Current product direction lives in `docs/current-direction.md`; current API/read-model semantics live in `specs/api-contract.md`. Future product/API/storage/runtime/UI progress must update the current docs in the same PR.
+
 > Keep this milestone backend-first, read-only, and reversible. Reuse the existing append-only evidence trail before any UI work.
 
 Updated: 2026-03-10T05:20:12+08:00

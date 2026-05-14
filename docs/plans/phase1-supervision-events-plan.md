@@ -1,5 +1,7 @@
 # Phase 1 Snapshot-Driven Supervision Events Plan
 
+> Historical archive notice: this document records an already-completed Phase 1 slice. It is not the current roadmap. Current product direction lives in `docs/current-direction.md`; current API/read-model semantics live in `specs/api-contract.md`. Future product/API/storage/runtime/UI progress must update the current docs in the same PR.
+
 > For Hermes: keep implementation minimal, schema-first, reversible, and backend-only. Do not start UI work.
 
 **Goal:** Extend the existing controller snapshot collector so one snapshot can append evidence-backed supervision alerts into the existing append-only event log without inventing new event types.

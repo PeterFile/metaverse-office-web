@@ -1,5 +1,7 @@
 # Phase 1 React Operator Shell Plan
 
+> Historical archive notice: this document records an already-completed Phase 1 slice. It is not the current roadmap. Current product direction lives in `docs/current-direction.md`; current API/read-model semantics live in `specs/api-contract.md`. Future product/API/storage/runtime/UI progress must update the current docs in the same PR.
+
 > For Hermes: keep this slice thin, evidence-first, and reversible. React is allowed, but UI must consume the existing read-only contract instead of inventing new product semantics.
 
 Updated: 2026-03-11T00:08:00+08:00

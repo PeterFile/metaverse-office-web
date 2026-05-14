@@ -1,5 +1,7 @@
 # Phase 1 Timeline Replay Plan
 
+> Historical archive notice: this document records an already-completed Phase 1 slice. It is not the current roadmap. Current product direction lives in `docs/current-direction.md`; current API/read-model semantics live in `specs/api-contract.md`. Future product/API/storage/runtime/UI progress must update the current docs in the same PR.
+
 > For Hermes: keep implementation minimal, schema-first, reversible, and read-only. No new write path.
 
 **Goal:** Extend `GET /timeline` into a replay slice query over append-only canonical events so the operator surface can filter recent activity without inventing new storage or new event types.

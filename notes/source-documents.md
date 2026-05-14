@@ -1,6 +1,10 @@
 # Source Documents
 
-Absolute source files:
+Current repo docs:
+- `docs/current-direction.md` — current product direction and next milestone
+- `specs/api-contract.md` — current API/read-model contract
+
+Historical absolute source files:
 - /Users/cwp/.hermes/teams/web3-company/controller/manager-playbook.md
 - /Users/cwp/.hermes/teams/web3-company/shared/metaverse-office-vision.md
 - /Users/cwp/.hermes/teams/web3-company/shared/peer-watch-protocol.md

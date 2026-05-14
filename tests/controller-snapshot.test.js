@@ -386,6 +386,79 @@ test('collector treats inbox-only workspace evidence as inbound presence, not ag
   assert.equal(store.getAgent('app-engineering').last_file_write_at, null);
 });
 
+test('store keeps runtime source gaps from overwriting agent output state', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'metaverse-office-store-'));
+  const storeFile = path.join(root, 'prototype-store.jsonl');
+  const store = await createPrototypeStore({ filePath: storeFile });
+
+  await store.appendCollectorReport(
+    createCollectorReport({
+      collectedAt: '2026-03-09T18:05:00.000Z',
+      items: [
+        createReportItem({
+          collectedAt: '2026-03-09T18:05:00.000Z',
+          agentId: 'app-engineering',
+          evidenceRefs: ['/tmp/app-engineering/outbox.md'],
+          currentState: 'coding',
+          activeTask: 'Implement runtime contract',
+          lastMeaningfulOutputAt: '2026-03-09T18:04:30.000Z',
+          lastFileWriteAt: '2026-03-09T18:04:00.000Z'
+        })
+      ]
+    })
+  );
+
+  const sourceGapReport = await collectControllerSnapshot({
+    agents: [
+      {
+        ...SEED_AGENTS.find((agent) => agent.agent_id === 'app-engineering'),
+        workspace_root: '/tmp/runtime-source-gap/app-engineering'
+      }
+    ],
+    collectedAt: '2026-03-09T18:10:00.000Z',
+    readPathStat: async (targetPath) => {
+      if (targetPath === '/tmp/runtime-source-gap/app-engineering') {
+        return { mtime: '2026-03-09T18:09:00.000Z' };
+      }
+
+      if (targetPath === '/tmp/runtime-source-gap/app-engineering/inbox.md') {
+        return { mtime: '2026-03-09T18:09:30.000Z' };
+      }
+
+      return null;
+    },
+    listTmuxPanes: async () => []
+  });
+
+  await store.appendCollectorReport(sourceGapReport);
+
+  const agent = store.getAgent('app-engineering');
+  assert.equal(agent.current_state, 'coding');
+  assert.equal(agent.active_task, 'Implement runtime contract');
+  assert.equal(agent.last_meaningful_output_at, '2026-03-09T18:04:30.000Z');
+  assert.equal(agent.last_file_write_at, '2026-03-09T18:04:00.000Z');
+  assert.deepEqual(store.listEvents({ agent_id: 'app-engineering' }).map((event) => event.event_type), [
+    'agent_state_changed',
+    'agent_wrote_file'
+  ]);
+  assert.deepEqual(store.getCounts(), {
+    agent_count: 7,
+    event_count: 2,
+    heartbeat_count: 1
+  });
+
+  const latestReport = store.getLatestCollectorReport();
+  assert.equal(latestReport.summary.heartbeat_count, 0);
+
+  const sourceHealth = store.getLatestCollectorSourceHealth();
+  assert.equal(sourceHealth.agent_items[0].source_health.workspace_files.status, 'degraded');
+  assert.equal(sourceHealth.agent_items[0].source_health.tmux_session.status, 'missing');
+  assert.deepEqual(sourceHealth.agent_items[0].evidence_refs.slice().sort(), [
+    '/tmp/runtime-source-gap/app-engineering',
+    '/tmp/runtime-source-gap/app-engineering/inbox.md'
+  ]);
+});
+
 test('store appends collector heartbeats and exposes the latest collector report', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'metaverse-office-store-'));
   const storeFile = path.join(root, 'prototype-store.jsonl');
@@ -1162,6 +1235,62 @@ test('store resolves collector-driven peer watch alerts when snapshot conditions
   assert.equal(latestGrowthRevenue.current_blocker, '');
   assert.equal(latestGrowthRevenue.reboot_recommended, false);
   assert.equal(latestGrowthRevenue.severity, 'normal');
+});
+
+test('store keeps source-only snapshots from resolving open collector alerts', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'metaverse-office-store-'));
+  const storeFile = path.join(root, 'prototype-store.jsonl');
+  const store = await createPrototypeStore({ filePath: storeFile });
+
+  await store.appendCollectorReport(
+    createCollectorReport({
+      collectedAt: '2026-03-09T18:05:00.000Z',
+      items: [
+        createReportItem({
+          collectedAt: '2026-03-09T18:05:00.000Z',
+          agentId: 'growth-revenue',
+          evidenceRefs: [
+            '/tmp/growth-revenue/inbox.md',
+            'tmux://6-web3-growth-revenue/0.0'
+          ],
+          currentState: 'blocked',
+          activeTask: 'Investigate stalled shell',
+          lastMeaningfulOutputAt: '2026-03-09T18:00:00.000Z',
+          lastFileWriteAt: '2026-03-09T18:00:00.000Z',
+          currentBlocker: 'tmux pane marked dead',
+          rebootRecommended: true
+        })
+      ]
+    })
+  );
+
+  await store.appendCollectorReport(
+    createCollectorReport({
+      collectedAt: '2026-03-09T18:12:00.000Z',
+      items: [
+        createReportItem({
+          collectedAt: '2026-03-09T18:12:00.000Z',
+          agentId: 'growth-revenue',
+          evidenceRefs: ['/tmp/growth-revenue/inbox.md'],
+          currentState: 'coding',
+          activeTask: 'Source gap only',
+          lastMeaningfulOutputAt: null,
+          lastFileWriteAt: null
+        })
+      ]
+    })
+  );
+
+  assert.equal(store.listEvents({ event_type: 'peer_watch_alert_resolved' }).length, 0);
+
+  const openAlerts = store.listOpenPeerWatchAlerts({ target_agent_id: 'growth-revenue' });
+  assert.equal(openAlerts.length, 1);
+  assert.equal(openAlerts[0].metadata.collector_alert_family, 'blocked');
+  assert.equal(store.getLatestCollectorReport().summary.heartbeat_count, 0);
+
+  const latestGrowthRevenue = store.getAgent('growth-revenue');
+  assert.equal(latestGrowthRevenue.current_state, 'blocked');
+  assert.equal(latestGrowthRevenue.current_blocker, 'tmux pane marked dead');
 });
 
 test('store suppresses duplicate collector-driven peer watch alerts for unchanged snapshots', async () => {

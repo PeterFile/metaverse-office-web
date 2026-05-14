@@ -4876,8 +4876,8 @@ test('GET /collectors/controller-snapshot/source-health projects latest source h
   ]);
 
   const lines = (await readFile(storeFile, 'utf8')).trim().split('\n');
-  assert.equal(lines.length, 5);
-  assert.equal(JSON.parse(lines[4]).kind, 'collector_snapshot');
+  assert.equal(lines.length, 4);
+  assert.equal(JSON.parse(lines[3]).kind, 'collector_snapshot');
 });
 
 test('collector snapshot POST exposes shared artifact rollups for refs shared by multiple agents', async (t) => {

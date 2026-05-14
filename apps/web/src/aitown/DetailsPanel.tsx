@@ -37,8 +37,11 @@ import {
 } from './accountabilitySignals';
 import { deriveAgentDetailEvidenceFacets } from './agentDetailEvidenceFacets';
 import {
+  deriveCollectorItemSourceDrilldownGroups,
   deriveCollectorItemSourceHealthFacts,
+  deriveRuntimeSourceDrilldownGroups,
   deriveRuntimeSourceEvidenceFacts,
+  type SourceDrilldownGroup,
   type SourceHealthFact
 } from './sourceHealth';
 
@@ -3732,6 +3735,21 @@ function renderSourceHealthFacts(facts: SourceHealthFact[], labelPrefix: string 
   ));
 }
 
+function renderSourceDrilldownGroups(groups: SourceDrilldownGroup[], labelPrefix: string | null = 'Source health') {
+  if (groups.length === 0) {
+    return null;
+  }
+
+  return groups.map((group) => (
+    <details key={group.key}>
+      <summary>{labelPrefix ? `${labelPrefix} · ${group.summary}` : group.summary}</summary>
+      {group.details.map((detail) => (
+        <span key={detail.key}>{detail.label}</span>
+      ))}
+    </details>
+  ));
+}
+
 function hasSourceHealthGap(facts: SourceHealthFact[]) {
   return facts.some((fact) => fact.status !== 'observed');
 }
@@ -4204,6 +4222,9 @@ export function DetailsPanel({
   const collectorRuntimeSourceEvidenceFacts = deriveRuntimeSourceEvidenceFacts(
     collectorSnapshot?.runtime_source_evidence
   );
+  const collectorRuntimeSourceDrilldownGroups = deriveRuntimeSourceDrilldownGroups(
+    collectorSnapshot?.runtime_source_evidence
+  );
   const collectorEvidenceCoverageLowAgentIds = new Set(
     collectorEvidenceCoverage?.low_confidence_agent_ids ?? []
   );
@@ -4475,6 +4496,7 @@ export function DetailsPanel({
                   agentCount: collectorSnapshot.summary.agent_count
                 })}
                 {renderSourceHealthFacts(collectorRuntimeSourceEvidenceFacts, null)}
+                {renderSourceDrilldownGroups(collectorRuntimeSourceDrilldownGroups, null)}
               </li>
             ) : null}
             {collectorSnapshot && collectorSharedArtifacts !== undefined ? (
@@ -4509,6 +4531,7 @@ export function DetailsPanel({
               const watchGraphAlignment = resolveCollectorWatchGraphAlignment(item, world);
               const collectorEvidenceCoverageItem = collectorEvidenceCoverageByAgentId.get(item.agent_id) ?? null;
               const sourceHealthFacts = deriveCollectorItemSourceHealthFacts(item);
+              const sourceDrilldownGroups = deriveCollectorItemSourceDrilldownGroups(item);
 
               return (
                 <li key={item.agent_id} className={`aitown-record severity-${resolveCollectorSeverity(item)}`}>
@@ -4532,6 +4555,7 @@ export function DetailsPanel({
                     onJump: onFocusSharedMemoryArtifact ?? focusSharedMemoryArtifact
                   })}
                   {renderSourceHealthFacts(sourceHealthFacts)}
+                  {renderSourceDrilldownGroups(sourceDrilldownGroups)}
                   {collectorEvidenceCoverageItem
                     ? renderCollectorEvidenceCoverageItem({
                         coverageItem: collectorEvidenceCoverageItem,
@@ -5052,6 +5076,9 @@ export function DetailsPanel({
   const selectedCollectorSourceHealthFacts = selectedCollectorItem
     ? deriveCollectorItemSourceHealthFacts(selectedCollectorItem)
     : [];
+  const selectedCollectorSourceDrilldownGroups = selectedCollectorItem
+    ? deriveCollectorItemSourceDrilldownGroups(selectedCollectorItem)
+    : [];
   const selectedCollectorWatchGraphAlignment = selectedCollectorItem
     ? resolveCollectorWatchGraphAlignment(selectedCollectorItem, world)
     : null;
@@ -5355,6 +5382,7 @@ export function DetailsPanel({
                 onJump: onFocusSharedMemoryArtifact ?? focusSharedMemoryArtifact
               })}
               {renderSourceHealthFacts(selectedCollectorSourceHealthFacts)}
+              {renderSourceDrilldownGroups(selectedCollectorSourceDrilldownGroups)}
               {collectorEvidenceCoverageByAgentId.has(selectedCollectorItem.agent_id)
                 ? renderCollectorEvidenceCoverageItem({
                     coverageItem: collectorEvidenceCoverageByAgentId.get(selectedCollectorItem.agent_id)!,

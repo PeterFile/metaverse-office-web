@@ -1,0 +1,41 @@
+{
+  "checkpoint": "checkpoint-08",
+  "assets": [
+    {
+      "id": "black-market-terminal",
+      "path": "assets/sprites/black-market-terminal/clean.png",
+      "exists": true,
+      "prompt_exists": true,
+      "metadata_exists": true,
+      "size": [
+        256,
+        256
+      ],
+      "style_check": "manual contact-sheet check: prop coverage, glyph-only terminal, cyberpunk style"
+    },
+    {
+      "id": "surveillance-drone-security-pack",
+      "path": "assets/sprites/surveillance-drone-security-pack/sheet-transparent.png",
+      "exists": true,
+      "prompt_exists": true,
+      "metadata_exists": true,
+      "size": [
+        512,
+        512
+      ],
+      "style_check": "manual contact-sheet check: prop coverage, glyph-only terminal, cyberpunk style"
+    },
+    {
+      "id": "energy-charging-facility-pack",
+      "path": "assets/sprites/energy-charging-facility-pack/sheet-transparent.png",
+      "exists": true,
+      "prompt_exists": true,
+      "metadata_exists": true,
+      "size": [
+        512,
+        512
+      ],
+      "style_check": "manual contact-sheet check: prop coverage, glyph-only terminal, cyberpunk style"
+    }
+  ]
+}

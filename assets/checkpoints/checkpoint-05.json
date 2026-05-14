@@ -1,0 +1,41 @@
+{
+  "checkpoint": "checkpoint-05",
+  "assets": [
+    {
+      "id": "agent-low-energy",
+      "path": "assets/sprites/agent-low-energy/sheet-transparent.png",
+      "exists": true,
+      "prompt_exists": true,
+      "metadata_exists": true,
+      "size": [
+        512,
+        512
+      ],
+      "style_check": "manual contact-sheet check: same Agent identity with requested state variation"
+    },
+    {
+      "id": "agent-upgraded",
+      "path": "assets/sprites/agent-upgraded/sheet-transparent.png",
+      "exists": true,
+      "prompt_exists": true,
+      "metadata_exists": true,
+      "size": [
+        512,
+        512
+      ],
+      "style_check": "manual contact-sheet check: same Agent identity with requested state variation"
+    },
+    {
+      "id": "agent-infected",
+      "path": "assets/sprites/agent-infected/sheet-transparent.png",
+      "exists": true,
+      "prompt_exists": true,
+      "metadata_exists": true,
+      "size": [
+        512,
+        512
+      ],
+      "style_check": "manual contact-sheet check: same Agent identity with requested state variation"
+    }
+  ]
+}

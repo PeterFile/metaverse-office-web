@@ -1,0 +1,5 @@
+Generate a 2x2 sprite animation sheet for `vagrant-hacker` from GameAssetDesign.md.
+
+Subject: a small lean vagrant hacker in a cyberpunk survival city. Hooded coat, portable terminal in one hand, tiny auxiliary drone hovering very close to the shoulder, glowing finger/eye interface ports, code graffiti patches on clothing represented as abstract pixel marks with no readable text. The silhouette should feel hidden, agile and dangerous, not cute.
+
+Sheet rules: EXACTLY 4 equal cells in a 2x2 grid, four idle/terminal-tap frames of the same hacker. Top-down 3/4 view from slightly above, full body visible, stable feet/bottom anchor, same scale and same bounding box in every cell, subject centered in each cell and occupying the central 60-70% safe area. Keep the small drone close to the body so it fits inside the same safe area. Solid flat #FF00FF magenta background only. No shadows, no labels, no readable words, no UI, no cell borders, no arrows, no frame numbers. Crisp 16-bit cyberpunk pixel art, strong dark outline, dark hood, cyan terminal glow, purple-green accents, not cute, not realistic painting.

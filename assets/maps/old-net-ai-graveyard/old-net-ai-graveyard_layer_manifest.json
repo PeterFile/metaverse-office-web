@@ -1,0 +1,29 @@
+{
+  "id": "old-net-ai-graveyard",
+  "title": "地下：旧网遗迹与 AI 坟场",
+  "source": "GameAssetDesign.md",
+  "source_lines": "122-147",
+  "skill": "generate2dmap",
+  "pipeline": {
+    "map_mode": "scene_mode",
+    "visual_model": "layered_raster",
+    "runtime_object_model": "y_sorted_props + interactive_scene_objects + scene_hooks",
+    "collision_model": "precise_shapes + trigger_zones",
+    "engine_target": "project-native"
+  },
+  "layers": {
+    "ground_base": "old-net-ai-graveyard_ground_base.png",
+    "dressed_ref": "old-net-ai-graveyard_dressed_ref.png",
+    "prop_pack": "old-net-ai-graveyard_prop_pack.png",
+    "props_transparent": "old-net-ai-graveyard_props_transparent.png",
+    "ysort_data": "old-net-ai-graveyard_ysort_data.json",
+    "collision": "old-net-ai-graveyard_collision.png",
+    "regions": "old-net-ai-graveyard_regions.png",
+    "preview": "old-net-ai-graveyard_preview.png"
+  },
+  "image_info": {
+    "width": 1448,
+    "height": 1086,
+    "mode": "RGB"
+  }
+}

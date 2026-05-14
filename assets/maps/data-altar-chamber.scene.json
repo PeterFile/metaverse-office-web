@@ -1,0 +1,24 @@
+{
+  "id": "data-altar-chamber",
+  "title": "数据祭坛",
+  "source": "GameAssetDesign.md",
+  "source_lines": "557-572",
+  "skill": "generate2dmap",
+  "map_mode": "baked_scene_mode",
+  "visual_model": "baked_raster",
+  "collision_model": "coarse_shapes",
+  "engine_target": "project-native",
+  "image": "data-altar-chamber.png",
+  "prompt": "data-altar-chamber.prompt.txt",
+  "image_info": {
+    "width": 1448,
+    "height": 1086,
+    "mode": "RGB"
+  },
+  "style_checks": [
+    "16-bit detailed pixel art",
+    "cyberpunk survival city",
+    "dirty wet neon atmosphere",
+    "no readable text or UI labels"
+  ]
+}

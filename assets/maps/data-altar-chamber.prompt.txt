@@ -1,0 +1,7 @@
+Use the visible pixel-cyberpunk interior reference above as style reference: crisp 16-bit pixel art, isometric/top-down room composition, dark outlines, neon hardware panels, readable game shapes.
+
+Generate one production-ready 2D pixel game interior/background asset for `data-altar-chamber` from GameAssetDesign.md.
+
+Subject: a data altar in the underground AI graveyard. The altar is built from old servers, mechanical limbs, CRT displays, broken monitors, fiber-optic roots and cooling tubes. It lets Agents recover memory fragments, view failed Agent records and trigger identity changes. Show floating data shards, ghostly AI fragments, cracked circuit floor, abandoned robot hands, faint cyan-white and purple glow, coolant puddles and cables arranged like ritual roots.
+
+Style constraints: 16-bit detailed pixel art, top-down/3-4 game-readable chamber, not cute, no readable words, no labels, no UI callouts, no arrows, no decorative border. Palette: black-blue, violet, cyan-white data glow, toxic green coolant, dark metal, small red failure pixels. Mood: sacred, broken, mysterious, dangerous, memory-haunted. Keep the altar center and walkable approach readable.

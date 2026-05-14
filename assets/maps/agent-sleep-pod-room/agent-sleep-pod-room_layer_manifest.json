@@ -1,0 +1,29 @@
+{
+  "id": "agent-sleep-pod-room",
+  "title": "Agent 休眠舱",
+  "source": "GameAssetDesign.md",
+  "source_lines": "511-524",
+  "skill": "generate2dmap",
+  "pipeline": {
+    "map_mode": "scene_mode",
+    "visual_model": "layered_raster",
+    "runtime_object_model": "y_sorted_props + interactive_scene_objects + scene_hooks",
+    "collision_model": "precise_shapes + trigger_zones",
+    "engine_target": "project-native"
+  },
+  "layers": {
+    "ground_base": "agent-sleep-pod-room_ground_base.png",
+    "dressed_ref": "agent-sleep-pod-room_dressed_ref.png",
+    "prop_pack": "agent-sleep-pod-room_prop_pack.png",
+    "props_transparent": "agent-sleep-pod-room_props_transparent.png",
+    "ysort_data": "agent-sleep-pod-room_ysort_data.json",
+    "collision": "agent-sleep-pod-room_collision.png",
+    "regions": "agent-sleep-pod-room_regions.png",
+    "preview": "agent-sleep-pod-room_preview.png"
+  },
+  "image_info": {
+    "width": 1448,
+    "height": 1086,
+    "mode": "RGB"
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "checkpoint": "checkpoint-01",
+  "assets": [
+    {
+      "id": "vertical-city-overview",
+      "path": "assets/maps/vertical-city-overview.png",
+      "exists": true,
+      "prompt_exists": true,
+      "metadata_exists": true,
+      "size": [
+        1024,
+        1536
+      ],
+      "style_check": "prompt and generated image target 16-bit cyberpunk pixel art; manual contact-sheet check required"
+    },
+    {
+      "id": "corporate-cloud-district",
+      "path": "assets/maps/corporate-cloud-district.png",
+      "exists": true,
+      "prompt_exists": true,
+      "metadata_exists": true,
+      "size": [
+        1536,
+        1024
+      ],
+      "style_check": "prompt and generated image target 16-bit cyberpunk pixel art; manual contact-sheet check required"
+    },
+    {
+      "id": "neon-commercial-district",
+      "path": "assets/maps/neon-commercial-district.png",
+      "exists": true,
+      "prompt_exists": true,
+      "metadata_exists": true,
+      "size": [
+        1448,
+        1086
+      ],
+      "style_check": "prompt and generated image target 16-bit cyberpunk pixel art; manual contact-sheet check required"
+    }
+  ]
+}

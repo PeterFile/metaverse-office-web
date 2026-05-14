@@ -1,0 +1,1 @@
+Map-specific prop pack assembled from previously generated cyberpunk prop/fx sprite assets; used by generate2dmap layered rebuild as separate runtime props.

@@ -1,0 +1,41 @@
+{
+  "checkpoint": "checkpoint-07",
+  "assets": [
+    {
+      "id": "data-ghost",
+      "path": "assets/sprites/data-ghost/sheet-transparent.png",
+      "exists": true,
+      "prompt_exists": true,
+      "metadata_exists": true,
+      "size": [
+        512,
+        512
+      ],
+      "style_check": "manual contact-sheet check: ghost/NPC/prop pack coverage and style"
+    },
+    {
+      "id": "bottom-resident-npc-pack",
+      "path": "assets/sprites/bottom-resident-npc-pack/sheet-transparent.png",
+      "exists": true,
+      "prompt_exists": true,
+      "metadata_exists": true,
+      "size": [
+        768,
+        512
+      ],
+      "style_check": "manual contact-sheet check: ghost/NPC/prop pack coverage and style"
+    },
+    {
+      "id": "neon-ad-corporate-sign-pack",
+      "path": "assets/sprites/neon-ad-corporate-sign-pack/sheet-transparent.png",
+      "exists": true,
+      "prompt_exists": true,
+      "metadata_exists": true,
+      "size": [
+        768,
+        768
+      ],
+      "style_check": "manual contact-sheet check: ghost/NPC/prop pack coverage and style"
+    }
+  ]
+}

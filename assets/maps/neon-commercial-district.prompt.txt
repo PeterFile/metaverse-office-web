@@ -1,0 +1,7 @@
+Use the visible pixel-cyberpunk interior reference above only as style guidance: crisp 16-bit pixel art, strong dark outlines, saturated neon accents, clean readable game shapes.
+
+Generate one production-ready 2D pixel game map/background asset for `neon-commercial-district` from GameAssetDesign.md.
+
+Subject: the middle layer and core play area of a cyberpunk survival city: dense rainy neon commercial district with packed shopfronts, abstract hologram ads, vending machines, cybernetic repair kiosks, data bar signs, street food stalls, black-market terminals, crowds implied by silhouettes, wet asphalt reflections, steam vents, cables and trash. Show high-tech and low-life together. Include natural walkable alleys and small plazas for agent interaction.
+
+Style constraints: 16-bit detailed pixel art, not cute, not realistic painting, no readable words, no labels, no UI, no arrows, no callouts, no decorative border. Palette: deep blue, purple black, dark green, neon pink, cyan blue, orange yellow, electric blue, alarm red. Mood: dirty, wet, bright, dense, cold. Make the scene readable for a top-down/3-4 game camera.

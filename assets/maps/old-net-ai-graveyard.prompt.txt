@@ -1,0 +1,7 @@
+Use the visible pixel-cyberpunk interior reference above only as style guidance: crisp 16-bit pixel art, strong dark outlines, saturated neon accents, clean readable game shapes.
+
+Generate one production-ready 2D pixel game map/background asset for `old-net-ai-graveyard` from GameAssetDesign.md.
+
+Subject: underground old-net ruins and AI graveyard: abandoned data center corridors, giant broken mainframe remains, coolant pools, old robots half-buried in walls, fractured fiber-optic tree roots, floating data fragments, glitchy ghost silhouettes of dead AI, circuit-board floor patterns, cracked server racks and forgotten Agent training pods. It must feel mysterious, frightening, memory-haunted and deep below the city.
+
+Style constraints: 16-bit detailed pixel art, top-down/3-4 game-readable map, not cute, no readable words, no labels, no UI, no arrows, no callouts, no decorative border. Palette: black-blue, purple shadows, cyan-white data glow, toxic green coolant, sparse red failure lights. Mood: cold, wet, broken, sacred, dangerous. Keep paths, chamber entrances and visual landmarks readable.

@@ -1,0 +1,29 @@
+{
+  "id": "token-leaderboard-plaza",
+  "title": "代币排行榜",
+  "source": "GameAssetDesign.md",
+  "source_lines": "542-554",
+  "skill": "generate2dmap",
+  "pipeline": {
+    "map_mode": "scene_mode",
+    "visual_model": "layered_raster",
+    "runtime_object_model": "y_sorted_props + interactive_scene_objects + scene_hooks",
+    "collision_model": "precise_shapes + trigger_zones",
+    "engine_target": "project-native"
+  },
+  "layers": {
+    "ground_base": "token-leaderboard-plaza_ground_base.png",
+    "dressed_ref": "token-leaderboard-plaza_dressed_ref.png",
+    "prop_pack": "token-leaderboard-plaza_prop_pack.png",
+    "props_transparent": "token-leaderboard-plaza_props_transparent.png",
+    "ysort_data": "token-leaderboard-plaza_ysort_data.json",
+    "collision": "token-leaderboard-plaza_collision.png",
+    "regions": "token-leaderboard-plaza_regions.png",
+    "preview": "token-leaderboard-plaza_preview.png"
+  },
+  "image_info": {
+    "width": 1448,
+    "height": 1086,
+    "mode": "RGB"
+  }
+}

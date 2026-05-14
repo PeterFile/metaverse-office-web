@@ -1,0 +1,29 @@
+{
+  "id": "cybernetic-repair-clinic",
+  "title": "义体维修店",
+  "source": "GameAssetDesign.md",
+  "source_lines": "191-205",
+  "skill": "generate2dmap",
+  "pipeline": {
+    "map_mode": "scene_mode",
+    "visual_model": "layered_raster",
+    "runtime_object_model": "y_sorted_props + interactive_scene_objects + scene_hooks",
+    "collision_model": "precise_shapes + trigger_zones",
+    "engine_target": "project-native"
+  },
+  "layers": {
+    "ground_base": "cybernetic-repair-clinic_ground_base.png",
+    "dressed_ref": "cybernetic-repair-clinic_dressed_ref.png",
+    "prop_pack": "cybernetic-repair-clinic_prop_pack.png",
+    "props_transparent": "cybernetic-repair-clinic_props_transparent.png",
+    "ysort_data": "cybernetic-repair-clinic_ysort_data.json",
+    "collision": "cybernetic-repair-clinic_collision.png",
+    "regions": "cybernetic-repair-clinic_regions.png",
+    "preview": "cybernetic-repair-clinic_preview.png"
+  },
+  "image_info": {
+    "width": 1484,
+    "height": 1060,
+    "mode": "RGB"
+  }
+}

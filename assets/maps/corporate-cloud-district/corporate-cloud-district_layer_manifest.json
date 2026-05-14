@@ -1,0 +1,29 @@
+{
+  "id": "corporate-cloud-district",
+  "title": "顶层：企业云端区",
+  "source": "GameAssetDesign.md",
+  "source_lines": "30-52",
+  "skill": "generate2dmap",
+  "pipeline": {
+    "map_mode": "scene_mode",
+    "visual_model": "layered_raster",
+    "runtime_object_model": "y_sorted_props + interactive_scene_objects + scene_hooks",
+    "collision_model": "precise_shapes + trigger_zones",
+    "engine_target": "project-native"
+  },
+  "layers": {
+    "ground_base": "corporate-cloud-district_ground_base.png",
+    "dressed_ref": "corporate-cloud-district_dressed_ref.png",
+    "prop_pack": "corporate-cloud-district_prop_pack.png",
+    "props_transparent": "corporate-cloud-district_props_transparent.png",
+    "ysort_data": "corporate-cloud-district_ysort_data.json",
+    "collision": "corporate-cloud-district_collision.png",
+    "regions": "corporate-cloud-district_regions.png",
+    "preview": "corporate-cloud-district_preview.png"
+  },
+  "image_info": {
+    "width": 1536,
+    "height": 1024,
+    "mode": "RGB"
+  }
+}

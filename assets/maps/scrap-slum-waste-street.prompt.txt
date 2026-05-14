@@ -1,0 +1,7 @@
+Use the visible pixel-cyberpunk interior reference above only as style guidance: crisp 16-bit pixel art, strong dark outlines, saturated neon accents, clean readable game shapes.
+
+Generate one production-ready 2D pixel game map/background asset for `scrap-slum-waste-street` from GameAssetDesign.md.
+
+Subject: the lower slum and scrap street where Agents survive: broken sheet-metal homes stacked under pipes, abandoned robot bodies, old server racks converted into living spaces, tangled electrical cables, fluorescent graffiti, puddles, garbage, damaged data chips, illegal charging stall at the end of an alley, old drone shells used as lamps, expired wanted posters as abstract paper shapes with no readable text. It should feel poor, patched together, dangerous, dark and wet.
+
+Style constraints: 16-bit detailed pixel art, top-down/3-4 game-readable map, not cute, no readable words, no labels, no UI, no arrows, no callouts, no decorative border. Palette: dark blue, dirty green, violet black, cyan leakage, neon pink graffiti, orange hazard lights, red warning pixels. Mood: oppressive survival, wet ground reflections, dense junk, readable paths and hiding corners.

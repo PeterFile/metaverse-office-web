@@ -1,0 +1,20 @@
+{
+  "id": "bottom-resident-npc-pack",
+  "action": "walk",
+  "walk_cycle": "4-direction canonical walk cycle",
+  "source_sheet": "assets/sprites/bottom-resident-npc-pack/walk-cycle/sheet-transparent.png",
+  "delivery_sheet": "assets/sprites/bottom-resident-npc-pack/walk-cycle-sheet-transparent.png",
+  "directions": [
+    "down",
+    "left",
+    "right",
+    "up"
+  ],
+  "frames_per_direction": 4,
+  "skill": "generate2dsprite",
+  "image_info": {
+    "width": 1024,
+    "height": 1024,
+    "mode": "RGBA"
+  }
+}

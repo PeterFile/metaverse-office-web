@@ -1,0 +1,59 @@
+{
+  "map": "corporate-cloud-district",
+  "coordinate_space": "pixels",
+  "render_order": "ascending_sortY",
+  "props": [
+    {
+      "id": "corporate-cloud-district_prop_2",
+      "source_cell": 2,
+      "x": 1106,
+      "y": 338,
+      "left": 1011,
+      "top": 140,
+      "w": 190,
+      "h": 198,
+      "anchor": "center-bottom",
+      "sortY": 338,
+      "collision": "blocker"
+    },
+    {
+      "id": "corporate-cloud-district_prop_1",
+      "source_cell": 1,
+      "x": 338,
+      "y": 348,
+      "left": 260,
+      "top": 150,
+      "w": 156,
+      "h": 198,
+      "anchor": "center-bottom",
+      "sortY": 348,
+      "collision": "blocker"
+    },
+    {
+      "id": "corporate-cloud-district_prop_3",
+      "source_cell": 3,
+      "x": 522,
+      "y": 707,
+      "left": 449,
+      "top": 509,
+      "w": 147,
+      "h": 198,
+      "anchor": "center-bottom",
+      "sortY": 707,
+      "collision": "blocker"
+    },
+    {
+      "id": "corporate-cloud-district_prop_4",
+      "source_cell": 4,
+      "x": 1014,
+      "y": 737,
+      "left": 915,
+      "top": 603,
+      "w": 198,
+      "h": 134,
+      "anchor": "center-bottom",
+      "sortY": 737,
+      "collision": "blocker"
+    }
+  ]
+}

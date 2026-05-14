@@ -1,0 +1,5 @@
+Generate a 2x2 compact prop/FX sprite pack for `environment-motif-prop-fx-pack` from GameAssetDesign.md.
+
+Subject: four reusable visual motif assets, one per cell, all matching the cyberpunk Agent survival style. Cell 1: rain streak and puddle-ripple overlay cluster, thin vertical blue-gray rain pixels plus small reflection ripples. Cell 2: tangled cable bundle as the city's blood vessels, black cables with cyan/orange connector lights. Cell 3: glowing broken screen cluster / small monitor shrine with abstract non-readable bars and cyan/purple light. Cell 4: old-tech junk pile with broken drone shell, robot head, old display, snapped fiber, mechanical prosthetic part, expired battery and damaged data chips.
+
+Sheet rules: EXACTLY 4 equal cells arranged 2x2. One compact motif asset centered per cell, safe padding on all sides. Solid flat #FF00FF magenta background only. No scene background, no labels, no readable words, no UI, no cell borders, no arrows, no frame numbers. Crisp 16-bit cyberpunk pixel art, strong readable silhouettes, deep blue/purple shadows, cyan/pink/orange neon details, dirty wet survival mood, not cute, not realistic painting.

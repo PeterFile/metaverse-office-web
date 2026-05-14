@@ -1,0 +1,7 @@
+Use the visible `agent-normal` sprite sheet immediately above as identity reference. Preserve the same Agent silhouette, half screen / half bionic mask face, coat, compact data backpack, cables and low-cost cybernetic body.
+
+Generate a 2x2 sprite animation sheet for `agent-low-energy` from GameAssetDesign.md.
+
+Variation: low energy survival state. The same Agent has weak dim cyan-green eyes, slight body flicker, slower hunched idle posture, backpack smoke, red warning pixels on chest and joints, darker clothing, a few drooping cables, depleted battery glow. Keep it readable as the same character, not a redesign.
+
+Sheet rules: EXACTLY 4 equal cells in a 2x2 grid, four idle/falter frames of the same character. Top-down 3/4 view from slightly above, full body visible, stable feet/bottom anchor, same scale and same bounding box in every cell, subject centered in each cell and occupying the central 60-70% safe area. Solid flat #FF00FF magenta background only. No shadows, no labels, no readable words, no UI, no cell borders, no arrows, no frame numbers. Crisp 16-bit pixel art, strong dark outline, saturated but dim cyberpunk accents, not cute, not realistic painting.

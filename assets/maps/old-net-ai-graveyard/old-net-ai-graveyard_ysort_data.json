@@ -1,0 +1,59 @@
+{
+  "map": "old-net-ai-graveyard",
+  "coordinate_space": "pixels",
+  "render_order": "ascending_sortY",
+  "props": [
+    {
+      "id": "old-net-ai-graveyard_prop_2",
+      "source_cell": 2,
+      "x": 1043,
+      "y": 358,
+      "left": 960,
+      "top": 160,
+      "w": 166,
+      "h": 198,
+      "anchor": "center-bottom",
+      "sortY": 358,
+      "collision": "blocker"
+    },
+    {
+      "id": "old-net-ai-graveyard_prop_1",
+      "source_cell": 1,
+      "x": 319,
+      "y": 369,
+      "left": 220,
+      "top": 180,
+      "w": 198,
+      "h": 189,
+      "anchor": "center-bottom",
+      "sortY": 369,
+      "collision": "blocker"
+    },
+    {
+      "id": "old-net-ai-graveyard_prop_3",
+      "source_cell": 3,
+      "x": 492,
+      "y": 749,
+      "left": 388,
+      "top": 543,
+      "w": 208,
+      "h": 206,
+      "anchor": "center-bottom",
+      "sortY": 749,
+      "collision": "blocker"
+    },
+    {
+      "id": "old-net-ai-graveyard_prop_4",
+      "source_cell": 4,
+      "x": 956,
+      "y": 782,
+      "left": 892,
+      "top": 584,
+      "w": 128,
+      "h": 198,
+      "anchor": "center-bottom",
+      "sortY": 782,
+      "collision": "blocker"
+    }
+  ]
+}

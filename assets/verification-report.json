@@ -1,0 +1,336 @@
+{
+  "objective": "Generate every map/sprite/prop/fx asset parsed from GameAssetDesign.md into project root assets/ and mark all complete in ASSET_LOG.md.",
+  "source": "GameAssetDesign.md",
+  "total_assets": 25,
+  "completed_assets": 25,
+  "checkpoints": 9,
+  "errors": [],
+  "warnings": [],
+  "assets": [
+    {
+      "index": 1,
+      "id": "vertical-city-overview",
+      "kind": "map",
+      "skill": "generate2dmap",
+      "output": "assets/maps/vertical-city-overview.png",
+      "size": [
+        1024,
+        1536
+      ],
+      "mode": "RGB",
+      "status": "complete"
+    },
+    {
+      "index": 2,
+      "id": "corporate-cloud-district",
+      "kind": "map",
+      "skill": "generate2dmap",
+      "output": "assets/maps/corporate-cloud-district.png",
+      "size": [
+        1536,
+        1024
+      ],
+      "mode": "RGB",
+      "status": "complete"
+    },
+    {
+      "index": 3,
+      "id": "neon-commercial-district",
+      "kind": "map",
+      "skill": "generate2dmap",
+      "output": "assets/maps/neon-commercial-district.png",
+      "size": [
+        1448,
+        1086
+      ],
+      "mode": "RGB",
+      "status": "complete"
+    },
+    {
+      "index": 4,
+      "id": "scrap-slum-waste-street",
+      "kind": "map",
+      "skill": "generate2dmap",
+      "output": "assets/maps/scrap-slum-waste-street.png",
+      "size": [
+        1448,
+        1086
+      ],
+      "mode": "RGB",
+      "status": "complete"
+    },
+    {
+      "index": 5,
+      "id": "old-net-ai-graveyard",
+      "kind": "map",
+      "skill": "generate2dmap",
+      "output": "assets/maps/old-net-ai-graveyard.png",
+      "size": [
+        1448,
+        1086
+      ],
+      "mode": "RGB",
+      "status": "complete"
+    },
+    {
+      "index": 6,
+      "id": "cybernetic-repair-clinic",
+      "kind": "map",
+      "skill": "generate2dmap",
+      "output": "assets/maps/cybernetic-repair-clinic.png",
+      "size": [
+        1465,
+        1073
+      ],
+      "mode": "RGB",
+      "status": "complete"
+    },
+    {
+      "index": 7,
+      "id": "data-bar-safehouse",
+      "kind": "map",
+      "skill": "generate2dmap",
+      "output": "assets/maps/data-bar-safehouse.png",
+      "size": [
+        1470,
+        1070
+      ],
+      "mode": "RGB",
+      "status": "complete"
+    },
+    {
+      "index": 8,
+      "id": "agent-sleep-pod-room",
+      "kind": "map",
+      "skill": "generate2dmap",
+      "output": "assets/maps/agent-sleep-pod-room.png",
+      "size": [
+        1466,
+        1073
+      ],
+      "mode": "RGB",
+      "status": "complete"
+    },
+    {
+      "index": 9,
+      "id": "mission-wall-alley",
+      "kind": "map",
+      "skill": "generate2dmap",
+      "output": "assets/maps/mission-wall-alley.png",
+      "size": [
+        1448,
+        1086
+      ],
+      "mode": "RGB",
+      "status": "complete"
+    },
+    {
+      "index": 10,
+      "id": "token-leaderboard-plaza",
+      "kind": "map",
+      "skill": "generate2dmap",
+      "output": "assets/maps/token-leaderboard-plaza.png",
+      "size": [
+        1448,
+        1086
+      ],
+      "mode": "RGB",
+      "status": "complete"
+    },
+    {
+      "index": 11,
+      "id": "data-altar-chamber",
+      "kind": "map",
+      "skill": "generate2dmap",
+      "output": "assets/maps/data-altar-chamber.png",
+      "size": [
+        1448,
+        1086
+      ],
+      "mode": "RGB",
+      "status": "complete"
+    },
+    {
+      "index": 12,
+      "id": "agent-normal",
+      "kind": "sprite",
+      "skill": "generate2dsprite",
+      "output": "assets/sprites/agent-normal/sheet-transparent.png",
+      "size": [
+        512,
+        512
+      ],
+      "mode": "RGBA",
+      "status": "complete"
+    },
+    {
+      "index": 13,
+      "id": "agent-low-energy",
+      "kind": "sprite",
+      "skill": "generate2dsprite",
+      "output": "assets/sprites/agent-low-energy/sheet-transparent.png",
+      "size": [
+        512,
+        512
+      ],
+      "mode": "RGBA",
+      "status": "complete"
+    },
+    {
+      "index": 14,
+      "id": "agent-upgraded",
+      "kind": "sprite",
+      "skill": "generate2dsprite",
+      "output": "assets/sprites/agent-upgraded/sheet-transparent.png",
+      "size": [
+        512,
+        512
+      ],
+      "mode": "RGBA",
+      "status": "complete"
+    },
+    {
+      "index": 15,
+      "id": "agent-infected",
+      "kind": "sprite",
+      "skill": "generate2dsprite",
+      "output": "assets/sprites/agent-infected/sheet-transparent.png",
+      "size": [
+        512,
+        512
+      ],
+      "mode": "RGBA",
+      "status": "complete"
+    },
+    {
+      "index": 16,
+      "id": "corporate-security-robot",
+      "kind": "sprite",
+      "skill": "generate2dsprite",
+      "output": "assets/sprites/corporate-security-robot/sheet-transparent.png",
+      "size": [
+        512,
+        512
+      ],
+      "mode": "RGBA",
+      "status": "complete"
+    },
+    {
+      "index": 17,
+      "id": "black-market-merchant",
+      "kind": "sprite",
+      "skill": "generate2dsprite",
+      "output": "assets/sprites/black-market-merchant/sheet-transparent.png",
+      "size": [
+        512,
+        512
+      ],
+      "mode": "RGBA",
+      "status": "complete"
+    },
+    {
+      "index": 18,
+      "id": "vagrant-hacker",
+      "kind": "sprite",
+      "skill": "generate2dsprite",
+      "output": "assets/sprites/vagrant-hacker/sheet-transparent.png",
+      "size": [
+        512,
+        512
+      ],
+      "mode": "RGBA",
+      "status": "complete"
+    },
+    {
+      "index": 19,
+      "id": "data-ghost",
+      "kind": "sprite",
+      "skill": "generate2dsprite",
+      "output": "assets/sprites/data-ghost/sheet-transparent.png",
+      "size": [
+        512,
+        512
+      ],
+      "mode": "RGBA",
+      "status": "complete"
+    },
+    {
+      "index": 20,
+      "id": "bottom-resident-npc-pack",
+      "kind": "sprite_pack",
+      "skill": "generate2dsprite",
+      "output": "assets/sprites/bottom-resident-npc-pack/sheet-transparent.png",
+      "size": [
+        768,
+        512
+      ],
+      "mode": "RGBA",
+      "status": "complete"
+    },
+    {
+      "index": 21,
+      "id": "neon-ad-corporate-sign-pack",
+      "kind": "prop_pack",
+      "skill": "generate2dsprite",
+      "output": "assets/sprites/neon-ad-corporate-sign-pack/sheet-transparent.png",
+      "size": [
+        768,
+        768
+      ],
+      "mode": "RGBA",
+      "status": "complete"
+    },
+    {
+      "index": 22,
+      "id": "black-market-terminal",
+      "kind": "prop",
+      "skill": "generate2dsprite",
+      "output": "assets/sprites/black-market-terminal/clean.png",
+      "size": [
+        256,
+        256
+      ],
+      "mode": "RGBA",
+      "status": "complete"
+    },
+    {
+      "index": 23,
+      "id": "surveillance-drone-security-pack",
+      "kind": "prop_pack",
+      "skill": "generate2dsprite",
+      "output": "assets/sprites/surveillance-drone-security-pack/sheet-transparent.png",
+      "size": [
+        512,
+        512
+      ],
+      "mode": "RGBA",
+      "status": "complete"
+    },
+    {
+      "index": 24,
+      "id": "energy-charging-facility-pack",
+      "kind": "prop_pack",
+      "skill": "generate2dsprite",
+      "output": "assets/sprites/energy-charging-facility-pack/sheet-transparent.png",
+      "size": [
+        512,
+        512
+      ],
+      "mode": "RGBA",
+      "status": "complete"
+    },
+    {
+      "index": 25,
+      "id": "environment-motif-prop-fx-pack",
+      "kind": "prop_fx_pack",
+      "skill": "generate2dsprite",
+      "output": "assets/sprites/environment-motif-prop-fx-pack/sheet-transparent.png",
+      "size": [
+        512,
+        512
+      ],
+      "mode": "RGBA",
+      "status": "complete"
+    }
+  ]
+}

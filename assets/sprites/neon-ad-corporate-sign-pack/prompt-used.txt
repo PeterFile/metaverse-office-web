@@ -1,0 +1,5 @@
+Generate a 3x3 compact prop sprite pack for `neon-ad-corporate-sign-pack` from GameAssetDesign.md.
+
+Subject: nine separate cyberpunk neon ad and corporate sign props, one sign per cell. Include variants that imply memory upgrade ads, corporate credit rules, cybernetic trial contracts, Agent ranking boards, personality scoring, emotion stabilizer sale, unauthorized intelligent-agent warning, cold corporate logo projection panel, and black-market sticker-covered ad box. All text must be abstract glyph bars, blocks and symbols only; no readable words or letters.
+
+Sheet rules: EXACTLY 9 equal cells arranged 3 columns by 3 rows. One compact sign prop centered per cell, same approximate scale, safe padding on all sides. Solid flat #FF00FF magenta background only. No scene background, no shadows, no labels, no readable words, no UI callouts, no cell borders, no arrows, no frame numbers. Crisp 16-bit cyberpunk pixel art, strong dark outline, saturated neon pink/cyan/orange/red light, dark metal housings, not cute, not realistic painting.

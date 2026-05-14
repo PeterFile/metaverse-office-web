@@ -162,13 +162,20 @@ class PrototypeStore {
       existingEvents: this.events
     });
     const items = [];
+    let appendedHeartbeatCount = 0;
 
     for (const event of [...collectorActivityEvents, ...collectorEvents]) {
       await this.appendEvent(event);
     }
 
     for (const item of normalizedReport.items || []) {
+      if (!hasCollectorOutputEvidence(item)) {
+        items.push(item);
+        continue;
+      }
+
       const heartbeat = await this.appendHeartbeat(item.heartbeat);
+      appendedHeartbeatCount += 1;
       items.push({
         ...item,
         heartbeat
@@ -179,7 +186,7 @@ class PrototypeStore {
       ...normalizedReport,
       summary: {
         ...(normalizedReport.summary || {}),
-        heartbeat_count: items.length
+        heartbeat_count: appendedHeartbeatCount
       },
       items
     };
@@ -1318,6 +1325,10 @@ function createCollectorSupervisionEvents({ report, existingEvents }) {
   const openAlerts = buildOpenCollectorAlertIndex(existingEvents);
 
   for (const item of report.items || []) {
+    if (!hasCollectorOutputEvidence(item)) {
+      continue;
+    }
+
     const previousEvent = openAlerts.get(item.agent_id) || null;
     const currentAlert = createCollectorAlertCandidate({ report, item });
 
@@ -1350,6 +1361,16 @@ function createCollectorSupervisionEvents({ report, existingEvents }) {
   }
 
   return events;
+}
+
+function hasCollectorOutputEvidence(item) {
+  const heartbeat = item?.heartbeat || null;
+  const observedAt = normalizeCollectorTimestamp(heartbeat?.last_file_write_at);
+
+  return Boolean(
+    deriveCollectorStateEvidence(item) ||
+      (observedAt && deriveCollectorFileWriteEvidence(item, observedAt))
+  );
 }
 
 function createCollectorActivityEvents({ report, previousAgentProjections }) {

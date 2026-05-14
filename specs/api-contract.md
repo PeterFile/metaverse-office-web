@@ -44,7 +44,7 @@ This is the current API/read-model contract for Metaverse Office Web. It grew ou
 
 ## Collector snapshot semantics
 - `GET /collectors/controller-snapshot` is read-only and returns `{ "item": null }` until a snapshot has been collected
-- `POST /collectors/controller-snapshot` triggers one controller snapshot, persists collected heartbeats, may append collector-derived canonical activity and peer-watch events, and stores the resulting report as an append-only `collector_snapshot` JSONL record
+- `POST /collectors/controller-snapshot` triggers one controller snapshot, persists only evidence-backed output heartbeats, may append collector-derived canonical activity and peer-watch events, and stores the resulting report as an append-only `collector_snapshot` JSONL record
 - collected heartbeat coverage is derived from real workspace metadata (`inbox.md`, `outbox.md`, `todo.md`) and tmux pane metadata for the canonical seven-actor roster; `inbox.md` and `workspace_root` are inbound/presence evidence and must not advance meaningful-output or file-write freshness
 - the collector must not fabricate random activity, random severity, or random timestamps
 - the latest collector report is a replayed read model backed by append-only `collector_snapshot` records; heartbeat storage stays backward compatible as append-only `heartbeat` records
@@ -62,7 +62,7 @@ This is the current API/read-model contract for Metaverse Office Web. It grew ou
 - `GET /collectors/controller-snapshot/source-health` is a bounded read-only projection of the latest report's `source_health`; it returns `200` with `{ "item": null }` when no latest collector report exists and never triggers collection, tmux, filesystem access, or append-only writes
 - source-health filters are exact and additive: `agent_id`, `source_kind`, `status`, and post-filter `limit`; blank values are ignored, invalid or negative limits use the existing read-model default, and unknown `source_kind`/`status` values return an empty bounded projection rather than an error
 - source-health `source_kind` accepts `workspace_root`, `workspace_file`, `workspace_files`, `tmux_observation`, and `tmux_session`; `workspace_file`/`workspace_files` project `source_health.workspace_files`, and `tmux_observation`/`tmux_session` project `source_health.tmux_session`
-- source-health `status` matches existing `source_health` statuses (`observed`, `degraded`, `missing`, `error`) only; inbound `inbox.md` and `workspace_root` remain source/presence signals and must not imply output or liveness
+- source-health `status` matches existing `source_health` statuses (`observed`, `degraded`, `missing`, `error`) only; inbound `inbox.md`, `workspace_root`, and runtime source gaps remain source/presence signals and must not imply output, liveness, state updates, task updates, or alert resolution
 - source-health responses include `collected_at`, `actor_id`, summary `source_kind_buckets` and `status_buckets`, bounded `agent_items`, and `runtime_source_evidence.unmapped_tmux_sessions`; each agent row includes `agent_id`, `workspace_root`, `session_ref`, projected `source_health`, `evidence_ref_count`, `evidence_refs`, and `latest_evidence_at` only when already derivable from the stored report
 - collector-derived activity uses canonical event types only: `agent_state_changed` and `agent_wrote_file`
 - collector-derived supervision uses existing canonical event types only: `peer_watch_alert_raised` and `peer_watch_alert_resolved`
@@ -71,7 +71,7 @@ This is the current API/read-model contract for Metaverse Office Web. It grew ou
 - collector staleness alerts use `last_meaningful_output_at` only: `<20m = normal`, `>=20m = yellow`, `>=30m = orange`
 - blocked or reboot-recommended collector items raise `peer_watch_alert_raised` with evidence refs plus collector metadata; no reboot lifecycle records are fabricated yet
 - repeated unchanged collector conditions must not append duplicate activity or `peer_watch_alert_raised` events
-- when a previously open collector-derived alert clears in a later snapshot, append `peer_watch_alert_resolved`
+- when a previously open collector-derived alert clears in a later output/evidence-backed snapshot, append `peer_watch_alert_resolved`
 - time alone must never fabricate `red`; `red` remains explicit event-driven supervision
 - collector-derived activity and supervision remain queryable through `/timeline` using the same evidence/source fields as the canonical event log
 

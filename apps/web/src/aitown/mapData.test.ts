@@ -30,7 +30,7 @@ describe('AI Town generated map data', () => {
 
       for (const layerKey of REQUIRED_LAYER_KEYS) {
         expect(map.layerUrls[layerKey]).toBe(
-          `/assets/generated/maps/${map.id}/${map.id}_${layerKey.replace(/[A-Z]/g, (match) => `_${match.toLowerCase()}`)}.png`
+          `/assets/generated/maps/${map.id}/${map.id}_${layerKey.replace(/[A-Z]/g, (match) => `_${match.toLowerCase()}`)}.webp`
         );
       }
     }

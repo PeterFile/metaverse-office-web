@@ -3,7 +3,7 @@ import type { AiTownGateway, AiTownLayeredMapData, AiTownYSortProp, ScenePoint }
 export const DEFAULT_AI_TOWN_MAP_ID = 'neon-commercial-district';
 
 function layerUrl(mapId: string, layer: string) {
-  return `/assets/generated/maps/${mapId}/${mapId}_${layer}.png`;
+  return `/assets/generated/maps/${mapId}/${mapId}_${layer}.webp`;
 }
 
 function makeLayeredMap(

@@ -19,6 +19,9 @@ const {
 } = require('../collectors/controller-snapshot');
 
 const COLLECTOR_ALERT_SOURCE = 'controller_snapshot';
+const INBOUND_WORKSPACE_FILES = new Set(['inbox.md']);
+const AGENT_OUTPUT_WORKSPACE_ROLES = new Set(['agent_output', 'agent_plan']);
+const NON_OUTPUT_WORKSPACE_ROLES = new Set(['inbound_task', 'workspace_presence']);
 const SEVERITY_RANK = Object.freeze({
   normal: 0,
   yellow: 1,
@@ -1512,7 +1515,7 @@ function deriveCollectorStateEvidence(item) {
     };
   }
 
-  const workspaceFileRef = normalizeEvidenceRefs(item.evidence_refs).find(isWorkspaceFileRef);
+  const workspaceFileRef = normalizeEvidenceRefs(item.evidence_refs).find(isAgentOutputWorkspaceFileRef);
   if (workspaceFileRef) {
     return {
       source_kind: 'workspace_file',
@@ -1533,7 +1536,7 @@ function deriveCollectorFileWriteEvidence(item, observedAt) {
     };
   }
 
-  const workspaceFileRef = normalizeEvidenceRefs(item.evidence_refs).find(isWorkspaceFileRef);
+  const workspaceFileRef = normalizeEvidenceRefs(item.evidence_refs).find(isAgentOutputWorkspaceFileRef);
   if (workspaceFileRef) {
     return {
       file_path: workspaceFileRef,
@@ -1560,7 +1563,7 @@ function getLatestCollectorTmuxObservation(item) {
 
 function getLatestCollectorWorkspaceFileObservation(item, observedAt = null) {
   const observations = (Array.isArray(item.workspace_observations) ? item.workspace_observations : [])
-    .filter((observation) => observation.kind === 'workspace_file')
+    .filter(isCollectorAgentOutputWorkspaceObservation)
     .slice()
     .sort(
       (left, right) =>
@@ -1591,6 +1594,26 @@ function isValidTmuxRef(ref) {
 
 function isWorkspaceFileRef(ref) {
   return typeof ref === 'string' && !isTmuxRef(ref) && path.extname(ref).length > 0;
+}
+
+function isAgentOutputWorkspaceFileRef(ref) {
+  return isWorkspaceFileRef(ref) && !INBOUND_WORKSPACE_FILES.has(path.basename(ref));
+}
+
+function isCollectorAgentOutputWorkspaceObservation(observation) {
+  if (!observation || observation.kind !== 'workspace_file') {
+    return false;
+  }
+
+  if (AGENT_OUTPUT_WORKSPACE_ROLES.has(observation.evidence_role)) {
+    return true;
+  }
+
+  if (NON_OUTPUT_WORKSPACE_ROLES.has(observation.evidence_role)) {
+    return false;
+  }
+
+  return !INBOUND_WORKSPACE_FILES.has(observation.file_name || path.basename(observation.path || ''));
 }
 
 function normalizeCollectorTimestamp(value) {

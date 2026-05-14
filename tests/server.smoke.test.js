@@ -4933,7 +4933,7 @@ test('collector snapshot POST emits supervision events onto existing query surfa
               current_state: 'blocked',
               active_task: 'Investigate stalled shell',
               last_meaningful_output_at: '2026-03-09T18:00:00.000Z',
-              last_file_write_at: '2026-03-09T18:00:00.000Z',
+              last_file_write_at: null,
               current_blocker: 'tmux pane marked dead',
               confidence_level: 'high',
               reboot_recommended: true
@@ -4961,8 +4961,9 @@ test('collector snapshot POST emits supervision events onto existing query surfa
 
   const fileWriteEvents = await requestJson(`${baseUrl}/events?event_type=agent_wrote_file&limit=5`);
   assert.equal(fileWriteEvents.response.status, 200);
-  assert.equal(fileWriteEvents.body.items.length, 2);
+  assert.equal(fileWriteEvents.body.items.length, 1);
   assert.ok(fileWriteEvents.body.items.every((event) => event.metadata.collector_activity_family === 'file_write'));
+  assert.ok(fileWriteEvents.body.items.every((event) => !event.evidence_refs.includes('/tmp/growth-revenue/inbox.md')));
 
   const events = await requestJson(`${baseUrl}/events?event_type=peer_watch_alert_raised`);
   assert.equal(events.response.status, 200);

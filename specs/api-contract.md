@@ -44,7 +44,7 @@ This is the current API/read-model contract for Metaverse Office Web. It grew ou
 ## Collector snapshot semantics
 - `GET /collectors/controller-snapshot` is read-only and returns `{ "item": null }` until a snapshot has been collected
 - `POST /collectors/controller-snapshot` triggers one controller snapshot, persists collected heartbeats, and may append collector-derived canonical activity and peer-watch events into the existing append-only event store
-- collected heartbeat fields are derived from real workspace file metadata (`inbox.md`, `outbox.md`, `todo.md`) and tmux pane metadata for the canonical seven-actor roster
+- collected heartbeat coverage is derived from real workspace metadata (`inbox.md`, `outbox.md`, `todo.md`) and tmux pane metadata for the canonical seven-actor roster; `inbox.md` and `workspace_root` are inbound/presence evidence and must not advance meaningful-output or file-write freshness
 - the collector must not fabricate random activity, random severity, or random timestamps
 - the latest collector report is an in-memory read model; heartbeat storage stays backward compatible as append-only `heartbeat` records
 - the latest collector report also exposes `shared_artifacts`, a top-level per-snapshot rollup derived only from the current collected items
@@ -60,7 +60,7 @@ This is the current API/read-model contract for Metaverse Office Web. It grew ou
 - collector-derived activity uses canonical event types only: `agent_state_changed` and `agent_wrote_file`
 - collector-derived supervision uses existing canonical event types only: `peer_watch_alert_raised` and `peer_watch_alert_resolved`
 - collector-derived `agent_state_changed` requires evidence-backed state drift versus the previously known projection and uses `tmux_observation` or `workspace_file` as the source kind
-- collector-derived `agent_wrote_file` requires a newer `last_file_write_at` than the previously known projection and binds to the newest relevant workspace-file evidence
+- collector-derived `agent_wrote_file` requires a newer agent-output workspace observation than the previously known projection; inbound `inbox.md` and workspace-root evidence remain coverage/provenance only
 - collector staleness alerts use `last_meaningful_output_at` only: `<20m = normal`, `>=20m = yellow`, `>=30m = orange`
 - blocked or reboot-recommended collector items raise `peer_watch_alert_raised` with evidence refs plus collector metadata; no reboot lifecycle records are fabricated yet
 - repeated unchanged collector conditions must not append duplicate activity or `peer_watch_alert_raised` events
@@ -616,6 +616,7 @@ This is the current API/read-model contract for Metaverse Office Web. It grew ou
           {
             "path": "/Users/cwp/.hermes/teams/web3-company/agents/app-engineering/workspace/todo.md",
             "file_name": "todo.md",
+            "evidence_role": "agent_plan",
             "kind": "workspace_file",
             "last_modified_at": "2026-03-09T18:04:00.000Z"
           }

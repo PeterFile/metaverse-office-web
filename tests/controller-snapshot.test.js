@@ -142,7 +142,8 @@ test('collector derives evidence-backed heartbeats from workspace and tmux metad
   assert.equal(growthRevenue.heartbeat.current_state, 'blocked');
   assert.equal(growthRevenue.heartbeat.current_blocker, 'tmux pane marked dead');
   assert.equal(growthRevenue.heartbeat.reboot_recommended, true);
-  assert.equal(growthRevenue.heartbeat.last_meaningful_output_at, '2026-03-09T17:59:00.000Z');
+  assert.equal(growthRevenue.heartbeat.last_file_write_at, null);
+  assert.equal(growthRevenue.heartbeat.last_meaningful_output_at, '2026-03-09T17:58:00.000Z');
   assert.equal(growthRevenue.heartbeat.confidence_level, 'high');
   assert.equal(growthRevenue.supervision.needs_attention, true);
 });
@@ -331,6 +332,58 @@ test('collector reports source health for missing tmux sessions and unmapped tmu
       }
     ]
   });
+});
+
+test('collector treats inbox-only workspace evidence as inbound presence, not agent output', async () => {
+  const appAgent = {
+    ...SEED_AGENTS.find((agent) => agent.agent_id === 'app-engineering'),
+    workspace_root: '/tmp/inbound-only/app-engineering'
+  };
+  const inboxRef = path.join(appAgent.workspace_root, 'inbox.md');
+  const statsByPath = new Map([
+    [appAgent.workspace_root, { mtime: '2026-03-09T18:00:00.000Z' }],
+    [inboxRef, { mtime: '2026-03-09T18:04:00.000Z' }]
+  ]);
+
+  const report = await collectControllerSnapshot({
+    agents: [appAgent],
+    collectedAt: '2026-03-09T18:05:00.000Z',
+    readPathStat: async (targetPath) => statsByPath.get(targetPath) || null,
+    listTmuxPanes: async () => []
+  });
+
+  const item = report.items[0];
+  assert.equal(item.heartbeat.current_state, 'idle');
+  assert.equal(item.heartbeat.active_task, 'No evidence captured');
+  assert.equal(item.heartbeat.last_meaningful_output_at, null);
+  assert.equal(item.heartbeat.last_file_write_at, null);
+  assert.equal(
+    item.workspace_observations.find((observation) => observation.path === appAgent.workspace_root)
+      .evidence_role,
+    'workspace_presence'
+  );
+  assert.equal(
+    item.workspace_observations.find((observation) => observation.path === inboxRef).evidence_role,
+    'inbound_task'
+  );
+  assert.ok(item.evidence_refs.includes(appAgent.workspace_root));
+  assert.ok(item.evidence_refs.includes(inboxRef));
+  assert.deepEqual(report.evidence_coverage.source_kind_buckets, {
+    workspace_file: 1,
+    workspace_root: 1,
+    tmux_observation: 0
+  });
+  assert.equal(item.source_health.workspace_files.observed_count, 1);
+  assert.equal(item.source_health.workspace_files.missing_count, 2);
+
+  const root = await mkdtemp(path.join(os.tmpdir(), 'metaverse-office-store-'));
+  const store = await createPrototypeStore({ filePath: path.join(root, 'prototype-store.jsonl') });
+  await store.appendCollectorReport(report);
+
+  assert.deepEqual(store.listEvents({ agent_id: 'app-engineering' }), []);
+  assert.equal(store.getAgent('app-engineering').current_state, 'idle');
+  assert.equal(store.getAgent('app-engineering').last_meaningful_output_at, null);
+  assert.equal(store.getAgent('app-engineering').last_file_write_at, null);
 });
 
 test('store appends collector heartbeats and exposes the latest collector report', async () => {
@@ -561,7 +614,7 @@ test('store appends collector-driven peer watch alerts for staleness and blocked
 
   assert.deepEqual(store.getCounts(), {
     agent_count: 7,
-    event_count: 6,
+    event_count: 5,
     heartbeat_count: 2
   });
 
@@ -747,12 +800,12 @@ test('store suppresses duplicate collector-driven peer watch alerts for unchange
   await store.appendCollectorReport(secondReport);
   const secondCounts = store.getCounts();
 
-  assert.equal(firstCounts.event_count, 6);
-  assert.equal(secondCounts.event_count, 6);
+  assert.equal(firstCounts.event_count, 5);
+  assert.equal(secondCounts.event_count, 5);
   assert.equal(secondCounts.heartbeat_count, 4);
   assert.equal(store.listEvents({ event_type: 'peer_watch_alert_raised' }).length, 2);
   assert.equal(store.listEvents({ event_type: 'agent_state_changed' }).length, 2);
-  assert.equal(store.listEvents({ event_type: 'agent_wrote_file' }).length, 2);
+  assert.equal(store.listEvents({ event_type: 'agent_wrote_file' }).length, 1);
 });
 
 

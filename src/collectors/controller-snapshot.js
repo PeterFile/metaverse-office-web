@@ -8,6 +8,8 @@ const { SEED_AGENTS } = require('../domain');
 const execFileAsync = promisify(execFile);
 
 const OBSERVED_WORKSPACE_PATHS = Object.freeze(['inbox.md', 'outbox.md', 'todo.md']);
+const INBOUND_WORKSPACE_FILES = new Set(['inbox.md']);
+const AGENT_OUTPUT_WORKSPACE_FILES = new Set(['outbox.md', 'todo.md']);
 const TMUX_FORMAT_DELIMITER = '\u001f';
 const EVIDENCE_SOURCE_KINDS = Object.freeze([
   'workspace_file',
@@ -168,6 +170,10 @@ function normalizeWorkspaceObservation(targetPath, statResult) {
     path: targetPath,
     file_name: path.basename(targetPath),
     kind: path.extname(targetPath) ? 'workspace_file' : 'workspace_root',
+    evidence_role: deriveWorkspaceEvidenceRole({
+      kind: path.extname(targetPath) ? 'workspace_file' : 'workspace_root',
+      fileName: path.basename(targetPath)
+    }),
     last_modified_at: lastModifiedAt
   };
 }
@@ -224,9 +230,7 @@ function createCollectorItem({
   tmuxObservations,
   sourceHealth
 }) {
-  const latestWorkspaceFile = workspaceObservations.find(
-    (observation) => observation.kind === 'workspace_file'
-  );
+  const latestWorkspaceFile = workspaceObservations.find(isAgentOutputWorkspaceObservation);
   const latestTmuxObservation = tmuxObservations.slice().sort(compareObservationRecency)[0] || null;
   const latestTmuxActivityAt = latestTmuxObservation ? latestTmuxObservation.pane_activity_at : null;
   const lastFileWriteAt = latestWorkspaceFile ? latestWorkspaceFile.last_modified_at : null;
@@ -599,6 +603,34 @@ function deriveWorkspaceEvidenceSourceKind(observation) {
   }
 
   return deriveEvidenceSourceKindFromRef(observation.path);
+}
+
+function deriveWorkspaceEvidenceRole({ kind, fileName }) {
+  if (kind === 'workspace_root') {
+    return 'workspace_presence';
+  }
+
+  if (fileName === 'inbox.md') {
+    return 'inbound_task';
+  }
+
+  if (AGENT_OUTPUT_WORKSPACE_FILES.has(fileName)) {
+    return fileName === 'todo.md' ? 'agent_plan' : 'agent_output';
+  }
+
+  return 'workspace_presence';
+}
+
+function isAgentOutputWorkspaceObservation(observation) {
+  if (!observation || observation.kind !== 'workspace_file') {
+    return false;
+  }
+
+  if (observation.evidence_role) {
+    return observation.evidence_role === 'agent_output' || observation.evidence_role === 'agent_plan';
+  }
+
+  return !INBOUND_WORKSPACE_FILES.has(observation.file_name || path.basename(observation.path || ''));
 }
 
 function deriveEvidenceSourceKindFromRef(evidenceRef) {

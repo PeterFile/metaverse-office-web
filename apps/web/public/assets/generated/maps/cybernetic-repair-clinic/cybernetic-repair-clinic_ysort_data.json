@@ -1,0 +1,59 @@
+{
+  "map": "cybernetic-repair-clinic",
+  "coordinate_space": "pixels",
+  "render_order": "ascending_sortY",
+  "props": [
+    {
+      "id": "cybernetic-repair-clinic_prop_2",
+      "source_cell": 2,
+      "x": 1068,
+      "y": 350,
+      "left": 984,
+      "top": 152,
+      "w": 169,
+      "h": 198,
+      "anchor": "center-bottom",
+      "sortY": 350,
+      "collision": "blocker"
+    },
+    {
+      "id": "cybernetic-repair-clinic_prop_1",
+      "source_cell": 1,
+      "x": 326,
+      "y": 360,
+      "left": 262,
+      "top": 162,
+      "w": 128,
+      "h": 198,
+      "anchor": "center-bottom",
+      "sortY": 360,
+      "collision": "blocker"
+    },
+    {
+      "id": "cybernetic-repair-clinic_prop_3",
+      "source_cell": 3,
+      "x": 505,
+      "y": 731,
+      "left": 409,
+      "top": 533,
+      "w": 193,
+      "h": 198,
+      "anchor": "center-bottom",
+      "sortY": 731,
+      "collision": "blocker"
+    },
+    {
+      "id": "cybernetic-repair-clinic_prop_4",
+      "source_cell": 4,
+      "x": 979,
+      "y": 763,
+      "left": 889,
+      "top": 565,
+      "w": 180,
+      "h": 198,
+      "anchor": "center-bottom",
+      "sortY": 763,
+      "collision": "blocker"
+    }
+  ]
+}

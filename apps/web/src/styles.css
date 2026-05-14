@@ -1153,6 +1153,109 @@ button {
   font-weight: 600;
 }
 
+.aitown-map-gateways {
+  position: absolute;
+  left: 18px;
+  bottom: calc(var(--aitown-category-bar-reserve) + 18px);
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(300px, calc(100% - 36px));
+  max-height: min(34dvh, 260px);
+  padding: 10px 12px;
+  border-style: solid;
+  border-width: var(--aitown-token-border);
+  border-image-source: url('/ai-town/assets/ui/box.svg');
+  border-image-repeat: stretch;
+  border-image-slice: 12.5%;
+  background: rgba(18, 36, 39, 0.88);
+  color: #e6faf4;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  pointer-events: none;
+  scrollbar-width: thin;
+}
+
+.aitown-map-gateways__caption {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0;
+}
+
+.aitown-map-gateways__title {
+  min-width: 0;
+  overflow: hidden;
+  color: #8be9d5;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.aitown-map-gateways__summary {
+  flex-shrink: 0;
+  color: #d5f0e8;
+  font-size: 0.72rem;
+}
+
+.aitown-map-gateways__list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.aitown-map-gateways__button {
+  pointer-events: auto;
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid rgba(139, 233, 213, 0.4);
+  border-radius: 3px;
+  background: rgba(9, 17, 20, 0.72);
+  color: #e6faf4;
+  cursor: pointer;
+}
+
+.aitown-map-gateways__button:hover,
+.aitown-map-gateways__button:focus-visible {
+  border-color: rgba(245, 207, 121, 0.86);
+  outline: none;
+}
+
+.aitown-map-gateways__button span,
+.aitown-map-gateways__button strong {
+  min-width: 0;
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.aitown-map-gateways__button span {
+  color: #d5f0e8;
+  font-size: 0.7rem;
+}
+
+.aitown-map-gateways__button strong {
+  color: #fffdf3;
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
 .aitown-watch-overlay {
   position: absolute;
   right: 18px;

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { adaptWorldToScene } from './sceneAdapter';
+import { AI_TOWN_GENERATED_MAPS, AI_TOWN_GATEWAYS, DEFAULT_AI_TOWN_MAP_ID } from './mapData';
 import type { WorldState } from '../world/types';
 
 const world: WorldState = {
@@ -151,6 +152,19 @@ const world: WorldState = {
 };
 
 describe('adaptWorldToScene', () => {
+  it('projects the generated map topology without touching world state semantics', () => {
+    const scene = adaptWorldToScene(world, null);
+
+    expect(scene.map.id).toBe(DEFAULT_AI_TOWN_MAP_ID);
+    expect(scene.maps!.map((map) => map.id)).toEqual(AI_TOWN_GENERATED_MAPS.map((map) => map.id));
+    expect(scene.gateways!.map((gateway) => gateway.gatewayId)).toEqual(
+      AI_TOWN_GATEWAYS.map((gateway) => gateway.gatewayId)
+    );
+    expect(scene.pixelWidth).toBe(scene.map.pixelWidth);
+    expect(scene.pixelHeight).toBe(scene.map.pixelHeight);
+    expect(scene.agents.every((agent) => agent.mapId === DEFAULT_AI_TOWN_MAP_ID)).toBe(true);
+  });
+
   it('maps world agents into stable AI Town scene coordinates and character variants', () => {
     const scene = adaptWorldToScene(world, 'app-engineering');
 

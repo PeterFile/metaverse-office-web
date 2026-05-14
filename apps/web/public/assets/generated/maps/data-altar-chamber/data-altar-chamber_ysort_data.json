@@ -1,0 +1,59 @@
+{
+  "map": "data-altar-chamber",
+  "coordinate_space": "pixels",
+  "render_order": "ascending_sortY",
+  "props": [
+    {
+      "id": "data-altar-chamber_prop_2",
+      "source_cell": 2,
+      "x": 1106,
+      "y": 338,
+      "left": 1033,
+      "top": 140,
+      "w": 147,
+      "h": 198,
+      "anchor": "center-bottom",
+      "sortY": 338,
+      "collision": "blocker"
+    },
+    {
+      "id": "data-altar-chamber_prop_1",
+      "source_cell": 1,
+      "x": 338,
+      "y": 348,
+      "left": 243,
+      "top": 150,
+      "w": 190,
+      "h": 198,
+      "anchor": "center-bottom",
+      "sortY": 348,
+      "collision": "blocker"
+    },
+    {
+      "id": "data-altar-chamber_prop_3",
+      "source_cell": 3,
+      "x": 522,
+      "y": 707,
+      "left": 423,
+      "top": 573,
+      "w": 198,
+      "h": 134,
+      "anchor": "center-bottom",
+      "sortY": 707,
+      "collision": "blocker"
+    },
+    {
+      "id": "data-altar-chamber_prop_4",
+      "source_cell": 4,
+      "x": 1014,
+      "y": 737,
+      "left": 941,
+      "top": 539,
+      "w": 147,
+      "h": 198,
+      "anchor": "center-bottom",
+      "sortY": 737,
+      "collision": "blocker"
+    }
+  ]
+}

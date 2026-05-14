@@ -4751,6 +4751,135 @@ test('GET /collectors/controller-snapshot/evidence-coverage projects latest cove
   ]);
 });
 
+test('GET /collectors/controller-snapshot/source-health projects latest source health read-only with filters', async (t) => {
+  const selectedAgents = ['app-engineering', 'growth-revenue'].map((agentId) =>
+    SEED_AGENTS.find((agent) => agent.agent_id === agentId)
+  );
+  const appAgent = selectedAgents[0];
+  const statsByPath = new Map([
+    [appAgent.workspace_root, { mtime: '2026-03-09T18:03:30.000Z' }],
+    [path.join(appAgent.workspace_root, 'outbox.md'), { mtime: '2026-03-09T18:04:00.000Z' }]
+  ]);
+  let collectCount = 0;
+
+  const controllerSnapshotCollector = {
+    async collectSnapshot({ actorId, collectedAt }) {
+      collectCount += 1;
+
+      return collectControllerSnapshot({
+        actorId,
+        collectedAt,
+        agents: selectedAgents,
+        readPathStat: async (targetPath) => statsByPath.get(targetPath) || null,
+        listTmuxPanes: async () => [
+          {
+            session_name: appAgent.session_ref,
+            window_index: '0',
+            pane_index: '1',
+            pane_id: '%11',
+            pane_title: 'Implement source health API',
+            pane_current_command: 'nvim',
+            pane_active: true,
+            pane_dead: false,
+            pane_activity_at: '2026-03-09T18:04:30.000Z'
+          },
+          {
+            session_name: 'unmapped-session',
+            window_index: '0',
+            pane_index: '0',
+            pane_id: '%99',
+            pane_title: 'unmapped',
+            pane_current_command: 'bash',
+            pane_active: false,
+            pane_dead: false,
+            pane_activity_at: '2026-03-09T18:02:00.000Z'
+          }
+        ]
+      });
+    }
+  };
+
+  const { baseUrl, store, storeFile } = await createHarness(t, { controllerSnapshotCollector });
+
+  const missing = await requestJson(`${baseUrl}/collectors/controller-snapshot/source-health`);
+  assert.equal(missing.response.status, 200);
+  assert.deepEqual(missing.body, { item: null });
+  assert.equal(collectCount, 0);
+
+  const collected = await requestJson(`${baseUrl}/collectors/controller-snapshot`, {
+    method: 'POST',
+    headers: {
+      'x-actor-id': 'team-lead'
+    }
+  });
+  assert.equal(collected.response.status, 201);
+  assert.equal(collectCount, 1);
+
+  const latestBeforeRead = store.getLatestCollectorReport();
+  const sourceHealth = await requestJson(`${baseUrl}/collectors/controller-snapshot/source-health`);
+  assert.equal(sourceHealth.response.status, 200);
+  assert.equal(sourceHealth.body.item.collected_at, '2026-03-09T18:05:00.000Z');
+  assert.equal(sourceHealth.body.item.actor_id, 'team-lead');
+  assert.deepEqual(sourceHealth.body.item.runtime_source_evidence.unmapped_tmux_sessions, [
+    {
+      session_name: 'unmapped-session',
+      observed_count: 1,
+      last_observed_at: '2026-03-09T18:02:00.000Z',
+      pane_refs: ['tmux://unmapped-session/0.0']
+    }
+  ]);
+  assert.deepEqual(sourceHealth.body.item.agent_items.map((item) => item.agent_id), [
+    'app-engineering',
+    'growth-revenue'
+  ]);
+  assert.equal(sourceHealth.body.item.agent_items[0].source_health.workspace_root.status, 'observed');
+  assert.equal(sourceHealth.body.item.agent_items[0].source_health.workspace_files.status, 'degraded');
+  assert.equal(sourceHealth.body.item.agent_items[0].source_health.tmux_session.status, 'observed');
+  assert.equal(sourceHealth.body.item.agent_items[0].evidence_ref_count, 3);
+  assert.equal(sourceHealth.body.item.agent_items[0].latest_evidence_at, '2026-03-09T18:04:30.000Z');
+  assert.equal(Object.hasOwn(sourceHealth.body.item, 'items'), false);
+  assert.equal(collectCount, 1);
+  assert.equal(store.getLatestCollectorReport(), latestBeforeRead);
+
+  const missingTmux = await requestJson(
+    `${baseUrl}/collectors/controller-snapshot/source-health?source_kind=tmux_observation&status=missing`
+  );
+  assert.deepEqual(missingTmux.body.item.agent_items.map((item) => item.agent_id), [
+    'growth-revenue'
+  ]);
+  assert.deepEqual(Object.keys(missingTmux.body.item.agent_items[0].source_health), [
+    'tmux_session'
+  ]);
+  assert.deepEqual(missingTmux.body.item.summary.status_buckets, {
+    observed: 0,
+    degraded: 0,
+    missing: 1,
+    error: 0
+  });
+
+  const aliasAndLimit = await requestJson(
+    `${baseUrl}/collectors/controller-snapshot/source-health?source_kind=workspace_file&limit=1`
+  );
+  assert.deepEqual(aliasAndLimit.body.item.agent_items.map((item) => item.agent_id), [
+    'app-engineering'
+  ]);
+  assert.deepEqual(Object.keys(aliasAndLimit.body.item.agent_items[0].source_health), [
+    'workspace_files'
+  ]);
+
+  const blankFilters = await requestJson(
+    `${baseUrl}/collectors/controller-snapshot/source-health?agent_id=&source_kind=&status=&limit=-1`
+  );
+  assert.deepEqual(blankFilters.body.item.agent_items.map((item) => item.agent_id), [
+    'app-engineering',
+    'growth-revenue'
+  ]);
+
+  const lines = (await readFile(storeFile, 'utf8')).trim().split('\n');
+  assert.equal(lines.length, 5);
+  assert.equal(JSON.parse(lines[4]).kind, 'collector_snapshot');
+});
+
 test('collector snapshot POST exposes shared artifact rollups for refs shared by multiple agents', async (t) => {
   const sharedArtifactRef = '/tmp/shared-controller-snapshot/todo.md';
   const controllerSnapshotCollector = {

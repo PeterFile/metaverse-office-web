@@ -123,6 +123,7 @@ Optional env:
 - `GET /interactions?event_id=&evidence_ref=&interaction_type=&counterparty_agent_id=&severity=&correlation_id=&limit=&window=`
 - `GET /collectors/controller-snapshot`
 - `GET /collectors/controller-snapshot/evidence-coverage?agent_id=&source_kind=&confidence_level=&limit=`
+- `GET /collectors/controller-snapshot/source-health?agent_id=&source_kind=&status=&limit=`
 - `GET /office/overview`
 - `GET /office/operations?limit=&state=&agent_id=&severity=`
 - `GET /timeline?window=&event_id=&agent_id=&event_type=&severity=&source_kind=&evidence_ref=&correlation_id=&limit=`
@@ -250,9 +251,12 @@ This keeps employee writes self-scoped and reserves cross-agent task dispatch pl
 - `POST /collectors/controller-snapshot` is lead-only and requires `x-actor-id: team-lead`
 - `GET /collectors/controller-snapshot` is read-only and returns the latest replayed collector report
 - `GET /collectors/controller-snapshot/evidence-coverage` is read-only and returns `{ "item": null }` until the latest replayed collector report includes `evidence_coverage`
+- `GET /collectors/controller-snapshot/source-health` is read-only and returns `{ "item": null }` until a latest collector report exists
 - `POST /collectors/controller-snapshot` stores a `collector_snapshot` JSONL record after the derived event and heartbeat records; replay uses only the latest snapshot record for the latest collector report and does not count it as an event or heartbeat
 - evidence coverage can be filtered by exact `agent_id`, collector evidence `source_kind`, `confidence_level`, and post-filter `limit`; blank filters are ignored and invalid limits use the existing read-model default
 - evidence coverage responses include only `collected_at`, `actor_id`, aggregate coverage counts, source-kind buckets, low-confidence agent ids, and bounded `agent_items`; the route does not touch tmux, the filesystem, or collector write paths
+- source health can be filtered by exact `agent_id`, `source_kind`, `status`, and post-filter `limit`; accepted `source_kind` values are `workspace_root`, `workspace_file`, `workspace_files`, `tmux_observation`, and `tmux_session`
+- source health responses include `collected_at`, `actor_id`, summary source/status buckets, bounded agent rows with source health and evidence refs, and `runtime_source_evidence.unmapped_tmux_sessions`; the route does not touch tmux, the filesystem, or collector write paths
 - collector heartbeats keep coverage for real `inbox.md`, `outbox.md`, `todo.md` mtimes plus tmux pane metadata, but only agent-output files (`outbox.md`, `todo.md`, and legacy non-inbox workspace files) or tmux runtime evidence advance meaningful-output/file-write state
 - collector items include additive `source_health` for `workspace_root`, workspace files, and the expected `tmux_session`; missing sessions are reported with the expected `session_ref`
 - collector reports include additive `runtime_source_evidence.unmapped_tmux_sessions` for observed tmux sessions outside the seeded roster

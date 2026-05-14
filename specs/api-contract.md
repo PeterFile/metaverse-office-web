@@ -14,6 +14,7 @@ This is the current API/read-model contract for Metaverse Office Web. It grew ou
 - `GET /agents/:id/workflow?limit=&window=`
 - `GET /collectors/controller-snapshot`
 - `GET /collectors/controller-snapshot/evidence-coverage?agent_id=&source_kind=&confidence_level=&limit=`
+- `GET /collectors/controller-snapshot/source-health?agent_id=&source_kind=&status=&limit=`
 - `GET /events?event_id=&agent_id=&event_type=&severity=&source_kind=&evidence_ref=&correlation_id=&limit=`
 - `GET /interactions?event_id=&evidence_ref=&interaction_type=&counterparty_agent_id=&severity=&correlation_id=&limit=&window=`
 - `GET /office/overview`
@@ -58,6 +59,11 @@ This is the current API/read-model contract for Metaverse Office Web. It grew ou
 - `source_kind` selects agent items that mention that source kind; selected multi-source agents keep their full coverage row, so projection aggregates still describe the returned agents' complete evidence mix rather than a per-ref slice
 - `limit` applies after filters; invalid, negative, or missing limits follow the existing read-model limit behavior (`50` default, `200` maximum)
 - evidence-coverage projection aggregates (`evidence_ref_count`, `covered_agent_count`, `source_kind_buckets`, `low_confidence_agent_ids`) are recomputed from the filtered/limited agent item set while preserving stable snapshot order
+- `GET /collectors/controller-snapshot/source-health` is a bounded read-only projection of the latest report's `source_health`; it returns `200` with `{ "item": null }` when no latest collector report exists and never triggers collection, tmux, filesystem access, or append-only writes
+- source-health filters are exact and additive: `agent_id`, `source_kind`, `status`, and post-filter `limit`; blank values are ignored, invalid or negative limits use the existing read-model default, and unknown `source_kind`/`status` values return an empty bounded projection rather than an error
+- source-health `source_kind` accepts `workspace_root`, `workspace_file`, `workspace_files`, `tmux_observation`, and `tmux_session`; `workspace_file`/`workspace_files` project `source_health.workspace_files`, and `tmux_observation`/`tmux_session` project `source_health.tmux_session`
+- source-health `status` matches existing `source_health` statuses (`observed`, `degraded`, `missing`, `error`) only; inbound `inbox.md` and `workspace_root` remain source/presence signals and must not imply output or liveness
+- source-health responses include `collected_at`, `actor_id`, summary `source_kind_buckets` and `status_buckets`, bounded `agent_items`, and `runtime_source_evidence.unmapped_tmux_sessions`; each agent row includes `agent_id`, `workspace_root`, `session_ref`, projected `source_health`, `evidence_ref_count`, `evidence_refs`, and `latest_evidence_at` only when already derivable from the stored report
 - collector-derived activity uses canonical event types only: `agent_state_changed` and `agent_wrote_file`
 - collector-derived supervision uses existing canonical event types only: `peer_watch_alert_raised` and `peer_watch_alert_resolved`
 - collector-derived `agent_state_changed` requires evidence-backed state drift versus the previously known projection and uses `tmux_observation` or `workspace_file` as the source kind
@@ -90,6 +96,65 @@ This is the current API/read-model contract for Metaverse Office Web. It grew ou
         "source_kinds": ["tmux_observation", "workspace_file"],
         "latest_evidence_at": "2026-03-09T18:04:30.000Z",
         "confidence_level": "high"
+      }
+    ]
+  }
+}
+```
+
+## Collector source health response shape
+```json
+{
+  "item": {
+    "collected_at": "2026-03-09T18:05:00.000Z",
+    "actor_id": "team-lead",
+    "summary": {
+      "agent_count": 1,
+      "source_kind_buckets": {
+        "workspace_root": { "observed": 1, "degraded": 0, "missing": 0, "error": 0 },
+        "workspace_files": { "observed": 0, "degraded": 1, "missing": 0, "error": 0 },
+        "tmux_session": { "observed": 1, "degraded": 0, "missing": 0, "error": 0 }
+      },
+      "status_buckets": { "observed": 2, "degraded": 1, "missing": 0, "error": 0 }
+    },
+    "runtime_source_evidence": {
+      "unmapped_tmux_sessions": []
+    },
+    "agent_items": [
+      {
+        "agent_id": "app-engineering",
+        "workspace_root": "/Users/cwp/.hermes/teams/web3-company/agents/app-engineering/workspace",
+        "session_ref": "5-web3-app-engineering",
+        "source_health": {
+          "workspace_root": {
+            "status": "observed",
+            "path": "/Users/cwp/.hermes/teams/web3-company/agents/app-engineering/workspace",
+            "last_observed_at": "2026-03-09T18:00:00.000Z",
+            "degraded_reasons": []
+          },
+          "workspace_files": {
+            "status": "degraded",
+            "expected_files": ["inbox.md", "outbox.md", "todo.md"],
+            "observed_count": 1,
+            "missing_count": 2,
+            "error_count": 0,
+            "last_observed_at": "2026-03-09T18:04:00.000Z",
+            "degraded_reasons": ["missing workspace files: inbox.md, outbox.md"]
+          },
+          "tmux_session": {
+            "status": "observed",
+            "expected_session_ref": "5-web3-app-engineering",
+            "observed_count": 1,
+            "last_observed_at": "2026-03-09T18:04:30.000Z",
+            "degraded_reasons": []
+          }
+        },
+        "evidence_ref_count": 2,
+        "evidence_refs": [
+          "/Users/cwp/.hermes/teams/web3-company/agents/app-engineering/workspace/todo.md",
+          "tmux://5-web3-app-engineering/0.1"
+        ],
+        "latest_evidence_at": "2026-03-09T18:04:30.000Z"
       }
     ]
   }

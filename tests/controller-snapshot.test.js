@@ -1,5 +1,5 @@
 const assert = require('node:assert/strict');
-const { mkdtemp, readFile } = require('node:fs/promises');
+const { mkdtemp, readFile, writeFile } = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
@@ -401,12 +401,49 @@ test('store appends collector heartbeats and exposes the latest collector report
       workspace_observed_count: 1,
       reboot_recommended_count: 0
     },
+    evidence_coverage: {
+      evidence_ref_count: 2,
+      covered_agent_count: 1,
+      low_confidence_agent_ids: [],
+      source_kind_buckets: {
+        workspace_file: 1,
+        workspace_root: 0,
+        tmux_observation: 1
+      },
+      agent_items: [
+        {
+          agent_id: 'app-engineering',
+          evidence_ref_count: 2,
+          source_kinds: ['tmux_observation', 'workspace_file'],
+          latest_evidence_at: '2026-03-09T18:04:30.000Z',
+          confidence_level: 'high'
+        }
+      ]
+    },
+    runtime_source_evidence: {
+      unmapped_tmux_sessions: [
+        {
+          session_name: 'outside-roster',
+          observed_count: 1,
+          last_observed_at: '2026-03-09T18:04:00.000Z',
+          pane_refs: ['tmux://outside-roster/0.0']
+        }
+      ]
+    },
     items: [
       {
         agent_id: 'app-engineering',
         evidence_refs: ['/tmp/app-engineering/todo.md', 'tmux://5-web3-app-engineering/0.1'],
         workspace_observations: [],
         tmux_observations: [],
+        source_health: {
+          workspace_root: {
+            status: 'observed',
+            path: '/tmp/app-engineering',
+            last_observed_at: '2026-03-09T18:04:00.000Z',
+            degraded_reasons: []
+          }
+        },
         supervision: {
           watch_target: 'growth-revenue',
           watched_by: ['protocol-engineering', 'team-lead'],
@@ -430,6 +467,10 @@ test('store appends collector heartbeats and exposes the latest collector report
 
   const storedReport = await store.appendCollectorReport(report);
   assert.equal(storedReport.items.length, 1);
+  assert.deepEqual(storedReport.evidence_coverage, report.evidence_coverage);
+  assert.deepEqual(storedReport.shared_artifacts, []);
+  assert.deepEqual(storedReport.runtime_source_evidence, report.runtime_source_evidence);
+  assert.deepEqual(storedReport.items[0].source_health, report.items[0].source_health);
   assert.equal(store.getLatestCollectorReport().collected_at, '2026-03-09T18:05:00.000Z');
   assert.deepEqual(store.getCounts(), {
     agent_count: 7,
@@ -442,10 +483,183 @@ test('store appends collector heartbeats and exposes the latest collector report
   assert.deepEqual(activityEvents, ['agent_state_changed', 'agent_wrote_file']);
 
   const lines = (await readFile(storeFile, 'utf8')).trim().split('\n');
-  assert.equal(lines.length, 3);
+  assert.equal(lines.length, 4);
   assert.equal(JSON.parse(lines[0]).kind, 'event');
   assert.equal(JSON.parse(lines[1]).kind, 'event');
   assert.equal(JSON.parse(lines[2]).kind, 'heartbeat');
+  const snapshotRecord = JSON.parse(lines[3]);
+  assert.equal(snapshotRecord.kind, 'collector_snapshot');
+  assert.deepEqual(snapshotRecord.payload, storedReport);
+  assert.equal(snapshotRecord.payload.items[0].heartbeat.current_state, 'coding');
+});
+
+test('store replays the latest collector snapshot without duplicating counts', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'metaverse-office-store-'));
+  const storeFile = path.join(root, 'prototype-store.jsonl');
+  const store = await createPrototypeStore({ filePath: storeFile });
+  const firstEvidenceCoverage = {
+    evidence_ref_count: 1,
+    covered_agent_count: 1,
+    low_confidence_agent_ids: [],
+    source_kind_buckets: {
+      workspace_file: 1,
+      workspace_root: 0,
+      tmux_observation: 0
+    },
+    agent_items: [
+      {
+        agent_id: 'app-engineering',
+        evidence_ref_count: 1,
+        source_kinds: ['workspace_file'],
+        latest_evidence_at: '2026-03-09T18:04:00.000Z',
+        confidence_level: 'high'
+      }
+    ]
+  };
+  const secondEvidenceCoverage = {
+    evidence_ref_count: 2,
+    covered_agent_count: 1,
+    low_confidence_agent_ids: ['app-engineering'],
+    source_kind_buckets: {
+      workspace_file: 1,
+      workspace_root: 1,
+      tmux_observation: 0
+    },
+    agent_items: [
+      {
+        agent_id: 'app-engineering',
+        evidence_ref_count: 2,
+        source_kinds: ['workspace_file', 'workspace_root'],
+        latest_evidence_at: '2026-03-09T18:11:00.000Z',
+        confidence_level: 'low'
+      }
+    ]
+  };
+
+  await store.appendCollectorReport(
+    createCollectorReport({
+      collectedAt: '2026-03-09T18:05:00.000Z',
+      evidenceCoverage: firstEvidenceCoverage,
+      items: [
+        {
+          ...createReportItem({
+            collectedAt: '2026-03-09T18:05:00.000Z',
+            agentId: 'app-engineering',
+            evidenceRefs: ['/tmp/app-engineering/outbox.md'],
+            currentState: 'coding',
+            activeTask: 'Implement HTTP handlers',
+            lastMeaningfulOutputAt: '2026-03-09T18:04:30.000Z',
+            lastFileWriteAt: '2026-03-09T18:04:00.000Z'
+          }),
+          source_health: {
+            workspace_root: {
+              status: 'observed',
+              path: '/tmp/app-engineering',
+              last_observed_at: '2026-03-09T18:04:00.000Z',
+              degraded_reasons: []
+            }
+          }
+        }
+      ]
+    })
+  );
+  const latestWrittenReport = await store.appendCollectorReport(
+    createCollectorReport({
+      collectedAt: '2026-03-09T18:12:00.000Z',
+      evidenceCoverage: secondEvidenceCoverage,
+      items: [
+        {
+          ...createReportItem({
+            collectedAt: '2026-03-09T18:12:00.000Z',
+            agentId: 'app-engineering',
+            evidenceRefs: ['/tmp/app-engineering/outbox.md', '/tmp/app-engineering'],
+            currentState: 'coding',
+            activeTask: 'Implement replay restore',
+            lastMeaningfulOutputAt: '2026-03-09T18:11:00.000Z',
+            lastFileWriteAt: '2026-03-09T18:11:00.000Z',
+            confidenceLevel: 'low'
+          }),
+          workspace_observations: [
+            {
+              path: '/tmp/app-engineering/outbox.md',
+              file_name: 'outbox.md',
+              kind: 'workspace_file',
+              last_modified_at: '2026-03-09T18:11:00.000Z'
+            },
+            {
+              path: '/tmp/app-engineering',
+              file_name: 'app-engineering',
+              kind: 'workspace_root',
+              last_modified_at: '2026-03-09T18:11:00.000Z'
+            }
+          ],
+          source_health: {
+            workspace_root: {
+              status: 'observed',
+              path: '/tmp/app-engineering',
+              last_observed_at: '2026-03-09T18:11:00.000Z',
+              degraded_reasons: []
+            }
+          }
+        }
+      ]
+    })
+  );
+
+  const reloadedStore = await createPrototypeStore({ filePath: storeFile });
+  assert.deepEqual(reloadedStore.getLatestCollectorReport(), latestWrittenReport);
+  assert.deepEqual(reloadedStore.getLatestCollectorEvidenceCoverage(), {
+    collected_at: '2026-03-09T18:12:00.000Z',
+    actor_id: 'team-lead',
+    evidence_ref_count: 2,
+    covered_agent_count: 1,
+    low_confidence_agent_ids: ['app-engineering'],
+    source_kind_buckets: {
+      workspace_file: 1,
+      workspace_root: 1,
+      tmux_observation: 0
+    },
+    agent_items: secondEvidenceCoverage.agent_items
+  });
+  assert.deepEqual(reloadedStore.getCounts(), store.getCounts());
+  assert.deepEqual(reloadedStore.getCounts(), {
+    agent_count: 7,
+    event_count: 3,
+    heartbeat_count: 2
+  });
+});
+
+test('store keeps heartbeat-only JSONL replay backward compatible without a latest collector report', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'metaverse-office-store-'));
+  const storeFile = path.join(root, 'prototype-store.jsonl');
+  const heartbeat = createReportItem({
+    collectedAt: '2026-03-09T18:05:00.000Z',
+    agentId: 'app-engineering',
+    evidenceRefs: ['/tmp/app-engineering/outbox.md'],
+    currentState: 'coding',
+    activeTask: 'Implement HTTP handlers',
+    lastMeaningfulOutputAt: '2026-03-09T18:04:30.000Z',
+    lastFileWriteAt: '2026-03-09T18:04:00.000Z'
+  }).heartbeat;
+
+  await writeFile(
+    storeFile,
+    `${JSON.stringify({ kind: 'heartbeat', payload: heartbeat })}\n${JSON.stringify({
+      kind: 'unknown_record',
+      payload: { ignored: true }
+    })}\n`,
+    'utf8'
+  );
+
+  const store = await createPrototypeStore({ filePath: storeFile });
+
+  assert.equal(store.getLatestCollectorReport(), null);
+  assert.equal(store.getLatestCollectorEvidenceCoverage(), null);
+  assert.deepEqual(store.getCounts(), {
+    agent_count: 7,
+    event_count: 0,
+    heartbeat_count: 1
+  });
 });
 
 test('store appends collector report with pane-id-only tmux observation', async () => {

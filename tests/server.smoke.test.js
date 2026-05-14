@@ -4559,10 +4559,14 @@ test('collector snapshot endpoints stay read-only on GET and require team-lead o
   );
 
   const lines = (await readFile(storeFile, 'utf8')).trim().split('\n');
-  assert.equal(lines.length, 3);
+  assert.equal(lines.length, 4);
   assert.equal(JSON.parse(lines[0]).kind, 'event');
   assert.equal(JSON.parse(lines[1]).kind, 'event');
   assert.equal(JSON.parse(lines[2]).kind, 'heartbeat');
+  const snapshotRecord = JSON.parse(lines[3]);
+  assert.equal(snapshotRecord.kind, 'collector_snapshot');
+  assert.equal(snapshotRecord.payload.collected_at, '2026-03-09T18:05:00.000Z');
+  assert.equal(snapshotRecord.payload.items[0].heartbeat.current_state, 'coding');
 });
 
 test('GET /collectors/controller-snapshot/evidence-coverage projects latest coverage read-only with filters', async (t) => {

@@ -43,10 +43,11 @@ This is the current API/read-model contract for Metaverse Office Web. It grew ou
 
 ## Collector snapshot semantics
 - `GET /collectors/controller-snapshot` is read-only and returns `{ "item": null }` until a snapshot has been collected
-- `POST /collectors/controller-snapshot` triggers one controller snapshot, persists collected heartbeats, and may append collector-derived canonical activity and peer-watch events into the existing append-only event store
+- `POST /collectors/controller-snapshot` triggers one controller snapshot, persists collected heartbeats, may append collector-derived canonical activity and peer-watch events, and stores the resulting report as an append-only `collector_snapshot` JSONL record
 - collected heartbeat coverage is derived from real workspace metadata (`inbox.md`, `outbox.md`, `todo.md`) and tmux pane metadata for the canonical seven-actor roster; `inbox.md` and `workspace_root` are inbound/presence evidence and must not advance meaningful-output or file-write freshness
 - the collector must not fabricate random activity, random severity, or random timestamps
-- the latest collector report is an in-memory read model; heartbeat storage stays backward compatible as append-only `heartbeat` records
+- the latest collector report is a replayed read model backed by append-only `collector_snapshot` records; heartbeat storage stays backward compatible as append-only `heartbeat` records
+- replaying `collector_snapshot` records restores the latest report and evidence coverage, with the last append-order snapshot winning; snapshot replay must not duplicate events or heartbeats, and older event/heartbeat-only JSONL files still load with no latest collector report
 - the latest collector report also exposes `shared_artifacts`, a top-level per-snapshot rollup derived only from the current collected items
 - `shared_artifacts` entries appear only when at least two agents in the same snapshot mention the same `artifact_ref` and expose `artifact_ref`, `artifact_kind`, optional `file_name`, `agent_ids`, `agent_count`, `mention_count`, `last_seen_at`, and `source_kinds`
 - each collector item exposes additive `source_health` for `workspace_root`, observed workspace files among `inbox.md`/`outbox.md`/`todo.md`, and the expected `tmux_session`; missing tmux sessions must be explicit with `expected_session_ref`

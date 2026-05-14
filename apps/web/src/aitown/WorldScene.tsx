@@ -14,7 +14,7 @@ import {
 import { Viewport } from 'pixi-viewport';
 
 import { loadAiTownAssets } from './assetLoader';
-import { resolveAgentNavigationRoute, type AgentNavigationRoutePoint } from './navigation';
+import { findTriggeredGateway, resolveAgentNavigationRoute, type AgentNavigationRoutePoint } from './navigation';
 import type { AiTownSceneModel, Facing, SceneAgent, ScenePoint } from './types';
 import {
   DEFAULT_ALLOW_VIEWPORT_DRAG_OUTSIDE,
@@ -92,8 +92,17 @@ type AgentMotionRoutePoint = AgentNavigationRoutePoint & {
 type AgentGatewayTravel = {
   agentId: string;
   gatewayId: string;
+  fromMapId: string;
   toMapId: string;
   arrival: ScenePoint;
+};
+
+type AgentPresenceOverride = {
+  currentMapId: string;
+  position: ScenePoint;
+  sourceMapId: string;
+  sourceX: number;
+  sourceY: number;
 };
 
 type AgentMotionState = {
@@ -115,6 +124,78 @@ type AgentMotionState = {
   animationFacing: Facing;
   homeChangedThisFrame: boolean;
 };
+
+const GENERATED_AGENT_BODY_SCALE = 0.46;
+
+function resolveSceneAgentCurrentMapId(agent: SceneAgent, fallbackMapId: string) {
+  return agent.mapId ?? fallbackMapId;
+}
+
+function agentPresenceOverrideMatchesSource(
+  agent: SceneAgent,
+  fallbackMapId: string,
+  override?: AgentPresenceOverride
+) {
+  if (!override) {
+    return false;
+  }
+
+  return (
+    override.sourceMapId === resolveSceneAgentCurrentMapId(agent, fallbackMapId) &&
+    override.sourceX === agent.position.x &&
+    override.sourceY === agent.position.y
+  );
+}
+
+function resolveSceneAgentPresence(
+  agent: SceneAgent,
+  fallbackMapId: string,
+  override?: AgentPresenceOverride
+) {
+  if (agentPresenceOverrideMatchesSource(agent, fallbackMapId, override) && override) {
+    return {
+      ...agent,
+      mapId: override.currentMapId,
+      position: override.position
+    };
+  }
+
+  return {
+    ...agent,
+    mapId: resolveSceneAgentCurrentMapId(agent, fallbackMapId)
+  };
+}
+
+function buildCurrentMapScene(
+  scene: AiTownSceneModel,
+  activeMap: AiTownSceneModel['map'],
+  fallbackMapId: string,
+  agentPresenceById: Record<string, AgentPresenceOverride>
+): AiTownSceneModel {
+  const activeMapId = activeMap.id ?? fallbackMapId;
+  const agents = scene.agents
+    .map((agent) => resolveSceneAgentPresence(agent, fallbackMapId, agentPresenceById[agent.agentId]))
+    .filter((agent) => agent.mapId === activeMapId);
+  const visibleAgentIds = new Set(agents.map((agent) => agent.agentId));
+
+  return {
+    ...scene,
+    map: activeMap,
+    agents,
+    watchEdges: scene.watchEdges.filter(
+      (edge) => visibleAgentIds.has(edge.fromAgentId) && visibleAgentIds.has(edge.toAgentId)
+    ),
+    correlationParticipantAgentIds: scene.correlationParticipantAgentIds.filter(
+      (agentId, index, list) => visibleAgentIds.has(agentId) && list.indexOf(agentId) === index
+    ),
+    pixelWidth:
+      activeMap.pixelWidth ??
+      (activeMap === scene.map ? scene.pixelWidth : activeMap.width * activeMap.tileDim),
+    pixelHeight:
+      activeMap.pixelHeight ??
+      (activeMap === scene.map ? scene.pixelHeight : activeMap.height * activeMap.tileDim)
+  };
+}
 
 function resolveWatchModeLabel(watchMode: 'lead' | 'peer') {
   return watchMode === 'lead' ? 'Lead watch' : 'Peer watch';
@@ -298,7 +379,7 @@ function resolveAgentMotionRoute(
   scene: AiTownSceneModel,
   currentPosition: ScenePoint = agent.position
 ): AgentMotionRoutePoint[] {
-  const currentMapId = scene.map.id ?? agent.mapId ?? '';
+  const currentMapId = agent.mapId ?? scene.map.id ?? '';
   const navigationAgent = {
     ...agent,
     mapId: currentMapId,
@@ -349,7 +430,7 @@ function createAgentMotionState(
 ): AgentMotionState {
   const profile = resolveAgentMotionProfile(agent);
   const canReusePreviousState = previousState?.agentId === agent.agentId;
-  const currentMapId = scene.map.id ?? agent.mapId ?? '';
+  const currentMapId = agent.mapId ?? scene.map.id ?? '';
   const canReusePreviousPosition = canReusePreviousState && previousState.currentMapId === currentMapId;
   const shouldRouteFromPreviousVisualPosition =
     canReusePreviousPosition &&
@@ -427,6 +508,7 @@ function applyAgentGatewayArrival(
     return false;
   }
 
+  const fromMapId = state.currentMapId;
   state.currentMapId = target.targetMapId;
   state.visualX = target.arrival.x;
   state.visualY = target.arrival.y;
@@ -439,6 +521,7 @@ function applyAgentGatewayArrival(
   onGatewayTravel?.({
     agentId: state.agentId,
     gatewayId: target.gatewayId,
+    fromMapId,
     toMapId: target.targetMapId,
     arrival: target.arrival
   });
@@ -478,10 +561,42 @@ function advanceAgentMotionAfterArrival(
   return advanceAgentMotionWaypoint(state);
 }
 
+function applyTriggeredGatewayTravel(
+  state: AgentMotionState,
+  gateways: AiTownSceneModel['gateways'],
+  onGatewayTravel?: (travel: AgentGatewayTravel) => void
+) {
+  const gateway = findTriggeredGateway(
+    state.currentMapId,
+    { x: state.visualX, y: state.visualY },
+    gateways ?? []
+  );
+
+  if (!gateway || !state.route.some((point) => point.gatewayId === gateway.gatewayId)) {
+    return false;
+  }
+
+  return applyAgentGatewayArrival(
+    state,
+    {
+      ...gateway.entry,
+      kind: 'gateway-entry',
+      mapId: state.currentMapId,
+      gatewayId: gateway.gatewayId,
+      targetMapId: gateway.toMapId,
+      arrival: gateway.arrival
+    },
+    onGatewayTravel
+  );
+}
+
 function applyAgentMotionFrame(
   states: AgentMotionState[],
   deltaSeconds: number,
-  options: { onGatewayTravel?: (travel: AgentGatewayTravel) => void } = {}
+  options: {
+    gateways?: AiTownSceneModel['gateways'];
+    onGatewayTravel?: (travel: AgentGatewayTravel) => void;
+  } = {}
 ) {
   const safeDeltaSeconds = Number.isFinite(deltaSeconds)
     ? Math.min(Math.max(deltaSeconds, 0), AGENT_MOTION_MAX_DELTA_SECONDS)
@@ -514,6 +629,10 @@ function applyAgentMotionFrame(
     const stepDistance = Math.min(travelSpeed * safeDeltaSeconds, distanceToTarget);
     state.visualX += (deltaX / distanceToTarget) * stepDistance;
     state.visualY += (deltaY / distanceToTarget) * stepDistance;
+
+    if (applyTriggeredGatewayTravel(state, options.gateways, options.onGatewayTravel)) {
+      continue;
+    }
 
     const remainingDistance = Math.hypot(state.targetX - state.visualX, state.targetY - state.visualY);
     if (remainingDistance <= state.profile.arrivalDistance) {
@@ -915,7 +1034,7 @@ function createAgentSprite(
   const character = new AnimatedSprite(characterTextures[agent.facing] ?? characterTextures.down);
   character.anchor.set(0.5, 1);
   character.y = 10;
-  character.scale.set(1.1);
+  character.scale.set(GENERATED_AGENT_BODY_SCALE);
   character.animationSpeed = 0;
   if ('gotoAndStop' in character && typeof character.gotoAndStop === 'function') {
     character.gotoAndStop(1);
@@ -991,20 +1110,13 @@ export default function WorldScene({
   const sceneMaps = useMemo(() => (scene.maps?.length ? scene.maps : [scene.map]), [scene.map, scene.maps]);
   const initialMapId = scene.map.id ?? sceneMaps[0]?.id ?? 'legacy-map';
   const [activeMapId, setActiveMapId] = useState(initialMapId);
+  const [agentPresenceById, setAgentPresenceById] = useState<Record<string, AgentPresenceOverride>>({});
   const activeMap = sceneMaps.find((map) => map.id === activeMapId) ?? sceneMaps[0] ?? scene.map;
   const activeGateways = (scene.gateways ?? []).filter((gateway) => gateway.fromMapId === activeMap.id);
+  const fallbackMapId = scene.map.id ?? sceneMaps[0]?.id ?? 'legacy-map';
   const renderScene = useMemo(
-    () => ({
-      ...scene,
-      map: activeMap,
-      pixelWidth:
-        activeMap.pixelWidth ??
-        (activeMap === scene.map ? scene.pixelWidth : activeMap.width * activeMap.tileDim),
-      pixelHeight:
-        activeMap.pixelHeight ??
-        (activeMap === scene.map ? scene.pixelHeight : activeMap.height * activeMap.tileDim)
-    }),
-    [activeMap, scene]
+    () => buildCurrentMapScene(scene, activeMap, fallbackMapId, agentPresenceById),
+    [activeMap, agentPresenceById, fallbackMapId, scene]
   );
   const hostRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<Application | null>(null);
@@ -1018,6 +1130,8 @@ export default function WorldScene({
   const selectedAgentRef = useRef<CenteredAgentState | null>(null);
   const selectedAgentIdRef = useRef(scene.selectedAgentId);
   const activeMapIdRef = useRef(activeMapId);
+  const sceneAgentsRef = useRef(scene.agents);
+  const fallbackMapIdRef = useRef(fallbackMapId);
   const sceneMapIdsRef = useRef(new Set(sceneMaps.map((map) => map.id).filter(Boolean)));
   const selectedAgentFollowRef = useRef(false);
   const selectedAgentDirectFocusRef = useRef<DirectFocusedAgentState | null>(null);
@@ -1043,17 +1157,19 @@ export default function WorldScene({
   const [ready, setReady] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loadAttempt, setLoadAttempt] = useState(0);
-  const watchOverlayCaptionItems = resolveWatchOverlayCaptionItems(scene);
+  const watchOverlayCaptionItems = resolveWatchOverlayCaptionItems(renderScene);
   const currentSelectedHasWatchOverlay = watchOverlayCaptionItems.length > 0;
   currentSelectedHasWatchOverlayRef.current = currentSelectedHasWatchOverlay;
   selectedAgentIdRef.current = scene.selectedAgentId;
   activeMapIdRef.current = activeMapId;
+  sceneAgentsRef.current = scene.agents;
+  fallbackMapIdRef.current = fallbackMapId;
   sceneMapIdsRef.current = new Set(sceneMaps.map((map) => map.id).filter(Boolean));
   const showWatchOverlayCaption = ready && !loadError && watchOverlayCaptionItems.length > 0;
-  const selectedSceneAgent = scene.agents.find((agent) => agent.agentId === scene.selectedAgentId);
-  const activeCorrelationOverlayParticipants = resolveActiveCorrelationOverlayParticipants(scene);
+  const selectedSceneAgent = renderScene.agents.find((agent) => agent.agentId === renderScene.selectedAgentId);
+  const activeCorrelationOverlayParticipants = resolveActiveCorrelationOverlayParticipants(renderScene);
   const showSceneCorrelationOverlay =
-    showActiveCorrelationOverlay && ready && !loadError && scene.activeCorrelationId !== null;
+    showActiveCorrelationOverlay && ready && !loadError && renderScene.activeCorrelationId !== null;
   const mapLabelById = new Map(sceneMaps.map((map) => [map.id, map.label ?? map.id ?? 'Map']));
   const showMapGatewayControls = ready && !loadError && sceneMaps.length > 1 && !!activeMap.id;
   selectedAgentRef.current = selectedSceneAgent
@@ -1742,6 +1858,7 @@ export default function WorldScene({
         }
 
         applyAgentMotionFrame(agentMotionStatesRef.current, agentMotionAccumulatorSeconds, {
+          gateways: renderScene.gateways,
           onGatewayTravel: (travel) => {
             const selectedAgentId = selectedAgentIdRef.current;
 
@@ -1749,7 +1866,25 @@ export default function WorldScene({
               return;
             }
 
-            if (!sceneMapIdsRef.current.has(travel.toMapId) || activeMapIdRef.current === travel.toMapId) {
+            if (!sceneMapIdsRef.current.has(travel.toMapId)) {
+              return;
+            }
+
+            const sourceAgent = sceneAgentsRef.current.find((agent) => agent.agentId === travel.agentId);
+            if (sourceAgent) {
+              setAgentPresenceById((previousPresence) => ({
+                ...previousPresence,
+                [travel.agentId]: {
+                  currentMapId: travel.toMapId,
+                  position: travel.arrival,
+                  sourceMapId: resolveSceneAgentCurrentMapId(sourceAgent, fallbackMapIdRef.current),
+                  sourceX: sourceAgent.position.x,
+                  sourceY: sourceAgent.position.y
+                }
+              }));
+            }
+
+            if (activeMapIdRef.current === travel.toMapId) {
               return;
             }
 
@@ -1899,7 +2034,7 @@ export default function WorldScene({
     }
 
     const viewport = viewportRef.current;
-    const targetAgent = scene.agents.find((candidate) => candidate.agentId === agentFocusRequest.agentId);
+    const targetAgent = renderScene.agents.find((candidate) => candidate.agentId === agentFocusRequest.agentId);
 
     if (!viewport || !targetAgent) {
       return;
@@ -1909,7 +2044,7 @@ export default function WorldScene({
     const focusTarget = resolveCurrentAgentFocusTarget(targetAgent);
     moveViewportCenterDirectly(viewport, focusTarget.x, focusTarget.y);
     markAgentDirectFocusState(focusTarget);
-  }, [agentFocusRequest, ready, scene.agents]);
+  }, [agentFocusRequest, ready, renderScene.agents]);
 
   useEffect(() => {
     if (!ready || !zoneFocusRequest || appliedZoneFocusRequestIdRef.current === zoneFocusRequest.requestId) {
@@ -1917,7 +2052,7 @@ export default function WorldScene({
     }
 
     const viewport = viewportRef.current;
-    const zone = scene.zones.find((candidate) => candidate.zoneId === zoneFocusRequest.zoneId);
+    const zone = renderScene.zones.find((candidate) => candidate.zoneId === zoneFocusRequest.zoneId);
 
     if (!viewport || !zone) {
       return;
@@ -1930,7 +2065,7 @@ export default function WorldScene({
       zone.anchor.y * renderScene.map.tileDim
     );
     stopSelectedAgentFollowState();
-  }, [ready, renderScene.map.tileDim, scene.zones, zoneFocusRequest]);
+  }, [ready, renderScene.map.tileDim, renderScene.zones, zoneFocusRequest]);
 
   useEffect(() => {
     if (!ready) {
@@ -1955,18 +2090,18 @@ export default function WorldScene({
       agentMotionStatesRef.current = [];
 
       const emphasisByAgentId = resolveWatchOverlayAgentEmphasisById(
-        scene.selectedAgentId,
-        scene.watchEdges
+        renderScene.selectedAgentId,
+        renderScene.watchEdges
       );
-      const correlationParticipantIds = new Set(scene.correlationParticipantAgentIds);
+      const correlationParticipantIds = new Set(renderScene.correlationParticipantAgentIds);
 
-      watchLayer.addChild(createWatchOverlay(scene));
+      watchLayer.addChild(createWatchOverlay(renderScene));
       for (const propSprite of createMapDepthSprites(renderScene, assets.generatedMapTextures)) {
         agentLayer.addChild(propSprite);
       }
 
       const nextAgentMotionStates: AgentMotionState[] = [];
-      for (const agent of scene.agents) {
+      for (const agent of renderScene.agents) {
         const agentSprite = createAgentSprite(
           agent,
           emphasisByAgentId.get(agent.agentId) ?? 'none',
@@ -2052,7 +2187,7 @@ export default function WorldScene({
         clearSelectedAgentFollowState();
       }
     })();
-  }, [ready, renderScene, scene]);
+  }, [ready, renderScene]);
 
   return (
     <div className="aitown-world__canvas">

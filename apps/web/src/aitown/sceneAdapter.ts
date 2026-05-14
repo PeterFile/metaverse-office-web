@@ -127,8 +127,8 @@ function agentRolePawn(agent: WorldAgent): RolePawnKey | undefined {
   return undefined;
 }
 
-function agentMapId(_agent: WorldAgent) {
-  return DEFAULT_AI_TOWN_MAP_ID;
+function agentMapId(agent: WorldAgent) {
+  return agent.current_map_id || DEFAULT_AI_TOWN_MAP_ID;
 }
 
 function findFallbackZone(agent: WorldAgent, zones: SceneZone[]) {

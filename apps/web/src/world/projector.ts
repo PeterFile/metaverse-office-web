@@ -219,6 +219,7 @@ function projectAgent(
     kind: oa.kind,
     raw_state: oa.current_state,
     raw_location: oa.current_location,
+    current_map_id: oa.current_map_id,
     active_task: oa.active_task,
     reboot_recommended: oa.reboot_recommended,
     phase,

@@ -1,0 +1,59 @@
+{
+  "map": "neon-commercial-district",
+  "coordinate_space": "pixels",
+  "render_order": "ascending_sortY",
+  "props": [
+    {
+      "id": "neon-commercial-district_prop_2",
+      "source_cell": 2,
+      "x": 1043,
+      "y": 358,
+      "left": 970,
+      "top": 160,
+      "w": 147,
+      "h": 198,
+      "anchor": "center-bottom",
+      "sortY": 358,
+      "collision": "blocker"
+    },
+    {
+      "id": "neon-commercial-district_prop_1",
+      "source_cell": 1,
+      "x": 319,
+      "y": 369,
+      "left": 220,
+      "top": 235,
+      "w": 198,
+      "h": 134,
+      "anchor": "center-bottom",
+      "sortY": 369,
+      "collision": "blocker"
+    },
+    {
+      "id": "neon-commercial-district_prop_3",
+      "source_cell": 3,
+      "x": 492,
+      "y": 749,
+      "left": 395,
+      "top": 551,
+      "w": 194,
+      "h": 198,
+      "anchor": "center-bottom",
+      "sortY": 749,
+      "collision": "blocker"
+    },
+    {
+      "id": "neon-commercial-district_prop_4",
+      "source_cell": 4,
+      "x": 956,
+      "y": 782,
+      "left": 850,
+      "top": 570,
+      "w": 212,
+      "h": 212,
+      "anchor": "center-bottom",
+      "sortY": 782,
+      "collision": "blocker"
+    }
+  ]
+}

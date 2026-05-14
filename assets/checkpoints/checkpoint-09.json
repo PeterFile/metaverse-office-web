@@ -1,0 +1,17 @@
+{
+  "checkpoint": "checkpoint-09",
+  "assets": [
+    {
+      "id": "environment-motif-prop-fx-pack",
+      "path": "assets/sprites/environment-motif-prop-fx-pack/sheet-transparent.png",
+      "exists": true,
+      "prompt_exists": true,
+      "metadata_exists": true,
+      "size": [
+        512,
+        512
+      ],
+      "style_check": "manual check: rain/cables/screens/old-tech motif coverage"
+    }
+  ]
+}

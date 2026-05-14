@@ -1,0 +1,29 @@
+{
+  "id": "data-altar-chamber",
+  "title": "数据祭坛",
+  "source": "GameAssetDesign.md",
+  "source_lines": "557-572",
+  "skill": "generate2dmap",
+  "pipeline": {
+    "map_mode": "scene_mode",
+    "visual_model": "layered_raster",
+    "runtime_object_model": "y_sorted_props + interactive_scene_objects + scene_hooks",
+    "collision_model": "precise_shapes + trigger_zones",
+    "engine_target": "project-native"
+  },
+  "layers": {
+    "ground_base": "data-altar-chamber_ground_base.png",
+    "dressed_ref": "data-altar-chamber_dressed_ref.png",
+    "prop_pack": "data-altar-chamber_prop_pack.png",
+    "props_transparent": "data-altar-chamber_props_transparent.png",
+    "ysort_data": "data-altar-chamber_ysort_data.json",
+    "collision": "data-altar-chamber_collision.png",
+    "regions": "data-altar-chamber_regions.png",
+    "preview": "data-altar-chamber_preview.png"
+  },
+  "image_info": {
+    "width": 1536,
+    "height": 1024,
+    "mode": "RGB"
+  }
+}

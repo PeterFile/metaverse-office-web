@@ -1,0 +1,5 @@
+Generate a 2x2 compact prop sprite pack for `surveillance-drone-security-pack` from GameAssetDesign.md.
+
+Subject: four separate surveillance/security props, one per cell. Cell 1: small patrol drone with red scanner eye and corporate angular shell. Cell 2: wall-corner camera turret with cable mount. Cell 3: laser scan emitter projecting a compact red scanning aperture object, not a long beam. Cell 4: corporate alarm light / identity scanner box with red warning lens and dark metal housing. These props should communicate the city is constantly monitored.
+
+Sheet rules: EXACTLY 4 equal cells arranged 2x2. One compact prop centered per cell, same approximate scale, safe padding on all sides. Solid flat #FF00FF magenta background only. No scene background, no shadows, no labels, no readable words, no UI, no cell borders, no arrows, no frame numbers. Crisp 16-bit cyberpunk pixel art, strong dark outlines, black/white/cold metal, red scan lights, small cyan electronics, not cute, not realistic painting.

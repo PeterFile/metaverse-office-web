@@ -1,0 +1,7 @@
+Use the visible pixel-cyberpunk interior reference above as style reference: crisp 16-bit pixel art, isometric/top-down room composition, dark outlines, neon hardware panels, readable game shapes.
+
+Generate one production-ready 2D pixel game interior map/background asset for `data-bar-safehouse` from GameAssetDesign.md.
+
+Subject: a data bar safehouse for socializing, trading and intelligence exchange. Behind the bar are data canisters, memory chips, neural interface jacks, glowing server bottles, black-market task screens rendered as abstract UI blocks with no readable text, wanted-board silhouettes, cyberpunk stools, patrons plugged into virtual hallucinations, a bartender who could be a cyborg or old AI terminal, steam, cables and wet neon reflections near the entrance.
+
+Style constraints: 16-bit detailed pixel art, top-down/3-4 game-readable room, not cute, no readable words, no labels, no UI callouts, no arrows, no decorative border. Palette: purple black, deep blue, cyan screens, neon pink, orange data glow, green terminal accents. Mood: safe but suspicious, dense, wet, low-life high-tech. Leave clear walkable space and interaction points.

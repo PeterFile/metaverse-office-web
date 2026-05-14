@@ -1,0 +1,7 @@
+Use the visible pixel-cyberpunk interior reference above as a strong style reference: crisp 16-bit pixel art, isometric/top-down room composition, dark outlines, neon hardware panels, readable game shapes.
+
+Generate one production-ready 2D pixel game interior map/background asset for `cybernetic-repair-clinic` from GameAssetDesign.md.
+
+Subject: a cybernetic repair shop that feels like an underground clinic mixed with a vehicle repair garage. Include mechanical arms hanging on the wall, electronic eyes in display cabinets, repair bed, glowing surgical lamp, grimy workbenches, old chips and prosthetic limbs, cash/token/data payment signage shown only as abstract light blocks with no readable text, cables, steam, cracked tile, puddles and neon diagnostics.
+
+Style constraints: 16-bit detailed pixel art, top-down/3-4 game-readable room, not cute, no readable words, no labels, no UI, no arrows, no callouts, no decorative border. Palette: black-blue, dark gray metal, cyan screens, neon pink accents, orange warning lights, small red alerts. Mood: practical, dirty, tense, lived-in. Leave walkable floor and interaction points clear.

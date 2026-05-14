@@ -1,0 +1,29 @@
+{
+  "id": "vertical-city-overview",
+  "title": "垂直城市结构",
+  "source": "GameAssetDesign.md",
+  "source_lines": "24-28",
+  "skill": "generate2dmap",
+  "pipeline": {
+    "map_mode": "scene_mode",
+    "visual_model": "layered_raster",
+    "runtime_object_model": "y_sorted_props + interactive_scene_objects + scene_hooks",
+    "collision_model": "precise_shapes + trigger_zones",
+    "engine_target": "project-native"
+  },
+  "layers": {
+    "ground_base": "vertical-city-overview_ground_base.png",
+    "dressed_ref": "vertical-city-overview_dressed_ref.png",
+    "prop_pack": "vertical-city-overview_prop_pack.png",
+    "props_transparent": "vertical-city-overview_props_transparent.png",
+    "ysort_data": "vertical-city-overview_ysort_data.json",
+    "collision": "vertical-city-overview_collision.png",
+    "regions": "vertical-city-overview_regions.png",
+    "preview": "vertical-city-overview_preview.png"
+  },
+  "image_info": {
+    "width": 1024,
+    "height": 1535,
+    "mode": "RGB"
+  }
+}

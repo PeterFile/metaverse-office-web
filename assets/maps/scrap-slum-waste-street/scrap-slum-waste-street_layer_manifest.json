@@ -1,0 +1,29 @@
+{
+  "id": "scrap-slum-waste-street",
+  "title": "下层：贫民区与废料街",
+  "source": "GameAssetDesign.md",
+  "source_lines": "92-119",
+  "skill": "generate2dmap",
+  "pipeline": {
+    "map_mode": "scene_mode",
+    "visual_model": "layered_raster",
+    "runtime_object_model": "y_sorted_props + interactive_scene_objects + scene_hooks",
+    "collision_model": "precise_shapes + trigger_zones",
+    "engine_target": "project-native"
+  },
+  "layers": {
+    "ground_base": "scrap-slum-waste-street_ground_base.png",
+    "dressed_ref": "scrap-slum-waste-street_dressed_ref.png",
+    "prop_pack": "scrap-slum-waste-street_prop_pack.png",
+    "props_transparent": "scrap-slum-waste-street_props_transparent.png",
+    "ysort_data": "scrap-slum-waste-street_ysort_data.json",
+    "collision": "scrap-slum-waste-street_collision.png",
+    "regions": "scrap-slum-waste-street_regions.png",
+    "preview": "scrap-slum-waste-street_preview.png"
+  },
+  "image_info": {
+    "width": 1448,
+    "height": 1086,
+    "mode": "RGB"
+  }
+}

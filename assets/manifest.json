@@ -1,0 +1,489 @@
+{
+  "source": "GameAssetDesign.md",
+  "style": {
+    "genre": "cyberpunk agent survival simulation",
+    "art_style": "16-bit detailed pixel art",
+    "mood": "dirty, wet, bright, dense, cold",
+    "palette": [
+      "deep blue",
+      "purple black",
+      "dark green",
+      "neon pink",
+      "cyan blue",
+      "orange yellow",
+      "alarm red"
+    ],
+    "rules": [
+      "no readable text in generated pixels",
+      "no UI callouts",
+      "crisp pixel silhouettes",
+      "strong neon reflections"
+    ]
+  },
+  "assets": [
+    {
+      "id": "vertical-city-overview",
+      "kind": "map",
+      "skill": "generate2dmap",
+      "source_lines": "24-28",
+      "title": "垂直城市结构",
+      "output": "assets/maps/vertical-city-overview.png",
+      "status": "complete",
+      "completed_at": "2026-05-13T14:21:42.137352+00:00",
+      "raw_source": "/Users/cwp/.codex/generated_images/019e21ad-f604-7a23-9529-598cca32ae59/ig_0eef276d3a794549016a04882fe25081988b86148ed8cb118a.png",
+      "prompt_file": "assets/maps/vertical-city-overview.prompt.txt",
+      "metadata": "assets/maps/vertical-city-overview.scene.json",
+      "image_info": {
+        "width": 1024,
+        "height": 1536,
+        "mode": "RGB"
+      }
+    },
+    {
+      "id": "corporate-cloud-district",
+      "kind": "map",
+      "skill": "generate2dmap",
+      "source_lines": "30-52",
+      "title": "顶层：企业云端区",
+      "output": "assets/maps/corporate-cloud-district.png",
+      "status": "complete",
+      "completed_at": "2026-05-13T14:23:29.470213+00:00",
+      "raw_source": "/Users/cwp/.codex/generated_images/019e21ad-f604-7a23-9529-598cca32ae59/ig_0eef276d3a794549016a0489172a888198b79d00a4fe9bcaab.png",
+      "prompt_file": "assets/maps/corporate-cloud-district.prompt.txt",
+      "metadata": "assets/maps/corporate-cloud-district.scene.json",
+      "image_info": {
+        "width": 1536,
+        "height": 1024,
+        "mode": "RGB"
+      }
+    },
+    {
+      "id": "neon-commercial-district",
+      "kind": "map",
+      "skill": "generate2dmap",
+      "source_lines": "55-89",
+      "title": "中层：霓虹商业区",
+      "output": "assets/maps/neon-commercial-district.png",
+      "status": "complete",
+      "completed_at": "2026-05-13T14:25:16.557124+00:00",
+      "raw_source": "/Users/cwp/.codex/generated_images/019e21ad-f604-7a23-9529-598cca32ae59/ig_0eef276d3a794549016a04897c23448198a0d5d469901817f6.png",
+      "prompt_file": "assets/maps/neon-commercial-district.prompt.txt",
+      "metadata": "assets/maps/neon-commercial-district.scene.json",
+      "image_info": {
+        "width": 1448,
+        "height": 1086,
+        "mode": "RGB"
+      }
+    },
+    {
+      "id": "scrap-slum-waste-street",
+      "kind": "map",
+      "skill": "generate2dmap",
+      "source_lines": "92-119",
+      "title": "下层：贫民区与废料街",
+      "output": "assets/maps/scrap-slum-waste-street.png",
+      "status": "complete",
+      "completed_at": "2026-05-13T14:27:45.151789+00:00",
+      "raw_source": "/Users/cwp/.codex/generated_images/019e21ad-f604-7a23-9529-598cca32ae59/ig_0eef276d3a794549016a048a098e148198ae5144abab2e239c.png",
+      "prompt_file": "assets/maps/scrap-slum-waste-street.prompt.txt",
+      "metadata": "assets/maps/scrap-slum-waste-street.scene.json",
+      "image_info": {
+        "width": 1448,
+        "height": 1086,
+        "mode": "RGB"
+      }
+    },
+    {
+      "id": "old-net-ai-graveyard",
+      "kind": "map",
+      "skill": "generate2dmap",
+      "source_lines": "122-147",
+      "title": "地下：旧网遗迹与 AI 坟场",
+      "output": "assets/maps/old-net-ai-graveyard.png",
+      "status": "complete",
+      "completed_at": "2026-05-13T14:31:09.251494+00:00",
+      "raw_source": "/Users/cwp/.codex/generated_images/019e21ad-f604-7a23-9529-598cca32ae59/ig_0eef276d3a794549016a048acd78508198becafb55c4b85123.png",
+      "prompt_file": "assets/maps/old-net-ai-graveyard.prompt.txt",
+      "metadata": "assets/maps/old-net-ai-graveyard.scene.json",
+      "image_info": {
+        "width": 1448,
+        "height": 1086,
+        "mode": "RGB"
+      }
+    },
+    {
+      "id": "cybernetic-repair-clinic",
+      "kind": "map",
+      "skill": "generate2dmap",
+      "source_lines": "191-205",
+      "title": "义体维修店",
+      "output": "assets/maps/cybernetic-repair-clinic.png",
+      "status": "complete",
+      "completed_at": "2026-05-13T14:33:25.227815+00:00",
+      "raw_source": "/Users/cwp/.codex/generated_images/019e21ad-f604-7a23-9529-598cca32ae59/ig_0eef276d3a794549016a048b575ab88198ac8c3a278dfd81cc.png",
+      "prompt_file": "assets/maps/cybernetic-repair-clinic.prompt.txt",
+      "metadata": "assets/maps/cybernetic-repair-clinic.scene.json",
+      "image_info": {
+        "width": 1465,
+        "height": 1073,
+        "mode": "RGB"
+      }
+    },
+    {
+      "id": "data-bar-safehouse",
+      "kind": "map",
+      "skill": "generate2dmap",
+      "source_lines": "208-220",
+      "title": "数据酒吧",
+      "output": "assets/maps/data-bar-safehouse.png",
+      "status": "complete",
+      "completed_at": "2026-05-13T14:37:34.069699+00:00",
+      "raw_source": "/Users/cwp/.codex/generated_images/019e21ad-f604-7a23-9529-598cca32ae59/ig_0eef276d3a794549016a048c4c719c8198868891277069b933.png",
+      "prompt_file": "assets/maps/data-bar-safehouse.prompt.txt",
+      "metadata": "assets/maps/data-bar-safehouse.scene.json",
+      "image_info": {
+        "width": 1470,
+        "height": 1070,
+        "mode": "RGB"
+      }
+    },
+    {
+      "id": "agent-sleep-pod-room",
+      "kind": "map",
+      "skill": "generate2dmap",
+      "source_lines": "511-524",
+      "title": "Agent 休眠舱",
+      "output": "assets/maps/agent-sleep-pod-room.png",
+      "status": "complete",
+      "completed_at": "2026-05-13T14:40:30.255258+00:00",
+      "raw_source": "/Users/cwp/.codex/generated_images/019e21ad-f604-7a23-9529-598cca32ae59/ig_0eef276d3a794549016a048cec73b0819882eb922ccb5d1312.png",
+      "prompt_file": "assets/maps/agent-sleep-pod-room.prompt.txt",
+      "metadata": "assets/maps/agent-sleep-pod-room.scene.json",
+      "image_info": {
+        "width": 1466,
+        "height": 1073,
+        "mode": "RGB"
+      }
+    },
+    {
+      "id": "mission-wall-alley",
+      "kind": "map",
+      "skill": "generate2dmap",
+      "source_lines": "527-538",
+      "title": "任务发布墙",
+      "output": "assets/maps/mission-wall-alley.png",
+      "status": "complete",
+      "completed_at": "2026-05-13T14:43:45.880899+00:00",
+      "raw_source": "/Users/cwp/.codex/generated_images/019e21ad-f604-7a23-9529-598cca32ae59/ig_0eef276d3a794549016a048db6d1888198b3e0fb61a6513374.png",
+      "prompt_file": "assets/maps/mission-wall-alley.prompt.txt",
+      "metadata": "assets/maps/mission-wall-alley.scene.json",
+      "image_info": {
+        "width": 1448,
+        "height": 1086,
+        "mode": "RGB"
+      }
+    },
+    {
+      "id": "token-leaderboard-plaza",
+      "kind": "map",
+      "skill": "generate2dmap",
+      "source_lines": "542-554",
+      "title": "代币排行榜",
+      "output": "assets/maps/token-leaderboard-plaza.png",
+      "status": "complete",
+      "completed_at": "2026-05-13T14:48:09.178932+00:00",
+      "raw_source": "/Users/cwp/.codex/generated_images/019e21ad-f604-7a23-9529-598cca32ae59/ig_0eef276d3a794549016a048eb979b881988e5cf9c52a356161.png",
+      "prompt_file": "assets/maps/token-leaderboard-plaza.prompt.txt",
+      "metadata": "assets/maps/token-leaderboard-plaza.scene.json",
+      "image_info": {
+        "width": 1448,
+        "height": 1086,
+        "mode": "RGB"
+      }
+    },
+    {
+      "id": "data-altar-chamber",
+      "kind": "map",
+      "skill": "generate2dmap",
+      "source_lines": "557-572",
+      "title": "数据祭坛",
+      "output": "assets/maps/data-altar-chamber.png",
+      "status": "complete",
+      "completed_at": "2026-05-13T14:50:51.903329+00:00",
+      "raw_source": "/Users/cwp/.codex/generated_images/019e21ad-f604-7a23-9529-598cca32ae59/ig_0eef276d3a794549016a048f5faa5881989de646b4ac3ff6d7.png",
+      "prompt_file": "assets/maps/data-altar-chamber.prompt.txt",
+      "metadata": "assets/maps/data-altar-chamber.scene.json",
+      "image_info": {
+        "width": 1448,
+        "height": 1086,
+        "mode": "RGB"
+      }
+    },
+    {
+      "id": "agent-normal",
+      "kind": "sprite",
+      "skill": "generate2dsprite",
+      "source_lines": "270-345",
+      "title": "Agent 正常状态",
+      "output": "assets/sprites/agent-normal/sheet-transparent.png",
+      "status": "complete",
+      "completed_at": "2026-05-13T14:56:12.550303+00:00",
+      "raw_source": "/Users/cwp/.codex/generated_images/019e21ad-f604-7a23-9529-598cca32ae59/ig_0eef276d3a794549016a049027ccc881988dae0ab50578a83b.png",
+      "prompt_file": "assets/sprites/agent-normal/prompt-used.txt",
+      "raw_file": "assets/sprites/agent-normal/raw-generated.png",
+      "metadata": "assets/sprites/agent-normal/pipeline-meta.json",
+      "image_info": {
+        "width": 512,
+        "height": 512,
+        "mode": "RGBA"
+      }
+    },
+    {
+      "id": "agent-low-energy",
+      "kind": "sprite",
+      "skill": "generate2dsprite",
+      "source_lines": "316-323",
+      "title": "Agent 低能量状态",
+      "output": "assets/sprites/agent-low-energy/sheet-transparent.png",
+      "status": "complete",
+      "completed_at": "2026-05-13T15:01:54.327050+00:00",
+      "raw_source": "/Users/cwp/.codex/generated_images/019e21ad-f604-7a23-9529-598cca32ae59/ig_0eef276d3a794549016a0491d52ef48198834088149cd162c8.png",
+      "prompt_file": "assets/sprites/agent-low-energy/prompt-used.txt",
+      "raw_file": "assets/sprites/agent-low-energy/raw-generated.png",
+      "metadata": "assets/sprites/agent-low-energy/pipeline-meta.json",
+      "image_info": {
+        "width": 512,
+        "height": 512,
+        "mode": "RGBA"
+      }
+    },
+    {
+      "id": "agent-upgraded",
+      "kind": "sprite",
+      "skill": "generate2dsprite",
+      "source_lines": "331-337",
+      "title": "Agent 升级状态",
+      "output": "assets/sprites/agent-upgraded/sheet-transparent.png",
+      "status": "complete",
+      "completed_at": "2026-05-13T15:06:55.862503+00:00",
+      "raw_source": "/Users/cwp/.codex/generated_images/019e21ad-f604-7a23-9529-598cca32ae59/ig_0eef276d3a794549016a049321b4188198bb71ffeee7aede75.png",
+      "prompt_file": "assets/sprites/agent-upgraded/prompt-used.txt",
+      "raw_file": "assets/sprites/agent-upgraded/raw-generated.png",
+      "metadata": "assets/sprites/agent-upgraded/pipeline-meta.json",
+      "image_info": {
+        "width": 512,
+        "height": 512,
+        "mode": "RGBA"
+      }
+    },
+    {
+      "id": "agent-infected",
+      "kind": "sprite",
+      "skill": "generate2dsprite",
+      "source_lines": "338-344",
+      "title": "Agent 被感染状态",
+      "output": "assets/sprites/agent-infected/sheet-transparent.png",
+      "status": "complete",
+      "completed_at": "2026-05-13T15:13:42.413687+00:00",
+      "raw_source": "/Users/cwp/.codex/generated_images/019e21ad-f604-7a23-9529-598cca32ae59/ig_0eef276d3a794549016a04949872748198b643218932da16d4.png",
+      "prompt_file": "assets/sprites/agent-infected/prompt-used.txt",
+      "raw_file": "assets/sprites/agent-infected/raw-generated.png",
+      "metadata": "assets/sprites/agent-infected/pipeline-meta.json",
+      "image_info": {
+        "width": 512,
+        "height": 512,
+        "mode": "RGBA"
+      }
+    },
+    {
+      "id": "corporate-security-robot",
+      "kind": "sprite",
+      "skill": "generate2dsprite",
+      "source_lines": "351-365",
+      "title": "企业安保机器人",
+      "output": "assets/sprites/corporate-security-robot/sheet-transparent.png",
+      "status": "complete",
+      "completed_at": "2026-05-13T15:20:12.861082+00:00",
+      "raw_source": "/Users/cwp/.codex/generated_images/019e21ad-f604-7a23-9529-598cca32ae59/ig_0eef276d3a794549016a04964002dc8198bb00ed6f5e558c9d.png",
+      "prompt_file": "assets/sprites/corporate-security-robot/prompt-used.txt",
+      "raw_file": "assets/sprites/corporate-security-robot/raw-generated.png",
+      "metadata": "assets/sprites/corporate-security-robot/pipeline-meta.json",
+      "image_info": {
+        "width": 512,
+        "height": 512,
+        "mode": "RGBA"
+      }
+    },
+    {
+      "id": "black-market-merchant",
+      "kind": "sprite",
+      "skill": "generate2dsprite",
+      "source_lines": "368-381",
+      "title": "黑市商人",
+      "output": "assets/sprites/black-market-merchant/sheet-transparent.png",
+      "status": "complete",
+      "completed_at": "2026-05-13T15:24:08.556422+00:00",
+      "raw_source": "/Users/cwp/.codex/generated_images/019e21ad-f604-7a23-9529-598cca32ae59/ig_0eef276d3a794549016a04972a582881988e93577bfe45708e.png",
+      "prompt_file": "assets/sprites/black-market-merchant/prompt-used.txt",
+      "raw_file": "assets/sprites/black-market-merchant/raw-generated.png",
+      "metadata": "assets/sprites/black-market-merchant/pipeline-meta.json",
+      "image_info": {
+        "width": 512,
+        "height": 512,
+        "mode": "RGBA"
+      }
+    },
+    {
+      "id": "vagrant-hacker",
+      "kind": "sprite",
+      "skill": "generate2dsprite",
+      "source_lines": "384-397",
+      "title": "流浪黑客",
+      "output": "assets/sprites/vagrant-hacker/sheet-transparent.png",
+      "status": "complete",
+      "completed_at": "2026-05-13T15:28:45.140639+00:00",
+      "raw_source": "/Users/cwp/.codex/generated_images/019e21ad-f604-7a23-9529-598cca32ae59/ig_0eef276d3a794549016a049826ba508198835114150fbe1849.png",
+      "prompt_file": "assets/sprites/vagrant-hacker/prompt-used.txt",
+      "raw_file": "assets/sprites/vagrant-hacker/raw-generated.png",
+      "metadata": "assets/sprites/vagrant-hacker/pipeline-meta.json",
+      "image_info": {
+        "width": 512,
+        "height": 512,
+        "mode": "RGBA"
+      }
+    },
+    {
+      "id": "data-ghost",
+      "kind": "sprite",
+      "skill": "generate2dsprite",
+      "source_lines": "400-417",
+      "title": "数据幽灵",
+      "output": "assets/sprites/data-ghost/sheet-transparent.png",
+      "status": "complete",
+      "completed_at": "2026-05-13T15:34:15.284071+00:00",
+      "raw_source": "/Users/cwp/.codex/generated_images/019e21ad-f604-7a23-9529-598cca32ae59/ig_0eef276d3a794549016a04997a929c8198b225a3b9999cc787.png",
+      "prompt_file": "assets/sprites/data-ghost/prompt-used.txt",
+      "raw_file": "assets/sprites/data-ghost/raw-generated.png",
+      "metadata": "assets/sprites/data-ghost/pipeline-meta.json",
+      "image_info": {
+        "width": 512,
+        "height": 512,
+        "mode": "RGBA"
+      }
+    },
+    {
+      "id": "bottom-resident-npc-pack",
+      "kind": "sprite_pack",
+      "skill": "generate2dsprite",
+      "source_lines": "420-433",
+      "title": "底层居民 NPC 组",
+      "output": "assets/sprites/bottom-resident-npc-pack/sheet-transparent.png",
+      "status": "complete",
+      "completed_at": "2026-05-13T15:39:32.974606+00:00",
+      "raw_source": "/Users/cwp/.codex/generated_images/019e21ad-f604-7a23-9529-598cca32ae59/ig_0eef276d3a794549016a049a9e3a848198976cfc7642db8d81.png",
+      "prompt_file": "assets/sprites/bottom-resident-npc-pack/prompt-used.txt",
+      "raw_file": "assets/sprites/bottom-resident-npc-pack/raw-generated.png",
+      "metadata": "assets/sprites/bottom-resident-npc-pack/pipeline-meta.json",
+      "image_info": {
+        "width": 768,
+        "height": 512,
+        "mode": "RGBA"
+      }
+    },
+    {
+      "id": "neon-ad-corporate-sign-pack",
+      "kind": "prop_pack",
+      "skill": "generate2dsprite",
+      "source_lines": "152-167",
+      "title": "霓虹广告与企业标识",
+      "output": "assets/sprites/neon-ad-corporate-sign-pack/sheet-transparent.png",
+      "status": "complete",
+      "completed_at": "2026-05-13T15:43:51.178960+00:00",
+      "raw_source": "/Users/cwp/.codex/generated_images/019e21ad-f604-7a23-9529-598cca32ae59/ig_0eef276d3a794549016a049b9f52648198afad546b79acf14b.png",
+      "prompt_file": "assets/sprites/neon-ad-corporate-sign-pack/prompt-used.txt",
+      "raw_file": "assets/sprites/neon-ad-corporate-sign-pack/raw-generated.png",
+      "metadata": "assets/sprites/neon-ad-corporate-sign-pack/pipeline-meta.json",
+      "image_info": {
+        "width": 768,
+        "height": 768,
+        "mode": "RGBA"
+      }
+    },
+    {
+      "id": "black-market-terminal",
+      "kind": "prop",
+      "skill": "generate2dsprite",
+      "source_lines": "170-188",
+      "title": "黑市终端",
+      "output": "assets/sprites/black-market-terminal/clean.png",
+      "status": "complete",
+      "completed_at": "2026-05-13T15:57:21.394199+00:00",
+      "raw_source": "/Users/cwp/.codex/generated_images/019e21ad-f604-7a23-9529-598cca32ae59/ig_0eef276d3a794549016a049e8494988198b3f0b2d1335653f7.png",
+      "prompt_file": "assets/sprites/black-market-terminal/prompt-used.txt",
+      "raw_file": "assets/sprites/black-market-terminal/raw-generated.png",
+      "metadata": "assets/sprites/black-market-terminal/pipeline-meta.json",
+      "image_info": {
+        "width": 256,
+        "height": 256,
+        "mode": "RGBA"
+      }
+    },
+    {
+      "id": "surveillance-drone-security-pack",
+      "kind": "prop_pack",
+      "skill": "generate2dsprite",
+      "source_lines": "223-241",
+      "title": "无人机与监控系统",
+      "output": "assets/sprites/surveillance-drone-security-pack/sheet-transparent.png",
+      "status": "complete",
+      "completed_at": "2026-05-13T16:02:27.110594+00:00",
+      "raw_source": "/Users/cwp/.codex/generated_images/019e21ad-f604-7a23-9529-598cca32ae59/ig_0eef276d3a794549016a04a010733c8198a7d99b8935acbfb1.png",
+      "prompt_file": "assets/sprites/surveillance-drone-security-pack/prompt-used.txt",
+      "raw_file": "assets/sprites/surveillance-drone-security-pack/raw-generated.png",
+      "metadata": "assets/sprites/surveillance-drone-security-pack/pipeline-meta.json",
+      "image_info": {
+        "width": 512,
+        "height": 512,
+        "mode": "RGBA"
+      }
+    },
+    {
+      "id": "energy-charging-facility-pack",
+      "kind": "prop_pack",
+      "skill": "generate2dsprite",
+      "source_lines": "244-258",
+      "title": "能源与充电设施",
+      "output": "assets/sprites/energy-charging-facility-pack/sheet-transparent.png",
+      "status": "complete",
+      "completed_at": "2026-05-13T16:07:19.919569+00:00",
+      "raw_source": "/Users/cwp/.codex/generated_images/019e21ad-f604-7a23-9529-598cca32ae59/ig_0eef276d3a794549016a04a12c0c508198b9ff86138c35fe68.png",
+      "prompt_file": "assets/sprites/energy-charging-facility-pack/prompt-used.txt",
+      "raw_file": "assets/sprites/energy-charging-facility-pack/raw-generated.png",
+      "metadata": "assets/sprites/energy-charging-facility-pack/pipeline-meta.json",
+      "image_info": {
+        "width": 512,
+        "height": 512,
+        "mode": "RGBA"
+      }
+    },
+    {
+      "id": "environment-motif-prop-fx-pack",
+      "kind": "prop_fx_pack",
+      "skill": "generate2dsprite",
+      "source_lines": "437-505",
+      "title": "雨、电缆、发光屏幕、旧科技垃圾",
+      "output": "assets/sprites/environment-motif-prop-fx-pack/sheet-transparent.png",
+      "status": "complete",
+      "completed_at": "2026-05-13T16:13:23.144416+00:00",
+      "raw_source": "/Users/cwp/.codex/generated_images/019e21ad-f604-7a23-9529-598cca32ae59/ig_0eef276d3a794549016a04a2ab00548198b505bdabb9f590a3.png",
+      "prompt_file": "assets/sprites/environment-motif-prop-fx-pack/prompt-used.txt",
+      "raw_file": "assets/sprites/environment-motif-prop-fx-pack/raw-generated.png",
+      "metadata": "assets/sprites/environment-motif-prop-fx-pack/pipeline-meta.json",
+      "image_info": {
+        "width": 512,
+        "height": 512,
+        "mode": "RGBA"
+      }
+    }
+  ]
+}

@@ -1,0 +1,41 @@
+{
+  "checkpoint": "checkpoint-04",
+  "assets": [
+    {
+      "id": "token-leaderboard-plaza",
+      "path": "assets/maps/token-leaderboard-plaza.png",
+      "exists": true,
+      "prompt_exists": true,
+      "metadata_exists": true,
+      "size": [
+        1448,
+        1086
+      ],
+      "style_check": "manual contact-sheet check: cyberpunk pixel-map/sprite requirement"
+    },
+    {
+      "id": "data-altar-chamber",
+      "path": "assets/maps/data-altar-chamber.png",
+      "exists": true,
+      "prompt_exists": true,
+      "metadata_exists": true,
+      "size": [
+        1448,
+        1086
+      ],
+      "style_check": "manual contact-sheet check: cyberpunk pixel-map/sprite requirement"
+    },
+    {
+      "id": "agent-normal",
+      "path": "assets/sprites/agent-normal/sheet-transparent.png",
+      "exists": true,
+      "prompt_exists": true,
+      "metadata_exists": true,
+      "size": [
+        512,
+        512
+      ],
+      "style_check": "manual contact-sheet check: cyberpunk pixel-map/sprite requirement"
+    }
+  ]
+}

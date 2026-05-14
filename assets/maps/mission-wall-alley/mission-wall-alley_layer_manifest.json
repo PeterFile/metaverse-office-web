@@ -1,0 +1,29 @@
+{
+  "id": "mission-wall-alley",
+  "title": "任务发布墙",
+  "source": "GameAssetDesign.md",
+  "source_lines": "527-538",
+  "skill": "generate2dmap",
+  "pipeline": {
+    "map_mode": "scene_mode",
+    "visual_model": "layered_raster",
+    "runtime_object_model": "y_sorted_props + interactive_scene_objects + scene_hooks",
+    "collision_model": "precise_shapes + trigger_zones",
+    "engine_target": "project-native"
+  },
+  "layers": {
+    "ground_base": "mission-wall-alley_ground_base.png",
+    "dressed_ref": "mission-wall-alley_dressed_ref.png",
+    "prop_pack": "mission-wall-alley_prop_pack.png",
+    "props_transparent": "mission-wall-alley_props_transparent.png",
+    "ysort_data": "mission-wall-alley_ysort_data.json",
+    "collision": "mission-wall-alley_collision.png",
+    "regions": "mission-wall-alley_regions.png",
+    "preview": "mission-wall-alley_preview.png"
+  },
+  "image_info": {
+    "width": 1536,
+    "height": 1024,
+    "mode": "RGB"
+  }
+}

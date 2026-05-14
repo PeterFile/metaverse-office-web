@@ -1,0 +1,29 @@
+{
+  "id": "data-bar-safehouse",
+  "title": "数据酒吧",
+  "source": "GameAssetDesign.md",
+  "source_lines": "208-220",
+  "skill": "generate2dmap",
+  "pipeline": {
+    "map_mode": "scene_mode",
+    "visual_model": "layered_raster",
+    "runtime_object_model": "y_sorted_props + interactive_scene_objects + scene_hooks",
+    "collision_model": "precise_shapes + trigger_zones",
+    "engine_target": "project-native"
+  },
+  "layers": {
+    "ground_base": "data-bar-safehouse_ground_base.png",
+    "dressed_ref": "data-bar-safehouse_dressed_ref.png",
+    "prop_pack": "data-bar-safehouse_prop_pack.png",
+    "props_transparent": "data-bar-safehouse_props_transparent.png",
+    "ysort_data": "data-bar-safehouse_ysort_data.json",
+    "collision": "data-bar-safehouse_collision.png",
+    "regions": "data-bar-safehouse_regions.png",
+    "preview": "data-bar-safehouse_preview.png"
+  },
+  "image_info": {
+    "width": 1443,
+    "height": 1090,
+    "mode": "RGB"
+  }
+}

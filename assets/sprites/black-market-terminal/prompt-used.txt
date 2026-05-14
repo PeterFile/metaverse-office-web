@@ -1,0 +1,9 @@
+Use the visible terminal image immediately above as a composition reference, but regenerate the prop with all screen and sticker content converted to non-text graphics.
+
+Generate a single transparent-ready prop sprite for `black-market-terminal` from GameAssetDesign.md.
+
+Keep: old ATM plus broken vending-machine silhouette, green/yellow cracked screen, one mechanical input arm, damaged casing, exposed cables, chipped metal, warning lights, cyberpunk pixel-art detail.
+
+Replace every possible letter/word/number with pure non-language graphics: square icons, dots, barcode blocks, short horizontal bars, circuit traces, checker blocks, triangles and invented symbols that cannot be read as any alphabet. No Latin letters, no Chinese characters, no numbers, no readable or word-like text anywhere.
+
+Asset rules: one complete prop centered on solid flat #FF00FF magenta background. 3/4 top-down game prop view, no scene background, no ground shadow, no labels, no UI callouts, no border, no arrows. Crisp 16-bit cyberpunk pixel art, strong dark outline, readable silhouette, compact but detailed, not cute, not realistic painting.

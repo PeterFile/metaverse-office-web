@@ -1,0 +1,175 @@
+{
+  "target": "asset",
+  "mode": "idle",
+  "prompt": "",
+  "role": "",
+  "input": "/Volumes/HDD/MyStorage/Projects/metaverse-office-web/assets/sprites/black-market-merchant/raw-generated.png",
+  "threshold": 100,
+  "edge_threshold": 150,
+  "duration": 200,
+  "rows": 2,
+  "cols": 2,
+  "cell_size": 256,
+  "fit_scale": 0.82,
+  "trim_border": 4,
+  "edge_clean_depth": 3,
+  "align": "feet",
+  "shared_scale": true,
+  "component_mode": "largest",
+  "component_padding": 0,
+  "min_component_area": 1,
+  "edge_touch_margin": 0,
+  "frame_labels": [
+    "idle-1",
+    "idle-2",
+    "idle-3",
+    "idle-4"
+  ],
+  "frames": [
+    {
+      "grid": [
+        0,
+        0
+      ],
+      "source_box": [
+        0,
+        0,
+        627,
+        627
+      ],
+      "component_mode": "largest",
+      "component_count": 1,
+      "selected_component_area": 100366,
+      "selected_component_bbox": [
+        171,
+        65,
+        522,
+        572
+      ],
+      "crop_bbox": [
+        171,
+        65,
+        522,
+        572
+      ],
+      "edge_touch": false,
+      "output_size": [
+        145,
+        209
+      ],
+      "paste_position": [
+        55,
+        24
+      ]
+    },
+    {
+      "grid": [
+        0,
+        1
+      ],
+      "source_box": [
+        627,
+        0,
+        1254,
+        627
+      ],
+      "component_mode": "largest",
+      "component_count": 1,
+      "selected_component_area": 95813,
+      "selected_component_bbox": [
+        77,
+        70,
+        443,
+        572
+      ],
+      "crop_bbox": [
+        77,
+        70,
+        443,
+        572
+      ],
+      "edge_touch": false,
+      "output_size": [
+        151,
+        207
+      ],
+      "paste_position": [
+        52,
+        26
+      ]
+    },
+    {
+      "grid": [
+        1,
+        0
+      ],
+      "source_box": [
+        0,
+        627,
+        627,
+        1254
+      ],
+      "component_mode": "largest",
+      "component_count": 1,
+      "selected_component_area": 98570,
+      "selected_component_bbox": [
+        165,
+        27,
+        504,
+        532
+      ],
+      "crop_bbox": [
+        165,
+        27,
+        504,
+        532
+      ],
+      "edge_touch": false,
+      "output_size": [
+        140,
+        209
+      ],
+      "paste_position": [
+        58,
+        24
+      ]
+    },
+    {
+      "grid": [
+        1,
+        1
+      ],
+      "source_box": [
+        627,
+        627,
+        1254,
+        1254
+      ],
+      "component_mode": "largest",
+      "component_count": 2,
+      "selected_component_area": 94402,
+      "selected_component_bbox": [
+        155,
+        25,
+        445,
+        532
+      ],
+      "crop_bbox": [
+        155,
+        25,
+        445,
+        532
+      ],
+      "edge_touch": false,
+      "output_size": [
+        120,
+        209
+      ],
+      "paste_position": [
+        68,
+        24
+      ]
+    }
+  ],
+  "edge_touch_frames": []
+}

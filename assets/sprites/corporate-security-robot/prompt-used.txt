@@ -1,0 +1,5 @@
+Generate a 2x2 sprite animation sheet for `corporate-security-robot` from GameAssetDesign.md.
+
+Subject: a tall expensive corporate security robot: clean, cold, symmetrical, high-end black and white armor, hard angular silhouette, red scanning eye slit, subtle corporate geometric emblem with no readable text, precise mechanical posture, restraint-net launcher, scanner module and compact stun weapon integrated into arms. It should feel expensive, merciless and controlled, not like a cartoon robot.
+
+Sheet rules: EXACTLY 4 equal cells in a 2x2 grid, four idle/scanning frames of the same robot. Top-down 3/4 view from slightly above, full body visible, stable feet/bottom anchor, same scale and same bounding box in every cell, subject centered in each cell and occupying the central 60-70% safe area. Solid flat #FF00FF magenta background only. No shadows, no labels, no readable words, no UI, no cell borders, no arrows, no frame numbers. Crisp 16-bit cyberpunk pixel art, strong dark outline, saturated red scan accents, cold white-blue highlights, not cute, not realistic painting.

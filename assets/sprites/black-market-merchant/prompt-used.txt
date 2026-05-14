@@ -1,0 +1,5 @@
+Generate a 2x2 sprite animation sheet for `black-market-merchant` from GameAssetDesign.md.
+
+Subject: a practical black-market merchant in a cyberpunk survival city. The figure wears layered street clothes, scarf or respirator mask covering the lower face, stacked goggles, many hanging chips, batteries and small parts, folding mechanical arm frame on the back, utility belt, small broken prosthetic parts and plugin pouches. The silhouette should be cluttered, sly and useful, not heroic.
+
+Sheet rules: EXACTLY 4 equal cells in a 2x2 grid, four idle/vendor gesture frames of the same merchant. Top-down 3/4 view from slightly above, full body visible, stable feet/bottom anchor, same scale and same bounding box in every cell, subject centered in each cell and occupying the central 60-70% safe area. Solid flat #FF00FF magenta background only. No stall background, no shadows, no labels, no readable words, no UI, no cell borders, no arrows, no frame numbers. Crisp 16-bit cyberpunk pixel art, strong dark outline, dark clothing, neon green/yellow terminal glints, orange battery accents, not cute, not realistic painting.

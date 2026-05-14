@@ -1,0 +1,7 @@
+Use the visible pixel-cyberpunk interior reference above only as style guidance: crisp 16-bit pixel art, strong dark outlines, saturated neon accents, clean readable game shapes.
+
+Generate one production-ready 2D pixel game map/background asset for `token-leaderboard-plaza` from GameAssetDesign.md.
+
+Subject: a central wet city plaza dominated by a huge electronic token leaderboard. The board displays abstract rows of Agent IDs, token amounts and credit scores as glyph bars and colored blocks with no readable text. High-ranked Agents are shown as glowing portrait silhouettes on ad screens; low-ranked Agents are marked for recycling with red warning blocks. Surround it with rain puddles, surveillance drones, corporate light beams, crowd silhouettes, cables, vending machines and worn concrete.
+
+Style constraints: 16-bit detailed pixel art, top-down/3-4 game-readable scene, not cute, no readable words, no labels, no UI callouts, no arrows, no decorative border. Palette: deep blue, violet black, cyan leaderboard glow, neon pink, orange currency glow, alarm red, dark green grime. Mood: competitive, oppressive, public surveillance, wet neon reflections. Keep plaza paths and central board readable.

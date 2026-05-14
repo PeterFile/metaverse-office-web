@@ -1,0 +1,41 @@
+{
+  "checkpoint": "checkpoint-06",
+  "assets": [
+    {
+      "id": "corporate-security-robot",
+      "path": "assets/sprites/corporate-security-robot/sheet-transparent.png",
+      "exists": true,
+      "prompt_exists": true,
+      "metadata_exists": true,
+      "size": [
+        512,
+        512
+      ],
+      "style_check": "manual contact-sheet check: role silhouette and cyberpunk pixel style"
+    },
+    {
+      "id": "black-market-merchant",
+      "path": "assets/sprites/black-market-merchant/sheet-transparent.png",
+      "exists": true,
+      "prompt_exists": true,
+      "metadata_exists": true,
+      "size": [
+        512,
+        512
+      ],
+      "style_check": "manual contact-sheet check: role silhouette and cyberpunk pixel style"
+    },
+    {
+      "id": "vagrant-hacker",
+      "path": "assets/sprites/vagrant-hacker/sheet-transparent.png",
+      "exists": true,
+      "prompt_exists": true,
+      "metadata_exists": true,
+      "size": [
+        512,
+        512
+      ],
+      "style_check": "manual contact-sheet check: role silhouette and cyberpunk pixel style"
+    }
+  ]
+}

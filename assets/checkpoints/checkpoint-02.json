@@ -1,0 +1,41 @@
+{
+  "checkpoint": "checkpoint-02",
+  "assets": [
+    {
+      "id": "scrap-slum-waste-street",
+      "path": "assets/maps/scrap-slum-waste-street.png",
+      "exists": true,
+      "prompt_exists": true,
+      "metadata_exists": true,
+      "size": [
+        1448,
+        1086
+      ],
+      "style_check": "manual contact-sheet check: cyberpunk pixel-map requirement"
+    },
+    {
+      "id": "old-net-ai-graveyard",
+      "path": "assets/maps/old-net-ai-graveyard.png",
+      "exists": true,
+      "prompt_exists": true,
+      "metadata_exists": true,
+      "size": [
+        1448,
+        1086
+      ],
+      "style_check": "manual contact-sheet check: cyberpunk pixel-map requirement"
+    },
+    {
+      "id": "cybernetic-repair-clinic",
+      "path": "assets/maps/cybernetic-repair-clinic.png",
+      "exists": true,
+      "prompt_exists": true,
+      "metadata_exists": true,
+      "size": [
+        1465,
+        1073
+      ],
+      "style_check": "manual contact-sheet check: cyberpunk pixel-map requirement"
+    }
+  ]
+}

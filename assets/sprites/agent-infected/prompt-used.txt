@@ -1,0 +1,7 @@
+Use the visible `agent-normal` sprite sheet immediately above as identity reference. Preserve the same Agent silhouette, half screen / half bionic mask face, coat, compact data backpack, cables and low-cost cybernetic body.
+
+Generate a 2x2 sprite animation sheet for `agent-infected` from GameAssetDesign.md.
+
+Variation: infected state. The same Agent has local pixel displacement, corrupted red-purple eye glow, glitchy magenta/cyan edge artifacts, abnormal residual trails close to the body, cracked face screen, jittering interface cables, dark corrupted patches on coat and backpack. Keep the same identity and proportions; it should look infected, not like a different monster.
+
+Sheet rules: EXACTLY 4 equal cells in a 2x2 grid, four corrupted idle frames of the same character. Top-down 3/4 view from slightly above, full body visible, stable feet/bottom anchor, same scale and same bounding box in every cell, subject centered in each cell and occupying the central 60-70% safe area. Solid flat #FF00FF magenta background only. No shadows, no labels, no readable words, no UI, no cell borders, no arrows, no frame numbers. Crisp 16-bit pixel art, strong dark outline, saturated cyberpunk glitch accents, not cute, not realistic painting.

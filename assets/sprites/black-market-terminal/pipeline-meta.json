@@ -1,0 +1,11 @@
+{
+  "target": "asset",
+  "mode": "single",
+  "prompt": "",
+  "role": "",
+  "input": "/Volumes/HDD/MyStorage/Projects/metaverse-office-web/assets/sprites/black-market-terminal/raw-generated.png",
+  "threshold": 100,
+  "edge_threshold": 150,
+  "duration": 200,
+  "single_size": 256
+}

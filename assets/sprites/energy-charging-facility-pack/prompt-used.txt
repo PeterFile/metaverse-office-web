@@ -1,0 +1,5 @@
+Generate a 2x2 compact prop sprite pack for `energy-charging-facility-pack` from GameAssetDesign.md.
+
+Subject: four separate energy/survival props, one per cell. Cell 1: public Agent charging pillar with cable sockets and cyan battery lights. Cell 2: illegal battery street stall as a compact prop with stacked batteries and hazard lamp, no vendor. Cell 3: discarded nuclear-energy battery core in a cracked protective case. Cell 4: temporary generator / life-support recharge module made from old server hardware and orange power cylinders. These props make Agent survival and energy scarcity visible.
+
+Sheet rules: EXACTLY 4 equal cells arranged 2x2. One compact prop centered per cell, same approximate scale, safe padding on all sides. Solid flat #FF00FF magenta background only. No scene background, no shadows, no labels, no readable words, no UI, no cell borders, no arrows, no frame numbers. Crisp 16-bit cyberpunk pixel art, strong dark outlines, dark metal, cyan battery glow, orange power cores, red hazard pixels, dark green grime, not cute, not realistic painting.

@@ -1,0 +1,59 @@
+{
+  "map": "mission-wall-alley",
+  "coordinate_space": "pixels",
+  "render_order": "ascending_sortY",
+  "props": [
+    {
+      "id": "mission-wall-alley_prop_2",
+      "source_cell": 2,
+      "x": 1106,
+      "y": 338,
+      "left": 1045,
+      "top": 140,
+      "w": 123,
+      "h": 198,
+      "anchor": "center-bottom",
+      "sortY": 338,
+      "collision": "blocker"
+    },
+    {
+      "id": "mission-wall-alley_prop_1",
+      "source_cell": 1,
+      "x": 338,
+      "y": 348,
+      "left": 235,
+      "top": 146,
+      "w": 207,
+      "h": 202,
+      "anchor": "center-bottom",
+      "sortY": 348,
+      "collision": "blocker"
+    },
+    {
+      "id": "mission-wall-alley_prop_3",
+      "source_cell": 3,
+      "x": 522,
+      "y": 707,
+      "left": 423,
+      "top": 555,
+      "w": 198,
+      "h": 152,
+      "anchor": "center-bottom",
+      "sortY": 707,
+      "collision": "blocker"
+    },
+    {
+      "id": "mission-wall-alley_prop_4",
+      "source_cell": 4,
+      "x": 1014,
+      "y": 737,
+      "left": 934,
+      "top": 539,
+      "w": 161,
+      "h": 198,
+      "anchor": "center-bottom",
+      "sortY": 737,
+      "collision": "blocker"
+    }
+  ]
+}

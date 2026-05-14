@@ -1,0 +1,7 @@
+Use the visible pixel-cyberpunk interior reference above as style reference: crisp 16-bit pixel art, isometric/top-down room composition, dark outlines, neon hardware panels, readable game shapes.
+
+Generate one production-ready 2D pixel game interior map/background asset for `agent-sleep-pod-room` from GameAssetDesign.md.
+
+Subject: an Agent home/safe point made from an old server pod, not a normal bedroom. A narrow metal room with one low-cost intelligent-agent sleep capsule, wall batteries, tool modules, old chips, low-brightness task terminal, numbered pod door shown as abstract unreadable markings, many empty abandoned Agent pods nearby, patched cables, leaking pipes, tiny warning lights and recycled server racks. It should feel like a birth point, recovery point and survival bunker.
+
+Style constraints: 16-bit detailed pixel art, top-down/3-4 game-readable room, not cute, no readable words, no labels, no UI callouts, no arrows, no decorative border. Palette: black-blue, steel gray, cyan terminal glow, dim green battery LEDs, orange hazard accents, small red warnings. Mood: cramped, cold, lonely, functional. Leave clear walkable tiles and interaction points.

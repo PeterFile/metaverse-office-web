@@ -1,0 +1,41 @@
+{
+  "checkpoint": "checkpoint-03",
+  "assets": [
+    {
+      "id": "data-bar-safehouse",
+      "path": "assets/maps/data-bar-safehouse.png",
+      "exists": true,
+      "prompt_exists": true,
+      "metadata_exists": true,
+      "size": [
+        1470,
+        1070
+      ],
+      "style_check": "manual contact-sheet check: cyberpunk pixel-map requirement"
+    },
+    {
+      "id": "agent-sleep-pod-room",
+      "path": "assets/maps/agent-sleep-pod-room.png",
+      "exists": true,
+      "prompt_exists": true,
+      "metadata_exists": true,
+      "size": [
+        1466,
+        1073
+      ],
+      "style_check": "manual contact-sheet check: cyberpunk pixel-map requirement"
+    },
+    {
+      "id": "mission-wall-alley",
+      "path": "assets/maps/mission-wall-alley.png",
+      "exists": true,
+      "prompt_exists": true,
+      "metadata_exists": true,
+      "size": [
+        1448,
+        1086
+      ],
+      "style_check": "manual contact-sheet check: cyberpunk pixel-map requirement"
+    }
+  ]
+}

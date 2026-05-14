@@ -1,0 +1,29 @@
+{
+  "id": "neon-commercial-district",
+  "title": "中层：霓虹商业区",
+  "source": "GameAssetDesign.md",
+  "source_lines": "55-89",
+  "skill": "generate2dmap",
+  "pipeline": {
+    "map_mode": "scene_mode",
+    "visual_model": "layered_raster",
+    "runtime_object_model": "y_sorted_props + interactive_scene_objects + scene_hooks",
+    "collision_model": "precise_shapes + trigger_zones",
+    "engine_target": "project-native"
+  },
+  "layers": {
+    "ground_base": "neon-commercial-district_ground_base.png",
+    "dressed_ref": "neon-commercial-district_dressed_ref.png",
+    "prop_pack": "neon-commercial-district_prop_pack.png",
+    "props_transparent": "neon-commercial-district_props_transparent.png",
+    "ysort_data": "neon-commercial-district_ysort_data.json",
+    "collision": "neon-commercial-district_collision.png",
+    "regions": "neon-commercial-district_regions.png",
+    "preview": "neon-commercial-district_preview.png"
+  },
+  "image_info": {
+    "width": 1448,
+    "height": 1086,
+    "mode": "RGB"
+  }
+}

@@ -19,6 +19,7 @@ const {
 } = require('../collectors/controller-snapshot');
 
 const COLLECTOR_ALERT_SOURCE = 'controller_snapshot';
+const COLLECTOR_SNAPSHOT_RECORD_KIND = 'collector_snapshot';
 const INBOUND_WORKSPACE_FILES = new Set(['inbox.md']);
 const AGENT_OUTPUT_WORKSPACE_ROLES = new Set(['agent_output', 'agent_plan']);
 const NON_OUTPUT_WORKSPACE_ROLES = new Set(['inbound_task', 'workspace_presence']);
@@ -122,6 +123,11 @@ class PrototypeStore {
 
       if (record.kind === 'heartbeat') {
         this.heartbeats.push(record.payload);
+        continue;
+      }
+
+      if (record.kind === COLLECTOR_SNAPSHOT_RECORD_KIND) {
+        this.latestCollectorReport = record.payload || null;
       }
     }
   }
@@ -169,7 +175,7 @@ class PrototypeStore {
       });
     }
 
-    this.latestCollectorReport = {
+    const storedReport = {
       ...normalizedReport,
       summary: {
         ...(normalizedReport.summary || {}),
@@ -177,6 +183,14 @@ class PrototypeStore {
       },
       items
     };
+
+    const snapshotRecord = {
+      kind: COLLECTOR_SNAPSHOT_RECORD_KIND,
+      payload: storedReport
+    };
+    await appendFile(this.filePath, `${JSON.stringify(snapshotRecord)}\n`, 'utf8');
+    this.records.push(snapshotRecord);
+    this.latestCollectorReport = storedReport;
 
     return this.latestCollectorReport;
   }

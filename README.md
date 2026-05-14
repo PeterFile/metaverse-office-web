@@ -21,7 +21,7 @@ The next product milestone is `Live Evidence Spine`: connect the current read mo
 ## Current implementation snapshot
 - backend exposes evidence-first read models for office overview, operations, agent workflow/detail, incidents, timeline replay, accountability replay, correlation drill-down, shared memory artifacts, peer-watch alerts, handoffs, reboots, and collector evidence coverage
 - controlled writes remain limited to `POST /events`, `POST /heartbeats`, and `POST /collectors/controller-snapshot`
-- storage is still the local append-only JSONL prototype at `data/prototype-store.jsonl`, replayed into memory; it is not yet the target production-grade event store
+- storage is still the local append-only JSONL prototype at `data/prototype-store.jsonl`, replayed into memory; event, heartbeat, and collector snapshot records are append-only, but this is not yet the target production-grade event store
 - domain still uses the canonical seven-actor office model: six employee agents plus `team-lead`
 - frontend is a React + TypeScript + PixiJS AI Town operator world with roster, category Hub, selected-agent drilldowns, supervision/evidence/replay/memory surfaces, and real browser smoke coverage
 
@@ -248,8 +248,9 @@ This keeps employee writes self-scoped and reserves cross-agent task dispatch pl
 
 ### Collector snapshot notes
 - `POST /collectors/controller-snapshot` is lead-only and requires `x-actor-id: team-lead`
-- `GET /collectors/controller-snapshot` is read-only and returns the latest in-memory collector report
-- `GET /collectors/controller-snapshot/evidence-coverage` is read-only and returns `{ "item": null }` until the latest in-memory collector report includes `evidence_coverage`
+- `GET /collectors/controller-snapshot` is read-only and returns the latest replayed collector report
+- `GET /collectors/controller-snapshot/evidence-coverage` is read-only and returns `{ "item": null }` until the latest replayed collector report includes `evidence_coverage`
+- `POST /collectors/controller-snapshot` stores a `collector_snapshot` JSONL record after the derived event and heartbeat records; replay uses only the latest snapshot record for the latest collector report and does not count it as an event or heartbeat
 - evidence coverage can be filtered by exact `agent_id`, collector evidence `source_kind`, `confidence_level`, and post-filter `limit`; blank filters are ignored and invalid limits use the existing read-model default
 - evidence coverage responses include only `collected_at`, `actor_id`, aggregate coverage counts, source-kind buckets, low-confidence agent ids, and bounded `agent_items`; the route does not touch tmux, the filesystem, or collector write paths
 - collector heartbeats keep coverage for real `inbox.md`, `outbox.md`, `todo.md` mtimes plus tmux pane metadata, but only agent-output files (`outbox.md`, `todo.md`, and legacy non-inbox workspace files) or tmux runtime evidence advance meaningful-output/file-write state

@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { DetailsPanel, type HubCategory } from './DetailsPanel';
@@ -8125,6 +8125,143 @@ describe('DetailsPanel accountability signals', () => {
     expect(collectorObservationSection!).toHaveTextContent('Expected tmux session · sess-1');
     expect(collectorObservationSection!).toHaveTextContent('Tmux panes observed · 1');
     expect(collectorObservationSection!).toHaveTextContent('Tmux session reason · expected tmux pane missing');
+  });
+
+  it('opens the selected-agent collector panel and focuses the exact workspace source gap group', async () => {
+    const baseCollectorSnapshot = buildCollectorSnapshot();
+    const collectorSnapshot: CollectorSnapshot = {
+      ...baseCollectorSnapshot,
+      items: [
+        {
+          ...baseCollectorSnapshot.items[0],
+          source_health: {
+            workspace_root: {
+              status: 'missing',
+              path: '/workspace/app-engineering',
+              last_observed_at: null,
+              degraded_reasons: ['workspace root not observed']
+            },
+            workspace_files: {
+              status: 'degraded',
+              expected_files: ['inbox.md', 'outbox.md'],
+              observed_count: 1,
+              missing_count: 1,
+              error_count: 0,
+              last_observed_at: '2026-03-16T08:56:00.000Z',
+              degraded_reasons: ['workspace file missing']
+            },
+            tmux_session: {
+              status: 'missing',
+              expected_session_ref: 'sess-1',
+              observed_count: 0,
+              last_observed_at: null,
+              degraded_reasons: ['tmux session not observed']
+            }
+          }
+        }
+      ]
+    };
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          activeHubCategory: 'supervision',
+          collectorSnapshot,
+          selectedAgentDrilldownTab: 'evidence',
+          sourceGapFocusIntent: {
+            agentId: 'app-engineering',
+            sourceDrilldownGroupKey: 'workspace',
+            requestId: 1
+          }
+        })}
+      />
+    );
+
+    const details = screen.getByRole('complementary', { name: 'Agent details' });
+    await waitFor(() => expect(details).toHaveAttribute('data-selected-agent-supervision-panel', 'collector'));
+
+    const workspaceGroup = document.getElementById('aitown-selected-agent-source-drilldown-workspace');
+    const tmuxGroup = document.getElementById('aitown-selected-agent-source-drilldown-tmux');
+    expect(workspaceGroup).not.toBeNull();
+    expect(tmuxGroup).not.toBeNull();
+    expect(workspaceGroup).toHaveAttribute('open');
+    expect(workspaceGroup).toHaveAttribute('data-source-gap-focus', 'true');
+    expect(tmuxGroup).not.toHaveAttribute('data-source-gap-focus');
+    expect(document.activeElement).toBe(workspaceGroup);
+  });
+
+  it('marks the exact tmux source gap group without marking workspace', async () => {
+    const baseCollectorSnapshot = buildCollectorSnapshot();
+    const collectorSnapshot: CollectorSnapshot = {
+      ...baseCollectorSnapshot,
+      items: [
+        {
+          ...baseCollectorSnapshot.items[0],
+          source_health: {
+            workspace_root: {
+              status: 'observed',
+              path: '/workspace/app-engineering',
+              last_observed_at: '2026-03-16T08:55:00.000Z',
+              degraded_reasons: []
+            },
+            tmux_session: {
+              status: 'missing',
+              expected_session_ref: 'sess-1',
+              observed_count: 0,
+              last_observed_at: null,
+              degraded_reasons: ['tmux session not observed']
+            }
+          }
+        }
+      ]
+    };
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          activeHubCategory: 'supervision',
+          collectorSnapshot,
+          selectedAgentDrilldownTab: 'evidence',
+          sourceGapFocusIntent: {
+            agentId: 'app-engineering',
+            sourceDrilldownGroupKey: 'tmux',
+            requestId: 2
+          }
+        })}
+      />
+    );
+
+    const tmuxGroup = document.getElementById('aitown-selected-agent-source-drilldown-tmux');
+    const workspaceGroup = document.getElementById('aitown-selected-agent-source-drilldown-workspace');
+    await waitFor(() => expect(tmuxGroup).toHaveAttribute('data-source-gap-focus', 'true'));
+    expect(tmuxGroup).toHaveAttribute('open');
+    expect(workspaceGroup).not.toHaveAttribute('data-source-gap-focus');
+    expect(document.activeElement).toBe(tmuxGroup);
+  });
+
+  it('shows an explicit source-gap focus empty state when the selected agent has no collector row', () => {
+    render(
+      <DetailsPanel
+        {...buildProps({
+          activeHubCategory: 'supervision',
+          selectedAgentDrilldownTab: 'evidence',
+          collectorSnapshot: {
+            ...buildCollectorSnapshot(),
+            collected_at: '2026-03-16T09:01:00.000Z',
+            items: []
+          },
+          sourceGapFocusIntent: {
+            agentId: 'app-engineering',
+            sourceDrilldownGroupKey: 'workspace',
+            requestId: 3
+          }
+        })}
+      />
+    );
+
+    expect(
+      screen.getByText('Source-gap focus · No collector source evidence for app-engineering in snapshot 2026-03-16T09:01:00.000Z.')
+    ).toBeVisible();
   });
 
   it('keeps the legacy collector supervision surface when evidence coverage is absent', () => {

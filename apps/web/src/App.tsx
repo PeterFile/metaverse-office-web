@@ -33,7 +33,8 @@ import {
   resolveSelectedAgentDrilldownPanelId,
   resolveSelectedAgentDrilldownTabId,
   type HubCategory,
-  type SelectedAgentDrilldownTab
+  type SelectedAgentDrilldownTab,
+  type SourceGapFocusIntent
 } from './aitown/DetailsPanel';
 import { SceneStatusLegend } from './aitown/SceneStatusLegend';
 import { resolveRolePawnAssetUrl } from './aitown/rolePawnAssets';
@@ -958,6 +959,8 @@ function AppInner() {
     useState<CollectorEvidenceCoverage | null>(null);
   const [latestSourceHealth, setLatestSourceHealth] =
     useState<CollectorSourceHealthProjection | null>(null);
+  const [sourceGapFocusIntent, setSourceGapFocusIntent] =
+    useState<SourceGapFocusIntent | null>(null);
   const requestedSelectedAgentDrilldownTabRef = useRef<SelectedAgentDrilldownTab | null>(null);
   const activeHubCategoryFromSelectedAgentTabRef = useRef(false);
   const defaultEvidenceCoverageRequestedRef = useRef(false);
@@ -972,6 +975,7 @@ function AppInner() {
   const sharedMemoryJumpRequestIdRef = useRef(0);
   const agentFocusRequestIdRef = useRef(0);
   const zoneFocusRequestIdRef = useRef(0);
+  const sourceGapFocusRequestIdRef = useRef(0);
   const wasHubOpenRef = useRef(false);
 
   const overviewResource = usePolledResource({
@@ -1832,12 +1836,14 @@ function AppInner() {
 
   const closeHub = useCallback(() => {
     setHubOpen(false);
+    setSourceGapFocusIntent(null);
   }, []);
 
   const openHubCategory = useCallback(
     (category: HubCategory) => {
       requestedSelectedAgentDrilldownTabRef.current = null;
       activeHubCategoryFromSelectedAgentTabRef.current = false;
+      setSourceGapFocusIntent(null);
       setActiveHubCategory(category);
       if (selectedAgentId !== null) {
         setSelectedAgentDrilldownTab(resolveHubCategorySelectedAgentTab(category));
@@ -1906,8 +1912,21 @@ function AppInner() {
     }
   }, [activeHubCategory, hubOpen, selectedAgentId]);
 
+  useEffect(() => {
+    if (
+      sourceGapFocusIntent &&
+      (!hubOpen ||
+        selectedAgentId !== sourceGapFocusIntent.agentId ||
+        activeHubCategory !== 'supervision' ||
+        selectedAgentDrilldownTab !== 'evidence')
+    ) {
+      setSourceGapFocusIntent(null);
+    }
+  }, [activeHubCategory, hubOpen, selectedAgentDrilldownTab, selectedAgentId, sourceGapFocusIntent]);
+
   const handleSelectSelectedAgentDrilldownTab = useCallback((tab: SelectedAgentDrilldownTab) => {
     requestedSelectedAgentDrilldownTabRef.current = null;
+    setSourceGapFocusIntent(null);
     setSelectedAgentDrilldownTab(tab);
     activeHubCategoryFromSelectedAgentTabRef.current = true;
     setActiveHubCategory((currentCategory) => resolveSelectedAgentTabHubCategory(tab, currentCategory));
@@ -2176,6 +2195,7 @@ function AppInner() {
       if (!agentId) {
         lastSelectedAgentRef.current = null;
         setAgentFocusRequest(null);
+        setSourceGapFocusIntent(null);
       } else {
         const overviewMatch = overviewResource.data?.agents.find((agent) => agent.agent_id === agentId) ?? null;
         if (overviewMatch) {
@@ -2297,12 +2317,18 @@ function AppInner() {
   );
 
   const handleSourceGapFocusAgent = useCallback(
-    (agentId: string) => {
+    (chip: (typeof sourceGapChips)[number]) => {
+      sourceGapFocusRequestIdRef.current += 1;
       requestedSelectedAgentDrilldownTabRef.current = 'evidence';
       activeHubCategoryFromSelectedAgentTabRef.current = false;
       setActiveHubCategory('supervision');
-      handleSelectAgentForInspection(agentId);
+      handleSelectAgentForInspection(chip.agentId);
       setSelectedAgentDrilldownTab('evidence');
+      setSourceGapFocusIntent({
+        agentId: chip.agentId,
+        sourceDrilldownGroupKey: chip.sourceDrilldownGroupKey,
+        requestId: sourceGapFocusRequestIdRef.current
+      });
       setHubOpen(true);
     },
     [handleSelectAgentForInspection]
@@ -2646,7 +2672,7 @@ function AppInner() {
                             type="button"
                             className={`aitown-focus-chip aitown-focus-chip--source-gap source-gap-${chip.status}${selectedAgentId === chip.agentId ? ' is-active' : ''}`}
                             aria-label={`Open source gap supervision for ${chip.displayName} ${chip.sourceLabel.toLowerCase()} ${chip.status}`}
-                            onClick={() => handleSourceGapFocusAgent(chip.agentId)}
+                            onClick={() => handleSourceGapFocusAgent(chip)}
                           >
                             <strong>{chip.displayName}</strong>
                             <span>{`${chip.sourceLabel} · ${chip.status}`}</span>
@@ -2915,6 +2941,7 @@ function AppInner() {
               selectedOperation={selectedOperation}
               selectedOperationRequestActive={selectedOperationSelection !== null}
               selectedAgentDrilldownTab={selectedAgent ? selectedAgentDrilldownTab : null}
+              sourceGapFocusIntent={sourceGapFocusIntent}
               timelineReplay={timelineReplayResource.data}
               timelineReplayError={timelineReplayResource.error}
               timelineReplayState={timelineReplayResource.state}

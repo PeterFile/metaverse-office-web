@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState, type ReactNode } from 'react';
+import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
 
 import type {
   AccountabilityReplayBundle,
@@ -49,6 +49,7 @@ import type {
   SelectedAgentEvidenceLedgerItem,
   SelectedAgentEvidenceLedgerModel
 } from '../selectedAgentEvidenceLedger';
+import type { SourceGapDrilldownGroupKey } from './sourceGapSignals';
 
 export type HubCategory = 'crew' | 'queue' | 'supervision' | 'evidence' | 'replay' | 'memory';
 
@@ -135,6 +136,7 @@ type DetailsPanelProps = {
   selectedOperation: OfficeOperation | null;
   selectedOperationRequestActive?: boolean;
   selectedAgentDrilldownTab?: SelectedAgentDrilldownTab | null;
+  sourceGapFocusIntent?: SourceGapFocusIntent | null;
   timelineReplay: TimelineReplayResponse | null;
   timelineReplayError: string | null;
   timelineReplayState: LoadState;
@@ -165,6 +167,12 @@ type DetailsPanelProps = {
   onFocusSharedMemoryArtifact?: (artifactRef: string, scope?: SharedMemoryJumpScope) => void;
   onOpenReplayCheckpoint?: (eventId: string) => void;
   onFocusWorldZone?: (zoneId: string) => void;
+};
+
+export type SourceGapFocusIntent = {
+  agentId: string;
+  sourceDrilldownGroupKey: SourceGapDrilldownGroupKey;
+  requestId: number;
 };
 
 type SelectAgentOptions = {
@@ -3773,13 +3781,25 @@ function renderSourceHealthFacts(facts: SourceHealthFact[], labelPrefix: string 
   ));
 }
 
-function renderSourceDrilldownGroups(groups: SourceDrilldownGroup[], labelPrefix: string | null = 'Source health') {
+function renderSourceDrilldownGroups(
+  groups: SourceDrilldownGroup[],
+  labelPrefix: string | null = 'Source health',
+  options: {
+    idPrefix?: string;
+    focusedGroupKey?: SourceGapDrilldownGroupKey | null;
+  } = {}
+) {
   if (groups.length === 0) {
     return null;
   }
 
   return groups.map((group) => (
-    <details key={group.key}>
+    <details
+      key={group.key}
+      id={options.idPrefix ? `${options.idPrefix}-${group.key}` : undefined}
+      data-source-gap-focus={options.focusedGroupKey === group.key ? 'true' : undefined}
+      tabIndex={options.idPrefix ? -1 : undefined}
+    >
       <summary>{labelPrefix ? `${labelPrefix} · ${group.summary}` : group.summary}</summary>
       {group.details.map((detail) => (
         <span key={detail.key}>{detail.label}</span>
@@ -3977,6 +3997,7 @@ export function DetailsPanel({
   selectedOperation,
   selectedOperationRequestActive,
   selectedAgentDrilldownTab = null,
+  sourceGapFocusIntent = null,
   timelineReplay,
   timelineReplayError,
   timelineReplayState,
@@ -4155,9 +4176,27 @@ export function DetailsPanel({
   );
   const [selectedAgentSupervisionPanel, setSelectedAgentSupervisionPanel] =
     useState<SelectedAgentSupervisionPanel | null>(null);
+  const [sourceGapFocusDomRetry, setSourceGapFocusDomRetry] = useState(0);
+  const focusedSourceGapRequestIdRef = useRef<number | null>(null);
+  const sourceGapFocusDomRetryRef = useRef<{ requestId: number | null; attempts: number }>({
+    requestId: null,
+    attempts: 0
+  });
+  const activeSourceGapFocusIntent =
+    selectedAgent &&
+    activeHubCategory === 'supervision' &&
+    selectedAgentDrilldownTab === 'evidence' &&
+    sourceGapFocusIntent?.agentId === selectedAgent.agent_id
+      ? sourceGapFocusIntent
+      : null;
   useEffect(() => {
     setSelectedAgentSupervisionPanel(null);
   }, [activeHubCategory, selectedAgent?.agent_id, selectedAgentDrilldownTab]);
+  useEffect(() => {
+    if (activeSourceGapFocusIntent) {
+      setSelectedAgentSupervisionPanel('collector');
+    }
+  }, [activeSourceGapFocusIntent]);
   const selectedAgentSupervisionDeckEnabled = Boolean(
     selectedAgent && activeHubCategory === 'supervision' && selectedAgentDrilldownTab === 'evidence'
   );
@@ -4169,6 +4208,43 @@ export function DetailsPanel({
       : null;
   const shouldShowSelectedAgentSupervisionPanel = (panel: SelectedAgentSupervisionPanel) =>
     !selectedAgentSupervisionDeckEnabled || selectedAgentSupervisionPanelMode === panel;
+  useEffect(() => {
+    if (!activeSourceGapFocusIntent || selectedAgentSupervisionPanelMode !== 'collector') {
+      return;
+    }
+
+    if (focusedSourceGapRequestIdRef.current === activeSourceGapFocusIntent.requestId) {
+      return;
+    }
+
+    if (sourceGapFocusDomRetryRef.current.requestId !== activeSourceGapFocusIntent.requestId) {
+      sourceGapFocusDomRetryRef.current = {
+        requestId: activeSourceGapFocusIntent.requestId,
+        attempts: 0
+      };
+    }
+
+    const target = document.getElementById(
+      `aitown-selected-agent-source-drilldown-${activeSourceGapFocusIntent.sourceDrilldownGroupKey}`
+    );
+    if (!(target instanceof HTMLDetailsElement)) {
+      if (sourceGapFocusDomRetryRef.current.attempts >= 8) {
+        return;
+      }
+
+      sourceGapFocusDomRetryRef.current.attempts += 1;
+      const retryTimer = window.setTimeout(() => {
+        setSourceGapFocusDomRetry((retry) => retry + 1);
+      }, 0);
+
+      return () => window.clearTimeout(retryTimer);
+    }
+
+    focusedSourceGapRequestIdRef.current = activeSourceGapFocusIntent.requestId;
+    target.open = true;
+    target.focus();
+    target.scrollIntoView?.({ block: 'nearest' });
+  }, [activeSourceGapFocusIntent, selectedAgentSupervisionPanelMode, sourceGapFocusDomRetry]);
   const renderSelectedAgentSupervisionPanelBackButton = (panel: SelectedAgentSupervisionPanel) =>
     selectedAgentSupervisionPanelMode === panel ? (
       <button
@@ -5120,6 +5196,11 @@ export function DetailsPanel({
   const selectedCollectorSourceDrilldownGroups = selectedCollectorItem
     ? deriveCollectorItemSourceDrilldownGroups(selectedCollectorItem)
     : [];
+  const selectedCollectorHasFocusedSourceGroup = activeSourceGapFocusIntent
+    ? selectedCollectorSourceDrilldownGroups.some(
+        (group) => group.key === activeSourceGapFocusIntent.sourceDrilldownGroupKey
+      )
+    : false;
   const selectedCollectorWatchGraphAlignment = selectedCollectorItem
     ? resolveCollectorWatchGraphAlignment(selectedCollectorItem, world)
     : null;
@@ -5423,13 +5504,19 @@ export function DetailsPanel({
                 onJump: onFocusSharedMemoryArtifact ?? focusSharedMemoryArtifact
               })}
               {renderSourceHealthFacts(selectedCollectorSourceHealthFacts)}
-              {renderSourceDrilldownGroups(selectedCollectorSourceDrilldownGroups)}
+              {renderSourceDrilldownGroups(selectedCollectorSourceDrilldownGroups, 'Source health', {
+                idPrefix: 'aitown-selected-agent-source-drilldown',
+                focusedGroupKey: activeSourceGapFocusIntent?.sourceDrilldownGroupKey ?? null
+              })}
               {collectorEvidenceCoverageByAgentId.has(selectedCollectorItem.agent_id)
                 ? renderCollectorEvidenceCoverageItem({
                     coverageItem: collectorEvidenceCoverageByAgentId.get(selectedCollectorItem.agent_id)!,
                     coverageLow: collectorEvidenceCoverageLowAgentIds.has(selectedCollectorItem.agent_id)
                   })
                 : null}
+              {activeSourceGapFocusIntent && !selectedCollectorHasFocusedSourceGroup ? (
+                <span>{`Source-gap focus · No collector source evidence for ${activeSourceGapFocusIntent.agentId} in snapshot ${collectorSnapshot.collected_at}.`}</span>
+              ) : null}
               <span>
                 Watch target ·{' '}
                 {renderCollectorWatchTarget({
@@ -5471,6 +5558,11 @@ export function DetailsPanel({
           ) : null}
           {collectorSnapshotState === 'ready' && !collectorSnapshotError && !collectorSnapshot ? (
             <li className="aitown-record">No collector snapshot available yet.</li>
+          ) : null}
+          {collectorSnapshot && !selectedCollectorItem && activeSourceGapFocusIntent ? (
+            <li className="aitown-record">
+              {`Source-gap focus · No collector source evidence for ${activeSourceGapFocusIntent.agentId} in snapshot ${collectorSnapshot.collected_at}.`}
+            </li>
           ) : null}
           {collectorSnapshot && !selectedCollectorItem ? (
             <li className="aitown-record">No collector observation context for this agent in latest snapshot.</li>

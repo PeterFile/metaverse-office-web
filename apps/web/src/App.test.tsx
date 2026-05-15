@@ -3019,6 +3019,39 @@ afterEach(() => {
         });
       }
 
+      if (url === collectorSnapshotUrl) {
+        return jsonResponse({
+          item: {
+            ...collectorSnapshotFixture,
+            items: collectorSnapshotFixture.items.map((item) =>
+              item.agent_id === 'growth-revenue'
+                ? {
+                    ...item,
+                    source_health: {
+                      workspace_files: {
+                        status: 'degraded',
+                        expected_files: ['inbox.md', 'outbox.md', 'todo.md'],
+                        observed_count: 1,
+                        missing_count: 2,
+                        error_count: 0,
+                        last_observed_at: '2026-03-16T08:58:30.000Z',
+                        degraded_reasons: ['missing workspace files: inbox.md, todo.md']
+                      },
+                      tmux_session: {
+                        status: 'observed',
+                        expected_session_ref: '6-web3-growth-revenue',
+                        observed_count: 1,
+                        last_observed_at: '2026-03-16T08:58:40.000Z',
+                        degraded_reasons: []
+                      }
+                    }
+                  }
+                : item
+            )
+          }
+        });
+      }
+
       return resolveTestFetchResponse(url);
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -3048,6 +3081,19 @@ afterEach(() => {
     expect(screen.getByRole('dialog', { name: 'Hub' })).toBeVisible();
     expect(screen.getByRole('button', { name: 'Supervision' })).toHaveAttribute('aria-expanded', 'true');
     expect(within(details).getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
+
+    expect(screen.getByRole('tab', { name: 'Evidence' })).toHaveAttribute('aria-selected', 'true');
+    await waitFor(() =>
+      expect(details).toHaveAttribute('data-selected-agent-supervision-panel', 'collector')
+    );
+    const workspaceGroup = document.getElementById('aitown-selected-agent-source-drilldown-workspace');
+    const tmuxGroup = document.getElementById('aitown-selected-agent-source-drilldown-tmux');
+    expect(workspaceGroup).not.toBeNull();
+    await waitFor(() => expect(workspaceGroup).toHaveAttribute('open'));
+    expect(workspaceGroup).toHaveAttribute('data-source-gap-focus', 'true');
+    await waitFor(() => expect(document.activeElement).toBe(workspaceGroup));
+    expect(tmuxGroup).not.toBeNull();
+    expect(tmuxGroup).not.toHaveAttribute('data-source-gap-focus');
   });
 
   it('omits the evidence coverage focus strip when collector coverage is absent', async () => {

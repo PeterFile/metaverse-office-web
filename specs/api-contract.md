@@ -43,9 +43,15 @@ This is the current API/read-model contract for Metaverse Office Web. It grew ou
 - `agent_received_task` remains queryable through the existing read models but does not advance `last_meaningful_output_at`; staleness still derives from real agent output/heartbeat evidence
 - `POST /events` validates source provenance at the write boundary: `controller_event` requires the team lead actor, `workspace_file` requires non-empty non-`tmux://` `evidence_ref` values and rejects `tmux://` refs, `tmux_observation` requires canonical `tmux://` `evidence_ref` values without boundary whitespace and rejects non-tmux refs, and `raw_transcript` requires a non-empty `evidence_ref`; refs are never inferred from metadata
 
+## Storage contract
+- The default append-only store remains JSONL at `data/prototype-store.jsonl`, or `METAVERSE_OFFICE_STORE_FILE` when set.
+- SQLite storage is opt-in only: `METAVERSE_OFFICE_STORE_BACKEND=sqlite` or `METAVERSE_OFFICE_SQLITE_STORE_FILE=/absolute/path/prototype-store.sqlite`.
+- `METAVERSE_OFFICE_SQLITE_BIN` may point at a non-default `sqlite3` CLI. Missing `sqlite3` or unknown `METAVERSE_OFFICE_STORE_BACKEND` values fail startup; there is no silent fallback to JSONL.
+- JSONL and SQLite store the same append-only record stream and replay through the same in-memory read-model code. SQLite stores `records(seq INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL, payload_json TEXT NOT NULL, appended_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)` and blocks `UPDATE`/`DELETE` with append-only triggers.
+
 ## Collector snapshot semantics
 - `GET /collectors/controller-snapshot` is read-only and returns `{ "item": null }` until a snapshot has been collected
-- `POST /collectors/controller-snapshot` triggers one controller snapshot, persists only evidence-backed output heartbeats, may append collector-derived canonical activity and peer-watch events, appends internal `evidence_record` JSONL records for collector-observed source facts, and stores the resulting report as an append-only `collector_snapshot` JSONL record
+- `POST /collectors/controller-snapshot` triggers one controller snapshot, persists only evidence-backed output heartbeats, may append collector-derived canonical activity and peer-watch events, appends internal `evidence_record` records for collector-observed source facts, and stores the resulting report as an append-only `collector_snapshot` record
 - collected heartbeat coverage is derived from real workspace metadata (`inbox.md`, `outbox.md`, `todo.md`) and tmux pane metadata for the canonical seven-actor roster; `inbox.md` and `workspace_root` are inbound/presence evidence and must not advance meaningful-output or file-write freshness
 - the collector must not fabricate random activity, random severity, or random timestamps
 - the latest collector report is a replayed read model backed by append-only `collector_snapshot` records; collector-observed source facts are replayed from internal append-only `evidence_record` records; heartbeat storage stays backward compatible as append-only `heartbeat` records

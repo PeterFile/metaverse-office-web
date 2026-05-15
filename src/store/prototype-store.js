@@ -1,5 +1,7 @@
+const { execFile } = require('node:child_process');
 const { appendFile, mkdir, readFile } = require('node:fs/promises');
 const path = require('node:path');
+const { promisify } = require('node:util');
 
 const {
   OFFICE_ZONES,
@@ -24,6 +26,7 @@ const EVIDENCE_RECORD_KIND = 'evidence_record';
 const INBOUND_WORKSPACE_FILES = new Set(['inbox.md']);
 const AGENT_OUTPUT_WORKSPACE_ROLES = new Set(['agent_output', 'agent_plan']);
 const NON_OUTPUT_WORKSPACE_ROLES = new Set(['inbound_task', 'workspace_presence']);
+const execFileAsync = promisify(execFile);
 const SEVERITY_RANK = Object.freeze({
   normal: 0,
   yellow: 1,
@@ -79,17 +82,12 @@ const INTERACTION_EVENT_DESCRIPTORS = Object.freeze({
   })
 });
 
-class PrototypeStore {
+class JsonlRecordLog {
   constructor({ filePath }) {
     this.filePath = filePath;
-    this.records = [];
-    this.events = [];
-    this.heartbeats = [];
-    this.evidenceRecords = [];
-    this.latestCollectorReport = null;
   }
 
-  async load() {
+  async loadRecords() {
     await mkdir(path.dirname(this.filePath), { recursive: true });
 
     let content = '';
@@ -101,58 +99,131 @@ class PrototypeStore {
       }
     }
 
+    if (!content.trim()) {
+      return [];
+    }
+
+    return content
+      .split('\n')
+      .filter((line) => line.trim())
+      .map((line) => JSON.parse(line));
+  }
+
+  async appendRecord(record) {
+    await appendFile(this.filePath, `${JSON.stringify(record)}\n`, 'utf8');
+  }
+}
+
+class SqliteRecordLog {
+  constructor({ sqliteFilePath, sqliteBinPath = 'sqlite3' }) {
+    this.filePath = sqliteFilePath;
+    this.sqliteBinPath = sqliteBinPath;
+  }
+
+  async loadRecords() {
+    await this.#ensureReady();
+    const { stdout } = await this.#exec([
+      this.filePath,
+      '-json',
+      'SELECT kind,payload_json FROM records ORDER BY seq;'
+    ]);
+    const rows = stdout.trim() ? JSON.parse(stdout) : [];
+    return rows.map((row) => ({
+      kind: row.kind,
+      payload: JSON.parse(row.payload_json)
+    }));
+  }
+
+  async appendRecord(record) {
+    await this.#ensureReady();
+    const kindHex = Buffer.from(record.kind, 'utf8').toString('hex');
+    const payloadHex = Buffer.from(JSON.stringify(record.payload), 'utf8').toString('hex');
+    await this.#exec([
+      this.filePath,
+      [
+        'INSERT INTO records(kind,payload_json)',
+        `VALUES (CAST(X'${kindHex}' AS TEXT), CAST(X'${payloadHex}' AS TEXT));`
+      ].join(' ')
+    ]);
+  }
+
+  async #ensureReady() {
+    if (this.ready) {
+      return;
+    }
+
+    try {
+      await this.#exec(['--version']);
+    } catch (error) {
+      if (error.code === 'ENOENT') {
+        throw new Error(`sqlite3 binary not found: ${this.sqliteBinPath}`);
+      }
+      throw error;
+    }
+
+    await mkdir(path.dirname(this.filePath), { recursive: true });
+    await this.#exec([
+      this.filePath,
+      [
+        'PRAGMA journal_mode=WAL;',
+        'CREATE TABLE IF NOT EXISTS records (',
+        'seq INTEGER PRIMARY KEY AUTOINCREMENT,',
+        'kind TEXT NOT NULL,',
+        'payload_json TEXT NOT NULL,',
+        'appended_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        ');',
+        'CREATE TRIGGER IF NOT EXISTS records_no_update',
+        'BEFORE UPDATE ON records',
+        'BEGIN',
+        "SELECT RAISE(ABORT, 'records are append-only; UPDATE is not allowed');",
+        'END;',
+        'CREATE TRIGGER IF NOT EXISTS records_no_delete',
+        'BEFORE DELETE ON records',
+        'BEGIN',
+        "SELECT RAISE(ABORT, 'records are append-only; DELETE is not allowed');",
+        'END;'
+      ].join(' ')
+    ]);
+    this.ready = true;
+  }
+
+  #exec(args) {
+    return execFileAsync(this.sqliteBinPath, args, { maxBuffer: 16 * 1024 * 1024 });
+  }
+}
+
+class PrototypeStore {
+  constructor({ filePath, recordLog }) {
+    this.filePath = filePath;
+    this.recordLog = recordLog || new JsonlRecordLog({ filePath });
+    this.records = [];
+    this.events = [];
+    this.heartbeats = [];
+    this.evidenceRecords = [];
+    this.latestCollectorReport = null;
+  }
+
+  async load() {
     this.records = [];
     this.events = [];
     this.heartbeats = [];
     this.evidenceRecords = [];
     this.latestCollectorReport = null;
 
-    if (!content.trim()) {
-      return;
-    }
-
-    for (const line of content.split('\n')) {
-      if (!line.trim()) {
-        continue;
-      }
-
-      const record = JSON.parse(line);
-      this.records.push(record);
-
-      if (record.kind === 'event') {
-        this.events.push(record.payload);
-        continue;
-      }
-
-      if (record.kind === 'heartbeat') {
-        this.heartbeats.push(record.payload);
-        continue;
-      }
-
-      if (record.kind === EVIDENCE_RECORD_KIND) {
-        this.evidenceRecords.push(record.payload);
-        continue;
-      }
-
-      if (record.kind === COLLECTOR_SNAPSHOT_RECORD_KIND) {
-        this.latestCollectorReport = record.payload || null;
-      }
+    for (const record of await this.recordLog.loadRecords()) {
+      this.#applyRecord(record);
     }
   }
 
   async appendEvent(event) {
     const record = { kind: 'event', payload: event };
-    await appendFile(this.filePath, `${JSON.stringify(record)}\n`, 'utf8');
-    this.records.push(record);
-    this.events.push(event);
+    await this.#appendRecord(record);
     return event;
   }
 
   async appendHeartbeat(heartbeat) {
     const record = { kind: 'heartbeat', payload: heartbeat };
-    await appendFile(this.filePath, `${JSON.stringify(record)}\n`, 'utf8');
-    this.records.push(record);
-    this.heartbeats.push(heartbeat);
+    await this.#appendRecord(record);
     return heartbeat;
   }
 
@@ -204,20 +275,44 @@ class PrototypeStore {
         kind: EVIDENCE_RECORD_KIND,
         payload: evidenceRecord
       };
-      await appendFile(this.filePath, `${JSON.stringify(record)}\n`, 'utf8');
-      this.records.push(record);
-      this.evidenceRecords.push(evidenceRecord);
+      await this.#appendRecord(record);
     }
 
     const snapshotRecord = {
       kind: COLLECTOR_SNAPSHOT_RECORD_KIND,
       payload: storedReport
     };
-    await appendFile(this.filePath, `${JSON.stringify(snapshotRecord)}\n`, 'utf8');
-    this.records.push(snapshotRecord);
-    this.latestCollectorReport = storedReport;
+    await this.#appendRecord(snapshotRecord);
 
     return this.latestCollectorReport;
+  }
+
+  async #appendRecord(record) {
+    await this.recordLog.appendRecord(record);
+    this.#applyRecord(record);
+  }
+
+  #applyRecord(record) {
+    this.records.push(record);
+
+    if (record.kind === 'event') {
+      this.events.push(record.payload);
+      return;
+    }
+
+    if (record.kind === 'heartbeat') {
+      this.heartbeats.push(record.payload);
+      return;
+    }
+
+    if (record.kind === EVIDENCE_RECORD_KIND) {
+      this.evidenceRecords.push(record.payload);
+      return;
+    }
+
+    if (record.kind === COLLECTOR_SNAPSHOT_RECORD_KIND) {
+      this.latestCollectorReport = record.payload || null;
+    }
   }
 
   getLatestCollectorReport() {
@@ -4049,8 +4144,14 @@ function parseNowMs(value) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-async function createPrototypeStore({ filePath }) {
-  const store = new PrototypeStore({ filePath });
+async function createPrototypeStore({ filePath, sqliteFilePath, sqliteBinPath } = {}) {
+  const recordLog = sqliteFilePath
+    ? new SqliteRecordLog({ sqliteFilePath, sqliteBinPath })
+    : new JsonlRecordLog({ filePath });
+  const store = new PrototypeStore({
+    filePath: sqliteFilePath || filePath,
+    recordLog
+  });
   await store.load();
   return store;
 }

@@ -5,15 +5,32 @@ const { createPrototypeStore } = require('./store/prototype-store');
 
 async function main() {
   const port = Number.parseInt(process.env.PORT || '3000', 10);
-  const filePath =
-    process.env.METAVERSE_OFFICE_STORE_FILE ||
-    path.join(process.cwd(), 'data', 'prototype-store.jsonl');
+  const storeBackend = process.env.METAVERSE_OFFICE_STORE_BACKEND || '';
+  const useSqlite =
+    storeBackend === 'sqlite' || (!storeBackend && process.env.METAVERSE_OFFICE_SQLITE_STORE_FILE);
+
+  if (storeBackend && storeBackend !== 'jsonl' && storeBackend !== 'sqlite') {
+    throw new Error(`Unknown METAVERSE_OFFICE_STORE_BACKEND: ${storeBackend}`);
+  }
+
+  const filePath = useSqlite
+    ? process.env.METAVERSE_OFFICE_SQLITE_STORE_FILE ||
+      path.join(process.cwd(), 'data', 'prototype-store.sqlite')
+    : process.env.METAVERSE_OFFICE_STORE_FILE ||
+      path.join(process.cwd(), 'data', 'prototype-store.jsonl');
 
   const allowedOrigins = process.env.CORS_ALLOWED_ORIGINS
     ? process.env.CORS_ALLOWED_ORIGINS.split(',').map((value) => value.trim()).filter(Boolean)
     : [];
 
-  const store = await createPrototypeStore({ filePath });
+  const store = await createPrototypeStore(
+    useSqlite
+      ? {
+          sqliteFilePath: filePath,
+          sqliteBinPath: process.env.METAVERSE_OFFICE_SQLITE_BIN
+        }
+      : { filePath }
+  );
   const server = createAppServer({ store, allowedOrigins });
 
   server.listen(port, () => {

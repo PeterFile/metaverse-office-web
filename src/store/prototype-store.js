@@ -2315,6 +2315,38 @@ function createCollectorEvidenceRecords(report = {}) {
         }
       });
     }
+
+    const hermesRuntimeObservations = Array.isArray(item.hermes_runtime_observations)
+      ? item.hermes_runtime_observations
+      : [];
+
+    for (const observation of hermesRuntimeObservations) {
+      if (!isHermesRuntimeSourceKind(observation?.source_kind) || !observation.evidence_ref) {
+        continue;
+      }
+
+      const health = sourceHealth[observation.source_kind] || null;
+      appendRecord({
+        observed_at: normalizeCollectorTimestamp(
+          observation.last_observed_at || observation.observed_at || health?.last_observed_at
+        ),
+        agent_id: item.agent_id,
+        source_kind: observation.source_kind,
+        evidence_ref: observation.evidence_ref,
+        evidence_role: 'runtime_presence',
+        source_status: observation.status || health?.status || null,
+        output_candidate: false,
+        degraded_reasons:
+          Array.isArray(observation.degraded_reasons) && observation.degraded_reasons.length > 0
+            ? observation.degraded_reasons
+            : health?.degraded_reasons,
+        metadata: createHermesEvidenceRecordMetadata({
+          observation,
+          sourceHealth: health,
+          sourceHealthKey: observation.source_kind
+        })
+      });
+    }
   }
 
   for (const session of report.runtime_source_evidence?.unmapped_tmux_sessions || []) {
@@ -2337,7 +2369,45 @@ function createCollectorEvidenceRecords(report = {}) {
     }
   }
 
+  for (const source of report.runtime_source_evidence?.unmapped_hermes_sources || []) {
+    if (!isHermesRuntimeSourceKind(source?.source_kind) || !source.evidence_ref) {
+      continue;
+    }
+
+    appendRecord({
+      observed_at: normalizeCollectorTimestamp(source.observed_at || source.last_observed_at),
+      agent_id: null,
+      source_kind: source.source_kind,
+      evidence_ref: source.evidence_ref,
+      evidence_role: 'runtime_unmapped',
+      source_status: source.status || 'observed',
+      output_candidate: false,
+      degraded_reasons: source.degraded_reasons,
+      metadata: createHermesEvidenceRecordMetadata({
+        observation: source,
+        sourceHealth: null,
+        sourceHealthKey: 'runtime_source_evidence.unmapped_hermes_sources'
+      })
+    });
+  }
+
   return records;
+}
+
+function isHermesRuntimeSourceKind(sourceKind) {
+  return sourceKind === 'hermes_profile' || sourceKind === 'hermes_session';
+}
+
+function createHermesEvidenceRecordMetadata({ observation, sourceHealth, sourceHealthKey }) {
+  return {
+    profile_id: observation.profile_id || sourceHealth?.profile_id || null,
+    session_ref:
+      observation.session_ref ||
+      sourceHealth?.session_ref ||
+      sourceHealth?.expected_session_ref ||
+      null,
+    source_health_key: sourceHealthKey
+  };
 }
 
 function deriveWorkspaceEvidenceRecordRole({ sourceKind, fileName }) {
@@ -2605,11 +2675,7 @@ function projectCollectorSourceHealth(report, filters = {}) {
     collected_at: report.collected_at || null,
     actor_id: report.actor_id || null,
     summary: createSourceHealthSummary(selectedItems, sourceHealthKeys, status),
-    runtime_source_evidence: {
-      unmapped_tmux_sessions: cloneUnmappedTmuxSessions(
-        report.runtime_source_evidence?.unmapped_tmux_sessions
-      )
-    },
+    runtime_source_evidence: cloneRuntimeSourceEvidence(report.runtime_source_evidence),
     agent_items: selectedItems.map((item) =>
       projectSourceHealthAgentItem({
         item,
@@ -2626,9 +2692,17 @@ const SOURCE_HEALTH_KEY_BY_SOURCE_KIND = Object.freeze({
   workspace_file: 'workspace_files',
   workspace_files: 'workspace_files',
   tmux_observation: 'tmux_session',
-  tmux_session: 'tmux_session'
+  tmux_session: 'tmux_session',
+  hermes_profile: 'hermes_profile',
+  hermes_session: 'hermes_session'
 });
-const SOURCE_HEALTH_KEYS = Object.freeze(['workspace_root', 'workspace_files', 'tmux_session']);
+const SOURCE_HEALTH_KEYS = Object.freeze([
+  'workspace_root',
+  'workspace_files',
+  'tmux_session',
+  'hermes_profile',
+  'hermes_session'
+]);
 const SOURCE_HEALTH_STATUSES = Object.freeze(['observed', 'degraded', 'missing', 'error']);
 
 function resolveSourceHealthKeys(sourceKind) {
@@ -2742,12 +2816,32 @@ function cloneUnmappedTmuxSessions(sessions) {
   }));
 }
 
+function cloneRuntimeSourceEvidence(runtimeSourceEvidence = {}) {
+  return {
+    unmapped_tmux_sessions: cloneUnmappedTmuxSessions(
+      runtimeSourceEvidence?.unmapped_tmux_sessions
+    ),
+    ...(Array.isArray(runtimeSourceEvidence?.unmapped_hermes_sources)
+      ? {
+          unmapped_hermes_sources: runtimeSourceEvidence.unmapped_hermes_sources.map((source) => ({
+            ...source,
+            degraded_reasons: Array.isArray(source.degraded_reasons)
+              ? source.degraded_reasons.slice()
+              : []
+          }))
+        }
+      : {})
+  };
+}
+
 function deriveLatestCollectorEvidenceAt(item = {}) {
   return maxCollectorIsoTimestamp([
     ...(Array.isArray(item.workspace_observations) ? item.workspace_observations : [])
       .map((observation) => observation.last_modified_at),
     ...(Array.isArray(item.tmux_observations) ? item.tmux_observations : [])
       .map((observation) => observation.pane_activity_at),
+    ...(Array.isArray(item.hermes_runtime_observations) ? item.hermes_runtime_observations : [])
+      .map((observation) => observation.last_observed_at || observation.observed_at),
     item.heartbeat?.last_meaningful_output_at,
     item.heartbeat?.last_file_write_at
   ]);
@@ -2808,6 +2902,13 @@ function createEvidenceCoverageAggregateFromRows(agentRows) {
     }
 
     for (const sourceKind of normalizeStringValues(row.source_kinds)) {
+      if (
+        isHermesRuntimeSourceKind(sourceKind) &&
+        !Object.prototype.hasOwnProperty.call(sourceKindBuckets, sourceKind)
+      ) {
+        sourceKindBuckets[sourceKind] = 0;
+      }
+
       if (Object.prototype.hasOwnProperty.call(sourceKindBuckets, sourceKind)) {
         sourceKindBuckets[sourceKind] += 1;
       }

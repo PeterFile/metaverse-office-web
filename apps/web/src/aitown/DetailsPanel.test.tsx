@@ -2,6 +2,7 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { DetailsPanel, type HubCategory } from './DetailsPanel';
+import type { SelectedAgentEvidenceLedgerModel } from '../selectedAgentEvidenceLedger';
 import type {
   AccountabilityReplayBundle,
   AgentWorkflow,
@@ -698,6 +699,9 @@ function buildProps(overrides: Partial<DetailsPanelProps> = {}): DetailsPanelPro
     selectedAgentAccountabilityReplay: null,
     selectedAgentAccountabilityReplayError: null,
     selectedAgentAccountabilityReplayState: 'idle',
+    selectedAgentEvidenceLedger: null,
+    selectedAgentEvidenceLedgerError: null,
+    selectedAgentEvidenceLedgerState: 'idle',
     workflow: buildWorkflow(),
     workflowError: null,
     workflowState: 'ready',
@@ -713,6 +717,75 @@ function buildProps(overrides: Partial<DetailsPanelProps> = {}): DetailsPanelPro
     onSelectOperationsState: vi.fn(),
     onSelectOperationsSeverity: vi.fn(),
     onSelectOperation: vi.fn(),
+    ...overrides
+  };
+}
+
+function buildSelectedAgentEvidenceLedger(
+  overrides: Partial<SelectedAgentEvidenceLedgerModel> = {}
+): SelectedAgentEvidenceLedgerModel {
+  return {
+    isEmpty: false,
+    outputEvidence: {
+      totalCount: 1,
+      overflowCount: 0,
+      items: [
+        {
+          evidenceId: 'output-1',
+          observedAt: '2026-03-16T08:58:00.000Z',
+          collectedAt: '2026-03-16T08:59:00.000Z',
+          agentId: 'app-engineering',
+          sourceKind: 'workspace_file',
+          evidenceRef: '/tmp/app/outbox.md',
+          evidenceRole: 'agent_output',
+          sourceStatus: 'observed',
+          outputCandidate: true,
+          collectorSnapshotId: 'collector-20260316',
+          correlationId: 'collector-20260316',
+          degradedReasons: []
+        }
+      ]
+    },
+    nonOutputEvidence: {
+      totalCount: 1,
+      overflowCount: 0,
+      items: [
+        {
+          evidenceId: 'presence-1',
+          observedAt: '2026-03-16T08:57:00.000Z',
+          collectedAt: '2026-03-16T08:59:00.000Z',
+          agentId: 'app-engineering',
+          sourceKind: 'workspace_root',
+          evidenceRef: '/tmp/app',
+          evidenceRole: 'workspace_presence',
+          sourceStatus: 'observed',
+          outputCandidate: false,
+          collectorSnapshotId: 'collector-20260316',
+          correlationId: 'collector-20260316',
+          degradedReasons: []
+        }
+      ]
+    },
+    degradedEvidence: {
+      totalCount: 1,
+      overflowCount: 0,
+      items: [
+        {
+          evidenceId: 'unmapped-1',
+          observedAt: '2026-03-16T08:56:00.000Z',
+          collectedAt: '2026-03-16T08:59:00.000Z',
+          agentId: null,
+          sourceKind: 'tmux_observation',
+          evidenceRef: 'tmux://unmapped/0.1',
+          evidenceRole: 'runtime_unmapped',
+          sourceStatus: 'observed',
+          outputCandidate: false,
+          collectorSnapshotId: 'collector-20260316',
+          correlationId: null,
+          degradedReasons: ['no seeded roster mapping']
+        }
+      ]
+    },
     ...overrides
   };
 }
@@ -1463,6 +1536,35 @@ describe('DetailsPanel selected-agent workflow lifecycle', () => {
     expect(within(facetsRecord!).getByText('Events · evt-2, evt-interaction, evt-related')).toBeVisible();
     expect(within(facetsRecord!).getByText('Incidents · inc-structured-facet')).toBeVisible();
     expect(within(facetsRecord!).getByText('Counterparties · growth-revenue, team-lead')).toBeVisible();
+  });
+
+  it('renders selected-agent evidence ledger groups without inferring idle or dumping raw metadata', () => {
+    render(
+      <DetailsPanel
+        {...buildProps({
+          activeHubCategory: 'evidence',
+          selectedAgentDrilldownTab: 'evidence',
+          selectedAgentEvidenceLedger: buildSelectedAgentEvidenceLedger(),
+          selectedAgentEvidenceLedgerState: 'ready'
+        })}
+      />
+    );
+
+    const section = screen.getByRole('heading', { name: 'Evidence Ledger' }).closest('section');
+    expect(section).not.toBeNull();
+    expect(within(section!).getByText('Output evidence · 1')).toBeVisible();
+    expect(within(section!).getByText('Non-output evidence · 1')).toBeVisible();
+    expect(within(section!).getByText('Degraded / unmapped · 1')).toBeVisible();
+    expect(within(section!).getByText('Ref · /tmp/app/outbox.md')).toBeVisible();
+    expect(within(section!).getByText('Role · agent_output')).toBeVisible();
+    expect(within(section!).getByText('Ref · /tmp/app')).toBeVisible();
+    expect(within(section!).getByText('Ref · tmux://unmapped/0.1')).toBeVisible();
+    expect(within(section!).getByText('Degraded · no seeded roster mapping')).toBeVisible();
+    expect(section!).not.toHaveTextContent('metadata');
+    expect(section!).not.toHaveTextContent('idle');
+    expect(section!).not.toHaveTextContent('offline');
+    expect(section!).not.toHaveTextContent('No work');
+    expect(section!).not.toHaveTextContent('productivity');
   });
 
   it('does not report structured evidence facets when workflow detail has no structured evidence', () => {

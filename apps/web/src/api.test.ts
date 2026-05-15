@@ -583,6 +583,29 @@ describe('fetchEvidenceRecords', () => {
       expect.objectContaining({ signal: undefined })
     );
   });
+
+  it('allows fetchEvidenceRecords callers to opt out of newest-first ordering explicitly', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            items: []
+          }),
+          {
+            headers: JSON_HEADERS
+          }
+        )
+      )
+    );
+
+    await expect(fetchEvidenceRecords({ newestFirst: false, limit: 3 })).resolves.toEqual([]);
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/evidence-records?newest_first=false&limit=3',
+      expect.objectContaining({ signal: undefined })
+    );
+  });
 });
 
 describe('fetchAgentDetail', () => {

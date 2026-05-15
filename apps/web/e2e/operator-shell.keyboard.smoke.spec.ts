@@ -400,9 +400,45 @@ const BENIGN_POST_JUMP_REQUESTS = new Set([
   '/collectors/controller-snapshot'
 ]);
 
+function formatRequestMethodAndPath(request: Request) {
+  try {
+    const url = new URL(request.url());
+    return `${request.method()} ${url.pathname}${url.search}`;
+  } catch {
+    return `${request.method()} ${request.url()}`;
+  }
+}
+
+function normalizePostJumpRequest(requestPath: string) {
+  return requestPath.startsWith('GET ') ? requestPath.slice(4) : requestPath;
+}
+
+function isSelectedAgentEvidenceLedgerGetRequest(requestPath: string) {
+  if (!requestPath.startsWith('GET ')) {
+    return false;
+  }
+
+  const [pathname, rawQuery = ''] = normalizePostJumpRequest(requestPath).split('?');
+  if (pathname !== '/evidence-records') {
+    return false;
+  }
+
+  const params = new URLSearchParams(rawQuery);
+  return (
+    params.size === 3 &&
+    Boolean(params.get('agent_id')) &&
+    params.get('newest_first') === 'true' &&
+    params.get('limit') === '12'
+  );
+}
+
 function expectOnlyBenignPostJumpRequests(postJumpRequests: string[], additionalAllowedRequests: string[] = []) {
   const allowedPostJumpRequests = new Set([...BENIGN_POST_JUMP_REQUESTS, ...additionalAllowedRequests]);
-  const unexpectedPostJumpRequests = postJumpRequests.filter((url) => !allowedPostJumpRequests.has(url));
+  const unexpectedPostJumpRequests = postJumpRequests.filter(
+    (requestPath) =>
+      !allowedPostJumpRequests.has(normalizePostJumpRequest(requestPath)) &&
+      !isSelectedAgentEvidenceLedgerGetRequest(requestPath)
+  );
   expect(unexpectedPostJumpRequests).toEqual([]);
 }
 
@@ -6887,12 +6923,7 @@ test.describe('operator shell smoke', () => {
 
     const requestedUrls: string[] = [];
     page.on('request', (request) => {
-      try {
-        const url = new URL(request.url());
-        requestedUrls.push(`${url.pathname}${url.search}`);
-      } catch {
-        requestedUrls.push(request.url());
-      }
+      requestedUrls.push(formatRequestMethodAndPath(request));
     });
 
     await page.goto('/');
@@ -9125,12 +9156,7 @@ test.describe('operator shell smoke', () => {
 
     const requestedUrls: string[] = [];
     page.on('request', (request) => {
-      try {
-        const url = new URL(request.url());
-        requestedUrls.push(`${url.pathname}${url.search}`);
-      } catch {
-        requestedUrls.push(request.url());
-      }
+      requestedUrls.push(formatRequestMethodAndPath(request));
     });
 
     const accountabilityCorrelationId = 'collector-snapshot:2026-03-10T23:59:40.000Z';

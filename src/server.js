@@ -371,6 +371,7 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
         source_kind: url.searchParams.get('source_kind'),
         evidence_role: url.searchParams.get('evidence_role'),
         output_candidate: url.searchParams.get('output_candidate'),
+        newest_first: url.searchParams.get('newest_first'),
         limit: url.searchParams.get('limit')
       })
     });

@@ -5020,6 +5020,15 @@ test('GET /evidence-records lists stored evidence records read-only with exact f
     '/tmp/evidence-query/app/inbox.md'
   ]);
 
+  const newestFirst = await requestJson(
+    `${baseUrl}/evidence-records?output_candidate=false&newest_first=true&limit=2`
+  );
+  assert.equal(newestFirst.response.status, 200);
+  assert.deepEqual(newestFirst.body.items.map((item) => item.evidence_ref), [
+    'tmux://unmapped-session/0.0',
+    '/tmp/evidence-query/app/inbox.md'
+  ]);
+
   const unmapped = await requestJson(
     `${baseUrl}/evidence-records?evidence_role=runtime_unmapped&output_candidate=false&limit=-1`
   );

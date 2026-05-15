@@ -231,6 +231,26 @@ export interface CollectorSourceHealthProjection {
   runtime_source_evidence?: CollectorRuntimeSourceEvidence;
 }
 
+export interface EvidenceRecord {
+  evidence_id: string;
+  observed_at: string | null;
+  collected_at: string | null;
+  agent_id: string | null;
+  source_kind: string;
+  evidence_ref: string;
+  evidence_role: string | null;
+  source_status: string | null;
+  output_candidate: boolean;
+  collector_snapshot_id: string;
+  correlation_id: string | null;
+  degraded_reasons: string[];
+  metadata: Record<string, unknown>;
+}
+
+export interface EvidenceRecordsResponse {
+  items: EvidenceRecord[];
+}
+
 export interface CollectorSnapshot {
   collected_at: string;
   actor_id: string;

@@ -15,7 +15,7 @@ This is the current API/read-model contract for Metaverse Office Web. It grew ou
 - `GET /collectors/controller-snapshot`
 - `GET /collectors/controller-snapshot/evidence-coverage?agent_id=&source_kind=&confidence_level=&limit=`
 - `GET /collectors/controller-snapshot/source-health?agent_id=&source_kind=&status=&limit=`
-- `GET /evidence-records?agent_id=&source_kind=&evidence_role=&output_candidate=&limit=`
+- `GET /evidence-records?agent_id=&source_kind=&evidence_role=&output_candidate=&newest_first=&limit=`
 - `GET /events?event_id=&agent_id=&event_type=&severity=&source_kind=&evidence_ref=&correlation_id=&limit=`
 - `GET /interactions?event_id=&evidence_ref=&interaction_type=&counterparty_agent_id=&severity=&correlation_id=&limit=&window=`
 - `GET /office/overview`
@@ -57,7 +57,7 @@ This is the current API/read-model contract for Metaverse Office Web. It grew ou
 - the latest collector report is a replayed read model backed by append-only `collector_snapshot` records; collector-observed source facts are replayed from internal append-only `evidence_record` records; heartbeat storage stays backward compatible as append-only `heartbeat` records
 - each `evidence_record` stores `evidence_id`, `observed_at`, `collected_at`, `agent_id`, `source_kind`, `evidence_ref`, `evidence_role`, `source_status`, `output_candidate`, collector correlation fields, degraded reasons, and metadata; current source kinds are `workspace_root`, `workspace_file`, and `tmux_observation`
 - `GET /evidence-records` is a small read-only query surface over replayed `evidence_record` facts; it returns `{ "items": [...] }`, delegates to `store.listEvidenceRecords`, and never triggers collection, tmux/filesystem reads, append-only writes, or control-plane actions
-- evidence-record filters are exact and additive: `agent_id`, `source_kind`, `evidence_role`, `output_candidate`, and post-filter `limit`; blank string filters are ignored, `output_candidate` accepts `true`/`false` via store boolean normalization, and invalid, negative, or missing limits follow the existing read-model limit behavior (`50` default, `200` maximum)
+- evidence-record filters are exact and additive: `agent_id`, `source_kind`, `evidence_role`, `output_candidate`, optional `newest_first=true`, and post-filter `limit`; blank string filters are ignored, `output_candidate` and `newest_first` accept `true`/`false` via store boolean normalization, invalid or false `newest_first` preserves append order for backward compatibility, and invalid, negative, or missing limits follow the existing read-model limit behavior (`50` default, `200` maximum)
 - unmapped tmux runtime rows remain queryable evidence records with `agent_id: null` and `output_candidate: false`
 - `evidence_record` does not add a write API, control-plane surface, event count, or heartbeat count
 - replaying `collector_snapshot` records restores the latest report and evidence coverage, with the last append-order snapshot winning; replaying `evidence_record` records restores collector evidence facts; snapshot replay must not duplicate events or heartbeats, and older event/heartbeat/collector-snapshot-only JSONL files still load without evidence records

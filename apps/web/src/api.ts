@@ -9,6 +9,8 @@ import type {
   AgentWorkflow,
   CollectorSnapshot,
   CorrelationDrilldown,
+  EvidenceRecord,
+  EvidenceRecordsResponse,
   IncidentFeedResponse,
   MemoryArtifactIndex,
   OfficeOperations,
@@ -20,6 +22,7 @@ import type {
 
 const DEFAULT_WORKFLOW_LIMIT = 10;
 const DEFAULT_WORKFLOW_WINDOW = '60m';
+const DEFAULT_EVIDENCE_RECORD_LIMIT = 200;
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL?.trim();
 
 export class RequestError extends Error {
@@ -164,6 +167,41 @@ export async function fetchCollectorSourceHealth(
   );
   const body = await parseJson<{ item: CollectorSourceHealthProjection | null }>(response);
   return body.item;
+}
+
+export async function fetchEvidenceRecords(
+  options: {
+    agentId?: string;
+    sourceKind?: string;
+    evidenceRole?: string;
+    outputCandidate?: boolean;
+    newestFirst?: boolean;
+    limit?: number;
+    signal?: AbortSignal;
+  } = {}
+): Promise<EvidenceRecord[]> {
+  const params = new URLSearchParams();
+  if (options.agentId) {
+    params.set('agent_id', options.agentId);
+  }
+  if (options.sourceKind) {
+    params.set('source_kind', options.sourceKind);
+  }
+  if (options.evidenceRole) {
+    params.set('evidence_role', options.evidenceRole);
+  }
+  if (options.outputCandidate !== undefined) {
+    params.set('output_candidate', String(options.outputCandidate));
+  }
+  params.set('newest_first', String(options.newestFirst ?? true));
+  params.set('limit', String(options.limit ?? DEFAULT_EVIDENCE_RECORD_LIMIT));
+
+  const suffix = params.size > 0 ? `?${params.toString()}` : '';
+  const response = await fetch(resolveApiUrl(`/evidence-records${suffix}`), {
+    signal: options.signal
+  });
+  const body = await parseJson<EvidenceRecordsResponse>(response);
+  return body.items;
 }
 
 export async function fetchOfficeOperations(

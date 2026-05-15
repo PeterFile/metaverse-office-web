@@ -70,7 +70,8 @@ const world: WorldState = {
         staleness: null,
         recent_trail: [],
         open_alert_count: 0,
-        has_open_incidents: false
+        has_open_incidents: false,
+        source_evidence_health_status: 'missing'
       }
     ]
   ]),
@@ -189,6 +190,9 @@ describe('adaptWorldToScene', () => {
     expect(appEngineering?.rolePawnKey).toBe('app_eng');
     expect(appEngineering?.position.x).toBeGreaterThan(0);
     expect(appEngineering?.position.y).toBeGreaterThan(0);
+
+    const growthRevenue = scene.agents.find((agent) => agent.agentId === 'growth-revenue');
+    expect(growthRevenue?.sourceEvidenceHealthStatus).toBe('missing');
   });
 
   it('projects current_map_id from world agents as the scene current map identity', () => {

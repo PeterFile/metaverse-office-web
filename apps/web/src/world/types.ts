@@ -1,4 +1,4 @@
-import type { Severity } from '../types';
+import type { CollectorSourceHealthStatus, Severity } from '../types';
 
 // ── Finite State Set ──
 // Derived phase that the world engine assigns to each agent.
@@ -71,6 +71,7 @@ export interface WorldAgent {
   open_alert_count: number;
   has_open_incidents: boolean;
   runtime_evidence?: RuntimeEvidence;
+  source_evidence_health_status?: Exclude<CollectorSourceHealthStatus, 'observed'> | null;
 }
 
 // ── Zone Snapshot ──

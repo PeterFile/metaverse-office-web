@@ -1,3 +1,4 @@
+import type { CollectorSourceHealthStatus } from '../types';
 import type { Severity } from '../world/types';
 import type { AgentPhase } from '../world/types';
 
@@ -109,6 +110,7 @@ export interface SceneAgent {
   openAlertCount: number;
   hasOpenIncidents: boolean;
   runtimeFreshnessSeverity?: Severity | null;
+  sourceEvidenceHealthStatus?: Exclude<CollectorSourceHealthStatus, 'observed'> | null;
 }
 
 export interface SceneWatchEdge {

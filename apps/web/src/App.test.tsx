@@ -24,6 +24,7 @@ vi.mock('./aitown/WorldScene', () => ({
       agents: Array<{
         agentId: string;
         displayName: string;
+        sourceEvidenceHealthStatus?: 'degraded' | 'missing' | 'error' | null;
       }>;
     };
     onSelectAgent: (agentId: string | null) => void;
@@ -47,6 +48,12 @@ vi.mock('./aitown/WorldScene', () => ({
         <output data-testid="mock-scene-active-correlation-id">{scene.activeCorrelationId ?? ''}</output>
         <output data-testid="mock-scene-correlation-participants">
           {scene.correlationParticipantAgentIds.join(',')}
+        </output>
+        <output data-testid="mock-scene-source-health">
+          {scene.agents
+            .filter((agent) => agent.sourceEvidenceHealthStatus)
+            .map((agent) => `${agent.agentId}:${agent.sourceEvidenceHealthStatus}`)
+            .join(',')}
         </output>
         {showActiveCorrelationOverlay && scene.activeCorrelationId ? (
           <section aria-label="Active correlation">{scene.activeCorrelationId}</section>
@@ -3016,6 +3023,7 @@ afterEach(() => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
+    setNavigatorUserAgent('VitestBrowser');
     render(<App />);
 
     await openHudSignals(user);
@@ -3023,6 +3031,7 @@ afterEach(() => {
 
     expect(within(sourceGapFocus).getByText('Source gaps')).toBeVisible();
     expect(within(sourceGapFocus).getByText('1 provenance gap')).toBeVisible();
+    await waitFor(() => expect(screen.getByTestId('mock-scene-source-health')).toHaveTextContent('growth-revenue:degraded'));
     expect(within(sourceGapFocus).queryByText(/idle|offline|not working|productivity/i)).not.toBeInTheDocument();
 
     const gapChip = within(sourceGapFocus).getByRole('button', {

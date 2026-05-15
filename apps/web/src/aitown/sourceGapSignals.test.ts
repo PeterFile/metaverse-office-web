@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { deriveSourceGapChips } from './sourceGapSignals';
+import { deriveSourceGapChips, deriveSourceHealthWorldBadges } from './sourceGapSignals';
 import type { CollectorSourceHealthProjection } from '../types';
 
 const sourceHealth: CollectorSourceHealthProjection = {
@@ -150,6 +150,60 @@ describe('deriveSourceGapChips', () => {
         },
         [{ agent_id: 'app-engineering', display_name: 'App Engineering Agent' }]
       )
+    ).toEqual([]);
+  });
+});
+
+describe('deriveSourceHealthWorldBadges', () => {
+  it('returns one worst non-observed source evidence health badge per agent', () => {
+    expect(deriveSourceHealthWorldBadges(sourceHealth)).toEqual([
+      {
+        agentId: 'growth-revenue',
+        status: 'error'
+      },
+      {
+        agentId: 'team-lead',
+        status: 'missing'
+      },
+      {
+        agentId: 'app-engineering',
+        status: 'degraded'
+      }
+    ]);
+  });
+
+  it('omits agents whose source evidence health is fully observed or absent', () => {
+    expect(
+      deriveSourceHealthWorldBadges({
+        ...sourceHealth,
+        agent_items: [
+          {
+            agent_id: 'app-engineering',
+            workspace_root: '/tmp/app-engineering',
+            session_ref: '5-web3-app-engineering',
+            evidence_ref_count: 2,
+            evidence_refs: ['/tmp/app-engineering/outbox.md'],
+            latest_evidence_at: '2026-03-16T08:59:30.000Z',
+            source_health: {
+              workspace_root: {
+                status: 'observed',
+                path: '/tmp/app-engineering',
+                last_observed_at: '2026-03-16T08:59:00.000Z',
+                degraded_reasons: []
+              }
+            }
+          },
+          {
+            agent_id: 'team-lead',
+            workspace_root: '/tmp/team-lead',
+            session_ref: '7-web3-team-lead',
+            evidence_ref_count: 1,
+            evidence_refs: ['/tmp/team-lead/outbox.md'],
+            latest_evidence_at: '2026-03-16T08:58:30.000Z',
+            source_health: {}
+          }
+        ]
+      })
     ).toEqual([]);
   });
 });

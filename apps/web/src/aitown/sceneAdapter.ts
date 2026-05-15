@@ -220,7 +220,8 @@ export function adaptWorldToScene(
       rebootRecommended: agent.reboot_recommended,
       openAlertCount: agent.open_alert_count,
       hasOpenIncidents: agent.has_open_incidents,
-      runtimeFreshnessSeverity: agent.staleness?.severity ?? null
+      runtimeFreshnessSeverity: agent.staleness?.severity ?? null,
+      sourceEvidenceHealthStatus: agent.source_evidence_health_status ?? null
     };
   });
 

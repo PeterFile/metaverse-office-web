@@ -191,6 +191,7 @@ const selectedCorrelationTmuxArtifactExactUrl =
   '/memory/artifacts?limit=4&window=60m&agent_id=app-engineering&correlation_id=corr-app-review&artifact_ref=tmux%3A%2F%2F5-web3-app-engineering%2F0.1';
 const collectorSnapshotUrl = '/collectors/controller-snapshot';
 const collectorEvidenceCoverageUrl = '/collectors/controller-snapshot/evidence-coverage';
+const collectorSourceHealthUrl = '/collectors/controller-snapshot/source-health?limit=7';
 
 const overviewFixture = {
   generated_at: '2026-03-16T09:00:00.000Z',
@@ -1631,6 +1632,10 @@ function resolveDefaultFetchResponse(url: string) {
     return jsonResponse({ item: collectorSnapshotFixture.evidence_coverage });
   }
 
+  if (url === collectorSourceHealthUrl) {
+    return jsonResponse({ item: null });
+  }
+
   return null;
 }
 
@@ -2875,6 +2880,87 @@ afterEach(() => {
     await waitFor(() => expect(evidenceTab).toHaveAttribute('aria-selected', 'true'));
     expect(screen.getByRole('tabpanel', { name: 'Evidence' })).toBeVisible();
     expect(details).toHaveAttribute('data-selected-agent-drilldown-tab', 'evidence');
+  });
+
+  it('surfaces source-gap chips as provenance health and opens Supervision from a chip', async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString();
+
+      if (url === collectorSourceHealthUrl) {
+        return jsonResponse({
+          item: {
+            collected_at: '2026-03-16T09:01:00.000Z',
+            actor_id: 'team-lead',
+            summary: {
+              agent_count: 1,
+              source_kind_buckets: {
+                workspace_root: { observed: 0, degraded: 0, missing: 0, error: 0 },
+                workspace_files: { observed: 0, degraded: 1, missing: 0, error: 0 },
+                tmux_session: { observed: 0, degraded: 0, missing: 0, error: 0 }
+              },
+              status_buckets: {
+                observed: 0,
+                degraded: 1,
+                missing: 0,
+                error: 0
+              }
+            },
+            agent_items: [
+              {
+                agent_id: 'growth-revenue',
+                workspace_root: '/tmp/growth-revenue',
+                session_ref: '6-web3-growth-revenue',
+                source_health: {
+                  workspace_files: {
+                    status: 'degraded',
+                    expected_files: ['inbox.md', 'outbox.md', 'todo.md'],
+                    observed_count: 1,
+                    missing_count: 2,
+                    error_count: 0,
+                    last_observed_at: '2026-03-16T08:58:30.000Z',
+                    degraded_reasons: ['missing workspace files: inbox.md, todo.md']
+                  }
+                },
+                evidence_ref_count: 3,
+                evidence_refs: ['/tmp/launch-note.md'],
+                latest_evidence_at: '2026-03-16T08:58:40.000Z'
+              }
+            ],
+            runtime_source_evidence: {
+              unmapped_tmux_sessions: []
+            }
+          }
+        });
+      }
+
+      return resolveTestFetchResponse(url);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<App />);
+
+    await openHudSignals(user);
+    const sourceGapFocus = await screen.findByRole('region', { name: 'Source gap focus' });
+
+    expect(within(sourceGapFocus).getByText('Source gaps')).toBeVisible();
+    expect(within(sourceGapFocus).getByText('1 provenance gap')).toBeVisible();
+    expect(within(sourceGapFocus).queryByText(/idle|offline|not working|productivity/i)).not.toBeInTheDocument();
+
+    const gapChip = within(sourceGapFocus).getByRole('button', {
+      name: 'Open source gap supervision for Growth Revenue Agent workspace files degraded'
+    });
+    expect(gapChip).toHaveTextContent('Workspace files · degraded');
+    expect(gapChip).toHaveTextContent('2 missing files · latest evidence 2026-03-16T08:58:40.000Z');
+    expect(gapChip).not.toHaveTextContent('/tmp/growth-revenue');
+    expect(gapChip).not.toHaveTextContent('6-web3-growth-revenue');
+
+    await user.click(gapChip);
+
+    const details = await screen.findByRole('complementary', { name: 'Agent details' });
+    expect(screen.getByRole('dialog', { name: 'Hub' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Supervision' })).toHaveAttribute('aria-expanded', 'true');
+    expect(within(details).getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
   });
 
   it('omits the evidence coverage focus strip when collector coverage is absent', async () => {

@@ -224,9 +224,47 @@ test.describe('operator shell layout visual smoke', () => {
         }
       ]
     };
+    const sourceHealth = {
+      collected_at: '2026-03-16T09:01:00.000Z',
+      actor_id: 'team-lead',
+      summary: {
+        agent_count: 1,
+        source_kind_buckets: {
+          workspace_root: { observed: 0, degraded: 0, missing: 0, error: 0 },
+          workspace_files: { observed: 0, degraded: 1, missing: 0, error: 0 },
+          tmux_session: { observed: 0, degraded: 0, missing: 0, error: 0 }
+        },
+        status_buckets: { observed: 0, degraded: 1, missing: 0, error: 0 }
+      },
+      agent_items: [
+        {
+          agent_id: 'growth-revenue',
+          workspace_root: '/tmp/growth-revenue',
+          session_ref: '6-web3-growth-revenue',
+          source_health: {
+            workspace_files: {
+              status: 'degraded',
+              expected_files: ['inbox.md', 'outbox.md', 'todo.md'],
+              observed_count: 1,
+              missing_count: 2,
+              error_count: 0,
+              last_observed_at: '2026-03-16T08:58:30.000Z',
+              degraded_reasons: ['missing workspace files: inbox.md, todo.md']
+            }
+          },
+          evidence_ref_count: 3,
+          evidence_refs: ['/tmp/launch-note.md'],
+          latest_evidence_at: '2026-03-16T08:58:40.000Z'
+        }
+      ],
+      runtime_source_evidence: { unmapped_tmux_sessions: [] }
+    };
 
     await page.route('**/collectors/controller-snapshot/evidence-coverage', async (route) => {
       await route.fulfill({ json: { item: evidenceCoverage } });
+    });
+    await page.route('**/collectors/controller-snapshot/source-health**', async (route) => {
+      await route.fulfill({ json: { item: sourceHealth } });
     });
 
     await page.route('**/collectors/controller-snapshot', async (route) => {
@@ -250,16 +288,22 @@ test.describe('operator shell layout visual smoke', () => {
     const signals = page.getByRole('region', { name: 'Office HUD signals' });
     const signalsSummary = signals.locator('summary');
     const evidenceFocus = page.getByRole('region', { name: 'Evidence coverage focus' });
+    const sourceGapFocus = page.getByRole('region', { name: 'Source gap focus' });
     const evidenceFocusHead = evidenceFocus.locator('.aitown-panel__evidence-focus__head');
     const evidenceFocusChip = evidenceFocus.getByRole('button', {
       name: 'Inspect evidence coverage focus agent Growth Revenue Agent'
+    });
+    const sourceGapChip = sourceGapFocus.getByRole('button', {
+      name: 'Open source gap supervision for Growth Revenue Agent workspace files degraded'
     });
     await expect(worldHost).toBeVisible();
     await page.waitForFunction(() => Boolean(window.__AITOWN_VIEWPORT__));
     await expect(signals).toBeVisible();
     await expect(signalsSummary.getByText('Signals', { exact: true })).toBeVisible();
     await expect(signalsSummary.getByText(/Evidence · 1/)).toBeVisible();
+    await expect(signalsSummary.getByText(/Source gaps · 1/)).toBeVisible();
     await expect(evidenceFocus).toBeHidden();
+    await expect(sourceGapFocus).toBeHidden();
     const roster = page.getByRole('navigation', { name: 'Agent roster' });
     const appEngineeringButton = roster.getByRole('button', { name: 'Select and locate App Engineering Agent' });
     const appEngineeringPortrait = roster.locator(
@@ -283,6 +327,14 @@ test.describe('operator shell layout visual smoke', () => {
     await expect(evidenceFocus.getByText('1 low coverage', { exact: true })).toBeVisible();
     await expect(evidenceFocus.getByText('Coverage below high-confidence/no evidence')).toBeVisible();
     await expect(evidenceFocusChip).toBeVisible();
+    await expect(sourceGapFocus).toBeVisible();
+    await expect(sourceGapFocus.getByText('Source gaps', { exact: true })).toBeVisible();
+    await expect(sourceGapFocus.getByText('1 provenance gap', { exact: true })).toBeVisible();
+    await expect(sourceGapChip).toBeVisible();
+    await expect(sourceGapChip).toContainText('Workspace files · degraded');
+    await expect(sourceGapChip).toContainText('2 missing files · latest evidence 2026-03-16T08:58:40.000Z');
+    await expect(sourceGapChip).not.toContainText('/tmp/growth-revenue');
+    await expect(sourceGapChip).not.toContainText('6-web3-growth-revenue');
 
     const before = await readViewportState(page);
     expect(before).not.toBeNull();

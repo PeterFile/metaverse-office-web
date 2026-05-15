@@ -1520,7 +1520,11 @@ test.describe('operator shell smoke', () => {
     await page.waitForFunction(() => Boolean(window.__AITOWN_VIEWPORT__));
 
     const frontendOrigin = new URL(page.url()).origin;
-    const allowedPostClosePathnames = new Set(['/office/overview', '/incidents']);
+    const allowedPostClosePathnames = new Set([
+      '/office/overview',
+      '/incidents',
+      '/collectors/controller-snapshot/source-health'
+    ]);
     const forbiddenPostClosePathnames = new Set([
       '/office/operations',
       '/timeline',
@@ -1532,6 +1536,7 @@ test.describe('operator shell smoke', () => {
     ]);
     const expectedOverviewSearch = '';
     const expectedIncidentsSearch = '?limit=200&window=8760h';
+    const expectedSourceHealthSearch = '?limit=7';
     const postCloseRequests: Array<{
       method: string;
       pathname: string;
@@ -1667,6 +1672,13 @@ test.describe('operator shell smoke', () => {
         )
       ).toEqual([]);
       expect(
+        readPostCloseGetRequests().filter(
+          (request) =>
+            request.pathname === '/collectors/controller-snapshot/source-health' &&
+            request.search !== expectedSourceHealthSearch
+        )
+      ).toEqual([]);
+      expect(
         readPostCloseGetRequests().filter((request) => forbiddenPostClosePathnames.has(request.pathname))
       ).toEqual([]);
     } finally {
@@ -1690,7 +1702,11 @@ test.describe('operator shell smoke', () => {
     await page.waitForFunction(() => Boolean(window.__AITOWN_VIEWPORT__));
 
     const frontendOrigin = new URL(page.url()).origin;
-    const allowedPostClosePathnames = new Set(['/office/overview', '/incidents']);
+    const allowedPostClosePathnames = new Set([
+      '/office/overview',
+      '/incidents',
+      '/collectors/controller-snapshot/source-health'
+    ]);
     const forbiddenPostClosePathnames = new Set([
       '/office/operations',
       '/timeline',
@@ -1702,6 +1718,7 @@ test.describe('operator shell smoke', () => {
     ]);
     const expectedOverviewSearch = '';
     const expectedIncidentsSearch = '?limit=200&window=8760h';
+    const expectedSourceHealthSearch = '?limit=7';
     const postCloseRequests: Array<{
       method: string;
       pathname: string;
@@ -1813,6 +1830,13 @@ test.describe('operator shell smoke', () => {
       expect(
         readPostCloseGetRequests().filter(
           (request) => request.pathname === '/incidents' && request.search !== expectedIncidentsSearch
+        )
+      ).toEqual([]);
+      expect(
+        readPostCloseGetRequests().filter(
+          (request) =>
+            request.pathname === '/collectors/controller-snapshot/source-health' &&
+            request.search !== expectedSourceHealthSearch
         )
       ).toEqual([]);
       expect(
@@ -1938,7 +1962,11 @@ test.describe('operator shell smoke', () => {
       name: 'Inspect live focus agent Growth Revenue Agent'
     });
     const frontendOrigin = new URL(page.url()).origin;
-    const allowedPostClosePathnames = new Set(['/office/overview', '/incidents']);
+    const allowedPostClosePathnames = new Set([
+      '/office/overview',
+      '/incidents',
+      '/collectors/controller-snapshot/source-health'
+    ]);
     const forbiddenPostClosePathnames = new Set([
       '/office/operations',
       '/timeline',
@@ -1950,6 +1978,7 @@ test.describe('operator shell smoke', () => {
     ]);
     const expectedOverviewSearch = '';
     const expectedIncidentsSearch = '?limit=200&window=8760h';
+    const expectedSourceHealthSearch = '?limit=7';
     const postCloseRequests: Array<{
       method: string;
       pathname: string;
@@ -2106,6 +2135,13 @@ test.describe('operator shell smoke', () => {
         )
       ).toEqual([]);
       expect(
+        readPostCloseGetRequests().filter(
+          (request) =>
+            request.pathname === '/collectors/controller-snapshot/source-health' &&
+            request.search !== expectedSourceHealthSearch
+        )
+      ).toEqual([]);
+      expect(
         readPostCloseGetRequests().filter((request) => forbiddenPostClosePathnames.has(request.pathname))
       ).toEqual([]);
     } finally {
@@ -2137,7 +2173,11 @@ test.describe('operator shell smoke', () => {
       name: 'Inspect live focus agent Growth Revenue Agent'
     });
     const frontendOrigin = new URL(page.url()).origin;
-    const allowedPostClosePathnames = new Set(['/office/overview', '/incidents']);
+    const allowedPostClosePathnames = new Set([
+      '/office/overview',
+      '/incidents',
+      '/collectors/controller-snapshot/source-health'
+    ]);
     const forbiddenPostClosePathnames = new Set([
       '/office/operations',
       '/timeline',
@@ -2149,6 +2189,7 @@ test.describe('operator shell smoke', () => {
     ]);
     const expectedOverviewSearch = '';
     const expectedIncidentsSearch = '?limit=200&window=8760h';
+    const expectedSourceHealthSearch = '?limit=7';
     const postCloseRequests: Array<{
       method: string;
       pathname: string;
@@ -2299,6 +2340,13 @@ test.describe('operator shell smoke', () => {
       expect(
         readPostCloseGetRequests().filter(
           (request) => request.pathname === '/incidents' && request.search !== expectedIncidentsSearch
+        )
+      ).toEqual([]);
+      expect(
+        readPostCloseGetRequests().filter(
+          (request) =>
+            request.pathname === '/collectors/controller-snapshot/source-health' &&
+            request.search !== expectedSourceHealthSearch
         )
       ).toEqual([]);
       expect(

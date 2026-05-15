@@ -589,6 +589,7 @@ button {
 }
 
 .aitown-panel__hud-popover .aitown-panel__evidence-focus,
+.aitown-panel__hud-popover .aitown-panel__source-gap-focus,
 .aitown-panel__hud-popover .aitown-panel__hot-zone-focus {
   max-width: 100%;
   margin-left: 0;
@@ -658,6 +659,15 @@ button {
   pointer-events: none;
 }
 
+.aitown-panel__source-gap-focus {
+  display: flex;
+  max-width: 100%;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  pointer-events: none;
+}
+
 .aitown-panel__evidence-focus__head {
   display: flex;
   flex-direction: column;
@@ -677,6 +687,7 @@ button {
 }
 
 .aitown-panel__evidence-focus .aitown-panel__focus-chips,
+.aitown-panel__source-gap-focus .aitown-panel__focus-chips,
 .aitown-panel__hot-zone-focus .aitown-panel__focus-chips {
   max-height: min(18dvh, 156px);
   overflow-x: hidden;
@@ -714,6 +725,11 @@ button {
 .aitown-focus-chip--evidence {
   flex-basis: 170px;
   background: rgba(47, 50, 55, 0.93);
+}
+
+.aitown-focus-chip--source-gap {
+  flex-basis: 170px;
+  background: rgba(56, 46, 43, 0.94);
 }
 
 .aitown-focus-chip:hover {

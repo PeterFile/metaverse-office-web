@@ -44,6 +44,11 @@ import {
   type SourceDrilldownGroup,
   type SourceHealthFact
 } from './sourceHealth';
+import type {
+  SelectedAgentEvidenceLedgerGroup,
+  SelectedAgentEvidenceLedgerItem,
+  SelectedAgentEvidenceLedgerModel
+} from '../selectedAgentEvidenceLedger';
 
 export type HubCategory = 'crew' | 'queue' | 'supervision' | 'evidence' | 'replay' | 'memory';
 
@@ -139,6 +144,9 @@ type DetailsPanelProps = {
   selectedAgentAccountabilityReplay: AccountabilityReplayBundle | null;
   selectedAgentAccountabilityReplayError: string | null;
   selectedAgentAccountabilityReplayState: LoadState;
+  selectedAgentEvidenceLedger: SelectedAgentEvidenceLedgerModel | null;
+  selectedAgentEvidenceLedgerError: string | null;
+  selectedAgentEvidenceLedgerState: LoadState;
   workflow: AgentWorkflow | null;
   workflowError: string | null;
   workflowState: LoadState;
@@ -1130,6 +1138,36 @@ function filterTimelineBySeverity(timeline: WorkflowTimelineEvent[], selectedSev
 
 function renderTimestamp(value: string | null | undefined, fallback: string) {
   return findFirstNonEmptyString([value]) ?? fallback;
+}
+
+function renderSelectedAgentEvidenceLedgerGroup(
+  label: string,
+  group: SelectedAgentEvidenceLedgerGroup
+) {
+  return (
+    <li className="aitown-record">
+      <strong>{`${label} · ${group.totalCount}`}</strong>
+      {group.items.map((item) => renderSelectedAgentEvidenceLedgerItem(item))}
+      {group.overflowCount > 0 ? <span>{`More · ${group.overflowCount} hidden by card limit`}</span> : null}
+    </li>
+  );
+}
+
+function renderSelectedAgentEvidenceLedgerItem(item: SelectedAgentEvidenceLedgerItem) {
+  const degradedReasons = item.degradedReasons.length > 0 ? item.degradedReasons.join(', ') : null;
+
+  return (
+    <Fragment key={item.evidenceId}>
+      <span>{`Ref · ${item.evidenceRef}`}</span>
+      <span>{`Source · ${item.sourceKind}`}</span>
+      <span>{`Role · ${item.evidenceRole ?? 'unclassified'}`}</span>
+      <span>{`Status · ${item.sourceStatus ?? 'unknown'}`}</span>
+      <span>{`Observed · ${renderTimestamp(item.observedAt, 'No observed timestamp')}`}</span>
+      <span>{item.agentId ? `Agent · ${item.agentId}` : 'Agent · unmapped'}</span>
+      {item.correlationId ? <span>{`Correlation · ${item.correlationId}`}</span> : null}
+      {degradedReasons ? <span>{`Degraded · ${degradedReasons}`}</span> : null}
+    </Fragment>
+  );
 }
 
 function renderOperationBlocker(blocker: string) {
@@ -3948,6 +3986,9 @@ export function DetailsPanel({
   selectedAgentAccountabilityReplay,
   selectedAgentAccountabilityReplayError,
   selectedAgentAccountabilityReplayState,
+  selectedAgentEvidenceLedger,
+  selectedAgentEvidenceLedgerError,
+  selectedAgentEvidenceLedgerState,
   workflow,
   workflowError,
   workflowState,
@@ -5663,6 +5704,34 @@ export function DetailsPanel({
               {accountabilityCorrelationCounts ? ` · ${accountabilityCorrelationCounts}` : null}
             </span>
           </li>
+        </ul>
+      </section>
+
+      <section className="aitown-details__section aitown-details__section--selected-evidence aitown-details__section--hub-evidence">
+        <h3>Evidence Ledger</h3>
+        <ul className="aitown-records">
+          {selectedAgentEvidenceLedgerState === 'loading' && !selectedAgentEvidenceLedger ? (
+            <li className="aitown-record">Loading evidence ledger...</li>
+          ) : null}
+          {selectedAgentEvidenceLedgerError && !selectedAgentEvidenceLedger ? (
+            <li className="aitown-record">{`Unable to load evidence ledger. ${selectedAgentEvidenceLedgerError}`}</li>
+          ) : null}
+          {selectedAgentEvidenceLedger ? (
+            <>
+              {renderSelectedAgentEvidenceLedgerGroup('Output evidence', selectedAgentEvidenceLedger.outputEvidence)}
+              {renderSelectedAgentEvidenceLedgerGroup(
+                'Non-output evidence',
+                selectedAgentEvidenceLedger.nonOutputEvidence
+              )}
+              {renderSelectedAgentEvidenceLedgerGroup(
+                'Degraded / unmapped',
+                selectedAgentEvidenceLedger.degradedEvidence
+              )}
+              {selectedAgentEvidenceLedger.isEmpty ? (
+                <li className="aitown-record">No evidence records returned for this bounded request.</li>
+              ) : null}
+            </>
+          ) : null}
         </ul>
       </section>
 

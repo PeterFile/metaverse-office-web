@@ -19,6 +19,7 @@ import {
   fetchCollectorSnapshot,
   fetchCollectorSourceHealth,
   fetchCorrelationDrilldown,
+  fetchEvidenceRecords,
   fetchIncidents,
   fetchMemoryArtifacts,
   fetchOfficeOperations,
@@ -41,6 +42,10 @@ import { deriveSourceGapChips } from './aitown/sourceGapSignals';
 import { WorldProvider, useWorld } from './context/WorldContext';
 import { usePolledResource, type LoadState } from './hooks/usePolledResource';
 import { getHubFocusableElements, isHubElementVisible } from './hubFocus';
+import {
+  buildSelectedAgentEvidenceLedger,
+  type SelectedAgentEvidenceLedgerModel
+} from './selectedAgentEvidenceLedger';
 import type {
   AccountabilityReplayBundle,
   CollectorEvidenceCoverage,
@@ -132,11 +137,17 @@ type SelectedAgentAccountabilityReplayPayload = {
   replayBundle: AccountabilityReplayBundle;
 };
 
+type SelectedAgentEvidenceLedgerPayload = {
+  targetAgentId: string;
+  evidenceLedger: SelectedAgentEvidenceLedgerModel;
+};
+
 const CREW_TIMELINE_LIMIT = 4;
 const CREW_OPEN_SUPERVISION_ALERTS_LIMIT = 4;
 const MEMORY_ARTIFACT_LIMIT = 4;
 const SOURCE_HEALTH_HUD_LIMIT = 7;
 const SELECTED_AGENT_SUPERVISION_HISTORY_LIMIT = 4;
+const SELECTED_AGENT_EVIDENCE_LEDGER_LIMIT = 12;
 const RESET_VIEW_SHORTCUT_KEY = 'r';
 const RESET_VIEW_SHORTCUT_ARIA = 'R';
 
@@ -1643,6 +1654,56 @@ function AppInner() {
       selectedAgentId,
       selectedAgentScopedCorrelationId
     );
+  const selectedAgentEvidenceLedgerResourceKey = selectedAgentId
+    ? `selected-agent-evidence-ledger:${selectedAgentId}:limit=${SELECTED_AGENT_EVIDENCE_LEDGER_LIMIT}`
+    : null;
+  const previousSelectedAgentEvidenceLedgerResourceKeyRef = useRef<string | null>(
+    selectedAgentEvidenceLedgerResourceKey
+  );
+  const selectedAgentEvidenceLedgerResource = usePolledResource<SelectedAgentEvidenceLedgerPayload>({
+    enabled:
+      hubOpen &&
+      selectedAgentId !== null &&
+      activeHubCategory === 'evidence' &&
+      selectedAgentDrilldownTab === 'evidence',
+    load: async (signal) => ({
+      targetAgentId: selectedAgentId!,
+      evidenceLedger: buildSelectedAgentEvidenceLedger(
+        await fetchEvidenceRecords({
+          agentId: selectedAgentId!,
+          newestFirst: true,
+          limit: SELECTED_AGENT_EVIDENCE_LEDGER_LIMIT,
+          signal
+        })
+      )
+    }),
+    resourceKey: selectedAgentEvidenceLedgerResourceKey
+  });
+  const selectedAgentEvidenceLedgerSelectionChanged =
+    selectedAgentId !== null &&
+    selectedAgentEvidenceLedgerResourceKey !== null &&
+    previousSelectedAgentEvidenceLedgerResourceKeyRef.current !== selectedAgentEvidenceLedgerResourceKey;
+  const selectedAgentEvidenceLedgerPayloadMatches =
+    selectedAgentEvidenceLedgerResource.data?.targetAgentId === selectedAgentId;
+  const selectedAgentEvidenceLedgerSurfaceIsStale =
+    selectedAgentEvidenceLedgerSelectionChanged ||
+    (selectedAgentEvidenceLedgerResource.data !== null &&
+      !selectedAgentEvidenceLedgerPayloadMatches);
+  const selectedAgentEvidenceLedger =
+    !selectedAgentEvidenceLedgerSurfaceIsStale &&
+    selectedAgentEvidenceLedgerPayloadMatches &&
+    selectedAgentEvidenceLedgerResource.data !== null
+      ? selectedAgentEvidenceLedgerResource.data.evidenceLedger
+      : null;
+  const selectedAgentEvidenceLedgerError = selectedAgentEvidenceLedgerSurfaceIsStale
+    ? null
+    : selectedAgentEvidenceLedgerResource.error;
+  const selectedAgentEvidenceLedgerState: LoadState = selectedAgentEvidenceLedgerSurfaceIsStale
+    ? 'loading'
+    : selectedAgentEvidenceLedgerResource.state;
+  useEffect(() => {
+    previousSelectedAgentEvidenceLedgerResourceKeyRef.current = selectedAgentEvidenceLedgerResourceKey;
+  }, [selectedAgentEvidenceLedgerResourceKey]);
 
   const crewOverviewOperationStateBuckets = useMemo(
     () => crewOverviewStateBucketsResource.data?.summary.state_buckets ?? {},
@@ -2862,6 +2923,9 @@ function AppInner() {
               selectedAgentAccountabilityReplay={selectedAgentAccountabilityReplay}
               selectedAgentAccountabilityReplayError={selectedAgentAccountabilityReplayError}
               selectedAgentAccountabilityReplayState={selectedAgentAccountabilityReplayState}
+              selectedAgentEvidenceLedger={selectedAgentEvidenceLedger}
+              selectedAgentEvidenceLedgerError={selectedAgentEvidenceLedgerError}
+              selectedAgentEvidenceLedgerState={selectedAgentEvidenceLedgerState}
               workflow={activeWorkflow}
               workflowError={workflowError}
               workflowState={workflowState}

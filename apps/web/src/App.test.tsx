@@ -192,6 +192,8 @@ const selectedCorrelationTmuxArtifactExactUrl =
 const collectorSnapshotUrl = '/collectors/controller-snapshot';
 const collectorEvidenceCoverageUrl = '/collectors/controller-snapshot/evidence-coverage';
 const collectorSourceHealthUrl = '/collectors/controller-snapshot/source-health?limit=7';
+const appEngineeringEvidenceRecordsUrl =
+  '/evidence-records?agent_id=app-engineering&newest_first=true&limit=12';
 
 const overviewFixture = {
   generated_at: '2026-03-16T09:00:00.000Z',
@@ -1207,6 +1209,43 @@ const collectorSnapshotFixture = {
   ]
 };
 
+const evidenceRecordsFixture = {
+  items: [
+    {
+      evidence_id: 'output-1',
+      observed_at: '2026-03-16T08:58:00.000Z',
+      collected_at: '2026-03-16T08:59:00.000Z',
+      agent_id: 'app-engineering',
+      source_kind: 'workspace_file',
+      evidence_ref: '/tmp/app/outbox.md',
+      evidence_role: 'agent_output',
+      source_status: 'observed',
+      output_candidate: true,
+      collector_snapshot_id: 'collector-20260316',
+      correlation_id: 'collector-20260316',
+      degraded_reasons: [],
+      metadata: {
+        raw_tmux_capture: 'do not render this raw metadata'
+      }
+    },
+    {
+      evidence_id: 'presence-1',
+      observed_at: '2026-03-16T08:57:00.000Z',
+      collected_at: '2026-03-16T08:59:00.000Z',
+      agent_id: 'app-engineering',
+      source_kind: 'workspace_root',
+      evidence_ref: '/tmp/app',
+      evidence_role: 'workspace_presence',
+      source_status: 'observed',
+      output_candidate: false,
+      collector_snapshot_id: 'collector-20260316',
+      correlation_id: 'collector-20260316',
+      degraded_reasons: [],
+      metadata: {}
+    }
+  ]
+};
+
 const teamLeadMemoryArtifactsFixture = {
   generated_at: '2026-03-16T09:00:00.000Z',
   items: [
@@ -1634,6 +1673,10 @@ function resolveDefaultFetchResponse(url: string) {
 
   if (url === collectorSourceHealthUrl) {
     return jsonResponse({ item: null });
+  }
+
+  if (url === appEngineeringEvidenceRecordsUrl) {
+    return jsonResponse(evidenceRecordsFixture);
   }
 
   return null;
@@ -2880,6 +2923,41 @@ afterEach(() => {
     await waitFor(() => expect(evidenceTab).toHaveAttribute('aria-selected', 'true'));
     expect(screen.getByRole('tabpanel', { name: 'Evidence' })).toBeVisible();
     expect(details).toHaveAttribute('data-selected-agent-drilldown-tab', 'evidence');
+  });
+
+  it('requests the selected-agent evidence ledger only for the Hub Evidence tab', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const roster = await screen.findByRole('navigation', { name: 'Agent roster' });
+    await user.click(
+      within(roster).getByRole('button', {
+        name: 'Select and locate App Engineering Agent'
+      })
+    );
+    const details = await openSelectedAgentPeekInHub(user, 'App Engineering Agent', 'Queue');
+
+    await waitFor(() => {
+      const requestedUrls = vi.mocked(globalThis.fetch).mock.calls.map(([request]) => String(request));
+      expect(requestedUrls).toContain(workflowUrl);
+      expect(requestedUrls).not.toContain(appEngineeringEvidenceRecordsUrl);
+    });
+    expect(details).toHaveAttribute('data-active-hub-category', 'queue');
+
+    const categoryMenu = await screen.findByRole('navigation', { name: 'Office category menu' });
+    await user.click(within(categoryMenu).getByRole('button', { name: 'Evidence' }));
+
+    await waitFor(() => {
+      expect(vi.mocked(globalThis.fetch).mock.calls.map(([request]) => String(request))).toContain(
+        appEngineeringEvidenceRecordsUrl
+      );
+    });
+
+    const ledgerSection = await findHubSection(details, 'Evidence Ledger');
+    expect(ledgerSection).toHaveTextContent('Output evidence · 1');
+    expect(ledgerSection).toHaveTextContent('Non-output evidence · 1');
+    expect(ledgerSection).toHaveTextContent('Ref · /tmp/app/outbox.md');
+    expect(ledgerSection).not.toHaveTextContent('raw_tmux_capture');
   });
 
   it('surfaces source-gap chips as provenance health and opens Supervision from a chip', async () => {

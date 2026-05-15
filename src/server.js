@@ -364,6 +364,19 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
     return;
   }
 
+  if (method === 'GET' && pathname === '/evidence-records') {
+    sendJson(res, 200, {
+      items: store.listEvidenceRecords({
+        agent_id: url.searchParams.get('agent_id'),
+        source_kind: url.searchParams.get('source_kind'),
+        evidence_role: url.searchParams.get('evidence_role'),
+        output_candidate: url.searchParams.get('output_candidate'),
+        limit: url.searchParams.get('limit')
+      })
+    });
+    return;
+  }
+
   if (method === 'GET' && pathname === '/memory/artifacts') {
     sendJson(res, 200, {
       generated_at: now(),

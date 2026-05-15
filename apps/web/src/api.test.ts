@@ -9,6 +9,7 @@ import {
   fetchAgentInteractions,
   fetchCollectorEvidenceCoverage,
   fetchCollectorSnapshot,
+  fetchCollectorSourceHealth,
   fetchMemoryArtifacts,
   fetchOfficeOperations,
   fetchOfficeOverview,
@@ -442,6 +443,88 @@ describe('fetchCollectorEvidenceCoverage', () => {
       '/collectors/controller-snapshot/evidence-coverage?agent_id=app-engineering&source_kind=tmux_observation&confidence_level=low&limit=2',
       expect.objectContaining({ signal: undefined })
     );
+  });
+});
+
+describe('fetchCollectorSourceHealth', () => {
+  it('unwraps the bounded collector source-health projection', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            item: {
+              collected_at: '2026-03-09T18:05:00.000Z',
+              actor_id: 'team-lead',
+              summary: {
+                agent_count: 1,
+                source_kind_buckets: {
+                  workspace_root: { observed: 1, degraded: 0, missing: 0, error: 0 },
+                  workspace_files: { observed: 0, degraded: 1, missing: 0, error: 0 },
+                  tmux_session: { observed: 1, degraded: 0, missing: 0, error: 0 }
+                },
+                status_buckets: {
+                  observed: 2,
+                  degraded: 1,
+                  missing: 0,
+                  error: 0
+                }
+              },
+              agent_items: [
+                {
+                  agent_id: 'app-engineering',
+                  workspace_root: '/tmp/app-engineering',
+                  session_ref: '5-web3-app-engineering',
+                  source_health: {
+                    workspace_files: {
+                      status: 'degraded',
+                      expected_files: ['inbox.md', 'outbox.md', 'todo.md'],
+                      observed_count: 1,
+                      missing_count: 2,
+                      error_count: 0,
+                      last_observed_at: '2026-03-09T18:04:00.000Z',
+                      degraded_reasons: ['missing workspace files: inbox.md, todo.md']
+                    }
+                  },
+                  evidence_ref_count: 2,
+                  evidence_refs: ['/tmp/app-engineering/outbox.md'],
+                  latest_evidence_at: '2026-03-09T18:04:30.000Z'
+                }
+              ],
+              runtime_source_evidence: {
+                unmapped_tmux_sessions: []
+              }
+            }
+          }),
+          {
+            headers: JSON_HEADERS
+          }
+        )
+      )
+    );
+
+    const sourceHealth = await fetchCollectorSourceHealth({ limit: 7 });
+
+    expect(sourceHealth).not.toBeNull();
+    expect(sourceHealth?.summary.status_buckets.degraded).toBe(1);
+    expect(sourceHealth?.agent_items[0].source_health.workspace_files?.status).toBe('degraded');
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/collectors/controller-snapshot/source-health?limit=7',
+      expect.objectContaining({ signal: undefined })
+    );
+  });
+
+  it('returns null when the source-health projection is absent', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ item: null }), {
+          headers: JSON_HEADERS
+        })
+      )
+    );
+
+    await expect(fetchCollectorSourceHealth({ limit: 7 })).resolves.toBeNull();
   });
 });
 

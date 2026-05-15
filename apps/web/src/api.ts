@@ -5,6 +5,7 @@ import type {
   AgentEventsResponse,
   AgentInteractionsResponse,
   CollectorEvidenceCoverage,
+  CollectorSourceHealthProjection,
   AgentWorkflow,
   CollectorSnapshot,
   CorrelationDrilldown,
@@ -128,6 +129,40 @@ export async function fetchCollectorEvidenceCoverage(
     }
   );
   const body = await parseJson<{ item: CollectorEvidenceCoverage | null }>(response);
+  return body.item;
+}
+
+export async function fetchCollectorSourceHealth(
+  options: {
+    agentId?: string;
+    sourceKind?: string;
+    status?: string;
+    limit?: number;
+    signal?: AbortSignal;
+  } = {}
+): Promise<CollectorSourceHealthProjection | null> {
+  const params = new URLSearchParams();
+  if (options.agentId) {
+    params.set('agent_id', options.agentId);
+  }
+  if (options.sourceKind) {
+    params.set('source_kind', options.sourceKind);
+  }
+  if (options.status) {
+    params.set('status', options.status);
+  }
+  if (options.limit !== undefined) {
+    params.set('limit', String(options.limit));
+  }
+
+  const suffix = params.size > 0 ? `?${params.toString()}` : '';
+  const response = await fetch(
+    resolveApiUrl(`/collectors/controller-snapshot/source-health${suffix}`),
+    {
+      signal: options.signal
+    }
+  );
+  const body = await parseJson<{ item: CollectorSourceHealthProjection | null }>(response);
   return body.item;
 }
 

@@ -14,6 +14,7 @@ import type {
   AgentWorkflow,
   CollectorEvidenceCoverage,
   CollectorSnapshot,
+  CollectorSourceHealthProjection,
   CorrelationDrilldown,
   IncidentFeedResponse,
   MemoryArtifactIndex,
@@ -113,7 +114,7 @@ describe('read-only frontend/backend contract smoke', () => {
     expect(path.basename(harness.root)).toMatch(/^web-contract-/);
   });
 
-  it('loads /office/overview, /office/operations, /agents/:id/workflow, /incidents, /timeline, /collectors/controller-snapshot, /collectors/controller-snapshot/evidence-coverage, /memory/artifacts, and /correlations/:id from the real backend', async () => {
+  it('loads /office/overview, /office/operations, /agents/:id/workflow, /incidents, /timeline, /collectors/controller-snapshot, collector source projections, /memory/artifacts, and /correlations/:id from the real backend', async () => {
     harness = await createHarness(() => '2026-03-09T19:00:00.000Z');
     await seedContractSlice(harness.store);
 
@@ -136,6 +137,7 @@ describe('read-only frontend/backend contract smoke', () => {
       timeline,
       collectorSnapshot,
       collectorEvidenceCoverage,
+      collectorSourceHealth,
       memoryArtifacts,
       correlation
     ] = await Promise.all([
@@ -146,6 +148,7 @@ describe('read-only frontend/backend contract smoke', () => {
       api.fetchTimeline(),
       api.fetchCollectorSnapshot(),
       api.fetchCollectorEvidenceCoverage(),
+      api.fetchCollectorSourceHealth({ limit: 7 }),
       api.fetchMemoryArtifacts({
         agentId: 'app-engineering',
         correlationId: 'corr-contract'
@@ -208,6 +211,12 @@ describe('read-only frontend/backend contract smoke', () => {
       {
         method: 'GET',
         origin: harness.baseUrl,
+        pathname: '/collectors/controller-snapshot/source-health',
+        query: [['limit', '7']]
+      },
+      {
+        method: 'GET',
+        origin: harness.baseUrl,
         pathname: '/memory/artifacts',
         query: [
           ['agent_id', 'app-engineering'],
@@ -233,6 +242,7 @@ describe('read-only frontend/backend contract smoke', () => {
     expectTimelineContract(timeline);
     expectCollectorSnapshotContract(collectorSnapshot);
     expectCollectorEvidenceCoverageContract(collectorEvidenceCoverage);
+    expectCollectorSourceHealthContract(collectorSourceHealth);
     expectMemoryArtifactContract(memoryArtifacts);
     expectCorrelationContract(correlation);
   });
@@ -1419,6 +1429,30 @@ async function seedContractSlice(store: BackendStore) {
         agent_id: 'app-engineering',
         workspace_root: '/tmp/app-engineering',
         session_ref: '5-web3-app-engineering',
+        source_health: {
+          workspace_root: {
+            status: 'observed',
+            path: '/tmp/app-engineering',
+            last_observed_at: '2026-03-09T18:58:30.000Z',
+            degraded_reasons: []
+          },
+          workspace_files: {
+            status: 'degraded',
+            expected_files: ['inbox.md', 'outbox.md', 'todo.md'],
+            observed_count: 1,
+            missing_count: 2,
+            error_count: 0,
+            last_observed_at: '2026-03-09T18:58:30.000Z',
+            degraded_reasons: ['missing workspace files: inbox.md, outbox.md']
+          },
+          tmux_session: {
+            status: 'observed',
+            expected_session_ref: '5-web3-app-engineering',
+            observed_count: 1,
+            last_observed_at: '2026-03-09T18:58:45.000Z',
+            degraded_reasons: []
+          }
+        },
         evidence_refs: ['/tmp/app-engineering/todo.md', 'tmux://5-web3-app-engineering/0.1'],
         workspace_observations: [
           {
@@ -1830,6 +1864,42 @@ function expectCollectorEvidenceCoverageContract(coverage: CollectorEvidenceCove
         source_kinds: ['tmux_observation', 'workspace_file'],
         latest_evidence_at: '2026-03-09T18:58:45.000Z',
         confidence_level: 'high'
+      }
+    ]
+  });
+}
+
+function expectCollectorSourceHealthContract(sourceHealth: CollectorSourceHealthProjection | null) {
+  expect(sourceHealth?.collected_at).toBe('2026-03-09T18:59:00.000Z');
+  expect(sourceHealth?.actor_id).toBe('team-lead');
+  expect(sourceHealth).toMatchObject({
+    summary: {
+      agent_count: 1,
+      status_buckets: {
+        observed: 2,
+        degraded: 1,
+        missing: 0,
+        error: 0
+      },
+      source_kind_buckets: {
+        workspace_root: { observed: 1, degraded: 0, missing: 0, error: 0 },
+        workspace_files: { observed: 0, degraded: 1, missing: 0, error: 0 },
+        tmux_session: { observed: 1, degraded: 0, missing: 0, error: 0 }
+      }
+    },
+    agent_items: [
+      {
+        agent_id: 'app-engineering',
+        workspace_root: '/tmp/app-engineering',
+        session_ref: '5-web3-app-engineering',
+        evidence_ref_count: 2,
+        latest_evidence_at: '2026-03-09T18:58:45.000Z',
+        source_health: {
+          workspace_files: {
+            status: 'degraded',
+            missing_count: 2
+          }
+        }
       }
     ]
   });

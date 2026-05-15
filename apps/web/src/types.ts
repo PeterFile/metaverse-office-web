@@ -207,6 +207,30 @@ export interface CollectorEvidenceCoverage {
   agent_items: CollectorEvidenceCoverageAgentItem[];
 }
 
+export type CollectorSourceHealthKind = 'workspace_root' | 'workspace_files' | 'tmux_session';
+
+export interface CollectorSourceHealthProjectionAgentItem {
+  agent_id: string;
+  workspace_root: string | null;
+  session_ref: string | null;
+  source_health: CollectorSourceHealth;
+  evidence_ref_count: number;
+  evidence_refs: string[];
+  latest_evidence_at: string | null;
+}
+
+export interface CollectorSourceHealthProjection {
+  collected_at?: string | null;
+  actor_id?: string | null;
+  summary: {
+    agent_count: number;
+    source_kind_buckets: Record<CollectorSourceHealthKind, Record<CollectorSourceHealthStatus, number>>;
+    status_buckets: Record<CollectorSourceHealthStatus, number>;
+  };
+  agent_items: CollectorSourceHealthProjectionAgentItem[];
+  runtime_source_evidence?: CollectorRuntimeSourceEvidence;
+}
+
 export interface CollectorSnapshot {
   collected_at: string;
   actor_id: string;

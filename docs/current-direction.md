@@ -12,7 +12,7 @@ This project is not a flashy dashboard, not a manual task-dispatch UI, and not a
 
 - Backend runtime is plain Node.js built-ins in `src/server.js` / `src/index.js`.
 - Current persistent store defaults to the local append-only JSONL prototype at `data/prototype-store.jsonl`, selected by `METAVERSE_OFFICE_STORE_FILE` when set.
-- SQLite storage is explicit opt-in via `METAVERSE_OFFICE_STORE_BACKEND=sqlite` or `METAVERSE_OFFICE_SQLITE_STORE_FILE`; it uses the local `sqlite3` CLI, stores the same append-only record stream in append order, and hard-fails if `sqlite3` is missing instead of falling back to JSONL.
+- SQLite storage is explicit opt-in via `METAVERSE_OFFICE_STORE_BACKEND=sqlite` or `METAVERSE_OFFICE_SQLITE_STORE_FILE`; it uses the local `sqlite3` CLI, stores the same append-only `records` stream in append order, maintains derived `record_index` / `record_evidence_refs` lookup sidecars, and hard-fails if `sqlite3` is missing instead of falling back to JSONL.
 - The store replays persisted records into memory and derives current agent projections, read models, incidents, interactions, memory artifacts, correlation drilldowns, timeline replay, accountability replay, evidence-record queries, and the latest collector snapshot.
 - Collector snapshot reports are persisted as append-only `collector_snapshot` records; collector-derived source facts are also persisted as internal append-only `evidence_record` records before the snapshot record.
 - `evidence_record` entries preserve source kind, evidence ref, evidence role, source health status, output-candidate classification, collector correlation, and degraded reasons for workspace roots, workspace files, mapped tmux panes, and unmapped tmux runtime evidence.

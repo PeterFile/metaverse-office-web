@@ -364,6 +364,104 @@ test('SQLite prototype store persists record kinds in append order', async () =>
   assert.equal(recordKinds.filter((kind) => kind === 'evidence_record').length, 3);
 });
 
+test('SQLite prototype store creates derived sidecar indexes and backfills existing records', async () => {
+  const sqliteStoreFile = await createSqliteStoreFile();
+  const eventPayload = JSON.stringify(createEvent()).replaceAll("'", "''");
+  const heartbeatPayload = JSON.stringify(createHeartbeat()).replaceAll("'", "''");
+
+  await execSqlite(
+    sqliteStoreFile,
+    [
+      'CREATE TABLE records (',
+      'seq INTEGER PRIMARY KEY AUTOINCREMENT,',
+      'kind TEXT NOT NULL,',
+      'payload_json TEXT NOT NULL,',
+      'appended_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP',
+      ');',
+      `INSERT INTO records(kind,payload_json) VALUES ('event', '${eventPayload}');`,
+      `INSERT INTO records(kind,payload_json) VALUES ('heartbeat', '${heartbeatPayload}');`
+    ].join(' ')
+  );
+
+  const store = await createPrototypeStore({ sqliteFilePath: sqliteStoreFile });
+  assert.deepEqual(store.getCounts(), {
+    agent_count: 7,
+    event_count: 1,
+    heartbeat_count: 1
+  });
+
+  const { stdout: tableStdout } = await execSqlite(
+    sqliteStoreFile,
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('record_index','record_evidence_refs') ORDER BY name;"
+  );
+  assert.deepEqual(tableStdout.trim().split('\n'), ['record_evidence_refs', 'record_index']);
+
+  const { stdout: indexStdout } = await execSqlite(
+    sqliteStoreFile,
+    [
+      "SELECT name FROM sqlite_master WHERE type = 'index'",
+      "AND name IN ('idx_record_index_event_id','idx_record_index_agent_id','idx_record_index_correlation_id','idx_record_index_source_kind','idx_record_evidence_refs_ref')",
+      'ORDER BY name;'
+    ].join(' ')
+  );
+  assert.deepEqual(indexStdout.trim().split('\n'), [
+    'idx_record_evidence_refs_ref',
+    'idx_record_index_agent_id',
+    'idx_record_index_correlation_id',
+    'idx_record_index_event_id',
+    'idx_record_index_source_kind'
+  ]);
+
+  const { stdout: indexedEventStdout } = await execSqlite(
+    sqliteStoreFile,
+    [
+      'SELECT record_index.kind, record_index.event_id, record_index.agent_id,',
+      'record_index.correlation_id, record_index.source_kind, record_evidence_refs.evidence_ref',
+      'FROM record_index',
+      'JOIN record_evidence_refs ON record_evidence_refs.seq = record_index.seq',
+      "WHERE record_index.kind = 'event';"
+    ].join(' ')
+  );
+  assert.equal(
+    indexedEventStdout.trim(),
+    'event|evt_store_contract_review_started|app-engineering|corr-store-contract|controller_event|/tmp/store-contract/review-start.md'
+  );
+
+  await execSqlite(sqliteStoreFile, 'DELETE FROM record_evidence_refs;');
+  await createPrototypeStore({ sqliteFilePath: sqliteStoreFile });
+  const { stdout: backfillCountStdout } = await execSqlite(
+    sqliteStoreFile,
+    'SELECT (SELECT COUNT(*) FROM record_index), (SELECT COUNT(*) FROM record_evidence_refs);'
+  );
+  assert.equal(backfillCountStdout.trim(), '2|1');
+});
+
+test('SQLite prototype store populates sidecars when appending collector evidence records', async () => {
+  const sqliteStoreFile = await createSqliteStoreFile();
+  const store = await createPrototypeStore({ sqliteFilePath: sqliteStoreFile });
+
+  await store.appendEvent(createEvent());
+  await store.appendHeartbeat(createHeartbeat());
+  await store.appendCollectorReport(createCollectorReport());
+
+  const { stdout: evidenceIndexStdout } = await execSqlite(
+    sqliteStoreFile,
+    [
+      'SELECT record_index.kind, record_index.evidence_id, record_index.agent_id,',
+      'record_index.source_kind, record_index.output_candidate, record_evidence_refs.evidence_ref',
+      'FROM record_index',
+      'JOIN record_evidence_refs ON record_evidence_refs.seq = record_index.seq',
+      "WHERE record_index.kind = 'evidence_record'",
+      'ORDER BY record_index.seq;'
+    ].join(' ')
+  );
+  assert.deepEqual(evidenceIndexStdout.trim().split('\n'), [
+    'evidence_record|ev_collector-snapshot_2026-03-09T18_06_00_000Z_app-engineering_workspace_root__tmp_store-contract_1|app-engineering|workspace_root|0|/tmp/store-contract',
+    'evidence_record|ev_collector-snapshot_2026-03-09T18_06_00_000Z_app-engineering_workspace_file__tmp_store-contract_outbox_md_2|app-engineering|workspace_file|1|/tmp/store-contract/outbox.md',
+    'evidence_record|ev_collector-snapshot_2026-03-09T18_06_00_000Z_app-engineering_tmux_observation_tmux_5-web3-app-engineering_0_1_3|app-engineering|tmux_observation|1|tmux://5-web3-app-engineering/0.1'
+  ]);
+});
+
 test('SQLite prototype store records are append-only', async () => {
   const sqliteStoreFile = await createSqliteStoreFile();
   const store = await createPrototypeStore({ sqliteFilePath: sqliteStoreFile });

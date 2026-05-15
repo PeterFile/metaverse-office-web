@@ -138,11 +138,15 @@ class SqliteRecordLog {
     await this.#ensureReady();
     const kindHex = Buffer.from(record.kind, 'utf8').toString('hex');
     const payloadHex = Buffer.from(JSON.stringify(record.payload), 'utf8').toString('hex');
+    const seqSql = '(SELECT seq FROM records ORDER BY seq DESC LIMIT 1)';
     await this.#exec([
       this.filePath,
       [
+        'BEGIN IMMEDIATE;',
         'INSERT INTO records(kind,payload_json)',
-        `VALUES (CAST(X'${kindHex}' AS TEXT), CAST(X'${payloadHex}' AS TEXT));`
+        `VALUES (CAST(X'${kindHex}' AS TEXT), CAST(X'${payloadHex}' AS TEXT));`,
+        this.#createSidecarInsertSql(seqSql, record),
+        'COMMIT;'
       ].join(' ')
     ]);
   }
@@ -181,15 +185,148 @@ class SqliteRecordLog {
         'BEFORE DELETE ON records',
         'BEGIN',
         "SELECT RAISE(ABORT, 'records are append-only; DELETE is not allowed');",
-        'END;'
+        'END;',
+        'CREATE TABLE IF NOT EXISTS record_index (',
+        'seq INTEGER PRIMARY KEY,',
+        'kind TEXT NOT NULL,',
+        'event_id TEXT,',
+        'evidence_id TEXT,',
+        'agent_id TEXT,',
+        'correlation_id TEXT,',
+        'source_kind TEXT,',
+        'ts TEXT,',
+        'collected_at TEXT,',
+        'observed_at TEXT,',
+        'output_candidate INTEGER,',
+        'FOREIGN KEY(seq) REFERENCES records(seq)',
+        ');',
+        'CREATE TABLE IF NOT EXISTS record_evidence_refs (',
+        'seq INTEGER NOT NULL,',
+        'evidence_ref TEXT NOT NULL,',
+        'PRIMARY KEY(seq, evidence_ref),',
+        'FOREIGN KEY(seq) REFERENCES records(seq)',
+        ');',
+        'CREATE INDEX IF NOT EXISTS idx_record_index_kind_seq',
+        'ON record_index(kind, seq);',
+        'CREATE INDEX IF NOT EXISTS idx_record_index_event_id',
+        'ON record_index(event_id);',
+        'CREATE INDEX IF NOT EXISTS idx_record_index_agent_id',
+        'ON record_index(agent_id);',
+        'CREATE INDEX IF NOT EXISTS idx_record_index_correlation_id',
+        'ON record_index(correlation_id);',
+        'CREATE INDEX IF NOT EXISTS idx_record_index_source_kind',
+        'ON record_index(source_kind);',
+        'CREATE INDEX IF NOT EXISTS idx_record_index_ts',
+        'ON record_index(ts);',
+        'CREATE INDEX IF NOT EXISTS idx_record_evidence_refs_ref',
+        'ON record_evidence_refs(evidence_ref);'
       ].join(' ')
     ]);
+    await this.#backfillSidecars();
     this.ready = true;
+  }
+
+  async #backfillSidecars() {
+    const { stdout } = await this.#exec([
+      this.filePath,
+      '-json',
+      [
+        'SELECT seq,kind,payload_json FROM records',
+        'ORDER BY seq;'
+      ].join(' ')
+    ]);
+    const rows = stdout.trim() ? JSON.parse(stdout) : [];
+
+    for (const row of rows) {
+      await this.#exec([
+        this.filePath,
+        [
+          'BEGIN IMMEDIATE;',
+          `DELETE FROM record_evidence_refs WHERE seq = ${row.seq};`,
+          this.#createSidecarInsertSql(String(row.seq), {
+            kind: row.kind,
+            payload: JSON.parse(row.payload_json)
+          }),
+          'COMMIT;'
+        ].join(' ')
+      ]);
+    }
+  }
+
+  #createSidecarInsertSql(seqSql, record) {
+    const index = createSqliteRecordIndex(record);
+    const values = [
+      seqSql,
+      sqlText(index.kind),
+      sqlText(index.event_id),
+      sqlText(index.evidence_id),
+      sqlText(index.agent_id),
+      sqlText(index.correlation_id),
+      sqlText(index.source_kind),
+      sqlText(index.ts),
+      sqlText(index.collected_at),
+      sqlText(index.observed_at),
+      sqlInteger(index.output_candidate)
+    ];
+    const evidenceRefInserts = index.evidence_refs.map((evidenceRef) =>
+      [
+        'INSERT OR IGNORE INTO record_evidence_refs(seq,evidence_ref)',
+        `VALUES (${seqSql}, ${sqlText(evidenceRef)});`
+      ].join(' ')
+    );
+
+    return [
+      'INSERT OR REPLACE INTO record_index(',
+      'seq,kind,event_id,evidence_id,agent_id,correlation_id,source_kind,ts,collected_at,observed_at,output_candidate',
+      `) VALUES (${values.join(', ')});`,
+      ...evidenceRefInserts
+    ].join(' ');
   }
 
   #exec(args) {
     return execFileAsync(this.sqliteBinPath, args, { maxBuffer: 16 * 1024 * 1024 });
   }
+}
+
+function createSqliteRecordIndex(record) {
+  const payload = record.payload || {};
+  const evidenceRefs = normalizeEvidenceRefs(
+    record.kind === EVIDENCE_RECORD_KIND
+      ? [payload.evidence_ref]
+      : payload.evidence_refs
+  );
+
+  return {
+    kind: record.kind,
+    event_id: payload.event_id || null,
+    evidence_id: payload.evidence_id || null,
+    agent_id: payload.agent_id || null,
+    correlation_id: payload.correlation_id || null,
+    source_kind: payload.source_kind || null,
+    ts: payload.ts || payload.received_at || null,
+    collected_at: payload.collected_at || null,
+    observed_at: payload.observed_at || null,
+    output_candidate:
+      typeof payload.output_candidate === 'boolean' ? payload.output_candidate : null,
+    evidence_refs: evidenceRefs
+  };
+}
+
+function sqlText(value) {
+  if (value === null || value === undefined) {
+    return 'NULL';
+  }
+
+  const hex = Buffer.from(String(value), 'utf8').toString('hex');
+  return `CAST(X'${hex}' AS TEXT)`;
+}
+
+function sqlInteger(value) {
+  if (value === null || value === undefined) {
+    return 'NULL';
+  }
+
+  return value ? '1' : '0';
 }
 
 class PrototypeStore {

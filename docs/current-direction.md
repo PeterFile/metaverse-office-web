@@ -11,9 +11,10 @@ This project is not a flashy dashboard, not a manual task-dispatch UI, and not a
 ## Current implementation facts
 
 - Backend runtime is plain Node.js built-ins in `src/server.js` / `src/index.js`.
-- Current persistent store is the local append-only JSONL prototype at `data/prototype-store.jsonl`, selected by `METAVERSE_OFFICE_STORE_FILE` when set.
-- The store replays JSONL records into memory and derives current agent projections, read models, incidents, interactions, memory artifacts, correlation drilldowns, timeline replay, accountability replay, evidence-record queries, and the latest collector snapshot.
-- Collector snapshot reports are persisted as append-only `collector_snapshot` JSONL records; collector-derived source facts are also persisted as internal append-only `evidence_record` JSONL records before the snapshot record.
+- Current persistent store defaults to the local append-only JSONL prototype at `data/prototype-store.jsonl`, selected by `METAVERSE_OFFICE_STORE_FILE` when set.
+- SQLite storage is explicit opt-in via `METAVERSE_OFFICE_STORE_BACKEND=sqlite` or `METAVERSE_OFFICE_SQLITE_STORE_FILE`; it uses the local `sqlite3` CLI, stores the same append-only record stream in append order, and hard-fails if `sqlite3` is missing instead of falling back to JSONL.
+- The store replays persisted records into memory and derives current agent projections, read models, incidents, interactions, memory artifacts, correlation drilldowns, timeline replay, accountability replay, evidence-record queries, and the latest collector snapshot.
+- Collector snapshot reports are persisted as append-only `collector_snapshot` records; collector-derived source facts are also persisted as internal append-only `evidence_record` records before the snapshot record.
 - `evidence_record` entries preserve source kind, evidence ref, evidence role, source health status, output-candidate classification, collector correlation, and degraded reasons for workspace roots, workspace files, mapped tmux panes, and unmapped tmux runtime evidence.
 - `GET /evidence-records` is read-only evidence inspection over replayed internal evidence records; it filters exact `agent_id`, `source_kind`, `evidence_role`, `output_candidate`, and `limit`, and must not collect, read tmux/filesystems, append records, or expose control-plane actions.
 - Event and heartbeat counts still come only from `event` and `heartbeat` records; inbound `inbox.md`, workspace-root presence, and unmapped tmux evidence remain non-output evidence and must not advance meaningful-output state.

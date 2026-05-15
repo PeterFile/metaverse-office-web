@@ -1,14 +1,27 @@
 const assert = require('node:assert/strict');
+const { execFile } = require('node:child_process');
 const { mkdtemp, readFile, writeFile } = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
+const { promisify } = require('node:util');
 const test = require('node:test');
 
 const { createPrototypeStore } = require('../src/store/prototype-store');
 
+const execFileAsync = promisify(execFile);
+
 async function createStoreFile() {
   const root = await mkdtemp(path.join(os.tmpdir(), 'metaverse-office-store-contract-'));
   return path.join(root, 'prototype-store.jsonl');
+}
+
+async function createSqliteStoreFile() {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'metaverse-office-store-contract-sqlite-'));
+  return path.join(root, 'prototype-store.sqlite');
+}
+
+async function execSqlite(sqliteFilePath, sql) {
+  return execFileAsync('sqlite3', [sqliteFilePath, sql]);
 }
 
 function createEvent() {
@@ -309,4 +322,91 @@ test('JSONL prototype store loads old record kinds without evidence records', as
     event_count: 1,
     heartbeat_count: 1
   });
+});
+
+test('SQLite prototype store replays the same contract as JSONL and survives reload', async () => {
+  const jsonlStoreFile = await createStoreFile();
+  const sqliteStoreFile = await createSqliteStoreFile();
+  const jsonlStore = await createPrototypeStore({ filePath: jsonlStoreFile });
+  const sqliteStore = await createPrototypeStore({ sqliteFilePath: sqliteStoreFile });
+
+  await jsonlStore.appendEvent(createEvent());
+  await jsonlStore.appendHeartbeat(createHeartbeat());
+  await jsonlStore.appendCollectorReport(createCollectorReport());
+
+  await sqliteStore.appendEvent(createEvent());
+  await sqliteStore.appendHeartbeat(createHeartbeat());
+  await sqliteStore.appendCollectorReport(createCollectorReport());
+
+  assert.deepEqual(projectReplayContract(sqliteStore), projectReplayContract(jsonlStore));
+
+  const reloadedSqliteStore = await createPrototypeStore({ sqliteFilePath: sqliteStoreFile });
+  assert.deepEqual(projectReplayContract(reloadedSqliteStore), projectReplayContract(jsonlStore));
+});
+
+test('SQLite prototype store persists record kinds in append order', async () => {
+  const sqliteStoreFile = await createSqliteStoreFile();
+  const store = await createPrototypeStore({ sqliteFilePath: sqliteStoreFile });
+
+  await store.appendEvent(createEvent());
+  await store.appendHeartbeat(createHeartbeat());
+  await store.appendCollectorReport(createCollectorReport());
+
+  const { stdout } = await execSqlite(
+    sqliteStoreFile,
+    "SELECT kind FROM records ORDER BY seq;"
+  );
+  const recordKinds = stdout.trim().split('\n');
+
+  assert.equal(recordKinds.at(-1), 'collector_snapshot');
+  assert.ok(recordKinds.includes('event'));
+  assert.ok(recordKinds.includes('heartbeat'));
+  assert.equal(recordKinds.filter((kind) => kind === 'evidence_record').length, 3);
+});
+
+test('SQLite prototype store records are append-only', async () => {
+  const sqliteStoreFile = await createSqliteStoreFile();
+  const store = await createPrototypeStore({ sqliteFilePath: sqliteStoreFile });
+
+  await store.appendEvent(createEvent());
+
+  await assert.rejects(
+    execSqlite(sqliteStoreFile, "UPDATE records SET kind = 'heartbeat' WHERE seq = 1;"),
+    /records are append-only/
+  );
+  await assert.rejects(
+    execSqlite(sqliteStoreFile, 'DELETE FROM records WHERE seq = 1;'),
+    /records are append-only/
+  );
+});
+
+test('SQLite prototype store preserves payload text through reload', async () => {
+  const sqliteStoreFile = await createSqliteStoreFile();
+  const store = await createPrototypeStore({ sqliteFilePath: sqliteStoreFile });
+  const event = {
+    ...createEvent(),
+    event_id: 'evt_payload_integrity',
+    summary: "single quote ' newline\nemoji 😀 backslash \\",
+    evidence_refs: ['quoted "evidence_ref"', "single ' ref"],
+    metadata: {
+      text: "single quote ' newline\nemoji 😀 backslash \\"
+    }
+  };
+
+  await store.appendEvent(event);
+
+  const reloadedStore = await createPrototypeStore({ sqliteFilePath: sqliteStoreFile });
+  assert.deepEqual(reloadedStore.listEvents({ event_id: 'evt_payload_integrity', limit: 1 })[0], event);
+});
+
+test('SQLite prototype store hard-fails when sqlite binary is missing', async () => {
+  const sqliteStoreFile = await createSqliteStoreFile();
+
+  await assert.rejects(
+    createPrototypeStore({
+      sqliteFilePath: sqliteStoreFile,
+      sqliteBinPath: '/definitely/missing/sqlite3'
+    }),
+    /sqlite3.*not found|missing sqlite/i
+  );
 });

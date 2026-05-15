@@ -21,7 +21,7 @@ The next product milestone is `Live Evidence Spine`: connect the current read mo
 ## Current implementation snapshot
 - backend exposes evidence-first read models for office overview, operations, agent workflow/detail, incidents, timeline replay, accountability replay, correlation drill-down, shared memory artifacts, peer-watch alerts, handoffs, reboots, and collector evidence coverage
 - controlled writes remain limited to `POST /events`, `POST /heartbeats`, and `POST /collectors/controller-snapshot`
-- storage is still the local append-only JSONL prototype at `data/prototype-store.jsonl`, replayed into memory; event, heartbeat, internal collector `evidence_record`, and collector snapshot records are append-only, but this is not yet the target production-grade event store
+- storage defaults to the local append-only JSONL prototype at `data/prototype-store.jsonl`, replayed into memory; an opt-in SQLite append-only backend can store the same record stream at `data/prototype-store.sqlite`
 - domain still uses the canonical seven-actor office model: six employee agents plus `team-lead`
 - frontend is a React + TypeScript + PixiJS AI Town operator world with roster, category Hub, selected-agent drilldowns, supervision/evidence/replay/memory surfaces, and real browser smoke coverage
 
@@ -37,7 +37,7 @@ The next product milestone is `Live Evidence Spine`: connect the current read mo
 - runtime: plain Node.js built-ins only
 - frontend shell: React + TypeScript via Vite under `apps/web`
 - workspace manager: pnpm 10.28.2
-- storage: append-only local JSONL file at `data/prototype-store.jsonl`
+- storage: append-only local JSONL file at `data/prototype-store.jsonl` by default; opt-in SQLite uses the local `sqlite3` CLI
 - seed domain: 6 employee agents plus `team-lead`
 - canonical employee ids:
   - `market-intel`
@@ -52,6 +52,7 @@ The next product milestone is `Live Evidence Spine`: connect the current read mo
 - recommended Node.js baseline: `22.12+` LTS so Vite 7 / jsdom 28 stay inside one supported line
 - pnpm is pinned at `10.28.2` via the root `packageManager` field
 - Corepack ships with modern Node; if your Node install does not expose it, install/refresh it with `npm install --global corepack@latest`
+- SQLite storage is opt-in and requires the `sqlite3` CLI on `PATH`, or `METAVERSE_OFFICE_SQLITE_BIN` pointing at the binary.
 
 ### Bootstrap
 From the repository root:
@@ -105,6 +106,9 @@ VITE_DEV_PROXY_TARGET=http://127.0.0.1:3000 pnpm test:browser-smoke:dev
 Optional env:
 - `PORT=3000`
 - `METAVERSE_OFFICE_STORE_FILE=/absolute/path/prototype-store.jsonl`
+- `METAVERSE_OFFICE_STORE_BACKEND=sqlite` to use SQLite instead of JSONL; unknown values fail startup
+- `METAVERSE_OFFICE_SQLITE_STORE_FILE=/absolute/path/prototype-store.sqlite`; setting this also opts into SQLite
+- `METAVERSE_OFFICE_SQLITE_BIN=/absolute/path/sqlite3` to override the SQLite CLI binary; missing binaries fail startup without falling back to JSONL
 - `BROWSER_SMOKE_FRONTEND_MODE=dev` to run the smoke wrapper against a managed Vite dev server instead of the preview build; omit it to keep the preview-mode smoke path
 - `BROWSER_SMOKE_BACKEND_PORT=3210` to pin the hermetic backend port for browser smoke while still letting the wrapper auto-select a free Vite port unless you also pin `BROWSER_SMOKE_DEV_SERVER_PORT`
 - `BROWSER_SMOKE_DEV_SERVER_PORT=4173` to pin the Vite dev-server port for browser smoke while still letting the wrapper auto-select a free hermetic backend port unless you also pin `BROWSER_SMOKE_BACKEND_PORT`

@@ -170,6 +170,128 @@ function createCollectorReport() {
   };
 }
 
+function createHermesRuntimeCollectorReport() {
+  return {
+    collected_at: '2026-03-09T18:07:00.000Z',
+    actor_id: 'team-lead',
+    summary: {
+      agent_count: 1,
+      heartbeat_count: 0,
+      tmux_observed_count: 0,
+      workspace_observed_count: 0,
+      reboot_recommended_count: 0
+    },
+    evidence_coverage: {
+      evidence_ref_count: 2,
+      covered_agent_count: 1,
+      low_confidence_agent_ids: [],
+      source_kind_buckets: {
+        workspace_file: 0,
+        workspace_root: 0,
+        tmux_observation: 0,
+        hermes_profile: 1,
+        hermes_session: 1
+      },
+      agent_items: [
+        {
+          agent_id: 'app-engineering',
+          evidence_ref_count: 2,
+          source_kinds: ['hermes_profile', 'hermes_session'],
+          latest_evidence_at: '2026-03-09T18:06:45.000Z',
+          confidence_level: 'high'
+        }
+      ]
+    },
+    runtime_source_evidence: {
+      unmapped_tmux_sessions: [],
+      unmapped_hermes_sources: [
+        {
+          source_kind: 'hermes_profile',
+          evidence_ref: 'hermes://profile/unmapped-worker',
+          profile_id: 'unmapped-worker',
+          session_ref: null,
+          observed_at: '2026-03-09T18:06:40.000Z',
+          status: 'observed',
+          degraded_reasons: []
+        }
+      ]
+    },
+    items: [
+      {
+        agent_id: 'app-engineering',
+        session_ref: '5-web3-app-engineering',
+        evidence_refs: [
+          'hermes://profile/app-profile',
+          'hermes://session/5-web3-app-engineering'
+        ],
+        workspace_observations: [],
+        tmux_observations: [],
+        hermes_runtime_observations: [
+          {
+            source_kind: 'hermes_profile',
+            agent_id: 'app-engineering',
+            profile_id: 'app-profile',
+            session_ref: null,
+            evidence_ref: 'hermes://profile/app-profile',
+            status: 'observed',
+            last_observed_at: '2026-03-09T18:06:30.000Z',
+            degraded_reasons: [],
+            metadata: {
+              noisy_runtime_payload: 'must not persist'
+            }
+          },
+          {
+            source_kind: 'hermes_session',
+            agent_id: null,
+            profile_id: null,
+            session_ref: '5-web3-app-engineering',
+            evidence_ref: 'hermes://session/5-web3-app-engineering',
+            status: 'degraded',
+            last_observed_at: '2026-03-09T18:06:45.000Z',
+            degraded_reasons: ['Hermes session stale'],
+            metadata: {
+              noisy_runtime_payload: 'must not persist'
+            }
+          }
+        ],
+        source_health: {
+          hermes_profile: {
+            status: 'observed',
+            profile_id: 'app-profile',
+            evidence_ref: 'hermes://profile/app-profile',
+            last_observed_at: '2026-03-09T18:06:30.000Z',
+            degraded_reasons: []
+          },
+          hermes_session: {
+            status: 'degraded',
+            expected_session_ref: '5-web3-app-engineering',
+            evidence_ref: 'hermes://session/5-web3-app-engineering',
+            last_observed_at: '2026-03-09T18:06:45.000Z',
+            degraded_reasons: ['Hermes session stale']
+          }
+        },
+        supervision: {
+          watch_target: 'growth-revenue',
+          watched_by: ['protocol-engineering', 'team-lead'],
+          needs_attention: false
+        },
+        heartbeat: {
+          agent_id: 'app-engineering',
+          actor_id: 'team-lead',
+          received_at: '2026-03-09T18:07:00.000Z',
+          current_state: 'coding',
+          active_task: 'Verify Hermes runtime source persistence',
+          last_meaningful_output_at: null,
+          last_file_write_at: null,
+          current_blocker: '',
+          confidence_level: 'high',
+          reboot_recommended: false
+        }
+      }
+    ]
+  };
+}
+
 function projectReplayContract(store) {
   const now = '2026-03-09T18:10:00.000Z';
 
@@ -299,6 +421,148 @@ test('JSONL prototype store appends and replays collector evidence records witho
 
   const records = (await readFile(storeFile, 'utf8')).trim().split('\n').map((line) => JSON.parse(line));
   assert.equal(records.filter((record) => record.kind === 'evidence_record').length, 3);
+});
+
+test('prototype store persists Hermes runtime source facts as read-only evidence records', async () => {
+  const jsonlStoreFile = await createStoreFile();
+  const sqliteStoreFile = await createSqliteStoreFile();
+  const jsonlStore = await createPrototypeStore({ filePath: jsonlStoreFile });
+  const sqliteStore = await createPrototypeStore({ sqliteFilePath: sqliteStoreFile });
+  const report = createHermesRuntimeCollectorReport();
+
+  await jsonlStore.appendEvent(createEvent());
+  await jsonlStore.appendHeartbeat(createHeartbeat());
+  await jsonlStore.appendCollectorReport(report);
+  await sqliteStore.appendEvent(createEvent());
+  await sqliteStore.appendHeartbeat(createHeartbeat());
+  await sqliteStore.appendCollectorReport(report);
+
+  assert.deepEqual(jsonlStore.getCounts(), {
+    agent_count: 7,
+    event_count: 1,
+    heartbeat_count: 1
+  });
+
+  const hermesRecords = jsonlStore.listEvidenceRecords({
+    evidence_role: 'runtime_presence'
+  });
+  assert.deepEqual(
+    hermesRecords.map((record) => record.evidence_ref),
+    ['hermes://profile/app-profile', 'hermes://session/5-web3-app-engineering']
+  );
+  assert.deepEqual(
+    hermesRecords.map((record) => record.source_kind),
+    ['hermes_profile', 'hermes_session']
+  );
+  assert.deepEqual(
+    hermesRecords.map((record) => record.output_candidate),
+    [false, false]
+  );
+  assert.deepEqual(
+    hermesRecords.map((record) => record.agent_id),
+    ['app-engineering', 'app-engineering']
+  );
+  assert.equal(hermesRecords[0].observed_at, '2026-03-09T18:06:30.000Z');
+  assert.equal(hermesRecords[1].source_status, 'degraded');
+  assert.deepEqual(hermesRecords[1].degraded_reasons, ['Hermes session stale']);
+  assert.deepEqual(hermesRecords[0].metadata, {
+    profile_id: 'app-profile',
+    session_ref: null,
+    source_health_key: 'hermes_profile'
+  });
+  assert.equal(Object.hasOwn(hermesRecords[0].metadata, 'noisy_runtime_payload'), false);
+
+  const unmappedRecords = jsonlStore.listEvidenceRecords({
+    evidence_role: 'runtime_unmapped',
+    source_kind: 'hermes_profile'
+  });
+  assert.equal(unmappedRecords.length, 1);
+  assert.equal(unmappedRecords[0].agent_id, null);
+  assert.equal(unmappedRecords[0].output_candidate, false);
+  assert.deepEqual(unmappedRecords[0].metadata, {
+    profile_id: 'unmapped-worker',
+    session_ref: null,
+    source_health_key: 'runtime_source_evidence.unmapped_hermes_sources'
+  });
+
+  assert.equal(
+    jsonlStore.getLatestCollectorSourceHealth({ source_kind: 'hermes_profile' }).summary
+      .source_kind_buckets.hermes_profile.observed,
+    1
+  );
+  assert.equal(
+    jsonlStore.getLatestCollectorSourceHealth({ source_kind: 'hermes_session' }).agent_items[0]
+      .source_health.hermes_session.status,
+    'degraded'
+  );
+  assert.deepEqual(
+    jsonlStore.getLatestCollectorSourceHealth().runtime_source_evidence.unmapped_hermes_sources,
+    report.runtime_source_evidence.unmapped_hermes_sources
+  );
+  assert.equal(
+    jsonlStore.getLatestCollectorSourceHealth().agent_items[0].latest_evidence_at,
+    '2026-03-09T18:06:45.000Z'
+  );
+  assert.deepEqual(jsonlStore.getLatestCollectorEvidenceCoverage().source_kind_buckets, {
+    workspace_file: 0,
+    workspace_root: 0,
+    tmux_observation: 0,
+    hermes_profile: 1,
+    hermes_session: 1
+  });
+
+  const reloadedJsonlStore = await createPrototypeStore({ filePath: jsonlStoreFile });
+  const reloadedSqliteStore = await createPrototypeStore({ sqliteFilePath: sqliteStoreFile });
+  assert.deepEqual(reloadedJsonlStore.listEvidenceRecords(), jsonlStore.listEvidenceRecords());
+  assert.deepEqual(projectReplayContract(reloadedSqliteStore), projectReplayContract(reloadedJsonlStore));
+
+  const records = (await readFile(jsonlStoreFile, 'utf8')).trim().split('\n').map((line) => JSON.parse(line));
+  assert.equal(records.filter((record) => record.kind === 'evidence_record').length, 3);
+});
+
+test('evidence coverage fallback aggregate preserves Hermes buckets', async () => {
+  const storeFile = await createStoreFile();
+  await writeFile(
+    storeFile,
+    JSON.stringify({
+      kind: 'collector_snapshot',
+      payload: {
+        collected_at: '2026-03-09T18:08:00.000Z',
+        actor_id: 'team-lead',
+        items: [],
+        evidence_coverage: {
+          evidence_ref_count: 1,
+          covered_agent_count: 1,
+          low_confidence_agent_ids: [],
+          source_kind_buckets: {
+            workspace_file: 0,
+            workspace_root: 0,
+            tmux_observation: 0,
+            hermes_profile: 1
+          },
+          agent_items: [
+            {
+              agent_id: 'missing-agent',
+              evidence_ref_count: 1,
+              source_kinds: ['hermes_profile'],
+              latest_evidence_at: '2026-03-09T18:07:30.000Z',
+              confidence_level: 'high'
+            }
+          ]
+        }
+      }
+    }) + '\n',
+    'utf8'
+  );
+
+  const store = await createPrototypeStore({ filePath: storeFile });
+
+  assert.deepEqual(store.getLatestCollectorEvidenceCoverage().source_kind_buckets, {
+    workspace_file: 0,
+    workspace_root: 0,
+    tmux_observation: 0,
+    hermes_profile: 1
+  });
 });
 
 test('JSONL prototype store filters evidence records by exact drilldown fields', async () => {

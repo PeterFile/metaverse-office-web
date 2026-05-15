@@ -332,15 +332,16 @@ class PrototypeStore {
     const sourceKind = normalizeFilterValue(filters.source_kind);
     const evidenceRole = normalizeFilterValue(filters.evidence_role);
     const outputCandidate = normalizeOptionalBoolean(filters.output_candidate);
+    const newestFirst = normalizeOptionalBoolean(filters.newest_first) === true;
     const limit = parseLimit(filters.limit);
 
-    return this.evidenceRecords
+    const records = this.evidenceRecords
       .filter((record) => !agentId || record.agent_id === agentId)
       .filter((record) => !sourceKind || record.source_kind === sourceKind)
       .filter((record) => !evidenceRole || record.evidence_role === evidenceRole)
-      .filter(
-        (record) => outputCandidate === null || record.output_candidate === outputCandidate
-      )
+      .filter((record) => outputCandidate === null || record.output_candidate === outputCandidate);
+
+    return (newestFirst ? records.slice().sort(compareEvidenceRecordRecency) : records)
       .slice(0, limit)
       .map(cloneEvidenceRecord);
   }
@@ -2696,6 +2697,20 @@ function normalizeFilterValue(value) {
 
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
+}
+
+function compareEvidenceRecordRecency(left, right) {
+  return getEvidenceRecordTime(right) - getEvidenceRecordTime(left);
+}
+
+function getEvidenceRecordTime(record) {
+  const observedAt = Date.parse(record?.observed_at || '');
+  if (Number.isFinite(observedAt)) {
+    return observedAt;
+  }
+
+  const collectedAt = Date.parse(record?.collected_at || '');
+  return Number.isFinite(collectedAt) ? collectedAt : 0;
 }
 
 function normalizeOptionalBoolean(value) {

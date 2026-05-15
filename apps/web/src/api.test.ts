@@ -10,6 +10,7 @@ import {
   fetchCollectorEvidenceCoverage,
   fetchCollectorSnapshot,
   fetchCollectorSourceHealth,
+  fetchEvidenceRecords,
   fetchMemoryArtifacts,
   fetchOfficeOperations,
   fetchOfficeOverview,
@@ -525,6 +526,62 @@ describe('fetchCollectorSourceHealth', () => {
     );
 
     await expect(fetchCollectorSourceHealth({ limit: 7 })).resolves.toBeNull();
+  });
+});
+
+describe('fetchEvidenceRecords', () => {
+  it('requests the max read-model slice by default so ledger callers do not get the oldest short prefix', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            items: []
+          }),
+          {
+            headers: JSON_HEADERS
+          }
+        )
+      )
+    );
+
+    await expect(fetchEvidenceRecords()).resolves.toEqual([]);
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/evidence-records?newest_first=true&limit=200',
+      expect.objectContaining({ signal: undefined })
+    );
+  });
+
+  it('passes only supported evidence-record filters through to the read-only ledger endpoint', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            items: []
+          }),
+          {
+            headers: JSON_HEADERS
+          }
+        )
+      )
+    );
+
+    await expect(
+      fetchEvidenceRecords({
+        agentId: 'app engineering',
+        sourceKind: 'tmux_observation',
+        evidenceRole: 'runtime activity',
+        outputCandidate: false,
+        limit: 7
+      })
+    ).resolves.toEqual([]);
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/evidence-records?agent_id=app+engineering&source_kind=tmux_observation&evidence_role=runtime+activity&output_candidate=false&newest_first=true&limit=7',
+      expect.objectContaining({ signal: undefined })
+    );
   });
 });
 

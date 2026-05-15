@@ -1,6 +1,6 @@
 # Metaverse Office Web
 
-Updated: 2026-05-15T09:47:00+08:00
+Updated: 2026-05-15T10:14:43+08:00
 
 This repository is the implementation home for the Hermes-Agent metaverse-office project.
 
@@ -124,6 +124,7 @@ Optional env:
 - `GET /collectors/controller-snapshot`
 - `GET /collectors/controller-snapshot/evidence-coverage?agent_id=&source_kind=&confidence_level=&limit=`
 - `GET /collectors/controller-snapshot/source-health?agent_id=&source_kind=&status=&limit=`
+- `GET /evidence-records?agent_id=&source_kind=&evidence_role=&output_candidate=&limit=`
 - `GET /office/overview`
 - `GET /office/operations?limit=&state=&agent_id=&severity=`
 - `GET /timeline?window=&event_id=&agent_id=&event_type=&severity=&source_kind=&evidence_ref=&correlation_id=&limit=`
@@ -253,7 +254,9 @@ This keeps employee writes self-scoped and reserves cross-agent task dispatch pl
 - `GET /collectors/controller-snapshot/evidence-coverage` is read-only and returns `{ "item": null }` until the latest replayed collector report includes `evidence_coverage`
 - `GET /collectors/controller-snapshot/source-health` is read-only and returns `{ "item": null }` until a latest collector report exists
 - `POST /collectors/controller-snapshot` stores internal `evidence_record` JSONL records after derived event/heartbeat records and before the `collector_snapshot` record; replay uses only the latest snapshot record for the latest collector report, replays evidence records for collector source facts, and counts only `event`/`heartbeat` records as events/heartbeats
-- collector evidence records capture workspace roots, workspace files, mapped tmux panes, and unmapped tmux runtime evidence with source kind, evidence role, source status, output-candidate classification, collector correlation, and degraded reasons; they do not add a public route or write API
+- collector evidence records capture workspace roots, workspace files, mapped tmux panes, and unmapped tmux runtime evidence with source kind, evidence role, source status, output-candidate classification, collector correlation, and degraded reasons
+- evidence records can be queried through `GET /evidence-records`; it returns `{ "items": [...] }`, supports exact `agent_id`, `source_kind`, `evidence_role`, `output_candidate`, and post-filter `limit`, ignores blank filters, and uses the existing default/max limit behavior
+- `GET /evidence-records` is read-only and does not trigger collection, tmux/filesystem reads, append-only writes, write APIs, control-plane actions, UI work, or SQLite work; unmapped tmux rows stay visible with `agent_id: null` and `output_candidate: false`
 - evidence coverage can be filtered by exact `agent_id`, collector evidence `source_kind`, `confidence_level`, and post-filter `limit`; blank filters are ignored and invalid limits use the existing read-model default
 - evidence coverage responses include only `collected_at`, `actor_id`, aggregate coverage counts, source-kind buckets, low-confidence agent ids, and bounded `agent_items`; the route does not touch tmux, the filesystem, or collector write paths
 - source health can be filtered by exact `agent_id`, `source_kind`, `status`, and post-filter `limit`; accepted `source_kind` values are `workspace_root`, `workspace_file`, `workspace_files`, `tmux_observation`, and `tmux_session`

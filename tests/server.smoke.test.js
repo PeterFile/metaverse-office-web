@@ -4886,6 +4886,172 @@ test('GET /collectors/controller-snapshot/source-health projects latest source h
   assert.equal(records[records.length - 1].kind, 'collector_snapshot');
 });
 
+test('GET /evidence-records lists stored evidence records read-only with exact filters', async (t) => {
+  let collectCount = 0;
+  const controllerSnapshotCollector = {
+    async collectSnapshot() {
+      collectCount += 1;
+      throw new Error('GET /evidence-records must not collect');
+    }
+  };
+  const { baseUrl, store, storeFile } = await createHarness(t, { controllerSnapshotCollector });
+
+  await store.appendCollectorReport({
+    collected_at: '2026-03-09T18:06:00.000Z',
+    actor_id: 'team-lead',
+    summary: {
+      agent_count: 2,
+      heartbeat_count: 0,
+      tmux_observed_count: 1,
+      workspace_observed_count: 2,
+      reboot_recommended_count: 0
+    },
+    runtime_source_evidence: {
+      unmapped_tmux_sessions: [
+        {
+          session_name: 'unmapped-session',
+          pane_refs: ['tmux://unmapped-session/0.0'],
+          observed_count: 1,
+          status: 'observed',
+          last_observed_at: '2026-03-09T18:05:50.000Z',
+          degraded_reasons: []
+        }
+      ]
+    },
+    items: [
+      {
+        agent_id: 'app-engineering',
+        evidence_refs: [
+          '/tmp/evidence-query/app',
+          '/tmp/evidence-query/app/inbox.md',
+          '/tmp/evidence-query/app/outbox.md',
+          'tmux://5-web3-app-engineering/0.1'
+        ],
+        workspace_observations: [
+          {
+            path: '/tmp/evidence-query/app/inbox.md',
+            file_name: 'inbox.md',
+            kind: 'workspace_file',
+            last_modified_at: '2026-03-09T18:04:00.000Z'
+          },
+          {
+            path: '/tmp/evidence-query/app/outbox.md',
+            file_name: 'outbox.md',
+            kind: 'workspace_file',
+            last_modified_at: '2026-03-09T18:05:00.000Z'
+          }
+        ],
+        tmux_observations: [
+          {
+            session_name: '5-web3-app-engineering',
+            window_index: '0',
+            pane_index: '1',
+            pane_id: '%11',
+            pane_current_command: 'nvim',
+            pane_activity_at: '2026-03-09T18:05:30.000Z'
+          }
+        ],
+        source_health: {
+          workspace_root: {
+            status: 'observed',
+            path: '/tmp/evidence-query/app',
+            last_observed_at: '2026-03-09T18:03:00.000Z',
+            degraded_reasons: []
+          },
+          workspace_files: {
+            status: 'observed',
+            last_observed_at: '2026-03-09T18:05:00.000Z',
+            degraded_reasons: []
+          },
+          tmux_session: {
+            status: 'observed',
+            expected_session_ref: '5-web3-app-engineering',
+            observed_count: 1,
+            last_observed_at: '2026-03-09T18:05:30.000Z',
+            degraded_reasons: []
+          }
+        }
+      },
+      {
+        agent_id: 'protocol-engineering',
+        evidence_refs: ['/tmp/evidence-query/protocol/todo.md'],
+        workspace_observations: [
+          {
+            path: '/tmp/evidence-query/protocol/todo.md',
+            file_name: 'todo.md',
+            kind: 'workspace_file',
+            last_modified_at: '2026-03-09T18:02:00.000Z'
+          }
+        ],
+        tmux_observations: [],
+        source_health: {
+          workspace_files: {
+            status: 'degraded',
+            last_observed_at: '2026-03-09T18:02:00.000Z',
+            degraded_reasons: ['missing workspace files: inbox.md, outbox.md']
+          }
+        }
+      }
+    ]
+  });
+
+  const fileBeforeRead = await readFile(storeFile, 'utf8');
+  const latestBeforeRead = store.getLatestCollectorReport();
+  const countsBeforeRead = store.getCounts();
+
+  const response = await requestJson(
+    `${baseUrl}/evidence-records?agent_id=app-engineering&source_kind=workspace_file&evidence_role=agent_output&output_candidate=true&limit=10`
+  );
+  assert.equal(response.response.status, 200);
+  assert.deepEqual(response.body.items.map((item) => item.evidence_ref), [
+    '/tmp/evidence-query/app/outbox.md'
+  ]);
+  assert.equal(response.body.items[0].agent_id, 'app-engineering');
+  assert.equal(response.body.items[0].source_kind, 'workspace_file');
+  assert.equal(response.body.items[0].evidence_role, 'agent_output');
+  assert.equal(response.body.items[0].output_candidate, true);
+
+  const blankFilters = await requestJson(
+    `${baseUrl}/evidence-records?agent_id=&source_kind=&evidence_role=&output_candidate=false&limit=2`
+  );
+  assert.equal(blankFilters.response.status, 200);
+  assert.deepEqual(blankFilters.body.items.map((item) => item.evidence_ref), [
+    '/tmp/evidence-query/app',
+    '/tmp/evidence-query/app/inbox.md'
+  ]);
+
+  const unmapped = await requestJson(
+    `${baseUrl}/evidence-records?evidence_role=runtime_unmapped&output_candidate=false&limit=-1`
+  );
+  assert.equal(unmapped.response.status, 200);
+  assert.deepEqual(unmapped.body.items, [
+    {
+      evidence_id: unmapped.body.items[0].evidence_id,
+      observed_at: '2026-03-09T18:05:50.000Z',
+      collected_at: '2026-03-09T18:06:00.000Z',
+      agent_id: null,
+      source_kind: 'tmux_observation',
+      evidence_ref: 'tmux://unmapped-session/0.0',
+      evidence_role: 'runtime_unmapped',
+      source_status: 'observed',
+      output_candidate: false,
+      collector_snapshot_id: 'collector-snapshot:2026-03-09T18:06:00.000Z',
+      correlation_id: 'collector-snapshot:2026-03-09T18:06:00.000Z',
+      degraded_reasons: [],
+      metadata: {
+        session_name: 'unmapped-session',
+        observed_count: 1,
+        source_health_key: 'runtime_source_evidence.unmapped_tmux_sessions'
+      }
+    }
+  ]);
+
+  assert.equal(collectCount, 0);
+  assert.equal(store.getLatestCollectorReport(), latestBeforeRead);
+  assert.deepEqual(store.getCounts(), countsBeforeRead);
+  assert.equal(await readFile(storeFile, 'utf8'), fileBeforeRead);
+});
+
 test('collector snapshot POST exposes shared artifact rollups for refs shared by multiple agents', async (t) => {
   const sharedArtifactRef = '/tmp/shared-controller-snapshot/todo.md';
   const controllerSnapshotCollector = {

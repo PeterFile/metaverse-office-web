@@ -14,7 +14,9 @@ const TMUX_FORMAT_DELIMITER = '\u001f';
 const EVIDENCE_SOURCE_KINDS = Object.freeze([
   'workspace_file',
   'workspace_root',
-  'tmux_observation'
+  'tmux_observation',
+  'hermes_profile',
+  'hermes_session'
 ]);
 const COMMAND_STATE_MAP = Object.freeze({
   cat: 'researching',
@@ -39,6 +41,9 @@ function createControllerSnapshotCollector(options = {}) {
   const agents = options.agents || SEED_AGENTS;
   const readPathStat = options.readPathStat || defaultReadPathStat;
   const listTmuxPanes = options.listTmuxPanes || defaultListTmuxPanes;
+  const readHermesRuntimeSources =
+    options.readHermesRuntimeSources || defaultReadHermesRuntimeSources;
+  const hermesRuntimeSourcesEnabled = typeof options.readHermesRuntimeSources === 'function';
 
   return {
     collectSnapshot({ actorId = 'team-lead', collectedAt = new Date().toISOString() } = {}) {
@@ -47,7 +52,9 @@ function createControllerSnapshotCollector(options = {}) {
         agents,
         collectedAt,
         readPathStat,
-        listTmuxPanes
+        listTmuxPanes,
+        readHermesRuntimeSources,
+        hermesRuntimeSourcesEnabled
       });
     }
   };
@@ -59,13 +66,30 @@ async function collectControllerSnapshot(options = {}) {
   const collectedAt = options.collectedAt || new Date().toISOString();
   const readPathStat = options.readPathStat || defaultReadPathStat;
   const listTmuxPanes = options.listTmuxPanes || defaultListTmuxPanes;
+  const readHermesRuntimeSources =
+    options.readHermesRuntimeSources || defaultReadHermesRuntimeSources;
+  const hermesRuntimeSourcesEnabled =
+    options.hermesRuntimeSourcesEnabled === undefined
+      ? typeof options.readHermesRuntimeSources === 'function'
+      : Boolean(options.hermesRuntimeSourcesEnabled);
   const panes = await listTmuxPanes();
   const panesBySession = groupTmuxPanesBySession(panes);
+  const hermesRuntimeSourceIndex = groupHermesRuntimeSources({
+    facts: await readHermesRuntimeSources(),
+    agents,
+    enabled: hermesRuntimeSourcesEnabled
+  });
   const items = [];
 
   for (const agent of agents) {
     const workspaceSources = await collectWorkspaceSources({ agent, readPathStat });
     const tmuxObservations = panesBySession.get(agent.session_ref) || [];
+    const hermesRuntimeObservations =
+      hermesRuntimeSourceIndex.factsByAgentId.get(agent.agent_id) || [];
+    const hermesSourceHealth =
+      hermesRuntimeSourceIndex.enabled || hermesRuntimeObservations.length > 0
+        ? createHermesSourceHealth({ agent, hermesRuntimeObservations })
+        : {};
     items.push(
       createCollectorItem({
         actorId,
@@ -73,12 +97,14 @@ async function collectControllerSnapshot(options = {}) {
         collectedAt,
         workspaceObservations: workspaceSources.observations,
         tmuxObservations,
+        hermesRuntimeObservations,
         sourceHealth: {
           ...workspaceSources.source_health,
           tmux_session: createTmuxSessionHealth({
             expectedSessionRef: agent.session_ref,
             tmuxObservations
-          })
+          }),
+          ...hermesSourceHealth
         }
       })
     );
@@ -92,7 +118,8 @@ async function collectControllerSnapshot(options = {}) {
     evidence_coverage: createEvidenceCoverageLedger(items),
     runtime_source_evidence: createRuntimeSourceEvidence({
       panesBySession,
-      expectedSessionRefs: new Set(agents.map((agent) => agent.session_ref))
+      expectedSessionRefs: new Set(agents.map((agent) => agent.session_ref)),
+      unmappedHermesSources: hermesRuntimeSourceIndex.unmappedFacts
     }),
     items
   };
@@ -228,6 +255,7 @@ function createCollectorItem({
   collectedAt,
   workspaceObservations,
   tmuxObservations,
+  hermesRuntimeObservations,
   sourceHealth
 }) {
   const latestWorkspaceFile = workspaceObservations.find(isAgentOutputWorkspaceObservation);
@@ -259,14 +287,21 @@ function createCollectorItem({
     source_health: sourceHealth,
     evidence_refs: createEvidenceRefs({
       workspaceObservations,
-      tmuxObservations
+      tmuxObservations,
+      hermesRuntimeObservations
     }),
     workspace_observations: workspaceObservations,
     tmux_observations: tmuxObservations,
+    hermes_runtime_observations: hermesRuntimeObservations,
     supervision: {
       watch_target: agent.watch_target,
       watched_by: agent.watched_by.slice(),
-      needs_attention: rebootRecommended || currentState === 'blocked' || confidenceLevel === 'low'
+      needs_attention: rebootRecommended || currentState === 'blocked' || confidenceLevel === 'low',
+      evidence_refs: createEvidenceRefs({
+        workspaceObservations,
+        tmuxObservations,
+        hermesRuntimeObservations
+      })
     },
     heartbeat: {
       agent_id: agent.agent_id,
@@ -281,7 +316,8 @@ function createCollectorItem({
       reboot_recommended: rebootRecommended,
       evidence_refs: createEvidenceRefs({
         workspaceObservations,
-        tmuxObservations
+        tmuxObservations,
+        hermesRuntimeObservations
       })
     }
   };
@@ -382,7 +418,60 @@ function deriveTmuxSessionStatus({ observedCount, degradedReasons }) {
   return 'observed';
 }
 
-function createRuntimeSourceEvidence({ panesBySession, expectedSessionRefs }) {
+function createHermesSourceHealth({ agent, hermesRuntimeObservations }) {
+  return {
+    hermes_profile: createHermesProfileHealth({ agent, hermesRuntimeObservations }),
+    hermes_session: createHermesSessionHealth({ agent, hermesRuntimeObservations })
+  };
+}
+
+function createHermesProfileHealth({ agent, hermesRuntimeObservations }) {
+  const observation =
+    hermesRuntimeObservations.find((fact) => fact.source_kind === 'hermes_profile') || null;
+
+  if (!observation) {
+    return {
+      status: 'missing',
+      profile_id: agent.agent_id,
+      evidence_ref: null,
+      last_observed_at: null,
+      degraded_reasons: ['Hermes profile not observed']
+    };
+  }
+
+  return {
+    status: observation.status,
+    profile_id: observation.profile_id || observation.agent_id || agent.agent_id,
+    evidence_ref: observation.evidence_ref,
+    last_observed_at: observation.last_observed_at,
+    degraded_reasons: observation.degraded_reasons.slice()
+  };
+}
+
+function createHermesSessionHealth({ agent, hermesRuntimeObservations }) {
+  const observation =
+    hermesRuntimeObservations.find((fact) => fact.source_kind === 'hermes_session') || null;
+
+  if (!observation) {
+    return {
+      status: 'missing',
+      expected_session_ref: agent.session_ref,
+      evidence_ref: null,
+      last_observed_at: null,
+      degraded_reasons: ['Hermes session not observed']
+    };
+  }
+
+  return {
+    status: observation.status,
+    expected_session_ref: agent.session_ref,
+    evidence_ref: observation.evidence_ref,
+    last_observed_at: observation.last_observed_at,
+    degraded_reasons: observation.degraded_reasons.slice()
+  };
+}
+
+function createRuntimeSourceEvidence({ panesBySession, expectedSessionRefs, unmappedHermesSources }) {
   const unmappedTmuxSessions = [];
 
   for (const [sessionName, observations] of panesBySession.entries()) {
@@ -404,7 +493,10 @@ function createRuntimeSourceEvidence({ panesBySession, expectedSessionRefs }) {
   return {
     unmapped_tmux_sessions: unmappedTmuxSessions.sort((left, right) =>
       left.session_name.localeCompare(right.session_name)
-    )
+    ),
+    ...(unmappedHermesSources.length > 0
+      ? { unmapped_hermes_sources: unmappedHermesSources }
+      : {})
   };
 }
 
@@ -520,13 +612,26 @@ function createEvidenceCoverageLedger(items = []) {
     evidence_ref_count: uniqueEvidenceRefs.size,
     covered_agent_count: coveredAgentCount,
     low_confidence_agent_ids: lowConfidenceAgentIds,
-    source_kind_buckets: {
-      workspace_file: sourceRefsByKind.get('workspace_file').size,
-      workspace_root: sourceRefsByKind.get('workspace_root').size,
-      tmux_observation: sourceRefsByKind.get('tmux_observation').size
-    },
+    source_kind_buckets: createSourceKindBuckets(sourceRefsByKind),
     agent_items: agentItems
   };
+}
+
+function createSourceKindBuckets(sourceRefsByKind) {
+  const buckets = {
+    workspace_file: sourceRefsByKind.get('workspace_file').size,
+    workspace_root: sourceRefsByKind.get('workspace_root').size,
+    tmux_observation: sourceRefsByKind.get('tmux_observation').size
+  };
+
+  for (const kind of ['hermes_profile', 'hermes_session']) {
+    const count = sourceRefsByKind.get(kind).size;
+    if (count > 0) {
+      buckets[kind] = count;
+    }
+  }
+
+  return buckets;
 }
 
 function collectItemEvidenceCoverage(item = {}) {
@@ -564,6 +669,19 @@ function collectItemEvidenceCoverage(item = {}) {
       ref: artifactRef,
       source_kind: 'tmux_observation',
       latest_at: normalizeIsoTimestamp(observation.pane_activity_at),
+      observed: true
+    });
+  }
+
+  for (const observation of item.hermes_runtime_observations || []) {
+    if (!observation?.evidence_ref) {
+      continue;
+    }
+
+    addEvidenceCoverageEntry(entriesByRef, {
+      ref: observation.evidence_ref,
+      source_kind: observation.source_kind,
+      latest_at: normalizeIsoTimestamp(observation.last_observed_at),
       observed: true
     });
   }
@@ -633,9 +751,24 @@ function isAgentOutputWorkspaceObservation(observation) {
   return !INBOUND_WORKSPACE_FILES.has(observation.file_name || path.basename(observation.path || ''));
 }
 
+function isHermesRuntimeEvidenceRef(evidenceRef) {
+  return (
+    typeof evidenceRef === 'string' &&
+    (evidenceRef.startsWith('hermes://profile/') || evidenceRef.startsWith('hermes://session/'))
+  );
+}
+
 function deriveEvidenceSourceKindFromRef(evidenceRef) {
   if (typeof evidenceRef === 'string' && evidenceRef.startsWith('tmux://')) {
     return 'tmux_observation';
+  }
+
+  if (typeof evidenceRef === 'string' && evidenceRef.startsWith('hermes://profile/')) {
+    return 'hermes_profile';
+  }
+
+  if (typeof evidenceRef === 'string' && evidenceRef.startsWith('hermes://session/')) {
+    return 'hermes_session';
   }
 
   return path.extname(evidenceRef) ? 'workspace_file' : 'workspace_root';
@@ -681,7 +814,7 @@ function collectItemArtifactMentions(item = {}) {
   }
 
   for (const evidenceRef of normalizeEvidenceRefs(item.evidence_refs)) {
-    if (seenArtifactRefs.has(evidenceRef)) {
+    if (seenArtifactRefs.has(evidenceRef) || isHermesRuntimeEvidenceRef(evidenceRef)) {
       continue;
     }
 
@@ -747,7 +880,7 @@ function rankArtifactKind(left, right) {
   return rightRank > leftRank ? right : left;
 }
 
-function createEvidenceRefs({ workspaceObservations, tmuxObservations }) {
+function createEvidenceRefs({ workspaceObservations, tmuxObservations, hermesRuntimeObservations = [] }) {
   const refs = [];
 
   for (const observation of workspaceObservations) {
@@ -758,6 +891,12 @@ function createEvidenceRefs({ workspaceObservations, tmuxObservations }) {
     const artifactRef = pane.artifact_ref || deriveTmuxArtifactRef(pane);
     if (artifactRef) {
       refs.push(artifactRef);
+    }
+  }
+
+  for (const observation of hermesRuntimeObservations) {
+    if (observation.evidence_ref) {
+      refs.push(observation.evidence_ref);
     }
   }
 
@@ -920,6 +1059,132 @@ async function defaultListTmuxPanes() {
 
     return handleTmuxError(error);
   }
+}
+
+async function defaultReadHermesRuntimeSources() {
+  return [];
+}
+
+function groupHermesRuntimeSources({ facts, agents, enabled }) {
+  const factsByAgentId = new Map();
+  const unmappedFacts = [];
+  const agentsById = new Map(agents.map((agent) => [agent.agent_id, agent]));
+  const agentIdBySessionRef = new Map(agents.map((agent) => [agent.session_ref, agent.agent_id]));
+  const normalizedFacts = Array.isArray(facts)
+    ? facts.map(normalizeHermesRuntimeSourceFact).filter(Boolean)
+    : [];
+
+  for (const fact of normalizedFacts) {
+    const agentId = mapHermesFactToAgentId({
+      fact,
+      agentsById,
+      agentIdBySessionRef
+    });
+
+    if (!agentId) {
+      unmappedFacts.push(createUnmappedHermesSourceFact(fact));
+      continue;
+    }
+
+    if (!factsByAgentId.has(agentId)) {
+      factsByAgentId.set(agentId, []);
+    }
+
+    factsByAgentId.get(agentId).push(fact);
+  }
+
+  for (const observations of factsByAgentId.values()) {
+    observations.sort(compareHermesRuntimeObservation);
+  }
+
+  return {
+    enabled: Boolean(enabled || normalizedFacts.length > 0),
+    factsByAgentId,
+    unmappedFacts: unmappedFacts.sort((left, right) =>
+      left.evidence_ref.localeCompare(right.evidence_ref)
+    )
+  };
+}
+
+function mapHermesFactToAgentId({ fact, agentsById, agentIdBySessionRef }) {
+  if (fact.source_kind === 'hermes_profile' && fact.agent_id && agentsById.has(fact.agent_id)) {
+    return fact.agent_id;
+  }
+
+  if (fact.source_kind === 'hermes_session' && fact.session_ref) {
+    return agentIdBySessionRef.get(fact.session_ref) || null;
+  }
+
+  return null;
+}
+
+function normalizeHermesRuntimeSourceFact(fact) {
+  if (!fact || !['hermes_profile', 'hermes_session'].includes(fact.source_kind)) {
+    return null;
+  }
+
+  const evidenceRef = sanitizeText(fact.evidence_ref) || deriveHermesEvidenceRef(fact);
+  if (!evidenceRef) {
+    return null;
+  }
+
+  return {
+    source_kind: fact.source_kind,
+    agent_id: sanitizeText(fact.agent_id) || null,
+    profile_id: sanitizeText(fact.profile_id) || null,
+    session_ref: sanitizeText(fact.session_ref) || null,
+    evidence_ref: evidenceRef,
+    status: normalizeSourceHealthStatus(fact.status) || 'observed',
+    last_observed_at: normalizeIsoTimestamp(fact.last_observed_at || fact.observed_at),
+    degraded_reasons: normalizeStringArray(fact.degraded_reasons),
+    metadata: fact.metadata && typeof fact.metadata === 'object' ? { ...fact.metadata } : {}
+  };
+}
+
+function deriveHermesEvidenceRef(fact) {
+  const profileId = sanitizeText(fact.profile_id || fact.agent_id);
+  const sessionRef = sanitizeText(fact.session_ref);
+
+  if (fact.source_kind === 'hermes_profile' && profileId) {
+    return `hermes://profile/${profileId}`;
+  }
+
+  if (fact.source_kind === 'hermes_session' && sessionRef) {
+    return `hermes://session/${sessionRef}`;
+  }
+
+  return null;
+}
+
+function createUnmappedHermesSourceFact(fact) {
+  return {
+    source_kind: fact.source_kind,
+    evidence_ref: fact.evidence_ref,
+    profile_id: fact.profile_id,
+    session_ref: fact.session_ref,
+    observed_at: fact.last_observed_at,
+    status: fact.status,
+    degraded_reasons: fact.degraded_reasons.slice()
+  };
+}
+
+function compareHermesRuntimeObservation(left, right) {
+  return (
+    left.source_kind.localeCompare(right.source_kind) ||
+    left.evidence_ref.localeCompare(right.evidence_ref)
+  );
+}
+
+function normalizeSourceHealthStatus(status) {
+  return ['observed', 'degraded', 'missing', 'error'].includes(status) ? status : null;
+}
+
+function normalizeStringArray(values) {
+  if (!Array.isArray(values)) {
+    return [];
+  }
+
+  return values.map(sanitizeText).filter(Boolean);
 }
 
 async function runTmuxListPanes() {

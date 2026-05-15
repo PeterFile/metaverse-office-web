@@ -380,7 +380,33 @@ test('collector treats inbox-only workspace evidence as inbound presence, not ag
   const store = await createPrototypeStore({ filePath: path.join(root, 'prototype-store.jsonl') });
   await store.appendCollectorReport(report);
 
+  const evidenceRecords = store.listEvidenceRecords();
+  assert.equal(evidenceRecords.length, 2);
+  assert.deepEqual(
+    evidenceRecords.map((record) => ({
+      evidence_ref: record.evidence_ref,
+      evidence_role: record.evidence_role,
+      output_candidate: record.output_candidate
+    })),
+    [
+      {
+        evidence_ref: appAgent.workspace_root,
+        evidence_role: 'workspace_presence',
+        output_candidate: false
+      },
+      {
+        evidence_ref: inboxRef,
+        evidence_role: 'inbound_task',
+        output_candidate: false
+      }
+    ]
+  );
   assert.deepEqual(store.listEvents({ agent_id: 'app-engineering' }), []);
+  assert.deepEqual(store.getCounts(), {
+    agent_count: 7,
+    event_count: 0,
+    heartbeat_count: 0
+  });
   assert.equal(store.getAgent('app-engineering').current_state, 'idle');
   assert.equal(store.getAgent('app-engineering').last_meaningful_output_at, null);
   assert.equal(store.getAgent('app-engineering').last_file_write_at, null);
@@ -555,12 +581,11 @@ test('store appends collector heartbeats and exposes the latest collector report
   const activityEvents = store.listEvents({ agent_id: 'app-engineering' }).map((event) => event.event_type);
   assert.deepEqual(activityEvents, ['agent_state_changed', 'agent_wrote_file']);
 
-  const lines = (await readFile(storeFile, 'utf8')).trim().split('\n');
-  assert.equal(lines.length, 4);
-  assert.equal(JSON.parse(lines[0]).kind, 'event');
-  assert.equal(JSON.parse(lines[1]).kind, 'event');
-  assert.equal(JSON.parse(lines[2]).kind, 'heartbeat');
-  const snapshotRecord = JSON.parse(lines[3]);
+  const records = (await readFile(storeFile, 'utf8')).trim().split('\n').map((line) => JSON.parse(line));
+  assert.equal(records.filter((record) => record.kind === 'event').length, 2);
+  assert.equal(records.filter((record) => record.kind === 'heartbeat').length, 1);
+  assert.equal(records.filter((record) => record.kind === 'evidence_record').length, 2);
+  const snapshotRecord = records[records.length - 1];
   assert.equal(snapshotRecord.kind, 'collector_snapshot');
   assert.deepEqual(snapshotRecord.payload, storedReport);
   assert.equal(snapshotRecord.payload.items[0].heartbeat.current_state, 'coding');

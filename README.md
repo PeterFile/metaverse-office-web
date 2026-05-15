@@ -1,6 +1,6 @@
 # Metaverse Office Web
 
-Updated: 2026-05-14T16:23:11+08:00
+Updated: 2026-05-15T09:47:00+08:00
 
 This repository is the implementation home for the Hermes-Agent metaverse-office project.
 
@@ -21,7 +21,7 @@ The next product milestone is `Live Evidence Spine`: connect the current read mo
 ## Current implementation snapshot
 - backend exposes evidence-first read models for office overview, operations, agent workflow/detail, incidents, timeline replay, accountability replay, correlation drill-down, shared memory artifacts, peer-watch alerts, handoffs, reboots, and collector evidence coverage
 - controlled writes remain limited to `POST /events`, `POST /heartbeats`, and `POST /collectors/controller-snapshot`
-- storage is still the local append-only JSONL prototype at `data/prototype-store.jsonl`, replayed into memory; event, heartbeat, and collector snapshot records are append-only, but this is not yet the target production-grade event store
+- storage is still the local append-only JSONL prototype at `data/prototype-store.jsonl`, replayed into memory; event, heartbeat, internal collector `evidence_record`, and collector snapshot records are append-only, but this is not yet the target production-grade event store
 - domain still uses the canonical seven-actor office model: six employee agents plus `team-lead`
 - frontend is a React + TypeScript + PixiJS AI Town operator world with roster, category Hub, selected-agent drilldowns, supervision/evidence/replay/memory surfaces, and real browser smoke coverage
 
@@ -252,7 +252,8 @@ This keeps employee writes self-scoped and reserves cross-agent task dispatch pl
 - `GET /collectors/controller-snapshot` is read-only and returns the latest replayed collector report
 - `GET /collectors/controller-snapshot/evidence-coverage` is read-only and returns `{ "item": null }` until the latest replayed collector report includes `evidence_coverage`
 - `GET /collectors/controller-snapshot/source-health` is read-only and returns `{ "item": null }` until a latest collector report exists
-- `POST /collectors/controller-snapshot` stores a `collector_snapshot` JSONL record after the derived event and heartbeat records; replay uses only the latest snapshot record for the latest collector report and does not count it as an event or heartbeat
+- `POST /collectors/controller-snapshot` stores internal `evidence_record` JSONL records after derived event/heartbeat records and before the `collector_snapshot` record; replay uses only the latest snapshot record for the latest collector report, replays evidence records for collector source facts, and counts only `event`/`heartbeat` records as events/heartbeats
+- collector evidence records capture workspace roots, workspace files, mapped tmux panes, and unmapped tmux runtime evidence with source kind, evidence role, source status, output-candidate classification, collector correlation, and degraded reasons; they do not add a public route or write API
 - evidence coverage can be filtered by exact `agent_id`, collector evidence `source_kind`, `confidence_level`, and post-filter `limit`; blank filters are ignored and invalid limits use the existing read-model default
 - evidence coverage responses include only `collected_at`, `actor_id`, aggregate coverage counts, source-kind buckets, low-confidence agent ids, and bounded `agent_items`; the route does not touch tmux, the filesystem, or collector write paths
 - source health can be filtered by exact `agent_id`, `source_kind`, `status`, and post-filter `limit`; accepted `source_kind` values are `workspace_root`, `workspace_file`, `workspace_files`, `tmux_observation`, and `tmux_session`

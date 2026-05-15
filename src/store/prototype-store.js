@@ -20,6 +20,7 @@ const {
 
 const COLLECTOR_ALERT_SOURCE = 'controller_snapshot';
 const COLLECTOR_SNAPSHOT_RECORD_KIND = 'collector_snapshot';
+const EVIDENCE_RECORD_KIND = 'evidence_record';
 const INBOUND_WORKSPACE_FILES = new Set(['inbox.md']);
 const AGENT_OUTPUT_WORKSPACE_ROLES = new Set(['agent_output', 'agent_plan']);
 const NON_OUTPUT_WORKSPACE_ROLES = new Set(['inbound_task', 'workspace_presence']);
@@ -84,6 +85,7 @@ class PrototypeStore {
     this.records = [];
     this.events = [];
     this.heartbeats = [];
+    this.evidenceRecords = [];
     this.latestCollectorReport = null;
   }
 
@@ -102,6 +104,7 @@ class PrototypeStore {
     this.records = [];
     this.events = [];
     this.heartbeats = [];
+    this.evidenceRecords = [];
     this.latestCollectorReport = null;
 
     if (!content.trim()) {
@@ -123,6 +126,11 @@ class PrototypeStore {
 
       if (record.kind === 'heartbeat') {
         this.heartbeats.push(record.payload);
+        continue;
+      }
+
+      if (record.kind === EVIDENCE_RECORD_KIND) {
+        this.evidenceRecords.push(record.payload);
         continue;
       }
 
@@ -191,6 +199,16 @@ class PrototypeStore {
       items
     };
 
+    for (const evidenceRecord of createCollectorEvidenceRecords(storedReport)) {
+      const record = {
+        kind: EVIDENCE_RECORD_KIND,
+        payload: evidenceRecord
+      };
+      await appendFile(this.filePath, `${JSON.stringify(record)}\n`, 'utf8');
+      this.records.push(record);
+      this.evidenceRecords.push(evidenceRecord);
+    }
+
     const snapshotRecord = {
       kind: COLLECTOR_SNAPSHOT_RECORD_KIND,
       payload: storedReport
@@ -212,6 +230,24 @@ class PrototypeStore {
 
   getLatestCollectorSourceHealth(filters = {}) {
     return projectCollectorSourceHealth(this.getLatestCollectorReport(), filters);
+  }
+
+  listEvidenceRecords(filters = {}) {
+    const agentId = normalizeFilterValue(filters.agent_id);
+    const sourceKind = normalizeFilterValue(filters.source_kind);
+    const evidenceRole = normalizeFilterValue(filters.evidence_role);
+    const outputCandidate = normalizeOptionalBoolean(filters.output_candidate);
+    const limit = parseLimit(filters.limit);
+
+    return this.evidenceRecords
+      .filter((record) => !agentId || record.agent_id === agentId)
+      .filter((record) => !sourceKind || record.source_kind === sourceKind)
+      .filter((record) => !evidenceRole || record.evidence_role === evidenceRole)
+      .filter(
+        (record) => outputCandidate === null || record.output_candidate === outputCandidate
+      )
+      .slice(0, limit)
+      .map(cloneEvidenceRecord);
   }
 
   getCounts() {
@@ -1910,6 +1946,188 @@ function normalizeCollectorReportItem(item = {}, previousItem = null) {
   };
 }
 
+function createCollectorEvidenceRecords(report = {}) {
+  const records = [];
+  const seen = new Set();
+  const collectedAt = normalizeCollectorTimestamp(report.collected_at) || report.collected_at || null;
+  const collectorSnapshotId = createCollectorCorrelationId(collectedAt || 'unknown');
+
+  const appendRecord = (record) => {
+    if (!record.evidence_ref || !record.source_kind) {
+      return;
+    }
+
+    const dedupeKey = [
+      record.agent_id || '',
+      record.source_kind,
+      record.evidence_ref,
+      record.evidence_role || ''
+    ].join('|');
+    if (seen.has(dedupeKey)) {
+      return;
+    }
+
+    seen.add(dedupeKey);
+    records.push({
+      evidence_id: createEvidenceRecordId({
+        collectorSnapshotId,
+        agentId: record.agent_id,
+        sourceKind: record.source_kind,
+        evidenceRef: record.evidence_ref,
+        index: records.length + 1
+      }),
+      observed_at: record.observed_at || null,
+      collected_at: collectedAt,
+      agent_id: record.agent_id || null,
+      source_kind: record.source_kind,
+      evidence_ref: record.evidence_ref,
+      evidence_role: record.evidence_role || null,
+      source_status: record.source_status || null,
+      output_candidate: Boolean(record.output_candidate),
+      collector_snapshot_id: collectorSnapshotId,
+      correlation_id: collectorSnapshotId,
+      degraded_reasons: normalizeStringValues(record.degraded_reasons),
+      metadata: record.metadata || {}
+    });
+  };
+
+  for (const item of Array.isArray(report.items) ? report.items : []) {
+    const sourceHealth = item.source_health || {};
+    const workspaceRootHealth = sourceHealth.workspace_root || null;
+    if (workspaceRootHealth?.path) {
+      appendRecord({
+        observed_at: normalizeCollectorTimestamp(workspaceRootHealth.last_observed_at),
+        agent_id: item.agent_id,
+        source_kind: 'workspace_root',
+        evidence_ref: workspaceRootHealth.path,
+        evidence_role: 'workspace_presence',
+        source_status: workspaceRootHealth.status || null,
+        output_candidate: false,
+        degraded_reasons: workspaceRootHealth.degraded_reasons,
+        metadata: {
+          path: workspaceRootHealth.path,
+          source_health_key: 'workspace_root'
+        }
+      });
+    }
+
+    for (const observation of Array.isArray(item.workspace_observations) ? item.workspace_observations : []) {
+      if (!observation?.path) {
+        continue;
+      }
+
+      const sourceKind =
+        observation.kind === 'workspace_root' ? 'workspace_root' : 'workspace_file';
+      const fileName = observation.file_name || path.basename(observation.path);
+      const evidenceRole =
+        observation.evidence_role ||
+        deriveWorkspaceEvidenceRecordRole({
+          sourceKind,
+          fileName
+        });
+      const health =
+        sourceKind === 'workspace_root' ? sourceHealth.workspace_root : sourceHealth.workspace_files;
+
+      appendRecord({
+        observed_at: normalizeCollectorTimestamp(
+          observation.last_modified_at || observation.last_observed_at || health?.last_observed_at
+        ),
+        agent_id: item.agent_id,
+        source_kind: sourceKind,
+        evidence_ref: observation.path,
+        evidence_role: evidenceRole,
+        source_status: health?.status || null,
+        output_candidate: AGENT_OUTPUT_WORKSPACE_ROLES.has(evidenceRole),
+        degraded_reasons: health?.degraded_reasons,
+        metadata: {
+          file_name: fileName,
+          path: observation.path,
+          source_health_key: sourceKind === 'workspace_root' ? 'workspace_root' : 'workspace_files'
+        }
+      });
+    }
+
+    for (const observation of Array.isArray(item.tmux_observations) ? item.tmux_observations : []) {
+      const evidenceRef = observation?.artifact_ref || deriveTmuxArtifactRef(observation);
+      if (!evidenceRef) {
+        continue;
+      }
+
+      appendRecord({
+        observed_at: normalizeCollectorTimestamp(observation.pane_activity_at),
+        agent_id: item.agent_id,
+        source_kind: 'tmux_observation',
+        evidence_ref: evidenceRef,
+        evidence_role: 'runtime_activity',
+        source_status: sourceHealth.tmux_session?.status || null,
+        output_candidate: true,
+        degraded_reasons: sourceHealth.tmux_session?.degraded_reasons,
+        metadata: {
+          session_name: observation.session_name || null,
+          window_index: observation.window_index || null,
+          pane_index: observation.pane_index || null,
+          pane_id: observation.pane_id || null,
+          pane_current_command: observation.pane_current_command || null,
+          source_health_key: 'tmux_session'
+        }
+      });
+    }
+  }
+
+  for (const session of report.runtime_source_evidence?.unmapped_tmux_sessions || []) {
+    for (const paneRef of normalizeEvidenceRefs(session.pane_refs)) {
+      appendRecord({
+        observed_at: normalizeCollectorTimestamp(session.last_observed_at),
+        agent_id: null,
+        source_kind: 'tmux_observation',
+        evidence_ref: paneRef,
+        evidence_role: 'runtime_unmapped',
+        source_status: session.status || 'observed',
+        output_candidate: false,
+        degraded_reasons: session.degraded_reasons,
+        metadata: {
+          session_name: session.session_name || null,
+          observed_count: normalizeCount(session.observed_count),
+          source_health_key: 'runtime_source_evidence.unmapped_tmux_sessions'
+        }
+      });
+    }
+  }
+
+  return records;
+}
+
+function deriveWorkspaceEvidenceRecordRole({ sourceKind, fileName }) {
+  if (sourceKind === 'workspace_root') {
+    return 'workspace_presence';
+  }
+
+  if (fileName === 'inbox.md') {
+    return 'inbound_task';
+  }
+
+  return fileName === 'todo.md' ? 'agent_plan' : 'agent_output';
+}
+
+function createEvidenceRecordId({ collectorSnapshotId, agentId, sourceKind, evidenceRef, index }) {
+  return [
+    'ev',
+    sanitizeEventIdPart(collectorSnapshotId),
+    sanitizeEventIdPart(agentId || 'runtime'),
+    sanitizeEventIdPart(sourceKind),
+    sanitizeEventIdPart(evidenceRef),
+    index
+  ].join('_');
+}
+
+function cloneEvidenceRecord(record) {
+  return {
+    ...record,
+    degraded_reasons: Array.isArray(record.degraded_reasons) ? record.degraded_reasons.slice() : [],
+    metadata: record.metadata && typeof record.metadata === 'object' ? { ...record.metadata } : {}
+  };
+}
+
 function buildPreviousTmuxRefByPaneId(previousItem = null, previousStableTmuxRefs = []) {
   const mapping = new Map();
   const previousObservations = previousItem?.tmux_observations || [];
@@ -2383,6 +2601,23 @@ function normalizeFilterValue(value) {
 
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
+}
+
+function normalizeOptionalBoolean(value) {
+  if (value === true || value === false) {
+    return value;
+  }
+
+  const normalized = normalizeFilterValue(value);
+  if (normalized === 'true') {
+    return true;
+  }
+
+  if (normalized === 'false') {
+    return false;
+  }
+
+  return null;
 }
 
 function normalizeCount(value) {

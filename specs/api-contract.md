@@ -1,6 +1,6 @@
 # Current API Contract
 
-Updated: 2026-05-14T16:23:11+08:00
+Updated: 2026-05-15T09:47:00+08:00
 
 This is the current API/read-model contract for Metaverse Office Web. It grew out of the Phase 1 contract, but it is no longer a Phase 1 draft. Update this file in the same PR as any route, response shape, filter, event schema, source-kind, storage, or request-surface change. Current product direction lives in `docs/current-direction.md`.
 
@@ -44,11 +44,13 @@ This is the current API/read-model contract for Metaverse Office Web. It grew ou
 
 ## Collector snapshot semantics
 - `GET /collectors/controller-snapshot` is read-only and returns `{ "item": null }` until a snapshot has been collected
-- `POST /collectors/controller-snapshot` triggers one controller snapshot, persists only evidence-backed output heartbeats, may append collector-derived canonical activity and peer-watch events, and stores the resulting report as an append-only `collector_snapshot` JSONL record
+- `POST /collectors/controller-snapshot` triggers one controller snapshot, persists only evidence-backed output heartbeats, may append collector-derived canonical activity and peer-watch events, appends internal `evidence_record` JSONL records for collector-observed source facts, and stores the resulting report as an append-only `collector_snapshot` JSONL record
 - collected heartbeat coverage is derived from real workspace metadata (`inbox.md`, `outbox.md`, `todo.md`) and tmux pane metadata for the canonical seven-actor roster; `inbox.md` and `workspace_root` are inbound/presence evidence and must not advance meaningful-output or file-write freshness
 - the collector must not fabricate random activity, random severity, or random timestamps
-- the latest collector report is a replayed read model backed by append-only `collector_snapshot` records; heartbeat storage stays backward compatible as append-only `heartbeat` records
-- replaying `collector_snapshot` records restores the latest report and evidence coverage, with the last append-order snapshot winning; snapshot replay must not duplicate events or heartbeats, and older event/heartbeat-only JSONL files still load with no latest collector report
+- the latest collector report is a replayed read model backed by append-only `collector_snapshot` records; collector-observed source facts are replayed from internal append-only `evidence_record` records; heartbeat storage stays backward compatible as append-only `heartbeat` records
+- each `evidence_record` stores `evidence_id`, `observed_at`, `collected_at`, `agent_id`, `source_kind`, `evidence_ref`, `evidence_role`, `source_status`, `output_candidate`, collector correlation fields, degraded reasons, and metadata; current source kinds are `workspace_root`, `workspace_file`, and `tmux_observation`
+- `evidence_record` is storage/read-model plumbing only in this slice: it does not add a public route, write API, control-plane surface, event count, or heartbeat count
+- replaying `collector_snapshot` records restores the latest report and evidence coverage, with the last append-order snapshot winning; replaying `evidence_record` records restores collector evidence facts; snapshot replay must not duplicate events or heartbeats, and older event/heartbeat/collector-snapshot-only JSONL files still load without evidence records
 - the latest collector report also exposes `shared_artifacts`, a top-level per-snapshot rollup derived only from the current collected items
 - `shared_artifacts` entries appear only when at least two agents in the same snapshot mention the same `artifact_ref` and expose `artifact_ref`, `artifact_kind`, optional `file_name`, `agent_ids`, `agent_count`, `mention_count`, `last_seen_at`, and `source_kinds`
 - each collector item exposes additive `source_health` for `workspace_root`, observed workspace files among `inbox.md`/`outbox.md`/`todo.md`, and the expected `tmux_session`; missing tmux sessions must be explicit with `expected_session_ref`

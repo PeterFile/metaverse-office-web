@@ -469,6 +469,10 @@ class PrototypeStore {
     const sourceKind = normalizeFilterValue(filters.source_kind);
     const evidenceRole = normalizeFilterValue(filters.evidence_role);
     const outputCandidate = normalizeOptionalBoolean(filters.output_candidate);
+    const evidenceRef = normalizeFilterValue(filters.evidence_ref);
+    const sourceStatus = normalizeFilterValue(filters.source_status);
+    const collectorSnapshotId = normalizeFilterValue(filters.collector_snapshot_id);
+    const correlationId = normalizeFilterValue(filters.correlation_id);
     const newestFirst = normalizeOptionalBoolean(filters.newest_first) === true;
     const limit = parseLimit(filters.limit);
 
@@ -476,7 +480,13 @@ class PrototypeStore {
       .filter((record) => !agentId || record.agent_id === agentId)
       .filter((record) => !sourceKind || record.source_kind === sourceKind)
       .filter((record) => !evidenceRole || record.evidence_role === evidenceRole)
-      .filter((record) => outputCandidate === null || record.output_candidate === outputCandidate);
+      .filter((record) => outputCandidate === null || record.output_candidate === outputCandidate)
+      .filter((record) => !evidenceRef || record.evidence_ref === evidenceRef)
+      .filter((record) => !sourceStatus || record.source_status === sourceStatus)
+      .filter(
+        (record) => !collectorSnapshotId || record.collector_snapshot_id === collectorSnapshotId
+      )
+      .filter((record) => !correlationId || record.correlation_id === correlationId);
 
     return (newestFirst ? records.slice().sort(compareEvidenceRecordRecency) : records)
       .slice(0, limit)

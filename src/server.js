@@ -371,6 +371,10 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
         source_kind: url.searchParams.get('source_kind'),
         evidence_role: url.searchParams.get('evidence_role'),
         output_candidate: url.searchParams.get('output_candidate'),
+        evidence_ref: url.searchParams.get('evidence_ref'),
+        source_status: url.searchParams.get('source_status'),
+        collector_snapshot_id: url.searchParams.get('collector_snapshot_id'),
+        correlation_id: url.searchParams.get('correlation_id'),
         newest_first: url.searchParams.get('newest_first'),
         limit: url.searchParams.get('limit')
       })

@@ -5055,6 +5055,20 @@ test('GET /evidence-records lists stored evidence records read-only with exact f
     }
   ]);
 
+  const exactDrilldown = await requestJson(
+    `${baseUrl}/evidence-records?evidence_ref=${encodeURIComponent('/tmp/evidence-query/app/outbox.md')}&source_status=observed&collector_snapshot_id=${encodeURIComponent('collector-snapshot:2026-03-09T18:06:00.000Z')}&correlation_id=${encodeURIComponent('collector-snapshot:2026-03-09T18:06:00.000Z')}`
+  );
+  assert.equal(exactDrilldown.response.status, 200);
+  assert.deepEqual(exactDrilldown.body.items.map((item) => item.evidence_ref), [
+    '/tmp/evidence-query/app/outbox.md'
+  ]);
+
+  const unknownExact = await requestJson(
+    `${baseUrl}/evidence-records?evidence_ref=${encodeURIComponent('/tmp/evidence-query')}&source_status=missing&collector_snapshot_id=unknown&correlation_id=unknown`
+  );
+  assert.equal(unknownExact.response.status, 200);
+  assert.deepEqual(unknownExact.body.items, []);
+
   assert.equal(collectCount, 0);
   assert.equal(store.getLatestCollectorReport(), latestBeforeRead);
   assert.deepEqual(store.getCounts(), countsBeforeRead);

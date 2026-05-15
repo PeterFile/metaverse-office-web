@@ -10,7 +10,7 @@ Metaverse Office Web is a live evidence spine and operator world for a real Herm
 The next product milestone is `Live Evidence Spine`: connect the current read models and AI Town UI to real Hermes team runtime facts, then persist those facts in a stronger append-only event store with stable provenance. See `docs/current-direction.md`.
 
 ## Project rules
-- repo root must stay under `/Users/cwp/Projects/metaverse-office-web`
+- repo root can live in any checkout path; docs and scripts must not require a contributor-specific absolute root
 - current product direction is tracked in `docs/current-direction.md`; Phase 1 documents are historical archive unless explicitly cited by that document
 - evidence-first is still mandatory: no fake productivity, no fabricated liveness, no decorative motion presented as work
 - UI work must not outrun event/state/storage/query architecture or its documentation
@@ -86,7 +86,7 @@ pnpm web:test:browser-smoke:dev
 pnpm backend:start
 ```
 
-`pnpm web:test:browser-smoke` runs the Playwright smoke bundle from the repository root (currently the keyboard smoke plus the active-queue smoke), starts its own hermetic read-only backend seeded under `./.tmp/browser-smoke`, starts its own Vite shell on ephemeral localhost ports, and passes the resolved base URL into Playwright so stale orphaned processes do not block startup.
+`pnpm web:test:browser-smoke` runs the Playwright smoke bundle from the repository root (currently the keyboard, active-queue, and layout-visual smokes), starts its own hermetic read-only backend seeded under `./.tmp/browser-smoke`, starts its own Vite shell on ephemeral localhost ports, and passes the resolved base URL into Playwright so stale orphaned processes do not block startup.
 
 `pnpm web:test:browser-smoke:dev` runs the same Playwright smoke bundle through the wrapper with `BROWSER_SMOKE_FRONTEND_MODE=dev`, so CI also proves the non-preview Vite path end-to-end instead of only covering that branch in helper tests.
 
@@ -112,7 +112,7 @@ Optional env:
 - `BROWSER_SMOKE_FRONTEND_MODE=dev` to run the smoke wrapper against a managed Vite dev server instead of the preview build; omit it to keep the preview-mode smoke path
 - `BROWSER_SMOKE_BACKEND_PORT=3210` to pin the hermetic backend port for browser smoke while still letting the wrapper auto-select a free Vite port unless you also pin `BROWSER_SMOKE_DEV_SERVER_PORT`
 - `BROWSER_SMOKE_DEV_SERVER_PORT=4173` to pin the Vite dev-server port for browser smoke while still letting the wrapper auto-select a free hermetic backend port unless you also pin `BROWSER_SMOKE_BACKEND_PORT`
-- `VITE_API_BASE_URL=https://api.example.test` for the React shell when the backend also allows that origin via `CORS_ALLOWED_ORIGINS`; omit it to keep same-origin `/office`, `/agents`, `/incidents`, `/timeline`, `/collectors`, and `/correlations` requests, or keep using `VITE_DEV_PROXY_TARGET` for local Vite proxying
+- `VITE_API_BASE_URL=https://api.example.test` for the React shell when the backend also allows that origin via `CORS_ALLOWED_ORIGINS`; omit it to keep same-origin read requests, or keep using `VITE_DEV_PROXY_TARGET` for local Vite proxying
 - `CORS_ALLOWED_ORIGINS=https://frontend.example.test,http://localhost:5173` for the backend; a comma-separated list of origins allowed to make cross-origin GET requests.
 
 ### API
@@ -128,7 +128,7 @@ Optional env:
 - `GET /collectors/controller-snapshot`
 - `GET /collectors/controller-snapshot/evidence-coverage?agent_id=&source_kind=&confidence_level=&limit=`
 - `GET /collectors/controller-snapshot/source-health?agent_id=&source_kind=&status=&limit=`
-- `GET /evidence-records?agent_id=&source_kind=&evidence_role=&output_candidate=&limit=`
+- `GET /evidence-records?agent_id=&source_kind=&evidence_role=&output_candidate=&newest_first=&limit=`
 - `GET /office/overview`
 - `GET /office/operations?limit=&state=&agent_id=&severity=`
 - `GET /timeline?window=&event_id=&agent_id=&event_type=&severity=&source_kind=&evidence_ref=&correlation_id=&limit=`
@@ -259,7 +259,7 @@ This keeps employee writes self-scoped and reserves cross-agent task dispatch pl
 - `GET /collectors/controller-snapshot/source-health` is read-only and returns `{ "item": null }` until a latest collector report exists
 - `POST /collectors/controller-snapshot` stores internal `evidence_record` JSONL records after derived event/heartbeat records and before the `collector_snapshot` record; replay uses only the latest snapshot record for the latest collector report, replays evidence records for collector source facts, and counts only `event`/`heartbeat` records as events/heartbeats
 - collector evidence records capture workspace roots, workspace files, mapped tmux panes, and unmapped tmux runtime evidence with source kind, evidence role, source status, output-candidate classification, collector correlation, and degraded reasons
-- evidence records can be queried through `GET /evidence-records`; it returns `{ "items": [...] }`, supports exact `agent_id`, `source_kind`, `evidence_role`, `output_candidate`, and post-filter `limit`, ignores blank filters, and uses the existing default/max limit behavior
+- evidence records can be queried through `GET /evidence-records`; it returns `{ "items": [...] }`, supports exact `agent_id`, `source_kind`, `evidence_role`, `output_candidate`, optional `newest_first=true`, and post-filter `limit`, ignores blank filters, and uses the existing default/max limit behavior
 - `GET /evidence-records` is read-only and does not trigger collection, tmux/filesystem reads, append-only writes, write APIs, control-plane actions, UI work, or SQLite work; unmapped tmux rows stay visible with `agent_id: null` and `output_candidate: false`
 - evidence coverage can be filtered by exact `agent_id`, collector evidence `source_kind`, `confidence_level`, and post-filter `limit`; blank filters are ignored and invalid limits use the existing read-model default
 - evidence coverage responses include only `collected_at`, `actor_id`, aggregate coverage counts, source-kind buckets, low-confidence agent ids, and bounded `agent_items`; the route does not touch tmux, the filesystem, or collector write paths
@@ -280,8 +280,8 @@ This keeps employee writes self-scoped and reserves cross-agent task dispatch pl
 
 ### React operator shell notes
 - `apps/web` is the current living office surface and stays strictly evidence-first; do not describe it as a Phase 1-only shell
-- the shell consumes `GET /office/overview`, `GET /office/operations?limit=&state=&agent_id=&severity=`, `GET /agents/:id/workflow?limit=&window=`, `GET /incidents?limit=&window=`, `GET /timeline?limit=&window=`, `GET /collectors/controller-snapshot`, and `GET /correlations/:correlation_id?limit=&window=` only
-- API calls are same-origin by default; cross-origin `VITE_API_BASE_URL` deployment requires the backend to allow that frontend origin via `CORS_ALLOWED_ORIGINS`, and local development may still proxy `/office`, `/agents`, `/incidents`, `/timeline`, `/correlations`, and `/collectors` through Vite via `VITE_DEV_PROXY_TARGET`
+- the shell consumes `GET /office/overview`, `GET /office/operations?limit=&state=&agent_id=&severity=`, `GET /agents/:id/workflow?limit=&window=`, `GET /incidents?limit=&window=`, `GET /timeline?limit=&window=`, `GET /collectors/controller-snapshot`, `GET /collectors/controller-snapshot/evidence-coverage`, `GET /collectors/controller-snapshot/source-health`, `GET /accountability/replay`, `GET /memory/artifacts`, `GET /peer-watch/alerts`, and `GET /correlations/:correlation_id?limit=&window=`
+- API calls are same-origin by default; cross-origin `VITE_API_BASE_URL` deployment requires the backend to allow that frontend origin via `CORS_ALLOWED_ORIGINS`, and local development may still proxy consumed read-route prefixes through Vite via `VITE_DEV_PROXY_TARGET`
 - workflow and incident surfaces can open correlation drill-down without introducing a new backend contract or write path
 - workflow counterparties, correlation participants, and incident agent ids remain read-only but are directly selectable so operators can pivot into another agent workflow from the current evidence surface
 - the shell polls every 15 seconds and must surface explicit loading, empty, and error states instead of inventing motion or liveness

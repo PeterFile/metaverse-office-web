@@ -204,7 +204,9 @@ test.describe('operator shell layout visual smoke', () => {
     ).toBeGreaterThan(20);
   });
 
-  test('keeps compact HUD signals disclosure from blocking non-chip world drag', async ({ page }) => {
+  test('@journey @evidence-live keeps compact HUD signals disclosure from blocking non-chip world drag', async ({
+    page
+  }) => {
     const evidenceCoverage = {
       evidence_ref_count: 1,
       covered_agent_count: 1,
@@ -742,7 +744,7 @@ test.describe('operator shell layout visual smoke', () => {
     await expect(page.getByRole('region', { name: 'Hub focus ribbon' })).toBeVisible();
   });
 
-  test('selected-agent Hub drilldown tabs split Now Evidence and Replay Correlation inside the RimWorld window', async ({
+  test('@journey @evidence-live selected-agent Hub drilldown tabs split Now Evidence and Replay Correlation inside the RimWorld window', async ({
     page
   }) => {
     await page.goto('/');
@@ -852,6 +854,8 @@ test.describe('operator shell layout visual smoke', () => {
     await expectLocatorTopInsideScrollport(replayPanel, hub, 'Replay / Correlation tab panel');
     await expect(replayPanel.getByRole('heading', { name: 'Timeline Replay' })).toBeVisible();
     await expect(replayPanel.getByRole('heading', { name: 'Correlation Drilldown' })).toBeVisible();
+    await expect(replayPanel.getByRole('heading', { name: 'Replay Bundle' })).toBeVisible();
+    await expect(replayPanel.getByText(/Ledger · \d+ entries · derived\/read-only/)).toBeVisible();
 
     await page.getByRole('button', { name: 'Close panel' }).click();
     await expect(hub).toHaveCount(0);

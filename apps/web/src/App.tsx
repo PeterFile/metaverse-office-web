@@ -17,6 +17,7 @@ import {
   fetchAccountabilityReplay,
   fetchCollectorEvidenceCoverage,
   fetchCollectorSnapshot,
+  fetchCollectorSourceHealth,
   fetchCorrelationDrilldown,
   fetchIncidents,
   fetchMemoryArtifacts,
@@ -36,6 +37,7 @@ import {
 import { SceneStatusLegend } from './aitown/SceneStatusLegend';
 import { resolveRolePawnAssetUrl } from './aitown/rolePawnAssets';
 import { adaptWorldToScene } from './aitown/sceneAdapter';
+import { deriveSourceGapChips } from './aitown/sourceGapSignals';
 import { WorldProvider, useWorld } from './context/WorldContext';
 import { usePolledResource, type LoadState } from './hooks/usePolledResource';
 import { getHubFocusableElements, isHubElementVisible } from './hubFocus';
@@ -44,6 +46,7 @@ import type {
   CollectorEvidenceCoverage,
   CollectorEvidenceCoverageAgentItem,
   CollectorSnapshot,
+  CollectorSourceHealthProjection,
   CorrelationDrilldown,
   MemoryArtifact,
   MemoryArtifactIndex,
@@ -132,6 +135,7 @@ type SelectedAgentAccountabilityReplayPayload = {
 const CREW_TIMELINE_LIMIT = 4;
 const CREW_OPEN_SUPERVISION_ALERTS_LIMIT = 4;
 const MEMORY_ARTIFACT_LIMIT = 4;
+const SOURCE_HEALTH_HUD_LIMIT = 7;
 const SELECTED_AGENT_SUPERVISION_HISTORY_LIMIT = 4;
 const RESET_VIEW_SHORTCUT_KEY = 'r';
 const RESET_VIEW_SHORTCUT_ARIA = 'R';
@@ -941,6 +945,8 @@ function AppInner() {
     useState<SelectedAgentDrilldownTab>('now');
   const [defaultEvidenceCoverage, setDefaultEvidenceCoverage] =
     useState<CollectorEvidenceCoverage | null>(null);
+  const [latestSourceHealth, setLatestSourceHealth] =
+    useState<CollectorSourceHealthProjection | null>(null);
   const requestedSelectedAgentDrilldownTabRef = useRef<SelectedAgentDrilldownTab | null>(null);
   const activeHubCategoryFromSelectedAgentTabRef = useRef(false);
   const defaultEvidenceCoverageRequestedRef = useRef(false);
@@ -1013,7 +1019,22 @@ function AppInner() {
     load: (signal) => fetchCollectorSnapshot(signal),
     resourceKey: 'collector-controller-snapshot'
   });
+  const sourceHealthResource = usePolledResource({
+    enabled: overviewResource.data !== null,
+    load: (signal) =>
+      fetchCollectorSourceHealth({
+        limit: SOURCE_HEALTH_HUD_LIMIT,
+        signal
+      }),
+    resourceKey: `collector-source-health:limit=${SOURCE_HEALTH_HUD_LIMIT}`
+  });
   const defaultEvidenceCoverageReady = overviewResource.data !== null;
+
+  useEffect(() => {
+    if (sourceHealthResource.state === 'ready') {
+      setLatestSourceHealth(sourceHealthResource.data);
+    }
+  }, [sourceHealthResource.data, sourceHealthResource.state]);
 
   useEffect(() => {
     if (hubOpen || selectedAgentId !== null || !defaultEvidenceCoverageReady || defaultEvidenceCoverageRequestedRef.current) {
@@ -1282,6 +1303,13 @@ function AppInner() {
         ? []
         : resolveEvidenceCoverageFocusItems(visibleEvidenceCoverage, overviewResource.data?.agents),
     [hubOpen, overviewResource.data?.agents, selectedAgentId, visibleEvidenceCoverage]
+  );
+  const sourceGapChips = useMemo(
+    () =>
+      hubOpen || selectedAgentId !== null
+        ? []
+        : deriveSourceGapChips(latestSourceHealth, overviewResource.data?.agents),
+    [hubOpen, latestSourceHealth, overviewResource.data?.agents, selectedAgentId]
   );
 
   const selectedAgent = resolveSelectedAgent(
@@ -2206,6 +2234,18 @@ function AppInner() {
     [handleSelectAgentForInspection]
   );
 
+  const handleSourceGapFocusAgent = useCallback(
+    (agentId: string) => {
+      requestedSelectedAgentDrilldownTabRef.current = 'evidence';
+      activeHubCategoryFromSelectedAgentTabRef.current = false;
+      setActiveHubCategory('supervision');
+      handleSelectAgentForInspection(agentId);
+      setSelectedAgentDrilldownTab('evidence');
+      setHubOpen(true);
+    },
+    [handleSelectAgentForInspection]
+  );
+
   const handleSelectOperation = useCallback(
     (
       operation: OfficeOperation,
@@ -2384,6 +2424,7 @@ function AppInner() {
   const hudSignalSummary = [
     `Viewport · ${viewportToplineStatus.status}`,
     evidenceCoverageFocusItems.length > 0 ? `Evidence · ${evidenceCoverageFocusItems.length}` : null,
+    sourceGapChips.length > 0 ? `Source gaps · ${sourceGapChips.length}` : null,
     hotZones.length > 0 ? `Zones · ${hotZones.length}` : null
   ]
     .filter(Boolean)
@@ -2514,6 +2555,41 @@ function AppInner() {
                             ) : (
                               <span>Coverage below high-confidence/no evidence</span>
                             )}
+                          </button>
+                        ))}
+                      </span>
+                    </section>
+                  ) : null}
+                  {sourceGapChips.length > 0 ? (
+                    <section
+                      className="aitown-panel__signal-panel aitown-panel__source-gap-focus"
+                      role="region"
+                      aria-label="Source gap focus"
+                    >
+                      <div className="aitown-panel__evidence-focus__head">
+                        <strong className="aitown-panel__topline-title">Source gaps</strong>
+                        <span className="aitown-panel__topline-copy">
+                          {`${sourceGapChips.length} provenance gap${sourceGapChips.length === 1 ? '' : 's'}`}
+                        </span>
+                      </div>
+                      <span className="aitown-panel__topline-copy">Collector source evidence degraded/missing/error</span>
+                      <span
+                        className="aitown-panel__focus-chips aitown-panel__focus-chips--compact"
+                        role="group"
+                        aria-label="Source gap focus agents"
+                      >
+                        {sourceGapChips.map((chip) => (
+                          <button
+                            key={`${chip.agentId}:${chip.sourceKind}:${chip.status}`}
+                            type="button"
+                            className={`aitown-focus-chip aitown-focus-chip--source-gap source-gap-${chip.status}${selectedAgentId === chip.agentId ? ' is-active' : ''}`}
+                            aria-label={`Open source gap supervision for ${chip.displayName} ${chip.sourceLabel.toLowerCase()} ${chip.status}`}
+                            onClick={() => handleSourceGapFocusAgent(chip.agentId)}
+                          >
+                            <strong>{chip.displayName}</strong>
+                            <span>{`${chip.sourceLabel} · ${chip.status}`}</span>
+                            <span>{chip.detail}</span>
+                            <span>{chip.observedAtLabel}</span>
                           </button>
                         ))}
                       </span>

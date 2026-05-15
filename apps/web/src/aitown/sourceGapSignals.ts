@@ -20,12 +20,15 @@ type SourceGapAgent = {
 export type SourceGapChip = {
   agentId: string;
   displayName: string;
+  sourceDrilldownGroupKey: SourceGapDrilldownGroupKey;
   sourceKind: CollectorSourceHealthKind;
   status: Exclude<CollectorSourceHealthStatus, 'observed'>;
   sourceLabel: string;
   detail: string;
   observedAtLabel: string;
 };
+
+export type SourceGapDrilldownGroupKey = 'workspace' | 'tmux';
 
 const MAX_SOURCE_GAP_CHIPS = 3;
 
@@ -74,6 +77,7 @@ export function deriveSourceGapChips(
       chips.push({
         agentId: item.agent_id,
         displayName,
+        sourceDrilldownGroupKey: resolveSourceGapDrilldownGroupKey(sourceKind),
         sourceKind,
         status: health.status,
         sourceLabel: SOURCE_KIND_LABELS[sourceKind],
@@ -98,6 +102,12 @@ export function deriveSourceGapChips(
       return SOURCE_KIND_ORDER.indexOf(left.sourceKind) - SOURCE_KIND_ORDER.indexOf(right.sourceKind);
     })
     .slice(0, MAX_SOURCE_GAP_CHIPS);
+}
+
+function resolveSourceGapDrilldownGroupKey(
+  sourceKind: CollectorSourceHealthKind
+): SourceGapDrilldownGroupKey {
+  return sourceKind === 'tmux_session' ? 'tmux' : 'workspace';
 }
 
 function renderSourceGapDetail(

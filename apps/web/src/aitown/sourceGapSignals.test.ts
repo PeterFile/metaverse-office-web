@@ -97,6 +97,7 @@ describe('deriveSourceGapChips', () => {
       {
         agentId: 'growth-revenue',
         displayName: 'Growth Revenue Agent',
+        sourceDrilldownGroupKey: 'workspace',
         sourceKind: 'workspace_root',
         status: 'error',
         sourceLabel: 'Workspace root',
@@ -106,6 +107,7 @@ describe('deriveSourceGapChips', () => {
       {
         agentId: 'growth-revenue',
         displayName: 'Growth Revenue Agent',
+        sourceDrilldownGroupKey: 'tmux',
         sourceKind: 'tmux_session',
         status: 'missing',
         sourceLabel: 'Tmux session',
@@ -115,6 +117,7 @@ describe('deriveSourceGapChips', () => {
       {
         agentId: 'team-lead',
         displayName: 'Team Lead Agent',
+        sourceDrilldownGroupKey: 'workspace',
         sourceKind: 'workspace_root',
         status: 'missing',
         sourceLabel: 'Workspace root',

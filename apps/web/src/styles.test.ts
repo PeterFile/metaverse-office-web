@@ -111,6 +111,9 @@ describe('AI Town shell styles', () => {
     expect(styles).toMatch(
       /data-selected-agent-supervision-panel\][\s\S]*?\.aitown-details__section\[class\*='aitown-details__section--selected-supervision-'\][\s\S]*?\.aitown-records\s*\{[\s\S]*?max-height:\s*none;/
     );
+    expect(styles).toMatch(
+      /\.aitown-record details\[data-source-gap-focus='true'\]\s*\{[\s\S]*?border-color:[\s\S]*?box-shadow:/
+    );
   });
 
   it('keeps browser pinch zoom available on the fullscreen world host and canvas', () => {

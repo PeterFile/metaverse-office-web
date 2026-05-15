@@ -5,7 +5,10 @@ const path = require('node:path');
 const test = require('node:test');
 
 const { SEED_AGENTS } = require('../src/domain');
-const { collectControllerSnapshot } = require('../src/collectors/controller-snapshot');
+const {
+  collectControllerSnapshot,
+  createControllerSnapshotCollector
+} = require('../src/collectors/controller-snapshot');
 const { createPrototypeStore } = require('../src/store/prototype-store');
 
 function createCollectorReport({ collectedAt, items, evidenceCoverage }) {
@@ -410,6 +413,178 @@ test('collector treats inbox-only workspace evidence as inbound presence, not ag
   assert.equal(store.getAgent('app-engineering').current_state, 'idle');
   assert.equal(store.getAgent('app-engineering').last_meaningful_output_at, null);
   assert.equal(store.getAgent('app-engineering').last_file_write_at, null);
+});
+
+test('collector treats injected Hermes runtime facts as source evidence only', async () => {
+  const appAgent = {
+    ...SEED_AGENTS.find((agent) => agent.agent_id === 'app-engineering'),
+    workspace_root: '/tmp/hermes-runtime-source/app-engineering'
+  };
+  const readHermesRuntimeSources = async () => [
+    {
+      source_kind: 'hermes_profile',
+      agent_id: 'app-engineering',
+      profile_id: 'app-profile',
+      status: 'observed',
+      last_observed_at: '2026-03-09T18:02:00.000Z',
+      metadata: { pid: 123 }
+    },
+    {
+      source_kind: 'hermes_session',
+      session_ref: appAgent.session_ref,
+      evidence_ref: `hermes://session/${appAgent.session_ref}`,
+      status: 'degraded',
+      observed_at: '2026-03-09T18:03:00.000Z',
+      degraded_reasons: ['session heartbeat stale']
+    },
+    {
+      source_kind: 'hermes_profile',
+      profile_id: 'unmapped-worker',
+      status: 'observed',
+      observed_at: '2026-03-09T18:04:00.000Z'
+    },
+    {
+      source_kind: 'tmux_observation',
+      evidence_ref: 'tmux://noise/0.0'
+    },
+    {
+      source_kind: 'hermes_session',
+      status: 'observed'
+    },
+    null
+  ];
+
+  const report = await collectControllerSnapshot({
+    agents: [appAgent],
+    collectedAt: '2026-03-09T18:05:00.000Z',
+    readPathStat: async () => null,
+    listTmuxPanes: async () => [],
+    readHermesRuntimeSources
+  });
+
+  const item = report.items[0];
+  assert.equal(item.heartbeat.current_state, 'idle');
+  assert.equal(item.heartbeat.active_task, 'No evidence captured');
+  assert.equal(item.heartbeat.last_meaningful_output_at, null);
+  assert.equal(item.heartbeat.last_file_write_at, null);
+  assert.deepEqual(item.hermes_runtime_observations, [
+    {
+      source_kind: 'hermes_profile',
+      agent_id: 'app-engineering',
+      profile_id: 'app-profile',
+      session_ref: null,
+      evidence_ref: 'hermes://profile/app-profile',
+      status: 'observed',
+      last_observed_at: '2026-03-09T18:02:00.000Z',
+      degraded_reasons: [],
+      metadata: { pid: 123 }
+    },
+    {
+      source_kind: 'hermes_session',
+      agent_id: null,
+      profile_id: null,
+      session_ref: appAgent.session_ref,
+      evidence_ref: `hermes://session/${appAgent.session_ref}`,
+      status: 'degraded',
+      last_observed_at: '2026-03-09T18:03:00.000Z',
+      degraded_reasons: ['session heartbeat stale'],
+      metadata: {}
+    }
+  ]);
+  assert.deepEqual(item.source_health.hermes_profile, {
+    status: 'observed',
+    profile_id: 'app-profile',
+    evidence_ref: 'hermes://profile/app-profile',
+    last_observed_at: '2026-03-09T18:02:00.000Z',
+    degraded_reasons: []
+  });
+  assert.deepEqual(item.source_health.hermes_session, {
+    status: 'degraded',
+    expected_session_ref: appAgent.session_ref,
+    evidence_ref: `hermes://session/${appAgent.session_ref}`,
+    last_observed_at: '2026-03-09T18:03:00.000Z',
+    degraded_reasons: ['session heartbeat stale']
+  });
+  assert.ok(item.evidence_refs.includes('hermes://profile/app-profile'));
+  assert.ok(item.evidence_refs.includes(`hermes://session/${appAgent.session_ref}`));
+  assert.ok(item.heartbeat.evidence_refs.includes('hermes://profile/app-profile'));
+  assert.ok(item.supervision.evidence_refs.includes(`hermes://session/${appAgent.session_ref}`));
+  assert.deepEqual(report.evidence_coverage.source_kind_buckets, {
+    workspace_file: 0,
+    workspace_root: 0,
+    tmux_observation: 0,
+    hermes_profile: 1,
+    hermes_session: 1
+  });
+  assert.deepEqual(report.runtime_source_evidence.unmapped_hermes_sources, [
+    {
+      source_kind: 'hermes_profile',
+      evidence_ref: 'hermes://profile/unmapped-worker',
+      profile_id: 'unmapped-worker',
+      session_ref: null,
+      observed_at: '2026-03-09T18:04:00.000Z',
+      status: 'observed',
+      degraded_reasons: []
+    }
+  ]);
+
+  const collector = createControllerSnapshotCollector({
+    agents: [appAgent],
+    readPathStat: async () => null,
+    listTmuxPanes: async () => [],
+    readHermesRuntimeSources
+  });
+  const factoryReport = await collector.collectSnapshot({
+    collectedAt: '2026-03-09T18:05:00.000Z'
+  });
+
+  assert.deepEqual(factoryReport.items[0].hermes_runtime_observations, item.hermes_runtime_observations);
+});
+
+test('collector keeps shared Hermes runtime refs out of shared artifact rollups', async () => {
+  const appAgent = {
+    ...SEED_AGENTS.find((agent) => agent.agent_id === 'app-engineering'),
+    workspace_root: '/tmp/hermes-shared-ref/app-engineering'
+  };
+  const protocolAgent = {
+    ...SEED_AGENTS.find((agent) => agent.agent_id === 'protocol-engineering'),
+    workspace_root: '/tmp/hermes-shared-ref/protocol-engineering'
+  };
+
+  const report = await collectControllerSnapshot({
+    agents: [appAgent, protocolAgent],
+    collectedAt: '2026-03-09T18:05:00.000Z',
+    readPathStat: async () => null,
+    listTmuxPanes: async () => [],
+    readHermesRuntimeSources: async () => [
+      {
+        source_kind: 'hermes_profile',
+        agent_id: 'app-engineering',
+        evidence_ref: 'hermes://profile/shared-runtime',
+        status: 'observed',
+        observed_at: '2026-03-09T18:02:00.000Z'
+      },
+      {
+        source_kind: 'hermes_profile',
+        agent_id: 'protocol-engineering',
+        evidence_ref: 'hermes://profile/shared-runtime',
+        status: 'observed',
+        observed_at: '2026-03-09T18:03:00.000Z'
+      }
+    ]
+  });
+
+  assert.deepEqual(report.shared_artifacts, []);
+  assert.deepEqual(
+    report.items.map((item) => item.evidence_refs),
+    [['hermes://profile/shared-runtime'], ['hermes://profile/shared-runtime']]
+  );
+  assert.deepEqual(report.evidence_coverage.source_kind_buckets, {
+    workspace_file: 0,
+    workspace_root: 0,
+    tmux_observation: 0,
+    hermes_profile: 1
+  });
 });
 
 test('store keeps runtime source gaps from overwriting agent output state', async () => {

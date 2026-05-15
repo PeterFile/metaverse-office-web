@@ -301,6 +301,55 @@ test('JSONL prototype store appends and replays collector evidence records witho
   assert.equal(records.filter((record) => record.kind === 'evidence_record').length, 3);
 });
 
+test('JSONL prototype store filters evidence records by exact drilldown fields', async () => {
+  const storeFile = await createStoreFile();
+  const store = await createPrototypeStore({ filePath: storeFile });
+
+  await store.appendCollectorReport(createCollectorReport());
+
+  assert.deepEqual(
+    store
+      .listEvidenceRecords({ evidence_ref: '/tmp/store-contract/outbox.md' })
+      .map((record) => record.evidence_ref),
+    ['/tmp/store-contract/outbox.md']
+  );
+  assert.deepEqual(
+    store.listEvidenceRecords({ source_status: 'degraded' }).map((record) => record.evidence_ref),
+    ['/tmp/store-contract/outbox.md']
+  );
+  assert.deepEqual(
+    store
+      .listEvidenceRecords({
+        collector_snapshot_id: 'collector-snapshot:2026-03-09T18:06:00.000Z'
+      })
+      .map((record) => record.evidence_ref),
+    [
+      '/tmp/store-contract',
+      '/tmp/store-contract/outbox.md',
+      'tmux://5-web3-app-engineering/0.1'
+    ]
+  );
+  assert.deepEqual(
+    store
+      .listEvidenceRecords({ correlation_id: 'collector-snapshot:2026-03-09T18:06:00.000Z' })
+      .map((record) => record.evidence_ref),
+    [
+      '/tmp/store-contract',
+      '/tmp/store-contract/outbox.md',
+      'tmux://5-web3-app-engineering/0.1'
+    ]
+  );
+  assert.deepEqual(
+    store
+      .listEvidenceRecords({ evidence_ref: '/tmp/store-contract' })
+      .map((record) => record.evidence_ref),
+    ['/tmp/store-contract']
+  );
+  assert.deepEqual(store.listEvidenceRecords({ evidence_ref: 'store-contract' }), []);
+  assert.deepEqual(store.listEvidenceRecords({ source_status: 'missing' }), []);
+  assert.equal(store.listEvidenceRecords({ evidence_ref: '', limit: 1 }).length, 1);
+});
+
 test('JSONL prototype store loads old record kinds without evidence records', async () => {
   const storeFile = await createStoreFile();
   await writeFile(

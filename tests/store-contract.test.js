@@ -1,5 +1,5 @@
 const assert = require('node:assert/strict');
-const { mkdtemp, readFile } = require('node:fs/promises');
+const { mkdtemp, readFile, writeFile } = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
@@ -165,6 +165,7 @@ function projectReplayContract(store) {
     appAgent: store.getAgentDetail('app-engineering', { limit: 5, now }),
     protocolAgent: store.getAgentDetail('protocol-engineering', { limit: 5, now }),
     latestCollectorReport: store.getLatestCollectorReport(),
+    evidenceRecords: store.listEvidenceRecords(),
     latestCollectorSourceHealth: store.getLatestCollectorSourceHealth(),
     latestCollectorEvidenceCoverage: store.getLatestCollectorEvidenceCoverage(),
     events: store.listEvents({
@@ -234,4 +235,78 @@ test('JSONL prototype store replays event, heartbeat, and collector snapshot rea
       (record) => record.kind === 'heartbeat' && record.payload.agent_id === 'protocol-engineering'
     )
   );
+});
+
+test('JSONL prototype store appends and replays collector evidence records without changing counts', async () => {
+  const storeFile = await createStoreFile();
+  const store = await createPrototypeStore({ filePath: storeFile });
+
+  await store.appendEvent(createEvent());
+  await store.appendHeartbeat(createHeartbeat());
+  await store.appendCollectorReport(createCollectorReport());
+
+  assert.deepEqual(store.getCounts(), {
+    agent_count: 7,
+    event_count: 3,
+    heartbeat_count: 2
+  });
+
+  const evidenceRecords = store.listEvidenceRecords();
+  assert.equal(evidenceRecords.length, 3);
+  assert.deepEqual(
+    evidenceRecords.map((record) => record.source_kind).sort(),
+    ['tmux_observation', 'workspace_file', 'workspace_root']
+  );
+
+  const workspaceOutputRecord = evidenceRecords.find(
+    (record) => record.evidence_ref === '/tmp/store-contract/outbox.md'
+  );
+  assert.equal(workspaceOutputRecord.evidence_role, 'agent_output');
+  assert.equal(workspaceOutputRecord.output_candidate, true);
+  assert.equal(workspaceOutputRecord.source_status, 'degraded');
+  assert.deepEqual(workspaceOutputRecord.degraded_reasons, [
+    'missing workspace files: inbox.md, todo.md'
+  ]);
+
+  const workspaceRootRecord = evidenceRecords.find(
+    (record) => record.evidence_ref === '/tmp/store-contract'
+  );
+  assert.equal(workspaceRootRecord.evidence_role, 'workspace_presence');
+  assert.equal(workspaceRootRecord.output_candidate, false);
+  assert.equal(workspaceRootRecord.source_status, 'observed');
+
+  const tmuxRecord = evidenceRecords.find((record) => record.source_kind === 'tmux_observation');
+  assert.equal(tmuxRecord.evidence_ref, 'tmux://5-web3-app-engineering/0.1');
+  assert.equal(tmuxRecord.output_candidate, true);
+  assert.equal(tmuxRecord.collector_snapshot_id, 'collector-snapshot:2026-03-09T18:06:00.000Z');
+
+  const reloadedStore = await createPrototypeStore({ filePath: storeFile });
+  assert.deepEqual(reloadedStore.listEvidenceRecords(), evidenceRecords);
+  assert.deepEqual(reloadedStore.getCounts(), store.getCounts());
+
+  const records = (await readFile(storeFile, 'utf8')).trim().split('\n').map((line) => JSON.parse(line));
+  assert.equal(records.filter((record) => record.kind === 'evidence_record').length, 3);
+});
+
+test('JSONL prototype store loads old record kinds without evidence records', async () => {
+  const storeFile = await createStoreFile();
+  await writeFile(
+    storeFile,
+    [
+      JSON.stringify({ kind: 'event', payload: createEvent() }),
+      JSON.stringify({ kind: 'heartbeat', payload: createHeartbeat() }),
+      JSON.stringify({ kind: 'collector_snapshot', payload: createCollectorReport() })
+    ].join('\n') + '\n',
+    'utf8'
+  );
+
+  const store = await createPrototypeStore({ filePath: storeFile });
+
+  assert.deepEqual(store.listEvidenceRecords(), []);
+  assert.equal(store.getLatestCollectorReport().collected_at, '2026-03-09T18:06:00.000Z');
+  assert.deepEqual(store.getCounts(), {
+    agent_count: 7,
+    event_count: 1,
+    heartbeat_count: 1
+  });
 });

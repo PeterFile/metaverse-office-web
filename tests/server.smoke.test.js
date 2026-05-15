@@ -4814,6 +4814,8 @@ test('GET /collectors/controller-snapshot/source-health projects latest source h
   });
   assert.equal(collected.response.status, 201);
   assert.equal(collectCount, 1);
+  const recordsAfterPost = (await readFile(storeFile, 'utf8')).trim().split('\n').map((line) => JSON.parse(line));
+  const recordCountAfterPost = recordsAfterPost.length;
 
   const latestBeforeRead = store.getLatestCollectorReport();
   const sourceHealth = await requestJson(`${baseUrl}/collectors/controller-snapshot/source-health`);
@@ -4875,9 +4877,13 @@ test('GET /collectors/controller-snapshot/source-health projects latest source h
     'growth-revenue'
   ]);
 
-  const lines = (await readFile(storeFile, 'utf8')).trim().split('\n');
-  assert.equal(lines.length, 4);
-  assert.equal(JSON.parse(lines[3]).kind, 'collector_snapshot');
+  const records = (await readFile(storeFile, 'utf8')).trim().split('\n').map((line) => JSON.parse(line));
+  assert.equal(records.length, recordCountAfterPost);
+  assert.equal(records.filter((record) => record.kind === 'event').length, 2);
+  assert.equal(records.filter((record) => record.kind === 'heartbeat').length, 1);
+  assert.ok(records.some((record) => record.kind === 'evidence_record'));
+  assert.equal(records.filter((record) => record.kind === 'collector_snapshot').length, 1);
+  assert.equal(records[records.length - 1].kind, 'collector_snapshot');
 });
 
 test('collector snapshot POST exposes shared artifact rollups for refs shared by multiple agents', async (t) => {

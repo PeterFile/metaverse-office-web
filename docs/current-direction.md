@@ -1,6 +1,6 @@
 # Current Direction: Live Evidence Spine
 
-Updated: 2026-05-15T00:31:24+08:00
+Updated: 2026-05-15T09:47:00+08:00
 
 ## Product vision
 
@@ -13,7 +13,9 @@ This project is not a flashy dashboard, not a manual task-dispatch UI, and not a
 - Backend runtime is plain Node.js built-ins in `src/server.js` / `src/index.js`.
 - Current persistent store is the local append-only JSONL prototype at `data/prototype-store.jsonl`, selected by `METAVERSE_OFFICE_STORE_FILE` when set.
 - The store replays JSONL records into memory and derives current agent projections, read models, incidents, interactions, memory artifacts, correlation drilldowns, timeline replay, accountability replay, and the latest collector snapshot.
-- Collector snapshot reports are persisted as append-only `collector_snapshot` JSONL records; event and heartbeat counts still come only from `event` and `heartbeat` records.
+- Collector snapshot reports are persisted as append-only `collector_snapshot` JSONL records; collector-derived source facts are also persisted as internal append-only `evidence_record` JSONL records before the snapshot record.
+- `evidence_record` entries preserve source kind, evidence ref, evidence role, source health status, output-candidate classification, collector correlation, and degraded reasons for workspace roots, workspace files, mapped tmux panes, and unmapped tmux runtime evidence.
+- Event and heartbeat counts still come only from `event` and `heartbeat` records; inbound `inbox.md`, workspace-root presence, and unmapped tmux evidence remain non-output evidence and must not advance meaningful-output state.
 - Controlled writes are limited to `POST /events`, `POST /heartbeats`, and `POST /collectors/controller-snapshot` with `x-actor-id` validation.
 - The domain still uses the canonical seven-actor office model: `team-lead` plus `market-intel`, `product-pmf`, `tokenomics`, `protocol-engineering`, `app-engineering`, and `growth-revenue`.
 - Collector snapshots expose source health for workspace roots, watched workspace files, and expected tmux sessions; missing/degraded sources are explicit evidence state, and inbound `inbox.md`/workspace-root presence does not imply agent output.

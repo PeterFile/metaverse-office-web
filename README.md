@@ -21,7 +21,7 @@ The next product milestone is `Live Evidence Spine`: connect the current read mo
 ## Current implementation snapshot
 - backend exposes evidence-first read models for office overview, operations, agent workflow/detail, incidents, timeline replay, accountability replay, correlation drill-down, shared memory artifacts, peer-watch alerts, handoffs, reboots, and collector evidence coverage
 - controlled writes remain limited to `POST /events`, `POST /heartbeats`, and `POST /collectors/controller-snapshot`
-- storage defaults to the local append-only JSONL prototype at `data/prototype-store.jsonl`, replayed into memory; an opt-in SQLite append-only backend can store the same record stream at `data/prototype-store.sqlite`
+- storage defaults to the local append-only JSONL prototype at `data/prototype-store.jsonl`, replayed into memory; an opt-in SQLite append-only backend can store the same canonical record stream at `data/prototype-store.sqlite` with derived sidecar indexes for lookup
 - domain still uses the canonical seven-actor office model: six employee agents plus `team-lead`
 - frontend is a React + TypeScript + PixiJS AI Town operator world with roster, category Hub, selected-agent drilldowns, supervision/evidence/replay/memory surfaces, and real browser smoke coverage
 
@@ -37,7 +37,7 @@ The next product milestone is `Live Evidence Spine`: connect the current read mo
 - runtime: plain Node.js built-ins only
 - frontend shell: React + TypeScript via Vite under `apps/web`
 - workspace manager: pnpm 10.28.2
-- storage: append-only local JSONL file at `data/prototype-store.jsonl` by default; opt-in SQLite uses the local `sqlite3` CLI
+- storage: append-only local JSONL file at `data/prototype-store.jsonl` by default; opt-in SQLite uses the local `sqlite3` CLI and keeps `records` canonical while maintaining derived lookup sidecars
 - seed domain: 6 employee agents plus `team-lead`
 - canonical employee ids:
   - `market-intel`

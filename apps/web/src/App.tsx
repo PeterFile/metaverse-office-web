@@ -1281,11 +1281,12 @@ function AppInner() {
         overview: overviewResource.data,
         workflows: activeWorkflow && selectedAgentId ? new Map([[selectedAgentId, activeWorkflow]]) : new Map(),
         incidentFeed: incidentFeedResource.data,
+        sourceHealth: latestSourceHealth,
         incidentFeedLimit: CREW_INCIDENT_FEED_LIMIT,
         selectedAgentWorkflowPending: selectedAgentId !== null && workflowState === 'loading',
         now: new Date().toISOString(),
       }),
-    [activeWorkflow, incidentFeedResource.data, overviewResource.data, selectedAgentId, workflowState]
+    [activeWorkflow, incidentFeedResource.data, latestSourceHealth, overviewResource.data, selectedAgentId, workflowState]
   );
 
   useEffect(() => {

@@ -6,6 +6,12 @@ import type {
   CollectorSourceHealthStatus
 } from '../types';
 
+export type { SourceHealthWorldBadge } from '../sourceHealthWorldBadges';
+export {
+  deriveSourceHealthWorldBadges,
+  resolveWorstSourceHealthStatus
+} from '../sourceHealthWorldBadges';
+
 type SourceGapAgent = {
   agent_id: string;
   display_name: string;

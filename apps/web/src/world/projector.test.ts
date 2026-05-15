@@ -3,6 +3,7 @@ import { projectWorldState } from './projector';
 import type { ProjectorInput } from './projector';
 import type {
   AgentWorkflow,
+  CollectorSourceHealthProjection,
   IncidentFeedResponse,
   OfficeAgent,
   OfficeOverview,
@@ -145,6 +146,54 @@ describe('projectWorldState', () => {
     expect(agent!.zone).toBe('desk-app-engineering');
     expect(agent!.raw_state).toBe('coding');
     expect(agent!.severity_reason).toContain('workflow unavailable');
+  });
+
+  it('projects source evidence health without changing runtime severity semantics', () => {
+    const sourceHealth: CollectorSourceHealthProjection = {
+      collected_at: NOW,
+      actor_id: 'team-lead',
+      summary: {
+        agent_count: 1,
+        source_kind_buckets: {
+          workspace_root: { observed: 0, degraded: 0, missing: 0, error: 1 },
+          workspace_files: { observed: 0, degraded: 0, missing: 0, error: 0 },
+          tmux_session: { observed: 0, degraded: 0, missing: 0, error: 0 },
+        },
+        status_buckets: { observed: 0, degraded: 0, missing: 0, error: 1 },
+      },
+      agent_items: [
+        {
+          agent_id: 'app-engineering',
+          workspace_root: '/tmp/app-engineering',
+          session_ref: '5-web3-app-engineering',
+          evidence_ref_count: 0,
+          evidence_refs: [],
+          latest_evidence_at: null,
+          source_health: {
+            workspace_root: {
+              status: 'error',
+              path: '/tmp/app-engineering',
+              last_observed_at: null,
+              degraded_reasons: ['workspace root read failed'],
+            },
+          },
+        },
+      ],
+    };
+    const input: ProjectorInput = {
+      overview: makeOverview(),
+      workflows: new Map(),
+      incidentFeed: null,
+      sourceHealth,
+      now: NOW,
+    };
+
+    const world = projectWorldState(input);
+    const agent = world.agents.get('app-engineering')!;
+
+    expect(agent.source_evidence_health_status).toBe('error');
+    expect(agent.severity).toBe('normal');
+    expect(agent.phase).toBe('active');
   });
 
   it('projects reviewing agent to review-zone', () => {

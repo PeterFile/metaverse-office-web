@@ -534,6 +534,7 @@ function readZoneLayer() {
 
 type MockTreeNode = {
   children?: MockTreeNode[];
+  eventMode?: string;
   options?: unknown;
 };
 
@@ -552,6 +553,32 @@ function collectPixiTextLabels(node: MockTreeNode | undefined): string[] {
     ...(typeof text === 'string' ? [text] : []),
     ...(node.children ?? []).flatMap((child) => collectPixiTextLabels(child))
   ];
+}
+
+function findPixiTextNode(node: MockTreeNode | undefined, text: string): MockTreeNode | undefined {
+  if (!node) {
+    return undefined;
+  }
+
+  const options = node.options;
+  const nodeText =
+    typeof options === 'object' && options !== null && 'text' in options
+      ? (options as { text?: unknown }).text
+      : undefined;
+
+  if (nodeText === text) {
+    return node;
+  }
+
+  for (const child of node.children ?? []) {
+    const candidate = findPixiTextNode(child, text);
+
+    if (candidate) {
+      return candidate;
+    }
+  }
+
+  return undefined;
 }
 
 function installViewportInspectorTracker() {
@@ -1108,6 +1135,40 @@ describe('WorldScene watch overlay caption gating', () => {
     expect(textLabels).not.toContain('Protocol Engineering Agent');
     expect(textLabels).not.toContain('Delivery Desk');
     expect(textLabels).not.toContain('Review Zone');
+  });
+
+  it('renders compact source evidence health badges without creating pointer targets', async () => {
+    appInitMock.mockReset().mockResolvedValue(undefined);
+    vi.mocked(loadAiTownAssets).mockResolvedValue(makeAssets());
+    const scene = {
+      ...makeScene(),
+      agents: [
+        makeAgent({
+          agentId: 'app-engineering',
+          displayName: 'App Engineering Agent',
+          sourceEvidenceHealthStatus: 'missing'
+        }),
+        makeAgent({
+          agentId: 'team-lead',
+          displayName: 'Team Lead',
+          selected: false,
+          sourceEvidenceHealthStatus: null
+        })
+      ]
+    } satisfies AiTownSceneModel;
+
+    render(<WorldScene scene={scene} onSelectAgent={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(readAgentLayer()?.children).toHaveLength(scene.agents.length);
+    });
+
+    const textLabels = collectPixiTextLabels(appInstances.at(-1)?.stage);
+    expect(textLabels.filter((label) => label === 'SRC')).toHaveLength(1);
+
+    const sourceBadgeText = findPixiTextNode(appInstances.at(-1)?.stage, 'SRC');
+    expect(sourceBadgeText?.eventMode).toBeUndefined();
+    expect(readAgentSprites()).toHaveLength(2);
   });
 
   it('keeps selected watch-link captions hidden while the renderer is still failed', async () => {

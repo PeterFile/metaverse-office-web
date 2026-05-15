@@ -48,6 +48,12 @@ const SEVERITY_COLORS = {
   red: 0xf26767
 } as const;
 
+const SOURCE_EVIDENCE_HEALTH_COLORS = {
+  degraded: 0xf8d34b,
+  missing: 0xff9551,
+  error: 0xf26767
+} as const;
+
 const nameLabelStyle = new TextStyle({
   fontFamily: '"VCR OSD Mono", monospace',
   fontSize: 8,
@@ -1121,6 +1127,40 @@ function createAgentStatusBadge(agent: SceneAgent) {
   return container;
 }
 
+function createAgentSourceEvidenceHealthBadge(agent: SceneAgent) {
+  const status = agent.sourceEvidenceHealthStatus;
+  if (!status) {
+    return null;
+  }
+
+  const container = new Container();
+  const background = new Graphics();
+  const color = SOURCE_EVIDENCE_HEALTH_COLORS[status];
+
+  background.roundRect(-13, -7, 26, 14, 5).fill({
+    color: 0x251a28,
+    alpha: 0.94
+  });
+  background.roundRect(-13, -7, 26, 14, 5).stroke({
+    color,
+    width: 1,
+    alpha: 0.9
+  });
+
+  const label = new Text({
+    text: 'SRC',
+    style: statusBadgeStyle,
+    resolution: 2
+  });
+  label.anchor.set(0.5, 0.5);
+
+  container.position.set(-20, -30);
+  container.eventMode = 'none';
+  container.addChild(background, label);
+
+  return container;
+}
+
 function createCachedAgentChrome(...children: Array<Container | Graphics | Text>) {
   const chrome = new Container();
   chrome.eventMode = 'none';
@@ -1146,6 +1186,7 @@ function resolveAgentSpriteRenderKey(
     agent.rebootRecommended ? 'reboot' : 'ok',
     agent.openAlertCount,
     agent.hasOpenIncidents ? 'incidents' : 'clear',
+    agent.sourceEvidenceHealthStatus ?? 'source-ok',
     emphasis,
     correlationHighlighted ? 'correlated' : 'uncorrelated'
   ].join('|');
@@ -1247,6 +1288,10 @@ function createAgentSprite(
     alpha: 1
   });
   const statusBadge = createAgentStatusBadge(agent);
+  const sourceEvidenceHealthBadge = createAgentSourceEvidenceHealthBadge(agent);
+  const chromeChildren = sourceEvidenceHealthBadge
+    ? [statusDot, nameLabel, sourceEvidenceHealthBadge]
+    : [statusDot, nameLabel];
 
   container.on('pointertap', (event) => {
     event.stopPropagation();
@@ -1257,13 +1302,13 @@ function createAgentSprite(
     container.addChild(
       createCachedAgentChrome(shadow, correlationSpotlight, aura, emphasisRing),
       character,
-      createCachedAgentChrome(statusDot, nameLabel, statusBadge)
+      createCachedAgentChrome(...chromeChildren, statusBadge)
     );
   } else {
     container.addChild(
       createCachedAgentChrome(shadow, correlationSpotlight, aura, emphasisRing),
       character,
-      createCachedAgentChrome(statusDot, nameLabel)
+      createCachedAgentChrome(...chromeChildren)
     );
   }
 

@@ -1,5 +1,6 @@
 import type {
   AgentWorkflow,
+  CollectorSourceHealthProjection,
   IncidentFeedResponse,
   OfficeAgent,
   OfficeOverview,
@@ -7,6 +8,7 @@ import type {
   WorkflowIncident,
 } from '../types';
 
+import { deriveSourceHealthWorldBadges } from '../sourceHealthWorldBadges';
 import { deriveAgentPhase, deriveAgentZone } from './state-machine';
 import type {
   DataQuality,
@@ -89,6 +91,7 @@ export interface ProjectorInput {
   overview: OfficeOverview | null;
   workflows: Map<string, AgentWorkflow>;
   incidentFeed: IncidentFeedResponse | null;
+  sourceHealth?: CollectorSourceHealthProjection | null;
   incidentFeedLimit?: number;
   selectedAgentWorkflowPending?: boolean;
   now: string;
@@ -118,6 +121,9 @@ export function projectWorldState(input: ProjectorInput): WorldState {
   );
   const activeIncidentMaxSeverityByAgent = buildActiveIncidentMaxSeverityByAgent(runtimeIncidentFeedItems);
   const incidentFeedPhaseSignalsByAgent = buildIncidentFeedPhaseSignalsByAgent(runtimeIncidentFeedItems, now);
+  const sourceEvidenceHealthStatusByAgent = new Map(
+    deriveSourceHealthWorldBadges(input.sourceHealth).map((badge) => [badge.agentId, badge.status])
+  );
 
   for (const oa of overview.agents) {
     const workflow = workflows.get(oa.agent_id) ?? null;
@@ -130,6 +136,7 @@ export function projectWorldState(input: ProjectorInput): WorldState {
       activeIncidentMaxSeverityByAgent.get(oa.agent_id) ?? 'normal',
       incidentFeedPhaseSignalsByAgent.get(oa.agent_id) ?? null,
       runtimeEvidence,
+      sourceEvidenceHealthStatusByAgent.get(oa.agent_id) ?? null,
       now
     );
     agents.set(wa.agent_id, wa);
@@ -186,6 +193,7 @@ function projectAgent(
   incidentFeedMaxSeverity: Severity,
   incidentFeedPhaseSignals: IncidentFeedPhaseSignals | null,
   runtimeEvidence: RuntimeEvidence,
+  sourceEvidenceHealthStatus: WorldAgent['source_evidence_health_status'],
   now: string
 ): WorldAgent {
   const signals = extractPhaseSignals(oa, workflow, incidentFeedOpenCount, incidentFeedPhaseSignals);
@@ -231,6 +239,7 @@ function projectAgent(
     open_alert_count: openAlertCount,
     has_open_incidents: hasOpenIncidents,
     runtime_evidence: runtimeEvidence,
+    source_evidence_health_status: sourceEvidenceHealthStatus,
   };
 }
 

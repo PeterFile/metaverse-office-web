@@ -211,6 +211,21 @@ describe('run-browser-smoke helpers', () => {
     ]);
   });
 
+  it('forwards stable journey grep tags through the wrapper without changing the hermetic smoke bundle', () => {
+    expect(resolvePlaywrightArgs(['--', '--grep', '@journey @evidence-live'])).toEqual([
+      'exec',
+      'playwright',
+      'test',
+      'e2e/operator-shell.keyboard.smoke.spec.ts',
+      'e2e/operator-shell.active-queue.smoke.spec.ts',
+      'e2e/operator-shell.layout-visual.smoke.spec.ts',
+      '--config',
+      'playwright.config.ts',
+      '--grep',
+      '@journey @evidence-live'
+    ]);
+  });
+
   it('threads the inspectable backend origin into Playwright only when the smoke target exposes request logs', () => {
     expect(
       resolveBrowserSmokePlaywrightEnv('http://127.0.0.1:4173', 'http://127.0.0.1:3210')

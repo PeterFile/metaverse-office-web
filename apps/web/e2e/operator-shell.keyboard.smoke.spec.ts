@@ -10803,7 +10803,7 @@ test.describe('operator shell smoke', () => {
     }
   });
 
-  test('Supervision History stays aligned with the active selected correlation in browser smoke once the selected-agent correlation settles', async ({
+  test('@journey @evidence-live Supervision History stays aligned with the active selected correlation in browser smoke once the selected-agent correlation settles', async ({
     page
   }) => {
     const accountabilityCorrelationId = 'collector-snapshot:2026-03-10T23:59:40.000Z';

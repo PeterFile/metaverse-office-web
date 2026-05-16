@@ -292,6 +292,17 @@ function createHermesRuntimeCollectorReport() {
   };
 }
 
+function createTieTimestampCollectorReport(collectedAt) {
+  const report = JSON.parse(JSON.stringify(createCollectorReport()));
+  report.collected_at = collectedAt;
+  report.items[0].workspace_observations[0].last_modified_at = '2026-03-09T18:05:00.000Z';
+  report.items[0].tmux_observations[0].pane_activity_at = '2026-03-09T18:05:00.000Z';
+  report.items[0].source_health.workspace_root.last_observed_at = '2026-03-09T18:05:00.000Z';
+  report.items[0].source_health.workspace_files.last_observed_at = '2026-03-09T18:05:00.000Z';
+  report.items[0].source_health.tmux_session.last_observed_at = '2026-03-09T18:05:00.000Z';
+  return report;
+}
+
 function projectReplayContract(store) {
   const now = '2026-03-09T18:10:00.000Z';
 
@@ -704,6 +715,54 @@ test('JSONL prototype store filters evidence records by observed and collected w
       })
       .map((record) => record.evidence_ref),
     []
+  );
+});
+
+test('prototype store orders newest evidence records by observed, collected, and deterministic tie key', async () => {
+  const jsonlStoreFile = await createStoreFile();
+  const sqliteStoreFile = await createSqliteStoreFile();
+  const jsonlStore = await createPrototypeStore({ filePath: jsonlStoreFile });
+  const sqliteStore = await createPrototypeStore({ sqliteFilePath: sqliteStoreFile });
+
+  await jsonlStore.appendCollectorReport(
+    createTieTimestampCollectorReport('2026-03-09T18:06:00.000Z')
+  );
+  await jsonlStore.appendCollectorReport(
+    createTieTimestampCollectorReport('2026-03-09T18:07:00.000Z')
+  );
+  await sqliteStore.appendCollectorReport(
+    createTieTimestampCollectorReport('2026-03-09T18:06:00.000Z')
+  );
+  await sqliteStore.appendCollectorReport(
+    createTieTimestampCollectorReport('2026-03-09T18:07:00.000Z')
+  );
+
+  const orderedRefs = jsonlStore
+    .listEvidenceRecords({ newest_first: 'true' })
+    .map((record) => `${record.collected_at}|${record.evidence_ref}`);
+
+  assert.deepEqual(orderedRefs, [
+    '2026-03-09T18:07:00.000Z|tmux://5-web3-app-engineering/0.1',
+    '2026-03-09T18:07:00.000Z|/tmp/store-contract/outbox.md',
+    '2026-03-09T18:07:00.000Z|/tmp/store-contract',
+    '2026-03-09T18:06:00.000Z|tmux://5-web3-app-engineering/0.1',
+    '2026-03-09T18:06:00.000Z|/tmp/store-contract/outbox.md',
+    '2026-03-09T18:06:00.000Z|/tmp/store-contract'
+  ]);
+
+  const reloadedJsonlStore = await createPrototypeStore({ filePath: jsonlStoreFile });
+  const reloadedSqliteStore = await createPrototypeStore({ sqliteFilePath: sqliteStoreFile });
+  assert.deepEqual(
+    reloadedJsonlStore
+      .listEvidenceRecords({ newest_first: 'true' })
+      .map((record) => `${record.collected_at}|${record.evidence_ref}`),
+    orderedRefs
+  );
+  assert.deepEqual(
+    reloadedSqliteStore
+      .listEvidenceRecords({ newest_first: 'true' })
+      .map((record) => `${record.collected_at}|${record.evidence_ref}`),
+    orderedRefs
   );
 });
 

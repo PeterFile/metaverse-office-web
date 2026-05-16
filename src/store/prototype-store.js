@@ -3051,17 +3051,50 @@ function matchesTimestampWindow(value, since, until) {
 }
 
 function compareEvidenceRecordRecency(left, right) {
-  return getEvidenceRecordTime(right) - getEvidenceRecordTime(left);
-}
-
-function getEvidenceRecordTime(record) {
-  const observedAt = Date.parse(record?.observed_at || '');
-  if (Number.isFinite(observedAt)) {
-    return observedAt;
+  const observedComparison =
+    getEvidenceRecordTimestamp(right.observed_at) - getEvidenceRecordTimestamp(left.observed_at);
+  if (observedComparison !== 0) {
+    return observedComparison;
   }
 
-  const collectedAt = Date.parse(record?.collected_at || '');
-  return Number.isFinite(collectedAt) ? collectedAt : 0;
+  const collectedComparison =
+    getEvidenceRecordTimestamp(right.collected_at) - getEvidenceRecordTimestamp(left.collected_at);
+  if (collectedComparison !== 0) {
+    return collectedComparison;
+  }
+
+  return compareStringsAsc(getEvidenceRecordTieKey(left), getEvidenceRecordTieKey(right));
+}
+
+function getEvidenceRecordTimestamp(value) {
+  const timestamp = Date.parse(value || '');
+  return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
+function getEvidenceRecordTieKey(record) {
+  return [
+    record?.evidence_id,
+    record?.collector_snapshot_id,
+    record?.agent_id,
+    record?.source_kind,
+    record?.evidence_ref,
+    record?.evidence_role,
+    record?.correlation_id
+  ]
+    .map((value) => (typeof value === 'string' ? value : ''))
+    .join('\u0000');
+}
+
+function compareStringsAsc(left, right) {
+  if (left < right) {
+    return -1;
+  }
+
+  if (left > right) {
+    return 1;
+  }
+
+  return 0;
 }
 
 function normalizeOptionalBoolean(value) {

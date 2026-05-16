@@ -384,22 +384,37 @@ test('collector treats inbox-only workspace evidence as inbound presence, not ag
   await store.appendCollectorReport(report);
 
   const evidenceRecords = store.listEvidenceRecords();
-  assert.equal(evidenceRecords.length, 2);
+  assert.equal(evidenceRecords.length, 4);
   assert.deepEqual(
     evidenceRecords.map((record) => ({
       evidence_ref: record.evidence_ref,
       evidence_role: record.evidence_role,
+      source_status: record.source_status,
       output_candidate: record.output_candidate
     })),
     [
       {
         evidence_ref: appAgent.workspace_root,
         evidence_role: 'workspace_presence',
+        source_status: 'observed',
         output_candidate: false
       },
       {
         evidence_ref: inboxRef,
         evidence_role: 'inbound_task',
+        source_status: 'degraded',
+        output_candidate: false
+      },
+      {
+        evidence_ref: path.join(appAgent.workspace_root, 'outbox.md'),
+        evidence_role: 'agent_output',
+        source_status: 'missing',
+        output_candidate: false
+      },
+      {
+        evidence_ref: path.join(appAgent.workspace_root, 'todo.md'),
+        evidence_role: 'agent_plan',
+        source_status: 'missing',
         output_candidate: false
       }
     ]
@@ -658,6 +673,102 @@ test('store keeps runtime source gaps from overwriting agent output state', asyn
     '/tmp/runtime-source-gap/app-engineering',
     '/tmp/runtime-source-gap/app-engineering/inbox.md'
   ]);
+});
+
+test('store persists missing and error expected workspace files as non-output evidence', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'metaverse-office-store-'));
+  const storeFile = path.join(root, 'prototype-store.jsonl');
+  const store = await createPrototypeStore({ filePath: storeFile });
+  const appAgent = {
+    ...SEED_AGENTS.find((agent) => agent.agent_id === 'app-engineering'),
+    workspace_root: '/tmp/negative-workspace-gap/app-engineering'
+  };
+
+  const report = await collectControllerSnapshot({
+    agents: [appAgent],
+    collectedAt: '2026-03-09T18:10:00.000Z',
+    readPathStat: async (targetPath) => {
+      if (targetPath === appAgent.workspace_root) {
+        return { mtime: '2026-03-09T18:09:00.000Z' };
+      }
+
+      if (targetPath.endsWith('/outbox.md')) {
+        throw new Error('permission denied');
+      }
+
+      return null;
+    },
+    listTmuxPanes: async () => []
+  });
+
+  await store.appendCollectorReport(report);
+
+  assert.deepEqual(store.getCounts(), {
+    agent_count: 7,
+    event_count: 0,
+    heartbeat_count: 0
+  });
+  assert.equal(store.getAgent('app-engineering').last_meaningful_output_at, null);
+
+  const gapRecords = store.listEvidenceRecords({
+    agent_id: 'app-engineering',
+    source_kind: 'workspace_file',
+    output_candidate: 'false',
+    limit: 10
+  });
+  assert.deepEqual(
+    gapRecords.map((record) => ({
+      evidence_ref: record.evidence_ref,
+      evidence_role: record.evidence_role,
+      source_status: record.source_status,
+      output_candidate: record.output_candidate,
+      observed_at: record.observed_at,
+      collector_snapshot_id: record.collector_snapshot_id,
+      degraded_reasons: record.degraded_reasons
+    })),
+    [
+      {
+        evidence_ref: '/tmp/negative-workspace-gap/app-engineering/inbox.md',
+        evidence_role: 'inbound_task',
+        source_status: 'missing',
+        output_candidate: false,
+        observed_at: null,
+        collector_snapshot_id: 'collector-snapshot:2026-03-09T18:10:00.000Z',
+        degraded_reasons: ['missing workspace file']
+      },
+      {
+        evidence_ref: '/tmp/negative-workspace-gap/app-engineering/outbox.md',
+        evidence_role: 'agent_output',
+        source_status: 'error',
+        output_candidate: false,
+        observed_at: null,
+        collector_snapshot_id: 'collector-snapshot:2026-03-09T18:10:00.000Z',
+        degraded_reasons: ['permission denied']
+      },
+      {
+        evidence_ref: '/tmp/negative-workspace-gap/app-engineering/todo.md',
+        evidence_role: 'agent_plan',
+        source_status: 'missing',
+        output_candidate: false,
+        observed_at: null,
+        collector_snapshot_id: 'collector-snapshot:2026-03-09T18:10:00.000Z',
+        degraded_reasons: ['missing workspace file']
+      }
+    ]
+  );
+  assert.deepEqual(
+    store.listEvidenceRecords({
+      source_status: 'error',
+      evidence_ref: '/tmp/negative-workspace-gap/app-engineering/outbox.md'
+    }).map((record) => record.metadata),
+    [
+      {
+        file_name: 'outbox.md',
+        path: '/tmp/negative-workspace-gap/app-engineering/outbox.md',
+        source_health_key: 'workspace_files'
+      }
+    ]
+  );
 });
 
 test('store appends collector heartbeats and exposes the latest collector report', async () => {

@@ -96,6 +96,7 @@ async function collectControllerSnapshot(options = {}) {
         agent,
         collectedAt,
         workspaceObservations: workspaceSources.observations,
+        workspaceSourceRecords: workspaceSources.source_records,
         tmuxObservations,
         hermesRuntimeObservations,
         sourceHealth: {
@@ -153,6 +154,7 @@ async function collectWorkspaceSources({ agent, readPathStat }) {
 
   return {
     observations: observations.sort(compareObservationRecency),
+    source_records: sourceRecords,
     source_health: createWorkspaceSourceHealth({
       workspaceRoot: agent.workspace_root,
       sourceRecords
@@ -254,6 +256,7 @@ function createCollectorItem({
   agent,
   collectedAt,
   workspaceObservations,
+  workspaceSourceRecords,
   tmuxObservations,
   hermesRuntimeObservations,
   sourceHealth
@@ -291,6 +294,7 @@ function createCollectorItem({
       hermesRuntimeObservations
     }),
     workspace_observations: workspaceObservations,
+    workspace_source_records: workspaceSourceRecords,
     tmux_observations: tmuxObservations,
     hermes_runtime_observations: hermesRuntimeObservations,
     supervision: {

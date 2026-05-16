@@ -651,6 +651,62 @@ test('JSONL prototype store filters evidence records by mapped agent presence', 
   assert.equal(store.listEvidenceRecords({ mapped: 'maybe', limit: 2 }).length, 2);
 });
 
+test('JSONL prototype store filters evidence records by observed and collected windows before limit', async () => {
+  const storeFile = await createStoreFile();
+  const store = await createPrototypeStore({ filePath: storeFile });
+  const report = createCollectorReport();
+  report.items[0].source_health.workspace_root.last_observed_at = null;
+
+  await store.appendCollectorReport(report);
+  await store.appendCollectorReport(createHermesRuntimeCollectorReport());
+
+  assert.deepEqual(
+    store
+      .listEvidenceRecords({
+        observed_since: '2026-03-09T18:05:21.000Z',
+        observed_until: '2026-03-09T18:06:35.000Z',
+        newest_first: 'true',
+        limit: 1
+      })
+      .map((record) => record.evidence_ref),
+    ['hermes://profile/app-profile']
+  );
+  assert.deepEqual(
+    store
+      .listEvidenceRecords({
+        collected_since: '2026-03-09T18:07:00.000Z',
+        collected_until: '2026-03-09T18:07:00.000Z'
+      })
+      .map((record) => record.evidence_ref),
+    [
+      'hermes://profile/app-profile',
+      'hermes://session/5-web3-app-engineering',
+      'hermes://profile/unmapped-worker'
+    ]
+  );
+  assert.deepEqual(
+    store
+      .listEvidenceRecords({
+        observed_since: 'not-a-date',
+        observed_until: '',
+        collected_since: ' ',
+        collected_until: '2026-13-99',
+        limit: 1
+      })
+      .map((record) => record.evidence_ref),
+    ['/tmp/store-contract']
+  );
+  assert.deepEqual(
+    store
+      .listEvidenceRecords({
+        source_kind: 'workspace_root',
+        observed_since: '2026-03-09T18:00:00.000Z'
+      })
+      .map((record) => record.evidence_ref),
+    []
+  );
+});
+
 test('JSONL prototype store loads old record kinds without evidence records', async () => {
   const storeFile = await createStoreFile();
   await writeFile(

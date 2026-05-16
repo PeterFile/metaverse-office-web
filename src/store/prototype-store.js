@@ -533,6 +533,10 @@ class PrototypeStore {
     const collectorSnapshotId = normalizeFilterValue(filters.collector_snapshot_id);
     const correlationId = normalizeFilterValue(filters.correlation_id);
     const mapped = normalizeOptionalBoolean(filters.mapped);
+    const observedSince = parseOptionalTimestampFilter(filters.observed_since);
+    const observedUntil = parseOptionalTimestampFilter(filters.observed_until);
+    const collectedSince = parseOptionalTimestampFilter(filters.collected_since);
+    const collectedUntil = parseOptionalTimestampFilter(filters.collected_until);
     const newestFirst = normalizeOptionalBoolean(filters.newest_first) === true;
     const limit = parseLimit(filters.limit);
 
@@ -553,7 +557,13 @@ class PrototypeStore {
       .filter(
         (record) => !collectorSnapshotId || record.collector_snapshot_id === collectorSnapshotId
       )
-      .filter((record) => !correlationId || record.correlation_id === correlationId);
+      .filter((record) => !correlationId || record.correlation_id === correlationId)
+      .filter((record) =>
+        matchesTimestampWindow(record.observed_at, observedSince, observedUntil)
+      )
+      .filter((record) =>
+        matchesTimestampWindow(record.collected_at, collectedSince, collectedUntil)
+      );
 
     return (newestFirst ? records.slice().sort(compareEvidenceRecordRecency) : records)
       .slice(0, limit)
@@ -3012,6 +3022,29 @@ function normalizeFilterValue(value) {
 
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
+}
+
+function parseOptionalTimestampFilter(value) {
+  const normalized = normalizeFilterValue(value);
+  if (!normalized) {
+    return null;
+  }
+
+  const timestamp = Date.parse(normalized);
+  return Number.isFinite(timestamp) ? timestamp : null;
+}
+
+function matchesTimestampWindow(value, since, until) {
+  if (since === null && until === null) {
+    return true;
+  }
+
+  const timestamp = Date.parse(value || '');
+  if (!Number.isFinite(timestamp)) {
+    return false;
+  }
+
+  return (since === null || timestamp >= since) && (until === null || timestamp <= until);
 }
 
 function compareEvidenceRecordRecency(left, right) {

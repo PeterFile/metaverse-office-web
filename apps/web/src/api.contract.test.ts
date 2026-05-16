@@ -270,6 +270,11 @@ describe('read-only frontend/backend contract smoke', () => {
       collectorSnapshotId: 'collector-snapshot:2026-03-09T18:59:00.000Z',
       correlationId: 'collector-snapshot:2026-03-09T18:59:00.000Z',
       outputCandidate: true,
+      mapped: true,
+      observedSince: '2026-03-09T18:58:00.000Z',
+      observedUntil: '2026-03-09T18:59:00.000Z',
+      collectedSince: '2026-03-09T18:58:00.000Z',
+      collectedUntil: '2026-03-09T19:00:00.000Z',
       newestFirst: true,
       limit: 5
     });
@@ -281,11 +286,16 @@ describe('read-only frontend/backend contract smoke', () => {
         pathname: '/evidence-records',
         query: [
           ['agent_id', 'app-engineering'],
+          ['collected_since', '2026-03-09T18:58:00.000Z'],
+          ['collected_until', '2026-03-09T19:00:00.000Z'],
           ['collector_snapshot_id', 'collector-snapshot:2026-03-09T18:59:00.000Z'],
           ['correlation_id', 'collector-snapshot:2026-03-09T18:59:00.000Z'],
           ['evidence_ref', '/tmp/app-engineering/todo.md'],
           ['limit', '5'],
+          ['mapped', 'true'],
           ['newest_first', 'true'],
+          ['observed_since', '2026-03-09T18:58:00.000Z'],
+          ['observed_until', '2026-03-09T18:59:00.000Z'],
           ['output_candidate', 'true'],
           ['source_kind', 'workspace_file'],
           ['source_status', 'degraded']

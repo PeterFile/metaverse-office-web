@@ -5143,6 +5143,16 @@ test('GET /evidence-records lists stored evidence records read-only with exact f
       {
         agent_id: 'protocol-engineering',
         evidence_refs: ['/tmp/evidence-query/protocol/todo.md'],
+        workspace_source_records: [
+          {
+            path: '/tmp/evidence-query/protocol/inbox.md',
+            file_name: 'inbox.md',
+            kind: 'workspace_file',
+            status: 'missing',
+            last_observed_at: null,
+            error: null
+          }
+        ],
         workspace_observations: [
           {
             path: '/tmp/evidence-query/protocol/todo.md',
@@ -5275,6 +5285,15 @@ test('GET /evidence-records lists stored evidence records read-only with exact f
   assert.deepEqual(exactDrilldown.body.items.map((item) => item.evidence_ref), [
     '/tmp/evidence-query/app/outbox.md'
   ]);
+
+  const negativeWorkspaceGap = await requestJson(
+    `${baseUrl}/evidence-records?agent_id=protocol-engineering&source_kind=workspace_file&source_status=missing&output_candidate=false&limit=10`
+  );
+  assert.equal(negativeWorkspaceGap.response.status, 200);
+  assert.deepEqual(negativeWorkspaceGap.body.items.map((item) => item.evidence_ref), [
+    '/tmp/evidence-query/protocol/inbox.md'
+  ]);
+  assert.equal(negativeWorkspaceGap.body.items[0].evidence_role, 'inbound_task');
 
   const observedWindow = await requestJson(
     `${baseUrl}/evidence-records?observed_since=${encodeURIComponent('2026-03-09T18:04:30.000Z')}&observed_until=${encodeURIComponent('2026-03-09T18:05:30.000Z')}&newest_first=true&limit=2`

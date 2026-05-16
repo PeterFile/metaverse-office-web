@@ -2369,6 +2369,38 @@ function createCollectorEvidenceRecords(report = {}) {
       });
     }
 
+    for (const sourceRecord of Array.isArray(item.workspace_source_records)
+      ? item.workspace_source_records
+      : []) {
+      if (
+        sourceRecord?.kind !== 'workspace_file' ||
+        !sourceRecord.path ||
+        !isNegativeWorkspaceSourceStatus(sourceRecord.status)
+      ) {
+        continue;
+      }
+
+      const fileName = sourceRecord.file_name || path.basename(sourceRecord.path);
+      appendRecord({
+        observed_at: null,
+        agent_id: item.agent_id,
+        source_kind: 'workspace_file',
+        evidence_ref: sourceRecord.path,
+        evidence_role: deriveWorkspaceEvidenceRecordRole({
+          sourceKind: 'workspace_file',
+          fileName
+        }),
+        source_status: sourceRecord.status,
+        output_candidate: false,
+        degraded_reasons: createNegativeWorkspaceSourceReasons(sourceRecord),
+        metadata: {
+          file_name: fileName,
+          path: sourceRecord.path,
+          source_health_key: 'workspace_files'
+        }
+      });
+    }
+
     for (const observation of Array.isArray(item.tmux_observations) ? item.tmux_observations : []) {
       const evidenceRef = observation?.artifact_ref || deriveTmuxArtifactRef(observation);
       if (!evidenceRef) {
@@ -2471,6 +2503,18 @@ function createCollectorEvidenceRecords(report = {}) {
   }
 
   return records;
+}
+
+function isNegativeWorkspaceSourceStatus(status) {
+  return status === 'missing' || status === 'error';
+}
+
+function createNegativeWorkspaceSourceReasons(sourceRecord) {
+  if (sourceRecord.status === 'error') {
+    return [sourceRecord.error || 'workspace file stat error'];
+  }
+
+  return ['missing workspace file'];
 }
 
 function isHermesRuntimeSourceKind(sourceKind) {

@@ -27,12 +27,44 @@ const defaultPlaywrightArgs = [
   '--config',
   'playwright.config.ts'
 ];
+const browserSmokeLaneSpecs = {
+  'live-evidence': ['e2e/operator-shell.live-evidence-journey.smoke.spec.ts']
+};
 export const BROWSER_SMOKE_FRONTEND_READY_PATH = '/';
 export const BROWSER_SMOKE_PROXY_READY_PATH = '/office/overview';
 
 export function resolvePlaywrightArgs(extraArgs = process.argv.slice(2)) {
-  const forwardedArgs = extraArgs[0] === '--' ? extraArgs.slice(1) : extraArgs;
-  return [...defaultPlaywrightArgs, ...forwardedArgs];
+  const { smokeLane, forwardedArgs } = parseBrowserSmokeLaneArgs(extraArgs);
+  const specs = smokeLane ? browserSmokeLaneSpecs[smokeLane] : defaultPlaywrightArgs.slice(3, -2);
+
+  return ['exec', 'playwright', 'test', ...specs, '--config', 'playwright.config.ts', ...forwardedArgs];
+}
+
+export function parseBrowserSmokeLaneArgs(args = []) {
+  const forwardedArgs = args[0] === '--' ? args.slice(1) : [...args];
+  let smokeLane = null;
+
+  for (let index = 0; index < forwardedArgs.length; index += 1) {
+    const arg = forwardedArgs[index];
+    if (arg === '--') {
+      forwardedArgs.splice(index, 1);
+      break;
+    }
+
+    if (!arg.startsWith('--smoke-lane=')) {
+      continue;
+    }
+
+    smokeLane = arg.slice('--smoke-lane='.length);
+    forwardedArgs.splice(index, 1);
+    index -= 1;
+  }
+
+  if (smokeLane && !Object.hasOwn(browserSmokeLaneSpecs, smokeLane)) {
+    throw new Error(`Unknown browser smoke lane "${smokeLane}"`);
+  }
+
+  return { smokeLane, forwardedArgs };
 }
 
 export async function main(cliArgs = process.argv.slice(2)) {

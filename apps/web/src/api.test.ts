@@ -610,12 +610,17 @@ describe('fetchEvidenceRecords', () => {
         collectorSnapshotId: 'snapshot 2026/03/09',
         correlationId: 'corr app/review#1',
         outputCandidate: false,
+        mapped: true,
+        observedSince: '2026-03-09T18:58:30.000Z',
+        observedUntil: '2026-03-09T18:59:00.000Z',
+        collectedSince: '2026-03-09T18:59:00.000Z',
+        collectedUntil: '2026-03-09T19:00:00.000Z',
         limit: 7
       })
     ).resolves.toEqual([]);
 
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      '/evidence-records?agent_id=app+engineering&source_kind=tmux_observation&evidence_role=runtime+activity&evidence_ref=%2Ftmp%2Fevidence+ref%231.md&source_status=active&collector_snapshot_id=snapshot+2026%2F03%2F09&correlation_id=corr+app%2Freview%231&output_candidate=false&newest_first=true&limit=7',
+      '/evidence-records?agent_id=app+engineering&source_kind=tmux_observation&evidence_role=runtime+activity&evidence_ref=%2Ftmp%2Fevidence+ref%231.md&source_status=active&collector_snapshot_id=snapshot+2026%2F03%2F09&correlation_id=corr+app%2Freview%231&output_candidate=false&mapped=true&observed_since=2026-03-09T18%3A58%3A30.000Z&observed_until=2026-03-09T18%3A59%3A00.000Z&collected_since=2026-03-09T18%3A59%3A00.000Z&collected_until=2026-03-09T19%3A00%3A00.000Z&newest_first=true&limit=7',
       expect.objectContaining({ signal: undefined })
     );
   });
@@ -645,13 +650,18 @@ describe('fetchEvidenceRecords', () => {
         collectorSnapshotId: null,
         correlationId: '',
         outputCandidate: false,
+        mapped: false,
+        observedSince: '',
+        observedUntil: null,
+        collectedSince: undefined,
+        collectedUntil: '',
         newestFirst: false,
         limit: 3
       })
     ).resolves.toEqual([]);
 
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      '/evidence-records?output_candidate=false&newest_first=false&limit=3',
+      '/evidence-records?output_candidate=false&mapped=false&newest_first=false&limit=3',
       expect.objectContaining({ signal: undefined })
     );
   });

@@ -179,6 +179,11 @@ export async function fetchEvidenceRecords(
     collectorSnapshotId?: string | null;
     correlationId?: string | null;
     outputCandidate?: boolean | null;
+    mapped?: boolean | null;
+    observedSince?: string | null;
+    observedUntil?: string | null;
+    collectedSince?: string | null;
+    collectedUntil?: string | null;
     newestFirst?: boolean;
     limit?: number;
     signal?: AbortSignal;
@@ -208,6 +213,21 @@ export async function fetchEvidenceRecords(
   }
   if (options.outputCandidate !== undefined && options.outputCandidate !== null) {
     params.set('output_candidate', String(options.outputCandidate));
+  }
+  if (options.mapped !== undefined && options.mapped !== null) {
+    params.set('mapped', String(options.mapped));
+  }
+  if (options.observedSince) {
+    params.set('observed_since', options.observedSince);
+  }
+  if (options.observedUntil) {
+    params.set('observed_until', options.observedUntil);
+  }
+  if (options.collectedSince) {
+    params.set('collected_since', options.collectedSince);
+  }
+  if (options.collectedUntil) {
+    params.set('collected_until', options.collectedUntil);
   }
   params.set('newest_first', String(options.newestFirst ?? true));
   params.set('limit', String(options.limit ?? DEFAULT_EVIDENCE_RECORD_LIMIT));

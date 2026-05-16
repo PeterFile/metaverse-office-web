@@ -3096,7 +3096,8 @@ afterEach(() => {
     expect(tmuxGroup).not.toHaveAttribute('data-source-gap-focus');
   });
 
-  it('omits the evidence coverage focus strip when collector coverage is absent', async () => {
+  it('shows no-snapshot evidence coverage read-model status when collector coverage is absent', async () => {
+    const user = userEvent.setup();
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = typeof input === 'string' ? input : input.toString();
 
@@ -3111,12 +3112,45 @@ afterEach(() => {
     render(<App />);
 
     await waitFor(() => expect(fetchMock.mock.calls.map(([request]) => String(request))).toContain(collectorEvidenceCoverageUrl));
+    const signals = await openHudSignals(user);
+    const evidenceStatus = await within(signals).findByRole('region', { name: 'Evidence coverage read model status' });
+    expect(within(evidenceStatus).getByText('Evidence coverage')).toBeVisible();
+    expect(within(evidenceStatus).getByText('No snapshot')).toBeVisible();
+    expect(within(evidenceStatus).getByText('Read model has no evidence coverage snapshot yet.')).toBeVisible();
     expect(screen.queryByRole('region', { name: 'Evidence coverage focus' })).not.toBeInTheDocument();
-    expect(screen.queryByText('Coverage below high-confidence/no evidence')).not.toBeInTheDocument();
-    expect(screen.queryByText(/No evidence coverage/i)).not.toBeInTheDocument();
+    expect(within(evidenceStatus).queryByText(/offline|dead|live|healthy|degraded|loading/i)).not.toBeInTheDocument();
+  });
+
+  it('shows unavailable source-health read-model status when the first source-health request fails', async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString();
+
+      if (url === collectorSourceHealthUrl) {
+        return new Response(JSON.stringify({ error: 'internal_error', details: 'source health read failed' }), {
+          status: 500,
+          headers: { 'content-type': 'application/json' }
+        });
+      }
+
+      return resolveTestFetchResponse(url);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<App />);
+
+    await waitFor(() => expect(fetchMock.mock.calls.map(([request]) => String(request))).toContain(collectorSourceHealthUrl));
+    const signals = await openHudSignals(user);
+    const sourceHealthStatus = await within(signals).findByRole('region', { name: 'Source health read model status' });
+    expect(within(sourceHealthStatus).getByText('Source health')).toBeVisible();
+    expect(within(sourceHealthStatus).getByText('Unavailable')).toBeVisible();
+    expect(within(sourceHealthStatus).getByText('Read model unavailable · source health read failed')).toBeVisible();
+    expect(screen.queryByRole('region', { name: 'Source gap focus' })).not.toBeInTheDocument();
+    expect(within(sourceHealthStatus).queryByText(/offline|dead|live|healthy|degraded|loading|0 provenance gaps/i)).not.toBeInTheDocument();
   });
 
   it('omits evidence coverage focus chips for agents missing from the current overview', async () => {
+    const user = userEvent.setup();
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = typeof input === 'string' ? input : input.toString();
 
@@ -3147,6 +3181,10 @@ afterEach(() => {
     await waitFor(() => expect(fetchMock.mock.calls.map(([request]) => String(request))).toContain(collectorEvidenceCoverageUrl));
     expect(screen.queryByRole('region', { name: 'Evidence coverage focus' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /ghost-agent/i })).not.toBeInTheDocument();
+
+    await openHudSignals(user);
+    expect(screen.queryByRole('region', { name: 'Evidence coverage read model status' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Healthy')).not.toBeInTheDocument();
   });
 
   it('uses a later Hub collector snapshot for evidence coverage focus after the default one-shot lacks coverage', async () => {

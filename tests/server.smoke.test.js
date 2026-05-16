@@ -5087,6 +5087,31 @@ test('GET /evidence-records lists stored evidence records read-only with exact f
     '/tmp/evidence-query/app/outbox.md'
   ]);
 
+  const observedWindow = await requestJson(
+    `${baseUrl}/evidence-records?observed_since=${encodeURIComponent('2026-03-09T18:04:30.000Z')}&observed_until=${encodeURIComponent('2026-03-09T18:05:30.000Z')}&newest_first=true&limit=2`
+  );
+  assert.equal(observedWindow.response.status, 200);
+  assert.deepEqual(observedWindow.body.items.map((item) => item.evidence_ref), [
+    'tmux://5-web3-app-engineering/0.1',
+    '/tmp/evidence-query/app/outbox.md'
+  ]);
+
+  const collectedWindow = await requestJson(
+    `${baseUrl}/evidence-records?collected_since=${encodeURIComponent('2026-03-09T18:06:00.000Z')}&collected_until=${encodeURIComponent('2026-03-09T18:06:00.000Z')}&limit=1`
+  );
+  assert.equal(collectedWindow.response.status, 200);
+  assert.deepEqual(collectedWindow.body.items.map((item) => item.evidence_ref), [
+    '/tmp/evidence-query/app'
+  ]);
+
+  const invalidWindow = await requestJson(
+    `${baseUrl}/evidence-records?observed_since=bogus&observed_until=&collected_since=%20&collected_until=2026-13-99&limit=1`
+  );
+  assert.equal(invalidWindow.response.status, 200);
+  assert.deepEqual(invalidWindow.body.items.map((item) => item.evidence_ref), [
+    '/tmp/evidence-query/app'
+  ]);
+
   const unknownExact = await requestJson(
     `${baseUrl}/evidence-records?evidence_ref=${encodeURIComponent('/tmp/evidence-query')}&source_status=missing&collector_snapshot_id=unknown&correlation_id=unknown`
   );

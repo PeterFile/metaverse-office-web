@@ -35,7 +35,18 @@ export type SourceGapChip = {
 
 export type SourceGapDrilldownGroupKey = 'workspace' | 'tmux' | 'hermes';
 
+export type SelectedAgentSourceGapFact = {
+  agentId: string;
+  sourceDrilldownGroupKey: SourceGapDrilldownGroupKey;
+  sourceKind: DisplayedSourceGapKind;
+  sourceLabel: string;
+  status: Exclude<CollectorSourceHealthStatus, 'observed'>;
+  countLabel: string;
+  reason: string | null;
+};
+
 const MAX_SOURCE_GAP_CHIPS = 3;
+const SELECTED_SOURCE_GAP_REASON_LIMIT = 96;
 
 const SOURCE_GAP_STATUS_RANK: Record<CollectorSourceHealthStatus, number> = {
   error: 0,
@@ -113,6 +124,56 @@ export function deriveSourceGapChips(
     .slice(0, MAX_SOURCE_GAP_CHIPS);
 }
 
+export function deriveSelectedAgentSourceGapFact(
+  sourceHealth: CollectorSourceHealthProjection | null | undefined,
+  selectedAgentId: string | null | undefined
+): SelectedAgentSourceGapFact | null {
+  if (!sourceHealth?.agent_items.length || !selectedAgentId) {
+    return null;
+  }
+
+  const item = sourceHealth.agent_items.find((agentItem) => agentItem.agent_id === selectedAgentId);
+  if (!item) {
+    return null;
+  }
+
+  const selectedSourceKind = SOURCE_KIND_ORDER.reduce<DisplayedSourceGapKind | null>((selectedKind, sourceKind) => {
+    const status = item.source_health[sourceKind]?.status;
+    if (!status || status === 'observed') {
+      return selectedKind;
+    }
+
+    if (!selectedKind) {
+      return sourceKind;
+    }
+
+    const selectedStatus = item.source_health[selectedKind]?.status;
+    if (!selectedStatus || SOURCE_GAP_STATUS_RANK[status] < SOURCE_GAP_STATUS_RANK[selectedStatus]) {
+      return sourceKind;
+    }
+
+    return selectedKind;
+  }, null);
+  if (!selectedSourceKind) {
+    return null;
+  }
+
+  const health = item.source_health[selectedSourceKind];
+  if (!health || health.status === 'observed') {
+    return null;
+  }
+
+  return {
+    agentId: item.agent_id,
+    sourceDrilldownGroupKey: resolveSourceGapDrilldownGroupKey(selectedSourceKind),
+    sourceKind: selectedSourceKind,
+    sourceLabel: SOURCE_KIND_LABELS[selectedSourceKind],
+    status: health.status,
+    countLabel: renderSelectedSourceGapCount(item, selectedSourceKind),
+    reason: renderSelectedSourceGapReason(item, selectedSourceKind)
+  };
+}
+
 function resolveSourceGapDrilldownGroupKey(
   sourceKind: DisplayedSourceGapKind
 ): SourceGapDrilldownGroupKey {
@@ -148,6 +209,94 @@ function renderSourceGapCount(
   }
 
   return renderEvidenceRefCount(item.evidence_ref_count);
+}
+
+function renderSelectedSourceGapCount(
+  item: CollectorSourceHealthProjectionAgentItem,
+  sourceKind: DisplayedSourceGapKind
+) {
+  if (sourceKind === 'workspace_files') {
+    const source = item.source_health.workspace_files;
+    if (!source) {
+      return renderEvidenceRefCount(item.evidence_ref_count);
+    }
+
+    const parts: string[] = [];
+    if (source.missing_count > 0) {
+      parts.push(`${source.missing_count} missing file${source.missing_count === 1 ? '' : 's'}`);
+    }
+    if (source.error_count > 0) {
+      parts.push(`${source.error_count} error${source.error_count === 1 ? '' : 's'}`);
+    }
+    parts.push(`${source.observed_count} observed`);
+    return parts.join(', ');
+  }
+
+  if (sourceKind === 'tmux_session') {
+    return renderObservationCount(item.source_health.tmux_session?.observed_count ?? 0);
+  }
+
+  return renderEvidenceRefCount(item.evidence_ref_count);
+}
+
+function renderSelectedSourceGapReason(
+  item: CollectorSourceHealthProjectionAgentItem,
+  sourceKind: DisplayedSourceGapKind
+) {
+  const reason = item.source_health[sourceKind]?.degraded_reasons[0];
+  if (!reason) {
+    return null;
+  }
+
+  return renderBoundedSelectedSourceGapText(redactSelectedSourceGapText(reason, item));
+}
+
+function redactSelectedSourceGapText(value: string, item: CollectorSourceHealthProjectionAgentItem) {
+  let redacted = value;
+  const sensitiveLabels = collectSensitiveSelectedSourceGapLabels(item).sort(
+    (left, right) => (right.value?.length ?? 0) - (left.value?.length ?? 0)
+  );
+
+  for (const { value: sensitiveValue, label } of sensitiveLabels) {
+    if (!sensitiveValue) {
+      continue;
+    }
+
+    redacted = redacted.replace(new RegExp(escapeRegExp(sensitiveValue), 'g'), label);
+  }
+
+  return redacted
+    .replace(/hermes:\/\/[^\s,;)]*/g, '[hermes ref]')
+    .replace(/https?:\/\/[^\s,;)]*/g, '[ref]')
+    .replace(/(?:~|\/)[^\s,;)]*/g, '[path]')
+    .replace(/\b\d+-web3-[A-Za-z0-9-]+\b/g, '[tmux ref]');
+}
+
+function collectSensitiveSelectedSourceGapLabels(item: CollectorSourceHealthProjectionAgentItem) {
+  const sourceHealth = item.source_health;
+  return [
+    { value: item.workspace_root, label: '[path]' },
+    { value: sourceHealth.workspace_root?.path, label: '[path]' },
+    { value: item.session_ref, label: '[tmux ref]' },
+    { value: sourceHealth.tmux_session?.expected_session_ref, label: '[tmux ref]' },
+    { value: sourceHealth.hermes_session?.expected_session_ref, label: '[tmux ref]' },
+    { value: sourceHealth.hermes_profile?.profile_id, label: '[hermes ref]' },
+    { value: sourceHealth.hermes_profile?.evidence_ref, label: '[hermes ref]' },
+    { value: sourceHealth.hermes_session?.evidence_ref, label: '[hermes ref]' },
+    ...item.evidence_refs.map((evidenceRef) => ({ value: evidenceRef, label: '[ref]' }))
+  ];
+}
+
+function renderBoundedSelectedSourceGapText(value: string) {
+  if (value.length <= SELECTED_SOURCE_GAP_REASON_LIMIT) {
+    return value;
+  }
+
+  return `${value.slice(0, SELECTED_SOURCE_GAP_REASON_LIMIT - 3)}...`;
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function renderWorkspaceFilesCount(sourceHealth: CollectorSourceHealth) {

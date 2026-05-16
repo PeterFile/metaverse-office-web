@@ -573,13 +573,53 @@ describe('fetchEvidenceRecords', () => {
         agentId: 'app engineering',
         sourceKind: 'tmux_observation',
         evidenceRole: 'runtime activity',
+        evidenceRef: '/tmp/evidence ref#1.md',
+        sourceStatus: 'active',
+        collectorSnapshotId: 'snapshot 2026/03/09',
+        correlationId: 'corr app/review#1',
         outputCandidate: false,
         limit: 7
       })
     ).resolves.toEqual([]);
 
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      '/evidence-records?agent_id=app+engineering&source_kind=tmux_observation&evidence_role=runtime+activity&output_candidate=false&newest_first=true&limit=7',
+      '/evidence-records?agent_id=app+engineering&source_kind=tmux_observation&evidence_role=runtime+activity&evidence_ref=%2Ftmp%2Fevidence+ref%231.md&source_status=active&collector_snapshot_id=snapshot+2026%2F03%2F09&correlation_id=corr+app%2Freview%231&output_candidate=false&newest_first=true&limit=7',
+      expect.objectContaining({ signal: undefined })
+    );
+  });
+
+  it('omits blank and null evidence-record filter values', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            items: []
+          }),
+          {
+            headers: JSON_HEADERS
+          }
+        )
+      )
+    );
+
+    await expect(
+      fetchEvidenceRecords({
+        agentId: '',
+        sourceKind: null,
+        evidenceRole: '',
+        evidenceRef: null,
+        sourceStatus: '',
+        collectorSnapshotId: null,
+        correlationId: '',
+        outputCandidate: false,
+        newestFirst: false,
+        limit: 3
+      })
+    ).resolves.toEqual([]);
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/evidence-records?output_candidate=false&newest_first=false&limit=3',
       expect.objectContaining({ signal: undefined })
     );
   });

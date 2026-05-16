@@ -158,6 +158,8 @@ describe('projectWorldState', () => {
           workspace_root: { observed: 0, degraded: 0, missing: 0, error: 1 },
           workspace_files: { observed: 0, degraded: 0, missing: 0, error: 0 },
           tmux_session: { observed: 0, degraded: 0, missing: 0, error: 0 },
+          hermes_profile: { observed: 0, degraded: 0, missing: 0, error: 0 },
+          hermes_session: { observed: 0, degraded: 0, missing: 0, error: 0 },
         },
         status_buckets: { observed: 0, degraded: 0, missing: 0, error: 1 },
       },

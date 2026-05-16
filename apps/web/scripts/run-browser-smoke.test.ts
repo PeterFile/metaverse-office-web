@@ -226,6 +226,19 @@ describe('run-browser-smoke helpers', () => {
     ]);
   });
 
+  it('lets callers run only the short Live Evidence journey lane without the full smoke bundle', () => {
+    expect(resolvePlaywrightArgs(['--smoke-lane=live-evidence', '--', '--grep', '@journey @evidence-live'])).toEqual([
+      'exec',
+      'playwright',
+      'test',
+      'e2e/operator-shell.live-evidence-journey.smoke.spec.ts',
+      '--config',
+      'playwright.config.ts',
+      '--grep',
+      '@journey @evidence-live'
+    ]);
+  });
+
   it('threads the inspectable backend origin into Playwright only when the smoke target exposes request logs', () => {
     expect(
       resolveBrowserSmokePlaywrightEnv('http://127.0.0.1:4173', 'http://127.0.0.1:3210')

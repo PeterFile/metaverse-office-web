@@ -158,37 +158,181 @@ describe('deriveSourceGapChips', () => {
     ).toEqual([]);
   });
 
-  it('does not turn Hermes runtime source health into legacy source-gap chips', () => {
+  it('includes mapped Hermes source-health gaps with compact chip details', () => {
+    const chips = deriveSourceGapChips(
+      {
+        ...sourceHealth,
+        summary: {
+          ...sourceHealth.summary,
+          source_kind_buckets: {
+            ...sourceHealth.summary.source_kind_buckets,
+            hermes_profile: { observed: 0, degraded: 0, missing: 1, error: 0 },
+            hermes_session: { observed: 0, degraded: 1, missing: 0, error: 0 }
+          }
+        },
+        agent_items: [
+          {
+            agent_id: 'app-engineering',
+            workspace_root: '/tmp/app-engineering',
+            session_ref: '5-web3-app-engineering',
+            evidence_ref_count: 2,
+            evidence_refs: [
+              'hermes://profile/profile-app-engineering',
+              'hermes://session/5-web3-app-engineering'
+            ],
+            latest_evidence_at: '2026-03-16T08:59:30.000Z',
+            source_health: {
+              hermes_profile: {
+                status: 'missing',
+                profile_id: 'profile-app-engineering',
+                evidence_ref: 'hermes://profile/profile-app-engineering',
+                last_observed_at: null,
+                degraded_reasons: ['Hermes profile missing']
+              },
+              hermes_session: {
+                status: 'degraded',
+                expected_session_ref: '5-web3-app-engineering',
+                evidence_ref: 'hermes://session/5-web3-app-engineering',
+                last_observed_at: '2026-03-16T08:59:00.000Z',
+                degraded_reasons: ['Hermes session stale']
+              }
+            }
+          }
+        ]
+      },
+      [{ agent_id: 'app-engineering', display_name: 'App Engineering Agent' }]
+    );
+
+    expect(chips).toEqual([
+      {
+        agentId: 'app-engineering',
+        displayName: 'App Engineering Agent',
+        sourceDrilldownGroupKey: 'hermes',
+        sourceKind: 'hermes_profile',
+        status: 'missing',
+        sourceLabel: 'Hermes profile',
+        detail: '2 refs · latest evidence 2026-03-16T08:59:30.000Z',
+        observedAtLabel: 'Not observed'
+      },
+      {
+        agentId: 'app-engineering',
+        displayName: 'App Engineering Agent',
+        sourceDrilldownGroupKey: 'hermes',
+        sourceKind: 'hermes_session',
+        status: 'degraded',
+        sourceLabel: 'Hermes session',
+        detail: '2 refs · latest evidence 2026-03-16T08:59:30.000Z',
+        observedAtLabel: 'Observed 2026-03-16T08:59:00.000Z'
+      }
+    ]);
+    for (const chip of chips) {
+      expect(chip.detail).not.toContain('hermes://');
+      expect(chip.detail).not.toContain('profile-app-engineering');
+      expect(chip.detail).not.toContain('5-web3-app-engineering');
+    }
+  });
+
+  it('keeps source-gap chips bounded with Hermes kinds after tmux in tie-break order', () => {
+    const orderedMissingSourceHealth = {
+      tmux_session: {
+        status: 'missing' as const,
+        expected_session_ref: '5-web3-app-engineering',
+        observed_count: 0,
+        last_observed_at: null,
+        degraded_reasons: ['tmux session missing']
+      },
+      hermes_profile: {
+        status: 'missing' as const,
+        profile_id: 'profile-app-engineering',
+        evidence_ref: 'hermes://profile/profile-app-engineering',
+        last_observed_at: null,
+        degraded_reasons: ['Hermes profile missing']
+      },
+      hermes_session: {
+        status: 'missing' as const,
+        expected_session_ref: '5-web3-app-engineering',
+        evidence_ref: 'hermes://session/5-web3-app-engineering',
+        last_observed_at: null,
+        degraded_reasons: ['Hermes session missing']
+      }
+    };
+
+    const sourceKinds = deriveSourceGapChips(
+      {
+        ...sourceHealth,
+        agent_items: [
+          {
+            agent_id: 'app-engineering',
+            workspace_root: '/tmp/app-engineering',
+            session_ref: '5-web3-app-engineering',
+            evidence_ref_count: 1,
+            evidence_refs: ['/tmp/app-engineering/outbox.md'],
+            latest_evidence_at: '2026-03-16T08:59:30.000Z',
+            source_health: {
+              workspace_root: {
+                status: 'missing',
+                path: '/tmp/app-engineering',
+                last_observed_at: null,
+                degraded_reasons: ['workspace root missing']
+              },
+              workspace_files: {
+                status: 'missing',
+                expected_files: ['inbox.md'],
+                observed_count: 0,
+                missing_count: 1,
+                error_count: 0,
+                last_observed_at: null,
+                degraded_reasons: ['workspace file missing']
+              },
+              ...orderedMissingSourceHealth
+            }
+          }
+        ]
+      },
+      [{ agent_id: 'app-engineering', display_name: 'App Engineering Agent' }]
+    ).map((chip) => chip.sourceKind);
+    expect(sourceKinds).toEqual(['workspace_root', 'workspace_files', 'tmux_session']);
+
+    const hermesSourceKinds = deriveSourceGapChips(
+      {
+        ...sourceHealth,
+        agent_items: [
+          {
+            agent_id: 'app-engineering',
+            workspace_root: '/tmp/app-engineering',
+            session_ref: '5-web3-app-engineering',
+            evidence_ref_count: 1,
+            evidence_refs: ['/tmp/app-engineering/outbox.md'],
+            latest_evidence_at: '2026-03-16T08:59:30.000Z',
+            source_health: orderedMissingSourceHealth
+          }
+        ]
+      },
+      [{ agent_id: 'app-engineering', display_name: 'App Engineering Agent' }]
+    ).map((chip) => chip.sourceKind);
+    expect(hermesSourceKinds).toEqual(['tmux_session', 'hermes_profile', 'hermes_session']);
+  });
+
+  it('does not turn unmapped Hermes runtime sources into source-gap chips', () => {
     expect(
       deriveSourceGapChips(
         {
           ...sourceHealth,
-          summary: {
-            ...sourceHealth.summary,
-            source_kind_buckets: {
-              ...sourceHealth.summary.source_kind_buckets,
-              hermes_session: { observed: 0, degraded: 1, missing: 0, error: 0 }
-            }
-          },
-          agent_items: [
-            {
-              agent_id: 'app-engineering',
-              workspace_root: '/tmp/app-engineering',
-              session_ref: '5-web3-app-engineering',
-              evidence_ref_count: 1,
-              evidence_refs: ['hermes://session/5-web3-app-engineering'],
-              latest_evidence_at: '2026-03-16T08:59:30.000Z',
-              source_health: {
-                hermes_session: {
-                  status: 'degraded',
-                  expected_session_ref: '5-web3-app-engineering',
-                  evidence_ref: 'hermes://session/5-web3-app-engineering',
-                  last_observed_at: '2026-03-16T08:59:00.000Z',
-                  degraded_reasons: ['Hermes session stale']
-                }
+          agent_items: [],
+          runtime_source_evidence: {
+            unmapped_tmux_sessions: [],
+            unmapped_hermes_sources: [
+              {
+                source_kind: 'hermes_session',
+                evidence_ref: 'hermes://session/unmapped-session',
+                profile_id: null,
+                session_ref: 'unmapped-session',
+                observed_at: '2026-03-16T08:59:30.000Z',
+                status: 'missing',
+                degraded_reasons: ['Hermes session not mapped to an agent']
               }
-            }
-          ]
+            ]
+          }
         },
         [{ agent_id: 'app-engineering', display_name: 'App Engineering Agent' }]
       )

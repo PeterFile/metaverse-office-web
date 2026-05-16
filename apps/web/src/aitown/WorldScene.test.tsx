@@ -1809,6 +1809,73 @@ describe('WorldScene watch overlay caption gating', () => {
     expect(recreatedCharacter?.textures).toBe(assets.characterAnimations.f1.right);
   });
 
+  it('keeps the last movement direction after arriving at an updated scene coordinate', async () => {
+    appInitMock.mockReset().mockResolvedValue(undefined);
+    const assets = makeAssets();
+    const rightTextures = [{ source: { direction: 'right' } }] as unknown as AiTownAssets['characterAnimations']['f1']['right'];
+    const downTextures = [{ source: { direction: 'down' } }] as unknown as AiTownAssets['characterAnimations']['f1']['down'];
+    const leftTextures = [{ source: { direction: 'left' } }] as unknown as AiTownAssets['characterAnimations']['f1']['left'];
+    const upTextures = [{ source: { direction: 'up' } }] as unknown as AiTownAssets['characterAnimations']['f1']['up'];
+    assets.characterAnimations.f1 = {
+      down: downTextures,
+      left: leftTextures,
+      right: rightTextures,
+      up: upTextures
+    };
+    vi.mocked(loadAiTownAssets).mockResolvedValue(assets);
+
+    const scene = makeScene();
+    const movingAgentIndex = scene.agents.findIndex((agent) => agent.agentId === 'team-lead');
+    const movingAgent = scene.agents[movingAgentIndex];
+    const destination = { x: 336, y: movingAgent?.position.y ?? 120 };
+    const nextScene = {
+      ...scene,
+      agents: scene.agents.map((agent) =>
+        agent.agentId === movingAgent?.agentId
+          ? {
+              ...agent,
+              position: destination,
+              facing: 'down' as const
+            }
+          : agent
+      )
+    } satisfies AiTownSceneModel;
+    const { rerender } = render(<WorldScene scene={scene} onSelectAgent={vi.fn()} />);
+
+    expect(movingAgent).toBeDefined();
+
+    await waitFor(() => {
+      expect(readAgentLayer()?.children).toHaveLength(scene.agents.length);
+    });
+
+    rerender(<WorldScene scene={nextScene} onSelectAgent={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(readAgentLayer()?.children).toHaveLength(nextScene.agents.length);
+    });
+
+    const travellingSprite = readAgentLayer()?.children[movingAgentIndex];
+    const character = findAgentCharacter(travellingSprite);
+
+    act(() => {
+      for (let index = 0; index < 80; index += 1) {
+        appInstances.at(-1)?.ticker.tick(1000);
+        const distanceToDestination = Math.hypot(
+          (travellingSprite?.x ?? 0) - destination.x,
+          (travellingSprite?.y ?? 0) - destination.y
+        );
+
+        if (distanceToDestination <= 0.5) {
+          break;
+        }
+      }
+    });
+
+    expect(travellingSprite?.x).toBeCloseTo(destination.x, 1);
+    expect(character?.textures).toBe(assets.characterAnimations.f1.right);
+    expect(character?.textures).not.toBe(assets.characterAnimations.f1.down);
+  });
+
   it('walks an agent from its previous scene coordinate to an updated coordinate instead of snapping', async () => {
     appInitMock.mockReset().mockResolvedValue(undefined);
     vi.mocked(loadAiTownAssets).mockResolvedValue(makeAssets());

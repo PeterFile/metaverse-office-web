@@ -375,6 +375,7 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
         source_status: url.searchParams.get('source_status'),
         collector_snapshot_id: url.searchParams.get('collector_snapshot_id'),
         correlation_id: url.searchParams.get('correlation_id'),
+        mapped: url.searchParams.get('mapped'),
         newest_first: url.searchParams.get('newest_first'),
         limit: url.searchParams.get('limit')
       })

@@ -614,6 +614,43 @@ test('JSONL prototype store filters evidence records by exact drilldown fields',
   assert.equal(store.listEvidenceRecords({ evidence_ref: '', limit: 1 }).length, 1);
 });
 
+test('JSONL prototype store filters evidence records by mapped agent presence', async () => {
+  const storeFile = await createStoreFile();
+  const store = await createPrototypeStore({ filePath: storeFile });
+
+  await store.appendCollectorReport({
+    ...createCollectorReport(),
+    runtime_source_evidence: {
+      unmapped_tmux_sessions: [
+        {
+          session_name: 'unmapped-session',
+          pane_refs: ['tmux://unmapped-session/0.0'],
+          observed_count: 1,
+          status: 'observed',
+          last_observed_at: '2026-03-09T18:05:50.000Z',
+          degraded_reasons: []
+        }
+      ]
+    }
+  });
+
+  assert.deepEqual(
+    store.listEvidenceRecords({ mapped: 'true' }).map((record) => record.evidence_ref),
+    [
+      '/tmp/store-contract',
+      '/tmp/store-contract/outbox.md',
+      'tmux://5-web3-app-engineering/0.1'
+    ]
+  );
+  assert.deepEqual(
+    store.listEvidenceRecords({ mapped: 'false' }).map((record) => record.evidence_ref),
+    ['tmux://unmapped-session/0.0']
+  );
+  assert.deepEqual(store.listEvidenceRecords({ mapped: 'false', agent_id: 'app-engineering' }), []);
+  assert.equal(store.listEvidenceRecords({ mapped: '', limit: 2 }).length, 2);
+  assert.equal(store.listEvidenceRecords({ mapped: 'maybe', limit: 2 }).length, 2);
+});
+
 test('JSONL prototype store loads old record kinds without evidence records', async () => {
   const storeFile = await createStoreFile();
   await writeFile(

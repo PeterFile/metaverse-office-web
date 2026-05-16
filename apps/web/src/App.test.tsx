@@ -2913,6 +2913,133 @@ afterEach(() => {
     });
   });
 
+  it.each([
+    ['click', async (user: ReturnType<typeof userEvent.setup>, control: HTMLElement) => user.click(control)],
+    [
+      'keyboard',
+      async (user: ReturnType<typeof userEvent.setup>, control: HTMLElement) => {
+        control.focus();
+        await user.keyboard('{Enter}');
+      }
+    ]
+  ] as const)(
+    'opens selected-agent source-health peek fact into the matching source drilldown on %s',
+    async (_activation, activate) => {
+      const user = userEvent.setup();
+      const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === collectorSourceHealthUrl) {
+          return jsonResponse({
+            item: {
+              collected_at: '2026-03-16T09:01:00.000Z',
+              actor_id: 'team-lead',
+              summary: {
+                agent_count: 1,
+                source_kind_buckets: {
+                  workspace_root: { observed: 0, degraded: 0, missing: 0, error: 0 },
+                  workspace_files: { observed: 0, degraded: 1, missing: 0, error: 0 },
+                  tmux_session: { observed: 0, degraded: 0, missing: 0, error: 0 }
+                },
+                status_buckets: {
+                  observed: 0,
+                  degraded: 1,
+                  missing: 0,
+                  error: 0
+                }
+              },
+              agent_items: [
+                {
+                  agent_id: 'app-engineering',
+                  workspace_root: '/tmp/app-engineering',
+                  session_ref: '5-web3-app-engineering',
+                  source_health: {
+                    workspace_files: {
+                      status: 'degraded',
+                      expected_files: ['inbox.md', 'outbox.md'],
+                      observed_count: 1,
+                      missing_count: 1,
+                      error_count: 0,
+                      last_observed_at: '2026-03-16T08:58:30.000Z',
+                      degraded_reasons: ['missing workspace files: /tmp/app-engineering/inbox.md']
+                    }
+                  },
+                  evidence_ref_count: 2,
+                  evidence_refs: ['/tmp/app-engineering/outbox.md'],
+                  latest_evidence_at: '2026-03-16T08:58:40.000Z'
+                }
+              ],
+              runtime_source_evidence: {
+                unmapped_tmux_sessions: []
+              }
+            }
+          });
+        }
+
+        if (url === collectorSnapshotUrl) {
+          return jsonResponse({
+            item: {
+              ...collectorSnapshotFixture,
+              items: collectorSnapshotFixture.items.map((item) =>
+                item.agent_id === 'app-engineering'
+                  ? {
+                      ...item,
+                      source_health: {
+                        workspace_files: {
+                          status: 'degraded',
+                          expected_files: ['inbox.md', 'outbox.md'],
+                          observed_count: 1,
+                          missing_count: 1,
+                          error_count: 0,
+                          last_observed_at: '2026-03-16T08:58:30.000Z',
+                          degraded_reasons: ['missing workspace files: /tmp/app-engineering/inbox.md']
+                        }
+                      }
+                    }
+                  : item
+              )
+            }
+          });
+        }
+
+        return resolveTestFetchResponse(url);
+      });
+      vi.stubGlobal('fetch', fetchMock);
+
+      render(<App />);
+
+      await user.click(await screen.findByRole('button', { name: 'Select and locate App Engineering Agent' }));
+      const inspectPeek = await screen.findByRole('region', { name: 'Selected agent inspect peek' });
+      const sourceHealthFact = await within(inspectPeek).findByRole('button', {
+        name: 'Open source gap supervision for App Engineering Agent workspace files degraded'
+      });
+      expect(sourceHealthFact).toHaveTextContent('Source health · Workspace files · degraded · 1 missing file, 1 observed');
+      expect(inspectPeek).not.toHaveTextContent('/tmp/app-engineering');
+
+      await waitFor(() => {
+        const requestedUrls = fetchMock.mock.calls.map(([request]) => String(request));
+        expect(requestedUrls).not.toContain(workflowUrl);
+        expect(requestedUrls).not.toContain(appEngineeringEvidenceRecordsUrl);
+      });
+
+      await activate(user, sourceHealthFact);
+
+      const details = await screen.findByRole('complementary', { name: 'Agent details' });
+      expect(screen.getByRole('dialog', { name: 'Hub' })).toBeVisible();
+      expect(screen.getByRole('button', { name: 'Supervision' })).toHaveAttribute('aria-expanded', 'true');
+      expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
+      expect(screen.getByRole('tab', { name: 'Evidence' })).toHaveAttribute('aria-selected', 'true');
+      await waitFor(() => expect(details).toHaveAttribute('data-selected-agent-supervision-panel', 'collector'));
+
+      const workspaceGroup = document.getElementById('aitown-selected-agent-source-drilldown-workspace');
+      expect(workspaceGroup).not.toBeNull();
+      await waitFor(() => expect(workspaceGroup).toHaveAttribute('data-source-gap-focus', 'true'));
+      expect(workspaceGroup).toHaveAttribute('open');
+      expect(document.activeElement).toBe(workspaceGroup);
+    },
+    20000
+  );
+
   it('surfaces a compact top agent roster without zone or desk copy', async () => {
     const user = userEvent.setup();
     render(<App />);

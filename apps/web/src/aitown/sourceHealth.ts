@@ -27,6 +27,8 @@ export interface SourceDrilldownGroup {
 
 const BOUNDED_DETAIL_LIMIT = 3;
 const BOUNDED_REASON_LIMIT = 2;
+const BOUNDED_RUNTIME_SOURCE_LIMIT = 3;
+const BOUNDED_TEXT_LIMIT = 120;
 
 export function deriveCollectorItemSourceHealthFacts(item: CollectorItem): SourceHealthFact[] {
   const sourceHealth = item.source_health;
@@ -74,29 +76,70 @@ export function deriveCollectorItemSourceHealthFacts(item: CollectorItem): Sourc
     });
   }
 
+  if (sourceHealth.hermes_profile) {
+    const hermesProfile = sourceHealth.hermes_profile;
+
+    facts.push({
+      key: 'hermes-profile',
+      label:
+        hermesProfile.status === 'observed'
+          ? `Hermes profile source · Observed ${hermesProfile.profile_id}`
+          : `Hermes profile source gap · Profile ${hermesProfile.profile_id} ${hermesProfile.status}`,
+      status: hermesProfile.status
+    });
+  }
+
+  if (sourceHealth.hermes_session) {
+    const hermesSession = sourceHealth.hermes_session;
+
+    facts.push({
+      key: 'hermes-session',
+      label:
+        hermesSession.status === 'observed'
+          ? `Hermes session source · Observed ${hermesSession.expected_session_ref}`
+          : `Hermes session source gap · Expected ${hermesSession.expected_session_ref} ${hermesSession.status}`,
+      status: hermesSession.status
+    });
+  }
+
   return facts;
 }
 
 export function deriveRuntimeSourceEvidenceFacts(
   runtimeSourceEvidence?: CollectorRuntimeSourceEvidence
 ): SourceHealthFact[] {
+  const facts: SourceHealthFact[] = [];
   const unmappedTmuxSessions = runtimeSourceEvidence?.unmapped_tmux_sessions ?? [];
-  if (unmappedTmuxSessions.length === 0) {
-    return [];
-  }
+  const unmappedHermesSources = runtimeSourceEvidence?.unmapped_hermes_sources ?? [];
 
-  const paneCount = unmappedTmuxSessions.reduce((total, session) => total + session.observed_count, 0);
+  if (unmappedTmuxSessions.length > 0) {
+    const paneCount = unmappedTmuxSessions.reduce((total, session) => total + session.observed_count, 0);
 
-  return [
-    {
+    facts.push({
       key: 'unmapped-tmux-sessions',
       label: `Unmapped tmux source gap · ${unmappedTmuxSessions.length} ${pluralize(
         'session',
         unmappedTmuxSessions.length
       )}, ${paneCount} ${pluralize('pane', paneCount)}`,
       status: 'degraded'
-    }
-  ];
+    });
+  }
+
+  if (unmappedHermesSources.length > 0) {
+    const profileCount = unmappedHermesSources.filter((source) => source.source_kind === 'hermes_profile').length;
+    const sessionCount = unmappedHermesSources.filter((source) => source.source_kind === 'hermes_session').length;
+
+    facts.push({
+      key: 'unmapped-hermes-sources',
+      label: `Unmapped Hermes source gap · ${unmappedHermesSources.length} ${pluralize(
+        'source',
+        unmappedHermesSources.length
+      )}, ${profileCount} ${pluralize('profile', profileCount)}, ${sessionCount} ${pluralize('session', sessionCount)}`,
+      status: resolveUnmappedRuntimeSourceStatus(unmappedHermesSources.map((source) => source.status))
+    });
+  }
+
+  return facts;
 }
 
 export function deriveCollectorItemSourceDrilldownGroups(item: CollectorItem): SourceDrilldownGroup[] {
@@ -159,38 +202,115 @@ export function deriveCollectorItemSourceDrilldownGroups(item: CollectorItem): S
     );
   }
 
+  const hermesDetails: SourceDrilldownDetail[] = [];
+  const hermesStatuses: CollectorSourceHealthStatus[] = [];
+
+  if (sourceHealth.hermes_profile) {
+    const hermesProfile = sourceHealth.hermes_profile;
+    hermesStatuses.push(hermesProfile.status);
+    hermesDetails.push(
+      { key: 'hermes-profile-status', label: `Hermes profile status · ${hermesProfile.status}` },
+      { key: 'hermes-profile-id', label: `Hermes profile id · ${hermesProfile.profile_id}` },
+      { key: 'hermes-profile-evidence', label: `Hermes profile evidence ref · ${renderEvidenceRef(hermesProfile.evidence_ref)}` },
+      {
+        key: 'hermes-profile-observed-at',
+        label: `Hermes profile observed at · ${renderNullable(hermesProfile.last_observed_at)}`
+      },
+      ...renderReasons('hermes-profile', 'Hermes profile', hermesProfile.degraded_reasons)
+    );
+  }
+
+  if (sourceHealth.hermes_session) {
+    const hermesSession = sourceHealth.hermes_session;
+    hermesStatuses.push(hermesSession.status);
+    hermesDetails.push(
+      { key: 'hermes-session-status', label: `Hermes session status · ${hermesSession.status}` },
+      { key: 'hermes-session-expected', label: `Expected Hermes session · ${hermesSession.expected_session_ref}` },
+      { key: 'hermes-session-evidence', label: `Hermes session evidence ref · ${renderEvidenceRef(hermesSession.evidence_ref)}` },
+      {
+        key: 'hermes-session-observed-at',
+        label: `Hermes session observed at · ${renderNullable(hermesSession.last_observed_at)}`
+      },
+      ...renderReasons('hermes-session', 'Hermes session', hermesSession.degraded_reasons)
+    );
+  }
+
+  if (hermesDetails.length > 0) {
+    groups.push(createGroup('hermes', 'Hermes source drilldown', resolveSourceStatus(hermesStatuses), hermesDetails));
+  }
+
   return groups;
 }
 
 export function deriveRuntimeSourceDrilldownGroups(
   runtimeSourceEvidence?: CollectorRuntimeSourceEvidence
 ): SourceDrilldownGroup[] {
+  const groups: SourceDrilldownGroup[] = [];
   const unmappedTmuxSessions = runtimeSourceEvidence?.unmapped_tmux_sessions ?? [];
-  if (unmappedTmuxSessions.length === 0) {
-    return [];
+  const unmappedHermesSources = runtimeSourceEvidence?.unmapped_hermes_sources ?? [];
+
+  if (unmappedTmuxSessions.length > 0) {
+    groups.push(
+      createGroup(
+        'runtime-tmux',
+        'Runtime tmux source drilldown',
+        'degraded',
+        unmappedTmuxSessions.flatMap((session, index) => [
+          {
+            key: `unmapped-tmux-session-${index}`,
+            label: `Unmapped tmux session · ${session.session_name} · ${session.observed_count} ${pluralize('pane', session.observed_count)}`
+          },
+          {
+            key: `unmapped-tmux-observed-${index}`,
+            label: `Unmapped tmux observed at · ${renderNullable(session.last_observed_at)}`
+          },
+          {
+            key: `unmapped-tmux-panes-${index}`,
+            label: `Unmapped tmux panes · ${renderBoundedList(session.pane_refs)}`
+          }
+        ])
+      )
+    );
   }
 
-  return [
-    createGroup(
-      'runtime-tmux',
-      'Runtime tmux source drilldown',
-      'degraded',
-      unmappedTmuxSessions.flatMap((session, index) => [
-        {
-          key: `unmapped-tmux-session-${index}`,
-          label: `Unmapped tmux session · ${session.session_name} · ${session.observed_count} ${pluralize('pane', session.observed_count)}`
-        },
-        {
-          key: `unmapped-tmux-observed-${index}`,
-          label: `Unmapped tmux observed at · ${renderNullable(session.last_observed_at)}`
-        },
-        {
-          key: `unmapped-tmux-panes-${index}`,
-          label: `Unmapped tmux panes · ${renderBoundedList(session.pane_refs)}`
-        }
-      ])
-    )
-  ];
+  if (unmappedHermesSources.length > 0) {
+    const visibleHermesSources = unmappedHermesSources.slice(0, BOUNDED_RUNTIME_SOURCE_LIMIT);
+    const hermesDetails = visibleHermesSources.flatMap((source, index) => [
+      {
+        key: `unmapped-hermes-source-${index}`,
+        label: `Unmapped Hermes ${renderHermesSourceKind(source.source_kind)} · ${renderHermesRuntimeSourceRef(
+          source
+        )} · ${source.status}`
+      },
+      {
+        key: `unmapped-hermes-evidence-${index}`,
+        label: `Unmapped Hermes evidence ref · ${renderEvidenceRef(source.evidence_ref)}`
+      },
+      {
+        key: `unmapped-hermes-observed-${index}`,
+        label: `Unmapped Hermes observed at · ${renderNullable(source.observed_at)}`
+      },
+      ...renderReasons(`unmapped-hermes-${index}`, 'Unmapped Hermes source', source.degraded_reasons)
+    ]);
+
+    if (unmappedHermesSources.length > visibleHermesSources.length) {
+      hermesDetails.push({
+        key: 'unmapped-hermes-source-overflow',
+        label: `Unmapped Hermes sources · +${unmappedHermesSources.length - visibleHermesSources.length} more`
+      });
+    }
+
+    groups.push(
+      createGroup(
+        'runtime-hermes',
+        'Runtime Hermes source drilldown',
+        resolveUnmappedRuntimeSourceStatus(unmappedHermesSources.map((source) => source.status)),
+        hermesDetails
+      )
+    );
+  }
+
+  return groups;
 }
 
 function renderWorkspaceFileGap(missingCount: number, errorCount: number, observedCount: number) {
@@ -244,6 +364,28 @@ function resolveSourceStatus(statuses: CollectorSourceHealthStatus[]) {
   return 'observed';
 }
 
+function resolveUnmappedRuntimeSourceStatus(statuses: CollectorSourceHealthStatus[]): CollectorSourceHealthStatus {
+  if (statuses.includes('error')) {
+    return 'error';
+  }
+
+  return 'degraded';
+}
+
+function renderHermesSourceKind(sourceKind: 'hermes_profile' | 'hermes_session') {
+  return sourceKind === 'hermes_profile' ? 'profile' : 'session';
+}
+
+function renderHermesRuntimeSourceRef(source: NonNullable<CollectorRuntimeSourceEvidence['unmapped_hermes_sources']>[number]) {
+  return source.source_kind === 'hermes_profile'
+    ? renderNullable(source.profile_id)
+    : renderNullable(source.session_ref);
+}
+
+function renderEvidenceRef(value: string | null) {
+  return renderBoundedText(renderNullable(value));
+}
+
 function renderReasons(keyPrefix: string, labelPrefix: string, reasons: string[]): SourceDrilldownDetail[] {
   const details = reasons.slice(0, BOUNDED_REASON_LIMIT).map((reason, index) => ({
     key: `${keyPrefix}-reason-${index}`,
@@ -268,6 +410,10 @@ function renderBoundedList(values: string[]) {
   const visibleValues = values.slice(0, BOUNDED_DETAIL_LIMIT);
   const overflowCount = values.length - visibleValues.length;
   return overflowCount > 0 ? `${visibleValues.join(', ')}, +${overflowCount} more` : visibleValues.join(', ');
+}
+
+function renderBoundedText(value: string) {
+  return value.length > BOUNDED_TEXT_LIMIT ? `${value.slice(0, BOUNDED_TEXT_LIMIT - 1)}…` : value;
 }
 
 function renderNullable(value: string | null) {

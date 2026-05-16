@@ -139,6 +139,42 @@ describe('deriveCollectorItemSourceHealthFacts', () => {
       }
     ]);
   });
+
+  it('summarizes mapped Hermes profile and session evidence sources without short evidence refs', () => {
+    expect(
+      deriveCollectorItemSourceHealthFacts(
+        buildCollectorItem({
+          source_health: {
+            hermes_profile: {
+              status: 'observed',
+              profile_id: 'profile-app-engineering',
+              evidence_ref: 'https://hermes.example.test/runtime/profiles/profile-app-engineering?long=true',
+              last_observed_at: '2026-03-16T08:55:00.000Z',
+              degraded_reasons: []
+            },
+            hermes_session: {
+              status: 'degraded',
+              expected_session_ref: 'hermes-session-app',
+              evidence_ref: 'https://hermes.example.test/runtime/sessions/hermes-session-app?long=true',
+              last_observed_at: '2026-03-16T08:57:00.000Z',
+              degraded_reasons: ['hermes session evidence incomplete']
+            }
+          }
+        })
+      )
+    ).toEqual([
+      {
+        key: 'hermes-profile',
+        label: 'Hermes profile source · Observed profile-app-engineering',
+        status: 'observed'
+      },
+      {
+        key: 'hermes-session',
+        label: 'Hermes session source gap · Expected hermes-session-app degraded',
+        status: 'degraded'
+      }
+    ]);
+  });
 });
 
 describe('deriveCollectorItemSourceDrilldownGroups', () => {
@@ -218,6 +254,64 @@ describe('deriveCollectorItemSourceDrilldownGroups', () => {
       }
     ]);
   });
+
+  it('groups mapped Hermes source evidence with bounded reasons and detailed evidence refs', () => {
+    const groups = deriveCollectorItemSourceDrilldownGroups(
+      buildCollectorItem({
+        source_health: {
+          hermes_profile: {
+            status: 'observed',
+            profile_id: 'profile-app-engineering',
+            evidence_ref: 'https://hermes.example.test/runtime/profiles/profile-app-engineering?long=true',
+            last_observed_at: '2026-03-16T08:55:00.000Z',
+            degraded_reasons: []
+          },
+          hermes_session: {
+            status: 'degraded',
+            expected_session_ref: 'hermes-session-app',
+            evidence_ref: 'https://hermes.example.test/runtime/sessions/hermes-session-app?long=true',
+            last_observed_at: null,
+            degraded_reasons: [
+              'hermes session evidence incomplete',
+              'hermes session snapshot missing coverage field',
+              'extra reason should stay bounded'
+            ]
+          }
+        }
+      })
+    );
+
+    expect(groups).toEqual([
+      {
+        key: 'hermes',
+        label: 'Hermes source drilldown',
+        status: 'degraded',
+        summary: 'Hermes source drilldown · degraded',
+        details: [
+          { key: 'hermes-profile-status', label: 'Hermes profile status · observed' },
+          { key: 'hermes-profile-id', label: 'Hermes profile id · profile-app-engineering' },
+          {
+            key: 'hermes-profile-evidence',
+            label: 'Hermes profile evidence ref · https://hermes.example.test/runtime/profiles/profile-app-engineering?long=true'
+          },
+          { key: 'hermes-profile-observed-at', label: 'Hermes profile observed at · 2026-03-16T08:55:00.000Z' },
+          { key: 'hermes-session-status', label: 'Hermes session status · degraded' },
+          { key: 'hermes-session-expected', label: 'Expected Hermes session · hermes-session-app' },
+          {
+            key: 'hermes-session-evidence',
+            label: 'Hermes session evidence ref · https://hermes.example.test/runtime/sessions/hermes-session-app?long=true'
+          },
+          { key: 'hermes-session-observed-at', label: 'Hermes session observed at · None' },
+          { key: 'hermes-session-reason-0', label: 'Hermes session reason · hermes session evidence incomplete' },
+          {
+            key: 'hermes-session-reason-1',
+            label: 'Hermes session reason · hermes session snapshot missing coverage field'
+          },
+          { key: 'hermes-session-reason-overflow', label: 'Hermes session reasons · +1 more' }
+        ]
+      }
+    ]);
+  });
 });
 
 describe('deriveRuntimeSourceEvidenceFacts', () => {
@@ -248,6 +342,40 @@ describe('deriveRuntimeSourceEvidenceFacts', () => {
       {
         key: 'unmapped-tmux-sessions',
         label: 'Unmapped tmux source gap · 2 sessions, 3 panes',
+        status: 'degraded'
+      }
+    ]);
+  });
+
+  it('summarizes unmapped Hermes runtime sources as source gaps', () => {
+    const runtimeSourceEvidence: CollectorRuntimeSourceEvidence = {
+      unmapped_tmux_sessions: [],
+      unmapped_hermes_sources: [
+        {
+          source_kind: 'hermes_profile',
+          evidence_ref: 'https://hermes.example.test/runtime/profiles/profile-outside?long=true',
+          profile_id: 'profile-outside',
+          session_ref: null,
+          observed_at: '2026-03-16T08:54:00.000Z',
+          status: 'observed',
+          degraded_reasons: []
+        },
+        {
+          source_kind: 'hermes_session',
+          evidence_ref: 'https://hermes.example.test/runtime/sessions/session-outside?long=true',
+          profile_id: null,
+          session_ref: 'session-outside',
+          observed_at: '2026-03-16T08:58:00.000Z',
+          status: 'degraded',
+          degraded_reasons: ['hermes source has no mapped collector item']
+        }
+      ]
+    };
+
+    expect(deriveRuntimeSourceEvidenceFacts(runtimeSourceEvidence)).toEqual([
+      {
+        key: 'unmapped-hermes-sources',
+        label: 'Unmapped Hermes source gap · 2 sources, 1 profile, 1 session',
         status: 'degraded'
       }
     ]);
@@ -290,6 +418,92 @@ describe('deriveRuntimeSourceDrilldownGroups', () => {
     ]);
   });
 
+  it('groups unmapped Hermes runtime source gaps with bounded refs, sources, and reasons', () => {
+    const longEvidenceRef = `https://hermes.example.test/runtime/profiles/profile-long/${'x'.repeat(160)}`;
+    const boundedLongEvidenceRef = `${longEvidenceRef.slice(0, 119)}…`;
+    const groups = deriveRuntimeSourceDrilldownGroups({
+      unmapped_tmux_sessions: [],
+      unmapped_hermes_sources: [
+        {
+          source_kind: 'hermes_profile',
+          evidence_ref: 'https://hermes.example.test/runtime/profiles/profile-outside?long=true',
+          profile_id: 'profile-outside',
+          session_ref: null,
+          observed_at: '2026-03-16T08:54:00.000Z',
+          status: 'observed',
+          degraded_reasons: []
+        },
+        {
+          source_kind: 'hermes_session',
+          evidence_ref: 'https://hermes.example.test/runtime/sessions/session-outside?long=true',
+          profile_id: null,
+          session_ref: 'session-outside',
+          observed_at: null,
+          status: 'degraded',
+          degraded_reasons: [
+            'hermes source has no mapped collector item',
+            'hermes session lacks profile mapping',
+            'extra reason should stay bounded'
+          ]
+        },
+        {
+          source_kind: 'hermes_profile',
+          evidence_ref: longEvidenceRef,
+          profile_id: 'profile-long',
+          session_ref: null,
+          observed_at: '2026-03-16T09:00:00.000Z',
+          status: 'observed',
+          degraded_reasons: []
+        },
+        {
+          source_kind: 'hermes_session',
+          evidence_ref: 'https://hermes.example.test/runtime/sessions/session-overflow',
+          profile_id: null,
+          session_ref: 'session-overflow',
+          observed_at: null,
+          status: 'observed',
+          degraded_reasons: []
+        }
+      ]
+    });
+
+    expect(groups).toEqual([
+      {
+        key: 'runtime-hermes',
+        label: 'Runtime Hermes source drilldown',
+        status: 'degraded',
+        summary: 'Runtime Hermes source drilldown · degraded',
+        details: [
+          { key: 'unmapped-hermes-source-0', label: 'Unmapped Hermes profile · profile-outside · observed' },
+          {
+            key: 'unmapped-hermes-evidence-0',
+            label: 'Unmapped Hermes evidence ref · https://hermes.example.test/runtime/profiles/profile-outside?long=true'
+          },
+          { key: 'unmapped-hermes-observed-0', label: 'Unmapped Hermes observed at · 2026-03-16T08:54:00.000Z' },
+          { key: 'unmapped-hermes-source-1', label: 'Unmapped Hermes session · session-outside · degraded' },
+          {
+            key: 'unmapped-hermes-evidence-1',
+            label: 'Unmapped Hermes evidence ref · https://hermes.example.test/runtime/sessions/session-outside?long=true'
+          },
+          { key: 'unmapped-hermes-observed-1', label: 'Unmapped Hermes observed at · None' },
+          {
+            key: 'unmapped-hermes-1-reason-0',
+            label: 'Unmapped Hermes source reason · hermes source has no mapped collector item'
+          },
+          {
+            key: 'unmapped-hermes-1-reason-1',
+            label: 'Unmapped Hermes source reason · hermes session lacks profile mapping'
+          },
+          { key: 'unmapped-hermes-1-reason-overflow', label: 'Unmapped Hermes source reasons · +1 more' },
+          { key: 'unmapped-hermes-source-2', label: 'Unmapped Hermes profile · profile-long · observed' },
+          { key: 'unmapped-hermes-evidence-2', label: `Unmapped Hermes evidence ref · ${boundedLongEvidenceRef}` },
+          { key: 'unmapped-hermes-observed-2', label: 'Unmapped Hermes observed at · 2026-03-16T09:00:00.000Z' },
+          { key: 'unmapped-hermes-source-overflow', label: 'Unmapped Hermes sources · +1 more' }
+        ]
+      }
+    ]);
+  });
+
   it('does not put liveness, severity, productivity, or control-plane vocabulary in source drilldown labels', () => {
     const groups = [
       ...deriveCollectorItemSourceDrilldownGroups(
@@ -318,6 +532,17 @@ describe('deriveRuntimeSourceDrilldownGroups', () => {
             observed_count: 1,
             last_observed_at: null,
             pane_refs: ['tmux://outside-tools/0.0']
+          }
+        ],
+        unmapped_hermes_sources: [
+          {
+            source_kind: 'hermes_session',
+            evidence_ref: 'https://hermes.example.test/runtime/sessions/session-outside',
+            profile_id: null,
+            session_ref: 'session-outside',
+            observed_at: null,
+            status: 'degraded',
+            degraded_reasons: ['hermes source has no mapped item']
           }
         ]
       })

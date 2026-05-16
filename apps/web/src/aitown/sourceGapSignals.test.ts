@@ -249,7 +249,7 @@ describe('deriveSourceHealthWorldBadges', () => {
     ).toEqual([]);
   });
 
-  it('does not turn Hermes runtime source health into world badges yet', () => {
+  it('does not turn unmapped Hermes runtime sources into world badges', () => {
     expect(
       deriveSourceHealthWorldBadges({
         ...sourceHealth,
@@ -258,20 +258,26 @@ describe('deriveSourceHealthWorldBadges', () => {
             agent_id: 'app-engineering',
             workspace_root: '/tmp/app-engineering',
             session_ref: '5-web3-app-engineering',
-            evidence_ref_count: 1,
-            evidence_refs: ['hermes://session/5-web3-app-engineering'],
-            latest_evidence_at: '2026-03-16T08:59:30.000Z',
-            source_health: {
-              hermes_session: {
-                status: 'missing',
-                expected_session_ref: '5-web3-app-engineering',
-                evidence_ref: null,
-                last_observed_at: null,
-                degraded_reasons: ['Hermes session not observed']
-              }
-            }
+            evidence_ref_count: 0,
+            evidence_refs: [],
+            latest_evidence_at: null,
+            source_health: {}
           }
-        ]
+        ],
+        runtime_source_evidence: {
+          unmapped_tmux_sessions: [],
+          unmapped_hermes_sources: [
+            {
+              source_kind: 'hermes_session',
+              evidence_ref: 'hermes://session/unmapped-session',
+              profile_id: null,
+              session_ref: 'unmapped-session',
+              observed_at: '2026-03-16T08:59:30.000Z',
+              status: 'missing',
+              degraded_reasons: ['Hermes session not mapped to an agent']
+            }
+          ]
+        }
       })
     ).toEqual([]);
   });

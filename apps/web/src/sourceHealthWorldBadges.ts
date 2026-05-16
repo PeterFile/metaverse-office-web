@@ -20,7 +20,9 @@ const SOURCE_HEALTH_STATUS_RANK: Record<CollectorSourceHealthStatus, number> = {
 const SOURCE_HEALTH_KIND_ORDER: CollectorSourceHealthKind[] = [
   'workspace_root',
   'workspace_files',
-  'tmux_session'
+  'tmux_session',
+  'hermes_profile',
+  'hermes_session'
 ];
 
 export function deriveSourceHealthWorldBadges(

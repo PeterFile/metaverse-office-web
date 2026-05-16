@@ -198,6 +198,64 @@ describe('projectWorldState', () => {
     expect(agent.phase).toBe('active');
   });
 
+  it('projects Hermes-only source evidence health without changing severity or phase', () => {
+    const sourceHealth: CollectorSourceHealthProjection = {
+      collected_at: NOW,
+      actor_id: 'team-lead',
+      summary: {
+        agent_count: 1,
+        source_kind_buckets: {
+          workspace_root: { observed: 0, degraded: 0, missing: 0, error: 0 },
+          workspace_files: { observed: 0, degraded: 0, missing: 0, error: 0 },
+          tmux_session: { observed: 0, degraded: 0, missing: 0, error: 0 },
+          hermes_profile: { observed: 0, degraded: 0, missing: 0, error: 1 },
+          hermes_session: { observed: 0, degraded: 1, missing: 0, error: 0 },
+        },
+        status_buckets: { observed: 0, degraded: 1, missing: 0, error: 1 },
+      },
+      agent_items: [
+        {
+          agent_id: 'app-engineering',
+          workspace_root: '/tmp/app-engineering',
+          session_ref: '5-web3-app-engineering',
+          evidence_ref_count: 1,
+          evidence_refs: ['hermes://profile/profile-app-engineering'],
+          latest_evidence_at: null,
+          source_health: {
+            hermes_profile: {
+              status: 'error',
+              profile_id: 'profile-app-engineering',
+              evidence_ref: null,
+              last_observed_at: null,
+              degraded_reasons: ['Hermes profile read failed'],
+            },
+            hermes_session: {
+              status: 'degraded',
+              expected_session_ref: 'hermes-session-app-engineering',
+              evidence_ref: 'hermes://session/hermes-session-app-engineering',
+              last_observed_at: null,
+              degraded_reasons: ['Hermes session stale'],
+            },
+          },
+        },
+      ],
+    };
+    const input: ProjectorInput = {
+      overview: makeOverview(),
+      workflows: new Map(),
+      incidentFeed: null,
+      sourceHealth,
+      now: NOW,
+    };
+
+    const world = projectWorldState(input);
+    const agent = world.agents.get('app-engineering')!;
+
+    expect(agent.source_evidence_health_status).toBe('error');
+    expect(agent.severity).toBe('normal');
+    expect(agent.phase).toBe('active');
+  });
+
   it('projects reviewing agent to review-zone', () => {
     const input: ProjectorInput = {
       overview: makeOverview([makeAgent({ current_state: 'reviewing' })]),

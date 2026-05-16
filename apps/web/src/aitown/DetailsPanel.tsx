@@ -5803,6 +5803,15 @@ export function DetailsPanel({
       <section className="aitown-details__section aitown-details__section--selected-evidence aitown-details__section--hub-evidence">
         <h3>Evidence Ledger</h3>
         <ul className="aitown-records">
+          <li className="aitown-record">
+            <strong>{`Scope · ${selectedAgentEvidenceLedger?.requestScopeLabel ?? 'Selected-agent evidence records'}`}</strong>
+            {selectedAgentEvidenceLedgerState === 'loading' && selectedAgentEvidenceLedger ? (
+              <span>Refreshing evidence ledger...</span>
+            ) : null}
+            {selectedAgentEvidenceLedgerError && selectedAgentEvidenceLedger ? (
+              <span>{`Last-good view · Refresh failed: ${selectedAgentEvidenceLedgerError}`}</span>
+            ) : null}
+          </li>
           {selectedAgentEvidenceLedgerState === 'loading' && !selectedAgentEvidenceLedger ? (
             <li className="aitown-record">Loading evidence ledger...</li>
           ) : null}

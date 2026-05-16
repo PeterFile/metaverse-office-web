@@ -23,38 +23,48 @@ export interface SelectedAgentEvidenceLedgerGroup {
 
 export interface SelectedAgentEvidenceLedgerModel {
   isEmpty: boolean;
+  requestScopeLabel: string;
   outputEvidence: SelectedAgentEvidenceLedgerGroup;
   nonOutputEvidence: SelectedAgentEvidenceLedgerGroup;
   degradedEvidence: SelectedAgentEvidenceLedgerGroup;
 }
 
 const DEGRADED_SOURCE_STATUSES = new Set(['degraded', 'missing', 'error']);
+const DEFAULT_REQUEST_SCOPE_LABEL = 'Selected-agent evidence records';
+
+type IndexedLedgerItem = {
+  item: SelectedAgentEvidenceLedgerItem;
+  sourceOrder: number;
+};
 
 export function buildSelectedAgentEvidenceLedger(
   records: EvidenceRecord[],
-  options: { maxItemsPerGroup?: number } = {}
+  options: { maxItemsPerGroup?: number; requestScopeLabel?: string } = {}
 ): SelectedAgentEvidenceLedgerModel {
   const maxItemsPerGroup = Math.max(0, options.maxItemsPerGroup ?? 4);
-  const outputEvidence: SelectedAgentEvidenceLedgerItem[] = [];
-  const nonOutputEvidence: SelectedAgentEvidenceLedgerItem[] = [];
-  const degradedEvidence: SelectedAgentEvidenceLedgerItem[] = [];
+  const requestScopeLabel = options.requestScopeLabel?.trim() || DEFAULT_REQUEST_SCOPE_LABEL;
+  const outputEvidence: IndexedLedgerItem[] = [];
+  const nonOutputEvidence: IndexedLedgerItem[] = [];
+  const degradedEvidence: IndexedLedgerItem[] = [];
 
-  for (const record of records) {
+  records.forEach((record, sourceOrder) => {
+    const item = { item: toLedgerItem(record), sourceOrder };
     if (isClassifiableEvidence(record)) {
       if (record.output_candidate) {
-        outputEvidence.push(toLedgerItem(record));
+        outputEvidence.push(item);
       } else {
-        nonOutputEvidence.push(toLedgerItem(record));
+        nonOutputEvidence.push(item);
       }
     }
 
     if (isDegradedOrUnmapped(record)) {
-      degradedEvidence.push(toLedgerItem(record));
+      degradedEvidence.push(item);
     }
-  }
+  });
 
   return {
     isEmpty: records.length === 0,
+    requestScopeLabel,
     outputEvidence: toBoundedGroup(outputEvidence, maxItemsPerGroup),
     nonOutputEvidence: toBoundedGroup(nonOutputEvidence, maxItemsPerGroup),
     degradedEvidence: toBoundedGroup(degradedEvidence, maxItemsPerGroup)
@@ -90,21 +100,35 @@ function isDegradedOrUnmapped(record: EvidenceRecord): boolean {
 }
 
 function toBoundedGroup(
-  items: SelectedAgentEvidenceLedgerItem[],
+  items: IndexedLedgerItem[],
   maxItems: number
 ): SelectedAgentEvidenceLedgerGroup {
   return {
     totalCount: items.length,
     overflowCount: Math.max(0, items.length - maxItems),
-    items: items.slice().sort(compareLedgerItemRecency).slice(0, maxItems)
+    items: items
+      .slice()
+      .sort(compareLedgerItemRecency)
+      .slice(0, maxItems)
+      .map((item) => cloneLedgerItem(item.item))
+  };
+}
+
+function cloneLedgerItem(
+  item: SelectedAgentEvidenceLedgerItem
+): SelectedAgentEvidenceLedgerItem {
+  return {
+    ...item,
+    degradedReasons: [...item.degradedReasons]
   };
 }
 
 function compareLedgerItemRecency(
-  left: SelectedAgentEvidenceLedgerItem,
-  right: SelectedAgentEvidenceLedgerItem
+  left: IndexedLedgerItem,
+  right: IndexedLedgerItem
 ): number {
-  return getLedgerItemTime(right) - getLedgerItemTime(left);
+  const recency = getLedgerItemTime(right.item) - getLedgerItemTime(left.item);
+  return recency !== 0 ? recency : left.sourceOrder - right.sourceOrder;
 }
 
 function getLedgerItemTime(item: SelectedAgentEvidenceLedgerItem): number {

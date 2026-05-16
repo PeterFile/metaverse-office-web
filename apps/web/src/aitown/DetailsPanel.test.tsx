@@ -726,6 +726,7 @@ function buildSelectedAgentEvidenceLedger(
 ): SelectedAgentEvidenceLedgerModel {
   return {
     isEmpty: false,
+    requestScopeLabel: 'Selected-agent evidence records',
     outputEvidence: {
       totalCount: 1,
       overflowCount: 0,
@@ -1552,6 +1553,7 @@ describe('DetailsPanel selected-agent workflow lifecycle', () => {
 
     const section = screen.getByRole('heading', { name: 'Evidence Ledger' }).closest('section');
     expect(section).not.toBeNull();
+    expect(within(section!).getByText('Scope · Selected-agent evidence records')).toBeVisible();
     expect(within(section!).getByText('Output evidence · 1')).toBeVisible();
     expect(within(section!).getByText('Non-output evidence · 1')).toBeVisible();
     expect(within(section!).getByText('Degraded / unmapped · 1')).toBeVisible();
@@ -1565,6 +1567,29 @@ describe('DetailsPanel selected-agent workflow lifecycle', () => {
     expect(section!).not.toHaveTextContent('offline');
     expect(section!).not.toHaveTextContent('No work');
     expect(section!).not.toHaveTextContent('productivity');
+  });
+
+  it('labels scoped selected-agent evidence ledger requests and stale last-good data honestly', () => {
+    render(
+      <DetailsPanel
+        {...buildProps({
+          activeHubCategory: 'evidence',
+          selectedAgentDrilldownTab: 'evidence',
+          selectedAgentEvidenceLedger: buildSelectedAgentEvidenceLedger({
+            requestScopeLabel: 'Source-gap scope · workspace source records for app-engineering'
+          }),
+          selectedAgentEvidenceLedgerError: 'HTTP 503',
+          selectedAgentEvidenceLedgerState: 'ready'
+        })}
+      />
+    );
+
+    const section = screen.getByRole('heading', { name: 'Evidence Ledger' }).closest('section');
+    expect(section).not.toBeNull();
+    expect(
+      within(section!).getByText('Scope · Source-gap scope · workspace source records for app-engineering')
+    ).toBeVisible();
+    expect(within(section!).getByText('Last-good view · Refresh failed: HTTP 503')).toBeVisible();
   });
 
   it('does not report structured evidence facets when workflow detail has no structured evidence', () => {

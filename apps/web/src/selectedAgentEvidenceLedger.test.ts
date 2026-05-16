@@ -25,6 +25,7 @@ describe('buildSelectedAgentEvidenceLedger', () => {
   it('keeps empty data as an empty evidence model without inferring idle or offline state', () => {
     expect(buildSelectedAgentEvidenceLedger([])).toEqual({
       isEmpty: true,
+      requestScopeLabel: 'Selected-agent evidence records',
       outputEvidence: { totalCount: 0, overflowCount: 0, items: [] },
       nonOutputEvidence: { totalCount: 0, overflowCount: 0, items: [] },
       degradedEvidence: { totalCount: 0, overflowCount: 0, items: [] }
@@ -69,6 +70,7 @@ describe('buildSelectedAgentEvidenceLedger', () => {
 
     expect(model).toEqual({
       isEmpty: false,
+      requestScopeLabel: 'Selected-agent evidence records',
       outputEvidence: {
         totalCount: 2,
         overflowCount: 0,
@@ -205,6 +207,37 @@ describe('buildSelectedAgentEvidenceLedger', () => {
     expect(model.outputEvidence.overflowCount).toBe(1);
     expect(model.outputEvidence.items.map((item) => item.evidenceId)).toEqual(['c', 'b']);
     expect(model.outputEvidence.items[0]).not.toHaveProperty('metadata');
+  });
+
+  it('preserves API order for records with equal ledger timestamps', () => {
+    const model = buildSelectedAgentEvidenceLedger(
+      [
+        evidenceRecord({
+          evidence_id: 'api-first',
+          evidence_ref: '/tmp/api-first.md'
+        }),
+        evidenceRecord({
+          evidence_id: 'api-second',
+          evidence_ref: '/tmp/api-second.md'
+        }),
+        evidenceRecord({
+          evidence_id: 'api-third',
+          evidence_ref: '/tmp/api-third.md'
+        })
+      ],
+      { maxItemsPerGroup: 2 }
+    );
+
+    expect(model.outputEvidence.items.map((item) => item.evidenceId)).toEqual(['api-first', 'api-second']);
+    expect(model.outputEvidence.overflowCount).toBe(1);
+  });
+
+  it('carries an explicit request scope label for scoped ledger callers', () => {
+    const model = buildSelectedAgentEvidenceLedger([], {
+      requestScopeLabel: 'Source-gap scope · workspace source records for app-engineering'
+    });
+
+    expect(model.requestScopeLabel).toBe('Source-gap scope · workspace source records for app-engineering');
   });
 
   it('treats unmapped tmux records as degraded/unmapped evidence, not agent output', () => {

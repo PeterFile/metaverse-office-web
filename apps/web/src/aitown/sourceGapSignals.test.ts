@@ -11,7 +11,9 @@ const sourceHealth: CollectorSourceHealthProjection = {
     source_kind_buckets: {
       workspace_root: { observed: 1, degraded: 0, missing: 1, error: 1 },
       workspace_files: { observed: 0, degraded: 1, missing: 1, error: 0 },
-      tmux_session: { observed: 1, degraded: 0, missing: 1, error: 0 }
+      tmux_session: { observed: 1, degraded: 0, missing: 1, error: 0 },
+      hermes_profile: { observed: 0, degraded: 0, missing: 0, error: 0 },
+      hermes_session: { observed: 0, degraded: 0, missing: 0, error: 0 }
     },
     status_buckets: {
       observed: 2,
@@ -155,6 +157,43 @@ describe('deriveSourceGapChips', () => {
       )
     ).toEqual([]);
   });
+
+  it('does not turn Hermes runtime source health into legacy source-gap chips', () => {
+    expect(
+      deriveSourceGapChips(
+        {
+          ...sourceHealth,
+          summary: {
+            ...sourceHealth.summary,
+            source_kind_buckets: {
+              ...sourceHealth.summary.source_kind_buckets,
+              hermes_session: { observed: 0, degraded: 1, missing: 0, error: 0 }
+            }
+          },
+          agent_items: [
+            {
+              agent_id: 'app-engineering',
+              workspace_root: '/tmp/app-engineering',
+              session_ref: '5-web3-app-engineering',
+              evidence_ref_count: 1,
+              evidence_refs: ['hermes://session/5-web3-app-engineering'],
+              latest_evidence_at: '2026-03-16T08:59:30.000Z',
+              source_health: {
+                hermes_session: {
+                  status: 'degraded',
+                  expected_session_ref: '5-web3-app-engineering',
+                  evidence_ref: 'hermes://session/5-web3-app-engineering',
+                  last_observed_at: '2026-03-16T08:59:00.000Z',
+                  degraded_reasons: ['Hermes session stale']
+                }
+              }
+            }
+          ]
+        },
+        [{ agent_id: 'app-engineering', display_name: 'App Engineering Agent' }]
+      )
+    ).toEqual([]);
+  });
 });
 
 describe('deriveSourceHealthWorldBadges', () => {
@@ -204,6 +243,33 @@ describe('deriveSourceHealthWorldBadges', () => {
             evidence_refs: ['/tmp/team-lead/outbox.md'],
             latest_evidence_at: '2026-03-16T08:58:30.000Z',
             source_health: {}
+          }
+        ]
+      })
+    ).toEqual([]);
+  });
+
+  it('does not turn Hermes runtime source health into world badges yet', () => {
+    expect(
+      deriveSourceHealthWorldBadges({
+        ...sourceHealth,
+        agent_items: [
+          {
+            agent_id: 'app-engineering',
+            workspace_root: '/tmp/app-engineering',
+            session_ref: '5-web3-app-engineering',
+            evidence_ref_count: 1,
+            evidence_refs: ['hermes://session/5-web3-app-engineering'],
+            latest_evidence_at: '2026-03-16T08:59:30.000Z',
+            source_health: {
+              hermes_session: {
+                status: 'missing',
+                expected_session_ref: '5-web3-app-engineering',
+                evidence_ref: null,
+                last_observed_at: null,
+                degraded_reasons: ['Hermes session not observed']
+              }
+            }
           }
         ]
       })

@@ -115,10 +115,28 @@ export interface CollectorTmuxSessionSourceHealth {
   degraded_reasons: string[];
 }
 
+export interface CollectorHermesProfileSourceHealth {
+  status: CollectorSourceHealthStatus;
+  profile_id: string;
+  evidence_ref: string | null;
+  last_observed_at: string | null;
+  degraded_reasons: string[];
+}
+
+export interface CollectorHermesSessionSourceHealth {
+  status: CollectorSourceHealthStatus;
+  expected_session_ref: string;
+  evidence_ref: string | null;
+  last_observed_at: string | null;
+  degraded_reasons: string[];
+}
+
 export interface CollectorSourceHealth {
   workspace_root?: CollectorWorkspaceRootSourceHealth;
   workspace_files?: CollectorWorkspaceFilesSourceHealth;
   tmux_session?: CollectorTmuxSessionSourceHealth;
+  hermes_profile?: CollectorHermesProfileSourceHealth;
+  hermes_session?: CollectorHermesSessionSourceHealth;
 }
 
 export interface CollectorUnmappedTmuxSession {
@@ -128,8 +146,19 @@ export interface CollectorUnmappedTmuxSession {
   pane_refs: string[];
 }
 
+export interface CollectorUnmappedHermesSource {
+  source_kind: 'hermes_profile' | 'hermes_session';
+  evidence_ref: string;
+  profile_id: string | null;
+  session_ref: string | null;
+  observed_at: string | null;
+  status: CollectorSourceHealthStatus;
+  degraded_reasons: string[];
+}
+
 export interface CollectorRuntimeSourceEvidence {
   unmapped_tmux_sessions?: CollectorUnmappedTmuxSession[];
+  unmapped_hermes_sources?: CollectorUnmappedHermesSource[];
 }
 
 export interface CollectorSupervision {
@@ -184,10 +213,16 @@ export interface CollectorSharedArtifact {
   source_kinds: Array<'workspace_file' | 'tmux_observation'>;
 }
 
-export type CollectorEvidenceCoverageSourceKind =
+export type CollectorEvidenceCoverageLegacySourceKind =
   | 'workspace_file'
   | 'workspace_root'
   | 'tmux_observation';
+
+export type CollectorHermesRuntimeSourceKind = 'hermes_profile' | 'hermes_session';
+
+export type CollectorEvidenceCoverageSourceKind =
+  | CollectorEvidenceCoverageLegacySourceKind
+  | CollectorHermesRuntimeSourceKind;
 
 export interface CollectorEvidenceCoverageAgentItem {
   agent_id: string;
@@ -203,11 +238,17 @@ export interface CollectorEvidenceCoverage {
   evidence_ref_count: number;
   covered_agent_count: number;
   low_confidence_agent_ids: string[];
-  source_kind_buckets: Record<CollectorEvidenceCoverageSourceKind, number>;
+  source_kind_buckets: Record<CollectorEvidenceCoverageLegacySourceKind, number> &
+    Partial<Record<CollectorHermesRuntimeSourceKind, number>>;
   agent_items: CollectorEvidenceCoverageAgentItem[];
 }
 
-export type CollectorSourceHealthKind = 'workspace_root' | 'workspace_files' | 'tmux_session';
+export type CollectorSourceHealthKind =
+  | 'workspace_root'
+  | 'workspace_files'
+  | 'tmux_session'
+  | 'hermes_profile'
+  | 'hermes_session';
 
 export interface CollectorSourceHealthProjectionAgentItem {
   agent_id: string;

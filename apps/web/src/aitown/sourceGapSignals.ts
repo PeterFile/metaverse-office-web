@@ -17,11 +17,16 @@ type SourceGapAgent = {
   display_name: string;
 };
 
+type DisplayedSourceGapKind = Extract<
+  CollectorSourceHealthKind,
+  'workspace_root' | 'workspace_files' | 'tmux_session'
+>;
+
 export type SourceGapChip = {
   agentId: string;
   displayName: string;
   sourceDrilldownGroupKey: SourceGapDrilldownGroupKey;
-  sourceKind: CollectorSourceHealthKind;
+  sourceKind: DisplayedSourceGapKind;
   status: Exclude<CollectorSourceHealthStatus, 'observed'>;
   sourceLabel: string;
   detail: string;
@@ -39,13 +44,13 @@ const SOURCE_GAP_STATUS_RANK: Record<CollectorSourceHealthStatus, number> = {
   observed: 3
 };
 
-const SOURCE_KIND_LABELS: Record<CollectorSourceHealthKind, string> = {
+const SOURCE_KIND_LABELS: Record<DisplayedSourceGapKind, string> = {
   workspace_root: 'Workspace root',
   workspace_files: 'Workspace files',
   tmux_session: 'Tmux session'
 };
 
-const SOURCE_KIND_ORDER: CollectorSourceHealthKind[] = [
+const SOURCE_KIND_ORDER: DisplayedSourceGapKind[] = [
   'workspace_root',
   'workspace_files',
   'tmux_session'
@@ -105,14 +110,14 @@ export function deriveSourceGapChips(
 }
 
 function resolveSourceGapDrilldownGroupKey(
-  sourceKind: CollectorSourceHealthKind
+  sourceKind: DisplayedSourceGapKind
 ): SourceGapDrilldownGroupKey {
   return sourceKind === 'tmux_session' ? 'tmux' : 'workspace';
 }
 
 function renderSourceGapDetail(
   item: CollectorSourceHealthProjectionAgentItem,
-  sourceKind: CollectorSourceHealthKind
+  sourceKind: DisplayedSourceGapKind
 ) {
   const countLabel = renderSourceGapCount(item, sourceKind);
   return `${countLabel} · latest evidence ${item.latest_evidence_at ?? 'unavailable'}`;
@@ -120,7 +125,7 @@ function renderSourceGapDetail(
 
 function renderSourceGapCount(
   item: CollectorSourceHealthProjectionAgentItem,
-  sourceKind: CollectorSourceHealthKind
+  sourceKind: DisplayedSourceGapKind
 ) {
   if (sourceKind === 'workspace_files') {
     return renderWorkspaceFilesCount(item.source_health);

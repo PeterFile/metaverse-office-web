@@ -462,7 +462,9 @@ describe('fetchCollectorSourceHealth', () => {
                 source_kind_buckets: {
                   workspace_root: { observed: 1, degraded: 0, missing: 0, error: 0 },
                   workspace_files: { observed: 0, degraded: 1, missing: 0, error: 0 },
-                  tmux_session: { observed: 1, degraded: 0, missing: 0, error: 0 }
+                  tmux_session: { observed: 1, degraded: 0, missing: 0, error: 0 },
+                  hermes_profile: { observed: 1, degraded: 0, missing: 0, error: 0 },
+                  hermes_session: { observed: 0, degraded: 1, missing: 0, error: 0 }
                 },
                 status_buckets: {
                   observed: 2,
@@ -485,6 +487,20 @@ describe('fetchCollectorSourceHealth', () => {
                       error_count: 0,
                       last_observed_at: '2026-03-09T18:04:00.000Z',
                       degraded_reasons: ['missing workspace files: inbox.md, todo.md']
+                    },
+                    hermes_profile: {
+                      status: 'observed',
+                      profile_id: 'app-engineering',
+                      evidence_ref: 'hermes://profile/app-engineering',
+                      last_observed_at: '2026-03-09T18:04:15.000Z',
+                      degraded_reasons: []
+                    },
+                    hermes_session: {
+                      status: 'degraded',
+                      expected_session_ref: '5-web3-app-engineering',
+                      evidence_ref: 'hermes://session/5-web3-app-engineering',
+                      last_observed_at: '2026-03-09T18:04:20.000Z',
+                      degraded_reasons: ['Hermes session stale']
                     }
                   },
                   evidence_ref_count: 2,
@@ -493,7 +509,18 @@ describe('fetchCollectorSourceHealth', () => {
                 }
               ],
               runtime_source_evidence: {
-                unmapped_tmux_sessions: []
+                unmapped_tmux_sessions: [],
+                unmapped_hermes_sources: [
+                  {
+                    source_kind: 'hermes_profile',
+                    evidence_ref: 'hermes://profile/unseeded-profile',
+                    profile_id: 'unseeded-profile',
+                    session_ref: null,
+                    observed_at: '2026-03-09T18:04:10.000Z',
+                    status: 'observed',
+                    degraded_reasons: []
+                  }
+                ]
               }
             }
           }),
@@ -509,6 +536,11 @@ describe('fetchCollectorSourceHealth', () => {
     expect(sourceHealth).not.toBeNull();
     expect(sourceHealth?.summary.status_buckets.degraded).toBe(1);
     expect(sourceHealth?.agent_items[0].source_health.workspace_files?.status).toBe('degraded');
+    expect(sourceHealth?.agent_items[0].source_health.hermes_session?.status).toBe('degraded');
+    expect(sourceHealth?.runtime_source_evidence?.unmapped_hermes_sources?.[0]).toMatchObject({
+      source_kind: 'hermes_profile',
+      profile_id: 'unseeded-profile'
+    });
     expect(globalThis.fetch).toHaveBeenCalledWith(
       '/collectors/controller-snapshot/source-health?limit=7',
       expect.objectContaining({ signal: undefined })

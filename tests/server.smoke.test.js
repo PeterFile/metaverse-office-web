@@ -5179,8 +5179,29 @@ test('GET /evidence-records lists stored evidence records read-only with exact f
   assert.equal(response.body.items[0].evidence_role, 'agent_output');
   assert.equal(response.body.items[0].output_candidate, true);
 
+  const evidenceId = response.body.items[0].evidence_id;
+  const exactEvidenceId = await requestJson(
+    `${baseUrl}/evidence-records?evidence_id=${encodeURIComponent(evidenceId)}&agent_id=app-engineering&source_kind=workspace_file&newest_first=true&limit=1`
+  );
+  assert.equal(exactEvidenceId.response.status, 200);
+  assert.deepEqual(exactEvidenceId.body.items.map((item) => item.evidence_ref), [
+    '/tmp/evidence-query/app/outbox.md'
+  ]);
+
+  const substringEvidenceId = await requestJson(
+    `${baseUrl}/evidence-records?evidence_id=${encodeURIComponent(evidenceId.slice(0, -2))}&limit=10`
+  );
+  assert.equal(substringEvidenceId.response.status, 200);
+  assert.deepEqual(substringEvidenceId.body.items, []);
+
+  const unknownEvidenceId = await requestJson(
+    `${baseUrl}/evidence-records?evidence_id=missing-evidence-id&limit=10`
+  );
+  assert.equal(unknownEvidenceId.response.status, 200);
+  assert.deepEqual(unknownEvidenceId.body.items, []);
+
   const blankFilters = await requestJson(
-    `${baseUrl}/evidence-records?agent_id=&source_kind=&evidence_role=&output_candidate=false&limit=2`
+    `${baseUrl}/evidence-records?evidence_id=&agent_id=&source_kind=&evidence_role=&output_candidate=false&limit=2`
   );
   assert.equal(blankFilters.response.status, 200);
   assert.deepEqual(blankFilters.body.items.map((item) => item.evidence_ref), [

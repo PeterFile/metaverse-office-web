@@ -582,6 +582,30 @@ test('JSONL prototype store filters evidence records by exact drilldown fields',
 
   await store.appendCollectorReport(createCollectorReport());
 
+  const outboxRecord = store.listEvidenceRecords({
+    evidence_ref: '/tmp/store-contract/outbox.md'
+  })[0];
+  assert.deepEqual(
+    store
+      .listEvidenceRecords({
+        evidence_id: outboxRecord.evidence_id,
+        source_kind: 'workspace_file',
+        newest_first: 'true',
+        limit: 1
+      })
+      .map((record) => record.evidence_ref),
+    ['/tmp/store-contract/outbox.md']
+  );
+  assert.deepEqual(
+    store.listEvidenceRecords({
+      evidence_id: outboxRecord.evidence_id.slice(0, -2),
+      source_kind: 'workspace_file'
+    }),
+    []
+  );
+  assert.deepEqual(store.listEvidenceRecords({ evidence_id: 'missing-evidence-id' }), []);
+  assert.equal(store.listEvidenceRecords({ evidence_id: '', limit: 1 }).length, 1);
+
   assert.deepEqual(
     store
       .listEvidenceRecords({ evidence_ref: '/tmp/store-contract/outbox.md' })

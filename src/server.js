@@ -367,6 +367,7 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
   if (method === 'GET' && pathname === '/evidence-records') {
     sendJson(res, 200, {
       items: store.listEvidenceRecords({
+        evidence_id: url.searchParams.get('evidence_id'),
         agent_id: url.searchParams.get('agent_id'),
         source_kind: url.searchParams.get('source_kind'),
         evidence_role: url.searchParams.get('evidence_role'),

@@ -524,6 +524,7 @@ class PrototypeStore {
   }
 
   listEvidenceRecords(filters = {}) {
+    const evidenceId = normalizeFilterValue(filters.evidence_id);
     const agentId = normalizeFilterValue(filters.agent_id);
     const sourceKind = normalizeFilterValue(filters.source_kind);
     const evidenceRole = normalizeFilterValue(filters.evidence_role);
@@ -541,6 +542,7 @@ class PrototypeStore {
     const limit = parseLimit(filters.limit);
 
     const records = this.evidenceRecords
+      .filter((record) => !evidenceId || record.evidence_id === evidenceId)
       .filter((record) => !agentId || record.agent_id === agentId)
       .filter(
         (record) =>

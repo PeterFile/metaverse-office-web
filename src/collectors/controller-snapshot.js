@@ -1,5 +1,5 @@
 const { execFile } = require('node:child_process');
-const { stat } = require('node:fs/promises');
+const { readFile, stat } = require('node:fs/promises');
 const path = require('node:path');
 const { promisify } = require('node:util');
 
@@ -1069,6 +1069,111 @@ async function defaultReadHermesRuntimeSources() {
   return [];
 }
 
+function createHermesRuntimeSourcesFileReader({ filePath }) {
+  const sourceFilePath = sanitizeText(filePath);
+  if (!sourceFilePath) {
+    throw new Error('Hermes runtime sources file path is required');
+  }
+
+  return async function readHermesRuntimeSourcesFile() {
+    const content = await readFile(sourceFilePath, 'utf8');
+    return parseHermesRuntimeSourcesFile(content, sourceFilePath);
+  };
+}
+
+function parseHermesRuntimeSourcesFile(content, sourceFilePath = 'Hermes runtime sources file') {
+  const trimmed = content.trim();
+  if (!trimmed) {
+    return [];
+  }
+
+  const facts =
+    trimmed[0] === '['
+      ? parseHermesRuntimeSourcesJson(trimmed, sourceFilePath)
+      : parseHermesRuntimeSourcesJsonl(content, sourceFilePath);
+  return facts.map((fact, index) => validateHermesRuntimeSourceFact(fact, index, sourceFilePath));
+}
+
+function parseHermesRuntimeSourcesJson(content, sourceFilePath) {
+  let parsed;
+  try {
+    parsed = JSON.parse(content);
+  } catch (error) {
+    throw new Error(`Invalid Hermes runtime sources JSON in ${sourceFilePath}: ${error.message}`);
+  }
+
+  if (!Array.isArray(parsed)) {
+    throw new Error(`Invalid Hermes runtime sources JSON in ${sourceFilePath}: expected an array`);
+  }
+
+  return parsed;
+}
+
+function parseHermesRuntimeSourcesJsonl(content, sourceFilePath) {
+  const facts = [];
+  const lines = content.split(/\r?\n/);
+
+  lines.forEach((line, lineIndex) => {
+    if (!line.trim()) {
+      return;
+    }
+
+    try {
+      facts.push(JSON.parse(line));
+    } catch (error) {
+      throw new Error(
+        `Invalid Hermes runtime sources JSONL in ${sourceFilePath} at line ${lineIndex + 1}: ${error.message}`
+      );
+    }
+  });
+
+  return facts;
+}
+
+function validateHermesRuntimeSourceFact(fact, index, sourceFilePath) {
+  const location = `${sourceFilePath} item ${index}`;
+  if (!fact || typeof fact !== 'object' || Array.isArray(fact)) {
+    throw new Error(`Invalid Hermes runtime source fact at ${location}: expected object`);
+  }
+
+  const normalized = normalizeHermesRuntimeSourceFact(fact);
+  if (!normalized) {
+    throw new Error(
+      `Invalid Hermes runtime source fact at ${location}: expected hermes_profile or hermes_session with evidence_ref or derivable identity`
+    );
+  }
+
+  if (fact.status !== undefined && !normalizeSourceHealthStatus(fact.status)) {
+    throw new Error(`Invalid Hermes runtime source fact at ${location}: invalid status`);
+  }
+
+  if (
+    (fact.last_observed_at !== undefined || fact.observed_at !== undefined) &&
+    !normalized.last_observed_at
+  ) {
+    throw new Error(`Invalid Hermes runtime source fact at ${location}: invalid observed timestamp`);
+  }
+
+  if (
+    fact.degraded_reasons !== undefined &&
+    (!Array.isArray(fact.degraded_reasons) ||
+      fact.degraded_reasons.some((reason) => typeof reason !== 'string'))
+  ) {
+    throw new Error(
+      `Invalid Hermes runtime source fact at ${location}: degraded_reasons must be a string array`
+    );
+  }
+
+  if (
+    fact.metadata !== undefined &&
+    (!fact.metadata || typeof fact.metadata !== 'object' || Array.isArray(fact.metadata))
+  ) {
+    throw new Error(`Invalid Hermes runtime source fact at ${location}: metadata must be an object`);
+  }
+
+  return normalized;
+}
+
 function groupHermesRuntimeSources({ facts, agents, enabled }) {
   const factsByAgentId = new Map();
   const unmappedFacts = [];
@@ -1263,6 +1368,7 @@ function handleTmuxError(error) {
 module.exports = {
   OBSERVED_WORKSPACE_PATHS,
   collectControllerSnapshot,
+  createHermesRuntimeSourcesFileReader,
   createEvidenceCoverageLedger,
   createSharedArtifactRollup,
   createControllerSnapshotCollector,

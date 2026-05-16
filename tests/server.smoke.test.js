@@ -1,18 +1,27 @@
 const assert = require('node:assert/strict');
+const { execFile } = require('node:child_process');
 const { mkdtemp, readFile } = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
+const { promisify } = require('node:util');
 
 const { collectControllerSnapshot } = require('../src/collectors/controller-snapshot');
 const { SEED_AGENTS } = require('../src/domain');
 const { createAppServer } = require('../src/server');
 const { createPrototypeStore } = require('../src/store/prototype-store');
 
+const execFileAsync = promisify(execFile);
+
 async function createHarness(t, options = {}) {
   const root = await mkdtemp(path.join(os.tmpdir(), 'metaverse-office-'));
   const storeFile = path.join(root, 'prototype-store.jsonl');
-  const store = await createPrototypeStore({ filePath: storeFile });
+  const sqliteStoreFile = path.join(root, 'prototype-store.sqlite');
+  const store = await createPrototypeStore(
+    options.storeBackend === 'sqlite'
+      ? { sqliteFilePath: sqliteStoreFile }
+      : { filePath: storeFile }
+  );
   const server = createAppServer({
     store,
     now: options.now || (() => '2026-03-09T18:05:00.000Z'),
@@ -43,6 +52,15 @@ async function createHarness(t, options = {}) {
     storeFile,
     baseUrl: `http://127.0.0.1:${address.port}`
   };
+}
+
+async function hasSqlite3() {
+  try {
+    await execFileAsync('sqlite3', ['--version']);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function requestJson(url, init) {
@@ -85,6 +103,154 @@ function createEvent({
     evidence_refs: evidenceRefs,
     source_kind: sourceKind,
     metadata
+  };
+}
+
+function createRouteParityCollectorReport() {
+  return {
+    collected_at: '2026-03-09T18:06:00.000Z',
+    actor_id: 'team-lead',
+    summary: {
+      agent_count: 2,
+      heartbeat_count: 0,
+      tmux_observed_count: 1,
+      workspace_observed_count: 2,
+      reboot_recommended_count: 0
+    },
+    evidence_coverage: {
+      evidence_ref_count: 3,
+      covered_agent_count: 1,
+      low_confidence_agent_ids: ['protocol-engineering'],
+      source_kind_buckets: {
+        workspace_file: 2,
+        workspace_root: 0,
+        tmux_observation: 1
+      },
+      agent_items: [
+        {
+          agent_id: 'app-engineering',
+          evidence_ref_count: 3,
+          source_kinds: ['workspace_file', 'tmux_observation'],
+          latest_evidence_at: '2026-03-09T18:05:30.000Z',
+          confidence_level: 'high'
+        },
+        {
+          agent_id: 'protocol-engineering',
+          evidence_ref_count: 0,
+          source_kinds: [],
+          latest_evidence_at: null,
+          confidence_level: 'low'
+        }
+      ]
+    },
+    runtime_source_evidence: {
+      unmapped_tmux_sessions: [
+        {
+          session_name: 'unmapped-route-parity',
+          pane_refs: ['tmux://unmapped-route-parity/0.0'],
+          observed_count: 1,
+          status: 'observed',
+          last_observed_at: '2026-03-09T18:05:50.000Z',
+          degraded_reasons: []
+        }
+      ]
+    },
+    items: [
+      {
+        agent_id: 'app-engineering',
+        evidence_refs: [
+          '/tmp/route-parity/app/inbox.md',
+          '/tmp/route-parity/app/outbox.md',
+          'tmux://5-web3-app-engineering/0.1'
+        ],
+        workspace_observations: [
+          {
+            path: '/tmp/route-parity/app/inbox.md',
+            file_name: 'inbox.md',
+            kind: 'workspace_file',
+            last_modified_at: '2026-03-09T18:04:00.000Z'
+          },
+          {
+            path: '/tmp/route-parity/app/outbox.md',
+            file_name: 'outbox.md',
+            kind: 'workspace_file',
+            evidence_role: 'agent_output',
+            last_modified_at: '2026-03-09T18:05:00.000Z'
+          }
+        ],
+        tmux_observations: [
+          {
+            session_name: '5-web3-app-engineering',
+            window_index: '0',
+            pane_index: '1',
+            pane_id: '%11',
+            pane_current_command: 'nvim',
+            pane_activity_at: '2026-03-09T18:05:30.000Z'
+          }
+        ],
+        source_health: {
+          workspace_root: {
+            status: 'observed',
+            path: '/tmp/route-parity/app',
+            last_observed_at: '2026-03-09T18:03:00.000Z',
+            degraded_reasons: []
+          },
+          workspace_files: {
+            status: 'degraded',
+            expected_files: ['inbox.md', 'outbox.md', 'todo.md'],
+            observed_count: 2,
+            missing_count: 1,
+            error_count: 0,
+            last_observed_at: '2026-03-09T18:05:00.000Z',
+            degraded_reasons: ['missing workspace files: todo.md']
+          },
+          tmux_session: {
+            status: 'observed',
+            expected_session_ref: '5-web3-app-engineering',
+            observed_count: 1,
+            last_observed_at: '2026-03-09T18:05:30.000Z',
+            degraded_reasons: []
+          }
+        },
+        heartbeat: {
+          agent_id: 'app-engineering',
+          actor_id: 'team-lead',
+          received_at: '2026-03-09T18:06:00.000Z',
+          current_state: 'coding',
+          active_task: 'Validate evidence read-route parity',
+          current_location: 'desk-app-engineering',
+          last_meaningful_output_at: '2026-03-09T18:05:00.000Z',
+          last_file_write_at: '2026-03-09T18:05:00.000Z',
+          current_blocker: '',
+          confidence_level: 'high',
+          reboot_recommended: false,
+          evidence_refs: ['/tmp/route-parity/app/outbox.md', 'tmux://5-web3-app-engineering/0.1']
+        }
+      },
+      {
+        agent_id: 'protocol-engineering',
+        evidence_refs: [],
+        workspace_observations: [],
+        tmux_observations: [],
+        source_health: {
+          workspace_root: {
+            status: 'missing',
+            path: '/tmp/route-parity/protocol',
+            last_observed_at: null,
+            degraded_reasons: ['workspace root not observed']
+          },
+          workspace_files: {
+            status: 'missing',
+            expected_files: ['inbox.md', 'outbox.md', 'todo.md'],
+            observed_count: 0,
+            missing_count: 3,
+            error_count: 0,
+            last_observed_at: null,
+            degraded_reasons: ['missing workspace files: inbox.md, outbox.md, todo.md']
+          }
+        }
+      }
+    ]
   };
 }
 
@@ -5122,6 +5288,85 @@ test('GET /evidence-records lists stored evidence records read-only with exact f
   assert.equal(store.getLatestCollectorReport(), latestBeforeRead);
   assert.deepEqual(store.getCounts(), countsBeforeRead);
   assert.equal(await readFile(storeFile, 'utf8'), fileBeforeRead);
+});
+
+test('GET evidence and source read routes keep JSONL and SQLite parity', async (t) => {
+  if (!(await hasSqlite3())) {
+    t.skip('sqlite3 binary not found; SQLite route parity smoke skipped explicitly');
+    return;
+  }
+
+  const jsonl = await createHarness(t);
+  const sqlite = await createHarness(t, { storeBackend: 'sqlite' });
+  const report = createRouteParityCollectorReport();
+  await jsonl.store.appendCollectorReport(report);
+  await sqlite.store.appendCollectorReport(structuredClone(report));
+
+  const before = {
+    jsonl: jsonl.store.records.length,
+    sqlite: sqlite.store.records.length
+  };
+
+  async function parityRequest(pathname) {
+    const jsonlResponse = await requestJson(`${jsonl.baseUrl}${pathname}`);
+    const sqliteResponse = await requestJson(`${sqlite.baseUrl}${pathname}`);
+    assert.equal(jsonlResponse.response.status, 200);
+    assert.equal(sqliteResponse.response.status, 200);
+    return [jsonlResponse.body, sqliteResponse.body];
+  }
+
+  const [jsonlHealth, sqliteHealth] = await parityRequest('/health');
+  assert.deepEqual(sqliteHealth, jsonlHealth);
+
+  const [jsonlCoverage, sqliteCoverage] = await parityRequest(
+    '/collectors/controller-snapshot/evidence-coverage?source_kind=workspace_file&confidence_level=high&limit=10'
+  );
+  assert.deepEqual(sqliteCoverage, jsonlCoverage);
+  assert.deepEqual(jsonlCoverage.item.agent_items.map((item) => item.agent_id), [
+    'app-engineering'
+  ]);
+
+  const [jsonlSourceHealth, sqliteSourceHealth] = await parityRequest(
+    '/collectors/controller-snapshot/source-health?status=missing&limit=10'
+  );
+  assert.deepEqual(sqliteSourceHealth, jsonlSourceHealth);
+  assert.deepEqual(jsonlSourceHealth.item.agent_items.map((item) => item.agent_id), [
+    'protocol-engineering'
+  ]);
+
+  const projectEvidenceRecords = (body) =>
+    body.items.map((item) => ({
+      observed_at: item.observed_at,
+      collected_at: item.collected_at,
+      agent_id: item.agent_id,
+      source_kind: item.source_kind,
+      evidence_ref: item.evidence_ref,
+      evidence_role: item.evidence_role,
+      source_status: item.source_status,
+      output_candidate: item.output_candidate,
+      collector_snapshot_id: item.collector_snapshot_id,
+      correlation_id: item.correlation_id
+    }));
+
+  const [jsonlMapped, sqliteMapped] = await parityRequest(
+    '/evidence-records?mapped=true&output_candidate=true&observed_since=2026-03-09T18%3A04%3A30.000Z&observed_until=2026-03-09T18%3A05%3A30.000Z&collected_since=2026-03-09T18%3A06%3A00.000Z&collected_until=2026-03-09T18%3A06%3A00.000Z&newest_first=true&limit=10'
+  );
+  assert.deepEqual(projectEvidenceRecords(sqliteMapped), projectEvidenceRecords(jsonlMapped));
+  assert.deepEqual(projectEvidenceRecords(jsonlMapped).map((item) => item.evidence_ref), [
+    'tmux://5-web3-app-engineering/0.1',
+    '/tmp/route-parity/app/outbox.md'
+  ]);
+
+  const [jsonlUnmapped, sqliteUnmapped] = await parityRequest(
+    '/evidence-records?mapped=false&output_candidate=false&limit=10'
+  );
+  assert.deepEqual(projectEvidenceRecords(sqliteUnmapped), projectEvidenceRecords(jsonlUnmapped));
+  assert.deepEqual(projectEvidenceRecords(jsonlUnmapped).map((item) => item.evidence_ref), [
+    'tmux://unmapped-route-parity/0.0'
+  ]);
+
+  assert.equal(jsonl.store.records.length, before.jsonl);
+  assert.equal(sqlite.store.records.length, before.sqlite);
 });
 
 test('collector snapshot POST exposes shared artifact rollups for refs shared by multiple agents', async (t) => {

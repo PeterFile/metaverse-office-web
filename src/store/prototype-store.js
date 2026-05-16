@@ -532,11 +532,19 @@ class PrototypeStore {
     const sourceStatus = normalizeFilterValue(filters.source_status);
     const collectorSnapshotId = normalizeFilterValue(filters.collector_snapshot_id);
     const correlationId = normalizeFilterValue(filters.correlation_id);
+    const mapped = normalizeOptionalBoolean(filters.mapped);
     const newestFirst = normalizeOptionalBoolean(filters.newest_first) === true;
     const limit = parseLimit(filters.limit);
 
     const records = this.evidenceRecords
       .filter((record) => !agentId || record.agent_id === agentId)
+      .filter(
+        (record) =>
+          mapped === null ||
+          (mapped
+            ? typeof record.agent_id === 'string' && record.agent_id.length > 0
+            : record.agent_id === null)
+      )
       .filter((record) => !sourceKind || record.source_kind === sourceKind)
       .filter((record) => !evidenceRole || record.evidence_role === evidenceRole)
       .filter((record) => outputCandidate === null || record.output_candidate === outputCandidate)

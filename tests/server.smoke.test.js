@@ -5055,6 +5055,30 @@ test('GET /evidence-records lists stored evidence records read-only with exact f
     }
   ]);
 
+  const mappedOnly = await requestJson(`${baseUrl}/evidence-records?mapped=true&limit=10`);
+  assert.equal(mappedOnly.response.status, 200);
+  assert.ok(mappedOnly.body.items.length > 0);
+  assert.ok(mappedOnly.body.items.every((item) => item.agent_id !== null));
+
+  const unmappedOnly = await requestJson(`${baseUrl}/evidence-records?mapped=false&limit=10`);
+  assert.equal(unmappedOnly.response.status, 200);
+  assert.deepEqual(unmappedOnly.body.items.map((item) => item.evidence_ref), [
+    'tmux://unmapped-session/0.0'
+  ]);
+
+  const unmappedWithAgent = await requestJson(
+    `${baseUrl}/evidence-records?mapped=false&agent_id=app-engineering&limit=10`
+  );
+  assert.equal(unmappedWithAgent.response.status, 200);
+  assert.deepEqual(unmappedWithAgent.body.items, []);
+
+  const invalidMapped = await requestJson(`${baseUrl}/evidence-records?mapped=maybe&limit=2`);
+  assert.equal(invalidMapped.response.status, 200);
+  assert.deepEqual(invalidMapped.body.items.map((item) => item.evidence_ref), [
+    '/tmp/evidence-query/app',
+    '/tmp/evidence-query/app/inbox.md'
+  ]);
+
   const exactDrilldown = await requestJson(
     `${baseUrl}/evidence-records?evidence_ref=${encodeURIComponent('/tmp/evidence-query/app/outbox.md')}&source_status=observed&collector_snapshot_id=${encodeURIComponent('collector-snapshot:2026-03-09T18:06:00.000Z')}&correlation_id=${encodeURIComponent('collector-snapshot:2026-03-09T18:06:00.000Z')}`
   );

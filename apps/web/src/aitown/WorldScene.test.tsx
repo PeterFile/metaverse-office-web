@@ -2187,12 +2187,14 @@ describe('WorldScene watch overlay caption gating', () => {
       });
     });
 
-    const inspection = readViewportInspector()?.read();
-    const center = readViewportCenter();
-    const expectedBiasX = (inspection?.clampPadding.right ?? 0) / ((inspection?.scale ?? 1) * 2);
+    await waitFor(() => {
+      const inspection = readViewportInspector()?.read();
+      const center = readViewportCenter();
+      const expectedBiasX = (inspection?.clampPadding.right ?? 0) / ((inspection?.scale ?? 1) * 2);
 
-    expect(center.x).toBeCloseTo((selectedAgent?.position.x ?? 0) + expectedBiasX, 4);
-    expect(center.y).toBeCloseTo(selectedAgent?.position.y ?? 0, 4);
+      expect(center.x).toBeCloseTo((selectedAgent?.position.x ?? 0) + expectedBiasX, 4);
+      expect(center.y).toBeCloseTo(selectedAgent?.position.y ?? 0, 4);
+    });
   });
 
   it('biases selected-agent recenter into the split-topline safe lane before Hub opens', async () => {
@@ -5045,6 +5047,10 @@ describe('WorldScene watch overlay caption gating', () => {
         top: 56,
         right: 180
       });
+    });
+
+    await act(async () => {
+      await Promise.resolve();
     });
 
     hostRect.mockClear();

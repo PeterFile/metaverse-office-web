@@ -119,6 +119,19 @@ type EvidenceCoverageFocusItem = {
   coverageItem: CollectorEvidenceCoverageAgentItem | null;
 };
 
+type EvidenceCoverageReadState = {
+  data: CollectorEvidenceCoverage | null;
+  error: string | null;
+  state: LoadState;
+};
+
+type HudReadModelStatus = {
+  label: string;
+  summary: string;
+  detail: string;
+  tone: 'unavailable';
+};
+
 type SelectedAgentTimelineReplayPayload = {
   targetAgentId: string;
   timelineReplay: TimelineReplayResponse;
@@ -482,6 +495,75 @@ function resolveEvidenceCoverageFocusItems(
     })
     .filter((item): item is EvidenceCoverageFocusItem => item !== null)
     .slice(0, 3);
+}
+
+function formatUnknownError(error: unknown) {
+  return error instanceof Error ? error.message : 'unknown_error';
+}
+
+function resolveEvidenceCoverageReadModelStatus(
+  coverageResource: EvidenceCoverageReadState
+): HudReadModelStatus | null {
+  const { data, error, state } = coverageResource;
+
+  if (data || state === 'loading') {
+    return null;
+  }
+
+  if (error) {
+    return {
+      label: 'Evidence coverage',
+      summary: 'Unavailable',
+      detail: `Read model unavailable · ${error}`,
+      tone: 'unavailable'
+    };
+  }
+
+  if (state === 'ready') {
+    return {
+      label: 'Evidence coverage',
+      summary: 'No snapshot',
+      detail: 'Read model has no evidence coverage snapshot yet.',
+      tone: 'unavailable'
+    };
+  }
+
+  return null;
+}
+
+function resolveSourceHealthReadModelStatus(
+  sourceHealthResource: {
+    data: CollectorSourceHealthProjection | null;
+    error: string | null;
+    state: LoadState;
+  },
+  latestSourceHealth: CollectorSourceHealthProjection | null
+): HudReadModelStatus | null {
+  const data = latestSourceHealth ?? sourceHealthResource.data;
+
+  if (data || sourceHealthResource.state === 'loading') {
+    return null;
+  }
+
+  if (sourceHealthResource.error) {
+    return {
+      label: 'Source health',
+      summary: 'Unavailable',
+      detail: `Read model unavailable · ${sourceHealthResource.error}`,
+      tone: 'unavailable'
+    };
+  }
+
+  if (sourceHealthResource.state === 'ready') {
+    return {
+      label: 'Source health',
+      summary: 'No snapshot',
+      detail: 'Read model has no source health snapshot yet.',
+      tone: 'unavailable'
+    };
+  }
+
+  return null;
 }
 
 function resolveHotZoneFocusMeta(zone: HotZoneSummary) {
@@ -957,6 +1039,10 @@ function AppInner() {
     useState<SelectedAgentDrilldownTab>('now');
   const [defaultEvidenceCoverage, setDefaultEvidenceCoverage] =
     useState<CollectorEvidenceCoverage | null>(null);
+  const [defaultEvidenceCoverageState, setDefaultEvidenceCoverageState] =
+    useState<LoadState>('idle');
+  const [defaultEvidenceCoverageError, setDefaultEvidenceCoverageError] =
+    useState<string | null>(null);
   const [latestSourceHealth, setLatestSourceHealth] =
     useState<CollectorSourceHealthProjection | null>(null);
   const [sourceGapFocusIntent, setSourceGapFocusIntent] =
@@ -1057,16 +1143,22 @@ function AppInner() {
     }
 
     defaultEvidenceCoverageRequestedRef.current = true;
+    setDefaultEvidenceCoverageState('loading');
+    setDefaultEvidenceCoverageError(null);
     const controller = new AbortController();
     let settled = false;
 
     void fetchCollectorEvidenceCoverage({ signal: controller.signal })
       .then((coverage) => {
         setDefaultEvidenceCoverage(coverage);
+        setDefaultEvidenceCoverageError(null);
+        setDefaultEvidenceCoverageState('ready');
       })
       .catch((error: unknown) => {
         if (!(error instanceof Error && error.name === 'AbortError')) {
           setDefaultEvidenceCoverage(null);
+          setDefaultEvidenceCoverageError(formatUnknownError(error));
+          setDefaultEvidenceCoverageState('error');
         }
       })
       .finally(() => {
@@ -1084,8 +1176,18 @@ function AppInner() {
   useEffect(() => {
     if (collectorSnapshotResource.state === 'ready') {
       setDefaultEvidenceCoverage(collectorSnapshotResource.data?.evidence_coverage ?? null);
+      setDefaultEvidenceCoverageError(collectorSnapshotResource.error);
+      setDefaultEvidenceCoverageState('ready');
+    } else if (collectorSnapshotResource.state === 'error' && !defaultEvidenceCoverage) {
+      setDefaultEvidenceCoverageError(collectorSnapshotResource.error);
+      setDefaultEvidenceCoverageState('error');
     }
-  }, [collectorSnapshotResource.data, collectorSnapshotResource.state]);
+  }, [
+    collectorSnapshotResource.data,
+    collectorSnapshotResource.error,
+    collectorSnapshotResource.state,
+    defaultEvidenceCoverage
+  ]);
 
   const operationsQueueEnabled = hubOpen && (selectedAgentId === null || selectedOperationSelection !== null);
 
@@ -1327,6 +1429,19 @@ function AppInner() {
         : deriveSourceGapChips(latestSourceHealth, overviewResource.data?.agents),
     [hubOpen, latestSourceHealth, overviewResource.data?.agents, selectedAgentId]
   );
+  const hudReadModelsVisible = !hubOpen && selectedAgentId === null;
+  const evidenceCoverageReadModelStatus = hudReadModelsVisible
+    ? resolveEvidenceCoverageReadModelStatus(
+        {
+          data: visibleEvidenceCoverage,
+          error: defaultEvidenceCoverageError,
+          state: defaultEvidenceCoverageState
+        }
+      )
+    : null;
+  const sourceHealthReadModelStatus = hudReadModelsVisible
+    ? resolveSourceHealthReadModelStatus(sourceHealthResource, latestSourceHealth)
+    : null;
 
   const selectedAgent = resolveSelectedAgent(
     selectedAgentId,
@@ -2512,7 +2627,13 @@ function AppInner() {
   const hudSignalSummary = [
     `Viewport · ${viewportToplineStatus.status}`,
     evidenceCoverageFocusItems.length > 0 ? `Evidence · ${evidenceCoverageFocusItems.length}` : null,
+    evidenceCoverageReadModelStatus
+      ? `${evidenceCoverageReadModelStatus.label} · ${evidenceCoverageReadModelStatus.summary}`
+      : null,
     sourceGapChips.length > 0 ? `Source gaps · ${sourceGapChips.length}` : null,
+    sourceHealthReadModelStatus
+      ? `${sourceHealthReadModelStatus.label} · ${sourceHealthReadModelStatus.summary}`
+      : null,
     hotZones.length > 0 ? `Zones · ${hotZones.length}` : null
   ]
     .filter(Boolean)
@@ -2603,6 +2724,19 @@ function AppInner() {
                     <span className="aitown-panel__topline-copy">Drag to pan. Wheel to zoom. Tap or click an agent to inspect.</span>
                     <span className="aitown-panel__topline-copy">{viewportToplineStatus.snapshot}</span>
                   </section>
+                  {evidenceCoverageReadModelStatus ? (
+                    <section
+                      className={`aitown-panel__signal-panel aitown-panel__read-model-status aitown-panel__read-model-status--${evidenceCoverageReadModelStatus.tone}`}
+                      role="region"
+                      aria-label="Evidence coverage read model status"
+                    >
+                      <div className="aitown-panel__evidence-focus__head">
+                        <strong className="aitown-panel__topline-title">{evidenceCoverageReadModelStatus.label}</strong>
+                        <span className="aitown-panel__topline-copy">{evidenceCoverageReadModelStatus.summary}</span>
+                      </div>
+                      <span className="aitown-panel__topline-copy">{evidenceCoverageReadModelStatus.detail}</span>
+                    </section>
+                  ) : null}
                   {evidenceCoverageFocusItems.length > 0 ? (
                     <section
                       className="aitown-panel__signal-panel aitown-panel__evidence-focus"
@@ -2646,6 +2780,19 @@ function AppInner() {
                           </button>
                         ))}
                       </span>
+                    </section>
+                  ) : null}
+                  {sourceHealthReadModelStatus ? (
+                    <section
+                      className={`aitown-panel__signal-panel aitown-panel__read-model-status aitown-panel__read-model-status--${sourceHealthReadModelStatus.tone}`}
+                      role="region"
+                      aria-label="Source health read model status"
+                    >
+                      <div className="aitown-panel__evidence-focus__head">
+                        <strong className="aitown-panel__topline-title">{sourceHealthReadModelStatus.label}</strong>
+                        <span className="aitown-panel__topline-copy">{sourceHealthReadModelStatus.summary}</span>
+                      </div>
+                      <span className="aitown-panel__topline-copy">{sourceHealthReadModelStatus.detail}</span>
                     </section>
                   ) : null}
                   {sourceGapChips.length > 0 ? (

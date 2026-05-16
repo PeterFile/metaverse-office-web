@@ -141,6 +141,7 @@ type AgentMotionState = {
   animationFacing: Facing;
   gatewayArrivedThisFrame: boolean;
   homeChangedThisFrame: boolean;
+  homeArrivalPending: boolean;
 };
 
 const GENERATED_AGENT_BODY_SCALE = 0.46;
@@ -341,6 +342,10 @@ function syncAgentCharacterAnimation(
   const nextFacing = moving ? resolveAgentTravelFacing(deltaX, deltaY, state.facing) : state.facing;
   const textures = characterTextures[nextFacing] ?? characterTextures.down;
 
+  if (moving) {
+    state.facing = nextFacing;
+  }
+
   if (state.animationFacing !== nextFacing) {
     character.textures = textures;
     state.animationFacing = nextFacing;
@@ -470,6 +475,13 @@ function createAgentMotionState(
     previousState.currentMapId === currentMapId &&
     previousState.targetX === agent.position.x &&
     previousState.targetY === agent.position.y;
+  const homeArrivalPending =
+    homeChangedThisFrame ||
+    (canReusePreviousState &&
+      previousState.homeArrivalPending &&
+      previousState.currentMapId === currentMapId &&
+      previousState.homeX === agent.position.x &&
+      previousState.homeY === agent.position.y);
   const canReuseTarget =
     canReusePreviousState &&
     !homeChangedThisFrame &&
@@ -515,7 +527,8 @@ function createAgentMotionState(
     facing: agent.facing,
     animationFacing: agent.facing,
     gatewayArrivedThisFrame: false,
-    homeChangedThisFrame
+    homeChangedThisFrame,
+    homeArrivalPending
   };
 
   container.position.set(state.visualX, state.visualY);
@@ -607,6 +620,10 @@ function advanceAgentMotionAfterArrival(
   return advanceAgentMotionWaypoint(state);
 }
 
+function shouldHoldAgentAtUpdatedSceneCoordinate(state: AgentMotionState) {
+  return state.homeArrivalPending && state.routeIndex === 0;
+}
+
 function applyTriggeredGatewayTravel(
   state: AgentMotionState,
   gateways: AiTownSceneModel['gateways'],
@@ -666,7 +683,17 @@ function applyAgentMotionFrame(
     if (distanceToTarget <= state.profile.arrivalDistance) {
       state.visualX = state.targetX;
       state.visualY = state.targetY;
+      const shouldHoldUpdatedSceneCoordinate = shouldHoldAgentAtUpdatedSceneCoordinate(state);
       state.homeChangedThisFrame = false;
+      state.container.position.set(state.visualX, state.visualY);
+      state.container.zIndex = state.visualY;
+
+      if (shouldHoldUpdatedSceneCoordinate) {
+        state.homeArrivalPending = false;
+        syncAgentCharacterAnimation(state, false, 0, 0, 0);
+        continue;
+      }
+
       const hasNextWaypoint = advanceAgentMotionAfterArrival(state, options.onGatewayTravel);
       deltaX = state.targetX - state.visualX;
       deltaY = state.targetY - state.visualY;
@@ -693,6 +720,17 @@ function applyAgentMotionFrame(
     if (remainingDistance <= state.profile.arrivalDistance) {
       state.visualX = state.targetX;
       state.visualY = state.targetY;
+      const shouldHoldUpdatedSceneCoordinate = shouldHoldAgentAtUpdatedSceneCoordinate(state);
+
+      if (shouldHoldUpdatedSceneCoordinate) {
+        state.homeChangedThisFrame = false;
+        state.homeArrivalPending = false;
+        syncAgentCharacterAnimation(state, false, 0, 0, 0);
+        state.container.position.set(state.visualX, state.visualY);
+        state.container.zIndex = state.visualY;
+        continue;
+      }
+
       const hasNextWaypoint = advanceAgentMotionAfterArrival(state, options.onGatewayTravel);
       const nextDeltaX = state.targetX - state.visualX;
       const nextDeltaY = state.targetY - state.visualY;

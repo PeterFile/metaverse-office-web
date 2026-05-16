@@ -5,6 +5,7 @@ import type { CollectorSourceHealthProjection } from '../types';
 
 const sourceHealth: CollectorSourceHealthProjection = {
   collected_at: '2026-03-16T09:01:00.000Z',
+  collector_snapshot_id: 'collector-snapshot:2026-03-16T09:01:00.000Z',
   actor_id: 'team-lead',
   summary: {
     agent_count: 3,

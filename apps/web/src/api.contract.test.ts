@@ -1938,6 +1938,7 @@ function expectCollectorEvidenceCoverageContract(coverage: CollectorEvidenceCove
 
 function expectCollectorSourceHealthContract(sourceHealth: CollectorSourceHealthProjection | null) {
   expect(sourceHealth?.collected_at).toBe('2026-03-09T18:59:00.000Z');
+  expect(sourceHealth?.collector_snapshot_id).toBe('collector-snapshot:2026-03-09T18:59:00.000Z');
   expect(sourceHealth?.actor_id).toBe('team-lead');
   expect(sourceHealth).toMatchObject({
     summary: {

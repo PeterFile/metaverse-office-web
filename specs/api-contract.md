@@ -76,7 +76,7 @@ This is the current API/read-model contract for Metaverse Office Web. It grew ou
 - source-health filters are exact and additive: `agent_id`, `source_kind`, `status`, and post-filter `limit`; blank values are ignored, invalid or negative limits use the existing read-model default, and unknown `source_kind`/`status` values return an empty bounded projection rather than an error
 - source-health `source_kind` accepts `workspace_root`, `workspace_file`, `workspace_files`, `tmux_observation`, `tmux_session`, `hermes_profile`, and `hermes_session`; `workspace_file`/`workspace_files` project `source_health.workspace_files`, `tmux_observation`/`tmux_session` project `source_health.tmux_session`, and Hermes kinds project their matching `source_health` keys
 - source-health `status` matches existing `source_health` statuses (`observed`, `degraded`, `missing`, `error`) only; inbound `inbox.md`, `workspace_root`, Hermes profile/session presence, and runtime source gaps remain source/presence signals and must not imply output, liveness, state updates, task updates, or alert resolution
-- source-health responses include `collected_at`, `actor_id`, summary `source_kind_buckets` and `status_buckets`, bounded `agent_items`, `runtime_source_evidence.unmapped_tmux_sessions`, and `runtime_source_evidence.unmapped_hermes_sources` when present; each agent row includes `agent_id`, `workspace_root`, `session_ref`, projected `source_health`, `evidence_ref_count`, `evidence_refs`, and `latest_evidence_at` only when already derivable from the stored report
+- source-health responses include `collected_at`, top-level `collector_snapshot_id` for the latest stored collector snapshot, `actor_id`, summary `source_kind_buckets` and `status_buckets`, bounded `agent_items`, `runtime_source_evidence.unmapped_tmux_sessions`, and `runtime_source_evidence.unmapped_hermes_sources` when present; each agent row includes `agent_id`, `workspace_root`, `session_ref`, projected `source_health`, `evidence_ref_count`, `evidence_refs`, and `latest_evidence_at` only when already derivable from the stored report
 - collector-derived activity uses canonical event types only: `agent_state_changed` and `agent_wrote_file`
 - collector-derived supervision uses existing canonical event types only: `peer_watch_alert_raised` and `peer_watch_alert_resolved`
 - collector-derived `agent_state_changed` requires evidence-backed state drift versus the previously known projection and uses `tmux_observation` or `workspace_file` as the source kind
@@ -120,6 +120,7 @@ This is the current API/read-model contract for Metaverse Office Web. It grew ou
 {
   "item": {
     "collected_at": "2026-03-09T18:05:00.000Z",
+    "collector_snapshot_id": "collector-snapshot:2026-03-09T18:05:00.000Z",
     "actor_id": "team-lead",
     "summary": {
       "agent_count": 1,

@@ -4987,6 +4987,7 @@ test('GET /collectors/controller-snapshot/source-health projects latest source h
   const sourceHealth = await requestJson(`${baseUrl}/collectors/controller-snapshot/source-health`);
   assert.equal(sourceHealth.response.status, 200);
   assert.equal(sourceHealth.body.item.collected_at, '2026-03-09T18:05:00.000Z');
+  assert.equal(sourceHealth.body.item.collector_snapshot_id, 'collector-snapshot:2026-03-09T18:05:00.000Z');
   assert.equal(sourceHealth.body.item.actor_id, 'team-lead');
   assert.deepEqual(sourceHealth.body.item.runtime_source_evidence.unmapped_tmux_sessions, [
     {
@@ -5012,6 +5013,7 @@ test('GET /collectors/controller-snapshot/source-health projects latest source h
   const missingTmux = await requestJson(
     `${baseUrl}/collectors/controller-snapshot/source-health?source_kind=tmux_observation&status=missing`
   );
+  assert.equal(missingTmux.body.item.collector_snapshot_id, 'collector-snapshot:2026-03-09T18:05:00.000Z');
   assert.deepEqual(missingTmux.body.item.agent_items.map((item) => item.agent_id), [
     'growth-revenue'
   ]);

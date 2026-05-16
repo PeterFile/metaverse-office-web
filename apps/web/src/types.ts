@@ -262,6 +262,7 @@ export interface CollectorSourceHealthProjectionAgentItem {
 
 export interface CollectorSourceHealthProjection {
   collected_at?: string | null;
+  collector_snapshot_id: string;
   actor_id?: string | null;
   summary: {
     agent_count: number;

@@ -2814,6 +2814,105 @@ afterEach(() => {
     expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
   });
 
+  it('shows selected-agent source-health gap facts in the world inspect peek without Hub drilldown reads', async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString();
+
+      if (url === collectorSourceHealthUrl) {
+        return jsonResponse({
+          item: {
+            collector_snapshot_id: 'collector-source-health-1',
+            collected_at: '2026-03-16T09:01:00.000Z',
+            actor_id: 'team-lead',
+            summary: {
+              agent_count: 1,
+              source_kind_buckets: {
+                workspace_root: { observed: 0, degraded: 0, missing: 0, error: 0 },
+                workspace_files: { observed: 0, degraded: 1, missing: 0, error: 0 },
+                tmux_session: { observed: 0, degraded: 0, missing: 0, error: 0 },
+                hermes_profile: { observed: 0, degraded: 0, missing: 0, error: 0 },
+                hermes_session: { observed: 0, degraded: 0, missing: 1, error: 0 }
+              },
+              status_buckets: {
+                observed: 0,
+                degraded: 1,
+                missing: 1,
+                error: 0
+              }
+            },
+            agent_items: [
+              {
+                agent_id: 'app-engineering',
+                workspace_root: '/tmp/app-engineering',
+                session_ref: '5-web3-app-engineering',
+                source_health: {
+                  workspace_files: {
+                    status: 'degraded',
+                    expected_files: ['inbox.md', 'outbox.md', 'todo.md'],
+                    observed_count: 1,
+                    missing_count: 2,
+                    error_count: 0,
+                    last_observed_at: '2026-03-16T08:58:30.000Z',
+                    degraded_reasons: ['missing workspace files: inbox.md, todo.md']
+                  },
+                  hermes_session: {
+                    status: 'missing',
+                    expected_session_ref: '5-web3-app-engineering',
+                    evidence_ref: 'hermes://session/5-web3-app-engineering',
+                    last_observed_at: null,
+                    degraded_reasons: ['Hermes session missing']
+                  }
+                },
+                evidence_ref_count: 4,
+                evidence_refs: ['/tmp/app-engineering/outbox.md', 'hermes://session/5-web3-app-engineering'],
+                latest_evidence_at: '2026-03-16T08:58:40.000Z'
+              }
+            ],
+            runtime_source_evidence: {
+              unmapped_tmux_sessions: [],
+              unmapped_hermes_sources: []
+            }
+          }
+        });
+      }
+
+      return resolveTestFetchResponse(url);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<App />);
+
+    const liveFocusButton = await screen.findByRole('button', {
+      name: 'Inspect live focus agent App Engineering Agent'
+    });
+    expect(screen.queryByRole('dialog', { name: 'Hub' })).not.toBeInTheDocument();
+
+    await user.click(liveFocusButton);
+
+    expect(screen.queryByRole('dialog', { name: 'Hub' })).not.toBeInTheDocument();
+    const inspectPeek = await screen.findByRole('region', { name: 'Selected agent inspect peek' });
+    expect(within(inspectPeek).getByText('App Engineering Agent')).toBeVisible();
+    await waitFor(() => {
+      const requestedUrls = fetchMock.mock.calls.map(([request]) => String(request));
+      expect(requestedUrls).toContain(collectorSourceHealthUrl);
+      expect(requestedUrls).not.toContain(workflowUrl);
+      expect(requestedUrls).not.toContain(appEngineeringEvidenceRecordsUrl);
+    });
+    const sourceHealthFact = await waitFor(() =>
+      within(inspectPeek).getByText('Source health · Hermes session · missing · 4 refs · Hermes session missing')
+    );
+    expect(sourceHealthFact).toBeVisible();
+    expect(inspectPeek).not.toHaveTextContent('/tmp/');
+    expect(inspectPeek).not.toHaveTextContent('hermes://');
+    expect(inspectPeek).not.toHaveTextContent('5-web3-app-engineering');
+
+    await user.click(await screen.findByRole('button', { name: 'Queue' }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole('region', { name: 'Selected agent inspect peek' })).not.toBeInTheDocument();
+    });
+  });
+
   it('surfaces a compact top agent roster without zone or desk copy', async () => {
     const user = userEvent.setup();
     render(<App />);

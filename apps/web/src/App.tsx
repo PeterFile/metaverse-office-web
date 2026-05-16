@@ -39,7 +39,7 @@ import {
 import { SceneStatusLegend } from './aitown/SceneStatusLegend';
 import { resolveRolePawnAssetUrl } from './aitown/rolePawnAssets';
 import { adaptWorldToScene } from './aitown/sceneAdapter';
-import { deriveSourceGapChips } from './aitown/sourceGapSignals';
+import { deriveSelectedAgentSourceGapFact, deriveSourceGapChips } from './aitown/sourceGapSignals';
 import { WorldProvider, useWorld } from './context/WorldContext';
 import { usePolledResource, type LoadState } from './hooks/usePolledResource';
 import { getHubFocusableElements, isHubElementVisible } from './hubFocus';
@@ -2624,6 +2624,18 @@ function AppInner() {
     workflow: activeWorkflow?.detail ?? null,
     correlationId: selectedAgentPeekCorrelationId
   });
+  const selectedAgentSourceGapFact = deriveSelectedAgentSourceGapFact(latestSourceHealth, selectedAgentId);
+  const selectedAgentSourceGapSummary = selectedAgentSourceGapFact
+    ? [
+        'Source health',
+        selectedAgentSourceGapFact.sourceLabel,
+        selectedAgentSourceGapFact.status,
+        selectedAgentSourceGapFact.countLabel,
+        selectedAgentSourceGapFact.reason
+      ]
+        .filter(Boolean)
+        .join(' · ')
+    : null;
   const hudSignalSummary = [
     `Viewport · ${viewportToplineStatus.status}`,
     evidenceCoverageFocusItems.length > 0 ? `Evidence · ${evidenceCoverageFocusItems.length}` : null,
@@ -2912,6 +2924,7 @@ function AppInner() {
                 <span className="aitown-selected-agent-peek__eyebrow">Selected agent</span>
                 <strong>{selectedAgent.display_name}</strong>
                 <span>{`${HOT_ZONE_SEVERITY_LABELS[selectedAgentPeekSeverity]} · ${selectedAgentPeekStatus}`}</span>
+                {selectedAgentSourceGapSummary ? <span>{selectedAgentSourceGapSummary}</span> : null}
               </div>
               <details className="aitown-selected-agent-peek__facts">
                 <summary>Inspect facts</summary>

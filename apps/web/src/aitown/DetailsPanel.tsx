@@ -3798,6 +3798,7 @@ function renderSourceDrilldownGroups(
       key={group.key}
       id={options.idPrefix ? `${options.idPrefix}-${group.key}` : undefined}
       data-source-gap-focus={options.focusedGroupKey === group.key ? 'true' : undefined}
+      open={options.focusedGroupKey === group.key ? true : undefined}
       tabIndex={options.idPrefix ? -1 : undefined}
     >
       <summary>{labelPrefix ? `${labelPrefix} · ${group.summary}` : group.summary}</summary>

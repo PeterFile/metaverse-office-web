@@ -8098,6 +8098,13 @@ describe('DetailsPanel accountability signals', () => {
               observed_count: 1,
               last_observed_at: '2026-03-16T08:57:00.000Z',
               degraded_reasons: ['expected tmux pane missing']
+            },
+            hermes_session: {
+              status: 'observed',
+              expected_session_ref: 'hermes-session-app',
+              evidence_ref: 'https://hermes.example.test/runtime/sessions/hermes-session-app?long=true',
+              last_observed_at: '2026-03-16T08:58:00.000Z',
+              degraded_reasons: []
             }
           }
         }
@@ -8125,6 +8132,9 @@ describe('DetailsPanel accountability signals', () => {
     expect(collectorObservationSection!).toHaveTextContent('Expected tmux session · sess-1');
     expect(collectorObservationSection!).toHaveTextContent('Tmux panes observed · 1');
     expect(collectorObservationSection!).toHaveTextContent('Tmux session reason · expected tmux pane missing');
+    expect(
+      within(collectorObservationSection!).getByText('Source health · Hermes source drilldown · observed')
+    ).toBeVisible();
   });
 
   it('opens the selected-agent collector panel and focuses the exact workspace source gap group', async () => {

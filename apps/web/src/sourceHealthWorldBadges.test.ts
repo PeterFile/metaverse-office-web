@@ -57,6 +57,7 @@ describe('sourceHealthWorldBadges', () => {
   it('omits mapped Hermes sources that are only observed', () => {
     const sourceHealth: CollectorSourceHealthProjection = {
       collected_at: '2026-03-16T08:59:00.000Z',
+      collector_snapshot_id: 'collector-snapshot:2026-03-16T08:59:00.000Z',
       actor_id: 'team-lead',
       summary: {
         agent_count: 1,

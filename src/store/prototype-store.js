@@ -2750,6 +2750,9 @@ function projectCollectorSourceHealth(report, filters = {}) {
 
   return {
     collected_at: report.collected_at || null,
+    collector_snapshot_id: createCollectorCorrelationId(
+      normalizeCollectorTimestamp(report.collected_at) || report.collected_at || 'unknown'
+    ),
     actor_id: report.actor_id || null,
     summary: createSourceHealthSummary(selectedItems, sourceHealthKeys, status),
     runtime_source_evidence: cloneRuntimeSourceEvidence(report.runtime_source_evidence),

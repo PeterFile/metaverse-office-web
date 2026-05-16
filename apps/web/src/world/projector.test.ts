@@ -151,6 +151,7 @@ describe('projectWorldState', () => {
   it('projects source evidence health without changing runtime severity semantics', () => {
     const sourceHealth: CollectorSourceHealthProjection = {
       collected_at: NOW,
+      collector_snapshot_id: `collector-snapshot:${NOW}`,
       actor_id: 'team-lead',
       summary: {
         agent_count: 1,
@@ -201,6 +202,7 @@ describe('projectWorldState', () => {
   it('projects Hermes-only source evidence health without changing severity or phase', () => {
     const sourceHealth: CollectorSourceHealthProjection = {
       collected_at: NOW,
+      collector_snapshot_id: `collector-snapshot:${NOW}`,
       actor_id: 'team-lead',
       summary: {
         agent_count: 1,

@@ -456,6 +456,7 @@ describe('fetchCollectorSourceHealth', () => {
           JSON.stringify({
             item: {
               collected_at: '2026-03-09T18:05:00.000Z',
+              collector_snapshot_id: 'collector-snapshot:2026-03-09T18:05:00.000Z',
               actor_id: 'team-lead',
               summary: {
                 agent_count: 1,
@@ -534,6 +535,7 @@ describe('fetchCollectorSourceHealth', () => {
     const sourceHealth = await fetchCollectorSourceHealth({ limit: 7 });
 
     expect(sourceHealth).not.toBeNull();
+    expect(sourceHealth?.collector_snapshot_id).toBe('collector-snapshot:2026-03-09T18:05:00.000Z');
     expect(sourceHealth?.summary.status_buckets.degraded).toBe(1);
     expect(sourceHealth?.agent_items[0].source_health.workspace_files?.status).toBe('degraded');
     expect(sourceHealth?.agent_items[0].source_health.hermes_session?.status).toBe('degraded');

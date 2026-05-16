@@ -1,6 +1,10 @@
 const path = require('node:path');
 
 const { createAppServer } = require('./server');
+const {
+  createControllerSnapshotCollector,
+  createHermesRuntimeSourcesFileReader
+} = require('./collectors/controller-snapshot');
 const { createPrototypeStore } = require('./store/prototype-store');
 
 async function main() {
@@ -31,7 +35,15 @@ async function main() {
         }
       : { filePath }
   );
-  const server = createAppServer({ store, allowedOrigins });
+  const hermesRuntimeSourcesFile = process.env.METAVERSE_OFFICE_HERMES_RUNTIME_SOURCES_FILE;
+  const controllerSnapshotCollector = hermesRuntimeSourcesFile
+    ? createControllerSnapshotCollector({
+        readHermesRuntimeSources: createHermesRuntimeSourcesFileReader({
+          filePath: hermesRuntimeSourcesFile
+        })
+      })
+    : createControllerSnapshotCollector();
+  const server = createAppServer({ store, controllerSnapshotCollector, allowedOrigins });
 
   server.listen(port, () => {
     process.stdout.write(

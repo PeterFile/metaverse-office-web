@@ -1,12 +1,16 @@
 const assert = require('node:assert/strict');
 const { execFile } = require('node:child_process');
-const { mkdtemp, readFile } = require('node:fs/promises');
+const { mkdtemp, readFile, writeFile } = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
 const { promisify } = require('node:util');
 
-const { collectControllerSnapshot } = require('../src/collectors/controller-snapshot');
+const {
+  collectControllerSnapshot,
+  createControllerSnapshotCollector,
+  createHermesRuntimeSourcesFileReader
+} = require('../src/collectors/controller-snapshot');
 const { SEED_AGENTS } = require('../src/domain');
 const { createAppServer } = require('../src/server');
 const { createPrototypeStore } = require('../src/store/prototype-store');
@@ -4733,6 +4737,40 @@ test('collector snapshot endpoints stay read-only on GET and require team-lead o
   assert.equal(snapshotRecord.kind, 'collector_snapshot');
   assert.equal(snapshotRecord.payload.collected_at, '2026-03-09T18:05:00.000Z');
   assert.equal(snapshotRecord.payload.items[0].heartbeat.current_state, 'coding');
+});
+
+test('collector snapshot rejects invalid Hermes runtime file before append', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'metaverse-office-hermes-runtime-'));
+  const runtimeFile = path.join(root, 'runtime-facts.json');
+  await writeFile(
+    runtimeFile,
+    JSON.stringify([
+      {
+        source_kind: 'hermes_profile',
+        profile_id: 'app-profile',
+        status: 'unknown'
+      }
+    ])
+  );
+
+  const controllerSnapshotCollector = createControllerSnapshotCollector({
+    agents: [SEED_AGENTS.find((agent) => agent.agent_id === 'app-engineering')],
+    readPathStat: async () => null,
+    listTmuxPanes: async () => [],
+    readHermesRuntimeSources: createHermesRuntimeSourcesFileReader({ filePath: runtimeFile })
+  });
+  const { baseUrl, storeFile } = await createHarness(t, { controllerSnapshotCollector });
+
+  const collected = await requestJson(`${baseUrl}/collectors/controller-snapshot`, {
+    method: 'POST',
+    headers: {
+      'x-actor-id': 'team-lead'
+    }
+  });
+
+  assert.equal(collected.response.status, 500);
+  assert.equal(collected.body.error, 'internal_error');
+  await assert.rejects(() => readFile(storeFile, 'utf8'), { code: 'ENOENT' });
 });
 
 test('GET /collectors/controller-snapshot/evidence-coverage projects latest coverage read-only with filters', async (t) => {

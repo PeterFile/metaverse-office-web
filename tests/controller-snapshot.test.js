@@ -7,7 +7,8 @@ const test = require('node:test');
 const { SEED_AGENTS } = require('../src/domain');
 const {
   collectControllerSnapshot,
-  createControllerSnapshotCollector
+  createControllerSnapshotCollector,
+  createHermesRuntimeSourcesFileReader
 } = require('../src/collectors/controller-snapshot');
 const { createPrototypeStore } = require('../src/store/prototype-store');
 
@@ -600,6 +601,80 @@ test('collector keeps shared Hermes runtime refs out of shared artifact rollups'
     tmux_observation: 0,
     hermes_profile: 1
   });
+});
+
+test('collector can read opt-in Hermes runtime facts from JSON and JSONL files', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'metaverse-office-hermes-runtime-'));
+  const jsonFile = path.join(root, 'runtime-facts.json');
+  const jsonlFile = path.join(root, 'runtime-facts.jsonl');
+
+  await writeFile(
+    jsonFile,
+    JSON.stringify([
+      {
+        source_kind: 'hermes_profile',
+        agent_id: 'app-engineering',
+        profile_id: 'app-profile',
+        observed_at: '2026-03-09T18:02:00.000Z'
+      }
+    ])
+  );
+  await writeFile(
+    jsonlFile,
+    `${JSON.stringify({
+      source_kind: 'hermes_session',
+      session_ref: '5-web3-app-engineering',
+      status: 'degraded',
+      observed_at: '2026-03-09T18:03:00.000Z',
+      degraded_reasons: ['session heartbeat stale']
+    })}\n`
+  );
+
+  const jsonFacts = await createHermesRuntimeSourcesFileReader({ filePath: jsonFile })();
+  const jsonlFacts = await createHermesRuntimeSourcesFileReader({ filePath: jsonlFile })();
+
+  assert.deepEqual(
+    jsonFacts.map((fact) => fact.evidence_ref),
+    ['hermes://profile/app-profile']
+  );
+  assert.deepEqual(jsonlFacts, [
+    {
+      source_kind: 'hermes_session',
+      agent_id: null,
+      profile_id: null,
+      session_ref: '5-web3-app-engineering',
+      evidence_ref: 'hermes://session/5-web3-app-engineering',
+      status: 'degraded',
+      last_observed_at: '2026-03-09T18:03:00.000Z',
+      degraded_reasons: ['session heartbeat stale'],
+      metadata: {}
+    }
+  ]);
+});
+
+test('collector rejects invalid opt-in Hermes runtime files before producing a report', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'metaverse-office-hermes-runtime-'));
+  const invalidFile = path.join(root, 'runtime-facts.jsonl');
+  await writeFile(
+    invalidFile,
+    `${JSON.stringify({
+      source_kind: 'hermes_profile',
+      profile_id: 'app-profile',
+      observed_at: 'not-a-date'
+    })}\n`
+  );
+
+  const collector = createControllerSnapshotCollector({
+    agents: [SEED_AGENTS.find((agent) => agent.agent_id === 'app-engineering')],
+    readPathStat: async () => null,
+    listTmuxPanes: async () => [],
+    readHermesRuntimeSources: createHermesRuntimeSourcesFileReader({ filePath: invalidFile })
+  });
+
+  await assert.rejects(
+    () => collector.collectSnapshot({ collectedAt: '2026-03-09T18:05:00.000Z' }),
+    /invalid observed timestamp/
+  );
 });
 
 test('store keeps runtime source gaps from overwriting agent output state', async () => {

@@ -171,10 +171,14 @@ export async function fetchCollectorSourceHealth(
 
 export async function fetchEvidenceRecords(
   options: {
-    agentId?: string;
-    sourceKind?: string;
-    evidenceRole?: string;
-    outputCandidate?: boolean;
+    agentId?: string | null;
+    sourceKind?: string | null;
+    evidenceRole?: string | null;
+    evidenceRef?: string | null;
+    sourceStatus?: string | null;
+    collectorSnapshotId?: string | null;
+    correlationId?: string | null;
+    outputCandidate?: boolean | null;
     newestFirst?: boolean;
     limit?: number;
     signal?: AbortSignal;
@@ -190,7 +194,19 @@ export async function fetchEvidenceRecords(
   if (options.evidenceRole) {
     params.set('evidence_role', options.evidenceRole);
   }
-  if (options.outputCandidate !== undefined) {
+  if (options.evidenceRef) {
+    params.set('evidence_ref', options.evidenceRef);
+  }
+  if (options.sourceStatus) {
+    params.set('source_status', options.sourceStatus);
+  }
+  if (options.collectorSnapshotId) {
+    params.set('collector_snapshot_id', options.collectorSnapshotId);
+  }
+  if (options.correlationId) {
+    params.set('correlation_id', options.correlationId);
+  }
+  if (options.outputCandidate !== undefined && options.outputCandidate !== null) {
     params.set('output_candidate', String(options.outputCandidate));
   }
   params.set('newest_first', String(options.newestFirst ?? true));

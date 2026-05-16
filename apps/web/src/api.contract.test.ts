@@ -247,6 +247,63 @@ describe('read-only frontend/backend contract smoke', () => {
     expectCorrelationContract(correlation);
   });
 
+  it('passes evidence-record exact filters through to the real backend', async () => {
+    harness = await createHarness(() => '2026-03-09T19:00:00.000Z');
+    await seedContractSlice(harness.store);
+
+    const nativeFetch = globalThis.fetch.bind(globalThis);
+    const requests: RequestContract[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+        requests.push(getRequestContract(input, harness!.baseUrl, init));
+        return nativeFetch(input, init);
+      })
+    );
+
+    const api = await loadApi(harness.baseUrl);
+    const records = await api.fetchEvidenceRecords({
+      agentId: 'app-engineering',
+      sourceKind: 'workspace_file',
+      evidenceRef: '/tmp/app-engineering/todo.md',
+      sourceStatus: 'degraded',
+      collectorSnapshotId: 'collector-snapshot:2026-03-09T18:59:00.000Z',
+      correlationId: 'collector-snapshot:2026-03-09T18:59:00.000Z',
+      outputCandidate: true,
+      newestFirst: true,
+      limit: 5
+    });
+
+    expect(requests).toEqual([
+      {
+        method: 'GET',
+        origin: harness.baseUrl,
+        pathname: '/evidence-records',
+        query: [
+          ['agent_id', 'app-engineering'],
+          ['collector_snapshot_id', 'collector-snapshot:2026-03-09T18:59:00.000Z'],
+          ['correlation_id', 'collector-snapshot:2026-03-09T18:59:00.000Z'],
+          ['evidence_ref', '/tmp/app-engineering/todo.md'],
+          ['limit', '5'],
+          ['newest_first', 'true'],
+          ['output_candidate', 'true'],
+          ['source_kind', 'workspace_file'],
+          ['source_status', 'degraded']
+        ]
+      }
+    ]);
+    expect(records).toHaveLength(1);
+    expect(records[0]).toMatchObject({
+      agent_id: 'app-engineering',
+      source_kind: 'workspace_file',
+      evidence_ref: '/tmp/app-engineering/todo.md',
+      source_status: 'degraded',
+      output_candidate: true,
+      collector_snapshot_id: 'collector-snapshot:2026-03-09T18:59:00.000Z',
+      correlation_id: 'collector-snapshot:2026-03-09T18:59:00.000Z'
+    });
+  });
+
   it('passes timeline correlation_id replay filters through to the real backend and preserves seeded replay semantics', async () => {
     harness = await createHarness(() => '2026-03-09T19:00:00.000Z');
     await seedContractSlice(harness.store);

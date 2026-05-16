@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { deriveSourceGapChips, deriveSourceHealthWorldBadges } from './sourceGapSignals';
+import {
+  deriveSelectedAgentSourceGapFact,
+  deriveSourceGapChips,
+  deriveSourceHealthWorldBadges
+} from './sourceGapSignals';
 import type { CollectorSourceHealthProjection } from '../types';
 
 const sourceHealth: CollectorSourceHealthProjection = {
@@ -338,6 +342,172 @@ describe('deriveSourceGapChips', () => {
         [{ agent_id: 'app-engineering', display_name: 'App Engineering Agent' }]
       )
     ).toEqual([]);
+  });
+});
+
+describe('deriveSelectedAgentSourceGapFact', () => {
+  it('returns the worst bounded source-gap fact for a selected agent', () => {
+    expect(deriveSelectedAgentSourceGapFact(sourceHealth, 'growth-revenue')).toEqual({
+      agentId: 'growth-revenue',
+      sourceDrilldownGroupKey: 'workspace',
+      sourceKind: 'workspace_root',
+      sourceLabel: 'Workspace root',
+      status: 'error',
+      countLabel: '0 refs',
+      reason: 'workspace root read failed'
+    });
+  });
+
+  it('keeps degraded, missing, and error source-health facts compact', () => {
+    const fact = deriveSelectedAgentSourceGapFact(
+      {
+        ...sourceHealth,
+        agent_items: [
+          {
+            agent_id: 'app-engineering',
+            workspace_root: '/tmp/app-engineering',
+            session_ref: '5-web3-app-engineering',
+            evidence_ref_count: 2,
+            evidence_refs: ['/tmp/app-engineering/outbox.md'],
+            latest_evidence_at: '2026-03-16T08:59:30.000Z',
+            source_health: {
+              workspace_files: {
+                status: 'degraded',
+                expected_files: ['inbox.md', 'outbox.md', 'todo.md'],
+                observed_count: 1,
+                missing_count: 2,
+                error_count: 1,
+                last_observed_at: '2026-03-16T08:59:00.000Z',
+                degraded_reasons: ['missing workspace files: inbox.md, todo.md']
+              }
+            }
+          }
+        ]
+      },
+      'app-engineering'
+    );
+
+    expect(fact).toEqual({
+      agentId: 'app-engineering',
+      sourceDrilldownGroupKey: 'workspace',
+      sourceKind: 'workspace_files',
+      sourceLabel: 'Workspace files',
+      status: 'degraded',
+      countLabel: '2 missing files, 1 error, 1 observed',
+      reason: 'missing workspace files: inbox.md, todo.md'
+    });
+  });
+
+  it('does not report observed, absent, no-data, unmapped, or unselected agents as gaps', () => {
+    expect(
+      deriveSelectedAgentSourceGapFact(
+        {
+          ...sourceHealth,
+          agent_items: [
+            {
+              agent_id: 'app-engineering',
+              workspace_root: '/tmp/app-engineering',
+              session_ref: '5-web3-app-engineering',
+              evidence_ref_count: 1,
+              evidence_refs: ['/tmp/app-engineering/outbox.md'],
+              latest_evidence_at: '2026-03-16T08:59:30.000Z',
+              source_health: {
+                workspace_root: {
+                  status: 'observed',
+                  path: '/tmp/app-engineering',
+                  last_observed_at: '2026-03-16T08:59:00.000Z',
+                  degraded_reasons: []
+                }
+              }
+            },
+            {
+              agent_id: 'team-lead',
+              workspace_root: '/tmp/team-lead',
+              session_ref: '7-web3-team-lead',
+              evidence_ref_count: 0,
+              evidence_refs: [],
+              latest_evidence_at: null,
+              source_health: {}
+            }
+          ],
+          runtime_source_evidence: {
+            unmapped_tmux_sessions: [
+              {
+                session_name: 'unmapped-session',
+                observed_count: 1,
+                last_observed_at: '2026-03-16T08:59:00.000Z',
+                pane_refs: ['%1']
+              }
+            ],
+            unmapped_hermes_sources: [
+              {
+                source_kind: 'hermes_session',
+                evidence_ref: 'hermes://session/unmapped-session',
+                profile_id: null,
+                session_ref: 'unmapped-session',
+                observed_at: '2026-03-16T08:59:00.000Z',
+                status: 'missing',
+                degraded_reasons: ['Hermes session not mapped to an agent']
+              }
+            ]
+          }
+        },
+        'app-engineering'
+      )
+    ).toBeNull();
+    expect(deriveSelectedAgentSourceGapFact(sourceHealth, 'ghost-agent')).toBeNull();
+    expect(deriveSelectedAgentSourceGapFact(null, 'app-engineering')).toBeNull();
+    expect(deriveSelectedAgentSourceGapFact(sourceHealth, null)).toBeNull();
+  });
+
+  it('redacts raw workspace paths, tmux refs, Hermes refs, and bounds long evidence text', () => {
+    const fact = deriveSelectedAgentSourceGapFact(
+      {
+        ...sourceHealth,
+        agent_items: [
+          {
+            agent_id: 'app-engineering',
+            workspace_root: '/Volumes/HDD/MyStorage/Projects/private/app-engineering',
+            session_ref: '5-web3-app-engineering',
+            evidence_ref_count: 14,
+            evidence_refs: [
+              '/Volumes/HDD/MyStorage/Projects/private/app-engineering/outbox-with-a-very-long-name.md',
+              'hermes://profile/profile-app-engineering-private',
+              'hermes://session/5-web3-app-engineering'
+            ],
+            latest_evidence_at: '2026-03-16T08:59:30.000Z',
+            source_health: {
+              hermes_session: {
+                status: 'missing',
+                expected_session_ref: '5-web3-app-engineering',
+                evidence_ref:
+                  'hermes://session/5-web3-app-engineering/with/an/excessively/long/evidence/reference/that/must/not/leak',
+                last_observed_at: null,
+                degraded_reasons: [
+                  'Expected 5-web3-app-engineering at /Volumes/HDD/MyStorage/Projects/private/app-engineering with hermes://session/5-web3-app-engineering/with/an/excessively/long/evidence/reference/that/must/not/leak'
+                ]
+              }
+            }
+          }
+        ]
+      },
+      'app-engineering'
+    );
+
+    expect(fact).toEqual({
+      agentId: 'app-engineering',
+      sourceDrilldownGroupKey: 'hermes',
+      sourceKind: 'hermes_session',
+      sourceLabel: 'Hermes session',
+      status: 'missing',
+      countLabel: '14 refs',
+      reason: 'Expected [tmux ref] at [path] with [hermes ref]'
+    });
+    expect(JSON.stringify(fact)).not.toContain('/Volumes/HDD');
+    expect(JSON.stringify(fact)).not.toContain('5-web3-app-engineering');
+    expect(JSON.stringify(fact)).not.toContain('profile-app-engineering-private');
+    expect(JSON.stringify(fact)).not.toContain('hermes://');
+    expect(JSON.stringify(fact).length).toBeLessThan(240);
   });
 });
 

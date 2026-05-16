@@ -198,6 +198,9 @@ class SqliteRecordLog {
         'collected_at TEXT,',
         'observed_at TEXT,',
         'output_candidate INTEGER,',
+        'evidence_role TEXT,',
+        'source_status TEXT,',
+        'collector_snapshot_id TEXT,',
         'FOREIGN KEY(seq) REFERENCES records(seq)',
         ');',
         'CREATE TABLE IF NOT EXISTS record_evidence_refs (',
@@ -222,8 +225,58 @@ class SqliteRecordLog {
         'ON record_evidence_refs(evidence_ref);'
       ].join(' ')
     ]);
+    await this.#ensureRecordIndexColumns();
+    await this.#ensureEvidenceLookupIndexes();
     await this.#backfillSidecars();
     this.ready = true;
+  }
+
+  async #ensureRecordIndexColumns() {
+    const { stdout } = await this.#exec([
+      this.filePath,
+      '-json',
+      'PRAGMA table_info(record_index);'
+    ]);
+    const rows = stdout.trim() ? JSON.parse(stdout) : [];
+    const columns = new Set(rows.map((row) => row.name));
+    const missingColumns = [
+      ['evidence_role', 'TEXT'],
+      ['source_status', 'TEXT'],
+      ['collector_snapshot_id', 'TEXT']
+    ].filter(([name]) => !columns.has(name));
+
+    if (missingColumns.length === 0) {
+      return;
+    }
+
+    await this.#exec([
+      this.filePath,
+      missingColumns
+        .map(([name, type]) => `ALTER TABLE record_index ADD COLUMN ${name} ${type};`)
+        .join(' ')
+    ]);
+  }
+
+  async #ensureEvidenceLookupIndexes() {
+    await this.#exec([
+      this.filePath,
+      [
+        'CREATE INDEX IF NOT EXISTS idx_record_index_evidence_role',
+        'ON record_index(evidence_role);',
+        'CREATE INDEX IF NOT EXISTS idx_record_index_source_status',
+        'ON record_index(source_status);',
+        'CREATE INDEX IF NOT EXISTS idx_record_index_collector_snapshot_id',
+        'ON record_index(collector_snapshot_id);',
+        'CREATE INDEX IF NOT EXISTS idx_record_index_output_candidate',
+        'ON record_index(output_candidate);',
+        'CREATE INDEX IF NOT EXISTS idx_record_index_collected_at',
+        'ON record_index(collected_at);',
+        'CREATE INDEX IF NOT EXISTS idx_record_index_observed_at',
+        'ON record_index(observed_at);',
+        'CREATE INDEX IF NOT EXISTS idx_record_index_evidence_query',
+        'ON record_index(kind, agent_id, source_kind, evidence_role, output_candidate, source_status, collector_snapshot_id, correlation_id, seq);'
+      ].join(' ')
+    ]);
   }
 
   async #backfillSidecars() {
@@ -266,7 +319,10 @@ class SqliteRecordLog {
       sqlText(index.ts),
       sqlText(index.collected_at),
       sqlText(index.observed_at),
-      sqlInteger(index.output_candidate)
+      sqlInteger(index.output_candidate),
+      sqlText(index.evidence_role),
+      sqlText(index.source_status),
+      sqlText(index.collector_snapshot_id)
     ];
     const evidenceRefInserts = index.evidence_refs.map((evidenceRef) =>
       [
@@ -277,7 +333,7 @@ class SqliteRecordLog {
 
     return [
       'INSERT OR REPLACE INTO record_index(',
-      'seq,kind,event_id,evidence_id,agent_id,correlation_id,source_kind,ts,collected_at,observed_at,output_candidate',
+      'seq,kind,event_id,evidence_id,agent_id,correlation_id,source_kind,ts,collected_at,observed_at,output_candidate,evidence_role,source_status,collector_snapshot_id',
       `) VALUES (${values.join(', ')});`,
       ...evidenceRefInserts
     ].join(' ');
@@ -308,6 +364,9 @@ function createSqliteRecordIndex(record) {
     observed_at: payload.observed_at || null,
     output_candidate:
       typeof payload.output_candidate === 'boolean' ? payload.output_candidate : null,
+    evidence_role: payload.evidence_role || null,
+    source_status: payload.source_status || null,
+    collector_snapshot_id: payload.collector_snapshot_id || null,
     evidence_refs: evidenceRefs
   };
 }

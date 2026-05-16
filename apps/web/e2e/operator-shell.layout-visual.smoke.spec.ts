@@ -234,15 +234,17 @@ test.describe('operator shell layout visual smoke', () => {
         source_kind_buckets: {
           workspace_root: { observed: 0, degraded: 0, missing: 0, error: 0 },
           workspace_files: { observed: 0, degraded: 1, missing: 0, error: 0 },
-          tmux_session: { observed: 0, degraded: 0, missing: 0, error: 0 }
+          tmux_session: { observed: 1, degraded: 0, missing: 0, error: 0 },
+          hermes_profile: { observed: 0, degraded: 0, missing: 1, error: 0 },
+          hermes_session: { observed: 0, degraded: 1, missing: 0, error: 0 }
         },
-        status_buckets: { observed: 0, degraded: 1, missing: 0, error: 0 }
+        status_buckets: { observed: 1, degraded: 2, missing: 1, error: 0 }
       },
       agent_items: [
         {
-          agent_id: 'growth-revenue',
-          workspace_root: '/tmp/growth-revenue',
-          session_ref: '6-web3-growth-revenue',
+          agent_id: 'app-engineering',
+          workspace_root: '/tmp/app-engineering',
+          session_ref: '5-web3-app-engineering',
           source_health: {
             workspace_files: {
               status: 'degraded',
@@ -252,10 +254,35 @@ test.describe('operator shell layout visual smoke', () => {
               error_count: 0,
               last_observed_at: '2026-03-16T08:58:30.000Z',
               degraded_reasons: ['missing workspace files: inbox.md, todo.md']
+            },
+            tmux_session: {
+              status: 'observed',
+              expected_session_ref: '5-web3-app-engineering',
+              observed_count: 1,
+              last_observed_at: '2026-03-16T08:58:32.000Z',
+              degraded_reasons: []
+            },
+            hermes_profile: {
+              status: 'missing',
+              profile_id: 'profile-app-engineering',
+              evidence_ref: 'hermes://profile/profile-app-engineering',
+              last_observed_at: null,
+              degraded_reasons: ['Hermes profile missing']
+            },
+            hermes_session: {
+              status: 'degraded',
+              expected_session_ref: '5-web3-app-engineering',
+              evidence_ref: 'hermes://session/5-web3-app-engineering',
+              last_observed_at: '2026-03-16T08:58:35.000Z',
+              degraded_reasons: ['Hermes session stale']
             }
           },
           evidence_ref_count: 3,
-          evidence_refs: ['/tmp/launch-note.md'],
+          evidence_refs: [
+            '/tmp/launch-note.md',
+            'hermes://profile/profile-app-engineering',
+            'hermes://session/5-web3-app-engineering'
+          ],
           latest_evidence_at: '2026-03-16T08:58:40.000Z'
         }
       ],
@@ -272,13 +299,28 @@ test.describe('operator shell layout visual smoke', () => {
     await page.route('**/collectors/controller-snapshot', async (route) => {
       const response = await route.fetch();
       const payload = await response.json();
+      const sourceHealthByAgentId = new Map(
+        sourceHealth.agent_items.map((item) => [item.agent_id, item] as const)
+      );
 
       await route.fulfill({
         response,
         json: {
           item: {
             ...payload.item,
-            evidence_coverage: evidenceCoverage
+            evidence_coverage: evidenceCoverage,
+            items: payload.item.items.map((item: { agent_id: string }) => {
+              const sourceHealthItem = sourceHealthByAgentId.get(item.agent_id);
+              return sourceHealthItem
+                ? {
+                    ...item,
+                    source_health: sourceHealthItem.source_health,
+                    evidence_ref_count: sourceHealthItem.evidence_ref_count,
+                    evidence_refs: sourceHealthItem.evidence_refs,
+                    latest_evidence_at: sourceHealthItem.latest_evidence_at
+                  }
+                : item;
+            })
           }
         }
       });
@@ -296,14 +338,20 @@ test.describe('operator shell layout visual smoke', () => {
       name: 'Inspect evidence coverage focus agent Growth Revenue Agent'
     });
     const sourceGapChip = sourceGapFocus.getByRole('button', {
-      name: 'Open source gap supervision for Growth Revenue Agent workspace files degraded'
+      name: 'Open source gap supervision for App Engineering Agent workspace files degraded'
+    });
+    const hermesProfileGapChip = sourceGapFocus.getByRole('button', {
+      name: 'Open source gap supervision for App Engineering Agent hermes profile missing'
+    });
+    const hermesSessionGapChip = sourceGapFocus.getByRole('button', {
+      name: 'Open source gap supervision for App Engineering Agent hermes session degraded'
     });
     await expect(worldHost).toBeVisible();
     await page.waitForFunction(() => Boolean(window.__AITOWN_VIEWPORT__));
     await expect(signals).toBeVisible();
     await expect(signalsSummary.getByText('Signals', { exact: true })).toBeVisible();
     await expect(signalsSummary.getByText(/Evidence · 1/)).toBeVisible();
-    await expect(signalsSummary.getByText(/Source gaps · 1/)).toBeVisible();
+    await expect(signalsSummary.getByText(/Source gaps · 3/)).toBeVisible();
     await expect(evidenceFocus).toBeHidden();
     await expect(sourceGapFocus).toBeHidden();
     const roster = page.getByRole('navigation', { name: 'Agent roster' });
@@ -331,12 +379,26 @@ test.describe('operator shell layout visual smoke', () => {
     await expect(evidenceFocusChip).toBeVisible();
     await expect(sourceGapFocus).toBeVisible();
     await expect(sourceGapFocus.getByText('Source gaps', { exact: true })).toBeVisible();
-    await expect(sourceGapFocus.getByText('1 provenance gap', { exact: true })).toBeVisible();
+    await expect(sourceGapFocus.getByText('3 provenance gaps', { exact: true })).toBeVisible();
     await expect(sourceGapChip).toBeVisible();
     await expect(sourceGapChip).toContainText('Workspace files · degraded');
     await expect(sourceGapChip).toContainText('2 missing files · latest evidence 2026-03-16T08:58:40.000Z');
-    await expect(sourceGapChip).not.toContainText('/tmp/growth-revenue');
-    await expect(sourceGapChip).not.toContainText('6-web3-growth-revenue');
+    await expect(sourceGapChip).not.toContainText('/tmp/app-engineering');
+    await expect(sourceGapChip).not.toContainText('5-web3-app-engineering');
+    await expect(hermesProfileGapChip).toBeVisible();
+    await expect(hermesProfileGapChip).toContainText('Hermes profile · missing');
+    await expect(hermesProfileGapChip).toContainText('3 refs · latest evidence 2026-03-16T08:58:40.000Z');
+    await expect(hermesProfileGapChip).toContainText('Not observed');
+    await expect(hermesProfileGapChip).not.toContainText('hermes://');
+    await expect(hermesProfileGapChip).not.toContainText('profile-app-engineering');
+    await expect(hermesProfileGapChip).not.toContainText('5-web3-app-engineering');
+    await expect(hermesSessionGapChip).toBeVisible();
+    await expect(hermesSessionGapChip).toContainText('Hermes session · degraded');
+    await expect(hermesSessionGapChip).toContainText('3 refs · latest evidence 2026-03-16T08:58:40.000Z');
+    await expect(hermesSessionGapChip).toContainText('Observed 2026-03-16T08:58:35.000Z');
+    await expect(hermesSessionGapChip).not.toContainText('hermes://');
+    await expect(hermesSessionGapChip).not.toContainText('profile-app-engineering');
+    await expect(hermesSessionGapChip).not.toContainText('5-web3-app-engineering');
 
     const before = await readViewportState(page);
     expect(before).not.toBeNull();
@@ -374,6 +436,24 @@ test.describe('operator shell layout visual smoke', () => {
         return current && before ? Math.abs(current.x - before.x) : 0;
       }, 'Evidence focus non-chip area should leave horizontal world drag usable')
       .toBeGreaterThan(40);
+
+    await hermesSessionGapChip.click();
+
+    const hub = page.getByRole('dialog', { name: 'Hub' });
+    const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
+    const hermesDrilldown = detailsPanel.locator('#aitown-selected-agent-source-drilldown-hermes');
+    const workspaceDrilldown = detailsPanel.locator('#aitown-selected-agent-source-drilldown-workspace');
+    const tmuxDrilldown = detailsPanel.locator('#aitown-selected-agent-source-drilldown-tmux');
+
+    await expect(hub).toBeVisible();
+    await expect(detailsPanel.getByText('App Engineering Agent · supervision and collector observation.')).toBeVisible();
+    await expect(hermesDrilldown).toHaveAttribute('data-source-gap-focus', 'true');
+    await expect
+      .poll(async () => hermesDrilldown.evaluate((element) => (element as HTMLDetailsElement).open))
+      .toBe(true);
+    await expect(hermesDrilldown).toContainText('Hermes session status · degraded');
+    await expect(workspaceDrilldown).not.toHaveAttribute('data-source-gap-focus', 'true');
+    await expect(tmuxDrilldown).not.toHaveAttribute('data-source-gap-focus', 'true');
   });
 
   test('keeps Hub-open passive HUD overlay from blocking pan-first horizontal drag', async ({ page }) => {

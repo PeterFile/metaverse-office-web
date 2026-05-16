@@ -19,7 +19,7 @@ type SourceGapAgent = {
 
 type DisplayedSourceGapKind = Extract<
   CollectorSourceHealthKind,
-  'workspace_root' | 'workspace_files' | 'tmux_session'
+  'workspace_root' | 'workspace_files' | 'tmux_session' | 'hermes_profile' | 'hermes_session'
 >;
 
 export type SourceGapChip = {
@@ -33,7 +33,7 @@ export type SourceGapChip = {
   observedAtLabel: string;
 };
 
-export type SourceGapDrilldownGroupKey = 'workspace' | 'tmux';
+export type SourceGapDrilldownGroupKey = 'workspace' | 'tmux' | 'hermes';
 
 const MAX_SOURCE_GAP_CHIPS = 3;
 
@@ -47,13 +47,17 @@ const SOURCE_GAP_STATUS_RANK: Record<CollectorSourceHealthStatus, number> = {
 const SOURCE_KIND_LABELS: Record<DisplayedSourceGapKind, string> = {
   workspace_root: 'Workspace root',
   workspace_files: 'Workspace files',
-  tmux_session: 'Tmux session'
+  tmux_session: 'Tmux session',
+  hermes_profile: 'Hermes profile',
+  hermes_session: 'Hermes session'
 };
 
 const SOURCE_KIND_ORDER: DisplayedSourceGapKind[] = [
   'workspace_root',
   'workspace_files',
-  'tmux_session'
+  'tmux_session',
+  'hermes_profile',
+  'hermes_session'
 ];
 
 export function deriveSourceGapChips(
@@ -112,7 +116,15 @@ export function deriveSourceGapChips(
 function resolveSourceGapDrilldownGroupKey(
   sourceKind: DisplayedSourceGapKind
 ): SourceGapDrilldownGroupKey {
-  return sourceKind === 'tmux_session' ? 'tmux' : 'workspace';
+  if (sourceKind === 'tmux_session') {
+    return 'tmux';
+  }
+
+  if (sourceKind === 'hermes_profile' || sourceKind === 'hermes_session') {
+    return 'hermes';
+  }
+
+  return 'workspace';
 }
 
 function renderSourceGapDetail(

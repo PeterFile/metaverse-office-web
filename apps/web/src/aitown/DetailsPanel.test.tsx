@@ -8249,6 +8249,71 @@ describe('DetailsPanel accountability signals', () => {
     expect(document.activeElement).toBe(tmuxGroup);
   });
 
+  it('marks the exact Hermes source gap group without marking workspace or tmux', async () => {
+    const baseCollectorSnapshot = buildCollectorSnapshot();
+    const collectorSnapshot: CollectorSnapshot = {
+      ...baseCollectorSnapshot,
+      items: [
+        {
+          ...baseCollectorSnapshot.items[0],
+          source_health: {
+            workspace_root: {
+              status: 'observed',
+              path: '/workspace/app-engineering',
+              last_observed_at: '2026-03-16T08:55:00.000Z',
+              degraded_reasons: []
+            },
+            tmux_session: {
+              status: 'observed',
+              expected_session_ref: 'sess-1',
+              observed_count: 1,
+              last_observed_at: '2026-03-16T08:55:30.000Z',
+              degraded_reasons: []
+            },
+            hermes_profile: {
+              status: 'missing',
+              profile_id: 'profile-app-engineering',
+              evidence_ref: null,
+              last_observed_at: null,
+              degraded_reasons: ['Hermes profile not observed']
+            },
+            hermes_session: {
+              status: 'degraded',
+              expected_session_ref: 'hermes-session-app-engineering',
+              evidence_ref: 'hermes://session/hermes-session-app-engineering',
+              last_observed_at: '2026-03-16T08:56:00.000Z',
+              degraded_reasons: ['Hermes session stale']
+            }
+          }
+        }
+      ]
+    };
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          activeHubCategory: 'supervision',
+          collectorSnapshot,
+          selectedAgentDrilldownTab: 'evidence',
+          sourceGapFocusIntent: {
+            agentId: 'app-engineering',
+            sourceDrilldownGroupKey: 'hermes',
+            requestId: 4
+          }
+        })}
+      />
+    );
+
+    const hermesGroup = document.getElementById('aitown-selected-agent-source-drilldown-hermes');
+    const tmuxGroup = document.getElementById('aitown-selected-agent-source-drilldown-tmux');
+    const workspaceGroup = document.getElementById('aitown-selected-agent-source-drilldown-workspace');
+    await waitFor(() => expect(hermesGroup).toHaveAttribute('data-source-gap-focus', 'true'));
+    expect(hermesGroup).toHaveAttribute('open');
+    expect(tmuxGroup).not.toHaveAttribute('data-source-gap-focus');
+    expect(workspaceGroup).not.toHaveAttribute('data-source-gap-focus');
+    expect(document.activeElement).toBe(hermesGroup);
+  });
+
   it('shows an explicit source-gap focus empty state when the selected agent has no collector row', () => {
     render(
       <DetailsPanel

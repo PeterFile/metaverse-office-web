@@ -2636,6 +2636,24 @@ function AppInner() {
         .filter(Boolean)
         .join(' · ')
     : null;
+  const handleSelectedAgentSourceGapFactOpen = useCallback(() => {
+    if (!selectedAgentSourceGapFact) {
+      return;
+    }
+
+    sourceGapFocusRequestIdRef.current += 1;
+    requestedSelectedAgentDrilldownTabRef.current = 'evidence';
+    activeHubCategoryFromSelectedAgentTabRef.current = false;
+    setActiveHubCategory('supervision');
+    handleSelectAgentForInspection(selectedAgentSourceGapFact.agentId);
+    setSelectedAgentDrilldownTab('evidence');
+    setSourceGapFocusIntent({
+      agentId: selectedAgentSourceGapFact.agentId,
+      sourceDrilldownGroupKey: selectedAgentSourceGapFact.sourceDrilldownGroupKey,
+      requestId: sourceGapFocusRequestIdRef.current
+    });
+    setHubOpen(true);
+  }, [handleSelectAgentForInspection, selectedAgentSourceGapFact]);
   const hudSignalSummary = [
     `Viewport · ${viewportToplineStatus.status}`,
     evidenceCoverageFocusItems.length > 0 ? `Evidence · ${evidenceCoverageFocusItems.length}` : null,
@@ -2924,7 +2942,16 @@ function AppInner() {
                 <span className="aitown-selected-agent-peek__eyebrow">Selected agent</span>
                 <strong>{selectedAgent.display_name}</strong>
                 <span>{`${HOT_ZONE_SEVERITY_LABELS[selectedAgentPeekSeverity]} · ${selectedAgentPeekStatus}`}</span>
-                {selectedAgentSourceGapSummary ? <span>{selectedAgentSourceGapSummary}</span> : null}
+                {selectedAgentSourceGapSummary && selectedAgentSourceGapFact ? (
+                  <button
+                    type="button"
+                    className="aitown-selected-agent-peek__source-gap-fact"
+                    aria-label={`Open source gap supervision for ${selectedAgent.display_name} ${selectedAgentSourceGapFact.sourceLabel.toLowerCase()} ${selectedAgentSourceGapFact.status}`}
+                    onClick={handleSelectedAgentSourceGapFactOpen}
+                  >
+                    {selectedAgentSourceGapSummary}
+                  </button>
+                ) : null}
               </div>
               <details className="aitown-selected-agent-peek__facts">
                 <summary>Inspect facts</summary>

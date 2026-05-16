@@ -1053,11 +1053,28 @@ button {
 }
 
 .aitown-selected-agent-peek__head span,
+.aitown-selected-agent-peek__source-gap-fact,
 .aitown-selected-agent-peek__facts span {
   color: #d8eadf;
   font-size: 0.74rem;
   line-height: 1.25;
   overflow-wrap: anywhere;
+}
+
+.aitown-selected-agent-peek__source-gap-fact {
+  width: fit-content;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+}
+
+.aitown-selected-agent-peek__source-gap-fact:focus-visible {
+  outline: 2px solid #8be9d5;
+  outline-offset: 2px;
 }
 
 .aitown-selected-agent-peek__facts span {

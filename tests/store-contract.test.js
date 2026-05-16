@@ -775,6 +775,78 @@ test('SQLite prototype store populates sidecars when appending collector evidenc
   ]);
 });
 
+test('SQLite prototype store migrates and backfills evidence-record lookup sidecar columns', async () => {
+  const sqliteStoreFile = await createSqliteStoreFile();
+  const store = await createPrototypeStore({ sqliteFilePath: sqliteStoreFile });
+
+  await store.appendCollectorReport(createCollectorReport());
+
+  await execSqlite(sqliteStoreFile, 'DROP TABLE record_index;');
+  await execSqlite(
+    sqliteStoreFile,
+    [
+      'CREATE TABLE record_index (',
+      'seq INTEGER PRIMARY KEY,',
+      'kind TEXT NOT NULL,',
+      'event_id TEXT,',
+      'evidence_id TEXT,',
+      'agent_id TEXT,',
+      'correlation_id TEXT,',
+      'source_kind TEXT,',
+      'ts TEXT,',
+      'collected_at TEXT,',
+      'observed_at TEXT,',
+      'output_candidate INTEGER,',
+      'FOREIGN KEY(seq) REFERENCES records(seq)',
+      ');'
+    ].join(' ')
+  );
+
+  const reloadedStore = await createPrototypeStore({ sqliteFilePath: sqliteStoreFile });
+  assert.equal(
+    reloadedStore.listEvidenceRecords({
+      evidence_role: 'agent_output',
+      source_status: 'degraded',
+      collector_snapshot_id: 'collector-snapshot:2026-03-09T18:06:00.000Z',
+      output_candidate: 'true',
+      limit: 1
+    })[0].evidence_ref,
+    '/tmp/store-contract/outbox.md'
+  );
+
+  const { stdout: indexStdout } = await execSqlite(
+    sqliteStoreFile,
+    [
+      "SELECT name FROM sqlite_master WHERE type = 'index'",
+      "AND name IN ('idx_record_index_evidence_role','idx_record_index_source_status','idx_record_index_collector_snapshot_id','idx_record_index_evidence_query','idx_record_index_observed_at','idx_record_index_collected_at','idx_record_index_output_candidate')",
+      'ORDER BY name;'
+    ].join(' ')
+  );
+  assert.deepEqual(indexStdout.trim().split('\n'), [
+    'idx_record_index_collected_at',
+    'idx_record_index_collector_snapshot_id',
+    'idx_record_index_evidence_query',
+    'idx_record_index_evidence_role',
+    'idx_record_index_observed_at',
+    'idx_record_index_output_candidate',
+    'idx_record_index_source_status'
+  ]);
+
+  const { stdout: evidenceIndexStdout } = await execSqlite(
+    sqliteStoreFile,
+    [
+      'SELECT evidence_role, source_status, collector_snapshot_id,',
+      'source_kind, output_candidate, observed_at, collected_at',
+      'FROM record_index',
+      "WHERE evidence_id LIKE 'ev_collector-snapshot_2026-03-09T18_06_00_000Z_app-engineering_workspace_file%'"
+    ].join(' ')
+  );
+  assert.equal(
+    evidenceIndexStdout.trim(),
+    'agent_output|degraded|collector-snapshot:2026-03-09T18:06:00.000Z|workspace_file|1|2026-03-09T18:05:20.000Z|2026-03-09T18:06:00.000Z'
+  );
+});
+
 test('SQLite prototype store records are append-only', async () => {
   const sqliteStoreFile = await createSqliteStoreFile();
   const store = await createPrototypeStore({ sqliteFilePath: sqliteStoreFile });

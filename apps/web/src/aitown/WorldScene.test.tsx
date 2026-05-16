@@ -400,6 +400,12 @@ function setElementRect(
     }) as DOMRect;
 }
 
+async function settleViewportClampLayoutMicrotasks() {
+  await act(async () => {
+    await Promise.resolve();
+  });
+}
+
 function setResponsiveShellChromeRects({
   host,
   toolbar,
@@ -5049,9 +5055,7 @@ describe('WorldScene watch overlay caption gating', () => {
       });
     });
 
-    await act(async () => {
-      await Promise.resolve();
-    });
+    await settleViewportClampLayoutMicrotasks();
 
     hostRect.mockClear();
     toolbarRect.mockClear();
@@ -5180,6 +5184,8 @@ describe('WorldScene watch overlay caption gating', () => {
       });
     });
 
+    await settleViewportClampLayoutMicrotasks();
+
     hostRect.mockClear();
     toolbarRect.mockClear();
     statsRect.mockClear();
@@ -5204,6 +5210,8 @@ describe('WorldScene watch overlay caption gating', () => {
       top: 56,
       right: 320
     });
+
+    await settleViewportClampLayoutMicrotasks();
 
     hostRect.mockClear();
     toolbarRect.mockClear();
@@ -5315,6 +5323,8 @@ describe('WorldScene watch overlay caption gating', () => {
         right: 180
       });
     });
+
+    await settleViewportClampLayoutMicrotasks();
 
     hostRect.mockClear();
     toolbarRect.mockClear();
@@ -5435,6 +5445,8 @@ describe('WorldScene watch overlay caption gating', () => {
         right: 180
       });
     });
+
+    await settleViewportClampLayoutMicrotasks();
 
     hostRect.mockClear();
     toolbarRect.mockClear();

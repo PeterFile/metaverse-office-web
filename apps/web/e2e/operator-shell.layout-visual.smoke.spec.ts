@@ -918,6 +918,8 @@ test.describe('operator shell layout visual smoke', () => {
     await expectLocatorTopInsideScrollport(evidencePanel, hub, 'Evidence tab panel');
     await expect(evidencePanel.getByRole('heading', { name: 'Collector Observation' })).toBeVisible();
     await expect(evidencePanel.getByRole('heading', { name: 'Audit Signals' })).toBeVisible();
+    await expect(evidencePanel.getByRole('heading', { name: 'Evidence Ledger' })).toBeVisible();
+    await expect(evidencePanel.getByText('Scope · Selected-agent evidence records')).toBeVisible();
     const evidenceWorkflowSection = evidencePanel.locator('section').filter({
       has: page.getByRole('heading', { name: 'Workflow' })
     });

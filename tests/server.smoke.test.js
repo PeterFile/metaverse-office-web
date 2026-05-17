@@ -5364,6 +5364,83 @@ test('GET /evidence-records lists stored evidence records read-only with exact f
   assert.equal(unknownExact.response.status, 200);
   assert.deepEqual(unknownExact.body.items, []);
 
+  const summary = await requestJson(
+    `${baseUrl}/evidence-records/summary?output_candidate=false&newest_first=true&limit=1`
+  );
+  assert.equal(summary.response.status, 200);
+  assert.deepEqual(summary.body, {
+    item: {
+      total_count: 4,
+      returned_limit: 1,
+      mapped_count: 3,
+      unmapped_count: 1,
+      output_candidate_buckets: {
+        true: 0,
+        false: 4
+      },
+      source_kind_buckets: {
+        workspace_root: 1,
+        workspace_file: 2,
+        tmux_observation: 1,
+        hermes_profile: 0,
+        hermes_session: 0
+      },
+      evidence_role_buckets: {
+        workspace_presence: 1,
+        inbound_task: 2,
+        agent_output: 0,
+        agent_plan: 0,
+        runtime_activity: 0,
+        runtime_presence: 0,
+        runtime_unmapped: 1
+      },
+      source_status_buckets: {
+        observed: 3,
+        degraded: 0,
+        missing: 1,
+        error: 0
+      }
+    }
+  });
+  assert.equal(await readFile(storeFile, 'utf8'), fileBeforeRead);
+
+  const emptySummary = await requestJson(
+    `${baseUrl}/evidence-records/summary?mapped=false&agent_id=app-engineering&limit=10`
+  );
+  assert.equal(emptySummary.response.status, 200);
+  assert.deepEqual(emptySummary.body.item, {
+    total_count: 0,
+    returned_limit: 10,
+    mapped_count: 0,
+    unmapped_count: 0,
+    output_candidate_buckets: {
+      true: 0,
+      false: 0
+    },
+    source_kind_buckets: {
+      workspace_root: 0,
+      workspace_file: 0,
+      tmux_observation: 0,
+      hermes_profile: 0,
+      hermes_session: 0
+    },
+    evidence_role_buckets: {
+      workspace_presence: 0,
+      inbound_task: 0,
+      agent_output: 0,
+      agent_plan: 0,
+      runtime_activity: 0,
+      runtime_presence: 0,
+      runtime_unmapped: 0
+    },
+    source_status_buckets: {
+      observed: 0,
+      degraded: 0,
+      missing: 0,
+      error: 0
+    }
+  });
+
   assert.equal(collectCount, 0);
   assert.equal(store.getLatestCollectorReport(), latestBeforeRead);
   assert.deepEqual(store.getCounts(), countsBeforeRead);
@@ -5444,6 +5521,13 @@ test('GET evidence and source read routes keep JSONL and SQLite parity', async (
   assert.deepEqual(projectEvidenceRecords(jsonlUnmapped).map((item) => item.evidence_ref), [
     'tmux://unmapped-route-parity/0.0'
   ]);
+
+  const [jsonlSummary, sqliteSummary] = await parityRequest(
+    '/evidence-records/summary?mapped=true&output_candidate=true&newest_first=true&limit=1'
+  );
+  assert.deepEqual(sqliteSummary, jsonlSummary);
+  assert.equal(jsonlSummary.item.total_count, 2);
+  assert.equal(jsonlSummary.item.returned_limit, 1);
 
   assert.equal(jsonl.store.records.length, before.jsonl);
   assert.equal(sqlite.store.records.length, before.sqlite);

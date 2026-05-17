@@ -26,6 +26,23 @@ const EVIDENCE_RECORD_KIND = 'evidence_record';
 const INBOUND_WORKSPACE_FILES = new Set(['inbox.md']);
 const AGENT_OUTPUT_WORKSPACE_ROLES = new Set(['agent_output', 'agent_plan']);
 const NON_OUTPUT_WORKSPACE_ROLES = new Set(['inbound_task', 'workspace_presence']);
+const EVIDENCE_RECORD_SOURCE_KINDS = Object.freeze([
+  'workspace_root',
+  'workspace_file',
+  'tmux_observation',
+  'hermes_profile',
+  'hermes_session'
+]);
+const EVIDENCE_RECORD_ROLES = Object.freeze([
+  'workspace_presence',
+  'inbound_task',
+  'agent_output',
+  'agent_plan',
+  'runtime_activity',
+  'runtime_presence',
+  'runtime_unmapped'
+]);
+const EVIDENCE_RECORD_SOURCE_STATUSES = Object.freeze(['observed', 'degraded', 'missing', 'error']);
 const execFileAsync = promisify(execFile);
 const SEVERITY_RANK = Object.freeze({
   normal: 0,
@@ -524,6 +541,46 @@ class PrototypeStore {
   }
 
   listEvidenceRecords(filters = {}) {
+    const { records, limit, newestFirst } = this.#filterEvidenceRecords(filters);
+
+    return (newestFirst ? records.slice().sort(compareEvidenceRecordRecency) : records)
+      .slice(0, limit)
+      .map(cloneEvidenceRecord);
+  }
+
+  getEvidenceRecordsSummary(filters = {}) {
+    const { records, limit } = this.#filterEvidenceRecords(filters);
+    const summary = {
+      total_count: records.length,
+      returned_limit: limit,
+      mapped_count: 0,
+      unmapped_count: 0,
+      output_candidate_buckets: {
+        true: 0,
+        false: 0
+      },
+      source_kind_buckets: createZeroBuckets(EVIDENCE_RECORD_SOURCE_KINDS),
+      evidence_role_buckets: createZeroBuckets(EVIDENCE_RECORD_ROLES),
+      source_status_buckets: createZeroBuckets(EVIDENCE_RECORD_SOURCE_STATUSES)
+    };
+
+    for (const record of records) {
+      if (typeof record.agent_id === 'string' && record.agent_id.length > 0) {
+        summary.mapped_count += 1;
+      } else if (record.agent_id === null) {
+        summary.unmapped_count += 1;
+      }
+
+      summary.output_candidate_buckets[String(record.output_candidate === true)] += 1;
+      incrementBucket(summary.source_kind_buckets, record.source_kind);
+      incrementBucket(summary.evidence_role_buckets, record.evidence_role);
+      incrementBucket(summary.source_status_buckets, record.source_status);
+    }
+
+    return summary;
+  }
+
+  #filterEvidenceRecords(filters = {}) {
     const evidenceId = normalizeFilterValue(filters.evidence_id);
     const agentId = normalizeFilterValue(filters.agent_id);
     const sourceKind = normalizeFilterValue(filters.source_kind);
@@ -567,9 +624,7 @@ class PrototypeStore {
         matchesTimestampWindow(record.collected_at, collectedSince, collectedUntil)
       );
 
-    return (newestFirst ? records.slice().sort(compareEvidenceRecordRecency) : records)
-      .slice(0, limit)
-      .map(cloneEvidenceRecord);
+    return { records, limit, newestFirst };
   }
 
   getCounts() {
@@ -1545,6 +1600,10 @@ function incrementBucket(buckets, key) {
   }
 
   buckets[key] = (buckets[key] || 0) + 1;
+}
+
+function createZeroBuckets(keys) {
+  return Object.fromEntries(keys.map((key) => [key, 0]));
 }
 
 function incrementSeverityBucket(buckets, severity) {

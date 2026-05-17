@@ -602,6 +602,55 @@ class PrototypeStore {
     return summary;
   }
 
+  getEvidenceRefRollup(filters = {}) {
+    const { records, limit } = this.#filterEvidenceRecords(filters);
+    const groups = new Map();
+
+    for (const record of records) {
+      const evidenceRef = record.evidence_ref;
+      if (typeof evidenceRef !== 'string' || evidenceRef.length === 0) {
+        continue;
+      }
+
+      if (!groups.has(evidenceRef)) {
+        groups.set(evidenceRef, {
+          evidence_ref: evidenceRef,
+          record_count: 0,
+          mapped_count: 0,
+          unmapped_count: 0,
+          agent_id_buckets: {},
+          source_kind_buckets: {},
+          source_status_buckets: {}
+        });
+      }
+
+      const group = groups.get(evidenceRef);
+      group.record_count += 1;
+
+      if (typeof record.agent_id === 'string' && record.agent_id.length > 0) {
+        group.mapped_count += 1;
+        incrementBucket(group.agent_id_buckets, record.agent_id);
+      } else if (record.agent_id === null) {
+        group.unmapped_count += 1;
+        incrementBucket(group.agent_id_buckets, 'unmapped');
+      }
+
+      incrementBucket(group.source_kind_buckets, record.source_kind);
+      incrementBucket(group.source_status_buckets, record.source_status);
+    }
+
+    const sortedGroups = Array.from(groups.values())
+      .map(sortEvidenceRefRollupBuckets)
+      .sort(compareEvidenceRefRollupGroups);
+
+    return {
+      total_count: records.length,
+      total_groups: sortedGroups.length,
+      returned_limit: limit,
+      groups: sortedGroups.slice(0, limit)
+    };
+  }
+
   #filterEvidenceRecords(filters = {}) {
     const evidenceId = normalizeFilterValue(filters.evidence_id);
     const agentId = normalizeFilterValue(filters.agent_id);
@@ -1626,6 +1675,28 @@ function incrementBucket(buckets, key) {
 
 function createZeroBuckets(keys) {
   return Object.fromEntries(keys.map((key) => [key, 0]));
+}
+
+function sortEvidenceRefRollupBuckets(group) {
+  return {
+    ...group,
+    agent_id_buckets: sortBucketKeys(group.agent_id_buckets),
+    source_kind_buckets: sortBucketKeys(group.source_kind_buckets),
+    source_status_buckets: sortBucketKeys(group.source_status_buckets)
+  };
+}
+
+function sortBucketKeys(buckets) {
+  return Object.fromEntries(Object.entries(buckets).sort(([left], [right]) => compareStringsAsc(left, right)));
+}
+
+function compareEvidenceRefRollupGroups(left, right) {
+  const countComparison = right.record_count - left.record_count;
+  if (countComparison !== 0) {
+    return countComparison;
+  }
+
+  return compareStringsAsc(left.evidence_ref, right.evidence_ref);
 }
 
 function incrementSeverityBucket(buckets, severity) {

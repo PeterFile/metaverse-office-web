@@ -130,6 +130,7 @@ Optional env:
 - `GET /collectors/controller-snapshot/source-health?agent_id=&source_kind=&status=&limit=`
 - `GET /evidence-records?evidence_id=&agent_id=&source_kind=&evidence_role=&output_candidate=&evidence_ref=&source_status=&collector_snapshot_id=&correlation_id=&mapped=&observed_since=&observed_until=&collected_since=&collected_until=&newest_first=&limit=`
 - `GET /evidence-records/summary?evidence_id=&agent_id=&source_kind=&evidence_role=&output_candidate=&evidence_ref=&source_status=&collector_snapshot_id=&correlation_id=&mapped=&observed_since=&observed_until=&collected_since=&collected_until=&newest_first=&limit=`
+- `GET /evidence-records/ref-rollup?evidence_id=&agent_id=&source_kind=&evidence_role=&output_candidate=&evidence_ref=&source_status=&collector_snapshot_id=&correlation_id=&mapped=&observed_since=&observed_until=&collected_since=&collected_until=&newest_first=&limit=`
 - `GET /evidence-records/:evidence_id`
 - `GET /runtime/source-gaps?evidence_id=&agent_id=&source_kind=&evidence_role=&output_candidate=&source_status=&collector_snapshot_id=&correlation_id=&mapped=&observed_since=&observed_until=&collected_since=&collected_until=&newest_first=&limit=`
 - `GET /office/overview`

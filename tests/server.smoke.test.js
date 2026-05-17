@@ -5578,6 +5578,53 @@ test('GET /evidence-records lists stored evidence records read-only with exact f
   });
 
   assert.equal(collectCount, 0);
+
+  const refRollup = await requestJson(
+    `${baseUrl}/evidence-records/ref-rollup?output_candidate=false&limit=2`
+  );
+  assert.equal(refRollup.response.status, 200);
+  assert.deepEqual(refRollup.body, {
+    item: {
+      total_count: 4,
+      total_groups: 4,
+      returned_limit: 2,
+      groups: [
+        {
+          evidence_ref: '/tmp/evidence-query/app',
+          record_count: 1,
+          mapped_count: 1,
+          unmapped_count: 0,
+          agent_id_buckets: {
+            'app-engineering': 1
+          },
+          source_kind_buckets: {
+            workspace_root: 1
+          },
+          source_status_buckets: {
+            observed: 1
+          }
+        },
+        {
+          evidence_ref: '/tmp/evidence-query/app/inbox.md',
+          record_count: 1,
+          mapped_count: 1,
+          unmapped_count: 0,
+          agent_id_buckets: {
+            'app-engineering': 1
+          },
+          source_kind_buckets: {
+            workspace_file: 1
+          },
+          source_status_buckets: {
+            observed: 1
+          }
+        }
+      ]
+    }
+  });
+  assert.equal(refRollup.body.item.groups[0].metadata, undefined);
+  assert.equal(refRollup.body.item.groups[0].degraded_reasons, undefined);
+
   assert.equal(store.getLatestCollectorReport(), latestBeforeRead);
   assert.deepEqual(store.getCounts(), countsBeforeRead);
   assert.equal(await readFile(storeFile, 'utf8'), fileBeforeRead);
@@ -5664,6 +5711,15 @@ test('GET evidence and source read routes keep JSONL and SQLite parity', async (
   assert.deepEqual(sqliteSummary, jsonlSummary);
   assert.equal(jsonlSummary.item.total_count, 2);
   assert.equal(jsonlSummary.item.returned_limit, 1);
+
+  const [jsonlRefRollup, sqliteRefRollup] = await parityRequest(
+    '/evidence-records/ref-rollup?mapped=true&output_candidate=true&limit=2'
+  );
+  assert.deepEqual(sqliteRefRollup, jsonlRefRollup);
+  assert.deepEqual(
+    jsonlRefRollup.item.groups.map((group) => group.evidence_ref),
+    ['/tmp/route-parity/app/outbox.md', 'tmux://5-web3-app-engineering/0.1']
+  );
 
   assert.equal(jsonl.store.records.length, before.jsonl);
   assert.equal(sqlite.store.records.length, before.sqlite);

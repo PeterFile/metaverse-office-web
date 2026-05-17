@@ -2354,7 +2354,8 @@ function createCollectorEvidenceRecords(report = {}) {
       record.agent_id || '',
       record.source_kind,
       record.evidence_ref,
-      record.evidence_role || ''
+      record.evidence_role || '',
+      ...createCollectorEvidenceRecordDedupeDisambiguator(record)
     ].join('|');
     if (seen.has(dedupeKey)) {
       return;
@@ -2551,7 +2552,13 @@ function createCollectorEvidenceRecords(report = {}) {
     }
   }
 
-  for (const source of report.runtime_source_evidence?.unmapped_hermes_sources || []) {
+  const unmappedHermesSources = Array.isArray(
+    report.runtime_source_evidence?.unmapped_hermes_sources
+  )
+    ? report.runtime_source_evidence.unmapped_hermes_sources
+    : [];
+
+  for (const [sourceIndex, source] of unmappedHermesSources.entries()) {
     if (!isHermesRuntimeSourceKind(source?.source_kind) || !source.evidence_ref) {
       continue;
     }
@@ -2565,6 +2572,7 @@ function createCollectorEvidenceRecords(report = {}) {
       source_status: source.status || 'observed',
       output_candidate: false,
       degraded_reasons: source.degraded_reasons,
+      dedupe_disambiguator: ['unmapped_hermes_source', sourceIndex],
       metadata: createHermesEvidenceRecordMetadata({
         observation: source,
         sourceHealth: null,
@@ -2574,6 +2582,14 @@ function createCollectorEvidenceRecords(report = {}) {
   }
 
   return records;
+}
+
+function createCollectorEvidenceRecordDedupeDisambiguator(record) {
+  if (!Array.isArray(record.dedupe_disambiguator)) {
+    return [];
+  }
+
+  return record.dedupe_disambiguator.map((part) => `${part ?? ''}`);
 }
 
 function isNegativeWorkspaceSourceStatus(status) {

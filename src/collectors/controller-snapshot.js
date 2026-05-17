@@ -86,9 +86,14 @@ async function collectControllerSnapshot(options = {}) {
     const tmuxObservations = panesBySession.get(agent.session_ref) || [];
     const hermesRuntimeObservations =
       hermesRuntimeSourceIndex.factsByAgentId.get(agent.agent_id) || [];
+    const hermesRuntimeHealthObservations =
+      hermesRuntimeSourceIndex.healthFactsByAgentId.get(agent.agent_id) || hermesRuntimeObservations;
     const hermesSourceHealth =
-      hermesRuntimeSourceIndex.enabled || hermesRuntimeObservations.length > 0
-        ? createHermesSourceHealth({ agent, hermesRuntimeObservations })
+      hermesRuntimeSourceIndex.enabled || hermesRuntimeHealthObservations.length > 0
+        ? createHermesSourceHealth({
+            agent,
+            hermesRuntimeObservations: hermesRuntimeHealthObservations
+          })
         : {};
     items.push(
       createCollectorItem({
@@ -1194,9 +1199,11 @@ function validateHermesRuntimeSourceFact(fact, index, sourceFilePath, sourceProv
 
 function groupHermesRuntimeSources({ facts, agents, enabled }) {
   const factsByAgentId = new Map();
+  const healthFactsByAgentId = new Map();
   const unmappedFacts = [];
   const agentsById = new Map(agents.map((agent) => [agent.agent_id, agent]));
   const agentIdBySessionRef = new Map(agents.map((agent) => [agent.session_ref, agent.agent_id]));
+  const pendingMappedFacts = new Map();
   const normalizedFacts = Array.isArray(facts)
     ? facts.map(normalizeHermesRuntimeSourceFact).filter(Boolean)
     : [];
@@ -1213,23 +1220,110 @@ function groupHermesRuntimeSources({ facts, agents, enabled }) {
       continue;
     }
 
-    if (!factsByAgentId.has(agentId)) {
-      factsByAgentId.set(agentId, []);
+    const mapKey = `${agentId}\u001f${fact.source_kind}`;
+    if (!pendingMappedFacts.has(mapKey)) {
+      pendingMappedFacts.set(mapKey, { agentId, sourceKind: fact.source_kind, facts: [] });
     }
 
-    factsByAgentId.get(agentId).push(fact);
+    pendingMappedFacts.get(mapKey).facts.push(fact);
+  }
+
+  const unsafeEvidenceRefFacts = collectUnsafeHermesEvidenceRefFacts(pendingMappedFacts);
+
+  for (const { agentId, sourceKind, facts: mappedFacts } of pendingMappedFacts.values()) {
+    if (mappedFacts.length === 1 && !unsafeEvidenceRefFacts.has(mappedFacts[0])) {
+      appendMappedHermesFact(factsByAgentId, agentId, mappedFacts[0]);
+      appendMappedHermesFact(healthFactsByAgentId, agentId, mappedFacts[0]);
+      continue;
+    }
+
+    const reason = createHermesUnsafeMappingReason(sourceKind);
+    appendMappedHermesFact(
+      healthFactsByAgentId,
+      agentId,
+      createHermesUnsafeHealthFact({
+        agent: agentsById.get(agentId),
+        sourceKind,
+        facts: mappedFacts,
+        reason
+      })
+    );
+
+    for (const fact of mappedFacts) {
+      unmappedFacts.push(createUnsafeUnmappedHermesSourceFact(fact, reason));
+    }
   }
 
   for (const observations of factsByAgentId.values()) {
+    observations.sort(compareHermesRuntimeObservation);
+  }
+  for (const observations of healthFactsByAgentId.values()) {
     observations.sort(compareHermesRuntimeObservation);
   }
 
   return {
     enabled: Boolean(enabled || normalizedFacts.length > 0),
     factsByAgentId,
+    healthFactsByAgentId,
     unmappedFacts: unmappedFacts.sort((left, right) =>
       left.evidence_ref.localeCompare(right.evidence_ref)
     )
+  };
+}
+
+function collectUnsafeHermesEvidenceRefFacts(pendingMappedFacts) {
+  const factsByEvidenceRef = new Map();
+
+  for (const { agentId, sourceKind, facts } of pendingMappedFacts.values()) {
+    for (const fact of facts) {
+      const evidenceRefKey = `${sourceKind}\u001f${fact.evidence_ref}`;
+      if (!factsByEvidenceRef.has(evidenceRefKey)) {
+        factsByEvidenceRef.set(evidenceRefKey, []);
+      }
+
+      factsByEvidenceRef.get(evidenceRefKey).push({ agentId, fact });
+    }
+  }
+
+  const unsafeFacts = new Set();
+  for (const mappedFacts of factsByEvidenceRef.values()) {
+    if (new Set(mappedFacts.map(({ agentId }) => agentId)).size <= 1) {
+      continue;
+    }
+
+    for (const { fact } of mappedFacts) {
+      unsafeFacts.add(fact);
+    }
+  }
+
+  return unsafeFacts;
+}
+
+function appendMappedHermesFact(target, agentId, fact) {
+  if (!target.has(agentId)) {
+    target.set(agentId, []);
+  }
+
+  target.get(agentId).push(fact);
+}
+
+function createHermesUnsafeMappingReason(sourceKind) {
+  return sourceKind === 'hermes_session'
+    ? 'Hermes session duplicate mapping'
+    : 'Hermes profile duplicate mapping';
+}
+
+function createHermesUnsafeHealthFact({ agent, sourceKind, facts, reason }) {
+  return {
+    source_kind: sourceKind,
+    agent_id: agent?.agent_id || null,
+    profile_id: sourceKind === 'hermes_profile' ? agent?.agent_id || null : null,
+    session_ref: sourceKind === 'hermes_session' ? agent?.session_ref || null : null,
+    evidence_ref: null,
+    status: 'degraded',
+    last_observed_at: maxIsoTimestamp(facts.map((fact) => fact.last_observed_at)),
+    degraded_reasons: [reason],
+    metadata: {}
   };
 }
 
@@ -1322,6 +1416,14 @@ function createUnmappedHermesSourceFact(fact) {
     status: fact.status,
     degraded_reasons: fact.degraded_reasons.slice(),
     ...(fact.source_provenance ? { source_provenance: fact.source_provenance } : {})
+  };
+}
+
+function createUnsafeUnmappedHermesSourceFact(fact, reason) {
+  return {
+    ...createUnmappedHermesSourceFact(fact),
+    status: 'degraded',
+    degraded_reasons: [reason]
   };
 }
 

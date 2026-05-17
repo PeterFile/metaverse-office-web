@@ -634,8 +634,24 @@ test('collector can read opt-in Hermes runtime facts from JSON and JSONL files',
   const jsonlFacts = await createHermesRuntimeSourcesFileReader({ filePath: jsonlFile })();
 
   assert.deepEqual(
-    jsonFacts.map((fact) => fact.evidence_ref),
-    ['hermes://profile/app-profile']
+    jsonFacts,
+    [
+      {
+        source_kind: 'hermes_profile',
+        agent_id: 'app-engineering',
+        profile_id: 'app-profile',
+        session_ref: null,
+        evidence_ref: 'hermes://profile/app-profile',
+        status: 'observed',
+        last_observed_at: '2026-03-09T18:02:00.000Z',
+        degraded_reasons: [],
+        metadata: {},
+        source_provenance: {
+          source_format: 'json_array',
+          source_index: 0
+        }
+      }
+    ]
   );
   assert.deepEqual(jsonlFacts, [
     {
@@ -647,7 +663,12 @@ test('collector can read opt-in Hermes runtime facts from JSON and JSONL files',
       status: 'degraded',
       last_observed_at: '2026-03-09T18:03:00.000Z',
       degraded_reasons: ['session heartbeat stale'],
-      metadata: {}
+      metadata: {},
+      source_provenance: {
+        source_format: 'jsonl',
+        source_index: 0,
+        line: 1
+      }
     }
   ]);
 });

@@ -1091,7 +1091,9 @@ function parseHermesRuntimeSourcesFile(content, sourceFilePath = 'Hermes runtime
     trimmed[0] === '['
       ? parseHermesRuntimeSourcesJson(trimmed, sourceFilePath)
       : parseHermesRuntimeSourcesJsonl(content, sourceFilePath);
-  return facts.map((fact, index) => validateHermesRuntimeSourceFact(fact, index, sourceFilePath));
+  return facts.map(({ fact, source_provenance }, index) =>
+    validateHermesRuntimeSourceFact(fact, index, sourceFilePath, source_provenance)
+  );
 }
 
 function parseHermesRuntimeSourcesJson(content, sourceFilePath) {
@@ -1106,7 +1108,13 @@ function parseHermesRuntimeSourcesJson(content, sourceFilePath) {
     throw new Error(`Invalid Hermes runtime sources JSON in ${sourceFilePath}: expected an array`);
   }
 
-  return parsed;
+  return parsed.map((fact, index) => ({
+    fact,
+    source_provenance: {
+      source_format: 'json_array',
+      source_index: index
+    }
+  }));
 }
 
 function parseHermesRuntimeSourcesJsonl(content, sourceFilePath) {
@@ -1119,7 +1127,14 @@ function parseHermesRuntimeSourcesJsonl(content, sourceFilePath) {
     }
 
     try {
-      facts.push(JSON.parse(line));
+      facts.push({
+        fact: JSON.parse(line),
+        source_provenance: {
+          source_format: 'jsonl',
+          source_index: facts.length,
+          line: lineIndex + 1
+        }
+      });
     } catch (error) {
       throw new Error(
         `Invalid Hermes runtime sources JSONL in ${sourceFilePath} at line ${lineIndex + 1}: ${error.message}`
@@ -1130,7 +1145,7 @@ function parseHermesRuntimeSourcesJsonl(content, sourceFilePath) {
   return facts;
 }
 
-function validateHermesRuntimeSourceFact(fact, index, sourceFilePath) {
+function validateHermesRuntimeSourceFact(fact, index, sourceFilePath, sourceProvenance = null) {
   const location = `${sourceFilePath} item ${index}`;
   if (!fact || typeof fact !== 'object' || Array.isArray(fact)) {
     throw new Error(`Invalid Hermes runtime source fact at ${location}: expected object`);
@@ -1171,7 +1186,10 @@ function validateHermesRuntimeSourceFact(fact, index, sourceFilePath) {
     throw new Error(`Invalid Hermes runtime source fact at ${location}: metadata must be an object`);
   }
 
-  return normalized;
+  return {
+    ...normalized,
+    ...(sourceProvenance ? { source_provenance: sourceProvenance } : {})
+  };
 }
 
 function groupHermesRuntimeSources({ facts, agents, enabled }) {
@@ -1237,6 +1255,7 @@ function normalizeHermesRuntimeSourceFact(fact) {
     return null;
   }
 
+  const sourceProvenance = normalizeHermesSourceProvenance(fact.source_provenance);
   return {
     source_kind: fact.source_kind,
     agent_id: sanitizeText(fact.agent_id) || null,
@@ -1246,8 +1265,36 @@ function normalizeHermesRuntimeSourceFact(fact) {
     status: normalizeSourceHealthStatus(fact.status) || 'observed',
     last_observed_at: normalizeIsoTimestamp(fact.last_observed_at || fact.observed_at),
     degraded_reasons: normalizeStringArray(fact.degraded_reasons),
-    metadata: fact.metadata && typeof fact.metadata === 'object' ? { ...fact.metadata } : {}
+    metadata: fact.metadata && typeof fact.metadata === 'object' ? { ...fact.metadata } : {},
+    ...(sourceProvenance ? { source_provenance: sourceProvenance } : {})
   };
+}
+
+function normalizeHermesSourceProvenance(sourceProvenance) {
+  if (!sourceProvenance || typeof sourceProvenance !== 'object' || Array.isArray(sourceProvenance)) {
+    return null;
+  }
+
+  if (!['json_array', 'jsonl'].includes(sourceProvenance.source_format)) {
+    return null;
+  }
+
+  if (!Number.isSafeInteger(sourceProvenance.source_index) || sourceProvenance.source_index < 0) {
+    return null;
+  }
+
+  const normalized = {
+    source_format: sourceProvenance.source_format,
+    source_index: sourceProvenance.source_index
+  };
+  if (sourceProvenance.source_format === 'jsonl') {
+    if (!Number.isSafeInteger(sourceProvenance.line) || sourceProvenance.line < 1) {
+      return null;
+    }
+    normalized.line = sourceProvenance.line;
+  }
+
+  return normalized;
 }
 
 function deriveHermesEvidenceRef(fact) {
@@ -1273,7 +1320,8 @@ function createUnmappedHermesSourceFact(fact) {
     session_ref: fact.session_ref,
     observed_at: fact.last_observed_at,
     status: fact.status,
-    degraded_reasons: fact.degraded_reasons.slice()
+    degraded_reasons: fact.degraded_reasons.slice(),
+    ...(fact.source_provenance ? { source_provenance: fact.source_provenance } : {})
   };
 }
 

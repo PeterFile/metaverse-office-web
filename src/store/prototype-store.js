@@ -2522,6 +2522,7 @@ function isHermesRuntimeSourceKind(sourceKind) {
 }
 
 function createHermesEvidenceRecordMetadata({ observation, sourceHealth, sourceHealthKey }) {
+  const sourceProvenance = normalizeHermesSourceProvenance(observation.source_provenance);
   return {
     profile_id: observation.profile_id || sourceHealth?.profile_id || null,
     session_ref:
@@ -2529,8 +2530,36 @@ function createHermesEvidenceRecordMetadata({ observation, sourceHealth, sourceH
       sourceHealth?.session_ref ||
       sourceHealth?.expected_session_ref ||
       null,
-    source_health_key: sourceHealthKey
+    source_health_key: sourceHealthKey,
+    ...(sourceProvenance ? { source_provenance: sourceProvenance } : {})
   };
+}
+
+function normalizeHermesSourceProvenance(sourceProvenance) {
+  if (!sourceProvenance || typeof sourceProvenance !== 'object' || Array.isArray(sourceProvenance)) {
+    return null;
+  }
+
+  if (!['json_array', 'jsonl'].includes(sourceProvenance.source_format)) {
+    return null;
+  }
+
+  if (!Number.isSafeInteger(sourceProvenance.source_index) || sourceProvenance.source_index < 0) {
+    return null;
+  }
+
+  const normalized = {
+    source_format: sourceProvenance.source_format,
+    source_index: sourceProvenance.source_index
+  };
+  if (sourceProvenance.source_format === 'jsonl') {
+    if (!Number.isSafeInteger(sourceProvenance.line) || sourceProvenance.line < 1) {
+      return null;
+    }
+    normalized.line = sourceProvenance.line;
+  }
+
+  return normalized;
 }
 
 function deriveWorkspaceEvidenceRecordRole({ sourceKind, fileName }) {

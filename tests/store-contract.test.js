@@ -860,6 +860,102 @@ test('prototype store lists compact runtime source gaps without normal observed 
   assert.equal(gaps.some((gap) => Object.hasOwn(gap, 'metadata')), false);
 });
 
+test('prototype store groups evidence refs with evidence-record filters before group limit', async () => {
+  const storeFile = await createStoreFile();
+  const store = await createPrototypeStore({ filePath: storeFile });
+
+  await store.appendCollectorReport(createCollectorReport());
+  await store.appendCollectorReport({
+    ...createCollectorReport(),
+    collected_at: '2026-03-09T18:07:00.000Z',
+    runtime_source_evidence: {
+      unmapped_tmux_sessions: [
+        {
+          session_name: 'unmapped-session',
+          pane_refs: ['tmux://unmapped-session/0.0'],
+          observed_count: 1,
+          status: 'observed',
+          last_observed_at: '2026-03-09T18:06:50.000Z',
+          degraded_reasons: []
+        }
+      ]
+    }
+  });
+
+  assert.deepEqual(
+    store.getEvidenceRefRollup({
+      agent_id: 'app-engineering',
+      limit: 2
+    }),
+    {
+      total_count: 6,
+      total_groups: 3,
+      returned_limit: 2,
+      groups: [
+        {
+          evidence_ref: '/tmp/store-contract',
+          record_count: 2,
+          mapped_count: 2,
+          unmapped_count: 0,
+          agent_id_buckets: {
+            'app-engineering': 2
+          },
+          source_kind_buckets: {
+            workspace_root: 2
+          },
+          source_status_buckets: {
+            observed: 2
+          }
+        },
+        {
+          evidence_ref: '/tmp/store-contract/outbox.md',
+          record_count: 2,
+          mapped_count: 2,
+          unmapped_count: 0,
+          agent_id_buckets: {
+            'app-engineering': 2
+          },
+          source_kind_buckets: {
+            workspace_file: 2
+          },
+          source_status_buckets: {
+            degraded: 2
+          }
+        }
+      ]
+    }
+  );
+  assert.deepEqual(
+    store.getEvidenceRefRollup({
+      mapped: 'false',
+      source_kind: 'tmux_observation',
+      limit: 10
+    }),
+    {
+      total_count: 1,
+      total_groups: 1,
+      returned_limit: 10,
+      groups: [
+        {
+          evidence_ref: 'tmux://unmapped-session/0.0',
+          record_count: 1,
+          mapped_count: 0,
+          unmapped_count: 1,
+          agent_id_buckets: {
+            unmapped: 1
+          },
+          source_kind_buckets: {
+            tmux_observation: 1
+          },
+          source_status_buckets: {
+            observed: 1
+          }
+        }
+      ]
+    }
+  );
+});
+
 test('JSONL prototype store filters evidence records by observed and collected windows before limit', async () => {
   const storeFile = await createStoreFile();
   const store = await createPrototypeStore({ filePath: storeFile });

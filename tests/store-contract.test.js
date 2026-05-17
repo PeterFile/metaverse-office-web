@@ -607,6 +607,8 @@ test('JSONL prototype store filters evidence records by exact drilldown fields',
   const outboxRecord = store.listEvidenceRecords({
     evidence_ref: '/tmp/store-contract/outbox.md'
   })[0];
+  assert.deepEqual(store.getEvidenceRecord(outboxRecord.evidence_id), outboxRecord);
+  assert.equal(store.getEvidenceRecord('missing-evidence-id'), null);
   assert.deepEqual(
     store
       .listEvidenceRecords({

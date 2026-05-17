@@ -5219,6 +5219,43 @@ test('GET /runtime/source-gaps returns compact gap and unmapped evidence read-on
   assert.equal(await readFile(storeFile, 'utf8'), fileBeforeRead);
 });
 
+test('GET /collectors/controller-snapshot/history returns bounded read-only summaries', async (t) => {
+  let collectCount = 0;
+  const controllerSnapshotCollector = {
+    async collectSnapshot() {
+      collectCount += 1;
+      throw new Error('GET history must not collect');
+    }
+  };
+  const { baseUrl, store, storeFile } = await createHarness(t, { controllerSnapshotCollector });
+  const firstReport = createRouteParityCollectorReport();
+  const secondReport = structuredClone(firstReport);
+  secondReport.collected_at = '2026-03-09T18:07:00.000Z';
+  secondReport.items[0].source_health.workspace_files.status = 'observed';
+  secondReport.items[0].source_health.workspace_files.degraded_reasons = [];
+  secondReport.summary.workspace_observed_count = 3;
+
+  await store.appendCollectorReport(firstReport);
+  await store.appendCollectorReport(secondReport);
+  const fileBeforeRead = await readFile(storeFile, 'utf8');
+  const latestBeforeRead = store.getLatestCollectorReport();
+
+  const response = await requestJson(
+    `${baseUrl}/collectors/controller-snapshot/history?agent_id=app-engineering&source_kind=workspace_file&status=observed&collected_since=${encodeURIComponent('2026-03-09T18:07:00.000Z')}&limit=1`
+  );
+  assert.equal(response.response.status, 200);
+  assert.equal(response.body.item.total_count, 1);
+  assert.equal(response.body.item.returned_limit, 1);
+  assert.deepEqual(response.body.item.items.map((item) => item.collector_snapshot_id), [
+    'collector-snapshot:2026-03-09T18:07:00.000Z'
+  ]);
+  assert.equal(Object.hasOwn(response.body.item.items[0], 'items'), false);
+  assert.equal(Object.hasOwn(response.body.item.items[0], 'runtime_source_evidence'), false);
+  assert.equal(collectCount, 0);
+  assert.equal(store.getLatestCollectorReport(), latestBeforeRead);
+  assert.equal(await readFile(storeFile, 'utf8'), fileBeforeRead);
+});
+
 test('GET /evidence-records lists stored evidence records read-only with exact filters', async (t) => {
   let collectCount = 0;
   const controllerSnapshotCollector = {

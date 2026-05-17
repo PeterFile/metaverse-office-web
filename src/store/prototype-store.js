@@ -414,6 +414,7 @@ class PrototypeStore {
     this.events = [];
     this.heartbeats = [];
     this.evidenceRecords = [];
+    this.collectorReports = [];
     this.latestCollectorReport = null;
   }
 
@@ -422,6 +423,7 @@ class PrototypeStore {
     this.events = [];
     this.heartbeats = [];
     this.evidenceRecords = [];
+    this.collectorReports = [];
     this.latestCollectorReport = null;
 
     for (const record of await this.recordLog.loadRecords()) {
@@ -525,6 +527,9 @@ class PrototypeStore {
     }
 
     if (record.kind === COLLECTOR_SNAPSHOT_RECORD_KIND) {
+      if (record.payload) {
+        this.collectorReports.push(record.payload);
+      }
       this.latestCollectorReport = record.payload || null;
     }
   }
@@ -539,6 +544,10 @@ class PrototypeStore {
 
   getLatestCollectorSourceHealth(filters = {}) {
     return projectCollectorSourceHealth(this.getLatestCollectorReport(), filters);
+  }
+
+  getCollectorSnapshotHistorySummary(filters = {}) {
+    return projectCollectorSnapshotHistorySummary(this.collectorReports, filters);
   }
 
   listEvidenceRecords(filters = {}) {
@@ -3036,6 +3045,129 @@ function projectCollectorSourceHealth(report, filters = {}) {
       })
     )
   };
+}
+
+function projectCollectorSnapshotHistorySummary(reports = [], filters = {}) {
+  const collectorSnapshotId = normalizeFilterValue(filters.collector_snapshot_id);
+  const agentId = normalizeFilterValue(filters.agent_id);
+  const sourceKind = normalizeFilterValue(filters.source_kind);
+  const sourceHealthKeys = resolveSourceHealthKeys(sourceKind);
+  const requestedStatus = normalizeFilterValue(filters.status);
+  const status = normalizeSourceHealthStatus(requestedStatus);
+  const hasUnknownStatus = Boolean(requestedStatus) && !status;
+  const collectedSince = parseOptionalTimestampFilter(filters.collected_since);
+  const collectedUntil = parseOptionalTimestampFilter(filters.collected_until);
+  const limit = parseLimit(filters.limit);
+  const rows = hasUnknownStatus
+    ? []
+    : reports
+        .map((report) =>
+          projectCollectorSnapshotHistoryItem(report, {
+            agentId,
+            sourceHealthKeys,
+            status
+          })
+        )
+        .filter(Boolean)
+        .filter((item) => !collectorSnapshotId || item.collector_snapshot_id === collectorSnapshotId)
+        .filter((item) =>
+          matchesTimestampWindow(item.collected_at, collectedSince, collectedUntil)
+        )
+        .sort(compareCollectorSnapshotHistoryRecency);
+  const items = rows.slice(0, limit);
+  const aggregate = createCollectorSnapshotHistoryAggregate(items);
+
+  return {
+    total_count: rows.length,
+    returned_limit: limit,
+    source_kind_buckets: aggregate.source_kind_buckets,
+    status_buckets: aggregate.status_buckets,
+    items
+  };
+}
+
+function projectCollectorSnapshotHistoryItem(report, { agentId, sourceHealthKeys, status }) {
+  if (!report || !Array.isArray(report.items)) {
+    return null;
+  }
+
+  const selectedItems = report.items
+    .filter((item) => item && typeof item.agent_id === 'string' && item.agent_id.length > 0)
+    .filter((item) => !agentId || item.agent_id === agentId)
+    .filter((item) => matchesSourceHealthStatus(item, sourceHealthKeys, status));
+
+  if (selectedItems.length === 0) {
+    return null;
+  }
+
+  const aggregate = createCollectorSnapshotHistoryAggregateFromReportItems(selectedItems, {
+    sourceHealthKeys,
+    status
+  });
+  const summary = report.summary || {};
+
+  return {
+    collector_snapshot_id: createCollectorCorrelationId(
+      normalizeCollectorTimestamp(report.collected_at) || report.collected_at || 'unknown'
+    ),
+    collected_at: report.collected_at || null,
+    actor_id: report.actor_id || null,
+    agent_count: normalizeCount(summary.agent_count),
+    heartbeat_count: normalizeCount(summary.heartbeat_count),
+    tmux_observed_count: normalizeCount(summary.tmux_observed_count),
+    workspace_observed_count: normalizeCount(summary.workspace_observed_count),
+    reboot_recommended_count: normalizeCount(summary.reboot_recommended_count),
+    matched_agent_count: selectedItems.length,
+    source_kind_buckets: aggregate.source_kind_buckets,
+    status_buckets: aggregate.status_buckets
+  };
+}
+
+function createCollectorSnapshotHistoryAggregate(items) {
+  const aggregate = createEmptyCollectorSnapshotHistoryAggregate();
+
+  for (const item of items) {
+    mergeBuckets(aggregate.source_kind_buckets, item.source_kind_buckets);
+    mergeBuckets(aggregate.status_buckets, item.status_buckets);
+  }
+
+  return aggregate;
+}
+
+function createCollectorSnapshotHistoryAggregateFromReportItems(items, { sourceHealthKeys, status }) {
+  const aggregate = createEmptyCollectorSnapshotHistoryAggregate();
+
+  for (const item of items) {
+    const sourceHealth = item.source_health || {};
+    for (const key of sourceHealthKeys) {
+      const sourceStatus = normalizeSourceHealthStatus(sourceHealth[key]?.status);
+      if (!sourceStatus || (status && sourceStatus !== status)) {
+        continue;
+      }
+
+      aggregate.source_kind_buckets[key] += 1;
+      aggregate.status_buckets[sourceStatus] += 1;
+    }
+  }
+
+  return aggregate;
+}
+
+function createEmptyCollectorSnapshotHistoryAggregate() {
+  return {
+    source_kind_buckets: Object.fromEntries(SOURCE_HEALTH_KEYS.map((key) => [key, 0])),
+    status_buckets: createEmptySourceHealthStatusBucket()
+  };
+}
+
+function mergeBuckets(target, source) {
+  for (const key of Object.keys(target)) {
+    target[key] += normalizeCount(source?.[key]);
+  }
+}
+
+function compareCollectorSnapshotHistoryRecency(left, right) {
+  return Date.parse(right.collected_at || '') - Date.parse(left.collected_at || '');
 }
 
 const SOURCE_HEALTH_KEY_BY_SOURCE_KIND = Object.freeze({

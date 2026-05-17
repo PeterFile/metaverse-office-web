@@ -557,6 +557,97 @@ test('collector treats injected Hermes runtime facts as source evidence only', a
   assert.deepEqual(factoryReport.items[0].hermes_runtime_observations, item.hermes_runtime_observations);
 });
 
+test('collector degrades duplicate Hermes runtime mappings without promoting unsafe facts', async () => {
+  const appAgent = {
+    ...SEED_AGENTS.find((agent) => agent.agent_id === 'app-engineering'),
+    workspace_root: '/tmp/hermes-duplicate-runtime-source/app-engineering'
+  };
+
+  const report = await collectControllerSnapshot({
+    agents: [appAgent],
+    collectedAt: '2026-03-09T18:05:00.000Z',
+    readPathStat: async () => null,
+    listTmuxPanes: async () => [],
+    readHermesRuntimeSources: async () => [
+      {
+        source_kind: 'hermes_profile',
+        agent_id: 'app-engineering',
+        profile_id: 'app-profile-primary',
+        observed_at: '2026-03-09T18:01:00.000Z'
+      },
+      {
+        source_kind: 'hermes_profile',
+        agent_id: 'app-engineering',
+        profile_id: 'app-profile-shadow',
+        observed_at: '2026-03-09T18:02:00.000Z'
+      },
+      {
+        source_kind: 'hermes_session',
+        session_ref: appAgent.session_ref,
+        evidence_ref: `hermes://session/${appAgent.session_ref}`,
+        observed_at: '2026-03-09T18:03:00.000Z'
+      },
+      {
+        source_kind: 'hermes_session',
+        session_ref: appAgent.session_ref,
+        evidence_ref: `hermes://session/${appAgent.session_ref}#duplicate`,
+        observed_at: '2026-03-09T18:04:00.000Z'
+      }
+    ]
+  });
+
+  const item = report.items[0];
+  assert.equal(item.heartbeat.last_meaningful_output_at, null);
+  assert.deepEqual(item.hermes_runtime_observations, []);
+  assert.deepEqual(item.source_health.hermes_profile, {
+    status: 'degraded',
+    profile_id: 'app-engineering',
+    evidence_ref: null,
+    last_observed_at: '2026-03-09T18:02:00.000Z',
+    degraded_reasons: ['Hermes profile duplicate mapping']
+  });
+  assert.deepEqual(item.source_health.hermes_session, {
+    status: 'degraded',
+    expected_session_ref: appAgent.session_ref,
+    evidence_ref: null,
+    last_observed_at: '2026-03-09T18:04:00.000Z',
+    degraded_reasons: ['Hermes session duplicate mapping']
+  });
+  assert.deepEqual(
+    report.runtime_source_evidence.unmapped_hermes_sources.map((source) => [
+      source.source_kind,
+      source.evidence_ref,
+      source.status,
+      source.degraded_reasons
+    ]),
+    [
+      ['hermes_profile', 'hermes://profile/app-profile-primary', 'degraded', ['Hermes profile duplicate mapping']],
+      ['hermes_profile', 'hermes://profile/app-profile-shadow', 'degraded', ['Hermes profile duplicate mapping']],
+      ['hermes_session', `hermes://session/${appAgent.session_ref}`, 'degraded', ['Hermes session duplicate mapping']],
+      ['hermes_session', `hermes://session/${appAgent.session_ref}#duplicate`, 'degraded', ['Hermes session duplicate mapping']]
+    ]
+  );
+
+  const root = await mkdtemp(path.join(os.tmpdir(), 'metaverse-office-hermes-duplicate-'));
+  const store = await createPrototypeStore({ filePath: path.join(root, 'prototype-store.jsonl') });
+  await store.appendCollectorReport(report);
+  const unsafeRecords = store.listEvidenceRecords({ source_status: 'degraded' });
+  assert.deepEqual(
+    unsafeRecords.map((record) => ({
+      agent_id: record.agent_id,
+      evidence_role: record.evidence_role,
+      output_candidate: record.output_candidate,
+      evidence_ref: record.evidence_ref
+    })),
+    report.runtime_source_evidence.unmapped_hermes_sources.map((source) => ({
+      agent_id: null,
+      evidence_role: 'runtime_unmapped',
+      output_candidate: false,
+      evidence_ref: source.evidence_ref
+    }))
+  );
+});
+
 test('collector keeps shared Hermes runtime refs out of shared artifact rollups', async () => {
   const appAgent = {
     ...SEED_AGENTS.find((agent) => agent.agent_id === 'app-engineering'),
@@ -585,21 +676,89 @@ test('collector keeps shared Hermes runtime refs out of shared artifact rollups'
         agent_id: 'protocol-engineering',
         evidence_ref: 'hermes://profile/shared-runtime',
         status: 'observed',
-        observed_at: '2026-03-09T18:03:00.000Z'
+        observed_at: '2026-03-09T18:02:00.000Z'
       }
     ]
   });
 
   assert.deepEqual(report.shared_artifacts, []);
+  assert.deepEqual(report.items.map((item) => item.evidence_refs), [[], []]);
+  assert.deepEqual(report.items.map((item) => item.hermes_runtime_observations), [[], []]);
   assert.deepEqual(
-    report.items.map((item) => item.evidence_refs),
-    [['hermes://profile/shared-runtime'], ['hermes://profile/shared-runtime']]
+    report.items.map((item) => ({
+      agent_id: item.agent_id,
+      hermes_profile: item.source_health.hermes_profile
+    })),
+    [
+      {
+        agent_id: 'app-engineering',
+        hermes_profile: {
+          status: 'degraded',
+          profile_id: 'app-engineering',
+          evidence_ref: null,
+          last_observed_at: '2026-03-09T18:02:00.000Z',
+          degraded_reasons: ['Hermes profile duplicate mapping']
+        }
+      },
+      {
+        agent_id: 'protocol-engineering',
+        hermes_profile: {
+          status: 'degraded',
+          profile_id: 'protocol-engineering',
+          evidence_ref: null,
+          last_observed_at: '2026-03-09T18:02:00.000Z',
+          degraded_reasons: ['Hermes profile duplicate mapping']
+        }
+      }
+    ]
+  );
+  assert.deepEqual(
+    report.runtime_source_evidence.unmapped_hermes_sources.map((source) => [
+      source.source_kind,
+      source.evidence_ref,
+      source.status,
+      source.degraded_reasons
+    ]),
+    [
+      ['hermes_profile', 'hermes://profile/shared-runtime', 'degraded', ['Hermes profile duplicate mapping']],
+      ['hermes_profile', 'hermes://profile/shared-runtime', 'degraded', ['Hermes profile duplicate mapping']]
+    ]
+  );
+
+  const root = await mkdtemp(path.join(os.tmpdir(), 'metaverse-office-hermes-shared-ref-'));
+  const store = await createPrototypeStore({ filePath: path.join(root, 'prototype-store.jsonl') });
+  await store.appendCollectorReport(report);
+  const sharedRefRecords = store.listEvidenceRecords({
+    source_kind: 'hermes_profile',
+    evidence_role: 'runtime_unmapped',
+    evidence_ref: 'hermes://profile/shared-runtime'
+  });
+  assert.deepEqual(
+    sharedRefRecords.map((record) => ({
+      agent_id: record.agent_id,
+      evidence_ref: record.evidence_ref,
+      evidence_role: record.evidence_role,
+      output_candidate: record.output_candidate
+    })),
+    [
+      {
+        agent_id: null,
+        evidence_ref: 'hermes://profile/shared-runtime',
+        evidence_role: 'runtime_unmapped',
+        output_candidate: false
+      },
+      {
+        agent_id: null,
+        evidence_ref: 'hermes://profile/shared-runtime',
+        evidence_role: 'runtime_unmapped',
+        output_candidate: false
+      }
+    ]
   );
   assert.deepEqual(report.evidence_coverage.source_kind_buckets, {
     workspace_file: 0,
     workspace_root: 0,
-    tmux_observation: 0,
-    hermes_profile: 1
+    tmux_observation: 0
   });
 });
 

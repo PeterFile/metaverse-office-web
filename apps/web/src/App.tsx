@@ -3043,6 +3043,16 @@ function AppInner() {
                       <span>{`Correlation · ${selectedAgentPeekCorrelationId}`}</span>
                     ) : null}
                     {selectedAgentPeekEvidenceRef ? <span>{`Evidence · ${selectedAgentPeekEvidenceRef}`}</span> : null}
+                    {selectedAgentSourceGapSummary && selectedAgentSourceGapFact ? (
+                      <button
+                        type="button"
+                        className="aitown-hub-focus-ribbon__source-gap-fact"
+                        aria-label={`Open source gap supervision for ${selectedAgent.display_name} ${selectedAgentSourceGapFact.sourceLabel.toLowerCase()} ${selectedAgentSourceGapFact.status}`}
+                        onClick={handleSelectedAgentSourceGapFactOpen}
+                      >
+                        {selectedAgentSourceGapSummary}
+                      </button>
+                    ) : null}
                   </div>
                 </section>
                 <section

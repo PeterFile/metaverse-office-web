@@ -1991,18 +1991,34 @@ button {
 }
 
 .aitown-hub-focus-ribbon__head span,
-.aitown-hub-focus-ribbon__facts span {
+.aitown-hub-focus-ribbon__facts span,
+.aitown-hub-focus-ribbon__source-gap-fact {
   color: #d8eadf;
   font-size: 0.72rem;
   line-height: 1.25;
   overflow-wrap: anywhere;
 }
 
-.aitown-hub-focus-ribbon__facts span {
+.aitown-hub-focus-ribbon__facts span,
+.aitown-hub-focus-ribbon__source-gap-fact {
   min-width: 0;
   padding: 3px 6px;
   border-left: 2px solid rgba(139, 233, 213, 0.35);
   background: rgba(7, 12, 15, 0.24);
+}
+
+.aitown-hub-focus-ribbon__source-gap-fact {
+  border-top: 0;
+  border-right: 0;
+  border-bottom: 0;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+}
+
+.aitown-hub-focus-ribbon__source-gap-fact:focus-visible {
+  outline: 2px solid #8be9d5;
+  outline-offset: 2px;
 }
 
 .aitown-hub-focus-ribbon__facts .aitown-hub-focus-ribbon__facts-label {

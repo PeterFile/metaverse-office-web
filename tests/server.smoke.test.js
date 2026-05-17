@@ -5236,6 +5236,15 @@ test('GET /evidence-records lists stored evidence records read-only with exact f
     '/tmp/evidence-query/app/outbox.md'
   ]);
 
+  const detail = await requestJson(`${baseUrl}/evidence-records/${encodeURIComponent(evidenceId)}`);
+  assert.equal(detail.response.status, 200);
+  assert.deepEqual(detail.body, { item: response.body.items[0] });
+
+  const unknownDetail = await requestJson(`${baseUrl}/evidence-records/missing-evidence-id`);
+  assert.equal(unknownDetail.response.status, 404);
+  assert.equal(unknownDetail.body.error, 'not_found');
+  assert.equal(unknownDetail.body.details, 'unknown evidence record missing-evidence-id');
+
   const substringEvidenceId = await requestJson(
     `${baseUrl}/evidence-records?evidence_id=${encodeURIComponent(evidenceId.slice(0, -2))}&limit=10`
   );

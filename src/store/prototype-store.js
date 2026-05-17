@@ -548,6 +548,18 @@ class PrototypeStore {
       .map(cloneEvidenceRecord);
   }
 
+  getEvidenceRecord(evidenceId) {
+    const normalizedEvidenceId = normalizeFilterValue(evidenceId);
+    if (!normalizedEvidenceId) {
+      return null;
+    }
+
+    const record = this.evidenceRecords.find(
+      (evidenceRecord) => evidenceRecord.evidence_id === normalizedEvidenceId
+    );
+    return record ? cloneEvidenceRecord(record) : null;
+  }
+
   getEvidenceRecordsSummary(filters = {}) {
     const { records, limit } = this.#filterEvidenceRecords(filters);
     const summary = {

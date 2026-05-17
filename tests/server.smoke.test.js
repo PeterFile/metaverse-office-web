@@ -5092,6 +5092,133 @@ test('GET /collectors/controller-snapshot/source-health projects latest source h
   assert.equal(records[records.length - 1].kind, 'collector_snapshot');
 });
 
+test('GET /runtime/source-gaps returns compact gap and unmapped evidence read-only', async (t) => {
+  let collectCount = 0;
+  const controllerSnapshotCollector = {
+    async collectSnapshot() {
+      collectCount += 1;
+      throw new Error('GET /runtime/source-gaps must not collect');
+    }
+  };
+  const { baseUrl, store, storeFile } = await createHarness(t, { controllerSnapshotCollector });
+
+  const missing = await requestJson(`${baseUrl}/runtime/source-gaps`);
+  assert.equal(missing.response.status, 200);
+  assert.deepEqual(missing.body, { items: [] });
+
+  await store.appendCollectorReport({
+    collected_at: '2026-03-09T18:06:00.000Z',
+    actor_id: 'team-lead',
+    summary: {
+      agent_count: 1,
+      heartbeat_count: 0,
+      tmux_observed_count: 1,
+      workspace_observed_count: 2,
+      reboot_recommended_count: 0
+    },
+    runtime_source_evidence: {
+      unmapped_tmux_sessions: [
+        {
+          session_name: 'unmapped-session',
+          pane_refs: ['tmux://unmapped-session/0.0'],
+          observed_count: 1,
+          status: 'observed',
+          last_observed_at: '2026-03-09T18:05:50.000Z',
+          degraded_reasons: []
+        }
+      ]
+    },
+    items: [
+      {
+        agent_id: 'app-engineering',
+        evidence_refs: [
+          '/tmp/source-gaps/app',
+          '/tmp/source-gaps/app/outbox.md',
+          'tmux://5-web3-app-engineering/0.1'
+        ],
+        workspace_observations: [
+          {
+            path: '/tmp/source-gaps/app/outbox.md',
+            file_name: 'outbox.md',
+            kind: 'workspace_file',
+            last_modified_at: '2026-03-09T18:05:00.000Z'
+          }
+        ],
+        tmux_observations: [
+          {
+            session_name: '5-web3-app-engineering',
+            window_index: '0',
+            pane_index: '1',
+            pane_id: '%11',
+            pane_current_command: 'nvim',
+            pane_activity_at: '2026-03-09T18:05:30.000Z'
+          }
+        ],
+        source_health: {
+          workspace_root: {
+            status: 'observed',
+            path: '/tmp/source-gaps/app',
+            last_observed_at: '2026-03-09T18:04:00.000Z',
+            degraded_reasons: []
+          },
+          workspace_files: {
+            status: 'degraded',
+            last_observed_at: '2026-03-09T18:05:00.000Z',
+            degraded_reasons: ['missing workspace files: inbox.md']
+          },
+          tmux_session: {
+            status: 'observed',
+            expected_session_ref: '5-web3-app-engineering',
+            observed_count: 1,
+            last_observed_at: '2026-03-09T18:05:30.000Z',
+            degraded_reasons: []
+          }
+        }
+      }
+    ]
+  });
+  const fileBeforeRead = await readFile(storeFile, 'utf8');
+  const latestBeforeRead = store.getLatestCollectorReport();
+
+  const response = await requestJson(`${baseUrl}/runtime/source-gaps?newest_first=true&limit=10`);
+
+  assert.equal(response.response.status, 200);
+  assert.deepEqual(
+    response.body.items.map((item) => ({
+      agent_id: item.agent_id,
+      source_kind: item.source_kind,
+      evidence_role: item.evidence_role,
+      source_status: item.source_status,
+      output_candidate: item.output_candidate,
+      unmapped: item.unmapped
+    })),
+    [
+      {
+        agent_id: null,
+        source_kind: 'tmux_observation',
+        evidence_role: 'runtime_unmapped',
+        source_status: 'observed',
+        output_candidate: false,
+        unmapped: true
+      },
+      {
+        agent_id: 'app-engineering',
+        source_kind: 'workspace_file',
+        evidence_role: 'agent_output',
+        source_status: 'degraded',
+        output_candidate: true,
+        unmapped: false
+      }
+    ]
+  );
+  assert.equal(response.body.items.some((item) => Object.hasOwn(item, 'evidence_id')), false);
+  assert.equal(response.body.items.some((item) => Object.hasOwn(item, 'evidence_ref')), false);
+  assert.equal(response.body.items.some((item) => Object.hasOwn(item, 'metadata')), false);
+  assert.equal(collectCount, 0);
+  assert.equal(store.getLatestCollectorReport(), latestBeforeRead);
+  assert.equal(await readFile(storeFile, 'utf8'), fileBeforeRead);
+});
+
 test('GET /evidence-records lists stored evidence records read-only with exact filters', async (t) => {
   let collectCount = 0;
   const controllerSnapshotCollector = {

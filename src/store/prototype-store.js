@@ -43,6 +43,7 @@ const EVIDENCE_RECORD_ROLES = Object.freeze([
   'runtime_unmapped'
 ]);
 const EVIDENCE_RECORD_SOURCE_STATUSES = Object.freeze(['observed', 'degraded', 'missing', 'error']);
+const RUNTIME_SOURCE_GAP_STATUSES = Object.freeze(['degraded', 'missing', 'error']);
 const execFileAsync = promisify(execFile);
 const SEVERITY_RANK = Object.freeze({
   normal: 0,
@@ -558,6 +559,15 @@ class PrototypeStore {
       (evidenceRecord) => evidenceRecord.evidence_id === normalizedEvidenceId
     );
     return record ? cloneEvidenceRecord(record) : null;
+  }
+
+  listRuntimeSourceGaps(filters = {}) {
+    const { records, limit, newestFirst } = this.#filterEvidenceRecords(filters);
+    const gapRecords = records.filter(isRuntimeSourceGapRecord);
+
+    return (newestFirst ? gapRecords.slice().sort(compareEvidenceRecordRecency) : gapRecords)
+      .slice(0, limit)
+      .map(projectRuntimeSourceGapRecord);
   }
 
   getEvidenceRecordsSummary(filters = {}) {
@@ -2677,6 +2687,34 @@ function cloneEvidenceRecord(record) {
     ...record,
     degraded_reasons: Array.isArray(record.degraded_reasons) ? record.degraded_reasons.slice() : [],
     metadata: record.metadata && typeof record.metadata === 'object' ? { ...record.metadata } : {}
+  };
+}
+
+function isRuntimeSourceGapRecord(record) {
+  if (RUNTIME_SOURCE_GAP_STATUSES.includes(record.source_status)) {
+    return true;
+  }
+
+  return (
+    record.source_status === 'observed' &&
+    record.agent_id === null &&
+    record.evidence_role === 'runtime_unmapped'
+  );
+}
+
+function projectRuntimeSourceGapRecord(record) {
+  return {
+    observed_at: record.observed_at,
+    collected_at: record.collected_at,
+    agent_id: record.agent_id,
+    source_kind: record.source_kind,
+    evidence_role: record.evidence_role,
+    source_status: record.source_status,
+    output_candidate: record.output_candidate === true,
+    collector_snapshot_id: record.collector_snapshot_id,
+    correlation_id: record.correlation_id,
+    degraded_reasons: Array.isArray(record.degraded_reasons) ? record.degraded_reasons.slice() : [],
+    unmapped: record.agent_id === null
   };
 }
 

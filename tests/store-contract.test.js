@@ -804,6 +804,62 @@ test('prototype store summarizes evidence records with list filter semantics bef
   });
 });
 
+test('prototype store lists compact runtime source gaps without normal observed mapped evidence', async () => {
+  const storeFile = await createStoreFile();
+  const store = await createPrototypeStore({ filePath: storeFile });
+
+  await store.appendCollectorReport({
+    ...createCollectorReport(),
+    runtime_source_evidence: {
+      unmapped_tmux_sessions: [
+        {
+          session_name: 'unmapped-session',
+          pane_refs: ['tmux://unmapped-session/0.0'],
+          observed_count: 1,
+          status: 'observed',
+          last_observed_at: '2026-03-09T18:05:50.000Z',
+          degraded_reasons: []
+        }
+      ]
+    }
+  });
+
+  const gaps = store.listRuntimeSourceGaps({ newest_first: 'true' });
+
+  assert.deepEqual(
+    gaps.map((gap) => ({
+      agent_id: gap.agent_id,
+      source_kind: gap.source_kind,
+      evidence_role: gap.evidence_role,
+      source_status: gap.source_status,
+      output_candidate: gap.output_candidate,
+      unmapped: gap.unmapped
+    })),
+    [
+      {
+        agent_id: null,
+        source_kind: 'tmux_observation',
+        evidence_role: 'runtime_unmapped',
+        source_status: 'observed',
+        output_candidate: false,
+        unmapped: true
+      },
+      {
+        agent_id: 'app-engineering',
+        source_kind: 'workspace_file',
+        evidence_role: 'agent_output',
+        source_status: 'degraded',
+        output_candidate: true,
+        unmapped: false
+      }
+    ]
+  );
+  assert.equal(gaps.some((gap) => gap.source_status === 'observed' && gap.unmapped === false), false);
+  assert.equal(gaps.some((gap) => Object.hasOwn(gap, 'evidence_id')), false);
+  assert.equal(gaps.some((gap) => Object.hasOwn(gap, 'evidence_ref')), false);
+  assert.equal(gaps.some((gap) => Object.hasOwn(gap, 'metadata')), false);
+});
+
 test('JSONL prototype store filters evidence records by observed and collected windows before limit', async () => {
   const storeFile = await createStoreFile();
   const store = await createPrototypeStore({ filePath: storeFile });

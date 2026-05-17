@@ -2639,6 +2639,18 @@ function AppInner() {
     });
     setHubOpen(true);
   }, [handleSelectAgentForInspection, selectedAgentSourceGapFact]);
+  const handleSelectedAgentEvidenceLedgerOpen = useCallback(() => {
+    if (selectedAgentId === null) {
+      return;
+    }
+
+    requestedSelectedAgentDrilldownTabRef.current = 'evidence';
+    activeHubCategoryFromSelectedAgentTabRef.current = false;
+    setSourceGapFocusIntent(null);
+    setActiveHubCategory('evidence');
+    setSelectedAgentDrilldownTab('evidence');
+    setHubOpen(true);
+  }, [selectedAgentId]);
   const hudSignalSummary = [
     `Viewport · ${viewportToplineStatus.status}`,
     evidenceCoverageFocusItems.length > 0 ? `Evidence · ${evidenceCoverageFocusItems.length}` : null,
@@ -2930,6 +2942,14 @@ function AppInner() {
                     {selectedAgentSourceGapSummary}
                   </button>
                 ) : null}
+                <button
+                  type="button"
+                  className="aitown-button aitown-selected-agent-peek__action"
+                  aria-label={`Open ${selectedAgent.display_name} Evidence Ledger`}
+                  onClick={handleSelectedAgentEvidenceLedgerOpen}
+                >
+                  Evidence Ledger
+                </button>
               </div>
               <details className="aitown-selected-agent-peek__facts">
                 <summary>Inspect facts</summary>

@@ -3310,6 +3310,47 @@ afterEach(() => {
     expect(ledgerSection).not.toHaveTextContent('raw_tmux_capture');
   });
 
+  it('opens the selected-agent inspect peek evidence ledger CTA without prefetching ledger reads', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const roster = await screen.findByRole('navigation', { name: 'Agent roster' });
+    await user.click(
+      within(roster).getByRole('button', {
+        name: 'Select and locate App Engineering Agent'
+      })
+    );
+
+    const inspectPeek = await screen.findByRole('region', { name: 'Selected agent inspect peek' });
+    expect(within(inspectPeek).getByText('App Engineering Agent')).toBeVisible();
+
+    await act(async () => {});
+    let requestedUrls = vi.mocked(globalThis.fetch).mock.calls.map(([request]) => String(request));
+    expect(requestedUrls).not.toContain(workflowUrl);
+    expect(requestedUrls).not.toContain(appEngineeringEvidenceRecordsUrl);
+
+    await user.click(
+      within(inspectPeek).getByRole('button', {
+        name: 'Open App Engineering Agent Evidence Ledger'
+      })
+    );
+
+    const details = await screen.findByRole('complementary', { name: 'Agent details' });
+    expect(screen.getByRole('dialog', { name: 'Hub' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Evidence' })).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByRole('tab', { name: 'Evidence' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tabpanel', { name: 'Evidence' })).toBeVisible();
+
+    await waitFor(() => {
+      requestedUrls = vi.mocked(globalThis.fetch).mock.calls.map(([request]) => String(request));
+      expect(requestedUrls).toContain(appEngineeringEvidenceRecordsUrl);
+    });
+
+    const evidenceRecordRequests = requestedUrls.filter((url) => url.startsWith('/evidence-records'));
+    expect(evidenceRecordRequests).toEqual([appEngineeringEvidenceRecordsUrl]);
+    expect(await findHubSection(details, 'Evidence Ledger')).toBeVisible();
+  });
+
   it('surfaces source-gap chips as provenance health and opens Supervision from a chip', async () => {
     const user = userEvent.setup();
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {

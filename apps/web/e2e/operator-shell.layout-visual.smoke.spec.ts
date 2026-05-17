@@ -733,6 +733,73 @@ test.describe('operator shell layout visual smoke', () => {
     await expect(page.getByRole('region', { name: 'Selected agent inspect peek' })).toHaveCount(0);
   });
 
+  test('@journey @evidence-live opens selected-agent inspect peek Evidence Ledger without prefetching records', async ({
+    page
+  }) => {
+    const evidenceRecordRequests: string[] = [];
+    const evidenceRecordViolations: string[] = [];
+    const apiRequestViolations: string[] = [];
+    page.on('request', (request) => {
+      const url = new URL(request.url());
+      const key = `${request.method()} ${url.pathname}${url.search}`;
+      const apiPathIsReadModel =
+        url.pathname.startsWith('/office/') ||
+        url.pathname.startsWith('/incidents') ||
+        url.pathname.startsWith('/timeline') ||
+        url.pathname.startsWith('/peer-watch/') ||
+        url.pathname.startsWith('/collectors/') ||
+        url.pathname.startsWith('/memory/') ||
+        url.pathname.startsWith('/agents/') ||
+        url.pathname.startsWith('/correlations/') ||
+        url.pathname.startsWith('/evidence-records');
+      if (apiPathIsReadModel && request.method() !== 'GET') {
+        apiRequestViolations.push(key);
+      }
+
+      if (url.pathname !== '/evidence-records') {
+        return;
+      }
+
+      evidenceRecordRequests.push(`${url.pathname}${url.search}`);
+      if (request.method() !== 'GET') {
+        evidenceRecordViolations.push(key);
+      }
+    });
+
+    await page.goto('/');
+
+    await expect(page.locator('.aitown-world__host canvas')).toBeVisible();
+    await page.waitForFunction(() => Boolean(window.__AITOWN_VIEWPORT__));
+
+    const hub = page.getByRole('dialog', { name: 'Hub' });
+    await expect(hub).toHaveCount(0);
+
+    await page.getByRole('button', { name: 'Inspect live focus agent Growth Revenue Agent' }).click();
+    await expect(hub).toHaveCount(0);
+
+    const inspectPeek = page.getByRole('region', { name: 'Selected agent inspect peek' });
+    const ledgerCta = inspectPeek.getByRole('button', { name: 'Open Growth Revenue Agent Evidence Ledger' });
+    await expect(inspectPeek).toBeVisible();
+    await expect(ledgerCta).toBeVisible();
+    expect(evidenceRecordRequests, 'Hub-closed inspect peek should not prefetch evidence records').toEqual([]);
+
+    await ledgerCta.click();
+
+    await expect(hub).toBeVisible();
+    const evidenceTab = page
+      .getByRole('tablist', { name: 'Selected agent drilldown' })
+      .getByRole('tab', { name: 'Evidence' });
+    await expect(evidenceTab).toHaveAttribute('aria-selected', 'true');
+    const evidencePanel = page.getByRole('tabpanel', { name: 'Evidence' });
+    await expect(evidencePanel.getByRole('heading', { name: 'Evidence Ledger' })).toBeVisible();
+    await expect(evidencePanel.getByText('Scope · Selected-agent evidence records')).toBeVisible();
+    await expect.poll(() => evidenceRecordRequests.slice()).toEqual([
+      '/evidence-records?agent_id=growth-revenue&newest_first=true&limit=12'
+    ]);
+    expect(evidenceRecordViolations, 'Inspect peek Evidence Ledger CTA should only issue read GETs').toEqual([]);
+    expect(apiRequestViolations, 'Inspect peek Evidence Ledger CTA should not issue mutating API requests').toEqual([]);
+  });
+
   test('keeps the selected-agent Hub focus ribbon compact inside the RimWorld window', async ({ page }) => {
     await page.goto('/');
 

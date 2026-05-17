@@ -3237,14 +3237,14 @@ afterEach(() => {
     const evidenceFocus = await screen.findByRole('region', { name: 'Evidence coverage focus' });
 
     expect(within(evidenceFocus).getByText('Evidence')).toBeVisible();
-    expect(within(evidenceFocus).getByText('1 low coverage')).toBeVisible();
-    expect(within(evidenceFocus).getByText('Coverage below high-confidence/no evidence')).toBeVisible();
+    expect(within(evidenceFocus).getByText('1 coverage gap')).toBeVisible();
+    expect(within(evidenceFocus).getByText('Low-confidence or uncovered evidence')).toBeVisible();
 
     const focusChip = within(evidenceFocus).getByRole('button', {
       name: 'Inspect evidence coverage focus agent Growth Revenue Agent'
     });
 
-    expect(within(evidenceFocus).getByText('Coverage below high-confidence/no evidence')).toBeVisible();
+    expect(focusChip).toHaveTextContent('Low-confidence evidence');
     expect(focusChip).toBeVisible();
     expect(focusChip).toHaveTextContent('Growth Revenue Agent');
     expect(focusChip).toHaveTextContent('ID · growth-revenue');
@@ -3492,7 +3492,7 @@ afterEach(() => {
     expect(within(sourceHealthStatus).queryByText(/offline|dead|live|healthy|degraded|loading|0 provenance gaps/i)).not.toBeInTheDocument();
   });
 
-  it('omits evidence coverage focus chips for agents missing from the current overview', async () => {
+  it('omits non-overview coverage agents while surfacing uncovered overview agents', async () => {
     const user = userEvent.setup();
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = typeof input === 'string' ? input : input.toString();
@@ -3522,10 +3522,22 @@ afterEach(() => {
     render(<App />);
 
     await waitFor(() => expect(fetchMock.mock.calls.map(([request]) => String(request))).toContain(collectorEvidenceCoverageUrl));
-    expect(screen.queryByRole('region', { name: 'Evidence coverage focus' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /ghost-agent/i })).not.toBeInTheDocument();
 
-    await openHudSignals(user);
+    const signals = await openHudSignals(user);
+    const evidenceFocus = await within(signals).findByRole('region', { name: 'Evidence coverage focus' });
+    expect(within(evidenceFocus).queryByRole('button', { name: /ghost-agent/i })).not.toBeInTheDocument();
+    expect(
+      within(evidenceFocus).getByRole('button', {
+        name: 'Inspect evidence coverage focus agent App Engineering Agent'
+      })
+    ).toHaveTextContent('Uncovered in snapshot');
+    expect(
+      within(evidenceFocus).getByRole('button', {
+        name: 'Inspect evidence coverage focus agent Growth Revenue Agent'
+      })
+    ).toHaveTextContent('0 refs · No evidence sources');
+    expect(within(evidenceFocus).getAllByText('No coverage in snapshot')).toHaveLength(2);
     expect(screen.queryByRole('region', { name: 'Evidence coverage read model status' })).not.toBeInTheDocument();
     expect(screen.queryByText('Healthy')).not.toBeInTheDocument();
   });
@@ -3563,7 +3575,7 @@ afterEach(() => {
     await openHudSignals(user);
     const evidenceFocus = await screen.findByRole('region', { name: 'Evidence coverage focus' });
     expect(within(evidenceFocus).getByText('Evidence')).toBeVisible();
-    expect(within(evidenceFocus).getByText('1 low coverage')).toBeVisible();
+    expect(within(evidenceFocus).getByText('1 coverage gap')).toBeVisible();
 
     expect(
       within(evidenceFocus).getByRole('button', {

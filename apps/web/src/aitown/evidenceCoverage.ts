@@ -47,6 +47,17 @@ export interface CollectorEvidenceCoverageViewModel {
   rows: CollectorEvidenceCoverageRow[];
 }
 
+export type CollectorEvidenceCoverageFocusItem = Pick<
+  CollectorEvidenceCoverageRow,
+  | 'agent_id'
+  | 'display_name'
+  | 'evidence_ref_count'
+  | 'source_kinds'
+  | 'latest_evidence_at'
+  | 'status'
+  | 'warning'
+>;
+
 type CoverageItemWithRefs = CollectorEvidenceCoverageAgentItem & {
   evidence_refs?: unknown;
 };
@@ -54,7 +65,9 @@ type CoverageItemWithRefs = CollectorEvidenceCoverageAgentItem & {
 const SOURCE_KIND_ORDER: CollectorEvidenceCoverageSourceKind[] = [
   'tmux_observation',
   'workspace_file',
-  'workspace_root'
+  'workspace_root',
+  'hermes_profile',
+  'hermes_session'
 ];
 
 const EMPTY_MODEL: CollectorEvidenceCoverageViewModel = {
@@ -101,6 +114,10 @@ function normalizeLowConfidenceIds(values: unknown): string[] {
   return uniqueSortedStrings(values);
 }
 
+function normalizeEvidenceRefCount(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, value) : 0;
+}
+
 function buildDisplayName(agentId: string, overviewName: string | null): string {
   return overviewName ?? agentId;
 }
@@ -144,7 +161,8 @@ export function deriveCollectorEvidenceCoverageViewModel(
   const rows = agentIds.map((agentId) => {
     const item = itemsById.get(agentId);
     const evidenceRefs = uniqueSortedStrings(item?.evidence_refs);
-    const hasEvidence = evidenceRefs.length > 0;
+    const evidenceRefCount = normalizeEvidenceRefCount(item?.evidence_ref_count);
+    const hasEvidence = evidenceRefCount > 0;
     const sourceKinds = hasEvidence ? normalizeSourceKinds(item?.source_kinds) : [];
     const confidence = hasEvidence ? (item?.confidence_level ?? null) : null;
     const latestEvidenceAt = hasEvidence ? (normalizeString(item?.latest_evidence_at) ?? null) : null;
@@ -154,7 +172,7 @@ export function deriveCollectorEvidenceCoverageViewModel(
       agent_id: agentId,
       display_name: buildDisplayName(agentId, overviewById.get(agentId) ?? null),
       evidence_refs: evidenceRefs,
-      evidence_ref_count: evidenceRefs.length,
+      evidence_ref_count: evidenceRefCount,
       source_kinds: sourceKinds,
       latest_evidence_at: latestEvidenceAt,
       confidence,
@@ -190,4 +208,41 @@ export function deriveCollectorEvidenceCoverageViewModel(
     source_kind_buckets: buckets,
     rows
   };
+}
+
+export function deriveCollectorEvidenceCoverageFocusItems(
+  coverage: CollectorEvidenceCoverage | null | undefined,
+  overviewAgents: CollectorEvidenceCoverageOverviewAgent[] = [],
+  limit = 3
+): CollectorEvidenceCoverageFocusItem[] {
+  if (limit <= 0 || overviewAgents.length === 0) {
+    return [];
+  }
+
+  const overviewAgentIds = new Set(
+    overviewAgents
+      .map((agent) => normalizeString(agent.agent_id))
+      .filter((agentId): agentId is string => agentId !== null)
+  );
+  if (overviewAgentIds.size === 0) {
+    return [];
+  }
+
+  return deriveCollectorEvidenceCoverageViewModel(coverage, overviewAgents)
+    .rows.filter((row) => overviewAgentIds.has(row.agent_id) && row.status !== 'evidence_backed')
+    .sort((left, right) => {
+      const leftPriority = left.status === 'low_confidence_evidence' ? 0 : 1;
+      const rightPriority = right.status === 'low_confidence_evidence' ? 0 : 1;
+      return leftPriority - rightPriority || left.display_name.localeCompare(right.display_name);
+    })
+    .slice(0, limit)
+    .map((row) => ({
+      agent_id: row.agent_id,
+      display_name: row.display_name,
+      evidence_ref_count: row.evidence_ref_count,
+      source_kinds: [...row.source_kinds],
+      latest_evidence_at: row.latest_evidence_at,
+      status: row.status,
+      warning: row.warning
+    }));
 }

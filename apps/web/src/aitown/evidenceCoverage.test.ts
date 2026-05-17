@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import { deriveCollectorEvidenceCoverageViewModel } from './evidenceCoverage';
+import {
+  deriveCollectorEvidenceCoverageFocusItems,
+  deriveCollectorEvidenceCoverageViewModel
+} from './evidenceCoverage';
 import type { CollectorEvidenceCoverage } from '../types';
 
 type CoverageWithRefs = CollectorEvidenceCoverage & {
@@ -21,7 +24,8 @@ function buildCoverage(): CoverageWithRefs {
     source_kind_buckets: {
       workspace_file: 2,
       workspace_root: 0,
-      tmux_observation: 2
+      tmux_observation: 2,
+      hermes_profile: 1
     },
     agent_items: [
       {
@@ -88,13 +92,14 @@ describe('deriveCollectorEvidenceCoverageViewModel', () => {
       actor_id: 'team-lead',
       counts: {
         covered_agent_count: 2,
-        uncovered_agent_count: 2,
+        uncovered_agent_count: 1,
         low_confidence_agent_count: 1,
         evidence_ref_count: 4
       },
       source_kind_buckets: [
         { source_kind: 'tmux_observation', count: 2 },
         { source_kind: 'workspace_file', count: 2 },
+        { source_kind: 'hermes_profile', count: 1 },
         { source_kind: 'workspace_root', count: 0 }
       ]
     });
@@ -128,7 +133,7 @@ describe('deriveCollectorEvidenceCoverageViewModel', () => {
     expect(viewModel.rows[0].evidence_refs).not.toBe(coverage.agent_items[1].evidence_refs);
   });
 
-  it('does not invent evidence refs from counts or overview agents', () => {
+  it('treats count-only coverage items as evidence-backed without inventing refs', () => {
     const coverage = buildCoverage();
 
     const viewModel = deriveCollectorEvidenceCoverageViewModel(coverage, [
@@ -139,19 +144,78 @@ describe('deriveCollectorEvidenceCoverageViewModel', () => {
     expect(viewModel.rows.find((row) => row.agent_id === 'empty-count-only')).toMatchObject({
       display_name: 'Count Only Agent',
       evidence_refs: [],
+      evidence_ref_count: 3,
+      source_kinds: ['workspace_file'],
+      latest_evidence_at: '2026-03-09T18:04:50.000Z',
+      confidence: 'high',
+      status: 'evidence_backed'
+    });
+    expect(viewModel.rows.find((row) => row.agent_id === 'sales')).toMatchObject({
+      evidence_refs: [],
       evidence_ref_count: 0,
       source_kinds: [],
       latest_evidence_at: null,
       confidence: null,
       status: 'uncovered_in_snapshot'
     });
-    expect(viewModel.rows.find((row) => row.agent_id === 'sales')).toMatchObject({
-      evidence_refs: [],
-      source_kinds: [],
-      latest_evidence_at: null,
-      confidence: null,
-      status: 'uncovered_in_snapshot'
-    });
     expect(JSON.stringify(viewModel)).not.toContain('checkpoint');
+  });
+
+  it('derives bounded HUD focus items from low-confidence and uncovered overview rows only', () => {
+    const coverage = buildCoverage();
+    const originalCoverage = JSON.parse(JSON.stringify(coverage));
+
+    const focusItems = deriveCollectorEvidenceCoverageFocusItems(coverage, [
+      { agent_id: 'app-engineering', display_name: 'App Engineering Agent' },
+      { agent_id: 'growth-revenue', display_name: 'Growth Revenue Agent' },
+      { agent_id: 'sales', display_name: 'Sales Agent' },
+      { agent_id: 'support', display_name: 'Support Agent' }
+    ]);
+
+    expect(coverage).toEqual(originalCoverage);
+    expect(focusItems).toEqual([
+      {
+        agent_id: 'growth-revenue',
+        display_name: 'Growth Revenue Agent',
+        evidence_ref_count: 2,
+        source_kinds: ['tmux_observation', 'workspace_file'],
+        latest_evidence_at: '2026-03-09T18:04:30.000Z',
+        status: 'low_confidence_evidence',
+        warning: 'low-confidence evidence coverage'
+      },
+      {
+        agent_id: 'sales',
+        display_name: 'Sales Agent',
+        evidence_ref_count: 0,
+        source_kinds: [],
+        latest_evidence_at: null,
+        status: 'uncovered_in_snapshot',
+        warning: null
+      },
+      {
+        agent_id: 'support',
+        display_name: 'Support Agent',
+        evidence_ref_count: 0,
+        source_kinds: [],
+        latest_evidence_at: null,
+        status: 'uncovered_in_snapshot',
+        warning: null
+      }
+    ]);
+    expect(JSON.stringify(focusItems)).not.toContain('/tmp/');
+  });
+
+  it('does not show focus items for missing coverage, non-overview agents, or non-positive limits', () => {
+    const coverage = buildCoverage();
+
+    expect(deriveCollectorEvidenceCoverageFocusItems(null, [
+      { agent_id: 'sales', display_name: 'Sales Agent' }
+    ])).toEqual([]);
+    expect(deriveCollectorEvidenceCoverageFocusItems(coverage, [
+      { agent_id: 'app-engineering', display_name: 'App Engineering Agent' }
+    ])).toEqual([]);
+    expect(deriveCollectorEvidenceCoverageFocusItems(coverage, [
+      { agent_id: 'growth-revenue', display_name: 'Growth Revenue Agent' }
+    ], 0)).toEqual([]);
   });
 });

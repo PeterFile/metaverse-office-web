@@ -288,4 +288,5 @@ This keeps employee writes self-scoped and reserves cross-agent task dispatch pl
 - workflow and incident surfaces can open correlation drill-down without introducing a new backend contract or write path
 - workflow counterparties, correlation participants, and incident agent ids remain read-only but are directly selectable so operators can pivot into another agent workflow from the current evidence surface
 - the shell polls every 15 seconds and must surface explicit loading, empty, and error states instead of inventing motion or liveness
+- HUD evidence coverage focus uses the collector evidence coverage read model and shows low-confidence or uncovered employee coverage without raw evidence refs or path metadata
 - once overview, workflow, incident, or correlation data has loaded successfully, later refresh failures keep the last-good surface visible with an explicit degraded-refresh notice

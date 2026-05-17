@@ -219,9 +219,14 @@ test.describe('operator shell layout visual smoke', () => {
       agent_items: [
         {
           agent_id: 'growth-revenue',
-          evidence_ref_count: 1,
-          source_kinds: ['workspace_file'],
-          latest_evidence_at: '2026-03-10T23:57:00.000Z',
+          evidence_ref_count: 3,
+          evidence_refs: [
+            '/tmp/launch-note.md',
+            'tmux://6-web3-growth-revenue/2.0',
+            '/tmp/growth-revenue'
+          ],
+          source_kinds: ['tmux_observation', 'workspace_file', 'workspace_root'],
+          latest_evidence_at: '2026-03-16T08:58:40.000Z',
           confidence_level: 'medium'
         }
       ]
@@ -350,7 +355,7 @@ test.describe('operator shell layout visual smoke', () => {
     await page.waitForFunction(() => Boolean(window.__AITOWN_VIEWPORT__));
     await expect(signals).toBeVisible();
     await expect(signalsSummary.getByText('Signals', { exact: true })).toBeVisible();
-    await expect(signalsSummary.getByText(/Evidence · 1/)).toBeVisible();
+    await expect(signalsSummary.locator('.aitown-panel__topline-copy')).toContainText('Evidence · 3');
     await expect(signalsSummary.getByText(/Source gaps · 3/)).toBeVisible();
     await expect(evidenceFocus).toBeHidden();
     await expect(sourceGapFocus).toBeHidden();
@@ -374,9 +379,15 @@ test.describe('operator shell layout visual smoke', () => {
     await signalsSummary.click();
     await expect(evidenceFocus).toBeVisible();
     await expect(evidenceFocus.getByText('Evidence', { exact: true })).toBeVisible();
-    await expect(evidenceFocus.getByText('1 low coverage', { exact: true })).toBeVisible();
-    await expect(evidenceFocus.getByText('Coverage below high-confidence/no evidence')).toBeVisible();
+    await expect(evidenceFocus.getByText('3 coverage gaps', { exact: true })).toBeVisible();
+    await expect(evidenceFocus.getByText('Low-confidence or uncovered evidence', { exact: true })).toBeVisible();
     await expect(evidenceFocusChip).toBeVisible();
+    await expect(evidenceFocusChip).toContainText('Low-confidence evidence');
+    await expect(evidenceFocusChip).toContainText('3 refs · tmux_observation, workspace_file, workspace_root');
+    await expect(evidenceFocusChip).toContainText('Latest evidence · 2026-03-16T08:58:40.000Z');
+    await expect(evidenceFocusChip).not.toContainText('/tmp/launch-note.md');
+    await expect(evidenceFocusChip).not.toContainText('/tmp/growth-revenue');
+    await expect(evidenceFocusChip).not.toContainText('tmux://6-web3-growth-revenue/2.0');
     await expect(sourceGapFocus).toBeVisible();
     await expect(sourceGapFocus.getByText('Source gaps', { exact: true })).toBeVisible();
     await expect(sourceGapFocus.getByText('3 provenance gaps', { exact: true })).toBeVisible();

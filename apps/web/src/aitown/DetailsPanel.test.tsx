@@ -1569,6 +1569,61 @@ describe('DetailsPanel selected-agent workflow lifecycle', () => {
     expect(section!).not.toHaveTextContent('productivity');
   });
 
+  it('renders bounded selected-agent evidence provenance without replay claims', () => {
+    render(
+      <DetailsPanel
+        {...buildProps({
+          activeHubCategory: 'evidence',
+          selectedAgentDrilldownTab: 'evidence',
+          selectedAgentEvidenceLedger: buildSelectedAgentEvidenceLedger({
+            outputEvidence: {
+              totalCount: 1,
+              overflowCount: 0,
+              items: [
+                {
+                  evidenceId:
+                    'evidence-app-engineering-output-with-a-very-long-sensitive-token-secret-value-that-must-not-render',
+                  observedAt: null,
+                  collectedAt: '2026-03-16T08:59:00.000Z',
+                  agentId: 'app-engineering',
+                  sourceKind: 'workspace_file',
+                  evidenceRef: '/tmp/app/outbox.md',
+                  evidenceRole: 'agent_output',
+                  sourceStatus: 'observed',
+                  outputCandidate: true,
+                  collectorSnapshotId:
+                    'collector-snapshot-20260316-with-a-very-long-access_token-value-that-must-not-render',
+                  correlationId: 'corr-app-review',
+                  degradedReasons: []
+                }
+              ]
+            }
+          }),
+          selectedAgentEvidenceLedgerState: 'ready'
+        })}
+      />
+    );
+
+    const section = screen.getByRole('heading', { name: 'Evidence Ledger' }).closest('section');
+    expect(section).not.toBeNull();
+    expect(
+      within(section!).getByText(/Evidence id · evidence-app-engineering-output-with-a-very-long-sensitive-\[redacted\]/)
+    ).toBeVisible();
+    expect(
+      within(section!).getByText(/Snapshot · collector-snapshot-20260316-with-a-very-long-\[redacted\]/)
+    ).toBeVisible();
+    const collectedProvenance = within(section!).getAllByText('Collected · 2026-03-16T08:59:00.000Z');
+    expect(collectedProvenance).toHaveLength(3);
+    expect(collectedProvenance[0]).toBeVisible();
+    expect(within(section!).getByText('Observed · No observed timestamp')).toBeVisible();
+    expect(section!).not.toHaveTextContent('token-secret');
+    expect(section!).not.toHaveTextContent('access_token');
+    expect(section!).not.toHaveTextContent('secret-value');
+    expect(section!).not.toHaveTextContent('must-not-render');
+    expect(section!).not.toHaveTextContent('event-backed');
+    expect(section!).not.toHaveTextContent('replayable');
+  });
+
   it('labels scoped selected-agent evidence ledger requests and stale last-good data honestly', () => {
     render(
       <DetailsPanel

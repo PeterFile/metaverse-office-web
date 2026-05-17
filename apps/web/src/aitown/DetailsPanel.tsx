@@ -228,6 +228,7 @@ const EMPTY_SEVERITY_BUCKETS: Record<Severity, number> = {
 
 const SHARED_MEMORY_BACKLINK_LIMIT = 4;
 const STRUCTURED_EVIDENCE_FACET_TOKEN_LIMIT = 3;
+const EVIDENCE_LEDGER_TOKEN_LIMIT = 72;
 
 const SELECTED_AGENT_SUPERVISION_PANEL_LABELS: Record<SelectedAgentSupervisionPanel, string> = {
   collector: 'Collector Observation',
@@ -1148,6 +1149,22 @@ function renderTimestamp(value: string | null | undefined, fallback: string) {
   return findFirstNonEmptyString([value]) ?? fallback;
 }
 
+const SENSITIVE_EVIDENCE_LEDGER_TOKEN_PATTERN = /(?:access[_-]?token|api[_-]?key|secret|password|credential|bearer|token)(?:[-_=:.][A-Za-z0-9][A-Za-z0-9._:-]*)?/gi;
+
+function redactSensitiveEvidenceLedgerToken(value: string) {
+  return value.replace(SENSITIVE_EVIDENCE_LEDGER_TOKEN_PATTERN, '[redacted]');
+}
+
+function formatBoundedEvidenceLedgerToken(value: string) {
+  const normalized = value.trim();
+  const redacted = redactSensitiveEvidenceLedgerToken(normalized);
+  if (redacted.length <= EVIDENCE_LEDGER_TOKEN_LIMIT) {
+    return redacted;
+  }
+
+  return `${redacted.slice(0, EVIDENCE_LEDGER_TOKEN_LIMIT - 3)}...`;
+}
+
 function renderSelectedAgentEvidenceLedgerGroup(
   label: string,
   group: SelectedAgentEvidenceLedgerGroup
@@ -1163,10 +1180,15 @@ function renderSelectedAgentEvidenceLedgerGroup(
 
 function renderSelectedAgentEvidenceLedgerItem(item: SelectedAgentEvidenceLedgerItem) {
   const degradedReasons = item.degradedReasons.length > 0 ? item.degradedReasons.join(', ') : null;
+  const evidenceId = formatBoundedEvidenceLedgerToken(item.evidenceId);
+  const collectorSnapshotId = formatBoundedEvidenceLedgerToken(item.collectorSnapshotId);
 
   return (
     <Fragment key={item.evidenceId}>
       <span>{`Ref · ${item.evidenceRef}`}</span>
+      <span>{`Evidence id · ${evidenceId}`}</span>
+      <span>{`Snapshot · ${collectorSnapshotId}`}</span>
+      <span>{`Collected · ${renderTimestamp(item.collectedAt, 'No collected timestamp')}`}</span>
       <span>{`Source · ${item.sourceKind}`}</span>
       <span>{`Role · ${item.evidenceRole ?? 'unclassified'}`}</span>
       <span>{`Status · ${item.sourceStatus ?? 'unknown'}`}</span>

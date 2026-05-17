@@ -37,6 +37,10 @@ import {
   type SourceGapFocusIntent
 } from './aitown/DetailsPanel';
 import { SceneStatusLegend } from './aitown/SceneStatusLegend';
+import {
+  deriveCollectorEvidenceCoverageFocusItems,
+  type CollectorEvidenceCoverageFocusItem
+} from './aitown/evidenceCoverage';
 import { resolveRolePawnAssetUrl } from './aitown/rolePawnAssets';
 import { adaptWorldToScene } from './aitown/sceneAdapter';
 import { deriveSelectedAgentSourceGapFact, deriveSourceGapChips } from './aitown/sourceGapSignals';
@@ -50,7 +54,6 @@ import {
 import type {
   AccountabilityReplayBundle,
   CollectorEvidenceCoverage,
-  CollectorEvidenceCoverageAgentItem,
   CollectorSnapshot,
   CollectorSourceHealthProjection,
   CorrelationDrilldown,
@@ -111,12 +114,6 @@ type ReplayCheckpointFocus = {
   eventId: string;
   selectedAgentId: string | null;
   selectedCorrelationId: string | null;
-};
-
-type EvidenceCoverageFocusItem = {
-  agentId: string;
-  displayName: string;
-  coverageItem: CollectorEvidenceCoverageAgentItem | null;
 };
 
 type EvidenceCoverageReadState = {
@@ -467,34 +464,18 @@ function renderEvidenceCoverageFocusSources(sourceKinds: string[]) {
   return sourceKinds.length > 0 ? sourceKinds.join(', ') : 'No evidence sources';
 }
 
-function resolveEvidenceCoverageFocusItems(
-  coverage: CollectorEvidenceCoverage | null,
-  overviewAgents: OfficeAgent[] | undefined
-): EvidenceCoverageFocusItem[] {
-  if (!coverage || coverage.low_confidence_agent_ids.length === 0) {
-    return [];
+function renderEvidenceCoverageFocusStatus(item: CollectorEvidenceCoverageFocusItem) {
+  return item.status === 'uncovered_in_snapshot' ? 'Uncovered in snapshot' : 'Low-confidence evidence';
+}
+
+function renderEvidenceCoverageFocusLatest(item: CollectorEvidenceCoverageFocusItem) {
+  if (item.status === 'uncovered_in_snapshot') {
+    return 'No coverage in snapshot';
   }
 
-  const overviewAgentsById = new Map((overviewAgents ?? []).map((agent) => [agent.agent_id, agent]));
-  const coverageItemsByAgentId = new Map(
-    coverage.agent_items.map((item) => [item.agent_id, item])
-  );
-
-  return coverage.low_confidence_agent_ids
-    .map((agentId) => {
-      const overviewAgent = overviewAgentsById.get(agentId);
-      if (!overviewAgent) {
-        return null;
-      }
-
-      return {
-        agentId,
-        displayName: overviewAgent.display_name,
-        coverageItem: coverageItemsByAgentId.get(agentId) ?? null
-      };
-    })
-    .filter((item): item is EvidenceCoverageFocusItem => item !== null)
-    .slice(0, 3);
+  return item.latest_evidence_at
+    ? `Latest evidence · ${item.latest_evidence_at}`
+    : 'Latest evidence unavailable';
 }
 
 function formatUnknownError(error: unknown) {
@@ -1415,12 +1396,16 @@ function AppInner() {
   const visibleCollectorSnapshot = collectorSnapshotResource.data;
   const visibleEvidenceCoverage =
     collectorSnapshotResource.data?.evidence_coverage ?? defaultEvidenceCoverage;
+  const evidenceCoverageOverviewAgents = useMemo(
+    () => overviewResource.data?.agents.filter((agent) => agent.kind === 'employee'),
+    [overviewResource.data?.agents]
+  );
   const evidenceCoverageFocusItems = useMemo(
     () =>
       hubOpen || selectedAgentId !== null
         ? []
-        : resolveEvidenceCoverageFocusItems(visibleEvidenceCoverage, overviewResource.data?.agents),
-    [hubOpen, overviewResource.data?.agents, selectedAgentId, visibleEvidenceCoverage]
+        : deriveCollectorEvidenceCoverageFocusItems(visibleEvidenceCoverage, evidenceCoverageOverviewAgents),
+    [evidenceCoverageOverviewAgents, hubOpen, selectedAgentId, visibleEvidenceCoverage]
   );
   const sourceGapChips = useMemo(
     () =>
@@ -2776,10 +2761,10 @@ function AppInner() {
                       <div className="aitown-panel__evidence-focus__head">
                         <strong className="aitown-panel__topline-title">Evidence</strong>
                         <span className="aitown-panel__topline-copy">
-                          {`${evidenceCoverageFocusItems.length} low coverage`}
+                          {`${evidenceCoverageFocusItems.length} coverage gap${evidenceCoverageFocusItems.length === 1 ? '' : 's'}`}
                         </span>
                       </div>
-                      <span className="aitown-panel__topline-copy">Coverage below high-confidence/no evidence</span>
+                      <span className="aitown-panel__topline-copy">Low-confidence or uncovered evidence</span>
                       <span
                         className="aitown-panel__focus-chips aitown-panel__focus-chips--compact"
                         role="group"
@@ -2787,26 +2772,19 @@ function AppInner() {
                       >
                         {evidenceCoverageFocusItems.map((item) => (
                           <button
-                            key={item.agentId}
+                            key={item.agent_id}
                             type="button"
-                            className={`aitown-focus-chip aitown-focus-chip--evidence${selectedAgentId === item.agentId ? ' is-active' : ''}`}
-                            aria-label={`Inspect evidence coverage focus agent ${item.displayName}`}
-                            onClick={() => handleEvidenceCoverageFocusAgent(item.agentId)}
+                            className={`aitown-focus-chip aitown-focus-chip--evidence${selectedAgentId === item.agent_id ? ' is-active' : ''}`}
+                            aria-label={`Inspect evidence coverage focus agent ${item.display_name}`}
+                            onClick={() => handleEvidenceCoverageFocusAgent(item.agent_id)}
                           >
-                            <strong>{item.displayName}</strong>
-                            <span>{`ID · ${item.agentId}`}</span>
-                            {item.coverageItem ? (
-                              <>
-                                <span>
-                                  {`${renderEvidenceCoverageFocusRefCount(item.coverageItem.evidence_ref_count)} · ${renderEvidenceCoverageFocusSources(item.coverageItem.source_kinds)}`}
-                                </span>
-                                <span>
-                                  {`Latest evidence · ${item.coverageItem.latest_evidence_at ?? 'No recent evidence'}`}
-                                </span>
-                              </>
-                            ) : (
-                              <span>Coverage below high-confidence/no evidence</span>
-                            )}
+                            <strong>{item.display_name}</strong>
+                            <span>{`ID · ${item.agent_id}`}</span>
+                            <span>{renderEvidenceCoverageFocusStatus(item)}</span>
+                            <span>
+                              {`${renderEvidenceCoverageFocusRefCount(item.evidence_ref_count)} · ${renderEvidenceCoverageFocusSources(item.source_kinds)}`}
+                            </span>
+                            <span>{renderEvidenceCoverageFocusLatest(item)}</span>
                           </button>
                         ))}
                       </span>

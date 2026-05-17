@@ -129,6 +129,7 @@ Optional env:
 - `GET /collectors/controller-snapshot/evidence-coverage?agent_id=&source_kind=&confidence_level=&limit=`
 - `GET /collectors/controller-snapshot/source-health?agent_id=&source_kind=&status=&limit=`
 - `GET /evidence-records?evidence_id=&agent_id=&source_kind=&evidence_role=&output_candidate=&evidence_ref=&source_status=&collector_snapshot_id=&correlation_id=&mapped=&observed_since=&observed_until=&collected_since=&collected_until=&newest_first=&limit=`
+- `GET /evidence-records/summary?evidence_id=&agent_id=&source_kind=&evidence_role=&output_candidate=&evidence_ref=&source_status=&collector_snapshot_id=&correlation_id=&mapped=&observed_since=&observed_until=&collected_since=&collected_until=&newest_first=&limit=`
 - `GET /office/overview`
 - `GET /office/operations?limit=&state=&agent_id=&severity=`
 - `GET /timeline?window=&event_id=&agent_id=&event_type=&severity=&source_kind=&evidence_ref=&correlation_id=&limit=`

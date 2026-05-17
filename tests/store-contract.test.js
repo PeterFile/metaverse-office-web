@@ -708,6 +708,100 @@ test('JSONL prototype store filters evidence records by mapped agent presence', 
   assert.equal(store.listEvidenceRecords({ mapped: 'maybe', limit: 2 }).length, 2);
 });
 
+test('prototype store summarizes evidence records with list filter semantics before limit', async () => {
+  const storeFile = await createStoreFile();
+  const store = await createPrototypeStore({ filePath: storeFile });
+
+  await store.appendCollectorReport({
+    ...createCollectorReport(),
+    runtime_source_evidence: {
+      unmapped_tmux_sessions: [
+        {
+          session_name: 'unmapped-session',
+          pane_refs: ['tmux://unmapped-session/0.0'],
+          observed_count: 1,
+          status: 'observed',
+          last_observed_at: '2026-03-09T18:05:50.000Z',
+          degraded_reasons: []
+        }
+      ]
+    }
+  });
+
+  const filters = {
+    output_candidate: 'false',
+    newest_first: 'true',
+    limit: 1
+  };
+
+  assert.equal(store.listEvidenceRecords(filters).length, 1);
+  assert.deepEqual(store.getEvidenceRecordsSummary(filters), {
+    total_count: 2,
+    returned_limit: 1,
+    mapped_count: 1,
+    unmapped_count: 1,
+    output_candidate_buckets: {
+      true: 0,
+      false: 2
+    },
+    source_kind_buckets: {
+      workspace_root: 1,
+      workspace_file: 0,
+      tmux_observation: 1,
+      hermes_profile: 0,
+      hermes_session: 0
+    },
+    evidence_role_buckets: {
+      workspace_presence: 1,
+      inbound_task: 0,
+      agent_output: 0,
+      agent_plan: 0,
+      runtime_activity: 0,
+      runtime_presence: 0,
+      runtime_unmapped: 1
+    },
+    source_status_buckets: {
+      observed: 2,
+      degraded: 0,
+      missing: 0,
+      error: 0
+    }
+  });
+
+  assert.deepEqual(store.getEvidenceRecordsSummary({ agent_id: 'missing-agent' }), {
+    total_count: 0,
+    returned_limit: 50,
+    mapped_count: 0,
+    unmapped_count: 0,
+    output_candidate_buckets: {
+      true: 0,
+      false: 0
+    },
+    source_kind_buckets: {
+      workspace_root: 0,
+      workspace_file: 0,
+      tmux_observation: 0,
+      hermes_profile: 0,
+      hermes_session: 0
+    },
+    evidence_role_buckets: {
+      workspace_presence: 0,
+      inbound_task: 0,
+      agent_output: 0,
+      agent_plan: 0,
+      runtime_activity: 0,
+      runtime_presence: 0,
+      runtime_unmapped: 0
+    },
+    source_status_buckets: {
+      observed: 0,
+      degraded: 0,
+      missing: 0,
+      error: 0
+    }
+  });
+});
+
 test('JSONL prototype store filters evidence records by observed and collected windows before limit', async () => {
   const storeFile = await createStoreFile();
   const store = await createPrototypeStore({ filePath: storeFile });

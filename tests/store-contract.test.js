@@ -212,7 +212,11 @@ function createHermesRuntimeCollectorReport() {
           session_ref: null,
           observed_at: '2026-03-09T18:06:40.000Z',
           status: 'observed',
-          degraded_reasons: []
+          degraded_reasons: [],
+          source_provenance: {
+            source_format: 'json_array',
+            source_index: 0
+          }
         }
       ]
     },
@@ -236,6 +240,10 @@ function createHermesRuntimeCollectorReport() {
             status: 'observed',
             last_observed_at: '2026-03-09T18:06:30.000Z',
             degraded_reasons: [],
+            source_provenance: {
+              source_format: 'json_array',
+              source_index: 0
+            },
             metadata: {
               noisy_runtime_payload: 'must not persist'
             }
@@ -249,6 +257,11 @@ function createHermesRuntimeCollectorReport() {
             status: 'degraded',
             last_observed_at: '2026-03-09T18:06:45.000Z',
             degraded_reasons: ['Hermes session stale'],
+            source_provenance: {
+              source_format: 'jsonl',
+              source_index: 2,
+              line: 4
+            },
             metadata: {
               noisy_runtime_payload: 'must not persist'
             }
@@ -479,9 +492,14 @@ test('prototype store persists Hermes runtime source facts as read-only evidence
   assert.deepEqual(hermesRecords[0].metadata, {
     profile_id: 'app-profile',
     session_ref: null,
-    source_health_key: 'hermes_profile'
+    source_health_key: 'hermes_profile',
+    source_provenance: {
+      source_format: 'json_array',
+      source_index: 0
+    }
   });
   assert.equal(Object.hasOwn(hermesRecords[0].metadata, 'noisy_runtime_payload'), false);
+  assert.equal(Object.hasOwn(hermesRecords[0], 'noisy_runtime_payload'), false);
 
   const unmappedRecords = jsonlStore.listEvidenceRecords({
     evidence_role: 'runtime_unmapped',
@@ -493,7 +511,11 @@ test('prototype store persists Hermes runtime source facts as read-only evidence
   assert.deepEqual(unmappedRecords[0].metadata, {
     profile_id: 'unmapped-worker',
     session_ref: null,
-    source_health_key: 'runtime_source_evidence.unmapped_hermes_sources'
+    source_health_key: 'runtime_source_evidence.unmapped_hermes_sources',
+    source_provenance: {
+      source_format: 'json_array',
+      source_index: 0
+    }
   });
 
   assert.equal(

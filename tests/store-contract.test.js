@@ -1083,6 +1083,61 @@ test('JSONL prototype store loads old record kinds without evidence records', as
   });
 });
 
+test('prototype store summarizes bounded collector snapshot history with exact filters', async () => {
+  const storeFile = await createStoreFile();
+  const store = await createPrototypeStore({ filePath: storeFile });
+  const firstReport = createCollectorReport();
+  const secondReport = createCollectorReport();
+  secondReport.collected_at = '2026-03-09T18:07:00.000Z';
+  secondReport.items[0].source_health.workspace_files.status = 'observed';
+  secondReport.items[0].source_health.workspace_files.degraded_reasons = [];
+
+  await store.appendCollectorReport(firstReport);
+  await store.appendCollectorReport(secondReport);
+
+  const bounded = store.getCollectorSnapshotHistorySummary({ limit: 1 });
+  assert.equal(bounded.total_count, 2);
+  assert.equal(bounded.returned_limit, 1);
+  assert.deepEqual(bounded.items.map((item) => item.collector_snapshot_id), [
+    'collector-snapshot:2026-03-09T18:07:00.000Z'
+  ]);
+  assert.deepEqual(bounded.source_kind_buckets, {
+    workspace_root: 1,
+    workspace_files: 1,
+    tmux_session: 1,
+    hermes_profile: 0,
+    hermes_session: 0
+  });
+  assert.deepEqual(bounded.status_buckets, {
+    observed: 3,
+    degraded: 0,
+    missing: 0,
+    error: 0
+  });
+  assert.equal(bounded.items[0].matched_agent_count, 1);
+  assert.equal(Object.hasOwn(bounded.items[0], 'items'), false);
+
+  assert.deepEqual(
+    store
+      .getCollectorSnapshotHistorySummary({
+        collector_snapshot_id: 'collector-snapshot:2026-03-09T18:06:00.000Z',
+        agent_id: 'app-engineering',
+        source_kind: 'workspace_file',
+        status: 'degraded',
+        collected_since: '2026-03-09T18:06:00.000Z',
+        collected_until: '2026-03-09T18:06:00.000Z'
+      })
+      .items.map((item) => item.collector_snapshot_id),
+    ['collector-snapshot:2026-03-09T18:06:00.000Z']
+  );
+
+  const reloadedStore = await createPrototypeStore({ filePath: storeFile });
+  assert.deepEqual(
+    reloadedStore.getCollectorSnapshotHistorySummary({ source_kind: 'workspace_file' }),
+    store.getCollectorSnapshotHistorySummary({ source_kind: 'workspace_file' })
+  );
+});
+
 test('SQLite prototype store replays the same contract as JSONL and survives reload', async () => {
   const jsonlStoreFile = await createStoreFile();
   const sqliteStoreFile = await createSqliteStoreFile();

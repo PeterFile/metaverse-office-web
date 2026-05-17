@@ -16,6 +16,7 @@ This project is not a flashy dashboard, not a manual task-dispatch UI, and not a
 - The store replays persisted records into memory and derives current agent projections, read models, incidents, interactions, memory artifacts, correlation drilldowns, timeline replay, accountability replay, evidence-record queries, and the latest collector snapshot.
 - Collector snapshot reports are persisted as append-only `collector_snapshot` records; collector-derived source facts are also persisted as internal append-only `evidence_record` records before the snapshot record.
 - `evidence_record` entries preserve source kind, evidence ref, evidence role, source health status, output-candidate classification, collector correlation, and degraded reasons for workspace roots, workspace files, mapped tmux panes, mapped Hermes profile/session presence, and unmapped tmux/Hermes runtime evidence.
+- Hermes profile/session runtime facts may be ingested from the opt-in local file named by `METAVERSE_OFFICE_HERMES_RUNTIME_SOURCES_FILE`; the controller owns reading that evidence input during collection, maps safe profile/session matches onto seeded agents, keeps unsafe or unknown facts under `runtime_source_evidence.unmapped_hermes_sources`, and treats every such fact as evidence only with no task dispatch, profile routing, worker orchestration, liveness/productivity, writable Kanban, or other control-plane semantics.
 - `GET /evidence-records` is read-only evidence inspection over replayed internal evidence records; it filters exact `evidence_id`, `agent_id`, `source_kind`, `evidence_role`, `output_candidate`, `evidence_ref`, `source_status`, `collector_snapshot_id`, `correlation_id`, optional `mapped=true|false`, valid observed/collected time windows, optional `newest_first=true`, and `limit`, and must not collect, read tmux/filesystems, append records, or expose control-plane actions.
 - Event and heartbeat counts still come only from `event` and `heartbeat` records; inbound `inbox.md`, workspace-root presence, Hermes runtime presence, and unmapped runtime evidence remain non-output evidence and must not advance meaningful-output state.
 - Controlled writes are limited to `POST /events`, `POST /heartbeats`, and `POST /collectors/controller-snapshot` with `x-actor-id` validation.
@@ -32,7 +33,7 @@ Goal: connect the current read models and AI Town UI to real Hermes team runtime
 
 Minimum target outcomes:
 
-1. Ingest real Hermes runtime facts from profiles, sessions, tmux panes, workspace artifacts, and compatible Kanban/task event sources as evidence records.
+1. Ingest real Hermes runtime facts from profiles, sessions, opt-in runtime source files, tmux panes, workspace artifacts, and compatible Kanban/task event sources as evidence records.
 2. Map live Hermes agents/profiles to the office actor model without fabricating activity when a source is missing or degraded.
 3. Keep the product boundary observability-first: no task dispatch, claim/complete controls, profile routing, or worker orchestration in this repo unless this document and the API contract are updated first.
 4. Upgrade the prototype JSONL event spine to a structured append-only store, likely SQLite first, with indexes for event id, agent id, correlation id, source kind, evidence ref, and time range.

@@ -130,6 +130,18 @@ class JsonlRecordLog {
   async appendRecord(record) {
     await appendFile(this.filePath, `${JSON.stringify(record)}\n`, 'utf8');
   }
+
+  async appendRecords(records) {
+    if (records.length === 0) {
+      return;
+    }
+
+    await appendFile(
+      this.filePath,
+      records.map((record) => JSON.stringify(record)).join('\n') + '\n',
+      'utf8'
+    );
+  }
 }
 
 class SqliteRecordLog {
@@ -154,19 +166,29 @@ class SqliteRecordLog {
 
   async appendRecord(record) {
     await this.#ensureReady();
-    const kindHex = Buffer.from(record.kind, 'utf8').toString('hex');
-    const payloadHex = Buffer.from(JSON.stringify(record.payload), 'utf8').toString('hex');
-    const seqSql = '(SELECT seq FROM records ORDER BY seq DESC LIMIT 1)';
-    await this.#exec([
-      this.filePath,
-      [
-        'BEGIN IMMEDIATE;',
+    await this.appendRecords([record]);
+  }
+
+  async appendRecords(records) {
+    await this.#ensureReady();
+    if (records.length === 0) {
+      return;
+    }
+
+    const statements = ['BEGIN IMMEDIATE;'];
+    for (const record of records) {
+      const kindHex = Buffer.from(record.kind, 'utf8').toString('hex');
+      const payloadHex = Buffer.from(JSON.stringify(record.payload), 'utf8').toString('hex');
+      const seqSql = '(SELECT seq FROM records ORDER BY seq DESC LIMIT 1)';
+      statements.push(
         'INSERT INTO records(kind,payload_json)',
         `VALUES (CAST(X'${kindHex}' AS TEXT), CAST(X'${payloadHex}' AS TEXT));`,
-        this.#createSidecarInsertSql(seqSql, record),
-        'COMMIT;'
-      ].join(' ')
-    ]);
+        this.#createSidecarInsertSql(seqSql, record)
+      );
+    }
+    statements.push('COMMIT;');
+
+    await this.#exec([this.filePath, statements.join(' ')]);
   }
 
   async #ensureReady() {
@@ -457,11 +479,14 @@ class PrototypeStore {
       existingEvents: this.events
     });
     const items = [];
+    const records = [
+      ...collectorActivityEvents,
+      ...collectorEvents
+    ].map((event) => ({
+      kind: 'event',
+      payload: event
+    }));
     let appendedHeartbeatCount = 0;
-
-    for (const event of [...collectorActivityEvents, ...collectorEvents]) {
-      await this.appendEvent(event);
-    }
 
     for (const item of normalizedReport.items || []) {
       if (!hasCollectorOutputEvidence(item)) {
@@ -469,7 +494,11 @@ class PrototypeStore {
         continue;
       }
 
-      const heartbeat = await this.appendHeartbeat(item.heartbeat);
+      const heartbeat = item.heartbeat;
+      records.push({
+        kind: 'heartbeat',
+        payload: heartbeat
+      });
       appendedHeartbeatCount += 1;
       items.push({
         ...item,
@@ -491,14 +520,15 @@ class PrototypeStore {
         kind: EVIDENCE_RECORD_KIND,
         payload: evidenceRecord
       };
-      await this.#appendRecord(record);
+      records.push(record);
     }
 
     const snapshotRecord = {
       kind: COLLECTOR_SNAPSHOT_RECORD_KIND,
       payload: storedReport
     };
-    await this.#appendRecord(snapshotRecord);
+    records.push(snapshotRecord);
+    await this.#appendRecords(records);
 
     return this.latestCollectorReport;
   }
@@ -506,6 +536,24 @@ class PrototypeStore {
   async #appendRecord(record) {
     await this.recordLog.appendRecord(record);
     this.#applyRecord(record);
+  }
+
+  async #appendRecords(records) {
+    if (records.length === 0) {
+      return;
+    }
+
+    if (typeof this.recordLog.appendRecords === 'function') {
+      await this.recordLog.appendRecords(records);
+    } else {
+      for (const record of records) {
+        await this.recordLog.appendRecord(record);
+      }
+    }
+
+    for (const record of records) {
+      this.#applyRecord(record);
+    }
   }
 
   #applyRecord(record) {

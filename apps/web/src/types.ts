@@ -274,6 +274,28 @@ export interface CollectorSourceHealthProjection {
   runtime_source_evidence?: CollectorRuntimeSourceEvidence;
 }
 
+export interface CollectorSnapshotHistoryItem {
+  collector_snapshot_id: string;
+  collected_at: string | null;
+  actor_id: string | null;
+  agent_count: number;
+  heartbeat_count: number;
+  tmux_observed_count: number;
+  workspace_observed_count: number;
+  reboot_recommended_count: number;
+  matched_agent_count: number;
+  source_kind_buckets: Record<CollectorSourceHealthKind, number>;
+  status_buckets: Record<CollectorSourceHealthStatus, number>;
+}
+
+export interface CollectorSnapshotHistory {
+  total_count: number;
+  returned_limit: number;
+  source_kind_buckets: Record<CollectorSourceHealthKind, number>;
+  status_buckets: Record<CollectorSourceHealthStatus, number>;
+  items: CollectorSnapshotHistoryItem[];
+}
+
 export interface EvidenceRecord {
   evidence_id: string;
   observed_at: string | null;

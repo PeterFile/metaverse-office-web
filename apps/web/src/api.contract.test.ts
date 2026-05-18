@@ -14,6 +14,7 @@ import type {
   AgentWorkflow,
   CollectorEvidenceCoverage,
   CollectorSnapshot,
+  CollectorSnapshotHistory,
   CollectorSourceHealthProjection,
   CorrelationDrilldown,
   IncidentFeedResponse,
@@ -138,6 +139,7 @@ describe('read-only frontend/backend contract smoke', () => {
       collectorSnapshot,
       collectorEvidenceCoverage,
       collectorSourceHealth,
+      collectorSnapshotHistory,
       memoryArtifacts,
       correlation
     ] = await Promise.all([
@@ -149,6 +151,12 @@ describe('read-only frontend/backend contract smoke', () => {
       api.fetchCollectorSnapshot(),
       api.fetchCollectorEvidenceCoverage(),
       api.fetchCollectorSourceHealth({ limit: 7 }),
+      api.fetchCollectorSnapshotHistory({
+        agentId: 'app-engineering',
+        sourceKind: 'workspace_file',
+        status: 'degraded',
+        limit: 7
+      }),
       api.fetchMemoryArtifacts({
         agentId: 'app-engineering',
         correlationId: 'corr-contract'
@@ -217,6 +225,17 @@ describe('read-only frontend/backend contract smoke', () => {
       {
         method: 'GET',
         origin: harness.baseUrl,
+        pathname: '/collectors/controller-snapshot/history',
+        query: [
+          ['agent_id', 'app-engineering'],
+          ['limit', '7'],
+          ['source_kind', 'workspace_file'],
+          ['status', 'degraded']
+        ]
+      },
+      {
+        method: 'GET',
+        origin: harness.baseUrl,
         pathname: '/memory/artifacts',
         query: [
           ['agent_id', 'app-engineering'],
@@ -243,6 +262,7 @@ describe('read-only frontend/backend contract smoke', () => {
     expectCollectorSnapshotContract(collectorSnapshot);
     expectCollectorEvidenceCoverageContract(collectorEvidenceCoverage);
     expectCollectorSourceHealthContract(collectorSourceHealth);
+    expectCollectorSnapshotHistoryContract(collectorSnapshotHistory);
     expectMemoryArtifactContract(memoryArtifacts);
     expectCorrelationContract(correlation);
   });
@@ -2078,6 +2098,45 @@ function expectCollectorSourceHealthContract(sourceHealth: CollectorSourceHealth
             status: 'degraded',
             missing_count: 2
           }
+        }
+      }
+    ]
+  });
+}
+
+function expectCollectorSnapshotHistoryContract(history: CollectorSnapshotHistory | null) {
+  expect(history).toMatchObject({
+    total_count: 1,
+    returned_limit: 7,
+    source_kind_buckets: {
+      workspace_root: 0,
+      workspace_files: 1,
+      tmux_session: 0,
+      hermes_profile: 0,
+      hermes_session: 0
+    },
+    status_buckets: {
+      observed: 0,
+      degraded: 1,
+      missing: 0,
+      error: 0
+    },
+    items: [
+      {
+        collector_snapshot_id: 'collector-snapshot:2026-03-09T18:59:00.000Z',
+        collected_at: '2026-03-09T18:59:00.000Z',
+        actor_id: 'team-lead',
+        agent_count: 1,
+        heartbeat_count: 1,
+        tmux_observed_count: 1,
+        workspace_observed_count: 1,
+        reboot_recommended_count: 0,
+        matched_agent_count: 1,
+        source_kind_buckets: {
+          workspace_files: 1
+        },
+        status_buckets: {
+          degraded: 1
         }
       }
     ]

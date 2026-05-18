@@ -5,6 +5,7 @@ import type {
   AgentEventsResponse,
   AgentInteractionsResponse,
   CollectorEvidenceCoverage,
+  CollectorSnapshotHistory,
   CollectorSourceHealthProjection,
   AgentWorkflow,
   CollectorSnapshot,
@@ -169,6 +170,52 @@ export async function fetchCollectorSourceHealth(
     }
   );
   const body = await parseJson<{ item: CollectorSourceHealthProjection | null }>(response);
+  return body.item;
+}
+
+export async function fetchCollectorSnapshotHistory(
+  options: {
+    collectorSnapshotId?: string;
+    agentId?: string;
+    sourceKind?: string;
+    status?: string;
+    collectedSince?: string;
+    collectedUntil?: string;
+    limit?: number;
+    signal?: AbortSignal;
+  } = {}
+): Promise<CollectorSnapshotHistory | null> {
+  const params = new URLSearchParams();
+  if (options.collectorSnapshotId) {
+    params.set('collector_snapshot_id', options.collectorSnapshotId);
+  }
+  if (options.agentId) {
+    params.set('agent_id', options.agentId);
+  }
+  if (options.sourceKind) {
+    params.set('source_kind', options.sourceKind);
+  }
+  if (options.status) {
+    params.set('status', options.status);
+  }
+  if (options.collectedSince) {
+    params.set('collected_since', options.collectedSince);
+  }
+  if (options.collectedUntil) {
+    params.set('collected_until', options.collectedUntil);
+  }
+  if (options.limit !== undefined) {
+    params.set('limit', String(options.limit));
+  }
+
+  const suffix = params.size > 0 ? `?${params.toString()}` : '';
+  const response = await fetch(
+    resolveApiUrl(`/collectors/controller-snapshot/history${suffix}`),
+    {
+      signal: options.signal
+    }
+  );
+  const body = await parseJson<{ item: CollectorSnapshotHistory | null }>(response);
   return body.item;
 }
 

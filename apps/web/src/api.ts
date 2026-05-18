@@ -17,12 +17,15 @@ import type {
   OfficeOverview,
   PeerWatchAlertsResponse,
   ProblemResponse,
+  RuntimeSourceGap,
+  RuntimeSourceGapsResponse,
   TimelineReplayResponse
 } from './types';
 
 const DEFAULT_WORKFLOW_LIMIT = 10;
 const DEFAULT_WORKFLOW_WINDOW = '60m';
 const DEFAULT_EVIDENCE_RECORD_LIMIT = 200;
+const DEFAULT_RUNTIME_SOURCE_GAP_LIMIT = 200;
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL?.trim();
 
 export class RequestError extends Error {
@@ -252,6 +255,73 @@ export async function fetchEvidenceRecord(
   );
   const body = await parseJson<{ item: EvidenceRecord | null }>(response);
   return body.item;
+}
+
+export async function fetchRuntimeSourceGaps(
+  options: {
+    agentId?: string | null;
+    sourceKind?: string | null;
+    evidenceRole?: string | null;
+    sourceStatus?: string | null;
+    collectorSnapshotId?: string | null;
+    correlationId?: string | null;
+    outputCandidate?: boolean | null;
+    mapped?: boolean | null;
+    observedSince?: string | null;
+    observedUntil?: string | null;
+    collectedSince?: string | null;
+    collectedUntil?: string | null;
+    newestFirst?: boolean;
+    limit?: number;
+    signal?: AbortSignal;
+  } = {}
+): Promise<RuntimeSourceGap[]> {
+  const params = new URLSearchParams();
+  if (options.agentId) {
+    params.set('agent_id', options.agentId);
+  }
+  if (options.sourceKind) {
+    params.set('source_kind', options.sourceKind);
+  }
+  if (options.evidenceRole) {
+    params.set('evidence_role', options.evidenceRole);
+  }
+  if (options.sourceStatus) {
+    params.set('source_status', options.sourceStatus);
+  }
+  if (options.collectorSnapshotId) {
+    params.set('collector_snapshot_id', options.collectorSnapshotId);
+  }
+  if (options.correlationId) {
+    params.set('correlation_id', options.correlationId);
+  }
+  if (options.outputCandidate !== undefined && options.outputCandidate !== null) {
+    params.set('output_candidate', String(options.outputCandidate));
+  }
+  if (options.mapped !== undefined && options.mapped !== null) {
+    params.set('mapped', String(options.mapped));
+  }
+  if (options.observedSince) {
+    params.set('observed_since', options.observedSince);
+  }
+  if (options.observedUntil) {
+    params.set('observed_until', options.observedUntil);
+  }
+  if (options.collectedSince) {
+    params.set('collected_since', options.collectedSince);
+  }
+  if (options.collectedUntil) {
+    params.set('collected_until', options.collectedUntil);
+  }
+  params.set('newest_first', String(options.newestFirst ?? true));
+  params.set('limit', String(options.limit ?? DEFAULT_RUNTIME_SOURCE_GAP_LIMIT));
+
+  const suffix = params.size > 0 ? `?${params.toString()}` : '';
+  const response = await fetch(resolveApiUrl(`/runtime/source-gaps${suffix}`), {
+    signal: options.signal
+  });
+  const body = await parseJson<RuntimeSourceGapsResponse>(response);
+  return body.items;
 }
 
 export async function fetchOfficeOperations(

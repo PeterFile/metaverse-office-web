@@ -621,6 +621,15 @@ class PrototypeStore {
     return record ? cloneEvidenceRecord(record) : null;
   }
 
+  getEvidenceProvenanceBundle(evidenceId) {
+    const record = this.getEvidenceRecord(evidenceId);
+    if (!record) {
+      return null;
+    }
+
+    return projectEvidenceProvenanceBundle(record);
+  }
+
   listRuntimeSourceGaps(filters = {}) {
     const { records, limit, newestFirst } = this.#filterEvidenceRecords(filters);
     const gapRecords = records.filter(isRuntimeSourceGapRecord);
@@ -2875,6 +2884,71 @@ function cloneEvidenceRecord(record) {
     ...record,
     degraded_reasons: Array.isArray(record.degraded_reasons) ? record.degraded_reasons.slice() : [],
     metadata: record.metadata && typeof record.metadata === 'object' ? { ...record.metadata } : {}
+  };
+}
+
+function projectEvidenceProvenanceBundle(record) {
+  return {
+    evidence_id: record.evidence_id,
+    record: {
+      observed_at: record.observed_at,
+      collected_at: record.collected_at,
+      agent_id: record.agent_id,
+      source_kind: record.source_kind,
+      evidence_role: record.evidence_role,
+      source_status: record.source_status,
+      output_candidate: record.output_candidate === true,
+      collector_snapshot_id: record.collector_snapshot_id,
+      correlation_id: record.correlation_id,
+      unmapped: record.agent_id === null
+    },
+    anchors: {
+      snapshot: createEvidenceSnapshotAnchor(record),
+      source: createEvidenceSourceAnchor(record),
+      replay: createEvidenceReplayAnchor(record)
+    }
+  };
+}
+
+function createEvidenceSnapshotAnchor(record) {
+  if (!record.collector_snapshot_id) {
+    return null;
+  }
+
+  const params = new URLSearchParams({ collector_snapshot_id: record.collector_snapshot_id });
+  if (record.source_kind) {
+    params.set('source_kind', record.source_kind);
+  }
+
+  return {
+    collector_snapshot_id: record.collector_snapshot_id,
+    route: `/collectors/controller-snapshot/source-health?${params.toString()}`
+  };
+}
+
+function createEvidenceSourceAnchor(record) {
+  if (!record.source_kind) {
+    return null;
+  }
+
+  return {
+    evidence_id: record.evidence_id,
+    source_kind: record.source_kind,
+    evidence_role: record.evidence_role,
+    source_status: record.source_status,
+    route: `/evidence-records/${encodeURIComponent(record.evidence_id)}`
+  };
+}
+
+function createEvidenceReplayAnchor(record) {
+  if (!record.correlation_id) {
+    return null;
+  }
+
+  const params = new URLSearchParams({ correlation_id: record.correlation_id });
+  return {
+    correlation_id: record.correlation_id,
+    route: `/accountability/replay?${params.toString()}`
   };
 }
 

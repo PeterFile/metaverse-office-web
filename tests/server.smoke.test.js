@@ -5574,6 +5574,58 @@ test('GET /evidence-records lists stored evidence records read-only with exact f
   assert.equal(detail.response.status, 200);
   assert.deepEqual(detail.body, { item: response.body.items[0] });
 
+  const provenanceBundle = await requestJson(
+    `${baseUrl}/evidence-records/${encodeURIComponent(evidenceId)}/provenance-bundle`
+  );
+  assert.equal(provenanceBundle.response.status, 200);
+  assert.deepEqual(provenanceBundle.body, {
+    item: {
+      evidence_id: evidenceId,
+      record: {
+        observed_at: '2026-03-09T18:05:00.000Z',
+        collected_at: '2026-03-09T18:06:00.000Z',
+        agent_id: 'app-engineering',
+        source_kind: 'workspace_file',
+        evidence_role: 'agent_output',
+        source_status: 'observed',
+        output_candidate: true,
+        collector_snapshot_id: 'collector-snapshot:2026-03-09T18:06:00.000Z',
+        correlation_id: 'collector-snapshot:2026-03-09T18:06:00.000Z',
+        unmapped: false
+      },
+      anchors: {
+        snapshot: {
+          collector_snapshot_id: 'collector-snapshot:2026-03-09T18:06:00.000Z',
+          route:
+            '/collectors/controller-snapshot/source-health?collector_snapshot_id=collector-snapshot%3A2026-03-09T18%3A06%3A00.000Z&source_kind=workspace_file'
+        },
+        source: {
+          evidence_id: evidenceId,
+          source_kind: 'workspace_file',
+          evidence_role: 'agent_output',
+          source_status: 'observed',
+          route: `/evidence-records/${encodeURIComponent(evidenceId)}`
+        },
+        replay: {
+          correlation_id: 'collector-snapshot:2026-03-09T18:06:00.000Z',
+          route:
+            '/accountability/replay?correlation_id=collector-snapshot%3A2026-03-09T18%3A06%3A00.000Z'
+        }
+      }
+    }
+  });
+  assert.equal(JSON.stringify(provenanceBundle.body).includes('/tmp/evidence-query'), false);
+  assert.equal(JSON.stringify(provenanceBundle.body).includes('evidence_ref'), false);
+  assert.equal(JSON.stringify(provenanceBundle.body).includes('metadata'), false);
+  assert.equal(JSON.stringify(provenanceBundle.body).includes('degraded_reasons'), false);
+
+  const unknownBundle = await requestJson(
+    `${baseUrl}/evidence-records/missing-evidence-id/provenance-bundle`
+  );
+  assert.equal(unknownBundle.response.status, 404);
+  assert.equal(unknownBundle.body.error, 'not_found');
+  assert.equal(unknownBundle.body.details, 'unknown evidence record missing-evidence-id');
+
   const unknownDetail = await requestJson(`${baseUrl}/evidence-records/missing-evidence-id`);
   assert.equal(unknownDetail.response.status, 404);
   assert.equal(unknownDetail.body.error, 'not_found');

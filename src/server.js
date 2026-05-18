@@ -498,6 +498,24 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
     return;
   }
 
+  const evidenceProvenanceBundleMatch = pathname.match(
+    /^\/evidence-records\/([^/]+)\/provenance-bundle$/
+  );
+  if (method === 'GET' && evidenceProvenanceBundleMatch) {
+    const evidenceId = decodeURIComponent(evidenceProvenanceBundleMatch[1]);
+    const provenanceBundle = store.getEvidenceProvenanceBundle(evidenceId);
+    if (!provenanceBundle) {
+      sendJson(res, 404, {
+        error: 'not_found',
+        details: `unknown evidence record ${evidenceId}`
+      });
+      return;
+    }
+
+    sendJson(res, 200, { item: provenanceBundle });
+    return;
+  }
+
   const evidenceRecordMatch = pathname.match(/^\/evidence-records\/([^/]+)$/);
   if (method === 'GET' && evidenceRecordMatch) {
     const evidenceId = decodeURIComponent(evidenceRecordMatch[1]);

@@ -6,7 +6,7 @@ const path = require('node:path');
 const { promisify } = require('node:util');
 const test = require('node:test');
 
-const { createPrototypeStore } = require('../src/store/prototype-store');
+const { PrototypeStore, createPrototypeStore } = require('../src/store/prototype-store');
 
 const execFileAsync = promisify(execFile);
 
@@ -316,6 +316,33 @@ function createTieTimestampCollectorReport(collectedAt) {
   return report;
 }
 
+class FailingCollectorBatchRecordLog {
+  constructor({ failOnKind }) {
+    this.failOnKind = failOnKind;
+    this.records = [];
+  }
+
+  async loadRecords() {
+    return this.records;
+  }
+
+  async appendRecord(record) {
+    if (record.kind === this.failOnKind) {
+      throw new Error(`injected append failure for ${record.kind}`);
+    }
+
+    this.records.push(record);
+  }
+
+  async appendRecords(records) {
+    if (records.some((record) => record.kind === this.failOnKind)) {
+      throw new Error(`injected append failure for ${this.failOnKind}`);
+    }
+
+    this.records.push(...records);
+  }
+}
+
 function projectReplayContract(store) {
   const now = '2026-03-09T18:10:00.000Z';
 
@@ -450,6 +477,31 @@ test('JSONL prototype store appends and replays collector evidence records witho
 
   const records = (await readFile(storeFile, 'utf8')).trim().split('\n').map((line) => JSON.parse(line));
   assert.equal(records.filter((record) => record.kind === 'evidence_record').length, 3);
+});
+
+test('prototype store does not expose half collector snapshots when a derived append fails', async () => {
+  const recordLog = new FailingCollectorBatchRecordLog({ failOnKind: 'evidence_record' });
+  const store = new PrototypeStore({
+    filePath: '/tmp/failing-collector-batch.jsonl',
+    recordLog
+  });
+  await store.load();
+  await store.appendEvent(createEvent());
+
+  const beforeCounts = store.getCounts();
+  const beforeEvents = store.listEvents({ limit: 10 });
+
+  await assert.rejects(
+    store.appendCollectorReport(createCollectorReport()),
+    /injected append failure for evidence_record/
+  );
+
+  assert.deepEqual(store.getCounts(), beforeCounts);
+  assert.deepEqual(store.listEvents({ limit: 10 }), beforeEvents);
+  assert.deepEqual(store.listEvidenceRecords(), []);
+  assert.equal(store.getLatestCollectorReport(), null);
+  assert.equal(recordLog.records.filter((record) => record.kind === 'evidence_record').length, 0);
+  assert.equal(recordLog.records.filter((record) => record.kind === 'collector_snapshot').length, 0);
 });
 
 test('prototype store persists Hermes runtime source facts as read-only evidence records', async () => {

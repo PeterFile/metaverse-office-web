@@ -12,6 +12,7 @@ import {
   fetchCollectorSourceHealth,
   fetchEvidenceRecord,
   fetchEvidenceRecords,
+  fetchRuntimeSourceGaps,
   fetchMemoryArtifacts,
   fetchOfficeOperations,
   fetchOfficeOverview,
@@ -763,6 +764,123 @@ describe('fetchEvidenceRecord', () => {
       status: 404,
       code: 'not_found',
       message: 'unknown evidence record missing-record'
+    });
+  });
+});
+
+describe('fetchRuntimeSourceGaps', () => {
+  it('requests a bounded newest-first source-gap slice by default', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ items: [] }), {
+          headers: JSON_HEADERS
+        })
+      )
+    );
+
+    await expect(fetchRuntimeSourceGaps()).resolves.toEqual([]);
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/runtime/source-gaps?newest_first=true&limit=200',
+      expect.objectContaining({ signal: undefined })
+    );
+  });
+
+  it('passes supported source-gap filters through with backend query names', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ items: [] }), {
+          headers: JSON_HEADERS
+        })
+      )
+    );
+
+    await expect(
+      fetchRuntimeSourceGaps({
+        agentId: 'app engineering',
+        sourceKind: 'workspace_file',
+        evidenceRole: 'agent output',
+        sourceStatus: 'degraded',
+        collectorSnapshotId: 'snapshot 2026/03/09',
+        correlationId: 'corr app/review#1',
+        outputCandidate: false,
+        mapped: true,
+        observedSince: '2026-03-09T18:58:30.000Z',
+        observedUntil: '2026-03-09T18:59:00.000Z',
+        collectedSince: '2026-03-09T18:59:00.000Z',
+        collectedUntil: '2026-03-09T19:00:00.000Z',
+        limit: 7
+      })
+    ).resolves.toEqual([]);
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/runtime/source-gaps?agent_id=app+engineering&source_kind=workspace_file&evidence_role=agent+output&source_status=degraded&collector_snapshot_id=snapshot+2026%2F03%2F09&correlation_id=corr+app%2Freview%231&output_candidate=false&mapped=true&observed_since=2026-03-09T18%3A58%3A30.000Z&observed_until=2026-03-09T18%3A59%3A00.000Z&collected_since=2026-03-09T18%3A59%3A00.000Z&collected_until=2026-03-09T19%3A00%3A00.000Z&newest_first=true&limit=7',
+      expect.objectContaining({ signal: undefined })
+    );
+  });
+
+  it('allows callers to opt out of newest-first source-gap ordering explicitly', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ items: [] }), {
+          headers: JSON_HEADERS
+        })
+      )
+    );
+
+    await expect(fetchRuntimeSourceGaps({ newestFirst: false, limit: 3 })).resolves.toEqual([]);
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/runtime/source-gaps?newest_first=false&limit=3',
+      expect.objectContaining({ signal: undefined })
+    );
+  });
+
+  it('unwraps compact source-gap envelopes without raw evidence fields', async () => {
+    const item = {
+      observed_at: '2026-03-09T18:05:00.000Z',
+      collected_at: '2026-03-09T18:06:00.000Z',
+      agent_id: null,
+      source_kind: 'tmux_observation',
+      evidence_role: 'runtime_unmapped',
+      source_status: 'observed',
+      output_candidate: false,
+      collector_snapshot_id: 'collector-snapshot:2026-03-09T18:06:00.000Z',
+      correlation_id: 'collector-snapshot:2026-03-09T18:06:00.000Z',
+      degraded_reasons: [],
+      unmapped: true
+    };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ items: [item] }), {
+          headers: JSON_HEADERS
+        })
+      )
+    );
+
+    await expect(fetchRuntimeSourceGaps({ limit: 1 })).resolves.toEqual([item]);
+  });
+
+  it('throws RequestError for source-gap backend problem responses', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ error: 'bad_request', details: 'invalid limit' }), {
+          status: 400,
+          headers: JSON_HEADERS
+        })
+      )
+    );
+
+    await expect(fetchRuntimeSourceGaps({ limit: 1 })).rejects.toMatchObject({
+      name: 'RequestError',
+      status: 400,
+      code: 'bad_request',
+      message: 'invalid limit'
     });
   });
 });

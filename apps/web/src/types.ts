@@ -294,6 +294,24 @@ export interface EvidenceRecordsResponse {
   items: EvidenceRecord[];
 }
 
+export interface RuntimeSourceGap {
+  observed_at: string | null;
+  collected_at: string | null;
+  agent_id: string | null;
+  source_kind: string;
+  evidence_role: string | null;
+  source_status: 'observed' | 'missing' | 'degraded' | 'error';
+  output_candidate: boolean;
+  collector_snapshot_id: string;
+  correlation_id: string | null;
+  degraded_reasons: string[];
+  unmapped: boolean;
+}
+
+export interface RuntimeSourceGapsResponse {
+  items: RuntimeSourceGap[];
+}
+
 export interface CollectorSnapshot {
   collected_at: string;
   actor_id: string;

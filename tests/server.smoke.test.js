@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict');
 const { execFile } = require('node:child_process');
-const { mkdtemp, readFile, writeFile } = require('node:fs/promises');
+const { mkdir, mkdtemp, readFile, writeFile } = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
@@ -9,6 +9,7 @@ const { promisify } = require('node:util');
 const {
   collectControllerSnapshot,
   createControllerSnapshotCollector,
+  createHermesRuntimeSourcesReader,
   createHermesRuntimeSourcesFileReader
 } = require('../src/collectors/controller-snapshot');
 const { SEED_AGENTS } = require('../src/domain');
@@ -4739,11 +4740,21 @@ test('collector snapshot endpoints stay read-only on GET and require team-lead o
   assert.equal(snapshotRecord.payload.items[0].heartbeat.current_state, 'coding');
 });
 
-test('collector snapshot rejects invalid Hermes runtime file before append', async (t) => {
+test('collector snapshot rejects invalid Hermes runtime inputs before append', async (t) => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'metaverse-office-hermes-runtime-'));
-  const runtimeFile = path.join(root, 'runtime-facts.json');
+  const sourcesDir = path.join(root, 'runtime-sources');
+  const validFile = path.join(sourcesDir, '01-valid.jsonl');
+  const invalidFile = path.join(sourcesDir, '02-invalid.json');
+  await mkdir(sourcesDir);
   await writeFile(
-    runtimeFile,
+    validFile,
+    `${JSON.stringify({
+      source_kind: 'hermes_session',
+      session_ref: '5-web3-app-engineering'
+    })}\n`
+  );
+  await writeFile(
+    invalidFile,
     JSON.stringify([
       {
         source_kind: 'hermes_profile',
@@ -4757,7 +4768,7 @@ test('collector snapshot rejects invalid Hermes runtime file before append', asy
     agents: [SEED_AGENTS.find((agent) => agent.agent_id === 'app-engineering')],
     readPathStat: async () => null,
     listTmuxPanes: async () => [],
-    readHermesRuntimeSources: createHermesRuntimeSourcesFileReader({ filePath: runtimeFile })
+    readHermesRuntimeSources: createHermesRuntimeSourcesReader({ inputPaths: [sourcesDir] })
   });
   const { baseUrl, storeFile } = await createHarness(t, { controllerSnapshotCollector });
 
@@ -4770,6 +4781,93 @@ test('collector snapshot rejects invalid Hermes runtime file before append', asy
 
   assert.equal(collected.response.status, 500);
   assert.equal(collected.body.error, 'internal_error');
+  assert.match(collected.body.details, /Hermes runtime source input 2/);
+  assert.equal(collected.body.details.includes(root), false);
+  assert.equal(collected.body.details.includes(sourcesDir), false);
+  assert.equal(collected.body.details.includes(invalidFile), false);
+  await assert.rejects(() => readFile(storeFile, 'utf8'), { code: 'ENOENT' });
+});
+
+test('collector snapshot labels missing Hermes runtime input before append', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'metaverse-office-hermes-runtime-'));
+  const missingFile = path.join(root, 'missing-runtime-facts.jsonl');
+
+  const controllerSnapshotCollector = createControllerSnapshotCollector({
+    agents: [SEED_AGENTS.find((agent) => agent.agent_id === 'app-engineering')],
+    readPathStat: async () => null,
+    listTmuxPanes: async () => [],
+    readHermesRuntimeSources: createHermesRuntimeSourcesReader({ inputPaths: [missingFile] })
+  });
+  const { baseUrl, storeFile } = await createHarness(t, { controllerSnapshotCollector });
+
+  const collected = await requestJson(`${baseUrl}/collectors/controller-snapshot`, {
+    method: 'POST',
+    headers: {
+      'x-actor-id': 'team-lead'
+    }
+  });
+
+  assert.equal(collected.response.status, 500);
+  assert.equal(collected.body.error, 'internal_error');
+  assert.match(collected.body.details, /Hermes runtime source input 1/);
+  assert.equal(collected.body.details.includes(root), false);
+  assert.equal(collected.body.details.includes(missingFile), false);
+  await assert.rejects(() => readFile(storeFile, 'utf8'), { code: 'ENOENT' });
+});
+
+test('collector snapshot legacy Hermes runtime file read failure is labeled before append', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'metaverse-office-hermes-runtime-'));
+  const missingFile = path.join(root, 'missing-runtime-facts.jsonl');
+
+  const controllerSnapshotCollector = createControllerSnapshotCollector({
+    agents: [SEED_AGENTS.find((agent) => agent.agent_id === 'app-engineering')],
+    readPathStat: async () => null,
+    listTmuxPanes: async () => [],
+    readHermesRuntimeSources: createHermesRuntimeSourcesFileReader({ filePath: missingFile })
+  });
+  const { baseUrl, storeFile } = await createHarness(t, { controllerSnapshotCollector });
+
+  const collected = await requestJson(`${baseUrl}/collectors/controller-snapshot`, {
+    method: 'POST',
+    headers: {
+      'x-actor-id': 'team-lead'
+    }
+  });
+
+  assert.equal(collected.response.status, 500);
+  assert.equal(collected.body.error, 'internal_error');
+  assert.match(collected.body.details, /Hermes runtime sources file/);
+  assert.equal(collected.body.details.includes(root), false);
+  assert.equal(collected.body.details.includes(missingFile), false);
+  await assert.rejects(() => readFile(storeFile, 'utf8'), { code: 'ENOENT' });
+});
+
+test('collector snapshot malformed Hermes runtime input is redacted before append', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'metaverse-office-hermes-runtime-'));
+  const malformedFile = path.join(root, 'malformed-runtime-facts.jsonl');
+  await writeFile(malformedFile, `${root}\n`);
+
+  const controllerSnapshotCollector = createControllerSnapshotCollector({
+    agents: [SEED_AGENTS.find((agent) => agent.agent_id === 'app-engineering')],
+    readPathStat: async () => null,
+    listTmuxPanes: async () => [],
+    readHermesRuntimeSources: createHermesRuntimeSourcesReader({ inputPaths: [malformedFile] })
+  });
+  const { baseUrl, storeFile } = await createHarness(t, { controllerSnapshotCollector });
+
+  const collected = await requestJson(`${baseUrl}/collectors/controller-snapshot`, {
+    method: 'POST',
+    headers: {
+      'x-actor-id': 'team-lead'
+    }
+  });
+
+  assert.equal(collected.response.status, 500);
+  assert.equal(collected.body.error, 'internal_error');
+  assert.match(collected.body.details, /Hermes runtime source input 1/);
+  assert.match(collected.body.details, /invalid JSON syntax/);
+  assert.equal(collected.body.details.includes(root), false);
+  assert.equal(collected.body.details.includes(malformedFile), false);
   await assert.rejects(() => readFile(storeFile, 'utf8'), { code: 'ENOENT' });
 });
 

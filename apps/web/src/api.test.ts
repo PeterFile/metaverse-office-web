@@ -10,6 +10,7 @@ import {
   fetchCollectorEvidenceCoverage,
   fetchCollectorSnapshot,
   fetchCollectorSourceHealth,
+  fetchEvidenceRecord,
   fetchEvidenceRecords,
   fetchMemoryArtifacts,
   fetchOfficeOperations,
@@ -689,6 +690,80 @@ describe('fetchEvidenceRecords', () => {
       '/evidence-records?newest_first=false&limit=3',
       expect.objectContaining({ signal: undefined })
     );
+  });
+});
+
+describe('fetchEvidenceRecord', () => {
+  const record = {
+    evidence_id: 'collector-snapshot:2026-03-09T18:59:00.000Z:app engineering:workspace_file:/tmp/evidence ref#1.md:0',
+    observed_at: '2026-03-09T18:58:30.000Z',
+    collected_at: '2026-03-09T18:59:00.000Z',
+    agent_id: 'app-engineering',
+    source_kind: 'workspace_file',
+    evidence_ref: '/tmp/evidence ref#1.md',
+    evidence_role: 'runtime activity',
+    source_status: 'active',
+    output_candidate: false,
+    collector_snapshot_id: 'collector-snapshot:2026-03-09T18:59:00.000Z',
+    correlation_id: 'corr-app-review',
+    degraded_reasons: [],
+    metadata: {}
+  };
+
+  it('URL-encodes the evidence_id path parameter and unwraps the item envelope without default query params', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ item: record }), {
+          headers: JSON_HEADERS
+        })
+      )
+    );
+
+    await expect(fetchEvidenceRecord(record.evidence_id)).resolves.toEqual(record);
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/evidence-records/collector-snapshot%3A2026-03-09T18%3A59%3A00.000Z%3Aapp%20engineering%3Aworkspace_file%3A%2Ftmp%2Fevidence%20ref%231.md%3A0',
+      expect.objectContaining({ signal: undefined })
+    );
+  });
+
+  it('returns null when the backend envelope item is null', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ item: null }), {
+          headers: JSON_HEADERS
+        })
+      )
+    );
+
+    await expect(fetchEvidenceRecord('missing-record')).resolves.toBeNull();
+  });
+
+  it('maps unknown evidence record 404 responses into RequestError metadata', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            error: 'not_found',
+            details: 'unknown evidence record missing-record'
+          }),
+          {
+            status: 404,
+            headers: JSON_HEADERS
+          }
+        )
+      )
+    );
+
+    await expect(fetchEvidenceRecord('missing-record')).rejects.toMatchObject({
+      name: 'RequestError',
+      status: 404,
+      code: 'not_found',
+      message: 'unknown evidence record missing-record'
+    });
   });
 });
 

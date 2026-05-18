@@ -5574,7 +5574,14 @@ test('GET /evidence-records lists stored evidence records read-only with exact f
         degraded: 0,
         missing: 1,
         error: 0
-      }
+      },
+      collector_snapshot_id_buckets: {
+        'collector-snapshot:2026-03-09T18:06:00.000Z': 4
+      },
+      first_observed_at: '2026-03-09T18:03:00.000Z',
+      last_observed_at: '2026-03-09T18:05:50.000Z',
+      first_collected_at: '2026-03-09T18:06:00.000Z',
+      last_collected_at: '2026-03-09T18:06:00.000Z'
     }
   });
   assert.equal(await readFile(storeFile, 'utf8'), fileBeforeRead);
@@ -5613,7 +5620,12 @@ test('GET /evidence-records lists stored evidence records read-only with exact f
       degraded: 0,
       missing: 0,
       error: 0
-    }
+    },
+    collector_snapshot_id_buckets: {},
+    first_observed_at: null,
+    last_observed_at: null,
+    first_collected_at: null,
+    last_collected_at: null
   });
 
   assert.equal(collectCount, 0);

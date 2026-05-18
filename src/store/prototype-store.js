@@ -543,7 +543,10 @@ class PrototypeStore {
   }
 
   getLatestCollectorSourceHealth(filters = {}) {
-    return projectCollectorSourceHealth(this.getLatestCollectorReport(), filters);
+    return projectCollectorSourceHealth(
+      findCollectorReportByIdOrLatest(this.collectorReports, this.getLatestCollectorReport(), filters),
+      filters
+    );
   }
 
   getCollectorSnapshotHistorySummary(filters = {}) {
@@ -3070,6 +3073,22 @@ function projectCollectorSourceHealth(report, filters = {}) {
       })
     )
   };
+}
+
+function findCollectorReportByIdOrLatest(reports, latestReport, filters = {}) {
+  const collectorSnapshotId = normalizeFilterValue(filters.collector_snapshot_id);
+  if (!collectorSnapshotId) {
+    return latestReport;
+  }
+
+  return (
+    reports.find(
+      (report) =>
+        createCollectorCorrelationId(
+          normalizeCollectorTimestamp(report?.collected_at) || report?.collected_at || 'unknown'
+        ) === collectorSnapshotId
+    ) || null
+  );
 }
 
 function projectCollectorSnapshotHistorySummary(reports = [], filters = {}) {

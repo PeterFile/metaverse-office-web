@@ -5094,6 +5094,56 @@ test('GET /collectors/controller-snapshot/source-health projects latest source h
   assert.equal(records[records.length - 1].kind, 'collector_snapshot');
 });
 
+test('GET /collectors/controller-snapshot/source-health projects requested historical snapshot', async (t) => {
+  let collectCount = 0;
+  const controllerSnapshotCollector = {
+    async collectSnapshot() {
+      collectCount += 1;
+      throw new Error('GET source-health must not collect');
+    }
+  };
+  const { baseUrl, store, storeFile } = await createHarness(t, { controllerSnapshotCollector });
+  const firstReport = createRouteParityCollectorReport();
+  const secondReport = structuredClone(firstReport);
+  secondReport.collected_at = '2026-03-09T18:07:00.000Z';
+  secondReport.items[0].source_health.workspace_files.status = 'observed';
+  secondReport.items[0].source_health.workspace_files.degraded_reasons = [];
+
+  await store.appendCollectorReport(firstReport);
+  await store.appendCollectorReport(secondReport);
+  const fileBeforeRead = await readFile(storeFile, 'utf8');
+  const latestBeforeRead = store.getLatestCollectorReport();
+
+  const historical = await requestJson(
+    `${baseUrl}/collectors/controller-snapshot/source-health?collector_snapshot_id=${encodeURIComponent('collector-snapshot:2026-03-09T18:06:00.000Z')}&agent_id=app-engineering&source_kind=workspace_file&status=degraded&limit=1`
+  );
+  assert.equal(historical.response.status, 200);
+  assert.equal(historical.body.item.collector_snapshot_id, 'collector-snapshot:2026-03-09T18:06:00.000Z');
+  assert.deepEqual(historical.body.item.agent_items.map((item) => item.agent_id), [
+    'app-engineering'
+  ]);
+  assert.equal(historical.body.item.agent_items[0].source_health.workspace_files.status, 'degraded');
+
+  const unknown = await requestJson(
+    `${baseUrl}/collectors/controller-snapshot/source-health?collector_snapshot_id=${encodeURIComponent('collector-snapshot:unknown')}`
+  );
+  assert.equal(unknown.response.status, 200);
+  assert.deepEqual(unknown.body, { item: null });
+
+  const latest = await requestJson(
+    `${baseUrl}/collectors/controller-snapshot/source-health?source_kind=workspace_file&status=observed&limit=1`
+  );
+  assert.equal(latest.response.status, 200);
+  assert.equal(latest.body.item.collector_snapshot_id, 'collector-snapshot:2026-03-09T18:07:00.000Z');
+  assert.deepEqual(latest.body.item.agent_items.map((item) => item.agent_id), [
+    'app-engineering'
+  ]);
+
+  assert.equal(collectCount, 0);
+  assert.equal(store.getLatestCollectorReport(), latestBeforeRead);
+  assert.equal(await readFile(storeFile, 'utf8'), fileBeforeRead);
+});
+
 test('GET /runtime/source-gaps returns compact gap and unmapped evidence read-only', async (t) => {
   let collectCount = 0;
   const controllerSnapshotCollector = {

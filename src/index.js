@@ -3,6 +3,7 @@ const path = require('node:path');
 const { createAppServer } = require('./server');
 const {
   createControllerSnapshotCollector,
+  createHermesRuntimeSourcesReader,
   createHermesRuntimeSourcesFileReader
 } = require('./collectors/controller-snapshot');
 const { createPrototypeStore } = require('./store/prototype-store');
@@ -36,13 +37,12 @@ async function main() {
       : { filePath }
   );
   const hermesRuntimeSourcesFile = process.env.METAVERSE_OFFICE_HERMES_RUNTIME_SOURCES_FILE;
-  const controllerSnapshotCollector = hermesRuntimeSourcesFile
-    ? createControllerSnapshotCollector({
-        readHermesRuntimeSources: createHermesRuntimeSourcesFileReader({
-          filePath: hermesRuntimeSourcesFile
-        })
-      })
-    : createControllerSnapshotCollector();
+  const hermesRuntimeSourcesPaths = parseDelimitedEnvPaths(
+    process.env.METAVERSE_OFFICE_HERMES_RUNTIME_SOURCES_PATHS
+  );
+  const controllerSnapshotCollector = createControllerSnapshotCollector(
+    createHermesRuntimeSourcesOptions({ hermesRuntimeSourcesFile, hermesRuntimeSourcesPaths })
+  );
   const server = createAppServer({ store, controllerSnapshotCollector, allowedOrigins });
 
   server.listen(port, () => {
@@ -52,6 +52,30 @@ async function main() {
   });
 }
 
+function parseDelimitedEnvPaths(value) {
+  return value ? value.split(path.delimiter).map((item) => item.trim()).filter(Boolean) : [];
+}
+
+function createHermesRuntimeSourcesOptions({ hermesRuntimeSourcesFile, hermesRuntimeSourcesPaths }) {
+  if (hermesRuntimeSourcesPaths.length > 0) {
+    return {
+      readHermesRuntimeSources: createHermesRuntimeSourcesReader({
+        inputPaths: hermesRuntimeSourcesPaths
+      })
+    };
+  }
+
+  if (hermesRuntimeSourcesFile) {
+    return {
+      readHermesRuntimeSources: createHermesRuntimeSourcesFileReader({
+        filePath: hermesRuntimeSourcesFile
+      })
+    };
+  }
+
+  return {};
+}
+
 if (require.main === module) {
   main().catch((error) => {
     process.stderr.write(`${error.stack}\n`);
@@ -59,4 +83,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { main };
+module.exports = { main, parseDelimitedEnvPaths, createHermesRuntimeSourcesOptions };

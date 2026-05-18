@@ -1,5 +1,5 @@
 const assert = require('node:assert/strict');
-const { mkdtemp, readFile, writeFile } = require('node:fs/promises');
+const { chmod, mkdir, mkdtemp, readFile, writeFile } = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
@@ -8,6 +8,7 @@ const { SEED_AGENTS } = require('../src/domain');
 const {
   collectControllerSnapshot,
   createControllerSnapshotCollector,
+  createHermesRuntimeSourcesReader,
   createHermesRuntimeSourcesFileReader
 } = require('../src/collectors/controller-snapshot');
 const { createPrototypeStore } = require('../src/store/prototype-store');
@@ -830,6 +831,151 @@ test('collector can read opt-in Hermes runtime facts from JSON and JSONL files',
       }
     }
   ]);
+});
+
+test('collector can read opt-in Hermes runtime facts from multiple files and directories', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'metaverse-office-hermes-runtime-'));
+  const sourcesDir = path.join(root, 'runtime-sources');
+  const ignoredFile = path.join(sourcesDir, 'ignore.txt');
+  const profileFile = path.join(sourcesDir, '01-profile.json');
+  const sessionFile = path.join(sourcesDir, '02-session.jsonl');
+  const extraFile = path.join(root, 'extra.jsonl');
+  await mkdir(sourcesDir);
+  await writeFile(ignoredFile, 'not runtime evidence');
+  await writeFile(
+    profileFile,
+    JSON.stringify([
+      {
+        source_kind: 'hermes_profile',
+        agent_id: 'app-engineering',
+        profile_id: 'app-profile',
+        observed_at: '2026-03-09T18:02:00.000Z'
+      }
+    ])
+  );
+  await writeFile(
+    sessionFile,
+    `${JSON.stringify({
+      source_kind: 'hermes_session',
+      session_ref: '5-web3-app-engineering',
+      observed_at: '2026-03-09T18:03:00.000Z'
+    })}\n`
+  );
+  await writeFile(
+    extraFile,
+    `${JSON.stringify({
+      source_kind: 'hermes_profile',
+      profile_id: 'unmapped-worker',
+      observed_at: '2026-03-09T18:04:00.000Z'
+    })}\n`
+  );
+
+  const facts = await createHermesRuntimeSourcesReader({
+    inputPaths: [sourcesDir, extraFile]
+  })();
+
+  assert.deepEqual(
+    facts.map((fact) => [fact.source_kind, fact.evidence_ref, fact.last_observed_at]),
+    [
+      ['hermes_profile', 'hermes://profile/app-profile', '2026-03-09T18:02:00.000Z'],
+      ['hermes_session', 'hermes://session/5-web3-app-engineering', '2026-03-09T18:03:00.000Z'],
+      ['hermes_profile', 'hermes://profile/unmapped-worker', '2026-03-09T18:04:00.000Z']
+    ]
+  );
+  assert.equal(facts.some((fact) => String(fact.evidence_ref).includes(root)), false);
+});
+
+test('collector labels missing Hermes runtime source inputs without leaking paths', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'metaverse-office-hermes-runtime-'));
+  const missingFile = path.join(root, 'missing-runtime-facts.jsonl');
+
+  await assert.rejects(
+    () =>
+      createHermesRuntimeSourcesReader({
+        inputPaths: [missingFile]
+      })(),
+    (error) => {
+      assert.match(error.message, /Hermes runtime source input 1/);
+      assert.equal(error.message.includes(root), false);
+      assert.equal(error.message.includes(missingFile), false);
+      return true;
+    }
+  );
+});
+
+test('collector legacy Hermes runtime source file reader labels read failures without leaking paths', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'metaverse-office-hermes-runtime-'));
+  const missingFile = path.join(root, 'missing-runtime-facts.jsonl');
+
+  await assert.rejects(
+    () => createHermesRuntimeSourcesFileReader({ filePath: missingFile })(),
+    (error) => {
+      assert.match(error.message, /Hermes runtime sources file/);
+      assert.equal(error.message.includes(root), false);
+      assert.equal(error.message.includes(missingFile), false);
+      return true;
+    }
+  );
+});
+
+test('collector labels malformed Hermes runtime source files without echoing input contents', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'metaverse-office-hermes-runtime-'));
+  const invalidJsonFile = path.join(root, 'invalid-runtime-facts.json');
+  const invalidJsonlFile = path.join(root, 'invalid-runtime-facts.jsonl');
+  await writeFile(invalidJsonFile, `[${JSON.stringify(root)}`);
+  await writeFile(invalidJsonlFile, `${root}\n`);
+
+  await assert.rejects(
+    () => createHermesRuntimeSourcesFileReader({ filePath: invalidJsonFile })(),
+    (error) => {
+      assert.match(error.message, /Invalid Hermes runtime sources JSON in Hermes runtime sources file/);
+      assert.match(error.message, /invalid JSON syntax/);
+      assert.equal(error.message.includes(root), false);
+      assert.equal(error.message.includes(invalidJsonFile), false);
+      return true;
+    }
+  );
+  await assert.rejects(
+    () => createHermesRuntimeSourcesFileReader({ filePath: invalidJsonlFile })(),
+    (error) => {
+      assert.match(error.message, /Invalid Hermes runtime sources JSONL in Hermes runtime sources file/);
+      assert.match(error.message, /invalid JSON syntax/);
+      assert.equal(error.message.includes(root), false);
+      assert.equal(error.message.includes(invalidJsonlFile), false);
+      return true;
+    }
+  );
+});
+
+test('collector labels unreadable Hermes runtime source files without leaking paths', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'metaverse-office-hermes-runtime-'));
+  const sourcesDir = path.join(root, 'runtime-sources');
+  const validFile = path.join(sourcesDir, '01-valid.jsonl');
+  const unreadableFile = path.join(sourcesDir, '02-unreadable.jsonl');
+  await mkdir(sourcesDir);
+  await writeFile(
+    validFile,
+    `${JSON.stringify({
+      source_kind: 'hermes_session',
+      session_ref: '5-web3-app-engineering'
+    })}\n`
+  );
+  await writeFile(unreadableFile, '{}\n');
+  await chmod(unreadableFile, 0);
+
+  await assert.rejects(
+    () =>
+      createHermesRuntimeSourcesReader({
+        inputPaths: [sourcesDir]
+      })(),
+    (error) => {
+      assert.match(error.message, /Hermes runtime source input 2/);
+      assert.equal(error.message.includes(root), false);
+      assert.equal(error.message.includes(sourcesDir), false);
+      assert.equal(error.message.includes(unreadableFile), false);
+      return true;
+    }
+  );
 });
 
 test('collector rejects invalid opt-in Hermes runtime files before producing a report', async () => {

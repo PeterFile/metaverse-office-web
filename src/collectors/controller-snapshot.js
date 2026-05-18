@@ -1,5 +1,5 @@
 const { execFile } = require('node:child_process');
-const { readFile, stat } = require('node:fs/promises');
+const { readdir, readFile, stat } = require('node:fs/promises');
 const path = require('node:path');
 const { promisify } = require('node:util');
 
@@ -1081,9 +1081,68 @@ function createHermesRuntimeSourcesFileReader({ filePath }) {
   }
 
   return async function readHermesRuntimeSourcesFile() {
-    const content = await readFile(sourceFilePath, 'utf8');
-    return parseHermesRuntimeSourcesFile(content, sourceFilePath);
+    const content = await readFile(sourceFilePath, 'utf8').catch((error) =>
+      throwHermesRuntimeSourceIoError('Hermes runtime sources file', 'read', error)
+    );
+    return parseHermesRuntimeSourcesFile(content);
   };
+}
+
+function createHermesRuntimeSourcesReader({ inputPaths }) {
+  const sourcePaths = Array.isArray(inputPaths)
+    ? inputPaths.map(sanitizeText).filter(Boolean)
+    : [];
+  if (sourcePaths.length === 0) {
+    throw new Error('Hermes runtime sources input path is required');
+  }
+
+  return async function readHermesRuntimeSources() {
+    const facts = [];
+    let sourceFileIndex = 0;
+    for (const [sourcePathIndex, sourcePath] of sourcePaths.entries()) {
+      const sourceInputLabel = `Hermes runtime source input ${sourcePathIndex + 1}`;
+      for (const filePath of await listHermesRuntimeSourceFiles(sourcePath, sourceInputLabel)) {
+        const sourceFileLabel = `Hermes runtime source input ${sourceFileIndex + 1}`;
+        const content = await readHermesRuntimeSourceFile(filePath, sourceFileLabel);
+        sourceFileIndex += 1;
+        facts.push(...parseHermesRuntimeSourcesFile(content, sourceFileLabel));
+      }
+    }
+
+    return facts;
+  };
+}
+
+async function listHermesRuntimeSourceFiles(sourcePath, sourceInputLabel) {
+  const sourceStat = await stat(sourcePath).catch((error) =>
+    throwHermesRuntimeSourceIoError(sourceInputLabel, 'stat', error)
+  );
+  if (!sourceStat.isDirectory()) {
+    return [sourcePath];
+  }
+
+  const entries = await readdir(sourcePath, { withFileTypes: true }).catch((error) =>
+    throwHermesRuntimeSourceIoError(sourceInputLabel, 'list', error)
+  );
+  return entries
+    .filter((entry) => entry.isFile() && isHermesRuntimeSourceFileName(entry.name))
+    .map((entry) => path.join(sourcePath, entry.name))
+    .sort((left, right) => left.localeCompare(right));
+}
+
+async function readHermesRuntimeSourceFile(filePath, sourceFileLabel) {
+  return readFile(filePath, 'utf8').catch((error) =>
+    throwHermesRuntimeSourceIoError(sourceFileLabel, 'read', error)
+  );
+}
+
+function throwHermesRuntimeSourceIoError(sourceLabel, operation, error) {
+  const code = sanitizeText(error?.code) || 'IO_ERROR';
+  throw new Error(`Unable to ${operation} ${sourceLabel}: ${code}`);
+}
+
+function isHermesRuntimeSourceFileName(fileName) {
+  return fileName.endsWith('.json') || fileName.endsWith('.jsonl');
 }
 
 function parseHermesRuntimeSourcesFile(content, sourceFilePath = 'Hermes runtime sources file') {
@@ -1105,8 +1164,8 @@ function parseHermesRuntimeSourcesJson(content, sourceFilePath) {
   let parsed;
   try {
     parsed = JSON.parse(content);
-  } catch (error) {
-    throw new Error(`Invalid Hermes runtime sources JSON in ${sourceFilePath}: ${error.message}`);
+  } catch {
+    throw new Error(`Invalid Hermes runtime sources JSON in ${sourceFilePath}: invalid JSON syntax`);
   }
 
   if (!Array.isArray(parsed)) {
@@ -1140,9 +1199,9 @@ function parseHermesRuntimeSourcesJsonl(content, sourceFilePath) {
           line: lineIndex + 1
         }
       });
-    } catch (error) {
+    } catch {
       throw new Error(
-        `Invalid Hermes runtime sources JSONL in ${sourceFilePath} at line ${lineIndex + 1}: ${error.message}`
+        `Invalid Hermes runtime sources JSONL in ${sourceFilePath} at line ${lineIndex + 1}: invalid JSON syntax`
       );
     }
   });
@@ -1518,6 +1577,7 @@ function handleTmuxError(error) {
 module.exports = {
   OBSERVED_WORKSPACE_PATHS,
   collectControllerSnapshot,
+  createHermesRuntimeSourcesReader,
   createHermesRuntimeSourcesFileReader,
   createEvidenceCoverageLedger,
   createSharedArtifactRollup,

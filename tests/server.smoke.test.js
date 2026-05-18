@@ -5233,6 +5233,7 @@ test('GET /runtime/source-gaps returns compact gap and unmapped evidence read-on
   const latestBeforeRead = store.getLatestCollectorReport();
 
   const response = await requestJson(`${baseUrl}/runtime/source-gaps?newest_first=true&limit=10`);
+  const summary = await requestJson(`${baseUrl}/runtime/source-gaps/summary?newest_first=true&limit=1`);
 
   assert.equal(response.response.status, 200);
   assert.deepEqual(
@@ -5266,6 +5267,25 @@ test('GET /runtime/source-gaps returns compact gap and unmapped evidence read-on
   assert.equal(response.body.items.some((item) => Object.hasOwn(item, 'evidence_id')), false);
   assert.equal(response.body.items.some((item) => Object.hasOwn(item, 'evidence_ref')), false);
   assert.equal(response.body.items.some((item) => Object.hasOwn(item, 'metadata')), false);
+  assert.equal(summary.response.status, 200);
+  assert.equal(summary.body.item.total_count, 2);
+  assert.equal(summary.body.item.returned_limit, 1);
+  assert.equal(summary.body.item.mapped_count, 1);
+  assert.equal(summary.body.item.unmapped_count, 1);
+  assert.deepEqual(summary.body.item.output_candidate_buckets, { true: 1, false: 1 });
+  assert.equal(summary.body.item.source_kind_buckets.workspace_file, 1);
+  assert.equal(summary.body.item.source_kind_buckets.tmux_observation, 1);
+  assert.equal(summary.body.item.evidence_role_buckets.agent_output, 1);
+  assert.equal(summary.body.item.evidence_role_buckets.runtime_unmapped, 1);
+  assert.equal(summary.body.item.source_status_buckets.degraded, 1);
+  assert.equal(summary.body.item.source_status_buckets.observed, 1);
+  assert.deepEqual(summary.body.item.collector_snapshot_id_buckets, {
+    'collector-snapshot:2026-03-09T18:06:00.000Z': 2
+  });
+  assert.equal(Object.hasOwn(summary.body.item, 'items'), false);
+  assert.equal(Object.hasOwn(summary.body.item, 'evidence_id'), false);
+  assert.equal(Object.hasOwn(summary.body.item, 'evidence_ref'), false);
+  assert.equal(Object.hasOwn(summary.body.item, 'metadata'), false);
   assert.equal(collectCount, 0);
   assert.equal(store.getLatestCollectorReport(), latestBeforeRead);
   assert.equal(await readFile(storeFile, 'utf8'), fileBeforeRead);

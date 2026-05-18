@@ -8,6 +8,7 @@ import type {
   AgentWorkflow,
   CollectorSnapshot,
   CorrelationDrilldown,
+  EvidenceRecord,
   MemoryArtifactIndex,
   OfficeAgent,
   OfficeOperation,
@@ -702,6 +703,10 @@ function buildProps(overrides: Partial<DetailsPanelProps> = {}): DetailsPanelPro
     selectedAgentEvidenceLedger: null,
     selectedAgentEvidenceLedgerError: null,
     selectedAgentEvidenceLedgerState: 'idle',
+    selectedAgentEvidenceRecord: null,
+    selectedAgentEvidenceRecordError: null,
+    selectedAgentEvidenceRecordId: null,
+    selectedAgentEvidenceRecordState: 'idle',
     workflow: buildWorkflow(),
     workflowError: null,
     workflowState: 'ready',
@@ -717,6 +722,7 @@ function buildProps(overrides: Partial<DetailsPanelProps> = {}): DetailsPanelPro
     onSelectOperationsState: vi.fn(),
     onSelectOperationsSeverity: vi.fn(),
     onSelectOperation: vi.fn(),
+    onInspectSelectedAgentEvidenceRecord: vi.fn(),
     ...overrides
   };
 }
@@ -786,6 +792,28 @@ function buildSelectedAgentEvidenceLedger(
           degradedReasons: ['no seeded roster mapping']
         }
       ]
+    },
+    ...overrides
+  };
+}
+
+function buildEvidenceRecord(overrides: Partial<EvidenceRecord> = {}): EvidenceRecord {
+  return {
+    evidence_id: 'output-1',
+    observed_at: '2026-03-16T08:58:00.000Z',
+    collected_at: '2026-03-16T08:59:00.000Z',
+    agent_id: 'app-engineering',
+    source_kind: 'workspace_file',
+    evidence_ref: '/tmp/app/outbox.md',
+    evidence_role: 'agent_output',
+    source_status: 'observed',
+    output_candidate: true,
+    collector_snapshot_id: 'collector-20260316',
+    correlation_id: 'corr-app-review',
+    degraded_reasons: ['collector lag'],
+    metadata: {
+      raw_tmux_capture: 'do not render',
+      secret_token: 'do not render'
     },
     ...overrides
   };
@@ -1622,6 +1650,108 @@ describe('DetailsPanel selected-agent workflow lifecycle', () => {
     expect(section!).not.toHaveTextContent('must-not-render');
     expect(section!).not.toHaveTextContent('event-backed');
     expect(section!).not.toHaveTextContent('replayable');
+  });
+
+  it('exposes a bounded inspect CTA per selected-agent evidence ledger row', async () => {
+    const user = userEvent.setup();
+    const onInspectSelectedAgentEvidenceRecord = vi.fn();
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          activeHubCategory: 'evidence',
+          selectedAgentDrilldownTab: 'evidence',
+          selectedAgentEvidenceLedger: buildSelectedAgentEvidenceLedger(),
+          selectedAgentEvidenceLedgerState: 'ready',
+          onInspectSelectedAgentEvidenceRecord
+        })}
+      />
+    );
+
+    const section = screen.getByRole('heading', { name: 'Evidence Ledger' }).closest('section');
+    expect(section).not.toBeNull();
+
+    await user.click(
+      within(section!).getByRole('button', {
+        name: 'Inspect evidence record output-1'
+      })
+    );
+
+    expect(onInspectSelectedAgentEvidenceRecord).toHaveBeenCalledWith('output-1');
+  });
+
+  it('renders selected-agent evidence detail as compact bounded fields without metadata', () => {
+    render(
+      <DetailsPanel
+        {...buildProps({
+          activeHubCategory: 'evidence',
+          selectedAgentDrilldownTab: 'evidence',
+          selectedAgentEvidenceLedger: buildSelectedAgentEvidenceLedger(),
+          selectedAgentEvidenceLedgerState: 'ready',
+          selectedAgentEvidenceRecord: buildEvidenceRecord(),
+          selectedAgentEvidenceRecordId: 'output-1',
+          selectedAgentEvidenceRecordState: 'ready'
+        })}
+      />
+    );
+
+    const section = screen.getByRole('heading', { name: 'Evidence Record Detail' }).closest('section');
+    expect(section).not.toBeNull();
+    expect(within(section!).getByText('Evidence id · output-1')).toBeVisible();
+    expect(within(section!).getByText('Observed · 2026-03-16T08:58:00.000Z')).toBeVisible();
+    expect(within(section!).getByText('Collected · 2026-03-16T08:59:00.000Z')).toBeVisible();
+    expect(within(section!).getByText('Source · workspace_file')).toBeVisible();
+    expect(within(section!).getByText('Status · observed')).toBeVisible();
+    expect(within(section!).getByText('Role · agent_output')).toBeVisible();
+    expect(within(section!).getByText('Output candidate · true')).toBeVisible();
+    expect(within(section!).getByText('Snapshot · collector-20260316')).toBeVisible();
+    expect(within(section!).getByText('Correlation · corr-app-review')).toBeVisible();
+    expect(within(section!).getByText('Degraded · collector lag')).toBeVisible();
+    expect(within(section!).getByText('Ref · /tmp/app/outbox.md')).toBeVisible();
+    expect(section!).not.toHaveTextContent('metadata');
+    expect(section!).not.toHaveTextContent('raw_tmux_capture');
+    expect(section!).not.toHaveTextContent('secret_token');
+  });
+
+  it('renders selected-agent evidence detail loading and error states explicitly', () => {
+    const { rerender } = render(
+      <DetailsPanel
+        {...buildProps({
+          activeHubCategory: 'evidence',
+          selectedAgentDrilldownTab: 'evidence',
+          selectedAgentEvidenceLedger: buildSelectedAgentEvidenceLedger(),
+          selectedAgentEvidenceLedgerState: 'ready',
+          selectedAgentEvidenceRecord: null,
+          selectedAgentEvidenceRecordError: null,
+          selectedAgentEvidenceRecordId: 'missing-1',
+          selectedAgentEvidenceRecordState: 'loading'
+        })}
+      />
+    );
+
+    expect(screen.getByText('Loading evidence record detail for missing-1...')).toBeVisible();
+
+    rerender(
+      <DetailsPanel
+        {...buildProps({
+          activeHubCategory: 'evidence',
+          selectedAgentDrilldownTab: 'evidence',
+          selectedAgentEvidenceLedger: buildSelectedAgentEvidenceLedger(),
+          selectedAgentEvidenceLedgerState: 'ready',
+          selectedAgentEvidenceRecord: null,
+          selectedAgentEvidenceRecordError: 'not_found',
+          selectedAgentEvidenceRecordId: 'missing-1',
+          selectedAgentEvidenceRecordState: 'error'
+        })}
+      />
+    );
+
+    const section = screen.getByRole('heading', { name: 'Evidence Record Detail' }).closest('section');
+    expect(section).not.toBeNull();
+    expect(within(section!).getByText('Unable to load evidence record missing-1. not_found')).toBeVisible();
+    expect(section!).not.toHaveTextContent('live');
+    expect(section!).not.toHaveTextContent('severity');
+    expect(section!).not.toHaveTextContent('output confirmed');
   });
 
   it('labels scoped selected-agent evidence ledger requests and stale last-good data honestly', () => {

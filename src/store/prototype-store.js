@@ -582,6 +582,41 @@ class PrototypeStore {
       .map(projectRuntimeSourceGapRecord);
   }
 
+  getRuntimeSourceGapsSummary(filters = {}) {
+    const { records, limit } = this.#filterEvidenceRecords(filters);
+    const gapRecords = records.filter(isRuntimeSourceGapRecord);
+    const summary = {
+      total_count: gapRecords.length,
+      returned_limit: limit,
+      mapped_count: 0,
+      unmapped_count: 0,
+      output_candidate_buckets: {
+        true: 0,
+        false: 0
+      },
+      source_kind_buckets: createZeroBuckets(EVIDENCE_RECORD_SOURCE_KINDS),
+      evidence_role_buckets: createZeroBuckets(EVIDENCE_RECORD_ROLES),
+      source_status_buckets: createZeroBuckets(EVIDENCE_RECORD_SOURCE_STATUSES),
+      collector_snapshot_id_buckets: {}
+    };
+
+    for (const record of gapRecords) {
+      if (typeof record.agent_id === 'string' && record.agent_id.length > 0) {
+        summary.mapped_count += 1;
+      } else if (record.agent_id === null) {
+        summary.unmapped_count += 1;
+      }
+
+      summary.output_candidate_buckets[String(record.output_candidate === true)] += 1;
+      incrementBucket(summary.source_kind_buckets, record.source_kind);
+      incrementBucket(summary.evidence_role_buckets, record.evidence_role);
+      incrementBucket(summary.source_status_buckets, record.source_status);
+      incrementBucket(summary.collector_snapshot_id_buckets, record.collector_snapshot_id);
+    }
+
+    return summary;
+  }
+
   getEvidenceRecordsSummary(filters = {}) {
     const { records, limit } = this.#filterEvidenceRecords(filters);
     const summary = {

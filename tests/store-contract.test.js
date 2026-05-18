@@ -877,6 +877,49 @@ test('prototype store lists compact runtime source gaps without normal observed 
   assert.equal(gaps.some((gap) => Object.hasOwn(gap, 'metadata')), false);
 });
 
+test('prototype store summarizes runtime source gaps before limit truncation', async () => {
+  const storeFile = await createStoreFile();
+  const store = await createPrototypeStore({ filePath: storeFile });
+
+  await store.appendCollectorReport({
+    ...createCollectorReport(),
+    runtime_source_evidence: {
+      unmapped_tmux_sessions: [
+        {
+          session_name: 'unmapped-session',
+          pane_refs: ['tmux://unmapped-session/0.0'],
+          observed_count: 1,
+          status: 'observed',
+          last_observed_at: '2026-03-09T18:05:50.000Z',
+          degraded_reasons: []
+        }
+      ]
+    }
+  });
+
+  const summary = store.getRuntimeSourceGapsSummary({ newest_first: 'true', limit: '1' });
+
+  assert.equal(summary.total_count, 2);
+  assert.equal(summary.returned_limit, 1);
+  assert.equal(summary.mapped_count, 1);
+  assert.equal(summary.unmapped_count, 1);
+  assert.deepEqual(summary.output_candidate_buckets, { true: 1, false: 1 });
+  assert.equal(summary.source_kind_buckets.workspace_file, 1);
+  assert.equal(summary.source_kind_buckets.tmux_observation, 1);
+  assert.equal(summary.evidence_role_buckets.agent_output, 1);
+  assert.equal(summary.evidence_role_buckets.runtime_unmapped, 1);
+  assert.equal(summary.source_status_buckets.degraded, 1);
+  assert.equal(summary.source_status_buckets.observed, 1);
+  assert.deepEqual(summary.collector_snapshot_id_buckets, {
+    'collector-snapshot:2026-03-09T18:06:00.000Z': 2
+  });
+
+  const unmappedSummary = store.getRuntimeSourceGapsSummary({ mapped: 'false' });
+  assert.equal(unmappedSummary.total_count, 1);
+  assert.equal(unmappedSummary.mapped_count, 0);
+  assert.equal(unmappedSummary.unmapped_count, 1);
+});
+
 test('prototype store groups evidence refs with evidence-record filters before group limit', async () => {
   const storeFile = await createStoreFile();
   const store = await createPrototypeStore({ filePath: storeFile });

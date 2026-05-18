@@ -26,6 +26,8 @@ import {
   fetchOfficeOperations,
   fetchOfficeOverview,
   fetchPeerWatchAlerts,
+  fetchRuntimeSourceGaps,
+  fetchRuntimeSourceGapsSummary,
   fetchTimeline
 } from './api';
 import {
@@ -44,7 +46,10 @@ import {
 } from './aitown/evidenceCoverage';
 import { resolveRolePawnAssetUrl } from './aitown/rolePawnAssets';
 import { adaptWorldToScene } from './aitown/sceneAdapter';
-import { deriveSelectedAgentSourceGapFact, deriveSourceGapChips } from './aitown/sourceGapSignals';
+import {
+  deriveRuntimeSourceGapChips,
+  deriveSelectedAgentSourceGapFact
+} from './aitown/sourceGapSignals';
 import { WorldProvider, useWorld } from './context/WorldContext';
 import { usePolledResource, type LoadState } from './hooks/usePolledResource';
 import { getHubFocusableElements, isHubElementVisible } from './hubFocus';
@@ -162,6 +167,7 @@ const CREW_TIMELINE_LIMIT = 4;
 const CREW_OPEN_SUPERVISION_ALERTS_LIMIT = 4;
 const MEMORY_ARTIFACT_LIMIT = 4;
 const SOURCE_HEALTH_HUD_LIMIT = 7;
+const SOURCE_GAP_QUEUE_LIMIT = 3;
 const SELECTED_AGENT_SUPERVISION_HISTORY_LIMIT = 4;
 const SELECTED_AGENT_EVIDENCE_LEDGER_LIMIT = 12;
 const RESET_VIEW_SHORTCUT_KEY = 'r';
@@ -1125,6 +1131,26 @@ function AppInner() {
       }),
     resourceKey: `collector-source-health:limit=${SOURCE_HEALTH_HUD_LIMIT}`
   });
+  const runtimeSourceGapsResource = usePolledResource({
+    enabled: overviewResource.data !== null,
+    load: (signal) =>
+      fetchRuntimeSourceGaps({
+        limit: SOURCE_GAP_QUEUE_LIMIT,
+        newestFirst: true,
+        signal
+      }),
+    resourceKey: `runtime-source-gaps:limit=${SOURCE_GAP_QUEUE_LIMIT}`
+  });
+  const runtimeSourceGapsSummaryResource = usePolledResource({
+    enabled: overviewResource.data !== null,
+    load: (signal) =>
+      fetchRuntimeSourceGapsSummary({
+        limit: SOURCE_GAP_QUEUE_LIMIT,
+        newestFirst: true,
+        signal
+      }),
+    resourceKey: `runtime-source-gaps-summary:limit=${SOURCE_GAP_QUEUE_LIMIT}`
+  });
   const defaultEvidenceCoverageReady = overviewResource.data !== null;
 
   useEffect(() => {
@@ -1426,9 +1452,10 @@ function AppInner() {
     () =>
       hubOpen || selectedAgentId !== null
         ? []
-        : deriveSourceGapChips(latestSourceHealth, overviewResource.data?.agents),
-    [hubOpen, latestSourceHealth, overviewResource.data?.agents, selectedAgentId]
+        : deriveRuntimeSourceGapChips(runtimeSourceGapsResource.data, overviewResource.data?.agents),
+    [hubOpen, overviewResource.data?.agents, runtimeSourceGapsResource.data, selectedAgentId]
   );
+  const sourceGapQueueTotal = runtimeSourceGapsSummaryResource.data?.total_count ?? sourceGapChips.length;
   const hudReadModelsVisible = !hubOpen && selectedAgentId === null;
   const evidenceCoverageReadModelStatus = hudReadModelsVisible
     ? resolveEvidenceCoverageReadModelStatus(
@@ -2487,6 +2514,10 @@ function AppInner() {
 
   const handleSourceGapFocusAgent = useCallback(
     (chip: (typeof sourceGapChips)[number]) => {
+      if (!chip.agentId || !chip.sourceDrilldownGroupKey) {
+        return;
+      }
+
       sourceGapFocusRequestIdRef.current += 1;
       requestedSelectedAgentDrilldownTabRef.current = 'evidence';
       activeHubCategoryFromSelectedAgentTabRef.current = false;
@@ -2893,29 +2924,43 @@ function AppInner() {
                       <div className="aitown-panel__evidence-focus__head">
                         <strong className="aitown-panel__topline-title">Source gaps</strong>
                         <span className="aitown-panel__topline-copy">
-                          {`${sourceGapChips.length} provenance gap${sourceGapChips.length === 1 ? '' : 's'}`}
+                          {`${sourceGapQueueTotal} provenance gap${sourceGapQueueTotal === 1 ? '' : 's'}`}
                         </span>
                       </div>
-                      <span className="aitown-panel__topline-copy">Collector source evidence degraded/missing/error</span>
+                      <span className="aitown-panel__topline-copy">Runtime source-gap read model</span>
                       <span
                         className="aitown-panel__focus-chips aitown-panel__focus-chips--compact"
                         role="group"
                         aria-label="Source gap focus agents"
                       >
-                        {sourceGapChips.map((chip) => (
-                          <button
-                            key={`${chip.agentId}:${chip.sourceKind}:${chip.status}`}
-                            type="button"
-                            className={`aitown-focus-chip aitown-focus-chip--source-gap source-gap-${chip.status}${selectedAgentId === chip.agentId ? ' is-active' : ''}`}
-                            aria-label={`Open source gap supervision for ${chip.displayName} ${chip.sourceLabel.toLowerCase()} ${chip.status}`}
-                            onClick={() => handleSourceGapFocusAgent(chip)}
-                          >
-                            <strong>{chip.displayName}</strong>
-                            <span>{`${chip.sourceLabel} · ${chip.status}`}</span>
-                            <span>{chip.detail}</span>
-                            <span>{chip.observedAtLabel}</span>
-                          </button>
-                        ))}
+                        {sourceGapChips.map((chip) =>
+                          chip.agentId && chip.sourceDrilldownGroupKey ? (
+                            <button
+                              key={`${chip.agentId}:${chip.sourceKind}:${chip.status}`}
+                              type="button"
+                              className={`aitown-focus-chip aitown-focus-chip--source-gap source-gap-${chip.status}${selectedAgentId === chip.agentId ? ' is-active' : ''}`}
+                              aria-label={`Open source gap supervision for ${chip.displayName} ${chip.sourceLabel.toLowerCase()} ${chip.status}`}
+                              onClick={() => handleSourceGapFocusAgent(chip)}
+                            >
+                              <strong>{chip.displayName}</strong>
+                              <span>{`${chip.sourceLabel} · ${chip.status}`}</span>
+                              <span>{chip.detail}</span>
+                              <span>{chip.observedAtLabel}</span>
+                            </button>
+                          ) : (
+                            <span
+                              key={`unmapped:${chip.sourceKind}:${chip.status}:${chip.observedAtLabel}`}
+                              className={`aitown-focus-chip aitown-focus-chip--source-gap source-gap-${chip.status}`}
+                              role="status"
+                              aria-label={`Unmapped source gap ${chip.sourceLabel.toLowerCase()} ${chip.status}`}
+                            >
+                              <strong>{chip.displayName}</strong>
+                              <span>{`${chip.sourceLabel} · ${chip.status}`}</span>
+                              <span>{chip.detail}</span>
+                              <span>{chip.observedAtLabel}</span>
+                            </span>
+                          )
+                        )}
                       </span>
                     </section>
                   ) : null}

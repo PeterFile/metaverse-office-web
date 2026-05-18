@@ -3,7 +3,8 @@ import type {
   CollectorSourceHealthKind,
   CollectorSourceHealthProjection,
   CollectorSourceHealthProjectionAgentItem,
-  CollectorSourceHealthStatus
+  CollectorSourceHealthStatus,
+  RuntimeSourceGap
 } from '../types';
 
 export type { SourceHealthWorldBadge } from '../sourceHealthWorldBadges';
@@ -23,11 +24,12 @@ type DisplayedSourceGapKind = Extract<
 >;
 
 export type SourceGapChip = {
-  agentId: string;
+  agentId: string | null;
   displayName: string;
-  sourceDrilldownGroupKey: SourceGapDrilldownGroupKey;
+  isMapped?: boolean;
+  sourceDrilldownGroupKey: SourceGapDrilldownGroupKey | null;
   sourceKind: DisplayedSourceGapKind;
-  status: Exclude<CollectorSourceHealthStatus, 'observed'>;
+  status: CollectorSourceHealthStatus;
   sourceLabel: string;
   detail: string;
   observedAtLabel: string;
@@ -71,6 +73,16 @@ const SOURCE_KIND_ORDER: DisplayedSourceGapKind[] = [
   'hermes_session'
 ];
 
+const RUNTIME_SOURCE_KIND_MAP: Record<string, DisplayedSourceGapKind> = {
+  workspace_root: 'workspace_root',
+  workspace_file: 'workspace_files',
+  workspace_files: 'workspace_files',
+  tmux_observation: 'tmux_session',
+  tmux_session: 'tmux_session',
+  hermes_profile: 'hermes_profile',
+  hermes_session: 'hermes_session'
+};
+
 export function deriveSourceGapChips(
   sourceHealth: CollectorSourceHealthProjection | null | undefined,
   agents: SourceGapAgent[] | null | undefined
@@ -112,6 +124,64 @@ export function deriveSourceGapChips(
       const statusRank = SOURCE_GAP_STATUS_RANK[left.status] - SOURCE_GAP_STATUS_RANK[right.status];
       if (statusRank !== 0) {
         return statusRank;
+      }
+
+      const agentRank = left.displayName.localeCompare(right.displayName);
+      if (agentRank !== 0) {
+        return agentRank;
+      }
+
+      return SOURCE_KIND_ORDER.indexOf(left.sourceKind) - SOURCE_KIND_ORDER.indexOf(right.sourceKind);
+    })
+    .slice(0, MAX_SOURCE_GAP_CHIPS);
+}
+
+export function deriveRuntimeSourceGapChips(
+  runtimeSourceGaps: RuntimeSourceGap[] | null | undefined,
+  agents: SourceGapAgent[] | null | undefined
+): SourceGapChip[] {
+  if (!runtimeSourceGaps?.length) {
+    return [];
+  }
+
+  const displayNameByAgentId = new Map((agents ?? []).map((agent) => [agent.agent_id, agent.display_name]));
+  const chips: SourceGapChip[] = [];
+
+  for (const gap of runtimeSourceGaps) {
+    const sourceKind = RUNTIME_SOURCE_KIND_MAP[gap.source_kind];
+    if (!sourceKind) {
+      continue;
+    }
+
+    const displayName = gap.agent_id ? displayNameByAgentId.get(gap.agent_id) : null;
+    if (gap.agent_id && !displayName) {
+      continue;
+    }
+
+    const isMapped = Boolean(gap.agent_id && !gap.unmapped);
+    chips.push({
+      agentId: isMapped ? gap.agent_id : null,
+      displayName: isMapped ? displayName! : 'Unmapped runtime source',
+      isMapped,
+      sourceDrilldownGroupKey: isMapped ? resolveSourceGapDrilldownGroupKey(sourceKind) : null,
+      sourceKind,
+      status: gap.source_status,
+      sourceLabel: SOURCE_KIND_LABELS[sourceKind],
+      detail: renderRuntimeSourceGapDetail(gap),
+      observedAtLabel: renderObservedAtLabel(gap.observed_at)
+    });
+  }
+
+  return chips
+    .sort((left, right) => {
+      const statusRank = SOURCE_GAP_STATUS_RANK[left.status] - SOURCE_GAP_STATUS_RANK[right.status];
+      if (statusRank !== 0) {
+        return statusRank;
+      }
+
+      const mappedRank = Number(left.isMapped === false) - Number(right.isMapped === false);
+      if (mappedRank !== 0) {
+        return mappedRank;
       }
 
       const agentRank = left.displayName.localeCompare(right.displayName);
@@ -194,6 +264,20 @@ function renderSourceGapDetail(
 ) {
   const countLabel = renderSourceGapCount(item, sourceKind);
   return `${countLabel} · latest evidence ${item.latest_evidence_at ?? 'unavailable'}`;
+}
+
+function renderRuntimeSourceGapDetail(gap: RuntimeSourceGap) {
+  if (gap.unmapped || !gap.agent_id) {
+    return `${renderEvidenceRoleLabel(gap.evidence_role)} · not mapped to an agent`;
+  }
+
+  return gap.output_candidate
+    ? `${renderEvidenceRoleLabel(gap.evidence_role)} · output candidate`
+    : `${renderEvidenceRoleLabel(gap.evidence_role)} · mapped source`;
+}
+
+function renderEvidenceRoleLabel(evidenceRole: string | null) {
+  return evidenceRole ? evidenceRole.replace(/_/g, ' ') : 'source evidence';
 }
 
 function renderSourceGapCount(

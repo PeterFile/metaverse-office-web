@@ -2,10 +2,11 @@ import { describe, expect, it } from 'vitest';
 
 import {
   deriveSelectedAgentSourceGapFact,
+  deriveRuntimeSourceGapChips,
   deriveSourceGapChips,
   deriveSourceHealthWorldBadges
 } from './sourceGapSignals';
-import type { CollectorSourceHealthProjection } from '../types';
+import type { CollectorSourceHealthProjection, RuntimeSourceGap } from '../types';
 
 const sourceHealth: CollectorSourceHealthProjection = {
   collected_at: '2026-03-16T09:01:00.000Z',
@@ -342,6 +343,71 @@ describe('deriveSourceGapChips', () => {
         [{ agent_id: 'app-engineering', display_name: 'App Engineering Agent' }]
       )
     ).toEqual([]);
+  });
+});
+
+describe('deriveRuntimeSourceGapChips', () => {
+  const runtimeSourceGaps: RuntimeSourceGap[] = [
+    {
+      observed_at: '2026-03-16T08:59:30.000Z',
+      collected_at: '2026-03-16T09:01:00.000Z',
+      agent_id: 'app-engineering',
+      source_kind: 'workspace_file',
+      evidence_role: 'agent_output',
+      source_status: 'degraded',
+      output_candidate: true,
+      collector_snapshot_id: 'collector-snapshot:2026-03-16T09:01:00.000Z',
+      correlation_id: 'collector-snapshot:2026-03-16T09:01:00.000Z',
+      degraded_reasons: ['raw path /tmp/app-engineering/outbox.md must not render'],
+      unmapped: false
+    },
+    {
+      observed_at: '2026-03-16T08:58:30.000Z',
+      collected_at: '2026-03-16T09:01:00.000Z',
+      agent_id: null,
+      source_kind: 'tmux_observation',
+      evidence_role: 'runtime_unmapped',
+      source_status: 'observed',
+      output_candidate: false,
+      collector_snapshot_id: 'collector-snapshot:2026-03-16T09:01:00.000Z',
+      correlation_id: 'collector-snapshot:2026-03-16T09:01:00.000Z',
+      degraded_reasons: ['raw tmux://outside-tools/0.0 must not render'],
+      unmapped: true
+    }
+  ];
+
+  it('maps bounded runtime source gaps into compact queue chips without raw provenance payloads', () => {
+    const chips = deriveRuntimeSourceGapChips(runtimeSourceGaps, [
+      { agent_id: 'app-engineering', display_name: 'App Engineering Agent' }
+    ]);
+
+    expect(chips).toEqual([
+      {
+        agentId: 'app-engineering',
+        displayName: 'App Engineering Agent',
+        isMapped: true,
+        sourceDrilldownGroupKey: 'workspace',
+        sourceKind: 'workspace_files',
+        status: 'degraded',
+        sourceLabel: 'Workspace files',
+        detail: 'agent output · output candidate',
+        observedAtLabel: 'Observed 2026-03-16T08:59:30.000Z'
+      },
+      {
+        agentId: null,
+        displayName: 'Unmapped runtime source',
+        isMapped: false,
+        sourceDrilldownGroupKey: null,
+        sourceKind: 'tmux_session',
+        status: 'observed',
+        sourceLabel: 'Tmux session',
+        detail: 'runtime unmapped · not mapped to an agent',
+        observedAtLabel: 'Observed 2026-03-16T08:58:30.000Z'
+      }
+    ]);
+    expect(JSON.stringify(chips)).not.toContain('/tmp/app-engineering');
+    expect(JSON.stringify(chips)).not.toContain('tmux://');
+    expect(JSON.stringify(chips)).not.toContain('collector-snapshot:');
   });
 });
 

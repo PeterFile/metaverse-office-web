@@ -1559,7 +1559,9 @@ test.describe('operator shell smoke', () => {
     const allowedPostClosePathnames = new Set([
       '/office/overview',
       '/incidents',
-      '/collectors/controller-snapshot/source-health'
+      '/collectors/controller-snapshot/source-health',
+      '/runtime/source-gaps',
+      '/runtime/source-gaps/summary'
     ]);
     const forbiddenPostClosePathnames = new Set([
       '/office/operations',
@@ -1573,6 +1575,8 @@ test.describe('operator shell smoke', () => {
     const expectedOverviewSearch = '';
     const expectedIncidentsSearch = '?limit=200&window=8760h';
     const expectedSourceHealthSearch = '?limit=7';
+    const expectedRuntimeSourceGapsSearch = '?newest_first=true&limit=3';
+    const expectedRuntimeSourceGapsSummarySearch = '?newest_first=true&limit=3';
     const postCloseRequests: Array<{
       method: string;
       pathname: string;
@@ -1715,6 +1719,19 @@ test.describe('operator shell smoke', () => {
         )
       ).toEqual([]);
       expect(
+        readPostCloseGetRequests().filter(
+          (request) =>
+            request.pathname === '/runtime/source-gaps' && request.search !== expectedRuntimeSourceGapsSearch
+        )
+      ).toEqual([]);
+      expect(
+        readPostCloseGetRequests().filter(
+          (request) =>
+            request.pathname === '/runtime/source-gaps/summary' &&
+            request.search !== expectedRuntimeSourceGapsSummarySearch
+        )
+      ).toEqual([]);
+      expect(
         readPostCloseGetRequests().filter((request) => forbiddenPostClosePathnames.has(request.pathname))
       ).toEqual([]);
     } finally {
@@ -1741,7 +1758,9 @@ test.describe('operator shell smoke', () => {
     const allowedPostClosePathnames = new Set([
       '/office/overview',
       '/incidents',
-      '/collectors/controller-snapshot/source-health'
+      '/collectors/controller-snapshot/source-health',
+      '/runtime/source-gaps',
+      '/runtime/source-gaps/summary'
     ]);
     const forbiddenPostClosePathnames = new Set([
       '/office/operations',
@@ -1755,6 +1774,8 @@ test.describe('operator shell smoke', () => {
     const expectedOverviewSearch = '';
     const expectedIncidentsSearch = '?limit=200&window=8760h';
     const expectedSourceHealthSearch = '?limit=7';
+    const expectedRuntimeSourceGapsSearch = '?newest_first=true&limit=3';
+    const expectedRuntimeSourceGapsSummarySearch = '?newest_first=true&limit=3';
     const postCloseRequests: Array<{
       method: string;
       pathname: string;
@@ -1873,6 +1894,19 @@ test.describe('operator shell smoke', () => {
           (request) =>
             request.pathname === '/collectors/controller-snapshot/source-health' &&
             request.search !== expectedSourceHealthSearch
+        )
+      ).toEqual([]);
+      expect(
+        readPostCloseGetRequests().filter(
+          (request) =>
+            request.pathname === '/runtime/source-gaps' && request.search !== expectedRuntimeSourceGapsSearch
+        )
+      ).toEqual([]);
+      expect(
+        readPostCloseGetRequests().filter(
+          (request) =>
+            request.pathname === '/runtime/source-gaps/summary' &&
+            request.search !== expectedRuntimeSourceGapsSummarySearch
         )
       ).toEqual([]);
       expect(
@@ -2001,7 +2035,9 @@ test.describe('operator shell smoke', () => {
     const allowedPostClosePathnames = new Set([
       '/office/overview',
       '/incidents',
-      '/collectors/controller-snapshot/source-health'
+      '/collectors/controller-snapshot/source-health',
+      '/runtime/source-gaps',
+      '/runtime/source-gaps/summary'
     ]);
     const forbiddenPostClosePathnames = new Set([
       '/office/operations',
@@ -2015,6 +2051,8 @@ test.describe('operator shell smoke', () => {
     const expectedOverviewSearch = '';
     const expectedIncidentsSearch = '?limit=200&window=8760h';
     const expectedSourceHealthSearch = '?limit=7';
+    const expectedRuntimeSourceGapsSearch = '?newest_first=true&limit=3';
+    const expectedRuntimeSourceGapsSummarySearch = '?newest_first=true&limit=3';
     const postCloseRequests: Array<{
       method: string;
       pathname: string;
@@ -2178,6 +2216,19 @@ test.describe('operator shell smoke', () => {
         )
       ).toEqual([]);
       expect(
+        readPostCloseGetRequests().filter(
+          (request) =>
+            request.pathname === '/runtime/source-gaps' && request.search !== expectedRuntimeSourceGapsSearch
+        )
+      ).toEqual([]);
+      expect(
+        readPostCloseGetRequests().filter(
+          (request) =>
+            request.pathname === '/runtime/source-gaps/summary' &&
+            request.search !== expectedRuntimeSourceGapsSummarySearch
+        )
+      ).toEqual([]);
+      expect(
         readPostCloseGetRequests().filter((request) => forbiddenPostClosePathnames.has(request.pathname))
       ).toEqual([]);
     } finally {
@@ -2212,7 +2263,9 @@ test.describe('operator shell smoke', () => {
     const allowedPostClosePathnames = new Set([
       '/office/overview',
       '/incidents',
-      '/collectors/controller-snapshot/source-health'
+      '/collectors/controller-snapshot/source-health',
+      '/runtime/source-gaps',
+      '/runtime/source-gaps/summary'
     ]);
     const forbiddenPostClosePathnames = new Set([
       '/office/operations',
@@ -2226,6 +2279,8 @@ test.describe('operator shell smoke', () => {
     const expectedOverviewSearch = '';
     const expectedIncidentsSearch = '?limit=200&window=8760h';
     const expectedSourceHealthSearch = '?limit=7';
+    const expectedRuntimeSourceGapsSearch = '?newest_first=true&limit=3';
+    const expectedRuntimeSourceGapsSummarySearch = '?newest_first=true&limit=3';
     const postCloseRequests: Array<{
       method: string;
       pathname: string;
@@ -2383,6 +2438,19 @@ test.describe('operator shell smoke', () => {
           (request) =>
             request.pathname === '/collectors/controller-snapshot/source-health' &&
             request.search !== expectedSourceHealthSearch
+        )
+      ).toEqual([]);
+      expect(
+        readPostCloseGetRequests().filter(
+          (request) =>
+            request.pathname === '/runtime/source-gaps' && request.search !== expectedRuntimeSourceGapsSearch
+        )
+      ).toEqual([]);
+      expect(
+        readPostCloseGetRequests().filter(
+          (request) =>
+            request.pathname === '/runtime/source-gaps/summary' &&
+            request.search !== expectedRuntimeSourceGapsSummarySearch
         )
       ).toEqual([]);
       expect(

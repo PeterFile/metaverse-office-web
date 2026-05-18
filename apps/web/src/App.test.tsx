@@ -199,6 +199,8 @@ const selectedCorrelationTmuxArtifactExactUrl =
 const collectorSnapshotUrl = '/collectors/controller-snapshot';
 const collectorEvidenceCoverageUrl = '/collectors/controller-snapshot/evidence-coverage';
 const collectorSourceHealthUrl = '/collectors/controller-snapshot/source-health?limit=7';
+const runtimeSourceGapsUrl = '/runtime/source-gaps?newest_first=true&limit=3';
+const runtimeSourceGapsSummaryUrl = '/runtime/source-gaps/summary?newest_first=true&limit=3';
 const appEngineeringEvidenceRecordsUrl =
   '/evidence-records?agent_id=app-engineering&newest_first=true&limit=12';
 const appEngineeringEvidenceRecordDetailUrl = '/evidence-records/output-1';
@@ -1259,6 +1261,62 @@ const evidenceRecordDetailFixture = {
   item: evidenceRecordsFixture.items[0]
 };
 
+const emptyRuntimeSourceGapsSummaryFixture = {
+  total_count: 0,
+  returned_limit: 3,
+  mapped_count: 0,
+  unmapped_count: 0,
+  output_candidate_buckets: {
+    true: 0,
+    false: 0
+  },
+  source_kind_buckets: {},
+  evidence_role_buckets: {},
+  source_status_buckets: {},
+  collector_snapshot_id_buckets: {}
+};
+
+const growthRevenueRuntimeSourceGapsFixture = {
+  items: [
+    {
+      observed_at: '2026-03-16T08:57:45.000Z',
+      collected_at: '2026-03-16T09:01:00.000Z',
+      agent_id: 'growth-revenue',
+      source_kind: 'workspace_file',
+      evidence_role: 'agent_output',
+      source_status: 'degraded',
+      output_candidate: true,
+      collector_snapshot_id: 'collector-snapshot:2026-03-16T09:01:00.000Z',
+      correlation_id: 'collector-snapshot:2026-03-16T09:01:00.000Z',
+      degraded_reasons: ['raw path /tmp/growth-revenue/outbox.md must not render'],
+      unmapped: false
+    }
+  ]
+};
+
+const growthRevenueRuntimeSourceGapsSummaryFixture = {
+  total_count: 1,
+  returned_limit: 3,
+  mapped_count: 1,
+  unmapped_count: 0,
+  output_candidate_buckets: {
+    true: 1,
+    false: 0
+  },
+  source_kind_buckets: {
+    workspace_file: 1
+  },
+  evidence_role_buckets: {
+    agent_output: 1
+  },
+  source_status_buckets: {
+    degraded: 1
+  },
+  collector_snapshot_id_buckets: {
+    'collector-snapshot:2026-03-16T09:01:00.000Z': 1
+  }
+};
+
 const teamLeadMemoryArtifactsFixture = {
   generated_at: '2026-03-16T09:00:00.000Z',
   items: [
@@ -1686,6 +1744,14 @@ function resolveDefaultFetchResponse(url: string) {
 
   if (url === collectorSourceHealthUrl) {
     return jsonResponse({ item: null });
+  }
+
+  if (url === runtimeSourceGapsUrl) {
+    return jsonResponse({ items: [] });
+  }
+
+  if (url === runtimeSourceGapsSummaryUrl) {
+    return jsonResponse({ item: emptyRuntimeSourceGapsSummaryFixture });
   }
 
   if (url === appEngineeringEvidenceRecordsUrl) {
@@ -3547,6 +3613,14 @@ afterEach(() => {
         });
       }
 
+      if (url === runtimeSourceGapsUrl) {
+        return jsonResponse(growthRevenueRuntimeSourceGapsFixture);
+      }
+
+      if (url === runtimeSourceGapsSummaryUrl) {
+        return jsonResponse({ item: growthRevenueRuntimeSourceGapsSummaryFixture });
+      }
+
       if (url === collectorSnapshotUrl) {
         return jsonResponse({
           item: {
@@ -3599,9 +3673,15 @@ afterEach(() => {
       name: 'Open source gap supervision for Growth Revenue Agent workspace files degraded'
     });
     expect(gapChip).toHaveTextContent('Workspace files · degraded');
-    expect(gapChip).toHaveTextContent('2 missing files · latest evidence 2026-03-16T08:58:40.000Z');
+    expect(gapChip).toHaveTextContent('agent output · output candidate');
+    expect(gapChip).toHaveTextContent('Observed 2026-03-16T08:57:45.000Z');
     expect(gapChip).not.toHaveTextContent('/tmp/growth-revenue');
     expect(gapChip).not.toHaveTextContent('6-web3-growth-revenue');
+    expect(gapChip).not.toHaveTextContent('collector-snapshot:');
+
+    const requestedUrls = fetchMock.mock.calls.map(([request]) => String(request));
+    expect(requestedUrls).toContain(runtimeSourceGapsUrl);
+    expect(requestedUrls).toContain(runtimeSourceGapsSummaryUrl);
 
     await user.click(gapChip);
 

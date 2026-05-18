@@ -186,7 +186,7 @@ test.describe('operator shell live evidence journey smoke', () => {
         name: 'Open source gap supervision for App Engineering Agent hermes session degraded'
       });
 
-      await expect(evidenceFocus.getByText('1 low coverage', { exact: true })).toBeVisible();
+      await expect(evidenceFocus.getByText('3 coverage gaps', { exact: true })).toBeVisible();
       await expect(sourceGapFocus.getByText('3 provenance gaps', { exact: true })).toBeVisible();
       await expect(hermesSessionGapChip).toContainText('Hermes session · degraded');
       await expect(hermesSessionGapChip).not.toContainText('hermes://');

@@ -9,6 +9,7 @@ import {
   fetchAgentInteractions,
   fetchCollectorEvidenceCoverage,
   fetchCollectorSnapshot,
+  fetchCollectorSnapshotHistory,
   fetchCollectorSourceHealth,
   fetchEvidenceRecord,
   fetchEvidenceRecords,
@@ -562,6 +563,172 @@ describe('fetchCollectorSourceHealth', () => {
     );
 
     await expect(fetchCollectorSourceHealth({ limit: 7 })).resolves.toBeNull();
+  });
+});
+
+describe('fetchCollectorSnapshotHistory', () => {
+  it('requests the snapshot history summary without query parameters when filters are omitted', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            item: {
+              total_count: 0,
+              returned_limit: 50,
+              source_kind_buckets: {
+                workspace_root: 0,
+                workspace_files: 0,
+                tmux_session: 0,
+                hermes_profile: 0,
+                hermes_session: 0
+              },
+              status_buckets: {
+                observed: 0,
+                degraded: 0,
+                missing: 0,
+                error: 0
+              },
+              items: []
+            }
+          }),
+          {
+            headers: JSON_HEADERS
+          }
+        )
+      )
+    );
+
+    await expect(fetchCollectorSnapshotHistory()).resolves.toMatchObject({
+      total_count: 0,
+      returned_limit: 50,
+      items: []
+    });
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/collectors/controller-snapshot/history',
+      expect.objectContaining({ signal: undefined })
+    );
+  });
+
+  it('passes explicit history filters through with backend query names and URL encoding', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            item: {
+              total_count: 1,
+              returned_limit: 7,
+              source_kind_buckets: {
+                workspace_root: 0,
+                workspace_files: 1,
+                tmux_session: 0,
+                hermes_profile: 0,
+                hermes_session: 0
+              },
+              status_buckets: {
+                observed: 0,
+                degraded: 1,
+                missing: 0,
+                error: 0
+              },
+              items: [
+                {
+                  collector_snapshot_id: 'collector-snapshot:2026-03-09T18:59:00.000Z',
+                  collected_at: '2026-03-09T18:59:00.000Z',
+                  actor_id: 'team-lead',
+                  agent_count: 1,
+                  heartbeat_count: 1,
+                  tmux_observed_count: 1,
+                  workspace_observed_count: 1,
+                  reboot_recommended_count: 0,
+                  matched_agent_count: 1,
+                  source_kind_buckets: {
+                    workspace_root: 0,
+                    workspace_files: 1,
+                    tmux_session: 0,
+                    hermes_profile: 0,
+                    hermes_session: 0
+                  },
+                  status_buckets: {
+                    observed: 0,
+                    degraded: 1,
+                    missing: 0,
+                    error: 0
+                  }
+                }
+              ]
+            }
+          }),
+          {
+            headers: JSON_HEADERS
+          }
+        )
+      )
+    );
+
+    const signal = new AbortController().signal;
+    const history = await fetchCollectorSnapshotHistory({
+      collectorSnapshotId: 'collector-snapshot:2026-03-09T18:59:00.000Z',
+      agentId: 'app engineering',
+      sourceKind: 'workspace_file',
+      status: 'degraded',
+      collectedSince: '2026-03-09T18:00:00.000Z',
+      collectedUntil: '2026-03-09T19:00:00.000Z',
+      limit: 7,
+      signal
+    });
+
+    expect(history).not.toBeNull();
+    if (!history) {
+      throw new Error('expected collector snapshot history');
+    }
+    expect(history.items).toHaveLength(1);
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/collectors/controller-snapshot/history?collector_snapshot_id=collector-snapshot%3A2026-03-09T18%3A59%3A00.000Z&agent_id=app+engineering&source_kind=workspace_file&status=degraded&collected_since=2026-03-09T18%3A00%3A00.000Z&collected_until=2026-03-09T19%3A00%3A00.000Z&limit=7',
+      expect.objectContaining({ signal })
+    );
+  });
+
+  it('unwraps a null backend envelope when history is absent', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ item: null }), {
+          headers: JSON_HEADERS
+        })
+      )
+    );
+
+    await expect(fetchCollectorSnapshotHistory()).resolves.toBeNull();
+  });
+
+  it('throws RequestError metadata when the history request fails', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            error: 'invalid_request',
+            details: 'invalid collected_since'
+          }),
+          {
+            status: 400,
+            headers: JSON_HEADERS
+          }
+        )
+      )
+    );
+
+    await expect(
+      fetchCollectorSnapshotHistory({ collectedSince: 'not-a-date' })
+    ).rejects.toMatchObject({
+      name: 'RequestError',
+      status: 400,
+      code: 'invalid_request',
+      message: 'invalid collected_since'
+    });
   });
 });
 

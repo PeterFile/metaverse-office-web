@@ -19,6 +19,7 @@ import {
   fetchCollectorSnapshot,
   fetchCollectorSourceHealth,
   fetchCorrelationDrilldown,
+  fetchEvidenceRecord,
   fetchEvidenceRecords,
   fetchIncidents,
   fetchMemoryArtifacts,
@@ -57,6 +58,7 @@ import type {
   CollectorSnapshot,
   CollectorSourceHealthProjection,
   CorrelationDrilldown,
+  EvidenceRecord,
   MemoryArtifact,
   MemoryArtifactIndex,
   OfficeAgent,
@@ -1018,6 +1020,14 @@ function AppInner() {
   const [cachedCorrelationSpotlight, setCachedCorrelationSpotlight] = useState<CorrelationSpotlight | null>(null);
   const [selectedAgentDrilldownTab, setSelectedAgentDrilldownTab] =
     useState<SelectedAgentDrilldownTab>('now');
+  const [selectedAgentEvidenceRecord, setSelectedAgentEvidenceRecord] =
+    useState<EvidenceRecord | null>(null);
+  const [selectedAgentEvidenceRecordId, setSelectedAgentEvidenceRecordId] =
+    useState<string | null>(null);
+  const [selectedAgentEvidenceRecordState, setSelectedAgentEvidenceRecordState] =
+    useState<LoadState>('idle');
+  const [selectedAgentEvidenceRecordError, setSelectedAgentEvidenceRecordError] =
+    useState<string | null>(null);
   const [defaultEvidenceCoverage, setDefaultEvidenceCoverage] =
     useState<CollectorEvidenceCoverage | null>(null);
   const [defaultEvidenceCoverageState, setDefaultEvidenceCoverageState] =
@@ -1041,6 +1051,7 @@ function AppInner() {
   const pendingSharedMemoryFocusRef = useRef<string | null>(null);
   const sharedMemoryJumpRequestIdRef = useRef(0);
   const agentFocusRequestIdRef = useRef(0);
+  const evidenceRecordDetailRequestIdRef = useRef(0);
   const zoneFocusRequestIdRef = useRef(0);
   const sourceGapFocusRequestIdRef = useRef(0);
   const wasHubOpenRef = useRef(false);
@@ -1809,6 +1820,43 @@ function AppInner() {
   useEffect(() => {
     previousSelectedAgentEvidenceLedgerResourceKeyRef.current = selectedAgentEvidenceLedgerResourceKey;
   }, [selectedAgentEvidenceLedgerResourceKey]);
+
+  useEffect(() => {
+    evidenceRecordDetailRequestIdRef.current += 1;
+    setSelectedAgentEvidenceRecord(null);
+    setSelectedAgentEvidenceRecordId(null);
+    setSelectedAgentEvidenceRecordError(null);
+    setSelectedAgentEvidenceRecordState('idle');
+  }, [selectedAgentId]);
+
+  const handleInspectSelectedAgentEvidenceRecord = useCallback((evidenceId: string) => {
+    const requestId = evidenceRecordDetailRequestIdRef.current + 1;
+    evidenceRecordDetailRequestIdRef.current = requestId;
+    setSelectedAgentEvidenceRecordId(evidenceId);
+    setSelectedAgentEvidenceRecord(null);
+    setSelectedAgentEvidenceRecordError(null);
+    setSelectedAgentEvidenceRecordState('loading');
+
+    void fetchEvidenceRecord(evidenceId)
+      .then((record) => {
+        if (evidenceRecordDetailRequestIdRef.current !== requestId) {
+          return;
+        }
+
+        setSelectedAgentEvidenceRecord(record);
+        setSelectedAgentEvidenceRecordError(null);
+        setSelectedAgentEvidenceRecordState('ready');
+      })
+      .catch((error: unknown) => {
+        if (evidenceRecordDetailRequestIdRef.current !== requestId) {
+          return;
+        }
+
+        setSelectedAgentEvidenceRecord(null);
+        setSelectedAgentEvidenceRecordError(formatUnknownError(error));
+        setSelectedAgentEvidenceRecordState('error');
+      });
+  }, []);
 
   const crewOverviewOperationStateBuckets = useMemo(
     () => crewOverviewStateBucketsResource.data?.summary.state_buckets ?? {},
@@ -3149,6 +3197,10 @@ function AppInner() {
               selectedAgentEvidenceLedger={selectedAgentEvidenceLedger}
               selectedAgentEvidenceLedgerError={selectedAgentEvidenceLedgerError}
               selectedAgentEvidenceLedgerState={selectedAgentEvidenceLedgerState}
+              selectedAgentEvidenceRecord={selectedAgentEvidenceRecord}
+              selectedAgentEvidenceRecordError={selectedAgentEvidenceRecordError}
+              selectedAgentEvidenceRecordId={selectedAgentEvidenceRecordId}
+              selectedAgentEvidenceRecordState={selectedAgentEvidenceRecordState}
               workflow={activeWorkflow}
               workflowError={workflowError}
               workflowState={workflowState}
@@ -3214,6 +3266,7 @@ function AppInner() {
               onSelectOperationsState={setSelectedOperationsState}
               onSelectOperationsSeverity={setSelectedOperationsSeverity}
               onSelectOperation={handleSelectOperation}
+              onInspectSelectedAgentEvidenceRecord={handleInspectSelectedAgentEvidenceRecord}
               onFocusSharedMemoryArtifact={handleFocusSharedMemoryArtifact}
               onOpenReplayCheckpoint={handleOpenReplayCheckpoint}
               onFocusWorldZone={handleFocusWorldZone}

@@ -201,6 +201,7 @@ const collectorEvidenceCoverageUrl = '/collectors/controller-snapshot/evidence-c
 const collectorSourceHealthUrl = '/collectors/controller-snapshot/source-health?limit=7';
 const appEngineeringEvidenceRecordsUrl =
   '/evidence-records?agent_id=app-engineering&newest_first=true&limit=12';
+const appEngineeringEvidenceRecordDetailUrl = '/evidence-records/output-1';
 
 const overviewFixture = {
   generated_at: '2026-03-16T09:00:00.000Z',
@@ -1253,6 +1254,10 @@ const evidenceRecordsFixture = {
   ]
 };
 
+const evidenceRecordDetailFixture = {
+  item: evidenceRecordsFixture.items[0]
+};
+
 const teamLeadMemoryArtifactsFixture = {
   generated_at: '2026-03-16T09:00:00.000Z',
   items: [
@@ -1684,6 +1689,10 @@ function resolveDefaultFetchResponse(url: string) {
 
   if (url === appEngineeringEvidenceRecordsUrl) {
     return jsonResponse(evidenceRecordsFixture);
+  }
+
+  if (url === appEngineeringEvidenceRecordDetailUrl) {
+    return jsonResponse(evidenceRecordDetailFixture);
   }
 
   return null;
@@ -3349,6 +3358,57 @@ afterEach(() => {
     const evidenceRecordRequests = requestedUrls.filter((url) => url.startsWith('/evidence-records'));
     expect(evidenceRecordRequests).toEqual([appEngineeringEvidenceRecordsUrl]);
     expect(await findHubSection(details, 'Evidence Ledger')).toBeVisible();
+  });
+
+  it('fetches selected-agent evidence detail only after the row inspect action', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const roster = await screen.findByRole('navigation', { name: 'Agent roster' });
+    await user.click(
+      within(roster).getByRole('button', {
+        name: 'Select and locate App Engineering Agent'
+      })
+    );
+
+    const inspectPeek = await screen.findByRole('region', { name: 'Selected agent inspect peek' });
+    await user.click(
+      within(inspectPeek).getByRole('button', {
+        name: 'Open App Engineering Agent Evidence Ledger'
+      })
+    );
+
+    const details = await screen.findByRole('complementary', { name: 'Agent details' });
+    await findHubSection(details, 'Evidence Ledger');
+
+    await waitFor(() => {
+      const requestedUrls = vi.mocked(globalThis.fetch).mock.calls.map(([request]) => String(request));
+      expect(requestedUrls).toContain(appEngineeringEvidenceRecordsUrl);
+      expect(requestedUrls).not.toContain(appEngineeringEvidenceRecordDetailUrl);
+    });
+
+    await user.click(
+      within(details).getByRole('button', {
+        name: 'Inspect evidence record output-1'
+      })
+    );
+
+    await waitFor(() => {
+      expect(vi.mocked(globalThis.fetch).mock.calls.map(([request]) => String(request))).toContain(
+        appEngineeringEvidenceRecordDetailUrl
+      );
+    });
+
+    const detailSection = await findHubSection(details, 'Evidence Record Detail');
+    expect(detailSection).toHaveTextContent('Evidence id · output-1');
+    expect(detailSection).toHaveTextContent('Observed · 2026-03-16T08:58:00.000Z');
+    expect(detailSection).toHaveTextContent('Collected · 2026-03-16T08:59:00.000Z');
+    expect(detailSection).toHaveTextContent('Source · workspace_file');
+    expect(detailSection).toHaveTextContent('Status · observed');
+    expect(detailSection).toHaveTextContent('Role · agent_output');
+    expect(detailSection).toHaveTextContent('Output candidate · true');
+    expect(detailSection).toHaveTextContent('Snapshot · collector-20260316');
+    expect(detailSection).not.toHaveTextContent('raw_tmux_capture');
   });
 
   it('surfaces source-gap chips as provenance health and opens Supervision from a chip', async () => {

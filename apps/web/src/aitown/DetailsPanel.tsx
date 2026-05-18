@@ -11,6 +11,7 @@ import type {
   CollectorTmuxObservation,
   CollectorWorkspaceObservation,
   CorrelationDrilldown,
+  EvidenceRecord,
   IncidentFeedResponse,
   MemoryArtifact,
   MemoryArtifactIndex,
@@ -149,6 +150,10 @@ type DetailsPanelProps = {
   selectedAgentEvidenceLedger: SelectedAgentEvidenceLedgerModel | null;
   selectedAgentEvidenceLedgerError: string | null;
   selectedAgentEvidenceLedgerState: LoadState;
+  selectedAgentEvidenceRecord: EvidenceRecord | null;
+  selectedAgentEvidenceRecordError: string | null;
+  selectedAgentEvidenceRecordId: string | null;
+  selectedAgentEvidenceRecordState: LoadState;
   workflow: AgentWorkflow | null;
   workflowError: string | null;
   workflowState: LoadState;
@@ -164,6 +169,7 @@ type DetailsPanelProps = {
   onSelectOperationsState: (state: string | null) => void;
   onSelectOperationsSeverity: (severity: Severity | null) => void;
   onSelectOperation: (operation: OfficeOperation, options?: SelectOperationOptions) => void;
+  onInspectSelectedAgentEvidenceRecord: (evidenceId: string) => void;
   onFocusSharedMemoryArtifact?: (artifactRef: string, scope?: SharedMemoryJumpScope) => void;
   onOpenReplayCheckpoint?: (eventId: string) => void;
   onFocusWorldZone?: (zoneId: string) => void;
@@ -1167,18 +1173,22 @@ function formatBoundedEvidenceLedgerToken(value: string) {
 
 function renderSelectedAgentEvidenceLedgerGroup(
   label: string,
-  group: SelectedAgentEvidenceLedgerGroup
+  group: SelectedAgentEvidenceLedgerGroup,
+  onInspectRecord: (evidenceId: string) => void
 ) {
   return (
     <li className="aitown-record">
       <strong>{`${label} · ${group.totalCount}`}</strong>
-      {group.items.map((item) => renderSelectedAgentEvidenceLedgerItem(item))}
+      {group.items.map((item) => renderSelectedAgentEvidenceLedgerItem(item, onInspectRecord))}
       {group.overflowCount > 0 ? <span>{`More · ${group.overflowCount} hidden by card limit`}</span> : null}
     </li>
   );
 }
 
-function renderSelectedAgentEvidenceLedgerItem(item: SelectedAgentEvidenceLedgerItem) {
+function renderSelectedAgentEvidenceLedgerItem(
+  item: SelectedAgentEvidenceLedgerItem,
+  onInspectRecord: (evidenceId: string) => void
+) {
   const degradedReasons = item.degradedReasons.length > 0 ? item.degradedReasons.join(', ') : null;
   const evidenceId = formatBoundedEvidenceLedgerToken(item.evidenceId);
   const collectorSnapshotId = formatBoundedEvidenceLedgerToken(item.collectorSnapshotId);
@@ -1196,7 +1206,63 @@ function renderSelectedAgentEvidenceLedgerItem(item: SelectedAgentEvidenceLedger
       <span>{item.agentId ? `Agent · ${item.agentId}` : 'Agent · unmapped'}</span>
       {item.correlationId ? <span>{`Correlation · ${item.correlationId}`}</span> : null}
       {degradedReasons ? <span>{`Degraded · ${degradedReasons}`}</span> : null}
+      <button
+        type="button"
+        className="aitown-link-button"
+        aria-label={`Inspect evidence record ${item.evidenceId}`}
+        onClick={() => onInspectRecord(item.evidenceId)}
+      >
+        Inspect record
+      </button>
     </Fragment>
+  );
+}
+
+function renderSelectedAgentEvidenceRecordDetail(
+  record: EvidenceRecord | null,
+  state: LoadState,
+  error: string | null,
+  requestedEvidenceId: string | null
+) {
+  if (!requestedEvidenceId && !record) {
+    return null;
+  }
+
+  const evidenceId = record?.evidence_id ?? requestedEvidenceId ?? 'unknown';
+
+  return (
+    <section
+      className="aitown-details__section aitown-details__section--selected-evidence-record aitown-details__section--hub-evidence"
+    >
+      <h3>Evidence Record Detail</h3>
+      <ul className="aitown-records">
+        {state === 'loading' && !record ? (
+          <li className="aitown-record">{`Loading evidence record detail for ${evidenceId}...`}</li>
+        ) : null}
+        {error && !record ? (
+          <li className="aitown-record">{`Unable to load evidence record ${evidenceId}. ${error}`}</li>
+        ) : null}
+        {record ? (
+          <li className="aitown-record">
+            <strong>{`Evidence id · ${formatBoundedEvidenceLedgerToken(record.evidence_id)}`}</strong>
+            {state === 'loading' ? <span>Refreshing evidence record detail...</span> : null}
+            {error ? <span>{`Last-good detail · Refresh failed: ${error}`}</span> : null}
+            <span>{`Observed · ${renderTimestamp(record.observed_at, 'No observed timestamp')}`}</span>
+            <span>{`Collected · ${renderTimestamp(record.collected_at, 'No collected timestamp')}`}</span>
+            <span>{`Source · ${record.source_kind}`}</span>
+            <span>{`Status · ${record.source_status ?? 'unknown'}`}</span>
+            <span>{`Role · ${record.evidence_role ?? 'unclassified'}`}</span>
+            <span>{`Output candidate · ${String(record.output_candidate)}`}</span>
+            <span>{`Snapshot · ${formatBoundedEvidenceLedgerToken(record.collector_snapshot_id)}`}</span>
+            <span>{`Correlation · ${record.correlation_id ?? 'none'}`}</span>
+            <span>
+              {`Degraded · ${record.degraded_reasons.length > 0 ? record.degraded_reasons.join(', ') : 'none'}`}
+            </span>
+            <span>{`Ref · ${formatBoundedEvidenceLedgerToken(record.evidence_ref)}`}</span>
+          </li>
+        ) : null}
+      </ul>
+    </section>
   );
 }
 
@@ -4033,6 +4099,10 @@ export function DetailsPanel({
   selectedAgentEvidenceLedger,
   selectedAgentEvidenceLedgerError,
   selectedAgentEvidenceLedgerState,
+  selectedAgentEvidenceRecord,
+  selectedAgentEvidenceRecordError,
+  selectedAgentEvidenceRecordId,
+  selectedAgentEvidenceRecordState,
   workflow,
   workflowError,
   workflowState,
@@ -4048,6 +4118,7 @@ export function DetailsPanel({
   onSelectOperationsState,
   onSelectOperationsSeverity,
   onSelectOperation,
+  onInspectSelectedAgentEvidenceRecord,
   onFocusSharedMemoryArtifact,
   onOpenReplayCheckpoint,
   onFocusWorldZone
@@ -5842,14 +5913,20 @@ export function DetailsPanel({
           ) : null}
           {selectedAgentEvidenceLedger ? (
             <>
-              {renderSelectedAgentEvidenceLedgerGroup('Output evidence', selectedAgentEvidenceLedger.outputEvidence)}
+              {renderSelectedAgentEvidenceLedgerGroup(
+                'Output evidence',
+                selectedAgentEvidenceLedger.outputEvidence,
+                onInspectSelectedAgentEvidenceRecord
+              )}
               {renderSelectedAgentEvidenceLedgerGroup(
                 'Non-output evidence',
-                selectedAgentEvidenceLedger.nonOutputEvidence
+                selectedAgentEvidenceLedger.nonOutputEvidence,
+                onInspectSelectedAgentEvidenceRecord
               )}
               {renderSelectedAgentEvidenceLedgerGroup(
                 'Degraded / unmapped',
-                selectedAgentEvidenceLedger.degradedEvidence
+                selectedAgentEvidenceLedger.degradedEvidence,
+                onInspectSelectedAgentEvidenceRecord
               )}
               {selectedAgentEvidenceLedger.isEmpty ? (
                 <li className="aitown-record">No evidence records returned for this bounded request.</li>
@@ -5858,6 +5935,13 @@ export function DetailsPanel({
           ) : null}
         </ul>
       </section>
+
+      {renderSelectedAgentEvidenceRecordDetail(
+        selectedAgentEvidenceRecord,
+        selectedAgentEvidenceRecordState,
+        selectedAgentEvidenceRecordError,
+        selectedAgentEvidenceRecordId
+      )}
 
       <section
         className="aitown-details__section aitown-details__section--selected-evidence aitown-details__section--hub-supervision aitown-details__section--hub-evidence aitown-details__section--selected-supervision-workflow"

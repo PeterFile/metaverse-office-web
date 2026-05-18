@@ -334,6 +334,22 @@ export interface RuntimeSourceGapsResponse {
   items: RuntimeSourceGap[];
 }
 
+export interface RuntimeSourceGapsSummary {
+  total_count: number;
+  returned_limit: number;
+  mapped_count: number;
+  unmapped_count: number;
+  output_candidate_buckets: Record<'true' | 'false', number>;
+  source_kind_buckets: Record<string, number>;
+  evidence_role_buckets: Record<string, number>;
+  source_status_buckets: Record<string, number>;
+  collector_snapshot_id_buckets: Record<string, number>;
+}
+
+export interface RuntimeSourceGapsSummaryResponse {
+  item: RuntimeSourceGapsSummary;
+}
+
 export interface CollectorSnapshot {
   collected_at: string;
   actor_id: string;

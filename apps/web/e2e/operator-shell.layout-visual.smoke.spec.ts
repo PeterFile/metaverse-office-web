@@ -293,9 +293,75 @@ test.describe('operator shell layout visual smoke', () => {
       ],
       runtime_source_evidence: { unmapped_tmux_sessions: [] }
     };
+    const runtimeSourceGaps = {
+      items: [
+        {
+          observed_at: '2026-03-16T08:58:30.000Z',
+          collected_at: '2026-03-16T09:01:00.000Z',
+          agent_id: 'app-engineering',
+          source_kind: 'workspace_file',
+          evidence_role: 'agent_output',
+          source_status: 'degraded',
+          output_candidate: false,
+          collector_snapshot_id: 'collector-snapshot:2026-03-16T09:01:00.000Z',
+          correlation_id: 'collector-snapshot:2026-03-16T09:01:00.000Z',
+          degraded_reasons: ['workspace file degraded'],
+          unmapped: false
+        },
+        {
+          observed_at: null,
+          collected_at: '2026-03-16T09:01:00.000Z',
+          agent_id: 'app-engineering',
+          source_kind: 'hermes_profile',
+          evidence_role: 'runtime_presence',
+          source_status: 'missing',
+          output_candidate: false,
+          collector_snapshot_id: 'collector-snapshot:2026-03-16T09:01:00.000Z',
+          correlation_id: 'collector-snapshot:2026-03-16T09:01:00.000Z',
+          degraded_reasons: ['Hermes profile missing'],
+          unmapped: false
+        },
+        {
+          observed_at: '2026-03-16T08:58:35.000Z',
+          collected_at: '2026-03-16T09:01:00.000Z',
+          agent_id: 'app-engineering',
+          source_kind: 'hermes_session',
+          evidence_role: 'runtime_presence',
+          source_status: 'degraded',
+          output_candidate: false,
+          collector_snapshot_id: 'collector-snapshot:2026-03-16T09:01:00.000Z',
+          correlation_id: 'collector-snapshot:2026-03-16T09:01:00.000Z',
+          degraded_reasons: ['Hermes session degraded'],
+          unmapped: false
+        }
+      ]
+    };
+    const runtimeSourceGapsSummary = {
+      total_count: 3,
+      returned_limit: 3,
+      mapped_count: 3,
+      unmapped_count: 0,
+      output_candidate_buckets: { true: 0, false: 3 },
+      source_kind_buckets: {
+        workspace_file: 1,
+        hermes_profile: 1,
+        hermes_session: 1
+      },
+      evidence_role_buckets: { agent_output: 1, runtime_presence: 2 },
+      source_status_buckets: { degraded: 2, missing: 1 },
+      collector_snapshot_id_buckets: {
+        'collector-snapshot:2026-03-16T09:01:00.000Z': 3
+      }
+    };
 
     await page.route('**/collectors/controller-snapshot/evidence-coverage', async (route) => {
       await route.fulfill({ json: { item: evidenceCoverage } });
+    });
+    await page.route('**/runtime/source-gaps?*', async (route) => {
+      await route.fulfill({ json: runtimeSourceGaps });
+    });
+    await page.route('**/runtime/source-gaps/summary?*', async (route) => {
+      await route.fulfill({ json: { item: runtimeSourceGapsSummary } });
     });
     await page.route('**/collectors/controller-snapshot/source-health**', async (route) => {
       await route.fulfill({ json: { item: sourceHealth } });
@@ -393,19 +459,20 @@ test.describe('operator shell layout visual smoke', () => {
     await expect(sourceGapFocus.getByText('3 provenance gaps', { exact: true })).toBeVisible();
     await expect(sourceGapChip).toBeVisible();
     await expect(sourceGapChip).toContainText('Workspace files · degraded');
-    await expect(sourceGapChip).toContainText('2 missing files · latest evidence 2026-03-16T08:58:40.000Z');
+    await expect(sourceGapChip).toContainText('agent output · mapped source');
+    await expect(sourceGapChip).toContainText('Observed 2026-03-16T08:58:30.000Z');
     await expect(sourceGapChip).not.toContainText('/tmp/app-engineering');
     await expect(sourceGapChip).not.toContainText('5-web3-app-engineering');
     await expect(hermesProfileGapChip).toBeVisible();
     await expect(hermesProfileGapChip).toContainText('Hermes profile · missing');
-    await expect(hermesProfileGapChip).toContainText('3 refs · latest evidence 2026-03-16T08:58:40.000Z');
+    await expect(hermesProfileGapChip).toContainText('runtime presence · mapped source');
     await expect(hermesProfileGapChip).toContainText('Not observed');
     await expect(hermesProfileGapChip).not.toContainText('hermes://');
     await expect(hermesProfileGapChip).not.toContainText('profile-app-engineering');
     await expect(hermesProfileGapChip).not.toContainText('5-web3-app-engineering');
     await expect(hermesSessionGapChip).toBeVisible();
     await expect(hermesSessionGapChip).toContainText('Hermes session · degraded');
-    await expect(hermesSessionGapChip).toContainText('3 refs · latest evidence 2026-03-16T08:58:40.000Z');
+    await expect(hermesSessionGapChip).toContainText('runtime presence · mapped source');
     await expect(hermesSessionGapChip).toContainText('Observed 2026-03-16T08:58:35.000Z');
     await expect(hermesSessionGapChip).not.toContainText('hermes://');
     await expect(hermesSessionGapChip).not.toContainText('profile-app-engineering');

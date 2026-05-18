@@ -1155,6 +1155,42 @@ test('prototype store summarizes bounded collector snapshot history with exact f
   );
 });
 
+test('prototype store projects collector source health for requested snapshot id', async () => {
+  const storeFile = await createStoreFile();
+  const store = await createPrototypeStore({ filePath: storeFile });
+  const firstReport = createCollectorReport();
+  const secondReport = createCollectorReport();
+  secondReport.collected_at = '2026-03-09T18:07:00.000Z';
+  secondReport.items[0].source_health.workspace_files.status = 'observed';
+  secondReport.items[0].source_health.workspace_files.degraded_reasons = [];
+
+  await store.appendCollectorReport(firstReport);
+  await store.appendCollectorReport(secondReport);
+
+  const historical = store.getLatestCollectorSourceHealth({
+    collector_snapshot_id: 'collector-snapshot:2026-03-09T18:06:00.000Z',
+    source_kind: 'workspace_file',
+    status: 'degraded'
+  });
+  assert.equal(historical.collector_snapshot_id, 'collector-snapshot:2026-03-09T18:06:00.000Z');
+  assert.deepEqual(historical.agent_items.map((item) => item.agent_id), ['app-engineering']);
+  assert.equal(historical.agent_items[0].source_health.workspace_files.status, 'degraded');
+
+  const latest = store.getLatestCollectorSourceHealth({
+    source_kind: 'workspace_file',
+    status: 'observed'
+  });
+  assert.equal(latest.collector_snapshot_id, 'collector-snapshot:2026-03-09T18:07:00.000Z');
+  assert.deepEqual(latest.agent_items.map((item) => item.agent_id), ['app-engineering']);
+
+  assert.equal(
+    store.getLatestCollectorSourceHealth({
+      collector_snapshot_id: 'collector-snapshot:unknown'
+    }),
+    null
+  );
+});
+
 test('SQLite prototype store replays the same contract as JSONL and survives reload', async () => {
   const jsonlStoreFile = await createStoreFile();
   const sqliteStoreFile = await createSqliteStoreFile();

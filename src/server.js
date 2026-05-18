@@ -355,6 +355,7 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
   if (method === 'GET' && pathname === '/collectors/controller-snapshot/source-health') {
     sendJson(res, 200, {
       item: store.getLatestCollectorSourceHealth({
+        collector_snapshot_id: url.searchParams.get('collector_snapshot_id'),
         agent_id: url.searchParams.get('agent_id'),
         source_kind: url.searchParams.get('source_kind'),
         status: url.searchParams.get('status'),

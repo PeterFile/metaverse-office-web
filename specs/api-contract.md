@@ -83,6 +83,7 @@ This is the current API/read-model contract for Metaverse Office Web. It grew ou
 - `source_kind` selects agent items that mention that source kind; selected multi-source agents keep their full coverage row, so projection aggregates still describe the returned agents' complete evidence mix rather than a per-ref slice
 - `limit` applies after filters; invalid, negative, or missing limits follow the existing read-model limit behavior (`50` default, `200` maximum)
 - evidence-coverage projection aggregates (`evidence_ref_count`, `covered_agent_count`, `source_kind_buckets`, `low_confidence_agent_ids`) are recomputed from the filtered/limited agent item set while preserving stable snapshot order
+- evidence-coverage responses include `collected_at`, top-level `collector_snapshot_id` for the latest stored collector snapshot, `actor_id`, aggregate coverage counts, source-kind buckets, low-confidence agent ids, and bounded `agent_items`
 - `GET /collectors/controller-snapshot/source-health` is a bounded read-only projection of the latest report's `source_health`; it returns `200` with `{ "item": null }` when no latest collector report exists and never triggers collection, tmux, filesystem access, or append-only writes
 - source-health filters are exact and additive: `agent_id`, `source_kind`, `status`, and post-filter `limit`; blank values are ignored, invalid or negative limits use the existing read-model default, and unknown `source_kind`/`status` values return an empty bounded projection rather than an error
 - source-health `source_kind` accepts `workspace_root`, `workspace_file`, `workspace_files`, `tmux_observation`, `tmux_session`, `hermes_profile`, and `hermes_session`; `workspace_file`/`workspace_files` project `source_health.workspace_files`, `tmux_observation`/`tmux_session` project `source_health.tmux_session`, and Hermes kinds project their matching `source_health` keys
@@ -107,6 +108,7 @@ This is the current API/read-model contract for Metaverse Office Web. It grew ou
 {
   "item": {
     "collected_at": "2026-03-09T18:05:00.000Z",
+    "collector_snapshot_id": "collector-snapshot:2026-03-09T18:05:00.000Z",
     "actor_id": "team-lead",
     "evidence_ref_count": 2,
     "covered_agent_count": 1,

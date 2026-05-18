@@ -366,6 +366,10 @@ test('JSONL prototype store replays event, heartbeat, and collector snapshot rea
 
   assert.deepEqual(afterReload, beforeReload);
   assert.equal(afterReload.latestCollectorReport.collected_at, '2026-03-09T18:06:00.000Z');
+  assert.equal(
+    afterReload.latestCollectorEvidenceCoverage.collector_snapshot_id,
+    'collector-snapshot:2026-03-09T18:06:00.000Z'
+  );
   assert.equal(afterReload.latestCollectorSourceHealth.agent_items[0].agent_id, 'app-engineering');
   assert.equal(afterReload.events[0].event_type, 'agent_state_changed');
   assert.ok(

@@ -2992,6 +2992,9 @@ function projectCollectorEvidenceCoverage(report, filters = {}) {
 
   return {
     collected_at: report.collected_at || null,
+    collector_snapshot_id: createCollectorCorrelationId(
+      normalizeCollectorTimestamp(report.collected_at) || report.collected_at || 'unknown'
+    ),
     actor_id: report.actor_id || null,
     evidence_ref_count: aggregate.evidence_ref_count,
     covered_agent_count: aggregate.covered_agent_count,

@@ -7940,6 +7940,7 @@ describe('DetailsPanel accountability signals', () => {
         reboot_recommended_count: 1
       },
       evidence_coverage: {
+        collector_snapshot_id: 'collector-snapshot:2026-03-16T08:59:00.000Z',
         evidence_ref_count: 2,
         covered_agent_count: 1,
         low_confidence_agent_ids: ['growth-revenue'],

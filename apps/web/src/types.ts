@@ -234,6 +234,7 @@ export interface CollectorEvidenceCoverageAgentItem {
 
 export interface CollectorEvidenceCoverage {
   collected_at?: string | null;
+  collector_snapshot_id?: string | null;
   actor_id?: string | null;
   evidence_ref_count: number;
   covered_agent_count: number;

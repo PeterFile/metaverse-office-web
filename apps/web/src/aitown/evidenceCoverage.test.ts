@@ -17,6 +17,7 @@ type CoverageWithRefs = CollectorEvidenceCoverage & {
 function buildCoverage(): CoverageWithRefs {
   return {
     collected_at: '2026-03-09T18:05:00.000Z',
+    collector_snapshot_id: 'collector-snapshot:2026-03-09T18:05:00.000Z',
     actor_id: 'team-lead',
     evidence_ref_count: 4,
     covered_agent_count: 2,

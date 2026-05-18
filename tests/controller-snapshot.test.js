@@ -1249,6 +1249,7 @@ test('store replays the latest collector snapshot without duplicating counts', a
   assert.deepEqual(reloadedStore.getLatestCollectorReport(), latestWrittenReport);
   assert.deepEqual(reloadedStore.getLatestCollectorEvidenceCoverage(), {
     collected_at: '2026-03-09T18:12:00.000Z',
+    collector_snapshot_id: 'collector-snapshot:2026-03-09T18:12:00.000Z',
     actor_id: 'team-lead',
     evidence_ref_count: 2,
     covered_agent_count: 1,

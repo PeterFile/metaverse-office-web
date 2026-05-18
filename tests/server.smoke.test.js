@@ -4842,6 +4842,7 @@ test('GET /collectors/controller-snapshot/evidence-coverage projects latest cove
   assert.equal(coverage.response.status, 200);
   assert.deepEqual(coverage.body.item, {
     collected_at: '2026-03-09T18:05:00.000Z',
+    collector_snapshot_id: 'collector-snapshot:2026-03-09T18:05:00.000Z',
     actor_id: 'team-lead',
     ...collected.body.item.evidence_coverage
   });
@@ -4883,6 +4884,7 @@ test('GET /collectors/controller-snapshot/evidence-coverage projects latest cove
   );
   assert.deepEqual(unknownAgent.body.item, {
     collected_at: '2026-03-09T18:05:00.000Z',
+    collector_snapshot_id: 'collector-snapshot:2026-03-09T18:05:00.000Z',
     actor_id: 'team-lead',
     evidence_ref_count: 0,
     covered_agent_count: 0,

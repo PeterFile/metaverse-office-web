@@ -300,4 +300,5 @@ This keeps employee writes self-scoped and reserves cross-agent task dispatch pl
 - workflow counterparties, correlation participants, and incident agent ids remain read-only but are directly selectable so operators can pivot into another agent workflow from the current evidence surface
 - the shell polls every 15 seconds and must surface explicit loading, empty, and error states instead of inventing motion or liveness
 - HUD evidence coverage focus uses the collector evidence coverage read model and shows low-confidence or uncovered employee coverage without raw evidence refs or path metadata
+- the selected-agent Evidence Ledger starts with a compact Proof Compass/basis summary derived only from already loaded evidence records; it redacts local path-like evidence refs in the summary, preserves the detailed ledger behind explicit inspection, and does not add write/control-plane requests
 - once overview, workflow, incident, or correlation data has loaded successfully, later refresh failures keep the last-good surface visible with an explicit degraded-refresh notice

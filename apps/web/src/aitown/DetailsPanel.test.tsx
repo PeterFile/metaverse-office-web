@@ -778,6 +778,26 @@ function buildSelectedAgentEvidenceLedger(
       overflowCount: 0,
       items: [
         {
+          evidenceId: 'degraded-1',
+          observedAt: '2026-03-16T08:56:30.000Z',
+          collectedAt: '2026-03-16T08:59:00.000Z',
+          agentId: 'app-engineering',
+          sourceKind: 'workspace_file',
+          evidenceRef: '/tmp/app/missing.md',
+          evidenceRole: 'workspace_file',
+          sourceStatus: 'missing',
+          outputCandidate: false,
+          collectorSnapshotId: 'collector-20260316',
+          correlationId: 'collector-20260316',
+          degradedReasons: ['workspace file not observed']
+        }
+      ]
+    },
+    unmappedEvidence: {
+      totalCount: 1,
+      overflowCount: 0,
+      items: [
+        {
           evidenceId: 'unmapped-1',
           observedAt: '2026-03-16T08:56:00.000Z',
           collectedAt: '2026-03-16T08:59:00.000Z',
@@ -793,6 +813,36 @@ function buildSelectedAgentEvidenceLedger(
         }
       ]
     },
+    sourceRefGroups: [
+      {
+        sourceKind: 'workspace_file',
+        evidenceRef: '/tmp/app/outbox.md',
+        evidenceRole: 'agent_output',
+        sourceStatus: 'observed',
+        totalCount: 1
+      },
+      {
+        sourceKind: 'workspace_root',
+        evidenceRef: '/tmp/app',
+        evidenceRole: 'workspace_presence',
+        sourceStatus: 'observed',
+        totalCount: 1
+      },
+      {
+        sourceKind: 'workspace_file',
+        evidenceRef: '/tmp/app/missing.md',
+        evidenceRole: 'workspace_file',
+        sourceStatus: 'missing',
+        totalCount: 1
+      },
+      {
+        sourceKind: 'tmux_observation',
+        evidenceRef: 'tmux://unmapped/0.1',
+        evidenceRole: 'runtime_unmapped',
+        sourceStatus: 'observed',
+        totalCount: 1
+      }
+    ],
     ...overrides
   };
 }
@@ -1582,14 +1632,18 @@ describe('DetailsPanel selected-agent workflow lifecycle', () => {
     const section = screen.getByRole('heading', { name: 'Evidence Ledger' }).closest('section');
     expect(section).not.toBeNull();
     expect(within(section!).getByText('Scope · Selected-agent evidence records')).toBeVisible();
+    expect(within(section!).getByText('Proof Compass')).toBeVisible();
+    expect(within(section!).getByText('Buckets · Output 1 · Non-output 1 · Degraded 1 · Unmapped 1')).toBeVisible();
     expect(within(section!).getByText('Output evidence · 1')).toBeVisible();
     expect(within(section!).getByText('Non-output evidence · 1')).toBeVisible();
-    expect(within(section!).getByText('Degraded / unmapped · 1')).toBeVisible();
-    expect(within(section!).getByText('Ref · /tmp/app/outbox.md')).toBeVisible();
+    expect(within(section!).getByText('Degraded evidence · 1')).toBeVisible();
+    expect(within(section!).getByText('Unmapped evidence · 1')).toBeVisible();
+    expect(within(section!).getAllByText('Ref · [local path] outbox.md')[0]).toBeVisible();
     expect(within(section!).getByText('Role · agent_output')).toBeVisible();
-    expect(within(section!).getByText('Ref · /tmp/app')).toBeVisible();
+    expect(within(section!).getByText('Ref · [local path] app')).toBeVisible();
     expect(within(section!).getByText('Ref · tmux://unmapped/0.1')).toBeVisible();
     expect(within(section!).getByText('Degraded · no seeded roster mapping')).toBeVisible();
+    expect(section!).not.toHaveTextContent('/tmp/app/outbox.md');
     expect(section!).not.toHaveTextContent('metadata');
     expect(section!).not.toHaveTextContent('idle');
     expect(section!).not.toHaveTextContent('offline');
@@ -1641,7 +1695,7 @@ describe('DetailsPanel selected-agent workflow lifecycle', () => {
       within(section!).getByText(/Snapshot · collector-snapshot-20260316-with-a-very-long-\[redacted\]/)
     ).toBeVisible();
     const collectedProvenance = within(section!).getAllByText('Collected · 2026-03-16T08:59:00.000Z');
-    expect(collectedProvenance).toHaveLength(3);
+    expect(collectedProvenance).toHaveLength(4);
     expect(collectedProvenance[0]).toBeVisible();
     expect(within(section!).getByText('Observed · No observed timestamp')).toBeVisible();
     expect(section!).not.toHaveTextContent('token-secret');
@@ -1707,7 +1761,8 @@ describe('DetailsPanel selected-agent workflow lifecycle', () => {
     expect(within(section!).getByText('Snapshot · collector-20260316')).toBeVisible();
     expect(within(section!).getByText('Correlation · corr-app-review')).toBeVisible();
     expect(within(section!).getByText('Degraded · collector lag')).toBeVisible();
-    expect(within(section!).getByText('Ref · /tmp/app/outbox.md')).toBeVisible();
+    expect(within(section!).getByText('Ref · [local path] outbox.md')).toBeVisible();
+    expect(section!).not.toHaveTextContent('/tmp/app/outbox.md');
     expect(section!).not.toHaveTextContent('metadata');
     expect(section!).not.toHaveTextContent('raw_tmux_capture');
     expect(section!).not.toHaveTextContent('secret_token');

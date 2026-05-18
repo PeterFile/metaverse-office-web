@@ -314,6 +314,44 @@ describe('read-only frontend/backend contract smoke', () => {
     });
   });
 
+  it('fetches an evidence-record detail by evidence_id from the real backend', async () => {
+    harness = await createHarness(() => '2026-03-09T19:00:00.000Z');
+    await seedContractSlice(harness.store);
+
+    const nativeFetch = globalThis.fetch.bind(globalThis);
+    const requests: RequestContract[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+        requests.push(getRequestContract(input, harness!.baseUrl, init));
+        return nativeFetch(input, init);
+      })
+    );
+
+    const api = await loadApi(harness.baseUrl);
+    const records = await api.fetchEvidenceRecords({ limit: 1 });
+    const detail = await api.fetchEvidenceRecord(records[0].evidence_id);
+
+    expect(requests).toEqual([
+      {
+        method: 'GET',
+        origin: harness.baseUrl,
+        pathname: '/evidence-records',
+        query: [
+          ['limit', '1'],
+          ['newest_first', 'true']
+        ]
+      },
+      {
+        method: 'GET',
+        origin: harness.baseUrl,
+        pathname: `/evidence-records/${encodeURIComponent(records[0].evidence_id)}`,
+        query: []
+      }
+    ]);
+    expect(detail).toEqual(records[0]);
+  });
+
   it('passes timeline correlation_id replay filters through to the real backend and preserves seeded replay semantics', async () => {
     harness = await createHarness(() => '2026-03-09T19:00:00.000Z');
     await seedContractSlice(harness.store);

@@ -240,6 +240,20 @@ export async function fetchEvidenceRecords(
   return body.items;
 }
 
+export async function fetchEvidenceRecord(
+  evidenceId: string,
+  options: { signal?: AbortSignal } = {}
+): Promise<EvidenceRecord | null> {
+  const response = await fetch(
+    resolveApiUrl(`/evidence-records/${encodeURIComponent(evidenceId)}`),
+    {
+      signal: options.signal
+    }
+  );
+  const body = await parseJson<{ item: EvidenceRecord | null }>(response);
+  return body.item;
+}
+
 export async function fetchOfficeOperations(
   options: {
     limit?: number;

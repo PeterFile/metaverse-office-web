@@ -133,6 +133,9 @@ type HudReadModelStatus = {
 
 type SelectedAgentTimelineReplayPayload = {
   targetAgentId: string;
+  correlationId: string | null;
+  severity: Severity | null;
+  eventId: string | null;
   timelineReplay: TimelineReplayResponse;
 };
 
@@ -1052,6 +1055,7 @@ function AppInner() {
   const sharedMemoryJumpRequestIdRef = useRef(0);
   const agentFocusRequestIdRef = useRef(0);
   const evidenceRecordDetailRequestIdRef = useRef(0);
+  const evidenceRecordDetailAbortControllerRef = useRef<AbortController | null>(null);
   const zoneFocusRequestIdRef = useRef(0);
   const sourceGapFocusRequestIdRef = useRef(0);
   const wasHubOpenRef = useRef(false);
@@ -1615,6 +1619,9 @@ function AppInner() {
       !selectedAgentTimelineReplayDefaultCorrelationPending,
     load: async (signal) => ({
       targetAgentId: selectedAgentId!,
+      correlationId: selectedAgentScopedCorrelationId,
+      severity: activeSelectedAgentReplaySeverity,
+      eventId: selectedAgentReplayCheckpointEventId,
       timelineReplay: await fetchTimeline({
         limit: DEFAULT_WORKFLOW_LIMIT,
         window: DEFAULT_WORKFLOW_WINDOW,
@@ -1632,15 +1639,18 @@ function AppInner() {
     selectedAgentTimelineReplayResourceKey !== null &&
     previousSelectedAgentTimelineReplayResourceKeyRef.current !==
       selectedAgentTimelineReplayResourceKey;
-  const selectedAgentTimelineReplayPayloadMatchesAgent =
-    selectedAgentTimelineReplayResource.data?.targetAgentId === selectedAgentId;
+  const selectedAgentTimelineReplayPayloadMatches =
+    selectedAgentTimelineReplayResource.data?.targetAgentId === selectedAgentId &&
+    selectedAgentTimelineReplayResource.data?.correlationId === selectedAgentScopedCorrelationId &&
+    selectedAgentTimelineReplayResource.data?.severity === activeSelectedAgentReplaySeverity &&
+    selectedAgentTimelineReplayResource.data?.eventId === selectedAgentReplayCheckpointEventId;
   const selectedAgentTimelineReplaySurfaceIsStale =
     selectedAgentTimelineReplaySelectionChanged ||
     (selectedAgentTimelineReplayResource.data !== null &&
-      !selectedAgentTimelineReplayPayloadMatchesAgent);
+      !selectedAgentTimelineReplayPayloadMatches);
   const selectedAgentTimelineReplay =
     !selectedAgentTimelineReplaySurfaceIsStale &&
-    selectedAgentTimelineReplayPayloadMatchesAgent &&
+    selectedAgentTimelineReplayPayloadMatches &&
     selectedAgentTimelineReplayResource.data !== null
       ? selectedAgentTimelineReplayResource.data.timelineReplay
       : null;
@@ -1823,6 +1833,8 @@ function AppInner() {
 
   useEffect(() => {
     evidenceRecordDetailRequestIdRef.current += 1;
+    evidenceRecordDetailAbortControllerRef.current?.abort();
+    evidenceRecordDetailAbortControllerRef.current = null;
     setSelectedAgentEvidenceRecord(null);
     setSelectedAgentEvidenceRecordId(null);
     setSelectedAgentEvidenceRecordError(null);
@@ -1831,24 +1843,33 @@ function AppInner() {
 
   const handleInspectSelectedAgentEvidenceRecord = useCallback((evidenceId: string) => {
     const requestId = evidenceRecordDetailRequestIdRef.current + 1;
+    const controller = new AbortController();
     evidenceRecordDetailRequestIdRef.current = requestId;
+    evidenceRecordDetailAbortControllerRef.current?.abort();
+    evidenceRecordDetailAbortControllerRef.current = controller;
     setSelectedAgentEvidenceRecordId(evidenceId);
     setSelectedAgentEvidenceRecord(null);
     setSelectedAgentEvidenceRecordError(null);
     setSelectedAgentEvidenceRecordState('loading');
 
-    void fetchEvidenceRecord(evidenceId)
+    void fetchEvidenceRecord(evidenceId, { signal: controller.signal })
       .then((record) => {
         if (evidenceRecordDetailRequestIdRef.current !== requestId) {
           return;
         }
 
+        evidenceRecordDetailAbortControllerRef.current = null;
         setSelectedAgentEvidenceRecord(record);
         setSelectedAgentEvidenceRecordError(null);
         setSelectedAgentEvidenceRecordState('ready');
       })
       .catch((error: unknown) => {
         if (evidenceRecordDetailRequestIdRef.current !== requestId) {
+          return;
+        }
+
+        evidenceRecordDetailAbortControllerRef.current = null;
+        if (error instanceof Error && error.name === 'AbortError') {
           return;
         }
 

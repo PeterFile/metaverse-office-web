@@ -1754,6 +1754,31 @@ describe('DetailsPanel selected-agent workflow lifecycle', () => {
     expect(section!).not.toHaveTextContent('output confirmed');
   });
 
+  it('renders an empty selected-agent evidence detail response without implying stale output', () => {
+    render(
+      <DetailsPanel
+        {...buildProps({
+          activeHubCategory: 'evidence',
+          selectedAgentDrilldownTab: 'evidence',
+          selectedAgentEvidenceLedger: buildSelectedAgentEvidenceLedger(),
+          selectedAgentEvidenceLedgerState: 'ready',
+          selectedAgentEvidenceRecord: null,
+          selectedAgentEvidenceRecordError: null,
+          selectedAgentEvidenceRecordId: 'missing-1',
+          selectedAgentEvidenceRecordState: 'ready'
+        })}
+      />
+    );
+
+    const section = screen.getByRole('heading', { name: 'Evidence Record Detail' }).closest('section');
+    expect(section).not.toBeNull();
+    expect(within(section!).getByText('No evidence record found for missing-1.')).toBeVisible();
+    expect(section!).not.toHaveTextContent('Evidence id · output-1');
+    expect(section!).not.toHaveTextContent('live');
+    expect(section!).not.toHaveTextContent('offline');
+    expect(section!).not.toHaveTextContent('productivity');
+  });
+
   it('labels scoped selected-agent evidence ledger requests and stale last-good data honestly', () => {
     render(
       <DetailsPanel

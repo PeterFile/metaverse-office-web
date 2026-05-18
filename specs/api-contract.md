@@ -1,6 +1,6 @@
 # Current API Contract
 
-Updated: 2026-05-15T10:14:43+08:00
+Updated: 2026-05-19T04:28:35+08:00
 
 This is the current API/read-model contract for Metaverse Office Web. It grew out of the Phase 1 contract, but it is no longer a Phase 1 draft. Update this file in the same PR as any route, response shape, filter, event schema, source-kind, storage, or request-surface change. Current product direction lives in `docs/current-direction.md`.
 
@@ -322,6 +322,7 @@ This is the current API/read-model contract for Metaverse Office Web. It grew ou
 ## React operator shell consumption notes
 - the current operator surface consumes `GET /office/overview`, `GET /office/operations`, `GET /agents/:id/workflow`, `GET /incidents`, `GET /timeline`, `GET /collectors/controller-snapshot`, `GET /collectors/controller-snapshot/evidence-coverage`, `GET /collectors/controller-snapshot/source-health`, `GET /evidence-records`, `GET /accountability/replay`, `GET /memory/artifacts`, `GET /peer-watch/alerts`, and `GET /correlations/:correlation_id`; this is the current shell, not a Phase 1-only baseline
 - the shell defaults to `GET /agents/:id/workflow?limit=10&window=60m` for the operator drawer slice, `GET /incidents?limit=10&window=60m` for the global incident feed, `GET /timeline?limit=10&window=60m` for replay pivots, `GET /collectors/controller-snapshot` plus collector source helper reads for source evidence, `GET /evidence-records?agent_id=<selected>&newest_first=true&limit=12` for the selected-agent Evidence ledger, `GET /memory/artifacts?limit=4&window=60m` for memory pivots, `GET /accountability/replay?limit=10&window=60m` for replay bundles, `GET /peer-watch/alerts?limit=10` for peer-watch evidence, and `GET /correlations/:correlation_id?limit=10&window=60m` when an operator opens a correlation drill-down
+- the selected-agent Evidence ledger may summarize already loaded evidence rows as a compact Proof Compass/basis before the detailed rows; that summary must not issue another request, expose raw local path-like evidence refs, or promote missing/degraded source presence into agent output
 - requests stay same-origin by default; the React shell may optionally prefix them with `VITE_API_BASE_URL` when the backend explicitly allows that frontend origin via `CORS_ALLOWED_ORIGINS`, and local Vite development may still proxy consumed read-route prefixes to the backend via an env-configurable target
 - the shell may poll these read-only routes on a ~15s cadence; no websocket or SSE contract is introduced by this slice
 - the UI must surface explicit loading, empty, and error states rather than infer activity that is not present in the API

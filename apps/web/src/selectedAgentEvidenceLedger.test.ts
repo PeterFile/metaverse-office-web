@@ -28,7 +28,9 @@ describe('buildSelectedAgentEvidenceLedger', () => {
       requestScopeLabel: 'Selected-agent evidence records',
       outputEvidence: { totalCount: 0, overflowCount: 0, items: [] },
       nonOutputEvidence: { totalCount: 0, overflowCount: 0, items: [] },
-      degradedEvidence: { totalCount: 0, overflowCount: 0, items: [] }
+      degradedEvidence: { totalCount: 0, overflowCount: 0, items: [] },
+      unmappedEvidence: { totalCount: 0, overflowCount: 0, items: [] },
+      sourceRefGroups: []
     });
   });
 
@@ -134,7 +136,42 @@ describe('buildSelectedAgentEvidenceLedger', () => {
             degradedReasons: ['missing workspace files: inbox.md']
           })
         ]
-      }
+      },
+      unmappedEvidence: {
+        totalCount: 0,
+        overflowCount: 0,
+        items: []
+      },
+      sourceRefGroups: [
+        {
+          sourceKind: 'workspace_file',
+          evidenceRef: '/tmp/app/missing.md',
+          evidenceRole: 'workspace_file',
+          sourceStatus: 'missing',
+          totalCount: 1
+        },
+        {
+          sourceKind: 'workspace_file',
+          evidenceRef: '/tmp/app/outbox.md',
+          evidenceRole: 'agent_output',
+          sourceStatus: 'degraded',
+          totalCount: 1
+        },
+        {
+          sourceKind: 'workspace_file',
+          evidenceRef: '/tmp/app/result.md',
+          evidenceRole: 'agent_output',
+          sourceStatus: 'observed',
+          totalCount: 1
+        },
+        {
+          sourceKind: 'workspace_root',
+          evidenceRef: '/tmp/app',
+          evidenceRole: 'workspace_presence',
+          sourceStatus: 'observed',
+          totalCount: 1
+        }
+      ]
     });
 
     expect(model.outputEvidence.items[0]).not.toBe(model.degradedEvidence.items[1]);
@@ -182,6 +219,7 @@ describe('buildSelectedAgentEvidenceLedger', () => {
         }
       ]
     });
+    expect(model.unmappedEvidence.items).toEqual([]);
     expect(model.outputEvidence.items[0]).not.toBe(model.degradedEvidence.items[0]);
   });
 
@@ -206,6 +244,7 @@ describe('buildSelectedAgentEvidenceLedger', () => {
     expect(model.outputEvidence.totalCount).toBe(3);
     expect(model.outputEvidence.overflowCount).toBe(1);
     expect(model.outputEvidence.items.map((item) => item.evidenceId)).toEqual(['c', 'b']);
+    expect(model.sourceRefGroups).toHaveLength(3);
     expect(model.outputEvidence.items[0]).not.toHaveProperty('metadata');
   });
 
@@ -255,7 +294,8 @@ describe('buildSelectedAgentEvidenceLedger', () => {
 
     expect(model.outputEvidence.items).toEqual([]);
     expect(model.nonOutputEvidence.items).toEqual([]);
-    expect(model.degradedEvidence.items).toEqual([
+    expect(model.degradedEvidence.items).toEqual([]);
+    expect(model.unmappedEvidence.items).toEqual([
       expect.objectContaining({
         evidenceId: 'unmapped',
         agentId: null,
@@ -265,5 +305,35 @@ describe('buildSelectedAgentEvidenceLedger', () => {
         outputCandidate: false
       })
     ]);
+  });
+
+  it('bounds top source/ref groups by count then recency without carrying metadata', () => {
+    const model = buildSelectedAgentEvidenceLedger(
+      [
+        evidenceRecord({ evidence_id: 'a', evidence_ref: '/tmp/a.md' }),
+        evidenceRecord({
+          evidence_id: 'b',
+          observed_at: '2026-03-09T18:06:00.000Z',
+          evidence_ref: '/tmp/b.md'
+        }),
+        evidenceRecord({
+          evidence_id: 'c',
+          observed_at: '2026-03-09T18:07:00.000Z',
+          evidence_ref: '/tmp/b.md'
+        })
+      ],
+      { maxSourceRefGroups: 1 }
+    );
+
+    expect(model.sourceRefGroups).toEqual([
+      {
+        sourceKind: 'workspace_file',
+        evidenceRef: '/tmp/b.md',
+        evidenceRole: 'agent_output',
+        sourceStatus: 'observed',
+        totalCount: 2
+      }
+    ]);
+    expect(model.sourceRefGroups[0]).not.toHaveProperty('metadata');
   });
 });

@@ -1242,6 +1242,9 @@ function renderSelectedAgentEvidenceRecordDetail(
         {error && !record ? (
           <li className="aitown-record">{`Unable to load evidence record ${evidenceId}. ${error}`}</li>
         ) : null}
+        {state === 'ready' && !error && !record ? (
+          <li className="aitown-record">{`No evidence record found for ${evidenceId}.`}</li>
+        ) : null}
         {record ? (
           <li className="aitown-record">
             <strong>{`Evidence id · ${formatBoundedEvidenceLedgerToken(record.evidence_id)}`}</strong>

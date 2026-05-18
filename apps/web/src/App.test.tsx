@@ -202,6 +202,7 @@ const collectorSourceHealthUrl = '/collectors/controller-snapshot/source-health?
 const appEngineeringEvidenceRecordsUrl =
   '/evidence-records?agent_id=app-engineering&newest_first=true&limit=12';
 const appEngineeringEvidenceRecordDetailUrl = '/evidence-records/output-1';
+const missingEvidenceRecordDetailUrl = '/evidence-records/missing-1';
 
 const overviewFixture = {
   generated_at: '2026-03-16T09:00:00.000Z',
@@ -3411,6 +3412,88 @@ afterEach(() => {
     expect(detailSection).not.toHaveTextContent('raw_tmux_capture');
   });
 
+  it('clears stale selected-agent evidence detail when the next detail response is empty', async () => {
+    const user = userEvent.setup();
+    const missingEvidenceRecordsFixture = {
+      items: [
+        evidenceRecordsFixture.items[0],
+        {
+          ...evidenceRecordsFixture.items[1],
+          evidence_id: 'missing-1',
+          evidence_ref: '/tmp/app/missing.md',
+          evidence_role: 'agent_output',
+          output_candidate: true
+        }
+      ]
+    };
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === appEngineeringEvidenceRecordsUrl) {
+          return jsonResponse(missingEvidenceRecordsFixture);
+        }
+
+        if (url === missingEvidenceRecordDetailUrl) {
+          return jsonResponse({ item: null });
+        }
+
+        return resolveTestFetchResponse(url);
+      })
+    );
+
+    render(<App />);
+
+    const roster = await screen.findByRole('navigation', { name: 'Agent roster' });
+    await user.click(
+      within(roster).getByRole('button', {
+        name: 'Select and locate App Engineering Agent'
+      })
+    );
+
+    const inspectPeek = await screen.findByRole('region', { name: 'Selected agent inspect peek' });
+    await user.click(
+      within(inspectPeek).getByRole('button', {
+        name: 'Open App Engineering Agent Evidence Ledger'
+      })
+    );
+
+    const details = await screen.findByRole('complementary', { name: 'Agent details' });
+    await findHubSection(details, 'Evidence Ledger');
+
+    await user.click(
+      within(details).getByRole('button', {
+        name: 'Inspect evidence record output-1'
+      })
+    );
+
+    let detailSection = await findHubSection(details, 'Evidence Record Detail');
+    await waitFor(() => {
+      expect(detailSection).toHaveTextContent('Evidence id · output-1');
+    });
+
+    await user.click(
+      within(details).getByRole('button', {
+        name: 'Inspect evidence record missing-1'
+      })
+    );
+
+    detailSection = await findHubSection(details, 'Evidence Record Detail');
+    await waitFor(() => {
+      expect(detailSection).toHaveTextContent('No evidence record found for missing-1.');
+      expect(detailSection).not.toHaveTextContent('Evidence id · output-1');
+      expect(detailSection).not.toHaveTextContent('productivity');
+    });
+
+    const detailRequests = vi
+      .mocked(globalThis.fetch)
+      .mock.calls.map(([request]) => String(request))
+      .filter((url) => url.startsWith('/evidence-records/'));
+    expect(detailRequests).toEqual([appEngineeringEvidenceRecordDetailUrl, missingEvidenceRecordDetailUrl]);
+  });
+
   it('surfaces source-gap chips as provenance health and opens Supervision from a chip', async () => {
     const user = userEvent.setup();
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
@@ -6295,6 +6378,132 @@ afterEach(() => {
     expect(
       vi.mocked(globalThis.fetch).mock.calls.every(([, init]) => !init || !('method' in init) || init.method === 'GET')
     ).toBe(true);
+  }, 10_000);
+
+  it('ignores superseded selected-agent timeline replay responses after correlation severity and event scope changes', async () => {
+    const replayCheckpointMemoryArtifacts = {
+      ...selectedCorrelationMemoryArtifactsFixture,
+      items: [
+        {
+          ...selectedCorrelationMemoryArtifactsFixture.items[0],
+          latest_event_id: 'evt-memory-replay-anchor',
+          latest_event_type: 'peer_watch_alert_raised',
+          replay_checkpoint: {
+            event_id: 'evt-memory-replay-anchor',
+            event_type: 'peer_watch_alert_raised',
+            summary: 'Workflow evidence checkpoint',
+            last_seen_at: '2026-03-16T08:58:00.000Z'
+          }
+        }
+      ]
+    };
+    const staleSecondaryOrangeFixture = {
+      items: [
+        {
+          ...secondaryCorrelationFixture.timeline[0],
+          event_id: 'evt-stale-secondary-orange-replay',
+          severity: 'orange',
+          summary: 'Stale secondary orange replay should not render'
+        }
+      ]
+    };
+    const exactReplayFixture = {
+      items: [
+        {
+          ...correlationFixture.timeline[0],
+          event_id: 'evt-memory-replay-anchor',
+          summary: 'Fresh checkpoint replay stayed selected'
+        }
+      ]
+    };
+    let resolveStaleSecondaryOrangeReplay: ((response: Response) => void) | null = null;
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === selectedCorrelationMemoryArtifactsUrl) {
+          return jsonResponse(replayCheckpointMemoryArtifacts);
+        }
+
+        if (url === orangeAppEngineeringSecondarySelectedTimelineUrl) {
+          return new Promise<Response>((resolve) => {
+            resolveStaleSecondaryOrangeReplay = resolve;
+          });
+        }
+
+        if (url === appEngineeringReviewSelectedTimelineCheckpointUrl) {
+          return jsonResponse(exactReplayFixture);
+        }
+
+        return resolveTestFetchResponse(url);
+      })
+    );
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    const details = await openHub(user, 'Crew');
+    await user.click(within(details).getByRole('button', { name: 'Inspect App Engineering Agent' }));
+
+    let incidentSection = (await within(details).findByRole('heading', { name: 'Incident Feed' })).closest('section');
+    expect(incidentSection).not.toBeNull();
+    await user.click(
+      within(incidentSection!).getByRole('button', { name: 'Open incident correlation corr-app-secondary' })
+    );
+
+    let replaySection = (await within(details).findByRole('heading', { name: 'Timeline Replay' })).closest('section');
+    expect(replaySection).not.toBeNull();
+    await waitFor(() => {
+      expect(within(replaySection!).getByText('Scoped replay · corr-app-secondary')).toBeVisible();
+      expect(within(replaySection!).getByText('App engineering finished the secondary review handoff')).toBeVisible();
+    });
+
+    await user.selectOptions(
+      within(replaySection!).getByRole('combobox', {
+        name: 'Filter timeline replay by severity'
+      }),
+      'orange'
+    );
+
+    await waitFor(() => {
+      expect(resolveStaleSecondaryOrangeReplay).not.toBeNull();
+    });
+
+    incidentSection = (await within(details).findByRole('heading', { name: 'Incident Feed' })).closest('section');
+    expect(incidentSection).not.toBeNull();
+    await user.click(within(incidentSection!).getByRole('button', { name: 'Open incident correlation corr-app-review' }));
+    await selectSelectedAgentDrilldownTab(user, 'Evidence');
+
+    const memorySection = within(details).getByRole('heading', { name: 'Shared Memory' }).closest('section');
+    expect(memorySection).not.toBeNull();
+    await waitFor(() => {
+      expect(within(memorySection!).getByText('Ref · /tmp/evidence.md')).toBeVisible();
+    });
+
+    await user.click(
+      within(memorySection!).getByRole('button', {
+        name: 'Open replay checkpoint evt-memory-replay-anchor'
+      })
+    );
+
+    const replayPanel = await selectSelectedAgentDrilldownTab(user, 'Replay / Correlation');
+    replaySection = within(replayPanel).getByRole('heading', { name: 'Timeline Replay' }).closest('section');
+    expect(replaySection).not.toBeNull();
+    await waitFor(() => {
+      expect(within(replaySection!).getByText('Request scope · Target agent · app-engineering · corr-app-review')).toBeVisible();
+      expect(within(replaySection!).getByText('Replay checkpoint focus · evt-memory-replay-anchor')).toBeVisible();
+      expect(within(replaySection!).getByText('Fresh checkpoint replay stayed selected')).toBeVisible();
+    });
+
+    resolveStaleSecondaryOrangeReplay!(jsonResponse(staleSecondaryOrangeFixture));
+
+    await waitFor(() => {
+      expect(within(replaySection!).getByText('Fresh checkpoint replay stayed selected')).toBeVisible();
+      expect(within(replaySection!).queryByText('Stale secondary orange replay should not render')).not.toBeInTheDocument();
+      expect(within(replaySection!).getByText('Replay checkpoint focus · evt-memory-replay-anchor')).toBeVisible();
+    });
   }, 10_000);
 
   it('refetches selected-agent scoped correlation replay with the selected severity filter', async () => {

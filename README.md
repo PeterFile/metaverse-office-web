@@ -28,6 +28,7 @@ The next product milestone is `Live Evidence Spine`: connect the current read mo
 ## Key documents
 - `docs/current-direction.md` — current vision, implementation facts, next milestone, and documentation discipline
 - `specs/api-contract.md` — current API/read-model contract; update when routes or semantics change
+- `docs/runbooks/hermes-runtime-source-onboarding.md` — sanitized Hermes runtime source onboarding contract and validation runbook
 - `README.md` — setup, API index, and current implementation snapshot
 - `docs/adr/0002-react-operator-shell.md` and `docs/adr/0003-hub-openhub-hud-visual-acceptance.md` — active UI architecture decisions
 - `specs/phase1-spec.md`, `docs/plans/phase1-*.md`, and `docs/adr/0001-phase1-stack.md` — historical Phase 1 archive, not the current roadmap

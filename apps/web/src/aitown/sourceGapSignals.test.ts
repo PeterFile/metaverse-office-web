@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  deriveRuntimeSourceGapLifecycle,
   deriveSelectedAgentSourceGapFact,
   deriveRuntimeSourceGapChips,
   deriveSourceGapChips,
@@ -408,6 +409,162 @@ describe('deriveRuntimeSourceGapChips', () => {
     expect(JSON.stringify(chips)).not.toContain('/tmp/app-engineering');
     expect(JSON.stringify(chips)).not.toContain('tmux://');
     expect(JSON.stringify(chips)).not.toContain('collector-snapshot:');
+  });
+});
+
+describe('deriveRuntimeSourceGapLifecycle', () => {
+  const baseGap: RuntimeSourceGap = {
+    observed_at: '2026-03-16T08:59:30.000Z',
+    collected_at: '2026-03-16T09:01:00.000Z',
+    agent_id: 'app-engineering',
+    source_kind: 'workspace_file',
+    evidence_role: 'agent_output',
+    source_status: 'degraded',
+    output_candidate: true,
+    collector_snapshot_id: 'collector-snapshot:current',
+    correlation_id: 'source-gap:workspace-output',
+    degraded_reasons: ['raw path /tmp/app-engineering/outbox.md must not render'],
+    unmapped: false
+  };
+
+  it('classifies mapped missing, degraded, and error rows as current gaps', () => {
+    const lifecycle = deriveRuntimeSourceGapLifecycle([
+      { ...baseGap, source_status: 'missing', source_kind: 'workspace_root', evidence_role: 'workspace_root' },
+      { ...baseGap, source_status: 'degraded', source_kind: 'workspace_file', evidence_role: 'agent_output' },
+      { ...baseGap, source_status: 'error', source_kind: 'hermes_session', evidence_role: 'hermes_session' }
+    ]);
+
+    expect(lifecycle.map((item) => [item.sourceKind, item.status, item.state])).toEqual([
+      ['hermes_session', 'error', 'current_gap'],
+      ['workspace_root', 'missing', 'current_gap'],
+      ['workspace_files', 'degraded', 'current_gap']
+    ]);
+  });
+
+  it('classifies unmapped observed runtime evidence separately from current gaps', () => {
+    const lifecycle = deriveRuntimeSourceGapLifecycle([
+      {
+        ...baseGap,
+        agent_id: null,
+        source_kind: 'tmux_observation',
+        evidence_role: 'runtime_unmapped',
+        source_status: 'observed',
+        output_candidate: false,
+        unmapped: true
+      }
+    ]);
+
+    expect(lifecycle).toEqual([
+      {
+        key: 'agent:unmapped|source:tmux_session|role:runtime_unmapped|status:observed',
+        agentId: null,
+        sourceKind: 'tmux_session',
+        evidenceRole: 'runtime_unmapped',
+        status: 'observed',
+        state: 'unmapped_observed',
+        count: 1,
+        firstObservedAt: '2026-03-16T08:59:30.000Z',
+        lastObservedAt: '2026-03-16T08:59:30.000Z'
+      }
+    ]);
+  });
+
+  it('distinguishes new, ongoing, and recurring groups without raw path, snapshot, or payload leakage', () => {
+    const lifecycle = deriveRuntimeSourceGapLifecycle(
+      [
+        { ...baseGap, source_kind: 'workspace_root', evidence_role: 'workspace_root', correlation_id: 'source-gap:new' },
+        {
+          ...baseGap,
+          source_kind: 'workspace_file',
+          evidence_role: 'agent_output',
+          correlation_id: 'collector-snapshot:2026-03-16T09:01:00.000Z',
+          collector_snapshot_id: 'collector-snapshot:2026-03-16T09:01:00.000Z'
+        },
+        {
+          ...baseGap,
+          source_kind: 'tmux_observation',
+          evidence_role: 'tmux_session',
+          correlation_id: 'collector-snapshot:2026-03-16T09:02:00.000Z',
+          collector_snapshot_id: 'collector-snapshot:2026-03-16T09:02:00.000Z',
+          observed_at: '2026-03-16T09:02:00.000Z'
+        },
+        {
+          ...baseGap,
+          source_kind: 'tmux_observation',
+          evidence_role: 'tmux_session',
+          correlation_id: 'collector-snapshot:2026-03-16T09:03:00.000Z',
+          collector_snapshot_id: 'collector-snapshot:2026-03-16T09:03:00.000Z',
+          observed_at: '2026-03-16T09:03:00.000Z'
+        }
+      ],
+      {
+        priorRows: [
+          {
+            ...baseGap,
+            source_kind: 'workspace_file',
+            evidence_role: 'agent_output',
+            correlation_id: 'collector-snapshot:2026-03-16T08:01:00.000Z',
+            collector_snapshot_id: 'collector-snapshot:2026-03-16T08:01:00.000Z'
+          },
+          {
+            ...baseGap,
+            source_kind: 'tmux_observation',
+            evidence_role: 'tmux_session',
+            correlation_id: 'collector-snapshot:2026-03-16T08:02:00.000Z',
+            collector_snapshot_id: 'collector-snapshot:2026-03-16T08:02:00.000Z'
+          }
+        ]
+      }
+    );
+
+    expect(lifecycle.map((item) => [item.key, item.state, item.count])).toEqual([
+      [
+        'agent:app-engineering|source:workspace_root|role:workspace_root|status:degraded',
+        'new',
+        1
+      ],
+      [
+        'agent:app-engineering|source:workspace_files|role:agent_output|status:degraded',
+        'ongoing',
+        1
+      ],
+      [
+        'agent:app-engineering|source:tmux_session|role:tmux_session|status:degraded',
+        'recurring',
+        2
+      ]
+    ]);
+    expect(JSON.stringify(lifecycle)).not.toContain('/tmp/app-engineering');
+    expect(JSON.stringify(lifecycle)).not.toContain('collector-snapshot:');
+    expect(JSON.stringify(lifecycle)).not.toContain('payload');
+  });
+
+  it('ignores unknown source kinds and keeps deterministic status/source ordering', () => {
+    const lifecycle = deriveRuntimeSourceGapLifecycle([
+      { ...baseGap, source_kind: 'unknown_runtime_source', source_status: 'error' },
+      { ...baseGap, source_kind: 'workspace_file', source_status: 'degraded', correlation_id: 'z' },
+      { ...baseGap, source_kind: 'workspace_root', source_status: 'missing', correlation_id: 'a' },
+      { ...baseGap, source_kind: 'tmux_observation', source_status: 'error', correlation_id: 'm' }
+    ]);
+
+    expect(lifecycle.map((item) => [item.sourceKind, item.status, item.key])).toEqual([
+      ['tmux_session', 'error', 'agent:app-engineering|source:tmux_session|role:agent_output|status:error'],
+      ['workspace_root', 'missing', 'agent:app-engineering|source:workspace_root|role:agent_output|status:missing'],
+      ['workspace_files', 'degraded', 'agent:app-engineering|source:workspace_files|role:agent_output|status:degraded']
+    ]);
+  });
+
+  it('does not claim recovered state from prior gaps without current recovery evidence', () => {
+    const lifecycle = deriveRuntimeSourceGapLifecycle([], { priorRows: [baseGap] });
+
+    expect(lifecycle).toEqual([]);
+    expect(JSON.stringify(lifecycle)).not.toContain('recovered');
+  });
+
+  it('does not expose liveness or productivity labels', () => {
+    const lifecycle = deriveRuntimeSourceGapLifecycle([baseGap]);
+
+    expect(JSON.stringify(lifecycle).toLowerCase()).not.toMatch(/liveness|productive|productivity/);
   });
 });
 

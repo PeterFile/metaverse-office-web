@@ -10,6 +10,7 @@ import type {
   AgentWorkflow,
   CollectorSnapshot,
   CorrelationDrilldown,
+  EvidenceProvenanceBundle,
   EvidenceRecord,
   EvidenceRecordsResponse,
   IncidentFeedResponse,
@@ -302,6 +303,20 @@ export async function fetchEvidenceRecord(
     }
   );
   const body = await parseJson<{ item: EvidenceRecord | null }>(response);
+  return body.item;
+}
+
+export async function fetchEvidenceProvenanceBundle(
+  evidenceId: string,
+  options: { signal?: AbortSignal } = {}
+): Promise<EvidenceProvenanceBundle | null> {
+  const response = await fetch(
+    resolveApiUrl(`/evidence-records/${encodeURIComponent(evidenceId)}/provenance-bundle`),
+    {
+      signal: options.signal
+    }
+  );
+  const body = await parseJson<{ item: EvidenceProvenanceBundle | null }>(response);
   return body.item;
 }
 

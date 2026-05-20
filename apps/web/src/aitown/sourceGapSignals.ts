@@ -18,7 +18,7 @@ type SourceGapAgent = {
   display_name: string;
 };
 
-type DisplayedSourceGapKind = Extract<
+export type DisplayedSourceGapKind = Extract<
   CollectorSourceHealthKind,
   'workspace_root' | 'workspace_files' | 'tmux_session' | 'hermes_profile' | 'hermes_session'
 >;
@@ -45,6 +45,29 @@ export type SelectedAgentSourceGapFact = {
   status: Exclude<CollectorSourceHealthStatus, 'observed'>;
   countLabel: string;
   reason: string | null;
+};
+
+export type RuntimeSourceGapLifecycleState =
+  | 'new'
+  | 'ongoing'
+  | 'recurring'
+  | 'current_gap'
+  | 'unmapped_observed';
+
+export type RuntimeSourceGapLifecycleItem = {
+  key: string;
+  agentId: string | null;
+  sourceKind: DisplayedSourceGapKind;
+  evidenceRole: string | null;
+  status: CollectorSourceHealthStatus;
+  state: RuntimeSourceGapLifecycleState;
+  count: number;
+  firstObservedAt: string | null;
+  lastObservedAt: string | null;
+};
+
+export type RuntimeSourceGapLifecycleOptions = {
+  priorRows?: RuntimeSourceGap[] | null;
 };
 
 const MAX_SOURCE_GAP_CHIPS = 3;
@@ -194,6 +217,58 @@ export function deriveRuntimeSourceGapChips(
     .slice(0, MAX_SOURCE_GAP_CHIPS);
 }
 
+export function deriveRuntimeSourceGapLifecycle(
+  runtimeSourceGaps: RuntimeSourceGap[] | null | undefined,
+  options: RuntimeSourceGapLifecycleOptions = {}
+): RuntimeSourceGapLifecycleItem[] {
+  if (!runtimeSourceGaps?.length) {
+    return [];
+  }
+
+  const priorCounts = countRuntimeSourceGapLifecycleKeys(options.priorRows);
+  const groups = new Map<string, RuntimeSourceGapLifecycleItem>();
+
+  for (const gap of runtimeSourceGaps) {
+    const sourceKind = RUNTIME_SOURCE_KIND_MAP[gap.source_kind];
+    if (!sourceKind) {
+      continue;
+    }
+
+    if (gap.source_status === 'observed' && !gap.unmapped) {
+      continue;
+    }
+
+    const key = buildRuntimeSourceGapLifecycleKey(gap, sourceKind);
+    const existing = groups.get(key);
+    if (existing) {
+      existing.count += 1;
+      existing.firstObservedAt = minNullableTimestamp(existing.firstObservedAt, gap.observed_at);
+      existing.lastObservedAt = maxNullableTimestamp(existing.lastObservedAt, gap.observed_at);
+      continue;
+    }
+
+    groups.set(key, {
+      key,
+      agentId: gap.agent_id,
+      sourceKind,
+      evidenceRole: gap.evidence_role,
+      status: gap.source_status,
+      state: 'current_gap',
+      count: 1,
+      firstObservedAt: gap.observed_at,
+      lastObservedAt: gap.observed_at
+    });
+  }
+
+  const hasPriorWindow = options.priorRows != null;
+  const lifecycle = Array.from(groups.values());
+  for (const item of lifecycle) {
+    item.state = resolveRuntimeSourceGapLifecycleState(item, priorCounts.get(item.key) ?? 0, hasPriorWindow);
+  }
+
+  return lifecycle.sort(compareRuntimeSourceGapLifecycleItems);
+}
+
 export function deriveSelectedAgentSourceGapFact(
   sourceHealth: CollectorSourceHealthProjection | null | undefined,
   selectedAgentId: string | null | undefined
@@ -256,6 +331,91 @@ function resolveSourceGapDrilldownGroupKey(
   }
 
   return 'workspace';
+}
+
+function countRuntimeSourceGapLifecycleKeys(runtimeSourceGaps: RuntimeSourceGap[] | null | undefined) {
+  const counts = new Map<string, number>();
+  if (!runtimeSourceGaps?.length) {
+    return counts;
+  }
+
+  for (const gap of runtimeSourceGaps) {
+    const sourceKind = RUNTIME_SOURCE_KIND_MAP[gap.source_kind];
+    if (!sourceKind || (gap.source_status === 'observed' && !gap.unmapped)) {
+      continue;
+    }
+
+    const key = buildRuntimeSourceGapLifecycleKey(gap, sourceKind);
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+
+  return counts;
+}
+
+function buildRuntimeSourceGapLifecycleKey(gap: RuntimeSourceGap, sourceKind: DisplayedSourceGapKind) {
+  return [
+    `agent:${gap.agent_id && !gap.unmapped ? gap.agent_id : 'unmapped'}`,
+    `source:${sourceKind}`,
+    `role:${gap.evidence_role ?? 'null'}`,
+    `status:${gap.source_status}`
+  ].join('|');
+}
+
+function resolveRuntimeSourceGapLifecycleState(
+  item: RuntimeSourceGapLifecycleItem,
+  priorCount: number,
+  hasPriorWindow: boolean
+): RuntimeSourceGapLifecycleState {
+  if (item.status === 'observed' && item.agentId === null) {
+    return 'unmapped_observed';
+  }
+
+  if (!hasPriorWindow) {
+    return 'current_gap';
+  }
+
+  if (item.count > 1 || priorCount > 1) {
+    return 'recurring';
+  }
+
+  return priorCount > 0 ? 'ongoing' : 'new';
+}
+
+function compareRuntimeSourceGapLifecycleItems(
+  left: RuntimeSourceGapLifecycleItem,
+  right: RuntimeSourceGapLifecycleItem
+) {
+  const statusRank = SOURCE_GAP_STATUS_RANK[left.status] - SOURCE_GAP_STATUS_RANK[right.status];
+  if (statusRank !== 0) {
+    return statusRank;
+  }
+
+  const sourceRank = SOURCE_KIND_ORDER.indexOf(left.sourceKind) - SOURCE_KIND_ORDER.indexOf(right.sourceKind);
+  if (sourceRank !== 0) {
+    return sourceRank;
+  }
+
+  return left.key.localeCompare(right.key);
+}
+
+function minNullableTimestamp(left: string | null, right: string | null) {
+  if (!left) {
+    return right;
+  }
+  if (!right) {
+    return left;
+  }
+  return left <= right ? left : right;
+}
+
+function maxNullableTimestamp(left: string | null, right: string | null) {
+  if (!left) {
+    return right;
+  }
+  if (!right) {
+    return left;
+  }
+  return left >= right ? left : right;
 }
 
 function renderSourceGapDetail(

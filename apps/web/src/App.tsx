@@ -20,6 +20,7 @@ import {
   fetchCollectorSourceHealth,
   fetchCorrelationDrilldown,
   fetchEvidenceRecord,
+  fetchEvidenceProvenanceBundle,
   fetchEvidenceRecords,
   fetchIncidents,
   fetchMemoryArtifacts,
@@ -64,6 +65,7 @@ import type {
   CollectorSnapshot,
   CollectorSourceHealthProjection,
   CorrelationDrilldown,
+  EvidenceProvenanceBundle,
   EvidenceRecord,
   MemoryArtifact,
   MemoryArtifactIndex,
@@ -1038,6 +1040,12 @@ function AppInner() {
     useState<LoadState>('idle');
   const [selectedAgentEvidenceRecordError, setSelectedAgentEvidenceRecordError] =
     useState<string | null>(null);
+  const [selectedAgentEvidenceProvenanceBundle, setSelectedAgentEvidenceProvenanceBundle] =
+    useState<EvidenceProvenanceBundle | null>(null);
+  const [selectedAgentEvidenceProvenanceBundleState, setSelectedAgentEvidenceProvenanceBundleState] =
+    useState<LoadState>('idle');
+  const [selectedAgentEvidenceProvenanceBundleError, setSelectedAgentEvidenceProvenanceBundleError] =
+    useState<string | null>(null);
   const [defaultEvidenceCoverage, setDefaultEvidenceCoverage] =
     useState<CollectorEvidenceCoverage | null>(null);
   const [defaultEvidenceCoverageState, setDefaultEvidenceCoverageState] =
@@ -1066,6 +1074,19 @@ function AppInner() {
   const zoneFocusRequestIdRef = useRef(0);
   const sourceGapFocusRequestIdRef = useRef(0);
   const wasHubOpenRef = useRef(false);
+
+  const clearSelectedAgentEvidenceRecordDetail = useCallback(() => {
+    evidenceRecordDetailRequestIdRef.current += 1;
+    evidenceRecordDetailAbortControllerRef.current?.abort();
+    evidenceRecordDetailAbortControllerRef.current = null;
+    setSelectedAgentEvidenceRecord(null);
+    setSelectedAgentEvidenceRecordId(null);
+    setSelectedAgentEvidenceRecordError(null);
+    setSelectedAgentEvidenceRecordState('idle');
+    setSelectedAgentEvidenceProvenanceBundle(null);
+    setSelectedAgentEvidenceProvenanceBundleError(null);
+    setSelectedAgentEvidenceProvenanceBundleState('idle');
+  }, []);
 
   const overviewResource = usePolledResource({
     load: (signal) => fetchOfficeOverview(signal),
@@ -1255,6 +1276,7 @@ function AppInner() {
         error.code === 'not_found' &&
         !selectedAgentStillVisibleInOverview
       ) {
+        clearSelectedAgentEvidenceRecordDetail();
         setSelectedAgentId(null);
       }
     },
@@ -1859,16 +1881,6 @@ function AppInner() {
     previousSelectedAgentEvidenceLedgerResourceKeyRef.current = selectedAgentEvidenceLedgerResourceKey;
   }, [selectedAgentEvidenceLedgerResourceKey]);
 
-  useEffect(() => {
-    evidenceRecordDetailRequestIdRef.current += 1;
-    evidenceRecordDetailAbortControllerRef.current?.abort();
-    evidenceRecordDetailAbortControllerRef.current = null;
-    setSelectedAgentEvidenceRecord(null);
-    setSelectedAgentEvidenceRecordId(null);
-    setSelectedAgentEvidenceRecordError(null);
-    setSelectedAgentEvidenceRecordState('idle');
-  }, [selectedAgentId]);
-
   const handleInspectSelectedAgentEvidenceRecord = useCallback((evidenceId: string) => {
     const requestId = evidenceRecordDetailRequestIdRef.current + 1;
     const controller = new AbortController();
@@ -1879,6 +1891,9 @@ function AppInner() {
     setSelectedAgentEvidenceRecord(null);
     setSelectedAgentEvidenceRecordError(null);
     setSelectedAgentEvidenceRecordState('loading');
+    setSelectedAgentEvidenceProvenanceBundle(null);
+    setSelectedAgentEvidenceProvenanceBundleError(null);
+    setSelectedAgentEvidenceProvenanceBundleState('loading');
 
     void fetchEvidenceRecord(evidenceId, { signal: controller.signal })
       .then((record) => {
@@ -1904,6 +1919,30 @@ function AppInner() {
         setSelectedAgentEvidenceRecord(null);
         setSelectedAgentEvidenceRecordError(formatUnknownError(error));
         setSelectedAgentEvidenceRecordState('error');
+      });
+
+    void fetchEvidenceProvenanceBundle(evidenceId, { signal: controller.signal })
+      .then((bundle) => {
+        if (evidenceRecordDetailRequestIdRef.current !== requestId) {
+          return;
+        }
+
+        setSelectedAgentEvidenceProvenanceBundle(bundle);
+        setSelectedAgentEvidenceProvenanceBundleError(null);
+        setSelectedAgentEvidenceProvenanceBundleState('ready');
+      })
+      .catch((error: unknown) => {
+        if (evidenceRecordDetailRequestIdRef.current !== requestId) {
+          return;
+        }
+
+        if (error instanceof Error && error.name === 'AbortError') {
+          return;
+        }
+
+        setSelectedAgentEvidenceProvenanceBundle(null);
+        setSelectedAgentEvidenceProvenanceBundleError(formatUnknownError(error));
+        setSelectedAgentEvidenceProvenanceBundleState('error');
       });
   }, []);
 
@@ -2389,6 +2428,8 @@ function AppInner() {
       correlationWasExplicit = correlationMode === 'manual',
       correlationCarryForward = correlationId !== null && correlationWasExplicit
     ) => {
+      const selectedAgentChanged = agentId !== selectedAgentId;
+
       if (!agentId) {
         lastSelectedAgentRef.current = null;
         setAgentFocusRequest(null);
@@ -2406,7 +2447,8 @@ function AppInner() {
       setSelectedCorrelationWasExplicit(correlationId !== null && correlationWasExplicit);
       setSelectedCorrelationCarryForward(correlationId !== null && correlationCarryForward);
       setSelectedOperationSelection(operationSelection);
-      if (agentId !== selectedAgentId) {
+      if (selectedAgentChanged) {
+        clearSelectedAgentEvidenceRecordDetail();
         setSelectedAgentReplayFilter(null);
         setSelectedAgentSupervisionHistoryFilter(null);
         if (activeHubCategoryFromSelectedAgentTabRef.current) {
@@ -2417,7 +2459,7 @@ function AppInner() {
       }
       setSelectedAgentId(agentId);
     },
-    [overviewResource.data, selectedAgentId, setSelectedAgentId]
+    [clearSelectedAgentEvidenceRecordDetail, overviewResource.data, selectedAgentId, setSelectedAgentId]
   );
 
   const requestAgentFocus = useCallback((agentId: string) => {
@@ -3280,6 +3322,9 @@ function AppInner() {
               selectedAgentEvidenceRecordError={selectedAgentEvidenceRecordError}
               selectedAgentEvidenceRecordId={selectedAgentEvidenceRecordId}
               selectedAgentEvidenceRecordState={selectedAgentEvidenceRecordState}
+              selectedAgentEvidenceProvenanceBundle={selectedAgentEvidenceProvenanceBundle}
+              selectedAgentEvidenceProvenanceBundleError={selectedAgentEvidenceProvenanceBundleError}
+              selectedAgentEvidenceProvenanceBundleState={selectedAgentEvidenceProvenanceBundleState}
               workflow={activeWorkflow}
               workflowError={workflowError}
               workflowState={workflowState}

@@ -11,6 +11,7 @@ import type {
   CollectorTmuxObservation,
   CollectorWorkspaceObservation,
   CorrelationDrilldown,
+  EvidenceProvenanceBundle,
   EvidenceRecord,
   IncidentFeedResponse,
   MemoryArtifact,
@@ -155,6 +156,9 @@ type DetailsPanelProps = {
   selectedAgentEvidenceRecordError: string | null;
   selectedAgentEvidenceRecordId: string | null;
   selectedAgentEvidenceRecordState: LoadState;
+  selectedAgentEvidenceProvenanceBundle: EvidenceProvenanceBundle | null;
+  selectedAgentEvidenceProvenanceBundleError: string | null;
+  selectedAgentEvidenceProvenanceBundleState: LoadState;
   workflow: AgentWorkflow | null;
   workflowError: string | null;
   workflowState: LoadState;
@@ -1157,6 +1161,43 @@ function renderTimestamp(value: string | null | undefined, fallback: string) {
 }
 
 const SENSITIVE_EVIDENCE_LEDGER_TOKEN_PATTERN = /(?:access[_-]?token|api[_-]?key|secret|password|credential|bearer|token)(?:[-_=:.][A-Za-z0-9][A-Za-z0-9._:-]*)?/gi;
+const FILE_EVIDENCE_LEDGER_REF_PATTERN = /file:\/\/\/?[^\s,;:)]+/g;
+const NON_FILE_URI_EVIDENCE_LEDGER_REF_PATTERN = /[A-Za-z][A-Za-z0-9+.-]*:\/\/[^\s,;)]+/g;
+const LOCAL_EVIDENCE_LEDGER_REF_PATTERN = /(^|[^/])((?:\/(?!\/)[^\s,;:)/]+(?:\/[^\s,;)]+)+)|(?:~\/[^\s,;)]+)|(?:[A-Za-z]:(?![\\/]{2})[\\/][^\s,;)]+))/g;
+
+function formatLocalEvidenceLedgerPathToken(value: string) {
+  const trimmed = value.trim().replace(/^file:\/\//, '');
+  const basename = trimmed.split(/[\\/]/).filter(Boolean).pop();
+  return basename ? `[local path] ${basename}` : '[local path]';
+}
+
+function redactLocalEvidenceLedgerPathChunk(value: string) {
+  return value.replace(
+    LOCAL_EVIDENCE_LEDGER_REF_PATTERN,
+    (_match, prefix: string, localRef: string) => (
+      `${prefix}${formatLocalEvidenceLedgerPathToken(localRef)}`
+    )
+  );
+}
+
+function redactLocalEvidenceLedgerRefs(value: string) {
+  const fileRefsRedacted = value.replace(
+    FILE_EVIDENCE_LEDGER_REF_PATTERN,
+    (match) => formatLocalEvidenceLedgerPathToken(match)
+  );
+
+  let cursor = 0;
+  let redacted = '';
+  for (const match of fileRefsRedacted.matchAll(NON_FILE_URI_EVIDENCE_LEDGER_REF_PATTERN)) {
+    const matchIndex = match.index ?? 0;
+    redacted += redactLocalEvidenceLedgerPathChunk(fileRefsRedacted.slice(cursor, matchIndex));
+    redacted += match[0];
+    cursor = matchIndex + match[0].length;
+  }
+
+  redacted += redactLocalEvidenceLedgerPathChunk(fileRefsRedacted.slice(cursor));
+  return redacted;
+}
 
 function redactSensitiveEvidenceLedgerToken(value: string) {
   return value.replace(SENSITIVE_EVIDENCE_LEDGER_TOKEN_PATTERN, '[redacted]');
@@ -1164,7 +1205,7 @@ function redactSensitiveEvidenceLedgerToken(value: string) {
 
 function formatBoundedEvidenceLedgerToken(value: string) {
   const normalized = value.trim();
-  const redacted = redactSensitiveEvidenceLedgerToken(normalized);
+  const redacted = redactSensitiveEvidenceLedgerToken(redactLocalEvidenceLedgerRefs(normalized));
   if (redacted.length <= EVIDENCE_LEDGER_TOKEN_LIMIT) {
     return redacted;
   }
@@ -1289,7 +1330,10 @@ function renderSelectedAgentEvidenceRecordDetail(
   record: EvidenceRecord | null,
   state: LoadState,
   error: string | null,
-  requestedEvidenceId: string | null
+  requestedEvidenceId: string | null,
+  provenanceBundle: EvidenceProvenanceBundle | null,
+  provenanceState: LoadState,
+  provenanceError: string | null
 ) {
   if (!requestedEvidenceId && !record) {
     return null;
@@ -1299,7 +1343,7 @@ function renderSelectedAgentEvidenceRecordDetail(
 
   return (
     <section
-      className="aitown-details__section aitown-details__section--selected-evidence-record aitown-details__section--hub-evidence"
+      className="aitown-details__section aitown-details__section--selected-evidence aitown-details__section--selected-evidence-record aitown-details__section--hub-evidence"
     >
       <h3>Evidence Record Detail</h3>
       <ul className="aitown-records">
@@ -1329,10 +1373,47 @@ function renderSelectedAgentEvidenceRecordDetail(
               {`Degraded · ${record.degraded_reasons.length > 0 ? record.degraded_reasons.map(formatEvidenceLedgerReason).join(', ') : 'none'}`}
             </span>
             <span>{`Ref · ${formatEvidenceLedgerRef(record.evidence_ref)}`}</span>
+            {renderSelectedAgentEvidenceProvenanceAnchors(provenanceBundle, provenanceState, provenanceError)}
           </li>
         ) : null}
       </ul>
     </section>
+  );
+}
+
+function renderSelectedAgentEvidenceProvenanceAnchors(
+  bundle: EvidenceProvenanceBundle | null,
+  state: LoadState,
+  error: string | null
+) {
+  if (state === 'loading' && !bundle) {
+    return <span>Loading provenance anchors...</span>;
+  }
+
+  if (error && !bundle) {
+    return <span>{`Provenance anchors unavailable · ${error}`}</span>;
+  }
+
+  if (!bundle) {
+    return null;
+  }
+
+  const { snapshot, source, replay } = bundle.anchors;
+
+  return (
+    <>
+      {snapshot ? (
+        <span>{`Snapshot anchor · ${formatBoundedEvidenceLedgerToken(snapshot.collector_snapshot_id)}`}</span>
+      ) : null}
+      {source ? (
+        <span>
+          {`Source anchor · ${formatBoundedEvidenceLedgerToken(source.evidence_id)} · ${source.source_kind} · ${source.evidence_role ?? 'unclassified'} · ${source.source_status ?? 'unknown'}`}
+        </span>
+      ) : null}
+      {replay ? (
+        <span>{`Replay anchor · ${formatBoundedEvidenceLedgerToken(replay.correlation_id)}`}</span>
+      ) : null}
+    </>
   );
 }
 
@@ -4173,6 +4254,9 @@ export function DetailsPanel({
   selectedAgentEvidenceRecordError,
   selectedAgentEvidenceRecordId,
   selectedAgentEvidenceRecordState,
+  selectedAgentEvidenceProvenanceBundle,
+  selectedAgentEvidenceProvenanceBundleError,
+  selectedAgentEvidenceProvenanceBundleState,
   workflow,
   workflowError,
   workflowState,
@@ -6016,7 +6100,10 @@ export function DetailsPanel({
         selectedAgentEvidenceRecord,
         selectedAgentEvidenceRecordState,
         selectedAgentEvidenceRecordError,
-        selectedAgentEvidenceRecordId
+        selectedAgentEvidenceRecordId,
+        selectedAgentEvidenceProvenanceBundle,
+        selectedAgentEvidenceProvenanceBundleState,
+        selectedAgentEvidenceProvenanceBundleError
       )}
 
       <section

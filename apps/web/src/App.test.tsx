@@ -204,7 +204,9 @@ const runtimeSourceGapsSummaryUrl = '/runtime/source-gaps/summary?newest_first=t
 const appEngineeringEvidenceRecordsUrl =
   '/evidence-records?agent_id=app-engineering&newest_first=true&limit=12';
 const appEngineeringEvidenceRecordDetailUrl = '/evidence-records/output-1';
+const appEngineeringEvidenceProvenanceBundleUrl = '/evidence-records/output-1/provenance-bundle';
 const missingEvidenceRecordDetailUrl = '/evidence-records/missing-1';
+const missingEvidenceProvenanceBundleUrl = '/evidence-records/missing-1/provenance-bundle';
 
 const overviewFixture = {
   generated_at: '2026-03-16T09:00:00.000Z',
@@ -1261,6 +1263,41 @@ const evidenceRecordDetailFixture = {
   item: evidenceRecordsFixture.items[0]
 };
 
+const evidenceProvenanceBundleFixture = {
+  item: {
+    evidence_id: 'output-1',
+    record: {
+      observed_at: '2026-03-16T08:58:00.000Z',
+      collected_at: '2026-03-16T08:59:00.000Z',
+      agent_id: 'app-engineering',
+      source_kind: 'workspace_file',
+      evidence_role: 'agent_output',
+      source_status: 'observed',
+      output_candidate: true,
+      collector_snapshot_id: 'collector-20260316-with-access_token-that-must-not-render',
+      correlation_id: 'corr-app-review-with-secret-token-that-must-not-render',
+      unmapped: false
+    },
+    anchors: {
+      snapshot: {
+        collector_snapshot_id: 'collector-20260316-with-access_token-that-must-not-render',
+        route: '/collectors/controller-snapshot/source-health?collector_snapshot_id=collector-20260316-with-access_token-that-must-not-render'
+      },
+      source: {
+        evidence_id: 'output-1-with-secret-token-that-must-not-render',
+        source_kind: 'workspace_file',
+        evidence_role: 'agent_output',
+        source_status: 'observed',
+        route: '/evidence-records/output-1-with-secret-token-that-must-not-render'
+      },
+      replay: {
+        correlation_id: 'corr-app-review-with-secret-token-that-must-not-render',
+        route: '/accountability/replay?correlation_id=corr-app-review-with-secret-token-that-must-not-render'
+      }
+    }
+  }
+};
+
 const emptyRuntimeSourceGapsSummaryFixture = {
   total_count: 0,
   returned_limit: 3,
@@ -1760,6 +1797,10 @@ function resolveDefaultFetchResponse(url: string) {
 
   if (url === appEngineeringEvidenceRecordDetailUrl) {
     return jsonResponse(evidenceRecordDetailFixture);
+  }
+
+  if (url === appEngineeringEvidenceProvenanceBundleUrl) {
+    return jsonResponse(evidenceProvenanceBundleFixture);
   }
 
   return null;
@@ -3428,56 +3469,71 @@ afterEach(() => {
     expect(await findHubSection(details, 'Evidence Ledger')).toBeVisible();
   });
 
-  it('fetches selected-agent evidence detail only after the row inspect action', async () => {
-    const user = userEvent.setup();
-    render(<App />);
+  it(
+    'fetches selected-agent Evidence Record detail and provenance only after Inspect record',
+    async () => {
+      const user = userEvent.setup();
+      render(<App />);
 
-    const roster = await screen.findByRole('navigation', { name: 'Agent roster' });
-    await user.click(
-      within(roster).getByRole('button', {
-        name: 'Select and locate App Engineering Agent'
-      })
-    );
-
-    const inspectPeek = await screen.findByRole('region', { name: 'Selected agent inspect peek' });
-    await user.click(
-      within(inspectPeek).getByRole('button', {
-        name: 'Open App Engineering Agent Evidence Ledger'
-      })
-    );
-
-    const details = await screen.findByRole('complementary', { name: 'Agent details' });
-    await findHubSection(details, 'Evidence Ledger');
-
-    await waitFor(() => {
-      const requestedUrls = vi.mocked(globalThis.fetch).mock.calls.map(([request]) => String(request));
-      expect(requestedUrls).toContain(appEngineeringEvidenceRecordsUrl);
-      expect(requestedUrls).not.toContain(appEngineeringEvidenceRecordDetailUrl);
-    });
-
-    await user.click(
-      within(details).getByRole('button', {
-        name: 'Inspect evidence record output-1'
-      })
-    );
-
-    await waitFor(() => {
-      expect(vi.mocked(globalThis.fetch).mock.calls.map(([request]) => String(request))).toContain(
-        appEngineeringEvidenceRecordDetailUrl
+      const roster = await screen.findByRole('navigation', { name: 'Agent roster' });
+      await user.click(
+        within(roster).getByRole('button', {
+          name: 'Select and locate App Engineering Agent'
+        })
       );
-    });
 
-    const detailSection = await findHubSection(details, 'Evidence Record Detail');
-    expect(detailSection).toHaveTextContent('Evidence id · output-1');
-    expect(detailSection).toHaveTextContent('Observed · 2026-03-16T08:58:00.000Z');
-    expect(detailSection).toHaveTextContent('Collected · 2026-03-16T08:59:00.000Z');
-    expect(detailSection).toHaveTextContent('Source · workspace_file');
-    expect(detailSection).toHaveTextContent('Status · observed');
-    expect(detailSection).toHaveTextContent('Role · agent_output');
-    expect(detailSection).toHaveTextContent('Output candidate · true');
-    expect(detailSection).toHaveTextContent('Snapshot · collector-20260316');
-    expect(detailSection).not.toHaveTextContent('raw_tmux_capture');
-  });
+      const inspectPeek = await screen.findByRole('region', { name: 'Selected agent inspect peek' });
+      await user.click(
+        within(inspectPeek).getByRole('button', {
+          name: 'Open App Engineering Agent Evidence Ledger'
+        })
+      );
+
+      const details = await screen.findByRole('complementary', { name: 'Agent details' });
+      await findHubSection(details, 'Evidence Ledger');
+
+      await waitFor(() => {
+        const requestedUrls = vi.mocked(globalThis.fetch).mock.calls.map(([request]) => String(request));
+        expect(requestedUrls).toContain(appEngineeringEvidenceRecordsUrl);
+        expect(requestedUrls).not.toContain(appEngineeringEvidenceRecordDetailUrl);
+        expect(requestedUrls).not.toContain(appEngineeringEvidenceProvenanceBundleUrl);
+      });
+
+      await user.click(
+        within(details).getByRole('button', {
+          name: 'Inspect evidence record output-1'
+        })
+      );
+
+      await waitFor(() => {
+        const requestedUrls = vi.mocked(globalThis.fetch).mock.calls.map(([request]) => String(request));
+        expect(requestedUrls).toContain(appEngineeringEvidenceRecordDetailUrl);
+        expect(requestedUrls).toContain(appEngineeringEvidenceProvenanceBundleUrl);
+      });
+
+      const detailSection = await findHubSection(details, 'Evidence Record Detail');
+      expect(detailSection).toHaveTextContent('Evidence id · output-1');
+      expect(detailSection).toHaveTextContent('Observed · 2026-03-16T08:58:00.000Z');
+      expect(detailSection).toHaveTextContent('Collected · 2026-03-16T08:59:00.000Z');
+      expect(detailSection).toHaveTextContent('Source · workspace_file');
+      expect(detailSection).toHaveTextContent('Status · observed');
+      expect(detailSection).toHaveTextContent('Role · agent_output');
+      expect(detailSection).toHaveTextContent('Output candidate · true');
+      expect(detailSection).toHaveTextContent('Snapshot · collector-20260316');
+      expect(detailSection).toHaveTextContent('Snapshot anchor · collector-20260316-with-[redacted]');
+      expect(detailSection).toHaveTextContent(
+        'Source anchor · output-1-with-[redacted] · workspace_file · agent_output · observed'
+      );
+      expect(detailSection).toHaveTextContent('Replay anchor · corr-app-review-with-[redacted]');
+      expect(detailSection).not.toHaveTextContent('raw_tmux_capture');
+      expect(detailSection).not.toHaveTextContent('/collectors/controller-snapshot');
+      expect(detailSection).not.toHaveTextContent('/evidence-records/output-1');
+      expect(detailSection).not.toHaveTextContent('/accountability/replay');
+      expect(detailSection).not.toHaveTextContent('access_token');
+      expect(detailSection).not.toHaveTextContent('secret-token');
+    },
+    10_000
+  );
 
   it('clears stale selected-agent evidence detail when the next detail response is empty', async () => {
     const user = userEvent.setup();
@@ -3504,6 +3560,10 @@ afterEach(() => {
         }
 
         if (url === missingEvidenceRecordDetailUrl) {
+          return jsonResponse({ item: null });
+        }
+
+        if (url === missingEvidenceProvenanceBundleUrl) {
           return jsonResponse({ item: null });
         }
 
@@ -3539,6 +3599,11 @@ afterEach(() => {
     let detailSection = await findHubSection(details, 'Evidence Record Detail');
     await waitFor(() => {
       expect(detailSection).toHaveTextContent('Evidence id · output-1');
+      expect(detailSection).toHaveTextContent('Snapshot anchor · collector-20260316-with-[redacted]');
+      expect(detailSection).toHaveTextContent(
+        'Source anchor · output-1-with-[redacted] · workspace_file · agent_output · observed'
+      );
+      expect(detailSection).toHaveTextContent('Replay anchor · corr-app-review-with-[redacted]');
     });
 
     await user.click(
@@ -3551,6 +3616,13 @@ afterEach(() => {
     await waitFor(() => {
       expect(detailSection).toHaveTextContent('No evidence record found for missing-1.');
       expect(detailSection).not.toHaveTextContent('Evidence id · output-1');
+      expect(detailSection).not.toHaveTextContent('Snapshot anchor · collector-20260316-with-[redacted]');
+      expect(detailSection).not.toHaveTextContent('Source anchor · output-1-with-[redacted]');
+      expect(detailSection).not.toHaveTextContent('Replay anchor · corr-app-review-with-[redacted]');
+      expect(detailSection).not.toHaveTextContent('/evidence-records/output-1');
+      expect(detailSection).not.toHaveTextContent('/accountability/replay');
+      expect(detailSection).not.toHaveTextContent('access_token');
+      expect(detailSection).not.toHaveTextContent('secret-token');
       expect(detailSection).not.toHaveTextContent('productivity');
     });
 
@@ -3558,7 +3630,12 @@ afterEach(() => {
       .mocked(globalThis.fetch)
       .mock.calls.map(([request]) => String(request))
       .filter((url) => url.startsWith('/evidence-records/'));
-    expect(detailRequests).toEqual([appEngineeringEvidenceRecordDetailUrl, missingEvidenceRecordDetailUrl]);
+    expect(detailRequests).toEqual([
+      appEngineeringEvidenceRecordDetailUrl,
+      appEngineeringEvidenceProvenanceBundleUrl,
+      missingEvidenceRecordDetailUrl,
+      missingEvidenceProvenanceBundleUrl
+    ]);
   });
 
   it('surfaces source-gap chips as provenance health and opens Supervision from a chip', async () => {

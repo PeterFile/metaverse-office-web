@@ -79,6 +79,78 @@ function normalizeTaskEvidenceFacts(facts) {
   return { candidates, rejected };
 }
 
+function projectTaskEvidenceRecords(facts, options = {}) {
+  const collectedAt = safeIsoTimestamp(options.collected_at);
+  const collectorSnapshotId =
+    safeIdentifier(options.collector_snapshot_id) ||
+    (collectedAt ? `task-evidence:${collectedAt}` : 'task-evidence:unknown');
+  const records = [];
+  const rejected = [];
+
+  if (!Array.isArray(facts)) {
+    return {
+      records,
+      rejected: [
+        {
+          status: 'invalid',
+          index: null,
+          missing_fields: ['facts'],
+          error: 'task evidence facts must be an array'
+        }
+      ]
+    };
+  }
+
+  facts.forEach((fact, index) => {
+    const candidate = normalizeTaskEvidenceFact(fact, index);
+
+    if (candidate.status === 'invalid' || candidate.status === 'unsupported') {
+      rejected.push(candidate);
+      return;
+    }
+
+    records.push(projectTaskEvidenceRecord(candidate, {
+      collectedAt,
+      collectorSnapshotId,
+      index
+    }));
+  });
+
+  return { records, rejected };
+}
+
+function projectTaskEvidenceRecord(candidate, { collectedAt, collectorSnapshotId, index }) {
+  const recordIndex = index + 1;
+  const metadata = {
+    task_ref: candidate.task_ref,
+    ...(candidate.id ? { fact_id: candidate.id } : {}),
+    source_index: index,
+    ...(Array.isArray(candidate.warnings) ? { warnings: candidate.warnings.slice() } : {})
+  };
+
+  return {
+    evidence_id: [
+      'ev',
+      sanitizeEvidenceIdPart(collectorSnapshotId),
+      sanitizeEvidenceIdPart(candidate.source_kind),
+      sanitizeEvidenceIdPart(candidate.task_ref),
+      recordIndex
+    ].join('_'),
+    observed_at: candidate.observed_at,
+    collected_at: collectedAt,
+    agent_id: candidate.agent_id || null,
+    source_kind: candidate.source_kind,
+    evidence_ref: `task://${candidate.source_kind}/${candidate.task_ref}`,
+    evidence_role: 'task_reference',
+    source_status: candidate.status,
+    output_candidate: false,
+    collector_snapshot_id: collectorSnapshotId,
+    correlation_id: candidate.correlation_id,
+    degraded_reasons: Array.isArray(candidate.warnings) ? candidate.warnings.slice() : [],
+    metadata
+  };
+}
+
 function normalizeTaskEvidenceFact(fact, index) {
   if (!fact || typeof fact !== 'object' || Array.isArray(fact)) {
     return {
@@ -177,7 +249,13 @@ function safeIsoTimestamp(value) {
   return new Date(timestamp).toISOString();
 }
 
+function sanitizeEvidenceIdPart(value) {
+  const sanitized = `${value ?? ''}`.trim().replace(/[^A-Za-z0-9_-]+/g, '_');
+  return sanitized || 'unknown';
+}
+
 module.exports = {
   normalizeTaskEvidenceFacts,
+  projectTaskEvidenceRecords,
   taskEvidenceSourceFrom
 };

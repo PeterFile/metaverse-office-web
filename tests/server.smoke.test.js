@@ -5798,7 +5798,11 @@ test('GET /evidence-records lists stored evidence records read-only with exact f
         workspace_file: 2,
         tmux_observation: 1,
         hermes_profile: 0,
-        hermes_session: 0
+        hermes_session: 0,
+        kanban_fixture: 0,
+        linear_fixture: 0,
+        slack_fixture: 0,
+        task_fixture: 0
       },
       evidence_role_buckets: {
         workspace_presence: 1,
@@ -5807,7 +5811,8 @@ test('GET /evidence-records lists stored evidence records read-only with exact f
         agent_plan: 0,
         runtime_activity: 0,
         runtime_presence: 0,
-        runtime_unmapped: 1
+        runtime_unmapped: 1,
+        task_reference: 0
       },
       source_status_buckets: {
         observed: 3,
@@ -5844,7 +5849,11 @@ test('GET /evidence-records lists stored evidence records read-only with exact f
       workspace_file: 0,
       tmux_observation: 0,
       hermes_profile: 0,
-      hermes_session: 0
+      hermes_session: 0,
+      kanban_fixture: 0,
+      linear_fixture: 0,
+      slack_fixture: 0,
+      task_fixture: 0
     },
     evidence_role_buckets: {
       workspace_presence: 0,
@@ -5853,7 +5862,8 @@ test('GET /evidence-records lists stored evidence records read-only with exact f
       agent_plan: 0,
       runtime_activity: 0,
       runtime_presence: 0,
-      runtime_unmapped: 0
+      runtime_unmapped: 0,
+      task_reference: 0
     },
     source_status_buckets: {
       observed: 0,

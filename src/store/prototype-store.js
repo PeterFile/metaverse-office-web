@@ -31,7 +31,11 @@ const EVIDENCE_RECORD_SOURCE_KINDS = Object.freeze([
   'workspace_file',
   'tmux_observation',
   'hermes_profile',
-  'hermes_session'
+  'hermes_session',
+  'kanban_fixture',
+  'linear_fixture',
+  'slack_fixture',
+  'task_fixture'
 ]);
 const EVIDENCE_RECORD_ROLES = Object.freeze([
   'workspace_presence',
@@ -40,7 +44,8 @@ const EVIDENCE_RECORD_ROLES = Object.freeze([
   'agent_plan',
   'runtime_activity',
   'runtime_presence',
-  'runtime_unmapped'
+  'runtime_unmapped',
+  'task_reference'
 ]);
 const EVIDENCE_RECORD_SOURCE_STATUSES = Object.freeze(['observed', 'degraded', 'missing', 'error']);
 const RUNTIME_SOURCE_GAP_STATUSES = Object.freeze(['degraded', 'missing', 'error']);

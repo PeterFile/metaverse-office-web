@@ -764,6 +764,327 @@ test('prototype store persists Hermes runtime source facts as read-only evidence
   assert.equal(records.filter((record) => record.kind === 'evidence_record').length, 3);
 });
 
+test('prototype store persists task evidence observations as bounded read-only evidence records', async () => {
+  const storeFile = await createStoreFile();
+  const store = await createPrototypeStore({ filePath: storeFile });
+  const report = createCollectorReport();
+
+  report.items[0].evidence_refs.push('task://kanban_fixture/TASK-200');
+  report.items[0].task_evidence_observations = [
+    {
+      status: 'observed',
+      task_ref: 'TASK-200',
+      source_kind: 'kanban_fixture',
+      observed_at: '2026-05-20T01:00:00.000Z',
+      correlation_id: 'corr-task',
+      agent_id: 'app-engineering',
+      evidence_ref: 'task://kanban_fixture/TASK-200',
+      fact_id: 'fixture-row-200',
+      source_index: 0,
+      local_path: '/tmp/task-evidence-secret',
+      raw_payload: 'token=task-secret'
+    }
+  ];
+  report.runtime_source_evidence.unmapped_task_evidence = [
+    {
+      status: 'observed',
+      task_ref: 'TASK-201',
+      source_kind: 'linear_fixture',
+      observed_at: '2026-05-20T01:01:00.000Z',
+      correlation_id: 'corr-unmapped',
+      evidence_ref: 'task://linear_fixture/TASK-201',
+      local_path: '/tmp/task-evidence-unmapped-secret',
+      raw_payload: 'token=unmapped-task-secret'
+    }
+  ];
+
+  await store.appendCollectorReport(report);
+
+  const latestReport = store.getLatestCollectorReport();
+  assert.deepEqual(latestReport.items[0].task_evidence_observations, [
+    {
+      status: 'observed',
+      task_ref: 'TASK-200',
+      source_kind: 'kanban_fixture',
+      observed_at: '2026-05-20T01:00:00.000Z',
+      correlation_id: 'corr-task',
+      agent_id: 'app-engineering',
+      evidence_ref: 'task://kanban_fixture/TASK-200',
+      fact_id: 'fixture-row-200',
+      source_index: 0
+    }
+  ]);
+  assert.deepEqual(latestReport.runtime_source_evidence.unmapped_task_evidence, [
+    {
+      status: 'observed',
+      task_ref: 'TASK-201',
+      source_kind: 'linear_fixture',
+      observed_at: '2026-05-20T01:01:00.000Z',
+      correlation_id: 'corr-unmapped',
+      evidence_ref: 'task://linear_fixture/TASK-201'
+    }
+  ]);
+  assert.equal(JSON.stringify(latestReport).includes('/tmp/task-evidence-secret'), false);
+  assert.equal(JSON.stringify(latestReport).includes('token='), false);
+
+  const taskRecords = store.listEvidenceRecords({ evidence_role: 'task_reference' });
+  assert.deepEqual(
+    taskRecords.map((record) => ({
+      agent_id: record.agent_id,
+      source_kind: record.source_kind,
+      evidence_ref: record.evidence_ref,
+      evidence_role: record.evidence_role,
+      source_status: record.source_status,
+      output_candidate: record.output_candidate,
+      correlation_id: record.correlation_id,
+      observed_at: record.observed_at,
+      metadata: record.metadata
+    })),
+    [
+      {
+        agent_id: 'app-engineering',
+        source_kind: 'kanban_fixture',
+        evidence_ref: 'task://kanban_fixture/TASK-200',
+        evidence_role: 'task_reference',
+        source_status: 'observed',
+        output_candidate: false,
+        correlation_id: 'corr-task',
+        observed_at: '2026-05-20T01:00:00.000Z',
+        metadata: {
+          task_ref: 'TASK-200',
+          source_index: 0,
+          source_health_key: 'task_evidence',
+          fact_id: 'fixture-row-200'
+        }
+      },
+      {
+        agent_id: null,
+        source_kind: 'linear_fixture',
+        evidence_ref: 'task://linear_fixture/TASK-201',
+        evidence_role: 'task_reference',
+        source_status: 'observed',
+        output_candidate: false,
+        correlation_id: 'corr-unmapped',
+        observed_at: '2026-05-20T01:01:00.000Z',
+        metadata: {
+          task_ref: 'TASK-201',
+          source_index: 0,
+          source_health_key: 'runtime_source_evidence.unmapped_task_evidence'
+        }
+      }
+    ]
+  );
+  assert.equal(JSON.stringify(taskRecords).includes('/tmp/task-evidence-secret'), false);
+  assert.equal(JSON.stringify(taskRecords).includes('token='), false);
+  assert.equal(store.getEvidenceRecordsSummary().source_kind_buckets.kanban_fixture, 1);
+  assert.equal(store.getEvidenceRecordsSummary().source_kind_buckets.linear_fixture, 1);
+  assert.equal(store.getEvidenceRecordsSummary({ mapped: 'false' }).unmapped_count, 1);
+  assert.deepEqual(store.listRuntimeSourceGaps({ source_kind: 'linear_fixture' }), []);
+});
+
+test('prototype store sanitizes unsafe task evidence identifiers and warnings before persistence', async () => {
+  const storeFile = await createStoreFile();
+  const store = await createPrototypeStore({ filePath: storeFile });
+  const report = createCollectorReport();
+
+  report.items[0].task_evidence_observations = [
+    {
+      status: 'degraded',
+      task_ref: 'TASK-202',
+      source_kind: 'kanban_fixture',
+      observed_at: '2026-05-20T01:02:00.000Z',
+      correlation_id: 'corr-safe-202',
+      fact_id: 'github_pat_unsafeFactIdCanary',
+      warnings: [
+        '/tmp/private/token=unsafe-warning',
+        'agent_id suppressed',
+        'https://hooks.slack.com/services/unsafe-warning'
+      ]
+    },
+    {
+      status: 'observed',
+      task_ref: 'ghp_unsafeTaskRefCanary',
+      source_kind: 'kanban_fixture',
+      observed_at: '2026-05-20T01:03:00.000Z',
+      correlation_id: 'corr-unsafe-task-ref'
+    },
+    {
+      status: 'observed',
+      task_ref: 'TASK-203',
+      source_kind: 'linear_fixture',
+      observed_at: '2026-05-20T01:04:00.000Z',
+      correlation_id: 'sk-1234567890abcdef'
+    }
+  ];
+  report.runtime_source_evidence.unmapped_task_evidence = [
+    {
+      status: 'degraded',
+      task_ref: 'TASK-204',
+      source_kind: 'slack_fixture',
+      observed_at: '2026-05-20T01:05:00.000Z',
+      correlation_id: 'corr-safe-204',
+      fact_id: 'xoxb-unsafeFactIdCanary',
+      degraded_reasons: ['token=unsafe-degraded-reason', 'agent_id suppressed']
+    }
+  ];
+
+  await store.appendCollectorReport(report);
+
+  const latestReport = store.getLatestCollectorReport();
+  assert.deepEqual(latestReport.items[0].task_evidence_observations, [
+    {
+      status: 'degraded',
+      task_ref: 'TASK-202',
+      source_kind: 'kanban_fixture',
+      observed_at: '2026-05-20T01:02:00.000Z',
+      correlation_id: 'corr-safe-202',
+      agent_id: 'app-engineering',
+      evidence_ref: 'task://kanban_fixture/TASK-202',
+      warnings: ['agent_id suppressed']
+    }
+  ]);
+  assert.deepEqual(latestReport.runtime_source_evidence.unmapped_task_evidence, [
+    {
+      status: 'degraded',
+      task_ref: 'TASK-204',
+      source_kind: 'slack_fixture',
+      observed_at: '2026-05-20T01:05:00.000Z',
+      correlation_id: 'corr-safe-204',
+      evidence_ref: 'task://slack_fixture/TASK-204',
+      warnings: ['agent_id suppressed']
+    }
+  ]);
+
+  const taskRecords = store
+    .listEvidenceRecords({ evidence_role: 'task_reference' })
+    .filter((record) => ['kanban_fixture', 'slack_fixture'].includes(record.source_kind));
+  assert.deepEqual(
+    taskRecords.map((record) => ({
+      source_kind: record.source_kind,
+      evidence_ref: record.evidence_ref,
+      correlation_id: record.correlation_id,
+      degraded_reasons: record.degraded_reasons,
+      metadata: record.metadata
+    })),
+    [
+      {
+        source_kind: 'kanban_fixture',
+        evidence_ref: 'task://kanban_fixture/TASK-202',
+        correlation_id: 'corr-safe-202',
+        degraded_reasons: ['agent_id suppressed'],
+        metadata: {
+          task_ref: 'TASK-202',
+          source_index: 0,
+          source_health_key: 'task_evidence',
+          warnings: ['agent_id suppressed']
+        }
+      },
+      {
+        source_kind: 'slack_fixture',
+        evidence_ref: 'task://slack_fixture/TASK-204',
+        correlation_id: 'corr-safe-204',
+        degraded_reasons: ['agent_id suppressed'],
+        metadata: {
+          task_ref: 'TASK-204',
+          source_index: 0,
+          source_health_key: 'runtime_source_evidence.unmapped_task_evidence',
+          warnings: ['agent_id suppressed']
+        }
+      }
+    ]
+  );
+  assert.deepEqual(store.listRuntimeSourceGaps({ source_kind: 'kanban_fixture' }), []);
+  assert.deepEqual(store.listRuntimeSourceGaps({ source_kind: 'slack_fixture' }), []);
+
+  const serialized = JSON.stringify({ latestReport, taskRecords });
+  for (const canary of [
+    'github_pat_',
+    'ghp_unsafeTaskRefCanary',
+    'sk-1234567890abcdef',
+    'xoxb-',
+    '/tmp/private',
+    'token=',
+    'hooks.slack.com'
+  ]) {
+    assert.equal(serialized.includes(canary), false, `${canary} should not be persisted`);
+  }
+});
+
+test('prototype store does not classify dotted task refs as workspace output evidence', async () => {
+  const storeFile = await createStoreFile();
+  const store = await createPrototypeStore({ filePath: storeFile });
+  const report = createCollectorReport();
+  const item = report.items[0];
+
+  report.summary.heartbeat_count = 0;
+  report.summary.tmux_observed_count = 0;
+  report.summary.workspace_observed_count = 0;
+  report.evidence_coverage = {
+    evidence_ref_count: 1,
+    covered_agent_count: 1,
+    low_confidence_agent_ids: [],
+    source_kind_buckets: {
+      workspace_file: 0,
+      workspace_root: 0,
+      tmux_observation: 0,
+      task_evidence: 1
+    },
+    agent_items: [
+      {
+        agent_id: 'app-engineering',
+        evidence_ref_count: 1,
+        source_kinds: ['task_evidence'],
+        latest_evidence_at: '2026-05-20T01:06:00.000Z',
+        confidence_level: 'high'
+      }
+    ]
+  };
+  item.evidence_refs = ['task://kanban_fixture/TASK.400'];
+  item.workspace_observations = [];
+  item.tmux_observations = [];
+  item.heartbeat = {
+    ...item.heartbeat,
+    current_state: 'coding',
+    active_task: 'Review dotted task evidence',
+    last_meaningful_output_at: null,
+    last_file_write_at: null
+  };
+  item.task_evidence_observations = [
+    {
+      status: 'observed',
+      task_ref: 'TASK.400',
+      source_kind: 'kanban_fixture',
+      observed_at: '2026-05-20T01:06:00.000Z',
+      correlation_id: 'corr.task.400',
+      evidence_ref: 'task://kanban_fixture/TASK.400'
+    }
+  ];
+
+  await store.appendCollectorReport(report);
+
+  assert.deepEqual(store.getCounts(), {
+    agent_count: 7,
+    event_count: 0,
+    heartbeat_count: 0
+  });
+  assert.deepEqual(store.listEvents({ agent_id: 'app-engineering', limit: 5 }), []);
+  assert.equal(store.getLatestCollectorReport().summary.heartbeat_count, 0);
+  assert.deepEqual(
+    store.listEvidenceRecords({ source_kind: 'kanban_fixture' }).map((record) => ({
+      evidence_ref: record.evidence_ref,
+      output_candidate: record.output_candidate,
+      correlation_id: record.correlation_id
+    })),
+    [
+      {
+        evidence_ref: 'task://kanban_fixture/TASK.400',
+        output_candidate: false,
+        correlation_id: 'corr.task.400'
+      }
+    ]
+  );
+});
+
 test('evidence coverage fallback aggregate preserves Hermes buckets', async () => {
   const storeFile = await createStoreFile();
   await writeFile(

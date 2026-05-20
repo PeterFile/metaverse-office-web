@@ -15,6 +15,7 @@ const {
 const { SEED_AGENTS } = require('../src/domain');
 const { createAppServer } = require('../src/server');
 const { createPrototypeStore } = require('../src/store/prototype-store');
+const { taskEvidenceFileReaderFrom } = require('../src/collectors/task-evidence-source');
 
 const execFileAsync = promisify(execFile);
 
@@ -4738,6 +4739,109 @@ test('collector snapshot endpoints stay read-only on GET and require team-lead o
   assert.equal(snapshotRecord.kind, 'collector_snapshot');
   assert.equal(snapshotRecord.payload.collected_at, '2026-03-09T18:05:00.000Z');
   assert.equal(snapshotRecord.payload.items[0].heartbeat.current_state, 'coding');
+});
+
+test('collector snapshot persists opt-in task evidence without heartbeat advancement', async (t) => {
+  const controllerSnapshotCollector = createControllerSnapshotCollector({
+    agents: [SEED_AGENTS.find((agent) => agent.agent_id === 'app-engineering')],
+    readPathStat: async () => null,
+    listTmuxPanes: async () => [],
+    readTaskEvidenceCandidates: async () => ({
+      candidates: [
+        {
+          task_ref: 'TASK.400',
+          source_kind: 'kanban_fixture',
+          observed_at: '2026-05-20T01:00:00.000Z',
+          correlation_id: 'corr.task.400',
+          agent_id: 'app-engineering'
+        }
+      ],
+      rejected: []
+    })
+  });
+  const { baseUrl } = await createHarness(t, {
+    now: () => '2026-05-20T02:00:00.000Z',
+    controllerSnapshotCollector
+  });
+
+  const collected = await requestJson(`${baseUrl}/collectors/controller-snapshot`, {
+    method: 'POST',
+    headers: {
+      'x-actor-id': 'team-lead'
+    }
+  });
+  assert.equal(collected.response.status, 201);
+  assert.equal(collected.body.item.summary.heartbeat_count, 0);
+  assert.equal(collected.body.item.items[0].heartbeat.last_meaningful_output_at, null);
+  assert.deepEqual(collected.body.item.evidence_coverage.source_kind_buckets, {
+    workspace_file: 0,
+    workspace_root: 0,
+    tmux_observation: 0,
+    task_evidence: 1
+  });
+
+  const evidence = await requestJson(`${baseUrl}/evidence-records?source_kind=kanban_fixture`);
+  assert.equal(evidence.response.status, 200);
+  assert.deepEqual(
+    evidence.body.items.map((item) => ({
+      agent_id: item.agent_id,
+      source_kind: item.source_kind,
+      evidence_ref: item.evidence_ref,
+      evidence_role: item.evidence_role,
+      output_candidate: item.output_candidate,
+      correlation_id: item.correlation_id
+    })),
+    [
+      {
+        agent_id: 'app-engineering',
+        source_kind: 'kanban_fixture',
+        evidence_ref: 'task://kanban_fixture/TASK.400',
+        evidence_role: 'task_reference',
+        output_candidate: false,
+        correlation_id: 'corr.task.400'
+      }
+    ]
+  );
+});
+
+test('collector snapshot rejects unsafe task evidence file paths before append', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'metaverse-office-task-evidence-'));
+  const taskEvidenceFile = path.join(root, 'task-evidence.jsonl');
+  await writeFile(
+    taskEvidenceFile,
+    `${JSON.stringify({
+      task_ref: 'TASK-401',
+      source_kind: 'kanban_fixture',
+      observed_at: '2026-05-20T01:00:00.000Z',
+      correlation_id: 'corr-task-401',
+      agent_id: 'app-engineering',
+      path: '/tmp/private/token=task-secret'
+    })}\n`
+  );
+
+  const taskEvidenceReader = taskEvidenceFileReaderFrom({ filePath: taskEvidenceFile });
+  const controllerSnapshotCollector = createControllerSnapshotCollector({
+    agents: [SEED_AGENTS.find((agent) => agent.agent_id === 'app-engineering')],
+    readPathStat: async () => null,
+    listTmuxPanes: async () => [],
+    readTaskEvidenceCandidates: () => taskEvidenceReader.readEvidenceCandidates()
+  });
+  const { baseUrl, storeFile } = await createHarness(t, { controllerSnapshotCollector });
+
+  const collected = await requestJson(`${baseUrl}/collectors/controller-snapshot`, {
+    method: 'POST',
+    headers: {
+      'x-actor-id': 'team-lead'
+    }
+  });
+
+  assert.equal(collected.response.status, 500);
+  assert.equal(collected.body.error, 'internal_error');
+  assert.match(collected.body.details, /Invalid task evidence input: 1 rejected task evidence record/);
+  assert.equal(collected.body.details.includes(root), false);
+  assert.equal(collected.body.details.includes('/tmp/private'), false);
+  assert.equal(collected.body.details.includes('token='), false);
+  await assert.rejects(() => readFile(storeFile, 'utf8'), { code: 'ENOENT' });
 });
 
 test('collector snapshot rejects invalid Hermes runtime inputs before append', async (t) => {

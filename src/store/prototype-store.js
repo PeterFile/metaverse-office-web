@@ -2872,6 +2872,18 @@ function normalizeHermesSourceProvenance(sourceProvenance) {
     }
     normalized.line = sourceProvenance.line;
   }
+  if (
+    Number.isSafeInteger(sourceProvenance.source_input_ordinal) &&
+    sourceProvenance.source_input_ordinal > 0
+  ) {
+    normalized.source_input_ordinal = sourceProvenance.source_input_ordinal;
+  }
+  if (
+    Number.isSafeInteger(sourceProvenance.source_file_ordinal) &&
+    sourceProvenance.source_file_ordinal > 0
+  ) {
+    normalized.source_file_ordinal = sourceProvenance.source_file_ordinal;
+  }
 
   return normalized;
 }

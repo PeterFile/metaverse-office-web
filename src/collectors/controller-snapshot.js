@@ -1084,7 +1084,10 @@ function createHermesRuntimeSourcesFileReader({ filePath }) {
     const content = await readFile(sourceFilePath, 'utf8').catch((error) =>
       throwHermesRuntimeSourceIoError('Hermes runtime sources file', 'read', error)
     );
-    return parseHermesRuntimeSourcesFile(content);
+    return parseHermesRuntimeSourcesFile(content, 'Hermes runtime sources file', {
+      source_input_ordinal: 1,
+      source_file_ordinal: 1
+    });
   };
 }
 
@@ -1102,10 +1105,17 @@ function createHermesRuntimeSourcesReader({ inputPaths }) {
     for (const [sourcePathIndex, sourcePath] of sourcePaths.entries()) {
       const sourceInputLabel = `Hermes runtime source input ${sourcePathIndex + 1}`;
       for (const filePath of await listHermesRuntimeSourceFiles(sourcePath, sourceInputLabel)) {
-        const sourceFileLabel = `Hermes runtime source input ${sourceFileIndex + 1}`;
+        const sourceFileOrdinal = sourceFileIndex + 1;
+        const sourceFileLabel = `Hermes runtime source file ${sourceFileOrdinal}`;
+        const sourceParseLabel = `Hermes runtime source input ${sourceFileOrdinal}`;
         const content = await readHermesRuntimeSourceFile(filePath, sourceFileLabel);
         sourceFileIndex += 1;
-        facts.push(...parseHermesRuntimeSourcesFile(content, sourceFileLabel));
+        facts.push(
+          ...parseHermesRuntimeSourcesFile(content, sourceParseLabel, {
+            source_input_ordinal: sourcePathIndex + 1,
+            source_file_ordinal: sourceFileOrdinal
+          })
+        );
       }
     }
 
@@ -1145,7 +1155,11 @@ function isHermesRuntimeSourceFileName(fileName) {
   return fileName.endsWith('.json') || fileName.endsWith('.jsonl');
 }
 
-function parseHermesRuntimeSourcesFile(content, sourceFilePath = 'Hermes runtime sources file') {
+function parseHermesRuntimeSourcesFile(
+  content,
+  sourceFilePath = 'Hermes runtime sources file',
+  baseProvenance = null
+) {
   const trimmed = content.trim();
   if (!trimmed) {
     return [];
@@ -1156,7 +1170,10 @@ function parseHermesRuntimeSourcesFile(content, sourceFilePath = 'Hermes runtime
       ? parseHermesRuntimeSourcesJson(trimmed, sourceFilePath)
       : parseHermesRuntimeSourcesJsonl(content, sourceFilePath);
   return facts.map(({ fact, source_provenance }, index) =>
-    validateHermesRuntimeSourceFact(fact, index, sourceFilePath, source_provenance)
+    validateHermesRuntimeSourceFact(fact, index, sourceFilePath, {
+      ...source_provenance,
+      ...normalizeHermesSourceOrdinalProvenance(baseProvenance)
+    })
   );
 }
 
@@ -1445,6 +1462,31 @@ function normalizeHermesSourceProvenance(sourceProvenance) {
       return null;
     }
     normalized.line = sourceProvenance.line;
+  }
+
+  return {
+    ...normalized,
+    ...normalizeHermesSourceOrdinalProvenance(sourceProvenance)
+  };
+}
+
+function normalizeHermesSourceOrdinalProvenance(sourceProvenance) {
+  if (!sourceProvenance || typeof sourceProvenance !== 'object' || Array.isArray(sourceProvenance)) {
+    return {};
+  }
+
+  const normalized = {};
+  if (
+    Number.isSafeInteger(sourceProvenance.source_input_ordinal) &&
+    sourceProvenance.source_input_ordinal > 0
+  ) {
+    normalized.source_input_ordinal = sourceProvenance.source_input_ordinal;
+  }
+  if (
+    Number.isSafeInteger(sourceProvenance.source_file_ordinal) &&
+    sourceProvenance.source_file_ordinal > 0
+  ) {
+    normalized.source_file_ordinal = sourceProvenance.source_file_ordinal;
   }
 
   return normalized;

@@ -5380,6 +5380,10 @@ test('GET /runtime/source-gaps returns compact gap and unmapped evidence read-on
   assert.deepEqual(summary.body.item.collector_snapshot_id_buckets, {
     'collector-snapshot:2026-03-09T18:06:00.000Z': 2
   });
+  assert.equal(summary.body.item.first_observed_at, '2026-03-09T18:05:00.000Z');
+  assert.equal(summary.body.item.last_observed_at, '2026-03-09T18:05:50.000Z');
+  assert.equal(summary.body.item.first_collected_at, '2026-03-09T18:06:00.000Z');
+  assert.equal(summary.body.item.last_collected_at, '2026-03-09T18:06:00.000Z');
   assert.equal(Object.hasOwn(summary.body.item, 'items'), false);
   assert.equal(Object.hasOwn(summary.body.item, 'evidence_id'), false);
   assert.equal(Object.hasOwn(summary.body.item, 'evidence_ref'), false);

@@ -1004,6 +1004,10 @@ test('prototype store summarizes runtime source gaps before limit truncation', a
   assert.deepEqual(summary.collector_snapshot_id_buckets, {
     'collector-snapshot:2026-03-09T18:06:00.000Z': 2
   });
+  assert.equal(summary.first_observed_at, '2026-03-09T18:05:20.000Z');
+  assert.equal(summary.last_observed_at, '2026-03-09T18:05:50.000Z');
+  assert.equal(summary.first_collected_at, '2026-03-09T18:06:00.000Z');
+  assert.equal(summary.last_collected_at, '2026-03-09T18:06:00.000Z');
 
   const unmappedSummary = store.getRuntimeSourceGapsSummary({ mapped: 'false' });
   assert.equal(unmappedSummary.total_count, 1);

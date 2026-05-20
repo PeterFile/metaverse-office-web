@@ -1399,6 +1399,9 @@ function renderSelectedAgentEvidenceProvenanceAnchors(
   }
 
   const { snapshot, source, replay } = bundle.anchors;
+  const replayAnchorLabel = replay
+    ? findFirstNonEmptyString([replay.correlation_id, replay.evidence_id])
+    : null;
 
   return (
     <>
@@ -1410,8 +1413,8 @@ function renderSelectedAgentEvidenceProvenanceAnchors(
           {`Source anchor · ${formatBoundedEvidenceLedgerToken(source.evidence_id)} · ${source.source_kind} · ${source.evidence_role ?? 'unclassified'} · ${source.source_status ?? 'unknown'}`}
         </span>
       ) : null}
-      {replay ? (
-        <span>{`Replay anchor · ${formatBoundedEvidenceLedgerToken(replay.correlation_id)}`}</span>
+      {replay && replayAnchorLabel ? (
+        <span>{`Replay anchor · ${formatBoundedEvidenceLedgerToken(replayAnchorLabel)}`}</span>
       ) : null}
     </>
   );

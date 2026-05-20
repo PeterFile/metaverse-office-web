@@ -125,4 +125,39 @@ describe('buildEvidenceProvenanceProof', () => {
     expect(output).not.toContain('evidence_ref');
     expect(output).not.toContain('payload');
   });
+
+  it('uses evidence_id for replay proof anchors when correlation_id is absent', () => {
+    const proof = buildEvidenceProvenanceProof({
+      evidence_id: 'evidence-record-1',
+      record: {
+        observed_at: null,
+        collected_at: null,
+        agent_id: 'app-engineering',
+        source_kind: 'workspace_file',
+        evidence_role: 'agent_plan',
+        source_status: 'observed',
+        output_candidate: false,
+        collector_snapshot_id: 'collector-snapshot:2026-03-09T18:59:00.000Z',
+        correlation_id: null,
+        unmapped: false
+      },
+      anchors: {
+        snapshot: null,
+        source: null,
+        replay: {
+          evidence_id: 'evidence-record-1',
+          route: '/accountability/replay?evidence_id=evidence-record-1'
+        }
+      }
+    });
+
+    expect(proof?.anchors).toEqual([
+      {
+        kind: 'replay',
+        id: 'evidence-record-1',
+        label: 'Replay',
+        route: '/accountability/replay?evidence_id=evidence-record-1'
+      }
+    ]);
+  });
 });

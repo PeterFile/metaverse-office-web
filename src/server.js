@@ -256,13 +256,14 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
     if (!hasReplayAnchor(url.searchParams)) {
       sendJson(res, 400, {
         error: 'missing_replay_anchor',
-        details: 'one of event_id, evidence_ref, correlation_id, or agent_id is required'
+        details: 'one of event_id, evidence_id, evidence_ref, correlation_id, or agent_id is required'
       });
       return;
     }
 
     sendJson(res, 200, store.getAccountabilityReplay({
       event_id: getSearchValue(url.searchParams, 'event_id'),
+      evidence_id: getSearchValue(url.searchParams, 'evidence_id'),
       evidence_ref: getSearchValue(url.searchParams, 'evidence_ref'),
       correlation_id: getSearchValue(url.searchParams, 'correlation_id'),
       agent_id: getSearchValue(url.searchParams, 'agent_id'),
@@ -656,7 +657,7 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
 }
 
 function hasReplayAnchor(searchParams) {
-  return ['event_id', 'evidence_ref', 'correlation_id', 'agent_id'].some((name) =>
+  return ['event_id', 'evidence_id', 'evidence_ref', 'correlation_id', 'agent_id'].some((name) =>
     Boolean(getSearchValue(searchParams, name))
   );
 }

@@ -5611,9 +5611,9 @@ test('GET /evidence-records lists stored evidence records read-only with exact f
           route: `/evidence-records/${encodeURIComponent(evidenceId)}`
         },
         replay: {
+          evidence_id: evidenceId,
           correlation_id: 'collector-snapshot:2026-03-09T18:06:00.000Z',
-          route:
-            '/accountability/replay?correlation_id=collector-snapshot%3A2026-03-09T18%3A06%3A00.000Z'
+          route: `/accountability/replay?evidence_id=${encodeURIComponent(evidenceId)}`
         }
       }
     }
@@ -5622,6 +5622,22 @@ test('GET /evidence-records lists stored evidence records read-only with exact f
   assert.equal(JSON.stringify(provenanceBundle.body).includes('evidence_ref'), false);
   assert.equal(JSON.stringify(provenanceBundle.body).includes('metadata'), false);
   assert.equal(JSON.stringify(provenanceBundle.body).includes('degraded_reasons'), false);
+
+  const replay = await requestJson(
+    `${baseUrl}/accountability/replay?evidence_id=${encodeURIComponent(evidenceId)}&limit=5&window=60m`
+  );
+  assert.equal(replay.response.status, 200);
+  assert.deepEqual(replay.body.query, {
+    evidence_id: evidenceId,
+    limit: 5,
+    window: '60m'
+  });
+  assert.equal(JSON.stringify(replay.body.query).includes('/tmp/evidence-query'), false);
+  assert.ok(
+    replay.body.memory_artifacts.some(
+      (artifact) => artifact.artifact_ref === '/tmp/evidence-query/app/outbox.md'
+    )
+  );
 
   const unknownBundle = await requestJson(
     `${baseUrl}/evidence-records/missing-evidence-id/provenance-bundle`

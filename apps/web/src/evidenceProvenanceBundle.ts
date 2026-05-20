@@ -55,7 +55,7 @@ export function buildEvidenceProvenanceProof(
     buildAnchor(
       'replay',
       'Replay',
-      bundle.anchors.replay?.correlation_id,
+      bundle.anchors.replay?.correlation_id ?? bundle.anchors.replay?.evidence_id,
       bundle.anchors.replay?.route
     )
   ].filter((anchor): anchor is EvidenceProvenanceProofAnchor => anchor !== null);

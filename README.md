@@ -140,7 +140,7 @@ Optional env:
 - `GET /office/overview`
 - `GET /office/operations?limit=&state=&agent_id=&severity=`
 - `GET /timeline?window=&event_id=&agent_id=&event_type=&severity=&source_kind=&evidence_ref=&correlation_id=&limit=`
-- `GET /accountability/replay?event_id=&evidence_ref=&correlation_id=&agent_id=&source_kind=&artifact_kind=&limit=&window=`
+- `GET /accountability/replay?event_id=&evidence_id=&evidence_ref=&correlation_id=&agent_id=&source_kind=&artifact_kind=&limit=&window=`
 - `GET /accountability/replay/checkpoint-summary`
 - `GET /peer-watch/alerts?status=&target_agent_id=&agent_id=&watcher_agent_id=&observer_agent_id=&correlation_id=&severity=&limit=`
 - `GET /incidents?kind=&agent_id=&severity=&status=&correlation_id=&limit=&window=`
@@ -212,7 +212,7 @@ Optional env:
 
 ### Accountability replay notes
 - `GET /accountability/replay` is a bounded read-only bundle over existing event, interaction, and shared-memory artifact read models
-- at least one anchor is required: `event_id`, `evidence_ref`, `correlation_id`, or `agent_id`; missing all anchors returns `400 missing_replay_anchor`
+- at least one anchor is required: `event_id`, `evidence_id`, `evidence_ref`, `correlation_id`, or `agent_id`; missing all anchors returns `400 missing_replay_anchor`
 - optional `source_kind` and `artifact_kind` are read-only facets over the existing replay read models; `source_kind` narrows events/timeline and memory artifacts, while `artifact_kind` narrows memory artifacts
 - `limit` and `window` bound every returned slice; missing values default to `limit=10` and `window=60m`
 - the response includes `accountability` rollups, chronological `ledger` entries, `events`, `interactions`, and `memory_artifacts`

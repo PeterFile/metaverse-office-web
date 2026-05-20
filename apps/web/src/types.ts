@@ -343,7 +343,8 @@ export interface EvidenceProvenanceSourceAnchor {
 }
 
 export interface EvidenceProvenanceReplayAnchor {
-  correlation_id: string;
+  evidence_id?: string;
+  correlation_id?: string | null;
   route: string;
 }
 

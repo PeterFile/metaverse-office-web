@@ -1028,14 +1028,22 @@ class PrototypeStore {
 
   getAccountabilityReplay(filters = {}) {
     const normalizedFilters = normalizeAccountabilityReplayFilters(filters);
-    const events = this.listTimeline(normalizedFilters);
-    const interactions = this.listInteractions(normalizedFilters);
-    const memoryArtifacts = listAccountabilityReplayArtifacts({
-      store: this,
-      filters: normalizedFilters,
-      events,
-      interactions
-    });
+    const evidenceRecord = this.getEvidenceRecord(normalizedFilters.evidence_id);
+    const hasUnknownEvidenceId = normalizedFilters.evidence_id && !evidenceRecord;
+    const replayFilters = resolveAccountabilityReplayEvidenceAnchor(
+      normalizedFilters,
+      evidenceRecord
+    );
+    const events = hasUnknownEvidenceId ? [] : this.listTimeline(replayFilters);
+    const interactions = hasUnknownEvidenceId ? [] : this.listInteractions(replayFilters);
+    const memoryArtifacts = hasUnknownEvidenceId
+      ? []
+      : listAccountabilityReplayArtifacts({
+          store: this,
+          filters: replayFilters,
+          events,
+          interactions
+        });
     const ledger = createAccountabilityReplayLedger({
       events,
       interactions,
@@ -1563,6 +1571,7 @@ function createWorkflowSummary({ incidents = [], interactions = [], timeline = [
 function normalizeAccountabilityReplayFilters(filters = {}) {
   return {
     event_id: normalizeOptionalString(filters.event_id),
+    evidence_id: normalizeOptionalString(filters.evidence_id),
     evidence_ref: normalizeOptionalString(filters.evidence_ref),
     correlation_id: normalizeOptionalString(filters.correlation_id),
     agent_id: normalizeOptionalString(filters.agent_id),
@@ -1575,6 +1584,19 @@ function normalizeAccountabilityReplayFilters(filters = {}) {
     ),
     window: normalizeOptionalString(filters.window) || '60m',
     now: normalizeOptionalString(filters.now)
+  };
+}
+
+function resolveAccountabilityReplayEvidenceAnchor(filters, evidenceRecord) {
+  if (!filters.evidence_id || !evidenceRecord) {
+    return filters;
+  }
+
+  return {
+    ...filters,
+    evidence_ref: filters.evidence_ref || evidenceRecord.evidence_ref,
+    correlation_id: filters.correlation_id || evidenceRecord.correlation_id,
+    agent_id: filters.agent_id || evidenceRecord.agent_id
   };
 }
 
@@ -1592,6 +1614,9 @@ function createAccountabilityReplayQuery(filters) {
 
   if (filters.event_id) {
     query.event_id = filters.event_id;
+  }
+  if (filters.evidence_id) {
+    query.evidence_id = filters.evidence_id;
   }
   if (filters.evidence_ref) {
     query.evidence_ref = filters.evidence_ref;
@@ -3073,13 +3098,14 @@ function createEvidenceSourceAnchor(record) {
 }
 
 function createEvidenceReplayAnchor(record) {
-  if (!record.correlation_id) {
+  if (!record.evidence_id) {
     return null;
   }
 
-  const params = new URLSearchParams({ correlation_id: record.correlation_id });
+  const params = new URLSearchParams({ evidence_id: record.evidence_id });
   return {
-    correlation_id: record.correlation_id,
+    evidence_id: record.evidence_id,
+    correlation_id: record.correlation_id || null,
     route: `/accountability/replay?${params.toString()}`
   };
 }

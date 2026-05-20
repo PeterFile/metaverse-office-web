@@ -221,7 +221,7 @@ test('GET /accountability/replay rejects requests without an anchor', async (t) 
 
   assert.equal(response.status, 400);
   assert.equal(body.error, 'missing_replay_anchor');
-  assert.match(body.details, /event_id, evidence_ref, correlation_id, or agent_id/);
+  assert.match(body.details, /event_id, evidence_id, evidence_ref, correlation_id, or agent_id/);
 });
 
 test('GET /accountability/replay returns an evidence_ref-anchored replay bundle', async (t) => {
@@ -256,6 +256,33 @@ test('GET /accountability/replay returns an evidence_ref-anchored replay bundle'
         entry.basis_event_ids.includes('evt_replay_review_started')
     )
   );
+});
+
+test('GET /accountability/replay returns an empty bundle for unknown evidence_id', async (t) => {
+  const { baseUrl, store, storeFile } = await createHarness(t);
+  await seedReplaySlice(store);
+  const beforeLineCount = await countStoreLines(storeFile);
+
+  const { response, body } = await requestJson(
+    `${baseUrl}/accountability/replay?evidence_id=evidence_unknown&limit=5&window=15m`
+  );
+  const afterLineCount = await countStoreLines(storeFile);
+
+  assert.equal(response.status, 200);
+  assert.equal(afterLineCount, beforeLineCount);
+  assert.deepEqual(body.query, {
+    evidence_id: 'evidence_unknown',
+    limit: 5,
+    window: '15m'
+  });
+  assert.deepEqual(body.events, []);
+  assert.deepEqual(body.interactions, []);
+  assert.deepEqual(body.memory_artifacts, []);
+  assert.deepEqual(body.ledger, []);
+  assert.equal(body.accountability.event_count, 0);
+  assert.equal(body.accountability.interaction_count, 0);
+  assert.equal(body.accountability.artifact_count, 0);
+  assert.deepEqual(body.accountability.evidence_refs, []);
 });
 
 test('accountability replay ledger drops interaction basis ids that are not event-log ids', async (t) => {

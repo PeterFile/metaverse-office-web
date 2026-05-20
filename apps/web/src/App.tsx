@@ -50,6 +50,7 @@ import {
   deriveRuntimeSourceGapChips,
   deriveSelectedAgentSourceGapFact
 } from './aitown/sourceGapSignals';
+import { deriveSelectedAgentEvidenceGlance } from './aitown/selectedAgentEvidenceGlance';
 import { WorldProvider, useWorld } from './context/WorldContext';
 import { usePolledResource, type LoadState } from './hooks/usePolledResource';
 import { getHubFocusableElements, isHubElementVisible } from './hubFocus';
@@ -2709,6 +2710,15 @@ function AppInner() {
     workflow: activeWorkflow?.detail ?? null,
     correlationId: selectedAgentPeekCorrelationId
   });
+  const selectedAgentEvidenceGlance = useMemo(
+    () =>
+      deriveSelectedAgentEvidenceGlance({
+        selectedAgentId,
+        evidenceCoverage: visibleEvidenceCoverage,
+        sourceHealth: latestSourceHealth
+      }),
+    [latestSourceHealth, selectedAgentId, visibleEvidenceCoverage]
+  );
   const selectedAgentSourceGapFact = deriveSelectedAgentSourceGapFact(latestSourceHealth, selectedAgentId);
   const selectedAgentSourceGapSummary = selectedAgentSourceGapFact
     ? [
@@ -3048,6 +3058,7 @@ function AppInner() {
                 <span className="aitown-selected-agent-peek__eyebrow">Selected agent</span>
                 <strong>{selectedAgent.display_name}</strong>
                 <span>{`${HOT_ZONE_SEVERITY_LABELS[selectedAgentPeekSeverity]} · ${selectedAgentPeekStatus}`}</span>
+                {selectedAgentEvidenceGlance ? <span>{selectedAgentEvidenceGlance}</span> : null}
                 {selectedAgentSourceGapSummary && selectedAgentSourceGapFact ? (
                   <button
                     type="button"

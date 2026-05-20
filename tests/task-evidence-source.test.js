@@ -1,4 +1,7 @@
 const assert = require('node:assert/strict');
+const { mkdtemp, writeFile } = require('node:fs/promises');
+const os = require('node:os');
+const path = require('node:path');
 const test = require('node:test');
 
 const taskEvidenceSource = require('../src/collectors/task-evidence-source');
@@ -19,6 +22,13 @@ function assertNoLeaks(value) {
   for (const canary of LEAK_CANARIES) {
     assert.equal(serialized.includes(canary), false, `leaked canary: ${canary}`);
   }
+}
+
+async function writeTempEvidenceFile(name, content) {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'task-evidence-source-'));
+  const filePath = path.join(root, name);
+  await writeFile(filePath, content);
+  return { root, filePath };
 }
 
 test('normalizes fixture task facts into allowlisted evidence summaries', () => {
@@ -224,6 +234,201 @@ test('read-only source surface has no mutation verbs and does not call client wr
   assert.equal(result.candidates.length, 1);
   assert.equal(result.candidates[0].task_ref, 'TASK-126');
   assertNoLeaks(result);
+});
+
+test('reads opt-in task evidence facts from a JSON array file', async () => {
+  const { root, filePath } = await writeTempEvidenceFile(
+    'task-evidence.json',
+    JSON.stringify([
+      {
+        task_ref: 'TASK-200',
+        id: 'row-200',
+        source_kind: 'kanban_fixture',
+        observed_at: '2026-05-20T01:00:00.000Z',
+        correlation_id: 'corr-json',
+        agent_id: 'app-engineering',
+        raw_payload: { text: LEAK_CANARIES[5] }
+      }
+    ])
+  );
+
+  const reader = taskEvidenceSource.taskEvidenceFileReaderFrom({ filePath });
+  const result = await reader.readEvidenceCandidates();
+
+  assert.deepEqual(result, {
+    candidates: [
+      {
+        status: 'observed',
+        task_ref: 'TASK-200',
+        id: 'row-200',
+        source_kind: 'kanban_fixture',
+        observed_at: '2026-05-20T01:00:00.000Z',
+        correlation_id: 'corr-json',
+        agent_id: 'app-engineering'
+      }
+    ],
+    rejected: []
+  });
+  assert.equal(JSON.stringify(result).includes(root), false);
+  assertNoLeaks(result);
+});
+
+test('reads opt-in task evidence facts from a JSONL file', async () => {
+  const { root, filePath } = await writeTempEvidenceFile(
+    'task-evidence.jsonl',
+    [
+      JSON.stringify({
+        task_ref: 'TASK-201',
+        source_kind: 'linear_fixture',
+        observed_at: '2026-05-20T01:01:00.000Z',
+        correlation_id: 'corr-jsonl'
+      }),
+      '',
+      JSON.stringify({
+        task_ref: 'TASK-202',
+        source_kind: 'slack_fixture',
+        observed_at: '2026-05-20T01:02:00.000Z',
+        correlation_id: 'corr-jsonl-2'
+      })
+    ].join('\n')
+  );
+
+  const reader = taskEvidenceSource.taskEvidenceFileReaderFrom({ filePath });
+  const result = await reader.readEvidenceCandidates();
+
+  assert.deepEqual(result.candidates.map((candidate) => candidate.task_ref), ['TASK-201', 'TASK-202']);
+  assert.deepEqual(result.rejected, []);
+  assert.equal(JSON.stringify(result).includes(root), false);
+  assertNoLeaks(result);
+});
+
+test('fails closed for malformed task evidence JSON and JSONL files without leaks', async () => {
+  const json = await writeTempEvidenceFile('bad.json', `[{ "task_ref": "${LEAK_CANARIES[0]}" }`);
+  const jsonl = await writeTempEvidenceFile('bad.jsonl', `${LEAK_CANARIES[6]}\n`);
+
+  const jsonResult = await taskEvidenceSource.taskEvidenceFileReaderFrom({ filePath: json.filePath }).readEvidenceCandidates();
+  const jsonlResult = await taskEvidenceSource.taskEvidenceFileReaderFrom({ filePath: jsonl.filePath }).readEvidenceCandidates();
+
+  assert.deepEqual(jsonResult.candidates, []);
+  assert.deepEqual(jsonlResult.candidates, []);
+  assert.deepEqual(jsonResult.rejected, [
+    {
+      status: 'invalid',
+      index: null,
+      missing_fields: ['file'],
+      error: 'task evidence file could not be parsed'
+    }
+  ]);
+  assert.deepEqual(jsonlResult.rejected, [
+    {
+      status: 'invalid',
+      index: null,
+      missing_fields: ['file'],
+      error: 'task evidence file could not be parsed'
+    }
+  ]);
+  assert.equal(JSON.stringify([jsonResult, jsonlResult]).includes(json.root), false);
+  assert.equal(JSON.stringify([jsonResult, jsonlResult]).includes(jsonl.root), false);
+  assertNoLeaks([jsonResult, jsonlResult]);
+});
+
+test('fails closed for unreadable task evidence files without path leakage', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'task-evidence-source-'));
+  const filePath = path.join(root, 'missing.jsonl');
+
+  const result = await taskEvidenceSource.taskEvidenceFileReaderFrom({ filePath }).readEvidenceCandidates();
+
+  assert.deepEqual(result, {
+    candidates: [],
+    rejected: [
+      {
+        status: 'invalid',
+        index: null,
+        missing_fields: ['file'],
+        error: 'task evidence file could not be read'
+      }
+    ]
+  });
+  assert.equal(JSON.stringify(result).includes(root), false);
+  assert.equal(JSON.stringify(result).includes(filePath), false);
+  assertNoLeaks(result);
+});
+
+test('fails closed for unsafe optional identifiers in task evidence files', async () => {
+  const { root, filePath } = await writeTempEvidenceFile(
+    'unsafe.jsonl',
+    `${JSON.stringify({
+      task_ref: 'TASK-203',
+      id: LEAK_CANARIES[2],
+      source_kind: 'kanban_fixture',
+      observed_at: '2026-05-20T01:03:00.000Z',
+      correlation_id: 'corr-unsafe',
+      agent_id: LEAK_CANARIES[4]
+    })}\n${JSON.stringify({
+      task_ref: LEAK_CANARIES[0],
+      source_kind: 'kanban_fixture',
+      observed_at: '2026-05-20T01:04:00.000Z',
+      correlation_id: 'corr-secret-task'
+    })}\n${JSON.stringify({
+      task_ref: 'TASK-204',
+      source_kind: 'kanban_fixture',
+      observed_at: '2026-05-20T01:05:00.000Z',
+      correlation_id: LEAK_CANARIES[3]
+    })}\n`
+  );
+
+  const result = await taskEvidenceSource.taskEvidenceFileReaderFrom({ filePath }).readEvidenceCandidates();
+
+  assert.deepEqual(result.candidates, []);
+  assert.deepEqual(result.rejected, [
+    {
+      status: 'invalid',
+      index: 0,
+      missing_fields: ['id', 'agent_id'],
+      error: 'task evidence fact has unsafe optional identifiers'
+    },
+    {
+      status: 'invalid',
+      index: 1,
+      missing_fields: ['task_ref'],
+      error: 'task evidence fact missing required fields'
+    },
+    {
+      status: 'invalid',
+      index: 2,
+      missing_fields: ['correlation_id'],
+      error: 'task evidence fact missing required fields'
+    }
+  ]);
+  assert.equal(JSON.stringify(result).includes(root), false);
+  assertNoLeaks(result);
+});
+
+test('file-reader output projects to canonical task_reference evidence records', async () => {
+  const { filePath } = await writeTempEvidenceFile(
+    'project.json',
+    JSON.stringify([
+      {
+        task_ref: 'TASK-204',
+        source_kind: 'task_fixture',
+        observed_at: '2026-05-20T01:04:00.000Z',
+        correlation_id: 'corr-project'
+      }
+    ])
+  );
+
+  const readResult = await taskEvidenceSource.taskEvidenceFileReaderFrom({ filePath }).readEvidenceCandidates();
+  const projected = taskEvidenceSource.projectTaskEvidenceRecords(readResult.candidates, {
+    collected_at: '2026-05-20T01:05:00.000Z',
+    collector_snapshot_id: 'task-evidence:file-reader'
+  });
+
+  assert.deepEqual(projected.rejected, []);
+  assert.equal(projected.records[0].evidence_ref, 'task://task_fixture/TASK-204');
+  assert.equal(projected.records[0].evidence_role, 'task_reference');
+  assert.equal(projected.records[0].output_candidate, false);
+  assert.equal(projected.records[0].source_status, 'observed');
+  assertNoLeaks(projected);
 });
 
 test('projects task facts into canonical read-only evidence records', () => {

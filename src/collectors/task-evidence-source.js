@@ -1,3 +1,5 @@
+const { readFile } = require('node:fs/promises');
+
 const SUPPORTED_SOURCE_KINDS = new Set([
   'kanban_fixture',
   'linear_fixture',
@@ -5,6 +7,7 @@ const SUPPORTED_SOURCE_KINDS = new Set([
   'task_fixture'
 ]);
 const REQUIRED_FIELDS = Object.freeze(['task_ref', 'source_kind', 'observed_at', 'correlation_id']);
+const FILE_OPTIONAL_IDENTIFIER_FIELDS = Object.freeze(['id', 'agent_id', 'local_path']);
 const SAFE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/;
 const SECRET_ID_PATTERNS = Object.freeze([
   /^xox[a-z]-/i,
@@ -44,6 +47,141 @@ function taskEvidenceSourceFrom(options = {}) {
       const clientFacts = await client.listTaskEvidenceFacts();
       return normalizeTaskEvidenceFacts(Array.isArray(clientFacts) ? clientFacts : []);
     }
+  };
+}
+
+function taskEvidenceFileReaderFrom(options = {}) {
+  const filePath = typeof options.filePath === 'string' ? options.filePath.trim() : '';
+
+  return {
+    async readEvidenceCandidates() {
+      if (!filePath) {
+        return fileFailure('task evidence file path is required');
+      }
+
+      let content;
+      try {
+        content = await readFile(filePath, 'utf8');
+      } catch {
+        return fileFailure('task evidence file could not be read');
+      }
+
+      const parsed = parseTaskEvidenceFileContent(content);
+      if (parsed.rejected.length > 0) {
+        return parsed;
+      }
+
+      return normalizeTaskEvidenceFileFacts(parsed.facts);
+    }
+  };
+}
+
+function parseTaskEvidenceFileContent(content) {
+  const trimmed = content.trim();
+  if (!trimmed) {
+    return { facts: [], rejected: [] };
+  }
+
+  if (trimmed.startsWith('[')) {
+    return parseTaskEvidenceJsonArray(trimmed);
+  }
+
+  return parseTaskEvidenceJsonLines(content);
+}
+
+function parseTaskEvidenceJsonArray(content) {
+  try {
+    const parsed = JSON.parse(content);
+    if (!Array.isArray(parsed)) {
+      return fileFailure('task evidence file must contain a JSON array');
+    }
+
+    return { facts: parsed, rejected: [] };
+  } catch {
+    return fileFailure('task evidence file could not be parsed');
+  }
+}
+
+function parseTaskEvidenceJsonLines(content) {
+  const facts = [];
+  const lines = content.split(/\r?\n/);
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      continue;
+    }
+
+    try {
+      facts.push(JSON.parse(trimmed));
+    } catch {
+      return fileFailure('task evidence file could not be parsed');
+    }
+  }
+
+  return { facts, rejected: [] };
+}
+
+function normalizeTaskEvidenceFileFacts(facts) {
+  const candidates = [];
+  const rejected = [];
+
+  facts.forEach((fact, index) => {
+    const unsafeFields = unsafeFileIdentifierFields(fact);
+    const normalized =
+      unsafeFields.length > 0
+        ? {
+            status: 'invalid',
+            index,
+            missing_fields: unsafeFields,
+            error: 'task evidence fact has unsafe optional identifiers'
+          }
+        : normalizeTaskEvidenceFact(fact, index);
+
+    if (normalized.status === 'invalid' || normalized.status === 'unsupported') {
+      rejected.push(normalized);
+      return;
+    }
+
+    candidates.push(normalized);
+  });
+
+  if (rejected.length > 0) {
+    return { candidates: [], rejected };
+  }
+
+  return { candidates, rejected };
+}
+
+function unsafeFileIdentifierFields(fact) {
+  if (!fact || typeof fact !== 'object' || Array.isArray(fact)) {
+    return [];
+  }
+
+  return FILE_OPTIONAL_IDENTIFIER_FIELDS.filter((field) => {
+    if (fact[field] === undefined || fact[field] === null || fact[field] === '') {
+      return false;
+    }
+
+    if (field === 'local_path') {
+      return true;
+    }
+
+    return !safeIdentifier(fact[field]);
+  });
+}
+
+function fileFailure(error) {
+  return {
+    candidates: [],
+    rejected: [
+      {
+        status: 'invalid',
+        index: null,
+        missing_fields: ['file'],
+        error
+      }
+    ]
   };
 }
 
@@ -257,5 +395,6 @@ function sanitizeEvidenceIdPart(value) {
 module.exports = {
   normalizeTaskEvidenceFacts,
   projectTaskEvidenceRecords,
+  taskEvidenceFileReaderFrom,
   taskEvidenceSourceFrom
 };

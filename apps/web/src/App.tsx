@@ -2944,6 +2944,7 @@ function AppInner() {
                             >
                               <strong>{chip.displayName}</strong>
                               <span>{`${chip.sourceLabel} · ${chip.status}`}</span>
+                              {chip.lifecycleLabel ? <span>{chip.lifecycleLabel}</span> : null}
                               <span>{chip.detail}</span>
                               <span>{chip.observedAtLabel}</span>
                             </button>
@@ -2956,6 +2957,7 @@ function AppInner() {
                             >
                               <strong>{chip.displayName}</strong>
                               <span>{`${chip.sourceLabel} · ${chip.status}`}</span>
+                              {chip.lifecycleLabel ? <span>{chip.lifecycleLabel}</span> : null}
                               <span>{chip.detail}</span>
                               <span>{chip.observedAtLabel}</span>
                             </span>

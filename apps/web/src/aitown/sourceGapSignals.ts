@@ -31,6 +31,7 @@ export type SourceGapChip = {
   sourceKind: DisplayedSourceGapKind;
   status: CollectorSourceHealthStatus;
   sourceLabel: string;
+  lifecycleLabel?: string;
   detail: string;
   observedAtLabel: string;
 };
@@ -168,6 +169,9 @@ export function deriveRuntimeSourceGapChips(
   }
 
   const displayNameByAgentId = new Map((agents ?? []).map((agent) => [agent.agent_id, agent.display_name]));
+  const lifecycleByKey = new Map(
+    deriveRuntimeSourceGapLifecycle(runtimeSourceGaps).map((item) => [item.key, item])
+  );
   const chips: SourceGapChip[] = [];
 
   for (const gap of runtimeSourceGaps) {
@@ -182,6 +186,7 @@ export function deriveRuntimeSourceGapChips(
     }
 
     const isMapped = Boolean(gap.agent_id && !gap.unmapped);
+    const lifecycle = lifecycleByKey.get(buildRuntimeSourceGapLifecycleKey(gap, sourceKind));
     chips.push({
       agentId: isMapped ? gap.agent_id : null,
       displayName: isMapped ? displayName! : 'Unmapped runtime source',
@@ -190,6 +195,7 @@ export function deriveRuntimeSourceGapChips(
       sourceKind,
       status: gap.source_status,
       sourceLabel: SOURCE_KIND_LABELS[sourceKind],
+      lifecycleLabel: lifecycle ? renderRuntimeSourceGapLifecycleLabel(lifecycle.state) : undefined,
       detail: renderRuntimeSourceGapDetail(gap),
       observedAtLabel: renderObservedAtLabel(gap.observed_at)
     });
@@ -249,7 +255,7 @@ export function deriveRuntimeSourceGapLifecycle(
 
     groups.set(key, {
       key,
-      agentId: gap.agent_id,
+      agentId: gap.agent_id && !gap.unmapped ? gap.agent_id : null,
       sourceKind,
       evidenceRole: gap.evidence_role,
       status: gap.source_status,
@@ -379,6 +385,21 @@ function resolveRuntimeSourceGapLifecycleState(
   }
 
   return priorCount > 0 ? 'ongoing' : 'new';
+}
+
+function renderRuntimeSourceGapLifecycleLabel(state: RuntimeSourceGapLifecycleState) {
+  switch (state) {
+    case 'new':
+      return 'New gap';
+    case 'ongoing':
+      return 'Ongoing gap';
+    case 'recurring':
+      return 'Recurring gap';
+    case 'unmapped_observed':
+      return 'Unmapped observed';
+    case 'current_gap':
+      return 'Current gap';
+  }
 }
 
 function compareRuntimeSourceGapLifecycleItems(

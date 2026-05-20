@@ -391,6 +391,7 @@ describe('deriveRuntimeSourceGapChips', () => {
         sourceKind: 'workspace_files',
         status: 'degraded',
         sourceLabel: 'Workspace files',
+        lifecycleLabel: 'Current gap',
         detail: 'agent output · output candidate',
         observedAtLabel: 'Observed 2026-03-16T08:59:30.000Z'
       },
@@ -402,6 +403,7 @@ describe('deriveRuntimeSourceGapChips', () => {
         sourceKind: 'tmux_session',
         status: 'observed',
         sourceLabel: 'Tmux session',
+        lifecycleLabel: 'Unmapped observed',
         detail: 'runtime unmapped · not mapped to an agent',
         observedAtLabel: 'Observed 2026-03-16T08:58:30.000Z'
       }

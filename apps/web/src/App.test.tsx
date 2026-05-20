@@ -3678,6 +3678,7 @@ afterEach(() => {
       name: 'Open source gap supervision for Growth Revenue Agent workspace files degraded'
     });
     expect(gapChip).toHaveTextContent('Workspace files · degraded');
+    expect(gapChip).toHaveTextContent('Current gap');
     expect(gapChip).toHaveTextContent('agent output · output candidate');
     expect(gapChip).toHaveTextContent('Observed 2026-03-16T08:57:45.000Z');
     expect(gapChip).not.toHaveTextContent('/tmp/growth-revenue');

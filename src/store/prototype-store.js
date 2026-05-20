@@ -654,7 +654,11 @@ class PrototypeStore {
       source_kind_buckets: createZeroBuckets(EVIDENCE_RECORD_SOURCE_KINDS),
       evidence_role_buckets: createZeroBuckets(EVIDENCE_RECORD_ROLES),
       source_status_buckets: createZeroBuckets(EVIDENCE_RECORD_SOURCE_STATUSES),
-      collector_snapshot_id_buckets: {}
+      collector_snapshot_id_buckets: {},
+      first_observed_at: null,
+      last_observed_at: null,
+      first_collected_at: null,
+      last_collected_at: null
     };
 
     for (const record of gapRecords) {
@@ -669,6 +673,22 @@ class PrototypeStore {
       incrementBucket(summary.evidence_role_buckets, record.evidence_role);
       incrementBucket(summary.source_status_buckets, record.source_status);
       incrementBucket(summary.collector_snapshot_id_buckets, record.collector_snapshot_id);
+      summary.first_observed_at = getEarliestEvidenceRecordIsoValue(
+        summary.first_observed_at,
+        record.observed_at
+      );
+      summary.last_observed_at = getLatestEvidenceRecordIsoValue(
+        summary.last_observed_at,
+        record.observed_at
+      );
+      summary.first_collected_at = getEarliestEvidenceRecordIsoValue(
+        summary.first_collected_at,
+        record.collected_at
+      );
+      summary.last_collected_at = getLatestEvidenceRecordIsoValue(
+        summary.last_collected_at,
+        record.collected_at
+      );
     }
 
     return summary;

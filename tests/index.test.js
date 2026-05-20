@@ -4,7 +4,11 @@ const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
 
-const { createHermesRuntimeSourcesOptions, parseDelimitedEnvPaths } = require('../src/index');
+const {
+  createHermesRuntimeSourcesOptions,
+  createTaskEvidenceOptions,
+  parseDelimitedEnvPaths
+} = require('../src/index');
 
 test('parseDelimitedEnvPaths trims blanks using the platform delimiter', () => {
   assert.deepEqual(
@@ -37,4 +41,36 @@ test('Hermes runtime source PATHS take precedence over legacy FILE', async () =>
     facts.map((fact) => fact.evidence_ref),
     ['hermes://profile/paths-profile']
   );
+});
+
+test('task evidence file env is opt-in and returns normalized candidates only when set', async () => {
+  assert.deepEqual(createTaskEvidenceOptions({ taskEvidenceFile: '' }), {});
+
+  const root = await mkdtemp(path.join(os.tmpdir(), 'metaverse-office-task-evidence-index-'));
+  const filePath = path.join(root, 'task-evidence.jsonl');
+  await writeFile(
+    filePath,
+    `${JSON.stringify({
+      task_ref: 'TASK-300',
+      source_kind: 'kanban_fixture',
+      observed_at: '2026-05-20T01:00:00.000Z',
+      correlation_id: 'corr-task-300',
+      agent_id: 'app-engineering'
+    })}\n`
+  );
+
+  const options = createTaskEvidenceOptions({ taskEvidenceFile: filePath });
+  const result = await options.readTaskEvidenceCandidates();
+
+  assert.deepEqual(result.rejected, []);
+  assert.deepEqual(result.candidates, [
+    {
+      status: 'observed',
+      task_ref: 'TASK-300',
+      source_kind: 'kanban_fixture',
+      observed_at: '2026-05-20T01:00:00.000Z',
+      correlation_id: 'corr-task-300',
+      agent_id: 'app-engineering'
+    }
+  ]);
 });

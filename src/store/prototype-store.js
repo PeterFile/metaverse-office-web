@@ -37,6 +37,24 @@ const EVIDENCE_RECORD_SOURCE_KINDS = Object.freeze([
   'slack_fixture',
   'task_fixture'
 ]);
+const TASK_EVIDENCE_SOURCE_KINDS = new Set([
+  'kanban_fixture',
+  'linear_fixture',
+  'slack_fixture',
+  'task_fixture'
+]);
+const SAFE_TASK_EVIDENCE_VALUE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/;
+const TASK_EVIDENCE_WARNING_CODES = new Set(['agent_id suppressed']);
+const UNSAFE_TASK_EVIDENCE_VALUE_PATTERNS = Object.freeze([
+  /^xox[a-z]-/i,
+  /^gh[opusr]_/i,
+  /^github_pat_/i,
+  /^sk-[A-Za-z0-9_-]{16,}$/i,
+  /(?:^|[?&])(?:access_)?token=/i,
+  /^[/~]/,
+  /^[A-Za-z]:[\\/]/,
+  /^https?:\/\/.+(?:hooks\.slack\.com|webhook|webhooks)/i
+]);
 const EVIDENCE_RECORD_ROLES = Object.freeze([
   'workspace_presence',
   'inbound_task',
@@ -2328,8 +2346,17 @@ function isValidTmuxRef(ref) {
   return isTmuxRef(ref) && !/\/(null|undefined)\.(null|undefined)$/.test(ref);
 }
 
+function isProtocolEvidenceRef(ref) {
+  return typeof ref === 'string' && (ref.startsWith('task://') || ref.startsWith('hermes://'));
+}
+
 function isWorkspaceFileRef(ref) {
-  return typeof ref === 'string' && !isTmuxRef(ref) && path.extname(ref).length > 0;
+  return (
+    typeof ref === 'string' &&
+    !isTmuxRef(ref) &&
+    !isProtocolEvidenceRef(ref) &&
+    path.extname(ref).length > 0
+  );
 }
 
 function isAgentOutputWorkspaceFileRef(ref) {
@@ -2567,9 +2594,15 @@ function normalizeCollectorReport(report = {}, previousReport = null) {
   const normalizedItems = (report.items || []).map((item) =>
     normalizeCollectorReportItem(item, previousItemsByAgentId.get(item.agent_id) || null)
   );
+  const normalizedRuntimeSourceEvidence = normalizeCollectorRuntimeSourceEvidence(
+    report.runtime_source_evidence
+  );
 
   return {
     ...report,
+    ...(normalizedRuntimeSourceEvidence
+      ? { runtime_source_evidence: normalizedRuntimeSourceEvidence }
+      : {}),
     shared_artifacts: createSharedArtifactRollup(normalizedItems),
     items: normalizedItems
   };
@@ -2595,6 +2628,15 @@ function normalizeCollectorReportItem(item = {}, previousItem = null) {
   const nonTmuxEvidenceRefs = normalizedEvidenceRefs.filter((ref) => !isTmuxRef(ref));
   const passthroughTmuxEvidenceRefs =
     rawTmuxObservations.length === 0 ? currentStableTmuxRefs : [];
+  const hasTaskEvidenceObservations = Array.isArray(item.task_evidence_observations);
+  const itemTaskEvidenceAgentId = normalizeTaskEvidenceValue(item.agent_id);
+  const normalizedTaskEvidenceObservations = hasTaskEvidenceObservations
+    ? item.task_evidence_observations
+        .map((observation) =>
+          projectSanitizedTaskEvidenceObservation(observation, { agentId: itemTaskEvidenceAgentId })
+        )
+        .filter(Boolean)
+    : [];
 
   return {
     ...item,
@@ -2603,7 +2645,57 @@ function normalizeCollectorReportItem(item = {}, previousItem = null) {
       ...normalizedTmuxEvidenceRefs,
       ...passthroughTmuxEvidenceRefs
     ]),
-    tmux_observations: normalizedTmuxObservations
+    tmux_observations: normalizedTmuxObservations,
+    ...(hasTaskEvidenceObservations
+      ? { task_evidence_observations: normalizedTaskEvidenceObservations }
+      : {})
+  };
+}
+
+function normalizeCollectorRuntimeSourceEvidence(runtimeSourceEvidence) {
+  if (
+    !runtimeSourceEvidence ||
+    typeof runtimeSourceEvidence !== 'object' ||
+    Array.isArray(runtimeSourceEvidence)
+  ) {
+    return runtimeSourceEvidence || null;
+  }
+
+  const hasUnmappedTaskEvidence = Array.isArray(runtimeSourceEvidence.unmapped_task_evidence);
+  return {
+    ...runtimeSourceEvidence,
+    ...(hasUnmappedTaskEvidence
+      ? {
+          unmapped_task_evidence: runtimeSourceEvidence.unmapped_task_evidence
+            .map((observation) => projectSanitizedTaskEvidenceObservation(observation))
+            .filter(Boolean)
+        }
+      : {})
+  };
+}
+
+function projectSanitizedTaskEvidenceObservation(observation, options = {}) {
+  const taskEvidence = normalizeTaskEvidenceObservation(observation);
+  if (!taskEvidence) {
+    return null;
+  }
+
+  return {
+    status: taskEvidence.status,
+    task_ref: taskEvidence.task_ref,
+    source_kind: taskEvidence.source_kind,
+    observed_at: taskEvidence.observed_at,
+    correlation_id: taskEvidence.correlation_id,
+    ...(options.agentId ? { agent_id: options.agentId } : {}),
+    evidence_ref: taskEvidence.evidence_ref,
+    ...(taskEvidence.fact_id ? { fact_id: taskEvidence.fact_id } : {}),
+    ...(Number.isSafeInteger(taskEvidence.source_index)
+      ? { source_index: taskEvidence.source_index }
+      : {}),
+    ...(taskEvidence.warnings.length > 0 ? { warnings: taskEvidence.warnings.slice() } : {}),
+    ...(taskEvidence.source_provenance
+      ? { source_provenance: taskEvidence.source_provenance }
+      : {})
   };
 }
 
@@ -2647,7 +2739,7 @@ function createCollectorEvidenceRecords(report = {}) {
       source_status: record.source_status || null,
       output_candidate: Boolean(record.output_candidate),
       collector_snapshot_id: collectorSnapshotId,
-      correlation_id: collectorSnapshotId,
+      correlation_id: record.correlation_id || collectorSnapshotId,
       degraded_reasons: normalizeStringValues(record.degraded_reasons),
       metadata: record.metadata || {}
     });
@@ -2798,6 +2890,35 @@ function createCollectorEvidenceRecords(report = {}) {
         })
       });
     }
+
+    const taskEvidenceObservations = Array.isArray(item.task_evidence_observations)
+      ? item.task_evidence_observations
+      : [];
+
+    for (const [sourceIndex, observation] of taskEvidenceObservations.entries()) {
+      const taskEvidence = normalizeTaskEvidenceObservation(observation);
+      if (!taskEvidence) {
+        continue;
+      }
+
+      appendRecord({
+        observed_at: taskEvidence.observed_at,
+        agent_id: item.agent_id,
+        source_kind: taskEvidence.source_kind,
+        evidence_ref: taskEvidence.evidence_ref,
+        evidence_role: 'task_reference',
+        source_status: taskEvidence.status,
+        output_candidate: false,
+        correlation_id: taskEvidence.correlation_id,
+        degraded_reasons: taskEvidence.warnings,
+        dedupe_disambiguator: ['task_evidence', sourceIndex, taskEvidence.correlation_id || ''],
+        metadata: createTaskEvidenceRecordMetadata({
+          observation: taskEvidence,
+          sourceHealthKey: 'task_evidence',
+          sourceIndex
+        })
+      });
+    }
   }
 
   for (const session of report.runtime_source_evidence?.unmapped_tmux_sessions || []) {
@@ -2849,6 +2970,35 @@ function createCollectorEvidenceRecords(report = {}) {
     });
   }
 
+  const unmappedTaskEvidence = Array.isArray(report.runtime_source_evidence?.unmapped_task_evidence)
+    ? report.runtime_source_evidence.unmapped_task_evidence
+    : [];
+
+  for (const [sourceIndex, source] of unmappedTaskEvidence.entries()) {
+    const taskEvidence = normalizeTaskEvidenceObservation(source);
+    if (!taskEvidence) {
+      continue;
+    }
+
+    appendRecord({
+      observed_at: taskEvidence.observed_at,
+      agent_id: null,
+      source_kind: taskEvidence.source_kind,
+      evidence_ref: taskEvidence.evidence_ref,
+      evidence_role: 'task_reference',
+      source_status: taskEvidence.status,
+      output_candidate: false,
+      correlation_id: taskEvidence.correlation_id,
+      degraded_reasons: taskEvidence.warnings,
+      dedupe_disambiguator: ['unmapped_task_evidence', sourceIndex, taskEvidence.correlation_id || ''],
+      metadata: createTaskEvidenceRecordMetadata({
+        observation: taskEvidence,
+        sourceHealthKey: 'runtime_source_evidence.unmapped_task_evidence',
+        sourceIndex
+      })
+    });
+  }
+
   return records;
 }
 
@@ -2874,6 +3024,94 @@ function createNegativeWorkspaceSourceReasons(sourceRecord) {
 
 function isHermesRuntimeSourceKind(sourceKind) {
   return sourceKind === 'hermes_profile' || sourceKind === 'hermes_session';
+}
+
+function normalizeTaskEvidenceObservation(observation) {
+  if (!observation || typeof observation !== 'object' || Array.isArray(observation)) {
+    return null;
+  }
+
+  const sourceKind = TASK_EVIDENCE_SOURCE_KINDS.has(observation.source_kind)
+    ? observation.source_kind
+    : null;
+  const taskRef = normalizeTaskEvidenceValue(observation.task_ref);
+  const observedAt = normalizeCollectorTimestamp(observation.observed_at);
+  const correlationId = normalizeTaskEvidenceValue(observation.correlation_id);
+
+  if (!sourceKind || !taskRef || !observedAt || !correlationId) {
+    return null;
+  }
+
+  return {
+    status: normalizeTaskEvidenceStatus(observation.status),
+    task_ref: taskRef,
+    source_kind: sourceKind,
+    observed_at: observedAt,
+    correlation_id: correlationId,
+    evidence_ref: `task://${sourceKind}/${taskRef}`,
+    fact_id: normalizeTaskEvidenceValue(observation.fact_id),
+    source_index: Number.isSafeInteger(observation.source_index) ? observation.source_index : null,
+    warnings: normalizeTaskEvidenceWarnings(observation.warnings || observation.degraded_reasons),
+    source_provenance: normalizeHermesSourceProvenance(observation.source_provenance)
+  };
+}
+
+function normalizeTaskEvidenceValue(value) {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  if (!SAFE_TASK_EVIDENCE_VALUE_PATTERN.test(trimmed) || isUnsafeTaskEvidenceValue(trimmed)) {
+    return null;
+  }
+
+  return trimmed;
+}
+
+function isUnsafeTaskEvidenceValue(value) {
+  return UNSAFE_TASK_EVIDENCE_VALUE_PATTERNS.some((pattern) => pattern.test(value));
+}
+
+function normalizeTaskEvidenceWarnings(values) {
+  if (!Array.isArray(values)) {
+    return [];
+  }
+
+  return Array.from(
+    new Set(
+      values
+        .filter((value) => typeof value === 'string')
+        .map((value) => value.trim())
+        .filter((value) => TASK_EVIDENCE_WARNING_CODES.has(value))
+    )
+  ).sort();
+}
+
+function normalizeTaskEvidenceStatus(status) {
+  return EVIDENCE_RECORD_SOURCE_STATUSES.includes(status) ? status : 'observed';
+}
+
+function createTaskEvidenceRecordMetadata({ observation, sourceHealthKey, sourceIndex }) {
+  const metadata = {
+    task_ref: observation.task_ref,
+    source_index: Number.isSafeInteger(observation.source_index)
+      ? observation.source_index
+      : sourceIndex,
+    source_health_key: sourceHealthKey
+  };
+
+  if (observation.fact_id) {
+    metadata.fact_id = observation.fact_id;
+  }
+  if (observation.warnings.length > 0) {
+    metadata.warnings = observation.warnings.slice();
+  }
+  if (observation.source_provenance) {
+    metadata.source_provenance = observation.source_provenance;
+  }
+
+  return metadata;
 }
 
 function createHermesEvidenceRecordMetadata({ observation, sourceHealth, sourceHealthKey }) {
@@ -3116,6 +3354,10 @@ function createEvidenceReplayAnchor(record) {
 }
 
 function isRuntimeSourceGapRecord(record) {
+  if (record.evidence_role === 'task_reference' && TASK_EVIDENCE_SOURCE_KINDS.has(record.source_kind)) {
+    return false;
+  }
+
   if (RUNTIME_SOURCE_GAP_STATUSES.includes(record.source_status)) {
     return true;
   }

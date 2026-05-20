@@ -374,6 +374,12 @@ test('fails closed for unsafe optional identifiers in task evidence files', asyn
       source_kind: 'kanban_fixture',
       observed_at: '2026-05-20T01:05:00.000Z',
       correlation_id: LEAK_CANARIES[3]
+    })}\n${JSON.stringify({
+      task_ref: 'TASK-205',
+      source_kind: 'kanban_fixture',
+      observed_at: '2026-05-20T01:06:00.000Z',
+      correlation_id: 'corr-path',
+      path: LEAK_CANARIES[0]
     })}\n`
   );
 
@@ -398,6 +404,12 @@ test('fails closed for unsafe optional identifiers in task evidence files', asyn
       index: 2,
       missing_fields: ['correlation_id'],
       error: 'task evidence fact missing required fields'
+    },
+    {
+      status: 'invalid',
+      index: 3,
+      missing_fields: ['path'],
+      error: 'task evidence fact has unsafe optional identifiers'
     }
   ]);
   assert.equal(JSON.stringify(result).includes(root), false);

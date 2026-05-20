@@ -4,6 +4,7 @@ const path = require('node:path');
 const { promisify } = require('node:util');
 
 const { SEED_AGENTS } = require('../domain');
+const { projectTaskEvidenceRecords } = require('./task-evidence-source');
 
 const execFileAsync = promisify(execFile);
 
@@ -16,7 +17,8 @@ const EVIDENCE_SOURCE_KINDS = Object.freeze([
   'workspace_root',
   'tmux_observation',
   'hermes_profile',
-  'hermes_session'
+  'hermes_session',
+  'task_evidence'
 ]);
 const COMMAND_STATE_MAP = Object.freeze({
   cat: 'researching',
@@ -44,6 +46,8 @@ function createControllerSnapshotCollector(options = {}) {
   const readHermesRuntimeSources =
     options.readHermesRuntimeSources || defaultReadHermesRuntimeSources;
   const hermesRuntimeSourcesEnabled = typeof options.readHermesRuntimeSources === 'function';
+  const readTaskEvidenceCandidates =
+    options.readTaskEvidenceCandidates || defaultReadTaskEvidenceCandidates;
 
   return {
     collectSnapshot({ actorId = 'team-lead', collectedAt = new Date().toISOString() } = {}) {
@@ -54,7 +58,8 @@ function createControllerSnapshotCollector(options = {}) {
         readPathStat,
         listTmuxPanes,
         readHermesRuntimeSources,
-        hermesRuntimeSourcesEnabled
+        hermesRuntimeSourcesEnabled,
+        readTaskEvidenceCandidates
       });
     }
   };
@@ -68,6 +73,8 @@ async function collectControllerSnapshot(options = {}) {
   const listTmuxPanes = options.listTmuxPanes || defaultListTmuxPanes;
   const readHermesRuntimeSources =
     options.readHermesRuntimeSources || defaultReadHermesRuntimeSources;
+  const readTaskEvidenceCandidates =
+    options.readTaskEvidenceCandidates || defaultReadTaskEvidenceCandidates;
   const hermesRuntimeSourcesEnabled =
     options.hermesRuntimeSourcesEnabled === undefined
       ? typeof options.readHermesRuntimeSources === 'function'
@@ -79,6 +86,11 @@ async function collectControllerSnapshot(options = {}) {
     agents,
     enabled: hermesRuntimeSourcesEnabled
   });
+  const taskEvidenceIndex = groupTaskEvidenceCandidates({
+    readResult: await readTaskEvidenceCandidates(),
+    agents,
+    collectedAt
+  });
   const items = [];
 
   for (const agent of agents) {
@@ -86,6 +98,7 @@ async function collectControllerSnapshot(options = {}) {
     const tmuxObservations = panesBySession.get(agent.session_ref) || [];
     const hermesRuntimeObservations =
       hermesRuntimeSourceIndex.factsByAgentId.get(agent.agent_id) || [];
+    const taskEvidenceObservations = taskEvidenceIndex.factsByAgentId.get(agent.agent_id) || [];
     const hermesRuntimeHealthObservations =
       hermesRuntimeSourceIndex.healthFactsByAgentId.get(agent.agent_id) || hermesRuntimeObservations;
     const hermesSourceHealth =
@@ -104,6 +117,7 @@ async function collectControllerSnapshot(options = {}) {
         workspaceSourceRecords: workspaceSources.source_records,
         tmuxObservations,
         hermesRuntimeObservations,
+        taskEvidenceObservations,
         sourceHealth: {
           ...workspaceSources.source_health,
           tmux_session: createTmuxSessionHealth({
@@ -125,7 +139,8 @@ async function collectControllerSnapshot(options = {}) {
     runtime_source_evidence: createRuntimeSourceEvidence({
       panesBySession,
       expectedSessionRefs: new Set(agents.map((agent) => agent.session_ref)),
-      unmappedHermesSources: hermesRuntimeSourceIndex.unmappedFacts
+      unmappedHermesSources: hermesRuntimeSourceIndex.unmappedFacts,
+      unmappedTaskEvidence: taskEvidenceIndex.unmappedFacts
     }),
     items
   };
@@ -264,6 +279,7 @@ function createCollectorItem({
   workspaceSourceRecords,
   tmuxObservations,
   hermesRuntimeObservations,
+  taskEvidenceObservations = [],
   sourceHealth
 }) {
   const latestWorkspaceFile = workspaceObservations.find(isAgentOutputWorkspaceObservation);
@@ -287,30 +303,31 @@ function createCollectorItem({
     latestWorkspaceFile,
     latestTmuxObservation
   });
+  const evidenceRefs = createEvidenceRefs({
+    workspaceObservations,
+    tmuxObservations,
+    hermesRuntimeObservations,
+    taskEvidenceObservations
+  });
 
   return {
     agent_id: agent.agent_id,
     workspace_root: agent.workspace_root,
     session_ref: agent.session_ref,
     source_health: sourceHealth,
-    evidence_refs: createEvidenceRefs({
-      workspaceObservations,
-      tmuxObservations,
-      hermesRuntimeObservations
-    }),
+    evidence_refs: evidenceRefs,
     workspace_observations: workspaceObservations,
     workspace_source_records: workspaceSourceRecords,
     tmux_observations: tmuxObservations,
     hermes_runtime_observations: hermesRuntimeObservations,
+    ...(taskEvidenceObservations.length > 0
+      ? { task_evidence_observations: taskEvidenceObservations }
+      : {}),
     supervision: {
       watch_target: agent.watch_target,
       watched_by: agent.watched_by.slice(),
       needs_attention: rebootRecommended || currentState === 'blocked' || confidenceLevel === 'low',
-      evidence_refs: createEvidenceRefs({
-        workspaceObservations,
-        tmuxObservations,
-        hermesRuntimeObservations
-      })
+      evidence_refs: evidenceRefs
     },
     heartbeat: {
       agent_id: agent.agent_id,
@@ -323,11 +340,7 @@ function createCollectorItem({
       current_blocker: currentBlocker,
       confidence_level: confidenceLevel,
       reboot_recommended: rebootRecommended,
-      evidence_refs: createEvidenceRefs({
-        workspaceObservations,
-        tmuxObservations,
-        hermesRuntimeObservations
-      })
+      evidence_refs: evidenceRefs
     }
   };
 }
@@ -480,7 +493,12 @@ function createHermesSessionHealth({ agent, hermesRuntimeObservations }) {
   };
 }
 
-function createRuntimeSourceEvidence({ panesBySession, expectedSessionRefs, unmappedHermesSources }) {
+function createRuntimeSourceEvidence({
+  panesBySession,
+  expectedSessionRefs,
+  unmappedHermesSources,
+  unmappedTaskEvidence = []
+}) {
   const unmappedTmuxSessions = [];
 
   for (const [sessionName, observations] of panesBySession.entries()) {
@@ -505,6 +523,9 @@ function createRuntimeSourceEvidence({ panesBySession, expectedSessionRefs, unma
     ),
     ...(unmappedHermesSources.length > 0
       ? { unmapped_hermes_sources: unmappedHermesSources }
+      : {}),
+    ...(unmappedTaskEvidence.length > 0
+      ? { unmapped_task_evidence: unmappedTaskEvidence }
       : {})
   };
 }
@@ -633,7 +654,7 @@ function createSourceKindBuckets(sourceRefsByKind) {
     tmux_observation: sourceRefsByKind.get('tmux_observation').size
   };
 
-  for (const kind of ['hermes_profile', 'hermes_session']) {
+  for (const kind of ['hermes_profile', 'hermes_session', 'task_evidence']) {
     const count = sourceRefsByKind.get(kind).size;
     if (count > 0) {
       buckets[kind] = count;
@@ -691,6 +712,19 @@ function collectItemEvidenceCoverage(item = {}) {
       ref: observation.evidence_ref,
       source_kind: observation.source_kind,
       latest_at: normalizeIsoTimestamp(observation.last_observed_at),
+      observed: true
+    });
+  }
+
+  for (const observation of item.task_evidence_observations || []) {
+    if (!observation?.evidence_ref) {
+      continue;
+    }
+
+    addEvidenceCoverageEntry(entriesByRef, {
+      ref: observation.evidence_ref,
+      source_kind: 'task_evidence',
+      latest_at: normalizeIsoTimestamp(observation.observed_at),
       observed: true
     });
   }
@@ -767,9 +801,17 @@ function isHermesRuntimeEvidenceRef(evidenceRef) {
   );
 }
 
+function isTaskEvidenceRef(evidenceRef) {
+  return typeof evidenceRef === 'string' && evidenceRef.startsWith('task://');
+}
+
 function deriveEvidenceSourceKindFromRef(evidenceRef) {
   if (typeof evidenceRef === 'string' && evidenceRef.startsWith('tmux://')) {
     return 'tmux_observation';
+  }
+
+  if (isTaskEvidenceRef(evidenceRef)) {
+    return 'task_evidence';
   }
 
   if (typeof evidenceRef === 'string' && evidenceRef.startsWith('hermes://profile/')) {
@@ -823,7 +865,11 @@ function collectItemArtifactMentions(item = {}) {
   }
 
   for (const evidenceRef of normalizeEvidenceRefs(item.evidence_refs)) {
-    if (seenArtifactRefs.has(evidenceRef) || isHermesRuntimeEvidenceRef(evidenceRef)) {
+    if (
+      seenArtifactRefs.has(evidenceRef) ||
+      isHermesRuntimeEvidenceRef(evidenceRef) ||
+      isTaskEvidenceRef(evidenceRef)
+    ) {
       continue;
     }
 
@@ -889,7 +935,12 @@ function rankArtifactKind(left, right) {
   return rightRank > leftRank ? right : left;
 }
 
-function createEvidenceRefs({ workspaceObservations, tmuxObservations, hermesRuntimeObservations = [] }) {
+function createEvidenceRefs({
+  workspaceObservations = [],
+  tmuxObservations = [],
+  hermesRuntimeObservations = [],
+  taskEvidenceObservations = []
+}) {
   const refs = [];
 
   for (const observation of workspaceObservations) {
@@ -904,6 +955,12 @@ function createEvidenceRefs({ workspaceObservations, tmuxObservations, hermesRun
   }
 
   for (const observation of hermesRuntimeObservations) {
+    if (observation.evidence_ref) {
+      refs.push(observation.evidence_ref);
+    }
+  }
+
+  for (const observation of taskEvidenceObservations) {
     if (observation.evidence_ref) {
       refs.push(observation.evidence_ref);
     }
@@ -1072,6 +1129,86 @@ async function defaultListTmuxPanes() {
 
 async function defaultReadHermesRuntimeSources() {
   return [];
+}
+
+async function defaultReadTaskEvidenceCandidates() {
+  return { candidates: [], rejected: [] };
+}
+
+function groupTaskEvidenceCandidates({ readResult, agents, collectedAt }) {
+  if (!readResult || !Array.isArray(readResult.candidates) || !Array.isArray(readResult.rejected)) {
+    throw new Error('Invalid task evidence input: reader returned an invalid result');
+  }
+
+  if (readResult.rejected.length > 0) {
+    throw createTaskEvidenceReadError(readResult.rejected);
+  }
+
+  const projected = projectTaskEvidenceRecords(readResult.candidates, {
+    collected_at: collectedAt,
+    collector_snapshot_id: `task-evidence:${collectedAt}`
+  });
+  if (projected.rejected.length > 0) {
+    throw createTaskEvidenceReadError(projected.rejected);
+  }
+
+  const agentsById = new Map(agents.map((agent) => [agent.agent_id, agent]));
+  const factsByAgentId = new Map();
+  const unmappedFacts = [];
+
+  for (const record of projected.records) {
+    const agentId = record.agent_id && agentsById.has(record.agent_id) ? record.agent_id : null;
+    const observation = createTaskEvidenceObservationFromRecord(record, { agentId });
+
+    if (!agentId) {
+      unmappedFacts.push(observation);
+      continue;
+    }
+
+    if (!factsByAgentId.has(agentId)) {
+      factsByAgentId.set(agentId, []);
+    }
+    factsByAgentId.get(agentId).push(observation);
+  }
+
+  for (const observations of factsByAgentId.values()) {
+    observations.sort(compareTaskEvidenceObservation);
+  }
+
+  return {
+    factsByAgentId,
+    unmappedFacts: unmappedFacts.sort(compareTaskEvidenceObservation)
+  };
+}
+
+function createTaskEvidenceObservationFromRecord(record, { agentId }) {
+  const metadata = record.metadata && typeof record.metadata === 'object' ? record.metadata : {};
+  return {
+    status: record.source_status || 'observed',
+    task_ref: metadata.task_ref,
+    source_kind: record.source_kind,
+    observed_at: record.observed_at,
+    correlation_id: record.correlation_id,
+    ...(agentId ? { agent_id: agentId } : {}),
+    evidence_ref: record.evidence_ref,
+    ...(metadata.fact_id ? { fact_id: metadata.fact_id } : {}),
+    ...(Number.isSafeInteger(metadata.source_index) ? { source_index: metadata.source_index } : {}),
+    ...(record.degraded_reasons.length > 0 ? { warnings: record.degraded_reasons.slice() } : {})
+  };
+}
+
+function createTaskEvidenceReadError(rejected) {
+  const count = Array.isArray(rejected) ? rejected.length : 0;
+  return new Error(
+    `Invalid task evidence input: ${count} rejected task evidence ${count === 1 ? 'record' : 'records'}`
+  );
+}
+
+function compareTaskEvidenceObservation(left, right) {
+  return (
+    left.evidence_ref.localeCompare(right.evidence_ref) ||
+    String(left.correlation_id || '').localeCompare(String(right.correlation_id || ''))
+  );
 }
 
 function createHermesRuntimeSourcesFileReader({ filePath }) {

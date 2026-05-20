@@ -7,7 +7,7 @@ const SUPPORTED_SOURCE_KINDS = new Set([
   'task_fixture'
 ]);
 const REQUIRED_FIELDS = Object.freeze(['task_ref', 'source_kind', 'observed_at', 'correlation_id']);
-const FILE_OPTIONAL_IDENTIFIER_FIELDS = Object.freeze(['id', 'agent_id', 'local_path']);
+const FILE_OPTIONAL_IDENTIFIER_FIELDS = Object.freeze(['id', 'agent_id', 'local_path', 'path']);
 const SAFE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/;
 const SECRET_ID_PATTERNS = Object.freeze([
   /^xox[a-z]-/i,
@@ -163,7 +163,7 @@ function unsafeFileIdentifierFields(fact) {
       return false;
     }
 
-    if (field === 'local_path') {
+    if (field === 'local_path' || field === 'path') {
       return true;
     }
 

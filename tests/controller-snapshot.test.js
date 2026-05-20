@@ -558,6 +558,109 @@ test('collector treats injected Hermes runtime facts as source evidence only', a
   assert.deepEqual(factoryReport.items[0].hermes_runtime_observations, item.hermes_runtime_observations);
 });
 
+test('collector treats injected task evidence facts as evidence only', async () => {
+  const appAgent = {
+    ...SEED_AGENTS.find((agent) => agent.agent_id === 'app-engineering'),
+    workspace_root: '/tmp/task-evidence-source/app-engineering'
+  };
+
+  const report = await collectControllerSnapshot({
+    agents: [appAgent],
+    collectedAt: '2026-05-20T02:00:00.000Z',
+    readPathStat: async () => null,
+    listTmuxPanes: async () => [],
+    readTaskEvidenceCandidates: async () => ({
+      candidates: [
+        {
+          task_ref: 'TASK-200',
+          source_kind: 'kanban_fixture',
+          observed_at: '2026-05-20T01:00:00.000Z',
+          correlation_id: 'corr-task',
+          agent_id: 'app-engineering',
+          id: 'fixture-row-200'
+        },
+        {
+          task_ref: 'TASK-201',
+          source_kind: 'linear_fixture',
+          observed_at: '2026-05-20T01:01:00.000Z',
+          correlation_id: 'corr-unmapped'
+        }
+      ],
+      rejected: []
+    })
+  });
+
+  const item = report.items[0];
+  assert.equal(item.heartbeat.current_state, 'idle');
+  assert.equal(item.heartbeat.active_task, 'No evidence captured');
+  assert.equal(item.heartbeat.last_meaningful_output_at, null);
+  assert.equal(item.heartbeat.last_file_write_at, null);
+  assert.deepEqual(item.task_evidence_observations, [
+    {
+      status: 'observed',
+      task_ref: 'TASK-200',
+      source_kind: 'kanban_fixture',
+      observed_at: '2026-05-20T01:00:00.000Z',
+      correlation_id: 'corr-task',
+      agent_id: 'app-engineering',
+      evidence_ref: 'task://kanban_fixture/TASK-200',
+      fact_id: 'fixture-row-200',
+      source_index: 0
+    }
+  ]);
+  assert.ok(item.evidence_refs.includes('task://kanban_fixture/TASK-200'));
+  assert.ok(item.heartbeat.evidence_refs.includes('task://kanban_fixture/TASK-200'));
+  assert.ok(item.supervision.evidence_refs.includes('task://kanban_fixture/TASK-200'));
+  assert.deepEqual(report.evidence_coverage.source_kind_buckets, {
+    workspace_file: 0,
+    workspace_root: 0,
+    tmux_observation: 0,
+    task_evidence: 1
+  });
+  assert.deepEqual(report.runtime_source_evidence.unmapped_task_evidence, [
+    {
+      status: 'observed',
+      task_ref: 'TASK-201',
+      source_kind: 'linear_fixture',
+      observed_at: '2026-05-20T01:01:00.000Z',
+      correlation_id: 'corr-unmapped',
+      evidence_ref: 'task://linear_fixture/TASK-201',
+      source_index: 1
+    }
+  ]);
+
+  const serialized = JSON.stringify(report);
+  assert.equal(serialized.includes('dispatch'), false);
+});
+
+test('collector rejects invalid task evidence input before producing a snapshot', async () => {
+  await assert.rejects(
+    collectControllerSnapshot({
+      agents: [SEED_AGENTS.find((agent) => agent.agent_id === 'app-engineering')],
+      collectedAt: '2026-05-20T02:00:00.000Z',
+      readPathStat: async () => null,
+      listTmuxPanes: async () => [],
+      readTaskEvidenceCandidates: async () => ({
+        candidates: [],
+        rejected: [
+          {
+            status: 'invalid',
+            index: null,
+            missing_fields: ['file'],
+            error: '/tmp/private/token=task-secret'
+          }
+        ]
+      })
+    }),
+    (error) => {
+      assert.match(error.message, /Invalid task evidence input: 1 rejected task evidence record/);
+      assert.equal(error.message.includes('/tmp/private'), false);
+      assert.equal(error.message.includes('token='), false);
+      return true;
+    }
+  );
+});
+
 test('collector degrades duplicate Hermes runtime mappings without promoting unsafe facts', async () => {
   const appAgent = {
     ...SEED_AGENTS.find((agent) => agent.agent_id === 'app-engineering'),

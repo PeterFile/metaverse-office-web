@@ -808,7 +808,9 @@ test('collector can read opt-in Hermes runtime facts from JSON and JSONL files',
         metadata: {},
         source_provenance: {
           source_format: 'json_array',
-          source_index: 0
+          source_index: 0,
+          source_input_ordinal: 1,
+          source_file_ordinal: 1
         }
       }
     ]
@@ -827,7 +829,9 @@ test('collector can read opt-in Hermes runtime facts from JSON and JSONL files',
       source_provenance: {
         source_format: 'jsonl',
         source_index: 0,
-        line: 1
+        line: 1,
+        source_input_ordinal: 1,
+        source_file_ordinal: 1
       }
     }
   ]);
@@ -875,14 +879,21 @@ test('collector can read opt-in Hermes runtime facts from multiple files and dir
   })();
 
   assert.deepEqual(
-    facts.map((fact) => [fact.source_kind, fact.evidence_ref, fact.last_observed_at]),
+    facts.map((fact) => [
+      fact.source_kind,
+      fact.evidence_ref,
+      fact.last_observed_at,
+      fact.source_provenance.source_input_ordinal,
+      fact.source_provenance.source_file_ordinal
+    ]),
     [
-      ['hermes_profile', 'hermes://profile/app-profile', '2026-03-09T18:02:00.000Z'],
-      ['hermes_session', 'hermes://session/5-web3-app-engineering', '2026-03-09T18:03:00.000Z'],
-      ['hermes_profile', 'hermes://profile/unmapped-worker', '2026-03-09T18:04:00.000Z']
+      ['hermes_profile', 'hermes://profile/app-profile', '2026-03-09T18:02:00.000Z', 1, 1],
+      ['hermes_session', 'hermes://session/5-web3-app-engineering', '2026-03-09T18:03:00.000Z', 1, 2],
+      ['hermes_profile', 'hermes://profile/unmapped-worker', '2026-03-09T18:04:00.000Z', 2, 3]
     ]
   );
   assert.equal(facts.some((fact) => String(fact.evidence_ref).includes(root)), false);
+  assert.equal(facts.some((fact) => JSON.stringify(fact.source_provenance).includes(root)), false);
 });
 
 test('collector labels missing Hermes runtime source inputs without leaking paths', async () => {
@@ -969,7 +980,7 @@ test('collector labels unreadable Hermes runtime source files without leaking pa
         inputPaths: [sourcesDir]
       })(),
     (error) => {
-      assert.match(error.message, /Hermes runtime source input 2/);
+      assert.match(error.message, /Hermes runtime source file 2/);
       assert.equal(error.message.includes(root), false);
       assert.equal(error.message.includes(sourcesDir), false);
       assert.equal(error.message.includes(unreadableFile), false);

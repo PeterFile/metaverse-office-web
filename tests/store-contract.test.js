@@ -215,7 +215,9 @@ function createHermesRuntimeCollectorReport() {
           degraded_reasons: [],
           source_provenance: {
             source_format: 'json_array',
-            source_index: 0
+            source_index: 0,
+            source_input_ordinal: 2,
+            source_file_ordinal: 3
           }
         }
       ]
@@ -242,7 +244,9 @@ function createHermesRuntimeCollectorReport() {
             degraded_reasons: [],
             source_provenance: {
               source_format: 'json_array',
-              source_index: 0
+              source_index: 0,
+              source_input_ordinal: 1,
+              source_file_ordinal: 1
             },
             metadata: {
               noisy_runtime_payload: 'must not persist'
@@ -260,7 +264,9 @@ function createHermesRuntimeCollectorReport() {
             source_provenance: {
               source_format: 'jsonl',
               source_index: 2,
-              line: 4
+              line: 4,
+              source_input_ordinal: 1,
+              source_file_ordinal: 2
             },
             metadata: {
               noisy_runtime_payload: 'must not persist'
@@ -552,7 +558,9 @@ test('prototype store persists Hermes runtime source facts as read-only evidence
     source_health_key: 'hermes_profile',
     source_provenance: {
       source_format: 'json_array',
-      source_index: 0
+      source_index: 0,
+      source_input_ordinal: 1,
+      source_file_ordinal: 1
     }
   });
   assert.equal(Object.hasOwn(hermesRecords[0].metadata, 'noisy_runtime_payload'), false);
@@ -571,7 +579,9 @@ test('prototype store persists Hermes runtime source facts as read-only evidence
     source_health_key: 'runtime_source_evidence.unmapped_hermes_sources',
     source_provenance: {
       source_format: 'json_array',
-      source_index: 0
+      source_index: 0,
+      source_input_ordinal: 2,
+      source_file_ordinal: 3
     }
   });
 

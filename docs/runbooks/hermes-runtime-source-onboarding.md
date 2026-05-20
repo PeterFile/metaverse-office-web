@@ -27,6 +27,8 @@ Enable ingestion only with one of these environment variables:
 
 Directories expand local `.json` and `.jsonl` files in stable lexical order. Unset variables preserve empty Hermes runtime input.
 
+Every accepted fact gets bounded provenance only: `source_input_ordinal` is the 1-based configured input position, `source_file_ordinal` is the 1-based expanded file read position, `source_format` is `json_array` or `jsonl`, `source_index` is the zero-based fact index within that file format, and JSONL also includes physical `line`. These are abstract ordinals, not filesystem paths.
+
 Missing files, unreadable files, invalid JSON/JSONL, invalid facts, or unsupported source kinds fail the collection request before any event, heartbeat, evidence-record, or collector-snapshot append.
 
 ## Supported Facts

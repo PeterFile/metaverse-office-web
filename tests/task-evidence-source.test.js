@@ -225,3 +225,75 @@ test('read-only source surface has no mutation verbs and does not call client wr
   assert.equal(result.candidates[0].task_ref, 'TASK-126');
   assertNoLeaks(result);
 });
+
+test('projects task facts into canonical read-only evidence records', () => {
+  const result = taskEvidenceSource.projectTaskEvidenceRecords(
+    [
+      {
+        task_ref: 'TASK-129',
+        id: 'fixture-row-129',
+        source_kind: 'kanban_fixture',
+        observed_at: '2026-05-20T01:02:03.000Z',
+        correlation_id: 'corr-task-129',
+        agent_id: 'app-engineering',
+        raw_payload: {
+          text: LEAK_CANARIES[5]
+        }
+      },
+      {
+        task_ref: 'TASK-130',
+        source_kind: 'linear_fixture',
+        observed_at: '2026-05-20T01:03:00.000Z',
+        correlation_id: 'corr-task-130',
+        agent_id: LEAK_CANARIES[0]
+      }
+    ],
+    {
+      collected_at: '2026-05-20T01:04:00.000Z',
+      collector_snapshot_id: 'task-evidence:2026-05-20T01:04:00.000Z'
+    }
+  );
+
+  assert.deepEqual(result.records, [
+    {
+      evidence_id: 'ev_task-evidence_2026-05-20T01_04_00_000Z_kanban_fixture_TASK-129_1',
+      observed_at: '2026-05-20T01:02:03.000Z',
+      collected_at: '2026-05-20T01:04:00.000Z',
+      agent_id: 'app-engineering',
+      source_kind: 'kanban_fixture',
+      evidence_ref: 'task://kanban_fixture/TASK-129',
+      evidence_role: 'task_reference',
+      source_status: 'observed',
+      output_candidate: false,
+      collector_snapshot_id: 'task-evidence:2026-05-20T01:04:00.000Z',
+      correlation_id: 'corr-task-129',
+      degraded_reasons: [],
+      metadata: {
+        task_ref: 'TASK-129',
+        fact_id: 'fixture-row-129',
+        source_index: 0
+      }
+    },
+    {
+      evidence_id: 'ev_task-evidence_2026-05-20T01_04_00_000Z_linear_fixture_TASK-130_2',
+      observed_at: '2026-05-20T01:03:00.000Z',
+      collected_at: '2026-05-20T01:04:00.000Z',
+      agent_id: null,
+      source_kind: 'linear_fixture',
+      evidence_ref: 'task://linear_fixture/TASK-130',
+      evidence_role: 'task_reference',
+      source_status: 'degraded',
+      output_candidate: false,
+      collector_snapshot_id: 'task-evidence:2026-05-20T01:04:00.000Z',
+      correlation_id: 'corr-task-130',
+      degraded_reasons: ['agent_id suppressed'],
+      metadata: {
+        task_ref: 'TASK-130',
+        source_index: 1,
+        warnings: ['agent_id suppressed']
+      }
+    }
+  ]);
+  assert.deepEqual(result.rejected, []);
+  assertNoLeaks(result);
+});

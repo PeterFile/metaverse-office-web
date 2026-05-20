@@ -6,6 +6,7 @@ const path = require('node:path');
 const { promisify } = require('node:util');
 const test = require('node:test');
 
+const taskEvidenceSource = require('../src/collectors/task-evidence-source');
 const { PrototypeStore, createPrototypeStore } = require('../src/store/prototype-store');
 
 const execFileAsync = promisify(execFile);
@@ -549,6 +550,85 @@ test('JSONL prototype store appends and replays collector evidence records witho
   assert.equal(records.filter((record) => record.kind === 'evidence_record').length, 3);
 });
 
+test('JSONL prototype store replays canonical task evidence records as read-only evidence', async () => {
+  const storeFile = await createStoreFile();
+  const taskEvidence = taskEvidenceSource.projectTaskEvidenceRecords(
+    [
+      {
+        task_ref: 'TASK-129',
+        source_kind: 'kanban_fixture',
+        observed_at: '2026-05-20T01:02:03.000Z',
+        correlation_id: 'corr-task-129',
+        agent_id: 'app-engineering',
+        title: '/tmp/store-contract/raw-task-title'
+      }
+    ],
+    {
+      collected_at: '2026-05-20T01:04:00.000Z',
+      collector_snapshot_id: 'task-evidence:2026-05-20T01:04:00.000Z'
+    }
+  );
+
+  await writeFile(
+    storeFile,
+    `${JSON.stringify({ kind: 'evidence_record', payload: taskEvidence.records[0] })}\n`
+  );
+
+  const store = await createPrototypeStore({ filePath: storeFile });
+  const records = store.listEvidenceRecords({ source_kind: 'kanban_fixture' });
+
+  assert.deepEqual(records, taskEvidence.records);
+  assert.deepEqual(store.getCounts(), {
+    agent_count: 7,
+    event_count: 0,
+    heartbeat_count: 0
+  });
+  assert.deepEqual(store.getEvidenceRecordsSummary({ evidence_role: 'task_reference' }), {
+    total_count: 1,
+    returned_limit: 50,
+    mapped_count: 1,
+    unmapped_count: 0,
+    output_candidate_buckets: {
+      true: 0,
+      false: 1
+    },
+    source_kind_buckets: {
+      workspace_root: 0,
+      workspace_file: 0,
+      tmux_observation: 0,
+      hermes_profile: 0,
+      hermes_session: 0,
+      kanban_fixture: 1,
+      linear_fixture: 0,
+      slack_fixture: 0,
+      task_fixture: 0
+    },
+    evidence_role_buckets: {
+      workspace_presence: 0,
+      inbound_task: 0,
+      agent_output: 0,
+      agent_plan: 0,
+      runtime_activity: 0,
+      runtime_presence: 0,
+      runtime_unmapped: 0,
+      task_reference: 1
+    },
+    source_status_buckets: {
+      observed: 1,
+      degraded: 0,
+      missing: 0,
+      error: 0
+    },
+    collector_snapshot_id_buckets: {
+      'task-evidence:2026-05-20T01:04:00.000Z': 1
+    },
+    first_observed_at: '2026-05-20T01:02:03.000Z',
+    last_observed_at: '2026-05-20T01:02:03.000Z',
+    first_collected_at: '2026-05-20T01:04:00.000Z',
+    last_collected_at: '2026-05-20T01:04:00.000Z'
+  });
+});
+
 test('prototype store does not expose half collector snapshots when a derived append fails', async () => {
   const recordLog = new FailingCollectorBatchRecordLog({ failOnKind: 'evidence_record' });
   const store = new PrototypeStore({
@@ -882,7 +962,11 @@ test('prototype store summarizes evidence records with list filter semantics bef
       workspace_file: 0,
       tmux_observation: 1,
       hermes_profile: 0,
-      hermes_session: 0
+      hermes_session: 0,
+      kanban_fixture: 0,
+      linear_fixture: 0,
+      slack_fixture: 0,
+      task_fixture: 0
     },
     evidence_role_buckets: {
       workspace_presence: 1,
@@ -891,7 +975,8 @@ test('prototype store summarizes evidence records with list filter semantics bef
       agent_plan: 0,
       runtime_activity: 0,
       runtime_presence: 0,
-      runtime_unmapped: 1
+      runtime_unmapped: 1,
+      task_reference: 0
     },
     source_status_buckets: {
       observed: 2,
@@ -922,7 +1007,11 @@ test('prototype store summarizes evidence records with list filter semantics bef
       workspace_file: 0,
       tmux_observation: 0,
       hermes_profile: 0,
-      hermes_session: 0
+      hermes_session: 0,
+      kanban_fixture: 0,
+      linear_fixture: 0,
+      slack_fixture: 0,
+      task_fixture: 0
     },
     evidence_role_buckets: {
       workspace_presence: 0,
@@ -931,7 +1020,8 @@ test('prototype store summarizes evidence records with list filter semantics bef
       agent_plan: 0,
       runtime_activity: 0,
       runtime_presence: 0,
-      runtime_unmapped: 0
+      runtime_unmapped: 0,
+      task_reference: 0
     },
     source_status_buckets: {
       observed: 0,

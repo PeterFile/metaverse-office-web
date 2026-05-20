@@ -9,6 +9,7 @@ const LEAK_CANARIES = [
   '/tmp/github-token-canary',
   'token=super-secret-value',
   'https://example.test/webhook/secret',
+  'POST /control-plane/dispatch',
   'raw payload snippet should never escape'
 ];
 

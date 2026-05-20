@@ -359,6 +359,7 @@ function projectReplayContract(store) {
     latestCollectorReport: store.getLatestCollectorReport(),
     evidenceRecords: store.listEvidenceRecords(),
     evidenceRecordsSummary: store.getEvidenceRecordsSummary({ output_candidate: 'false', limit: 1 }),
+    replayCheckpointSummary: store.getReplayCheckpointSummary(),
     latestCollectorSourceHealth: store.getLatestCollectorSourceHealth(),
     latestCollectorEvidenceCoverage: store.getLatestCollectorEvidenceCoverage(),
     events: store.listEvents({
@@ -432,6 +433,69 @@ test('JSONL prototype store replays event, heartbeat, and collector snapshot rea
       (record) => record.kind === 'heartbeat' && record.payload.agent_id === 'protocol-engineering'
     )
   );
+});
+
+test('prototype store exposes sanitized replay checkpoint summary that survives reload', async () => {
+  const storeFile = await createStoreFile();
+  const store = await createPrototypeStore({ filePath: storeFile });
+
+  await store.appendEvent(createEvent());
+  await store.appendHeartbeat(createHeartbeat());
+  await store.appendCollectorReport(createCollectorReport());
+
+  const summary = store.getReplayCheckpointSummary();
+  assert.deepEqual(summary, {
+    record_count: 9,
+    record_kind_buckets: {
+      event: 3,
+      heartbeat: 2,
+      evidence_record: 3,
+      collector_snapshot: 1
+    },
+    agent_count: 7,
+    event_count: 3,
+    heartbeat_count: 2,
+    evidence_record_count: 3,
+    collector_snapshot_count: 1,
+    latest_event: {
+      event_id: 'evt_collector_app-engineering_state_change_observed_normal_2026-03-09T18_06_00_000Z',
+      ts: '2026-03-09T18:06:00.000Z',
+      agent_id: 'app-engineering',
+      event_type: 'agent_state_changed',
+      correlation_id: 'collector-snapshot:2026-03-09T18:06:00.000Z',
+      source_kind: 'tmux_observation'
+    },
+    latest_heartbeat: {
+      agent_id: 'app-engineering',
+      received_at: '2026-03-09T18:06:00.000Z'
+    },
+    latest_evidence_record: {
+      observed_at: '2026-03-09T18:05:30.000Z',
+      collected_at: '2026-03-09T18:06:00.000Z',
+      agent_id: 'app-engineering',
+      source_kind: 'tmux_observation',
+      evidence_role: 'runtime_activity',
+      source_status: 'observed',
+      output_candidate: true,
+      collector_snapshot_id: 'collector-snapshot:2026-03-09T18:06:00.000Z',
+      correlation_id: 'collector-snapshot:2026-03-09T18:06:00.000Z',
+      unmapped: false
+    },
+    latest_collector_snapshot: {
+      collector_snapshot_id: 'collector-snapshot:2026-03-09T18:06:00.000Z',
+      collected_at: '2026-03-09T18:06:00.000Z',
+      actor_id: 'team-lead',
+      item_count: 1
+    }
+  });
+  assert.equal(Object.hasOwn(summary.latest_evidence_record, 'evidence_id'), false);
+  assert.equal(JSON.stringify(summary).includes('/tmp/store-contract'), false);
+  assert.equal(JSON.stringify(summary).includes('store-contract'), false);
+  assert.equal(JSON.stringify(summary).includes('tmux://'), false);
+  assert.equal(JSON.stringify(summary).includes('5-web3-app-engineering'), false);
+
+  const reloadedStore = await createPrototypeStore({ filePath: storeFile });
+  assert.deepEqual(reloadedStore.getReplayCheckpointSummary(), summary);
 });
 
 test('JSONL prototype store appends and replays collector evidence records without changing counts', async () => {

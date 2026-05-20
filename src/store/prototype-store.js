@@ -601,6 +601,17 @@ class PrototypeStore {
     return projectCollectorSnapshotHistorySummary(this.collectorReports, filters);
   }
 
+  getReplayCheckpointSummary() {
+    return projectReplayCheckpointSummary({
+      records: this.records,
+      counts: this.getCounts(),
+      events: this.events,
+      heartbeats: this.heartbeats,
+      evidenceRecords: this.evidenceRecords,
+      collectorReports: this.collectorReports
+    });
+  }
+
   listEvidenceRecords(filters = {}) {
     const { records, limit, newestFirst } = this.#filterEvidenceRecords(filters);
 
@@ -2916,6 +2927,95 @@ function cloneEvidenceRecord(record) {
     ...record,
     degraded_reasons: Array.isArray(record.degraded_reasons) ? record.degraded_reasons.slice() : [],
     metadata: record.metadata && typeof record.metadata === 'object' ? { ...record.metadata } : {}
+  };
+}
+
+function projectReplayCheckpointSummary({
+  records,
+  counts,
+  events,
+  heartbeats,
+  evidenceRecords,
+  collectorReports
+}) {
+  return {
+    record_count: records.length,
+    record_kind_buckets: createRecordKindBuckets(records),
+    agent_count: counts.agent_count,
+    event_count: counts.event_count,
+    heartbeat_count: counts.heartbeat_count,
+    evidence_record_count: evidenceRecords.length,
+    collector_snapshot_count: collectorReports.length,
+    latest_event: projectReplayCheckpointEvent(events.at(-1)),
+    latest_heartbeat: projectReplayCheckpointHeartbeat(heartbeats.at(-1)),
+    latest_evidence_record: projectReplayCheckpointEvidenceRecord(evidenceRecords.at(-1)),
+    latest_collector_snapshot: projectReplayCheckpointCollectorSnapshot(collectorReports.at(-1))
+  };
+}
+
+function createRecordKindBuckets(records) {
+  const buckets = {};
+  for (const record of records) {
+    incrementBucket(buckets, record.kind);
+  }
+  return buckets;
+}
+
+function projectReplayCheckpointEvent(event) {
+  if (!event) {
+    return null;
+  }
+
+  return {
+    event_id: event.event_id,
+    ts: event.ts,
+    agent_id: event.agent_id,
+    event_type: event.event_type,
+    correlation_id: event.correlation_id || null,
+    source_kind: event.source_kind || null
+  };
+}
+
+function projectReplayCheckpointHeartbeat(heartbeat) {
+  if (!heartbeat) {
+    return null;
+  }
+
+  return {
+    agent_id: heartbeat.agent_id,
+    received_at: heartbeat.received_at
+  };
+}
+
+function projectReplayCheckpointEvidenceRecord(record) {
+  if (!record) {
+    return null;
+  }
+
+  return {
+    observed_at: record.observed_at,
+    collected_at: record.collected_at,
+    agent_id: record.agent_id,
+    source_kind: record.source_kind,
+    evidence_role: record.evidence_role,
+    source_status: record.source_status,
+    output_candidate: record.output_candidate === true,
+    collector_snapshot_id: record.collector_snapshot_id,
+    correlation_id: record.correlation_id,
+    unmapped: record.agent_id === null
+  };
+}
+
+function projectReplayCheckpointCollectorSnapshot(report) {
+  if (!report) {
+    return null;
+  }
+
+  return {
+    collector_snapshot_id: createCollectorCorrelationId(report.collected_at),
+    collected_at: report.collected_at,
+    actor_id: report.actor_id,
+    item_count: Array.isArray(report.items) ? report.items.length : 0
   };
 }
 

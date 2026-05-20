@@ -141,6 +141,7 @@ Optional env:
 - `GET /office/operations?limit=&state=&agent_id=&severity=`
 - `GET /timeline?window=&event_id=&agent_id=&event_type=&severity=&source_kind=&evidence_ref=&correlation_id=&limit=`
 - `GET /accountability/replay?event_id=&evidence_ref=&correlation_id=&agent_id=&source_kind=&artifact_kind=&limit=&window=`
+- `GET /accountability/replay/checkpoint-summary`
 - `GET /peer-watch/alerts?status=&target_agent_id=&agent_id=&watcher_agent_id=&observer_agent_id=&correlation_id=&severity=&limit=`
 - `GET /incidents?kind=&agent_id=&severity=&status=&correlation_id=&limit=&window=`
 - `GET /correlations/:correlation_id?limit=&window=`
@@ -217,6 +218,7 @@ Optional env:
 - the response includes `accountability` rollups, chronological `ledger` entries, `events`, `interactions`, and `memory_artifacts`
 - ledger `basis_event_ids` cite only existing event ids; collector-only artifacts remain marked as `collector_observation_without_event_id` and do not fabricate replay checkpoints
 - the route does not add a write path, storage table, command dispatch path, or collector filesystem/tmux read
+- `GET /accountability/replay/checkpoint-summary` returns a sanitized append-order checkpoint over replayed records, with record/count buckets and latest bounded anchors for events, heartbeats, evidence records, and collector snapshots; it does not return evidence record ids derived from raw refs, raw evidence refs, paths, summaries, metadata, payloads, degraded reasons, or trigger collection, tmux/filesystem reads, append-only writes, or control-plane actions
 
 ### Peer-watch alert query notes
 - `GET /peer-watch/alerts` stays read-only and derives its evidence view from canonical peer-watch events

@@ -11,6 +11,7 @@ import {
   fetchCollectorSnapshot,
   fetchCollectorSnapshotHistory,
   fetchCollectorSourceHealth,
+  fetchEvidenceProvenanceBundle,
   fetchEvidenceRecord,
   fetchEvidenceRecords,
   fetchRuntimeSourceGaps,
@@ -563,6 +564,107 @@ describe('fetchCollectorSourceHealth', () => {
     );
 
     await expect(fetchCollectorSourceHealth({ limit: 7 })).resolves.toBeNull();
+  });
+});
+
+describe('fetchEvidenceProvenanceBundle', () => {
+  it('fetches a provenance bundle by URL-encoded evidence_id', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            item: {
+              evidence_id: 'evidence:app/review#1',
+              record: {
+                observed_at: '2026-03-09T18:58:30.000Z',
+                collected_at: '2026-03-09T18:59:00.000Z',
+                agent_id: 'app-engineering',
+                source_kind: 'workspace_file',
+                evidence_role: 'agent_plan',
+                source_status: 'observed',
+                output_candidate: false,
+                collector_snapshot_id: 'collector-snapshot:2026-03-09T18:59:00.000Z',
+                correlation_id: 'corr-app-review',
+                unmapped: false
+              },
+              anchors: {
+                snapshot: {
+                  collector_snapshot_id: 'collector-snapshot:2026-03-09T18:59:00.000Z',
+                  route:
+                    '/collectors/controller-snapshot/source-health?collector_snapshot_id=collector-snapshot%3A2026-03-09T18%3A59%3A00.000Z&source_kind=workspace_file'
+                },
+                source: {
+                  evidence_id: 'evidence:app/review#1',
+                  source_kind: 'workspace_file',
+                  evidence_role: 'agent_plan',
+                  source_status: 'observed',
+                  route: '/evidence-records/evidence%3Aapp%2Freview%231'
+                },
+                replay: {
+                  correlation_id: 'corr-app-review',
+                  route: '/accountability/replay?correlation_id=corr-app-review'
+                }
+              }
+            }
+          }),
+          {
+            headers: JSON_HEADERS
+          }
+        )
+      )
+    );
+
+    await expect(fetchEvidenceProvenanceBundle('evidence:app/review#1')).resolves.toMatchObject({
+      evidence_id: 'evidence:app/review#1',
+      record: {
+        collector_snapshot_id: 'collector-snapshot:2026-03-09T18:59:00.000Z',
+        correlation_id: 'corr-app-review'
+      }
+    });
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/evidence-records/evidence%3Aapp%2Freview%231/provenance-bundle',
+      expect.objectContaining({ signal: undefined })
+    );
+  });
+
+  it('returns null when the provenance bundle item is null', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ item: null }), {
+          headers: JSON_HEADERS
+        })
+      )
+    );
+
+    await expect(fetchEvidenceProvenanceBundle('missing-evidence')).resolves.toBeNull();
+  });
+
+  it('surfaces not_found responses as RequestError metadata', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            error: 'not_found',
+            details: 'unknown evidence record missing-evidence'
+          }),
+          {
+            status: 404,
+            headers: JSON_HEADERS
+          }
+        )
+      )
+    );
+
+    await expect(fetchEvidenceProvenanceBundle('missing-evidence')).rejects.toMatchObject({
+      name: 'RequestError',
+      status: 404,
+      code: 'not_found',
+      message: 'unknown evidence record missing-evidence'
+    });
   });
 });
 

@@ -13,6 +13,7 @@ import type {
   AgentInteractionsResponse,
   AgentWorkflow,
   CollectorEvidenceCoverage,
+  EvidenceProvenanceBundle,
   CollectorSnapshot,
   CollectorSnapshotHistory,
   CollectorSourceHealthProjection,
@@ -334,7 +335,7 @@ describe('read-only frontend/backend contract smoke', () => {
     });
   });
 
-  it('fetches an evidence-record detail by evidence_id from the real backend', async () => {
+  it('fetches an evidence-record detail and replay-safe provenance bundle by evidence_id from the real backend', async () => {
     harness = await createHarness(() => '2026-03-09T19:00:00.000Z');
     await seedContractSlice(harness.store);
 
@@ -351,6 +352,7 @@ describe('read-only frontend/backend contract smoke', () => {
     const api = await loadApi(harness.baseUrl);
     const records = await api.fetchEvidenceRecords({ limit: 1 });
     const detail = await api.fetchEvidenceRecord(records[0].evidence_id);
+    const bundle = await api.fetchEvidenceProvenanceBundle(records[0].evidence_id);
 
     expect(requests).toEqual([
       {
@@ -367,9 +369,16 @@ describe('read-only frontend/backend contract smoke', () => {
         origin: harness.baseUrl,
         pathname: `/evidence-records/${encodeURIComponent(records[0].evidence_id)}`,
         query: []
+      },
+      {
+        method: 'GET',
+        origin: harness.baseUrl,
+        pathname: `/evidence-records/${encodeURIComponent(records[0].evidence_id)}/provenance-bundle`,
+        query: []
       }
     ]);
     expect(detail).toEqual(records[0]);
+    expectEvidenceProvenanceBundleContract(bundle, records[0].evidence_id);
   });
 
   it('passes runtime source-gap filters through to the real backend and unwraps the compact feed', async () => {
@@ -2065,6 +2074,25 @@ function expectCollectorEvidenceCoverageContract(coverage: CollectorEvidenceCove
       }
     ]
   });
+}
+
+function expectEvidenceProvenanceBundleContract(
+  bundle: EvidenceProvenanceBundle | null,
+  evidenceId: string
+) {
+  expect(bundle?.evidence_id).toBe(evidenceId);
+  expect(bundle?.record).toMatchObject({
+    collector_snapshot_id: 'collector-snapshot:2026-03-09T18:59:00.000Z'
+  });
+  expect(bundle?.anchors.snapshot?.collector_snapshot_id).toBe(
+    'collector-snapshot:2026-03-09T18:59:00.000Z'
+  );
+
+  const serializedBundle = JSON.stringify(bundle);
+  expect(serializedBundle).not.toContain('/tmp/app-engineering/todo.md');
+  expect(serializedBundle).not.toContain('evidence_ref');
+  expect(serializedBundle).not.toContain('metadata');
+  expect(serializedBundle).not.toContain('degraded_reasons');
 }
 
 function expectCollectorSourceHealthContract(sourceHealth: CollectorSourceHealthProjection | null) {

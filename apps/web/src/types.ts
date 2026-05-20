@@ -316,6 +316,47 @@ export interface EvidenceRecordsResponse {
   items: EvidenceRecord[];
 }
 
+export interface EvidenceProvenanceRecord {
+  observed_at: string | null;
+  collected_at: string | null;
+  agent_id: string | null;
+  source_kind: string;
+  evidence_role: string | null;
+  source_status: string | null;
+  output_candidate: boolean;
+  collector_snapshot_id: string;
+  correlation_id: string | null;
+  unmapped: boolean;
+}
+
+export interface EvidenceProvenanceSnapshotAnchor {
+  collector_snapshot_id: string;
+  route: string;
+}
+
+export interface EvidenceProvenanceSourceAnchor {
+  evidence_id: string;
+  source_kind: string;
+  evidence_role: string | null;
+  source_status: string | null;
+  route: string;
+}
+
+export interface EvidenceProvenanceReplayAnchor {
+  correlation_id: string;
+  route: string;
+}
+
+export interface EvidenceProvenanceBundle {
+  evidence_id: string;
+  record: EvidenceProvenanceRecord;
+  anchors: {
+    snapshot: EvidenceProvenanceSnapshotAnchor | null;
+    source: EvidenceProvenanceSourceAnchor | null;
+    replay: EvidenceProvenanceReplayAnchor | null;
+  };
+}
+
 export interface RuntimeSourceGap {
   observed_at: string | null;
   collected_at: string | null;

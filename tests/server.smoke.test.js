@@ -5933,6 +5933,29 @@ test('GET evidence and source read routes keep JSONL and SQLite parity', async (
   const [jsonlHealth, sqliteHealth] = await parityRequest('/health');
   assert.deepEqual(sqliteHealth, jsonlHealth);
 
+  const [jsonlReplayCheckpoint, sqliteReplayCheckpoint] = await parityRequest(
+    '/accountability/replay/checkpoint-summary'
+  );
+  assert.deepEqual(sqliteReplayCheckpoint, jsonlReplayCheckpoint);
+  assert.equal(
+    jsonlReplayCheckpoint.item.record_count,
+    Object.values(jsonlReplayCheckpoint.item.record_kind_buckets)
+      .reduce((sum, count) => sum + count, 0)
+  );
+  assert.equal(jsonlReplayCheckpoint.item.evidence_record_count > 0, true);
+  assert.equal(
+    jsonlReplayCheckpoint.item.latest_collector_snapshot.collector_snapshot_id,
+    'collector-snapshot:2026-03-09T18:06:00.000Z'
+  );
+  assert.equal(
+    Object.hasOwn(jsonlReplayCheckpoint.item.latest_evidence_record, 'evidence_id'),
+    false
+  );
+  assert.equal(JSON.stringify(jsonlReplayCheckpoint).includes('/tmp/route-parity'), false);
+  assert.equal(JSON.stringify(jsonlReplayCheckpoint).includes('route-parity'), false);
+  assert.equal(JSON.stringify(jsonlReplayCheckpoint).includes('tmux://'), false);
+  assert.equal(JSON.stringify(jsonlReplayCheckpoint).includes('5-web3-app-engineering'), false);
+
   const [jsonlCoverage, sqliteCoverage] = await parityRequest(
     '/collectors/controller-snapshot/evidence-coverage?source_kind=workspace_file&confidence_level=high&limit=10'
   );

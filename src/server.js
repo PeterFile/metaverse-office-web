@@ -275,6 +275,13 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
     return;
   }
 
+  if (method === 'GET' && pathname === '/accountability/replay/checkpoint-summary') {
+    sendJson(res, 200, {
+      item: store.getReplayCheckpointSummary()
+    });
+    return;
+  }
+
   if (method === 'GET' && pathname === '/peer-watch/alerts') {
     sendJson(res, 200, {
       items: store.listPeerWatchAlerts({

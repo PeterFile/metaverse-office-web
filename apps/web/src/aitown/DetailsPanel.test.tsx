@@ -8,6 +8,7 @@ import type {
   AgentWorkflow,
   CollectorSnapshot,
   CorrelationDrilldown,
+  EvidenceProvenanceBundle,
   EvidenceRecord,
   MemoryArtifactIndex,
   OfficeAgent,
@@ -707,6 +708,9 @@ function buildProps(overrides: Partial<DetailsPanelProps> = {}): DetailsPanelPro
     selectedAgentEvidenceRecordError: null,
     selectedAgentEvidenceRecordId: null,
     selectedAgentEvidenceRecordState: 'idle',
+    selectedAgentEvidenceProvenanceBundle: null,
+    selectedAgentEvidenceProvenanceBundleError: null,
+    selectedAgentEvidenceProvenanceBundleState: 'idle',
     workflow: buildWorkflow(),
     workflowError: null,
     workflowState: 'ready',
@@ -841,6 +845,13 @@ function buildSelectedAgentEvidenceLedger(
         evidenceRole: 'runtime_unmapped',
         sourceStatus: 'observed',
         totalCount: 1
+      },
+      {
+        sourceKind: 'tmux_observation',
+        evidenceRef: 'tmux://session/window/pane',
+        evidenceRole: 'runtime_unmapped',
+        sourceStatus: 'observed',
+        totalCount: 1
       }
     ],
     ...overrides
@@ -864,6 +875,47 @@ function buildEvidenceRecord(overrides: Partial<EvidenceRecord> = {}): EvidenceR
     metadata: {
       raw_tmux_capture: 'do not render',
       secret_token: 'do not render'
+    },
+    ...overrides
+  };
+}
+
+function buildEvidenceProvenanceBundle(
+  overrides: Partial<EvidenceProvenanceBundle> = {}
+): EvidenceProvenanceBundle {
+  return {
+    evidence_id: 'output-1',
+    record: {
+      observed_at: '2026-03-16T08:58:00.000Z',
+      collected_at: '2026-03-16T08:59:00.000Z',
+      agent_id: 'app-engineering',
+      source_kind: 'workspace_file',
+      evidence_role: 'agent_output',
+      source_status: 'observed',
+      output_candidate: true,
+      collector_snapshot_id:
+        'collector-snapshot-20260316-with-a-very-long-access_token-value-that-must-not-render',
+      correlation_id: 'corr-app-review-with-secret-token-that-must-not-render',
+      unmapped: false
+    },
+    anchors: {
+      snapshot: {
+        collector_snapshot_id:
+          'collector-snapshot-20260316-with-a-very-long-access_token-value-that-must-not-render',
+        route:
+          '/collectors/controller-snapshot/source-health?collector_snapshot_id=collector-snapshot-20260316-with-a-very-long-access_token-value-that-must-not-render&source_kind=workspace_file'
+      },
+      source: {
+        evidence_id: 'output-1:/tmp/app/outbox.md:secret-token-that-must-not-render',
+        source_kind: 'workspace_file',
+        evidence_role: 'agent_output',
+        source_status: 'observed',
+        route: '/evidence-records/output-1-with-a-very-long-secret-token-that-must-not-render'
+      },
+      replay: {
+        correlation_id: 'corr-app-review-with-secret-token-that-must-not-render',
+        route: '/accountability/replay?correlation_id=corr-app-review-with-secret-token-that-must-not-render'
+      }
     },
     ...overrides
   };
@@ -1642,6 +1694,7 @@ describe('DetailsPanel selected-agent workflow lifecycle', () => {
     expect(within(section!).getByText('Role · agent_output')).toBeVisible();
     expect(within(section!).getByText('Ref · [local path] app')).toBeVisible();
     expect(within(section!).getByText('Ref · tmux://unmapped/0.1')).toBeVisible();
+    expect(within(section!).getByText('Source/ref · tmux_observation · runtime_unmapped · observed · tmux://session/window/pane · 1')).toBeVisible();
     expect(within(section!).getByText('Degraded · no seeded roster mapping')).toBeVisible();
     expect(section!).not.toHaveTextContent('/tmp/app/outbox.md');
     expect(section!).not.toHaveTextContent('metadata');
@@ -1734,7 +1787,7 @@ describe('DetailsPanel selected-agent workflow lifecycle', () => {
     expect(onInspectSelectedAgentEvidenceRecord).toHaveBeenCalledWith('output-1');
   });
 
-  it('renders selected-agent evidence detail as compact bounded fields without metadata', () => {
+  it('renders selected-agent Evidence Record detail provenance anchors as compact bounded fields without metadata', () => {
     render(
       <DetailsPanel
         {...buildProps({
@@ -1744,13 +1797,16 @@ describe('DetailsPanel selected-agent workflow lifecycle', () => {
           selectedAgentEvidenceLedgerState: 'ready',
           selectedAgentEvidenceRecord: buildEvidenceRecord(),
           selectedAgentEvidenceRecordId: 'output-1',
-          selectedAgentEvidenceRecordState: 'ready'
+          selectedAgentEvidenceRecordState: 'ready',
+          selectedAgentEvidenceProvenanceBundle: buildEvidenceProvenanceBundle(),
+          selectedAgentEvidenceProvenanceBundleState: 'ready'
         })}
       />
     );
 
     const section = screen.getByRole('heading', { name: 'Evidence Record Detail' }).closest('section');
     expect(section).not.toBeNull();
+    expect(section!).toHaveClass('aitown-details__section--selected-evidence');
     expect(within(section!).getByText('Evidence id · output-1')).toBeVisible();
     expect(within(section!).getByText('Observed · 2026-03-16T08:58:00.000Z')).toBeVisible();
     expect(within(section!).getByText('Collected · 2026-03-16T08:59:00.000Z')).toBeVisible();
@@ -1762,10 +1818,64 @@ describe('DetailsPanel selected-agent workflow lifecycle', () => {
     expect(within(section!).getByText('Correlation · corr-app-review')).toBeVisible();
     expect(within(section!).getByText('Degraded · collector lag')).toBeVisible();
     expect(within(section!).getByText('Ref · [local path] outbox.md')).toBeVisible();
+    expect(
+      within(section!).getByText(/Snapshot anchor · collector-snapshot-20260316-with-a-very-long-\[redacted\]/)
+    ).toBeVisible();
+    expect(
+      within(section!).getByText(/Source anchor · output-1:\[local path\] outbox\.md:\[redacted\] · workspace_file · agent_output · observed/)
+    ).toBeVisible();
+    expect(within(section!).getByText(/Replay anchor · corr-app-review-with-\[redacted\]/)).toBeVisible();
     expect(section!).not.toHaveTextContent('/tmp/app/outbox.md');
+    expect(section!).not.toHaveTextContent('/collectors/controller-snapshot');
+    expect(section!).not.toHaveTextContent('/evidence-records/output-1');
+    expect(section!).not.toHaveTextContent('/accountability/replay');
+    expect(section!).not.toHaveTextContent('access_token');
+    expect(section!).not.toHaveTextContent('secret-token');
     expect(section!).not.toHaveTextContent('metadata');
     expect(section!).not.toHaveTextContent('raw_tmux_capture');
     expect(section!).not.toHaveTextContent('secret_token');
+  });
+
+  it('preserves non-file provenance URI refs while redacting adjacent local paths', () => {
+    const baseBundle = buildEvidenceProvenanceBundle();
+    render(
+      <DetailsPanel
+        {...buildProps({
+          activeHubCategory: 'evidence',
+          selectedAgentDrilldownTab: 'evidence',
+          selectedAgentEvidenceLedger: buildSelectedAgentEvidenceLedger(),
+          selectedAgentEvidenceLedgerState: 'ready',
+          selectedAgentEvidenceRecord: buildEvidenceRecord(),
+          selectedAgentEvidenceRecordId: 'output-1',
+          selectedAgentEvidenceRecordState: 'ready',
+          selectedAgentEvidenceProvenanceBundle: buildEvidenceProvenanceBundle({
+            anchors: {
+              ...baseBundle.anchors,
+              source: {
+                evidence_id:
+                  'tmux://session/window/pane /Users/cwp/private/note.md secret-token',
+                source_kind: 'tmux_observation',
+                evidence_role: 'runtime_unmapped',
+                source_status: 'observed',
+                route: '/evidence-records/output-1-with-a-very-long-secret-token-that-must-not-render'
+              }
+            }
+          }),
+          selectedAgentEvidenceProvenanceBundleState: 'ready'
+        })}
+      />
+    );
+
+    const section = screen.getByRole('heading', { name: 'Evidence Record Detail' }).closest('section');
+    expect(section).not.toBeNull();
+    expect(
+      within(section!).getByText(
+        /Source anchor · tmux:\/\/session\/window\/pane \[local path\] note\.md \[redacted\] · tmux_observation · runtime_unmapped · observed/
+      )
+    ).toBeVisible();
+    expect(section!).not.toHaveTextContent('/Users/cwp/private/note.md');
+    expect(section!).not.toHaveTextContent('secret-token');
+    expect(section!).not.toHaveTextContent('/evidence-records/output-1');
   });
 
   it('renders selected-agent evidence detail loading and error states explicitly', () => {

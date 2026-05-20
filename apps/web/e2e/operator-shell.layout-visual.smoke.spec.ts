@@ -867,6 +867,115 @@ test.describe('operator shell layout visual smoke', () => {
     expect(apiRequestViolations, 'Inspect peek Evidence Ledger CTA should not issue mutating API requests').toEqual([]);
   });
 
+  test('@journey @evidence-live surfaces selected-agent provenance anchors after explicit Inspect record', async ({
+    page
+  }) => {
+    const evidenceId =
+      'ev_collector-snapshot_2026-03-10T23_59_40_000Z_app-engineering_workspace_file__tmp_revenue-handoff_md_1';
+    const expectedEvidenceRecordGets = [
+      '/evidence-records?agent_id=app-engineering&newest_first=true&limit=12',
+      `/evidence-records/${evidenceId}`,
+      `/evidence-records/${evidenceId}/provenance-bundle`
+    ];
+    const allowedApiGets = new Set([
+      '/office/overview',
+      '/incidents?limit=200&window=8760h',
+      '/collectors/controller-snapshot/source-health?limit=7',
+      '/collectors/controller-snapshot/evidence-coverage',
+      '/runtime/source-gaps?newest_first=true&limit=3',
+      '/runtime/source-gaps/summary?newest_first=true&limit=3',
+      '/agents/app-engineering/workflow?limit=10&window=60m',
+      '/office/operations?agent_id=app-engineering',
+      '/collectors/controller-snapshot',
+      '/memory/artifacts?limit=4&window=60m&agent_id=app-engineering',
+      '/memory/artifacts?limit=4&window=60m&agent_id=app-engineering&correlation_id=collector-snapshot%3A2026-03-10T23%3A59%3A40.000Z',
+      '/timeline?limit=10&window=60m&agent_id=app-engineering',
+      '/timeline?limit=10&window=60m&agent_id=app-engineering&correlation_id=collector-snapshot%3A2026-03-10T23%3A59%3A40.000Z',
+      '/peer-watch/alerts?target_agent_id=app-engineering&limit=4',
+      '/peer-watch/alerts?target_agent_id=app-engineering&correlation_id=collector-snapshot%3A2026-03-10T23%3A59%3A40.000Z&limit=4',
+      '/correlations/collector-snapshot%3A2026-03-10T23%3A59%3A40.000Z?limit=10&window=60m',
+      ...expectedEvidenceRecordGets
+    ]);
+    const evidenceRecordRequests: string[] = [];
+    const evidenceRecordViolations: string[] = [];
+    const apiRequestViolations: string[] = [];
+
+    page.on('request', (request) => {
+      const url = new URL(request.url());
+      const relativeUrl = `${url.pathname}${url.search}`;
+      const key = `${request.method()} ${relativeUrl}`;
+      const apiPathIsReadModel =
+        url.pathname.startsWith('/office/') ||
+        url.pathname.startsWith('/incidents') ||
+        url.pathname.startsWith('/timeline') ||
+        url.pathname.startsWith('/peer-watch/') ||
+        url.pathname.startsWith('/collectors/') ||
+        url.pathname.startsWith('/memory/') ||
+        url.pathname.startsWith('/agents/') ||
+        url.pathname.startsWith('/correlations/') ||
+        url.pathname === '/runtime' ||
+        url.pathname.startsWith('/runtime/') ||
+        url.pathname === '/accountability' ||
+        url.pathname.startsWith('/accountability/') ||
+        url.pathname.startsWith('/evidence-records') ||
+        url.pathname === '/control-plane' ||
+        url.pathname.startsWith('/control-plane/');
+      if (apiPathIsReadModel && (request.method() !== 'GET' || !allowedApiGets.has(relativeUrl))) {
+        apiRequestViolations.push(key);
+      }
+
+      if (!url.pathname.startsWith('/evidence-records')) {
+        return;
+      }
+
+      evidenceRecordRequests.push(relativeUrl);
+      if (request.method() !== 'GET' || !expectedEvidenceRecordGets.includes(relativeUrl)) {
+        evidenceRecordViolations.push(key);
+      }
+    });
+
+    await page.goto('/');
+
+    await expect(page.locator('.aitown-world__host canvas')).toBeVisible();
+    await page.waitForFunction(() => Boolean(window.__AITOWN_VIEWPORT__));
+
+    const roster = page.getByRole('navigation', { name: 'Agent roster' });
+    await roster.getByRole('button', { name: 'Select and locate App Engineering Agent' }).click();
+
+    const inspectPeek = page.getByRole('region', { name: 'Selected agent inspect peek' });
+    const ledgerCta = inspectPeek.getByRole('button', { name: 'Open App Engineering Agent Evidence Ledger' });
+    await expect(inspectPeek).toBeVisible();
+    await expect(ledgerCta).toBeVisible();
+    expect(evidenceRecordRequests, 'Selecting an agent should not prefetch evidence records').toEqual([]);
+
+    await ledgerCta.click();
+
+    const hub = page.getByRole('dialog', { name: 'Hub' });
+    await expect(hub).toBeVisible();
+    const evidencePanel = page.getByRole('tabpanel', { name: 'Evidence' });
+    await expect(evidencePanel.getByRole('heading', { name: 'Evidence Ledger' })).toBeVisible();
+    await expect.poll(() => evidenceRecordRequests.slice()).toEqual([expectedEvidenceRecordGets[0]]);
+
+    await evidencePanel.getByRole('button', { name: `Inspect evidence record ${evidenceId}` }).click();
+
+    await expect.poll(() => evidenceRecordRequests.slice()).toEqual(expectedEvidenceRecordGets);
+    const detailSection = evidencePanel.locator('section').filter({
+      has: page.getByRole('heading', { name: 'Evidence Record Detail' })
+    });
+    await expect(detailSection).toContainText(
+      'Snapshot anchor · collector-snapshot:2026-03-10T23:59:40.000Z'
+    );
+    await expect(detailSection).toContainText('Source anchor ·');
+    await expect(detailSection).toContainText('workspace_file · agent_output · unknown');
+    await expect(detailSection).toContainText('Replay anchor · collector-snapshot:2026-03-10T23:59:40.000Z');
+    await expect(detailSection).not.toContainText('/collectors/controller-snapshot');
+    await expect(detailSection).not.toContainText('/accountability/replay');
+    await expect(detailSection).not.toContainText('/evidence-records/');
+    await expect(detailSection).not.toContainText('/tmp/revenue-handoff.md');
+    expect(evidenceRecordViolations, 'Inspect record should issue only exact evidence read GETs').toEqual([]);
+    expect(apiRequestViolations, 'Inspect record should not issue unlisted or mutating API requests').toEqual([]);
+  });
+
   test('keeps the selected-agent Hub focus ribbon compact inside the RimWorld window', async ({ page }) => {
     await page.goto('/');
 

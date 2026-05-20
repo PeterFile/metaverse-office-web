@@ -42,6 +42,10 @@ export default defineConfig(({ mode }) => {
         '/correlations': {
           target: proxyTarget,
           changeOrigin: true
+        },
+        '/evidence-records': {
+          target: proxyTarget,
+          changeOrigin: true
         }
       }
     : undefined;

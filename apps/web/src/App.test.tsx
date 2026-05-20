@@ -3563,6 +3563,11 @@ afterEach(() => {
 
   it('surfaces source-gap chips as provenance health and opens Supervision from a chip', async () => {
     const user = userEvent.setup();
+    const leakCanaries = [
+      '/Users/cwp/private/live-evidence-secret.md',
+      'token=live-evidence-secret',
+      '/control-plane/dispatch'
+    ];
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = typeof input === 'string' ? input : input.toString();
 
@@ -3588,7 +3593,7 @@ afterEach(() => {
             agent_items: [
               {
                 agent_id: 'growth-revenue',
-                workspace_root: '/tmp/growth-revenue',
+                workspace_root: leakCanaries[0],
                 session_ref: '6-web3-growth-revenue',
                 source_health: {
                   workspace_files: {
@@ -3602,7 +3607,7 @@ afterEach(() => {
                   }
                 },
                 evidence_ref_count: 3,
-                evidence_refs: ['/tmp/launch-note.md'],
+                evidence_refs: ['/tmp/launch-note.md', leakCanaries[1], leakCanaries[2]],
                 latest_evidence_at: '2026-03-16T08:58:40.000Z'
               }
             ],
@@ -3682,6 +3687,10 @@ afterEach(() => {
     const requestedUrls = fetchMock.mock.calls.map(([request]) => String(request));
     expect(requestedUrls).toContain(runtimeSourceGapsUrl);
     expect(requestedUrls).toContain(runtimeSourceGapsSummaryUrl);
+    expect(requestedUrls.some((url) => url.includes('/control-plane/'))).toBe(false);
+    for (const canary of leakCanaries) {
+      expect(document.body).not.toHaveTextContent(canary);
+    }
 
     await user.click(gapChip);
 
@@ -3702,6 +3711,9 @@ afterEach(() => {
     await waitFor(() => expect(document.activeElement).toBe(workspaceGroup));
     expect(tmuxGroup).not.toBeNull();
     expect(tmuxGroup).not.toHaveAttribute('data-source-gap-focus');
+    for (const canary of leakCanaries) {
+      expect(document.body).not.toHaveTextContent(canary);
+    }
   });
 
   it('shows no-snapshot evidence coverage read-model status when collector coverage is absent', async () => {

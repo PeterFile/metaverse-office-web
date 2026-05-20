@@ -876,9 +876,16 @@ test('prototype store summarizes evidence records with list filter semantics bef
 test('prototype store lists compact runtime source gaps without normal observed mapped evidence', async () => {
   const storeFile = await createStoreFile();
   const store = await createPrototypeStore({ filePath: storeFile });
+  const leakCanaries = [
+    '/Users/cwp/private/live-evidence-secret.md',
+    'token=live-evidence-secret',
+    'POST /control-plane/dispatch'
+  ];
+  const report = createCollectorReport();
+  report.items[0].evidence_refs.push(...leakCanaries);
 
   await store.appendCollectorReport({
-    ...createCollectorReport(),
+    ...report,
     runtime_source_evidence: {
       unmapped_tmux_sessions: [
         {
@@ -927,6 +934,38 @@ test('prototype store lists compact runtime source gaps without normal observed 
   assert.equal(gaps.some((gap) => Object.hasOwn(gap, 'evidence_id')), false);
   assert.equal(gaps.some((gap) => Object.hasOwn(gap, 'evidence_ref')), false);
   assert.equal(gaps.some((gap) => Object.hasOwn(gap, 'metadata')), false);
+  const serializedGaps = JSON.stringify(gaps);
+  for (const canary of leakCanaries) {
+    assert.equal(serializedGaps.includes(canary), false, `leaked canary: ${canary}`);
+  }
+});
+
+test('prototype store projects evidence provenance bundles without raw refs or control-plane canaries', async () => {
+  const storeFile = await createStoreFile();
+  const store = await createPrototypeStore({ filePath: storeFile });
+  const leakCanaries = [
+    '/Users/cwp/private/provenance-secret.md',
+    'token=provenance-secret',
+    'POST /control-plane/dispatch'
+  ];
+  const report = createCollectorReport();
+  report.items[0].evidence_refs.push(...leakCanaries);
+
+  await store.appendCollectorReport(report);
+
+  const outboxRecord = store.listEvidenceRecords({
+    evidence_ref: '/tmp/store-contract/outbox.md'
+  })[0];
+  const provenanceBundle = store.getEvidenceProvenanceBundle(outboxRecord.evidence_id);
+  const serializedBundle = JSON.stringify(provenanceBundle);
+
+  assert.equal(serializedBundle.includes('/tmp/store-contract'), false);
+  assert.equal(serializedBundle.includes('evidence_ref'), false);
+  assert.equal(serializedBundle.includes('metadata'), false);
+  assert.equal(serializedBundle.includes('degraded_reasons'), false);
+  for (const canary of leakCanaries) {
+    assert.equal(serializedBundle.includes(canary), false, `leaked canary: ${canary}`);
+  }
 });
 
 test('prototype store summarizes runtime source gaps before limit truncation', async () => {

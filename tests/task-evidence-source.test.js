@@ -144,6 +144,50 @@ test('rejects id-only facts without promoting id into task_ref', () => {
   assert.equal(JSON.stringify(result).includes('internal-row-777'), false);
 });
 
+test('rejects task control-plane fields without leakage', () => {
+  const result = taskEvidenceSource.normalizeTaskEvidenceFacts([
+    {
+      task_ref: 'TASK-127',
+      source_kind: 'kanban_fixture',
+      observed_at: '2026-05-20T01:00:00.000Z',
+      correlation_id: 'corr-control',
+      claim_url: LEAK_CANARIES[4],
+      [`claim_${LEAK_CANARIES[3]}`]: 'redacted-field-name',
+      assignedTo: 'app-engineering',
+      assigneeId: 'app-engineering',
+      completedAt: '2026-05-20T01:05:00.000Z',
+      dispatchPayload: LEAK_CANARIES[6],
+      'route.profile': 'worker-profile'
+    },
+    {
+      task_ref: 'TASK-128',
+      source_kind: 'linear_fixture',
+      observed_at: '2026-05-20T01:00:00.000Z',
+      correlation_id: 'corr-writeback',
+      write_back_status: 'complete',
+      writeBackStatus: 'complete',
+      mutationToken: LEAK_CANARIES[3]
+    }
+  ]);
+
+  assert.deepEqual(result.candidates, []);
+  assert.deepEqual(result.rejected, [
+    {
+      status: 'invalid',
+      index: 0,
+      missing_fields: ['assign', 'claim', 'complete', 'dispatch', 'route'],
+      error: 'task evidence fact contains control-plane fields'
+    },
+    {
+      status: 'invalid',
+      index: 1,
+      missing_fields: ['mutate', 'writeback'],
+      error: 'task evidence fact contains control-plane fields'
+    }
+  ]);
+  assertNoLeaks(result);
+});
+
 test('rejects or suppresses secret-shaped identifier fields without leakage', () => {
   const result = taskEvidenceSource.normalizeTaskEvidenceFacts([
     {

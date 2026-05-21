@@ -37,6 +37,7 @@ import {
   collectInteractionSourceKinds,
   formatCollectorDerivedPeerWatchMetadata
 } from './accountabilitySignals';
+import { deriveAccountabilityReplayAuditVerdict } from './accountabilityReplayAudit';
 import { deriveAgentDetailEvidenceFacets } from './agentDetailEvidenceFacets';
 import {
   deriveCollectorItemSourceDrilldownGroups,
@@ -2830,6 +2831,30 @@ function renderReplayBundleQueryAnchors(bundle: AccountabilityReplayBundle) {
   return renderNamedList(anchors, 'No query anchors');
 }
 
+function renderReplayProofLadder(replayBundle: AccountabilityReplayBundle) {
+  const verdict = deriveAccountabilityReplayAuditVerdict(replayBundle);
+  const { counts } = verdict;
+  const unavailableAnchorCount =
+    counts.collector_observation_without_event_id_row_count + counts.unsupported_unbacked_row_count;
+  const replayableLabel =
+    verdict.status === 'empty' ? 'unavailable' : verdict.replayable ? 'full' : 'partial';
+
+  return (
+    <li className="aitown-record">
+      <strong>Replay Proof Ladder</strong>
+      <span>{`Verdict · ${verdict.status}`}</span>
+      <span>
+        {`Rows · ${counts.ledger_row_count} total · ${counts.replayable_row_count} replayable · ${counts.collector_observation_without_event_id_row_count} collector-only gaps · ${counts.unsupported_unbacked_row_count} unsupported gaps`}
+      </span>
+      <span>{`Anchor events · ${verdict.replay_anchor_event_ids.length}`}</span>
+      <span>
+        {`Unavailable anchors · ${unavailableAnchorCount} total · ${counts.collector_observation_without_event_id_row_count} collector-only · ${counts.unsupported_unbacked_row_count} unsupported`}
+      </span>
+      <span>{`Replayable · ${replayableLabel}`}</span>
+    </li>
+  );
+}
+
 function renderReplayBundleLedgerSourceKinds(entry: AccountabilityReplayLedgerEntry) {
   const sourceKinds = dedupeNonEmptyStrings([
     entry.source_kind,
@@ -2994,6 +3019,7 @@ function renderSelectedAgentReplayBundleSection({
                 )} -> ${renderTimestamp(replayBundle.accountability.last_ts, 'No last event timestamp')}`}
               </span>
             </li>
+            {renderReplayProofLadder(replayBundle)}
             {replayBundle.ledger.map((entry) =>
               renderReplayBundleLedgerEntry({
                 entry,

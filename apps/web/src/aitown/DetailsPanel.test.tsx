@@ -3821,6 +3821,21 @@ describe('DetailsPanel accountability signals', () => {
 
     const section = screen.getByRole('heading', { name: 'Replay Bundle' }).closest('section');
     expect(section).not.toBeNull();
+    const proofLadderRecord = within(section!).getByText('Replay Proof Ladder').closest('li');
+    expect(proofLadderRecord).not.toBeNull();
+    expect(within(proofLadderRecord!).getByText('Verdict · collector_observation_gaps')).toBeVisible();
+    expect(
+      within(proofLadderRecord!).getByText(
+        'Rows · 4 total · 3 replayable · 1 collector-only gaps · 0 unsupported gaps'
+      )
+    ).toBeVisible();
+    expect(within(proofLadderRecord!).getByText('Anchor events · 1')).toBeVisible();
+    expect(
+      within(proofLadderRecord!).getByText('Unavailable anchors · 1 total · 1 collector-only · 0 unsupported')
+    ).toBeVisible();
+    expect(within(proofLadderRecord!).getByText('Replayable · partial')).toBeVisible();
+    expect(proofLadderRecord!).not.toHaveTextContent('tmux://');
+    expect(proofLadderRecord!).not.toHaveTextContent('/evidence/replay.md');
     expect(within(section!).getByText('Basis · event_log_and_existing_read_models')).toBeVisible();
     expect(
       within(section!).getByText('bounded_by · limit 10 · window 60m · generated_at 2026-03-16T09:00:00.000Z')
@@ -3844,6 +3859,55 @@ describe('DetailsPanel accountability signals', () => {
     expect(within(collectorOnlyRecord!).getByText('Provenance · collector_observation_without_event_id')).toBeVisible();
     expect(collectorOnlyRecord).not.toHaveTextContent(/evt-/);
     expect(collectorOnlyRecord).not.toHaveTextContent(/Replay checkpoint/);
+  });
+
+  it('renders empty replay proof ladder as unavailable without inventing anchors', () => {
+    const replayBundle = buildAccountabilityReplayBundle();
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          selectedAgentDrilldownTab: 'replay',
+          selectedAgentAccountabilityReplay: {
+            ...replayBundle,
+            accountability: {
+              ...replayBundle.accountability,
+              event_count: 0,
+              interaction_count: 0,
+              artifact_count: 0,
+              participant_agent_ids: [],
+              actor_ids: [],
+              evidence_refs: [],
+              source_kind_buckets: {},
+              first_ts: null,
+              last_ts: null
+            },
+            ledger: [],
+            events: [],
+            interactions: [],
+            memory_artifacts: []
+          },
+          selectedAgentAccountabilityReplayError: null,
+          selectedAgentAccountabilityReplayState: 'ready'
+        })}
+      />
+    );
+
+    const section = screen.getByRole('heading', { name: 'Replay Bundle' }).closest('section');
+    expect(section).not.toBeNull();
+    const proofLadderRecord = within(section!).getByText('Replay Proof Ladder').closest('li');
+    expect(proofLadderRecord).not.toBeNull();
+    expect(within(proofLadderRecord!).getByText('Verdict · empty')).toBeVisible();
+    expect(
+      within(proofLadderRecord!).getByText(
+        'Rows · 0 total · 0 replayable · 0 collector-only gaps · 0 unsupported gaps'
+      )
+    ).toBeVisible();
+    expect(within(proofLadderRecord!).getByText('Anchor events · 0')).toBeVisible();
+    expect(
+      within(proofLadderRecord!).getByText('Unavailable anchors · 0 total · 0 collector-only · 0 unsupported')
+    ).toBeVisible();
+    expect(within(proofLadderRecord!).getByText('Replayable · unavailable')).toBeVisible();
   });
 
   it('opens selected-agent replay bundle ledger basis events as replay checkpoints without changing scope', async () => {

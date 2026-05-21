@@ -1358,6 +1358,217 @@ test('prototype store summarizes evidence records with list filter semantics bef
   });
 });
 
+test('prototype store returns safe evidence facet buckets before limit truncation', async () => {
+  const storeFile = await createStoreFile();
+  const store = await createPrototypeStore({ filePath: storeFile });
+
+  await store.appendCollectorReport({
+    ...createCollectorReport(),
+    runtime_source_evidence: {
+      unmapped_tmux_sessions: [
+        {
+          session_name: 'unmapped-session',
+          pane_refs: ['tmux://unmapped-session/0.0'],
+          observed_count: 1,
+          status: 'observed',
+          last_observed_at: '2026-03-09T18:05:50.000Z',
+          degraded_reasons: []
+        }
+      ]
+    }
+  });
+
+  const facets = store.getEvidenceRecordFacets({
+    output_candidate: 'false',
+    newest_first: 'true',
+    limit: 1
+  });
+  assert.deepEqual(facets, {
+    total_count: 2,
+    returned_limit: 1,
+    source_kind_buckets: {
+      workspace_root: 1,
+      workspace_file: 0,
+      tmux_observation: 1,
+      hermes_profile: 0,
+      hermes_session: 0,
+      kanban_fixture: 0,
+      linear_fixture: 0,
+      slack_fixture: 0,
+      task_fixture: 0
+    },
+    evidence_role_buckets: {
+      workspace_presence: 1,
+      inbound_task: 0,
+      agent_output: 0,
+      agent_plan: 0,
+      runtime_activity: 0,
+      runtime_presence: 0,
+      runtime_unmapped: 1,
+      task_reference: 0
+    },
+    source_status_buckets: {
+      observed: 2,
+      degraded: 0,
+      missing: 0,
+      error: 0
+    },
+    output_candidate_buckets: {
+      true: 0,
+      false: 2
+    },
+    mapped_buckets: {
+      mapped: 1,
+      unmapped: 1
+    },
+    agent_id_buckets: {
+      'team-lead': 0,
+      'market-intel': 0,
+      'product-pmf': 0,
+      tokenomics: 0,
+      'protocol-engineering': 0,
+      'app-engineering': 1,
+      'growth-revenue': 0,
+      unmapped: 1
+    }
+  });
+
+  const serializedFacets = JSON.stringify(facets);
+  assert.equal(serializedFacets.includes('/tmp/store-contract'), false);
+  assert.equal(serializedFacets.includes('tmux://'), false);
+  assert.equal(serializedFacets.includes('metadata'), false);
+  assert.equal(serializedFacets.includes('degraded_reasons'), false);
+
+  assert.deepEqual(
+    store.getEvidenceRecordFacets({ mapped: 'false', agent_id: 'app-engineering' }),
+    {
+      total_count: 0,
+      returned_limit: 50,
+      source_kind_buckets: {
+        workspace_root: 0,
+        workspace_file: 0,
+        tmux_observation: 0,
+        hermes_profile: 0,
+        hermes_session: 0,
+        kanban_fixture: 0,
+        linear_fixture: 0,
+        slack_fixture: 0,
+        task_fixture: 0
+      },
+      evidence_role_buckets: {
+        workspace_presence: 0,
+        inbound_task: 0,
+        agent_output: 0,
+        agent_plan: 0,
+        runtime_activity: 0,
+        runtime_presence: 0,
+        runtime_unmapped: 0,
+        task_reference: 0
+      },
+      source_status_buckets: {
+        observed: 0,
+        degraded: 0,
+        missing: 0,
+        error: 0
+      },
+      output_candidate_buckets: {
+        true: 0,
+        false: 0
+      },
+      mapped_buckets: {
+        mapped: 0,
+        unmapped: 0
+      },
+      agent_id_buckets: {
+        'team-lead': 0,
+        'market-intel': 0,
+        'product-pmf': 0,
+        tokenomics: 0,
+        'protocol-engineering': 0,
+        'app-engineering': 0,
+        'growth-revenue': 0,
+        unmapped: 0
+      }
+    }
+  );
+});
+
+test('prototype store omits non-seeded evidence agent ids from facet buckets', async () => {
+  const storeFile = await createStoreFile();
+  await writeFile(
+    storeFile,
+    `${JSON.stringify({
+      kind: 'evidence_record',
+      payload: {
+        evidence_id: 'ev_external_agent_workspace_file_1',
+        agent_id: 'external-agent',
+        source_kind: '/tmp/store-contract/source-kind.md',
+        evidence_role: 'tmux://facet-role/0.0',
+        evidence_ref: '/tmp/store-contract/external-output.md',
+        source_status: 'token=facet-status-secret',
+        output_candidate: true,
+        observed_at: '2026-03-09T18:05:20.000Z',
+        collected_at: '2026-03-09T18:06:00.000Z',
+        collector_snapshot_id: 'collector-snapshot:2026-03-09T18:06:00.000Z',
+        correlation_id: 'collector-snapshot:2026-03-09T18:06:00.000Z',
+        degraded_reasons: [],
+        metadata: {}
+      }
+    })}\n`
+  );
+
+  const store = await createPrototypeStore({ filePath: storeFile });
+  const facets = store.getEvidenceRecordFacets({ mapped: 'true' });
+
+  assert.equal(facets.total_count, 1);
+  assert.equal(facets.mapped_buckets.mapped, 1);
+  assert.equal(Object.hasOwn(facets.agent_id_buckets, 'external-agent'), false);
+  assert.equal(Object.hasOwn(facets.source_kind_buckets, '/tmp/store-contract/source-kind.md'), false);
+  assert.equal(Object.hasOwn(facets.evidence_role_buckets, 'tmux://facet-role/0.0'), false);
+  assert.equal(Object.hasOwn(facets.source_status_buckets, 'token=facet-status-secret'), false);
+  const serializedFacets = JSON.stringify(facets);
+  assert.equal(serializedFacets.includes('/tmp/store-contract'), false);
+  assert.equal(serializedFacets.includes('tmux://'), false);
+  assert.equal(serializedFacets.includes('facet-status-secret'), false);
+  assert.deepEqual(facets.source_kind_buckets, {
+    workspace_root: 0,
+    workspace_file: 0,
+    tmux_observation: 0,
+    hermes_profile: 0,
+    hermes_session: 0,
+    kanban_fixture: 0,
+    linear_fixture: 0,
+    slack_fixture: 0,
+    task_fixture: 0
+  });
+  assert.deepEqual(facets.evidence_role_buckets, {
+    workspace_presence: 0,
+    inbound_task: 0,
+    agent_output: 0,
+    agent_plan: 0,
+    runtime_activity: 0,
+    runtime_presence: 0,
+    runtime_unmapped: 0,
+    task_reference: 0
+  });
+  assert.deepEqual(facets.source_status_buckets, {
+    observed: 0,
+    degraded: 0,
+    missing: 0,
+    error: 0
+  });
+  assert.deepEqual(facets.agent_id_buckets, {
+    'team-lead': 0,
+    'market-intel': 0,
+    'product-pmf': 0,
+    tokenomics: 0,
+    'protocol-engineering': 0,
+    'app-engineering': 0,
+    'growth-revenue': 0,
+    unmapped: 0
+  });
+});
+
 test('prototype store lists compact runtime source gaps without normal observed mapped evidence', async () => {
   const storeFile = await createStoreFile();
   const store = await createPrototypeStore({ filePath: storeFile });

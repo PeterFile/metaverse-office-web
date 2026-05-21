@@ -5993,6 +5993,123 @@ test('GET /evidence-records lists stored evidence records read-only with exact f
 
   assert.equal(collectCount, 0);
 
+  const facets = await requestJson(
+    `${baseUrl}/evidence-records/facets?output_candidate=false&newest_first=true&limit=1`
+  );
+  assert.equal(facets.response.status, 200);
+  assert.deepEqual(facets.body, {
+    item: {
+      total_count: 4,
+      returned_limit: 1,
+      source_kind_buckets: {
+        workspace_root: 1,
+        workspace_file: 2,
+        tmux_observation: 1,
+        hermes_profile: 0,
+        hermes_session: 0,
+        kanban_fixture: 0,
+        linear_fixture: 0,
+        slack_fixture: 0,
+        task_fixture: 0
+      },
+      evidence_role_buckets: {
+        workspace_presence: 1,
+        inbound_task: 2,
+        agent_output: 0,
+        agent_plan: 0,
+        runtime_activity: 0,
+        runtime_presence: 0,
+        runtime_unmapped: 1,
+        task_reference: 0
+      },
+      source_status_buckets: {
+        observed: 3,
+        degraded: 0,
+        missing: 1,
+        error: 0
+      },
+      output_candidate_buckets: {
+        true: 0,
+        false: 4
+      },
+      mapped_buckets: {
+        mapped: 3,
+        unmapped: 1
+      },
+      agent_id_buckets: {
+        'team-lead': 0,
+        'market-intel': 0,
+        'product-pmf': 0,
+        tokenomics: 0,
+        'protocol-engineering': 1,
+        'app-engineering': 2,
+        'growth-revenue': 0,
+        unmapped: 1
+      }
+    }
+  });
+  const serializedFacets = JSON.stringify(facets.body);
+  assert.equal(serializedFacets.includes('/tmp/evidence-query'), false);
+  assert.equal(serializedFacets.includes('tmux://'), false);
+  assert.equal(serializedFacets.includes('metadata'), false);
+  assert.equal(serializedFacets.includes('degraded_reasons'), false);
+  assert.equal(await readFile(storeFile, 'utf8'), fileBeforeRead);
+
+  const emptyFacets = await requestJson(
+    `${baseUrl}/evidence-records/facets?mapped=false&agent_id=app-engineering&limit=10`
+  );
+  assert.equal(emptyFacets.response.status, 200);
+  assert.deepEqual(emptyFacets.body.item, {
+    total_count: 0,
+    returned_limit: 10,
+    source_kind_buckets: {
+      workspace_root: 0,
+      workspace_file: 0,
+      tmux_observation: 0,
+      hermes_profile: 0,
+      hermes_session: 0,
+      kanban_fixture: 0,
+      linear_fixture: 0,
+      slack_fixture: 0,
+      task_fixture: 0
+    },
+    evidence_role_buckets: {
+      workspace_presence: 0,
+      inbound_task: 0,
+      agent_output: 0,
+      agent_plan: 0,
+      runtime_activity: 0,
+      runtime_presence: 0,
+      runtime_unmapped: 0,
+      task_reference: 0
+    },
+    source_status_buckets: {
+      observed: 0,
+      degraded: 0,
+      missing: 0,
+      error: 0
+    },
+    output_candidate_buckets: {
+      true: 0,
+      false: 0
+    },
+    mapped_buckets: {
+      mapped: 0,
+      unmapped: 0
+    },
+    agent_id_buckets: {
+      'team-lead': 0,
+      'market-intel': 0,
+      'product-pmf': 0,
+      tokenomics: 0,
+      'protocol-engineering': 0,
+      'app-engineering': 0,
+      'growth-revenue': 0,
+      unmapped: 0
+    }
+  });
+  assert.equal(collectCount, 0);
+
   const refRollup = await requestJson(
     `${baseUrl}/evidence-records/ref-rollup?output_candidate=false&limit=2`
   );
@@ -6149,6 +6266,15 @@ test('GET evidence and source read routes keep JSONL and SQLite parity', async (
   assert.equal(jsonlSummary.item.total_count, 2);
   assert.equal(jsonlSummary.item.returned_limit, 1);
 
+  const [jsonlFacets, sqliteFacets] = await parityRequest(
+    '/evidence-records/facets?mapped=true&output_candidate=true&newest_first=true&limit=1'
+  );
+  assert.deepEqual(sqliteFacets, jsonlFacets);
+  assert.equal(jsonlFacets.item.total_count, 2);
+  assert.equal(jsonlFacets.item.returned_limit, 1);
+  assert.equal(JSON.stringify(jsonlFacets).includes('/tmp/route-parity'), false);
+  assert.equal(JSON.stringify(jsonlFacets).includes('tmux://'), false);
+
   const [jsonlRefRollup, sqliteRefRollup] = await parityRequest(
     '/evidence-records/ref-rollup?mapped=true&output_candidate=true&limit=2'
   );
@@ -6192,6 +6318,7 @@ test('GET read route purity matrix leaves replay records and checkpoints unchang
   const paths = [
     '/evidence-records?mapped=true&output_candidate=true&limit=2',
     `/evidence-records/${encodeURIComponent(evidenceRecord.evidence_id)}`,
+    '/evidence-records/facets?mapped=true&output_candidate=true&limit=1',
     '/evidence-records/summary?mapped=true&output_candidate=true&limit=1',
     '/evidence-records/ref-rollup?mapped=true&output_candidate=true&limit=2',
     `/evidence-records/${encodeURIComponent(evidenceRecord.evidence_id)}/provenance-bundle`,

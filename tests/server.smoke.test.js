@@ -4807,10 +4807,20 @@ test('collector snapshot persists opt-in task evidence without heartbeat advance
   const sourceGapSummary = await requestJson(
     `${baseUrl}/runtime/source-gaps/summary?source_kind=kanban_fixture`
   );
+  const sourceGapAgentSummary = await requestJson(
+    `${baseUrl}/runtime/source-gaps/agent-summary?source_kind=kanban_fixture`
+  );
   assert.equal(sourceGaps.response.status, 200);
   assert.deepEqual(sourceGaps.body.items, []);
   assert.equal(sourceGapSummary.response.status, 200);
   assert.equal(sourceGapSummary.body.item.total_count, 0);
+  assert.equal(sourceGapAgentSummary.response.status, 200);
+  assert.deepEqual(sourceGapAgentSummary.body.item, {
+    total_count: 0,
+    total_groups: 0,
+    returned_limit: 50,
+    groups: []
+  });
 });
 
 test('collector snapshot rejects unsafe task evidence file paths before append', async (t) => {
@@ -5445,6 +5455,9 @@ test('GET /runtime/source-gaps returns compact gap and unmapped evidence read-on
 
   const response = await requestJson(`${baseUrl}/runtime/source-gaps?newest_first=true&limit=10`);
   const summary = await requestJson(`${baseUrl}/runtime/source-gaps/summary?newest_first=true&limit=1`);
+  const agentSummary = await requestJson(
+    `${baseUrl}/runtime/source-gaps/agent-summary?newest_first=true&limit=1`
+  );
 
   assert.equal(response.response.status, 200);
   assert.deepEqual(
@@ -5501,6 +5514,33 @@ test('GET /runtime/source-gaps returns compact gap and unmapped evidence read-on
   assert.equal(Object.hasOwn(summary.body.item, 'evidence_id'), false);
   assert.equal(Object.hasOwn(summary.body.item, 'evidence_ref'), false);
   assert.equal(Object.hasOwn(summary.body.item, 'metadata'), false);
+  assert.equal(agentSummary.response.status, 200);
+  assert.deepEqual(agentSummary.body.item, {
+    total_count: 2,
+    total_groups: 2,
+    returned_limit: 1,
+    groups: [
+      {
+        agent_id: null,
+        source_kind: 'tmux_observation',
+        record_count: 1,
+        mapped_count: 0,
+        unmapped_count: 1,
+        output_candidate_buckets: { true: 0, false: 1 },
+        evidence_role_buckets: { runtime_unmapped: 1 },
+        source_status_buckets: { observed: 1 },
+        first_observed_at: '2026-03-09T18:05:50.000Z',
+        last_observed_at: '2026-03-09T18:05:50.000Z',
+        first_collected_at: '2026-03-09T18:06:00.000Z',
+        last_collected_at: '2026-03-09T18:06:00.000Z'
+      }
+    ]
+  });
+  assert.equal(JSON.stringify(agentSummary.body).includes('/tmp/source-gaps'), false);
+  assert.equal(JSON.stringify(agentSummary.body).includes('tmux://'), false);
+  assert.equal(JSON.stringify(agentSummary.body).includes('evidence_id'), false);
+  assert.equal(JSON.stringify(agentSummary.body).includes('evidence_ref'), false);
+  assert.equal(JSON.stringify(agentSummary.body).includes('metadata'), false);
   assert.equal(collectCount, 0);
   assert.equal(store.getLatestCollectorReport(), latestBeforeRead);
   assert.equal(await readFile(storeFile, 'utf8'), fileBeforeRead);
@@ -6325,7 +6365,8 @@ test('GET read route purity matrix leaves replay records and checkpoints unchang
     `/accountability/replay?evidence_id=${encodeURIComponent(evidenceRecord.evidence_id)}&limit=5&window=60m`,
     '/accountability/replay/checkpoint-summary',
     '/runtime/source-gaps?newest_first=true&limit=10',
-    '/runtime/source-gaps/summary?newest_first=true&limit=1'
+    '/runtime/source-gaps/summary?newest_first=true&limit=1',
+    '/runtime/source-gaps/agent-summary?newest_first=true&limit=1'
   ];
 
   for (const pathname of paths) {

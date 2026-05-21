@@ -459,16 +459,7 @@ test('collector treats injected Hermes runtime facts as source evidence only', a
       profile_id: 'unmapped-worker',
       status: 'observed',
       observed_at: '2026-03-09T18:04:00.000Z'
-    },
-    {
-      source_kind: 'tmux_observation',
-      evidence_ref: 'tmux://noise/0.0'
-    },
-    {
-      source_kind: 'hermes_session',
-      status: 'observed'
-    },
-    null
+    }
   ];
 
   const report = await collectControllerSnapshot({
@@ -556,6 +547,133 @@ test('collector treats injected Hermes runtime facts as source evidence only', a
   });
 
   assert.deepEqual(factoryReport.items[0].hermes_runtime_observations, item.hermes_runtime_observations);
+});
+
+test('collector rejects unsafe injected Hermes runtime facts before mapping', async () => {
+  const appAgent = {
+    ...SEED_AGENTS.find((agent) => agent.agent_id === 'app-engineering'),
+    workspace_root: '/tmp/hermes-runtime-source/app-engineering'
+  };
+  const canaries = [
+    'https://example.invalid/runtime-secret',
+    'file:///tmp/hermes-runtime-secret.json',
+    'hermes://profile/runtime-secret'
+  ];
+  const readHermesRuntimeSources = async () => [
+    {
+      source_kind: 'hermes_profile',
+      agent_id: 'app-engineering',
+      profile_id: 'app-profile',
+      evidence_ref: 'hermes://profile/app-profile',
+      metadata: {
+        note: canaries[0],
+        file_hint: canaries[1],
+        runtime_ref: canaries[2]
+      }
+    }
+  ];
+
+  await assert.rejects(
+    () =>
+      collectControllerSnapshot({
+        agents: [appAgent],
+        collectedAt: '2026-03-09T18:05:00.000Z',
+        readPathStat: async () => null,
+        listTmuxPanes: async () => [],
+        readHermesRuntimeSources
+      }),
+    (error) => {
+      assert.match(error.message, /Invalid Hermes runtime source fact at Hermes runtime source input item 0/);
+      assert.match(error.message, /unsafe field metadata/);
+      assert.equal(canaries.some((canary) => error.message.includes(canary)), false);
+      return true;
+    }
+  );
+});
+
+test('collector rejects unsafe injected Hermes runtime source provenance before mapping', async () => {
+  const appAgent = {
+    ...SEED_AGENTS.find((agent) => agent.agent_id === 'app-engineering'),
+    workspace_root: '/tmp/hermes-runtime-source/app-engineering'
+  };
+  const canaries = ['/tmp/private/runtime.json', 'POST /control-plane/dispatch'];
+  const readHermesRuntimeSources = async () => [
+    {
+      source_kind: 'hermes_profile',
+      agent_id: 'app-engineering',
+      profile_id: 'app-profile',
+      evidence_ref: 'hermes://profile/app-profile',
+      source_provenance: {
+        source_format: 'jsonl',
+        source_index: 1,
+        line: 1,
+        path: canaries[0],
+        payload: canaries[1]
+      }
+    }
+  ];
+
+  await assert.rejects(
+    () =>
+      collectControllerSnapshot({
+        agents: [appAgent],
+        collectedAt: '2026-03-09T18:05:00.000Z',
+        readPathStat: async () => null,
+        listTmuxPanes: async () => [],
+        readHermesRuntimeSources
+      }),
+    (error) => {
+      assert.match(error.message, /Invalid Hermes runtime source fact at Hermes runtime source input item 0/);
+      assert.match(error.message, /unsafe field source_provenance/);
+      assert.equal(canaries.some((canary) => error.message.includes(canary)), false);
+      return true;
+    }
+  );
+});
+
+test('collector accepts timestamp-optional Hermes runtime reader facts', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'metaverse-office-hermes-runtime-'));
+  const runtimeFile = path.join(root, 'runtime-facts.jsonl');
+  const appAgent = {
+    ...SEED_AGENTS.find((agent) => agent.agent_id === 'app-engineering'),
+    workspace_root: '/tmp/hermes-runtime-source/app-engineering'
+  };
+  await writeFile(
+    runtimeFile,
+    `${JSON.stringify({
+      source_kind: 'hermes_session',
+      session_ref: appAgent.session_ref
+    })}\n`
+  );
+
+  const report = await collectControllerSnapshot({
+    agents: [appAgent],
+    collectedAt: '2026-03-09T18:05:00.000Z',
+    readPathStat: async () => null,
+    listTmuxPanes: async () => [],
+    readHermesRuntimeSources: createHermesRuntimeSourcesReader({ inputPaths: [runtimeFile] })
+  });
+
+  assert.deepEqual(report.items[0].hermes_runtime_observations, [
+    {
+      source_kind: 'hermes_session',
+      agent_id: null,
+      profile_id: null,
+      session_ref: appAgent.session_ref,
+      evidence_ref: `hermes://session/${appAgent.session_ref}`,
+      status: 'observed',
+      last_observed_at: null,
+      degraded_reasons: [],
+      metadata: {},
+      source_provenance: {
+        source_format: 'jsonl',
+        source_index: 0,
+        line: 1,
+        source_input_ordinal: 1,
+        source_file_ordinal: 1
+      }
+    }
+  ]);
 });
 
 test('collector treats injected task evidence facts as evidence only', async () => {
@@ -997,6 +1115,166 @@ test('collector can read opt-in Hermes runtime facts from multiple files and dir
   );
   assert.equal(facts.some((fact) => String(fact.evidence_ref).includes(root)), false);
   assert.equal(facts.some((fact) => JSON.stringify(fact.source_provenance).includes(root)), false);
+});
+
+test('collector rejects unsafe Hermes runtime fact strings without echoing canaries', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'metaverse-office-hermes-runtime-'));
+  const unsafeFile = path.join(root, 'unsafe-runtime-facts.jsonl');
+  const canaries = [
+    '/Users/alice/private',
+    'stale(/tmp/private/runtime.json)',
+    '/Volumes/HDD/private/runtime.json',
+    '../private/runtime.json',
+    './runtime/session.json',
+    'relative/private-runtime.json',
+    'note(relative\\private-runtime.json)',
+    'note(C:\\private\\runtime.json)',
+    '/tmp/private/token=runtime-secret',
+    'tmux://private-session/0.0',
+    'https://example.invalid/runtime-secret',
+    'stale(http://example.invalid/runtime-secret)',
+    'url:file:///tmp/private/runtime-secret.json',
+    'http://127.0.0.1:65535/runtime-secret',
+    'file:///tmp/private/runtime-secret.json'
+  ];
+  await writeFile(
+    unsafeFile,
+    `${JSON.stringify({
+      source_kind: 'hermes_profile',
+      agent_id: 'app-engineering',
+      profile_id: 'app-profile',
+      evidence_ref: 'hermes://profile/app-profile',
+      degraded_reasons: canaries
+    })}\n`
+  );
+
+  await assert.rejects(
+    () => createHermesRuntimeSourcesReader({ inputPaths: [unsafeFile] })(),
+    (error) => {
+      assert.match(error.message, /Invalid Hermes runtime source fact at Hermes runtime source input 1 item 0/);
+      assert.match(error.message, /unsafe field/);
+      assert.equal(error.message.includes(root), false);
+      assert.equal(error.message.includes(unsafeFile), false);
+      assert.equal(canaries.some((canary) => error.message.includes(canary)), false);
+      return true;
+    }
+  );
+});
+
+test('collector rejects Hermes runtime metadata payload and control-plane fields', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'metaverse-office-hermes-runtime-'));
+  const unsafeFile = path.join(root, 'unsafe-runtime-metadata.jsonl');
+  await writeFile(
+    unsafeFile,
+    `${JSON.stringify({
+      source_kind: 'hermes_profile',
+      agent_id: 'app-engineering',
+      profile_id: 'app-profile',
+      evidence_ref: 'hermes://profile/app-profile',
+      metadata: {
+        payload: { status: 'observed' },
+        control_plane: { route: 'worker-a' }
+      }
+    })}\n`
+  );
+
+  await assert.rejects(
+    () => createHermesRuntimeSourcesReader({ inputPaths: [unsafeFile] })(),
+    (error) => {
+      assert.match(error.message, /Invalid Hermes runtime source fact at Hermes runtime source input 1 item 0/);
+      assert.match(error.message, /unsafe field metadata/);
+      assert.equal(error.message.includes(root), false);
+      assert.equal(error.message.includes(unsafeFile), false);
+      assert.equal(error.message.includes('worker-a'), false);
+      return true;
+    }
+  );
+});
+
+test('collector rejects Hermes runtime top-level payload and control-plane fields', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'metaverse-office-hermes-runtime-'));
+  const unsafeFile = path.join(root, 'unsafe-runtime-top-level.jsonl');
+  await writeFile(
+    unsafeFile,
+    `${JSON.stringify({
+      source_kind: 'hermes_profile',
+      agent_id: 'app-engineering',
+      profile_id: 'app-profile',
+      evidence_ref: 'hermes://profile/app-profile',
+      payload: { status: 'observed' },
+      route: 'worker-a'
+    })}\n`
+  );
+
+  await assert.rejects(
+    () => createHermesRuntimeSourcesReader({ inputPaths: [unsafeFile] })(),
+    (error) => {
+      assert.match(error.message, /Invalid Hermes runtime source fact at Hermes runtime source input 1 item 0/);
+      assert.match(error.message, /unsafe field runtime_field/);
+      assert.equal(error.message.includes(root), false);
+      assert.equal(error.message.includes(unsafeFile), false);
+      assert.equal(error.message.includes('worker-a'), false);
+      return true;
+    }
+  );
+});
+
+test('collector rejects unsafe Hermes runtime field names without echoing canaries', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'metaverse-office-hermes-runtime-'));
+  const unsafeFile = path.join(root, 'unsafe-runtime-field-name.jsonl');
+  const unsafeFieldName = 'token=runtime-secret';
+  await writeFile(
+    unsafeFile,
+    `${JSON.stringify({
+      source_kind: 'hermes_profile',
+      agent_id: 'app-engineering',
+      profile_id: 'app-profile',
+      evidence_ref: 'hermes://profile/app-profile',
+      [unsafeFieldName]: 'observed'
+    })}\n`
+  );
+
+  await assert.rejects(
+    () => createHermesRuntimeSourcesReader({ inputPaths: [unsafeFile] })(),
+    (error) => {
+      assert.match(error.message, /Invalid Hermes runtime source fact at Hermes runtime source input 1 item 0/);
+      assert.match(error.message, /unsafe field runtime_field/);
+      assert.equal(error.message.includes(root), false);
+      assert.equal(error.message.includes(unsafeFile), false);
+      assert.equal(error.message.includes(unsafeFieldName), false);
+      return true;
+    }
+  );
+});
+
+test('collector rejects unsafe custom Hermes runtime field values without echoing field names', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'metaverse-office-hermes-runtime-'));
+  const unsafeFile = path.join(root, 'unsafe-runtime-custom-field.jsonl');
+  const customFieldName = 'runtime_note';
+  const unsafeValue = '../private/runtime.json';
+  await writeFile(
+    unsafeFile,
+    `${JSON.stringify({
+      source_kind: 'hermes_profile',
+      agent_id: 'app-engineering',
+      profile_id: 'app-profile',
+      evidence_ref: 'hermes://profile/app-profile',
+      [customFieldName]: unsafeValue
+    })}\n`
+  );
+
+  await assert.rejects(
+    () => createHermesRuntimeSourcesReader({ inputPaths: [unsafeFile] })(),
+    (error) => {
+      assert.match(error.message, /Invalid Hermes runtime source fact at Hermes runtime source input 1 item 0/);
+      assert.match(error.message, /unsafe field runtime_field/);
+      assert.equal(error.message.includes(root), false);
+      assert.equal(error.message.includes(unsafeFile), false);
+      assert.equal(error.message.includes(customFieldName), false);
+      assert.equal(error.message.includes(unsafeValue), false);
+      return true;
+    }
+  );
 });
 
 test('collector labels missing Hermes runtime source inputs without leaking paths', async () => {

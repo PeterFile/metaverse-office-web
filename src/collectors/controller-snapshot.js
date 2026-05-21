@@ -38,6 +38,46 @@ const FILE_STATE_MAP = Object.freeze({
   'outbox.md': 'coding',
   'todo.md': 'planning'
 });
+const SAFE_HERMES_RUNTIME_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/;
+const SAFE_HERMES_EVIDENCE_REF_PATTERN =
+  /^hermes:\/\/(?:profile|session)\/[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}(?:#[A-Za-z0-9_.:-]{1,64})?$/;
+const UNSAFE_HERMES_RUNTIME_TEXT_PATTERNS = Object.freeze([
+  /(?:^|[\s"'=(:,])\/(?!\/)[^\s"'<>]*/i,
+  /(?:^|[\s"'=(:,])\.{1,2}[\/\\][^\s"'<>]*/i,
+  /(?:^|[\s"'=(:,])[^\s"'<>:\/\\]+[\/\\][^\s"'<>]*/i,
+  /(?:^|[\s"'=(:,])~(?:\/|\b)/i,
+  /(?:^|[\s"'=(:,])[A-Za-z]:[\\/]/,
+  /(?:^|[\s"'=(:,])\/(?:Users|tmp)(?:\/|\b)/i,
+  /^[/~]/,
+  /^[A-Za-z]:[\\/]/,
+  /^tmux:\/\//i,
+  /github_pat_/i,
+  /\bgh[opusr]_[A-Za-z0-9_]+/i,
+  /\bxox[a-z]-[A-Za-z0-9-]+/i,
+  /\bsk[-_][A-Za-z0-9_-]+/i,
+  /\btoken(?:=|:|\b)/i,
+  /webhook/i
+]);
+const UNSAFE_HERMES_RUNTIME_METADATA_KEY_PATTERN =
+  /(?:payload|control[-_ ]?plane|dispatch|claim|complete|assignment|assignee|route|routing|writeback|worker|orchestrat)/i;
+const HERMES_RUNTIME_URI_PATTERN =
+  /[A-Za-z][A-Za-z0-9+.-]*:\/\/[^\s"'<>]*/i;
+const SAFE_HERMES_RUNTIME_METADATA_KEYS = Object.freeze(new Set(['pid']));
+const SAFE_HERMES_RUNTIME_FACT_KEYS = Object.freeze(
+  new Set([
+    'source_kind',
+    'agent_id',
+    'profile_id',
+    'session_ref',
+    'evidence_ref',
+    'status',
+    'observed_at',
+    'last_observed_at',
+    'degraded_reasons',
+    'metadata',
+    'source_provenance'
+  ])
+);
 
 function createControllerSnapshotCollector(options = {}) {
   const agents = options.agents || SEED_AGENTS;
@@ -1369,6 +1409,8 @@ function validateHermesRuntimeSourceFact(fact, index, sourceFilePath, sourceProv
     throw new Error(`Invalid Hermes runtime source fact at ${location}: expected object`);
   }
 
+  assertSafeHermesRuntimeSourceFact(fact, location);
+
   const normalized = normalizeHermesRuntimeSourceFact(fact);
   if (!normalized) {
     throw new Error(
@@ -1380,10 +1422,10 @@ function validateHermesRuntimeSourceFact(fact, index, sourceFilePath, sourceProv
     throw new Error(`Invalid Hermes runtime source fact at ${location}: invalid status`);
   }
 
-  if (
-    (fact.last_observed_at !== undefined || fact.observed_at !== undefined) &&
-    !normalized.last_observed_at
-  ) {
+  const hasObservedTimestampInput =
+    (fact.last_observed_at !== undefined && fact.last_observed_at !== null) ||
+    (fact.observed_at !== undefined && fact.observed_at !== null);
+  if (hasObservedTimestampInput && !normalized.last_observed_at) {
     throw new Error(`Invalid Hermes runtime source fact at ${location}: invalid observed timestamp`);
   }
 
@@ -1404,9 +1446,10 @@ function validateHermesRuntimeSourceFact(fact, index, sourceFilePath, sourceProv
     throw new Error(`Invalid Hermes runtime source fact at ${location}: metadata must be an object`);
   }
 
+  const normalizedSourceProvenance = normalizeHermesSourceProvenance(sourceProvenance);
   return {
     ...normalized,
-    ...(sourceProvenance ? { source_provenance: sourceProvenance } : {})
+    ...(normalizedSourceProvenance ? { source_provenance: normalizedSourceProvenance } : {})
   };
 }
 
@@ -1417,9 +1460,7 @@ function groupHermesRuntimeSources({ facts, agents, enabled }) {
   const agentsById = new Map(agents.map((agent) => [agent.agent_id, agent]));
   const agentIdBySessionRef = new Map(agents.map((agent) => [agent.session_ref, agent.agent_id]));
   const pendingMappedFacts = new Map();
-  const normalizedFacts = Array.isArray(facts)
-    ? facts.map(normalizeHermesRuntimeSourceFact).filter(Boolean)
-    : [];
+  const normalizedFacts = normalizeHermesRuntimeSourceFacts(facts);
 
   for (const fact of normalizedFacts) {
     const agentId = mapHermesFactToAgentId({
@@ -1557,7 +1598,8 @@ function normalizeHermesRuntimeSourceFact(fact) {
     return null;
   }
 
-  const evidenceRef = sanitizeText(fact.evidence_ref) || deriveHermesEvidenceRef(fact);
+  const evidenceRef =
+    normalizeHermesEvidenceRef(fact.evidence_ref) || deriveHermesEvidenceRef(fact);
   if (!evidenceRef) {
     return null;
   }
@@ -1565,16 +1607,45 @@ function normalizeHermesRuntimeSourceFact(fact) {
   const sourceProvenance = normalizeHermesSourceProvenance(fact.source_provenance);
   return {
     source_kind: fact.source_kind,
-    agent_id: sanitizeText(fact.agent_id) || null,
-    profile_id: sanitizeText(fact.profile_id) || null,
-    session_ref: sanitizeText(fact.session_ref) || null,
+    agent_id: normalizeHermesRuntimeId(fact.agent_id) || null,
+    profile_id: normalizeHermesRuntimeId(fact.profile_id) || null,
+    session_ref: normalizeHermesRuntimeId(fact.session_ref) || null,
     evidence_ref: evidenceRef,
     status: normalizeSourceHealthStatus(fact.status) || 'observed',
     last_observed_at: normalizeIsoTimestamp(fact.last_observed_at || fact.observed_at),
-    degraded_reasons: normalizeStringArray(fact.degraded_reasons),
-    metadata: fact.metadata && typeof fact.metadata === 'object' ? { ...fact.metadata } : {},
+    degraded_reasons: normalizeHermesDegradedReasons(fact.degraded_reasons),
+    metadata: normalizeHermesRuntimeMetadata(fact.metadata),
     ...(sourceProvenance ? { source_provenance: sourceProvenance } : {})
   };
+}
+
+function normalizeHermesRuntimeSourceFacts(facts) {
+  if (!Array.isArray(facts)) {
+    return [];
+  }
+
+  return facts.map((fact, index) =>
+    validateHermesRuntimeSourceFact(
+      fact,
+      index,
+      'Hermes runtime source input',
+      fact && typeof fact === 'object' && !Array.isArray(fact) ? fact.source_provenance : null
+    )
+  );
+}
+
+function normalizeHermesRuntimeMetadata(metadata) {
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
+    return {};
+  }
+
+  const normalized = {};
+  for (const key of SAFE_HERMES_RUNTIME_METADATA_KEYS) {
+    if (key === 'pid' && Number.isSafeInteger(metadata.pid) && metadata.pid >= 0) {
+      normalized.pid = metadata.pid;
+    }
+  }
+  return normalized;
 }
 
 function normalizeHermesSourceProvenance(sourceProvenance) {
@@ -1630,8 +1701,8 @@ function normalizeHermesSourceOrdinalProvenance(sourceProvenance) {
 }
 
 function deriveHermesEvidenceRef(fact) {
-  const profileId = sanitizeText(fact.profile_id || fact.agent_id);
-  const sessionRef = sanitizeText(fact.session_ref);
+  const profileId = normalizeHermesRuntimeId(fact.profile_id || fact.agent_id);
+  const sessionRef = normalizeHermesRuntimeId(fact.session_ref);
 
   if (fact.source_kind === 'hermes_profile' && profileId) {
     return `hermes://profile/${profileId}`;
@@ -1642,6 +1713,125 @@ function deriveHermesEvidenceRef(fact) {
   }
 
   return null;
+}
+
+function assertSafeHermesRuntimeSourceFact(fact, location) {
+  for (const [fieldName, fieldValue] of Object.entries(fact)) {
+    const normalizedFieldName = sanitizeText(fieldName);
+    if (
+      containsUnsafeHermesRuntimeText(normalizedFieldName) ||
+      UNSAFE_HERMES_RUNTIME_METADATA_KEY_PATTERN.test(normalizedFieldName)
+    ) {
+      throw new Error(`Invalid Hermes runtime source fact at ${location}: unsafe field runtime_field`);
+    }
+    if (
+      !SAFE_HERMES_RUNTIME_FACT_KEYS.has(normalizedFieldName) &&
+      containsUnsafeHermesRuntimeValue(fieldValue)
+    ) {
+      throw new Error(`Invalid Hermes runtime source fact at ${location}: unsafe field runtime_field`);
+    }
+  }
+
+  for (const fieldName of ['agent_id', 'profile_id', 'session_ref']) {
+    const value = fact[fieldName];
+    if (value !== undefined && value !== null && !normalizeHermesRuntimeId(value)) {
+      throw new Error(
+        `Invalid Hermes runtime source fact at ${location}: unsafe field ${fieldName}`
+      );
+    }
+  }
+
+  if (fact.evidence_ref !== undefined && fact.evidence_ref !== null && !normalizeHermesEvidenceRef(fact.evidence_ref)) {
+    throw new Error(`Invalid Hermes runtime source fact at ${location}: unsafe field evidence_ref`);
+  }
+
+  if (Array.isArray(fact.degraded_reasons)) {
+    for (const reason of fact.degraded_reasons) {
+      if (!normalizeHermesDegradedReason(reason)) {
+        throw new Error(
+          `Invalid Hermes runtime source fact at ${location}: unsafe field degraded_reasons`
+        );
+      }
+    }
+  }
+
+  if (fact.metadata && containsUnsafeHermesRuntimeValue(fact.metadata)) {
+    throw new Error(`Invalid Hermes runtime source fact at ${location}: unsafe field metadata`);
+  }
+  if (fact.source_provenance && containsUnsafeHermesRuntimeValue(fact.source_provenance)) {
+    throw new Error(`Invalid Hermes runtime source fact at ${location}: unsafe field source_provenance`);
+  }
+}
+
+function normalizeHermesRuntimeId(value) {
+  const text = sanitizeText(value);
+  if (
+    !text ||
+    !SAFE_HERMES_RUNTIME_ID_PATTERN.test(text) ||
+    containsUnsafeHermesRuntimeText(text)
+  ) {
+    return null;
+  }
+
+  return text;
+}
+
+function normalizeHermesEvidenceRef(value) {
+  const text = sanitizeText(value);
+  if (
+    !text ||
+    !SAFE_HERMES_EVIDENCE_REF_PATTERN.test(text) ||
+    containsUnsafeHermesRuntimeText(text, { allowHermesEvidenceRef: true })
+  ) {
+    return null;
+  }
+
+  return text;
+}
+
+function normalizeHermesDegradedReasons(values) {
+  if (!Array.isArray(values)) {
+    return [];
+  }
+
+  return values.map(normalizeHermesDegradedReason).filter(Boolean);
+}
+
+function normalizeHermesDegradedReason(value) {
+  const text = sanitizeText(value);
+  if (!text || text.length > 160 || containsUnsafeHermesRuntimeText(text)) {
+    return null;
+  }
+
+  return text;
+}
+
+function containsUnsafeHermesRuntimeValue(value, seen = new WeakSet()) {
+  if (typeof value === 'string') {
+    return containsUnsafeHermesRuntimeText(value);
+  }
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+  if (seen.has(value)) {
+    return false;
+  }
+
+  seen.add(value);
+  return Object.entries(value).some(
+    ([key, childValue]) =>
+      containsUnsafeHermesRuntimeText(key) ||
+      UNSAFE_HERMES_RUNTIME_METADATA_KEY_PATTERN.test(sanitizeText(key)) ||
+      containsUnsafeHermesRuntimeValue(childValue, seen)
+  );
+}
+
+function containsUnsafeHermesRuntimeText(value, options = {}) {
+  const text = sanitizeText(value);
+  if (!options.allowHermesEvidenceRef && HERMES_RUNTIME_URI_PATTERN.test(` ${text}`)) {
+    return true;
+  }
+  return UNSAFE_HERMES_RUNTIME_TEXT_PATTERNS.some((pattern) => pattern.test(text));
 }
 
 function createUnmappedHermesSourceFact(fact) {
@@ -1674,14 +1864,6 @@ function compareHermesRuntimeObservation(left, right) {
 
 function normalizeSourceHealthStatus(status) {
   return ['observed', 'degraded', 'missing', 'error'].includes(status) ? status : null;
-}
-
-function normalizeStringArray(values) {
-  if (!Array.isArray(values)) {
-    return [];
-  }
-
-  return values.map(sanitizeText).filter(Boolean);
 }
 
 async function runTmuxListPanes() {

@@ -139,6 +139,8 @@ Missing, degraded, unmapped, duplicate, and shared-ref sources stay evidence-onl
 
 Fail closed. If the fact cannot be parsed, validated, sanitized, or safely mapped, do not fabricate output, heartbeat, task state, liveness, or office actors.
 
+Unsafe runtime strings also fail closed before append. `evidence_ref`, `agent_id`, `profile_id`, `session_ref`, `degraded_reasons`, `source_provenance`, and metadata must not contain absolute or relative local paths, generic URI schemes such as `http://`, `https://`, or `file://`, `tmux://` refs, webhook URLs, control-plane/payload keys, or secret-shaped values such as `token`, `github_pat`, `xox`, or `sk` canaries. Collection errors expose only abstract input/file ordinals and generic field names.
+
 ## Redaction Rules
 
 Before writing a source file:
@@ -149,9 +151,9 @@ Before writing a source file:
 - omit prompt text, model messages, shell commands, tmux pane content, and transcripts
 - omit secrets, tokens, env vars, auth headers, cookies, and credentials
 - keep `degraded_reasons` short and generic, for example `session heartbeat stale`
-- keep metadata optional and sanitized; prefer no metadata unless a read model requires it
+- keep metadata optional and sanitized; only bounded allowlisted primitives such as a numeric `pid` may persist
 
-Collection errors must use abstract source labels and must not expose configured input paths, expanded file paths, temp roots, or raw input snippets.
+Collection errors must use abstract source labels and generic field names. They must not expose configured input paths, expanded file paths, temp roots, raw input snippets, URI refs, tmux refs, or secret-shaped canaries.
 
 ## Validation
 

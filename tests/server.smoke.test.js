@@ -4994,6 +4994,60 @@ test('collector snapshot malformed Hermes runtime input is redacted before appen
   await assert.rejects(() => readFile(storeFile, 'utf8'), { code: 'ENOENT' });
 });
 
+test('collector snapshot rejects unsafe Hermes runtime canaries before append', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'metaverse-office-hermes-runtime-'));
+  const unsafeFile = path.join(root, 'unsafe-runtime-facts.jsonl');
+  const canaries = [
+    '/Users/alice/private',
+    '/Volumes/HDD/private/runtime.json',
+    '/tmp/private/token=runtime-secret',
+    'tmux://private-session/0.0',
+    'https://example.invalid/runtime-secret',
+    'http://127.0.0.1:65535/runtime-secret',
+    'file:///tmp/private/runtime-secret.json'
+  ];
+  await writeFile(
+    unsafeFile,
+    `${JSON.stringify({
+      source_kind: 'hermes_profile',
+      agent_id: 'app-engineering',
+      profile_id: 'app-profile',
+      evidence_ref: 'hermes://profile/app-profile',
+      degraded_reasons: ['session heartbeat stale'],
+      metadata: {
+        note: canaries[4],
+        file_hint: canaries[6],
+        runtime_ref: 'hermes://profile/private-runtime'
+      }
+    })}\n`
+  );
+
+  const controllerSnapshotCollector = createControllerSnapshotCollector({
+    agents: [SEED_AGENTS.find((agent) => agent.agent_id === 'app-engineering')],
+    readPathStat: async () => null,
+    listTmuxPanes: async () => [],
+    readHermesRuntimeSources: createHermesRuntimeSourcesReader({ inputPaths: [unsafeFile] })
+  });
+  const { baseUrl, storeFile } = await createHarness(t, { controllerSnapshotCollector });
+
+  const collected = await requestJson(`${baseUrl}/collectors/controller-snapshot`, {
+    method: 'POST',
+    headers: {
+      'x-actor-id': 'team-lead'
+    }
+  });
+
+  assert.equal(collected.response.status, 500);
+  assert.equal(collected.body.error, 'internal_error');
+  assert.match(collected.body.details, /Hermes runtime source input 1/);
+  assert.match(collected.body.details, /unsafe field metadata/);
+  assert.equal(collected.body.details.includes(root), false);
+  assert.equal(collected.body.details.includes(unsafeFile), false);
+  assert.equal(canaries.some((canary) => collected.body.details.includes(canary)), false);
+  assert.equal(collected.body.details.includes('private-runtime'), false);
+  await assert.rejects(() => readFile(storeFile, 'utf8'), { code: 'ENOENT' });
+});
+
 test('GET /collectors/controller-snapshot/evidence-coverage projects latest coverage read-only with filters', async (t) => {
   const selectedAgents = ['app-engineering', 'protocol-engineering', 'growth-revenue'].map((agentId) =>
     SEED_AGENTS.find((agent) => agent.agent_id === agentId)

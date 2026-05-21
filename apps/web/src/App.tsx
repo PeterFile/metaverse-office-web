@@ -3100,7 +3100,7 @@ function AppInner() {
                 <span className="aitown-selected-agent-peek__eyebrow">Selected agent</span>
                 <strong>{selectedAgent.display_name}</strong>
                 <span>{`${HOT_ZONE_SEVERITY_LABELS[selectedAgentPeekSeverity]} · ${selectedAgentPeekStatus}`}</span>
-                {selectedAgentEvidenceGlance ? <span>{selectedAgentEvidenceGlance}</span> : null}
+                {selectedAgentEvidenceGlance?.map((line) => <span key={line}>{line}</span>)}
                 {selectedAgentSourceGapSummary && selectedAgentSourceGapFact ? (
                   <button
                     type="button"

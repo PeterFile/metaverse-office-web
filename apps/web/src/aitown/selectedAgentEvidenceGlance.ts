@@ -11,6 +11,8 @@ export type SelectedAgentEvidenceGlanceInput = {
   sourceHealth: CollectorSourceHealthProjection | null | undefined;
 };
 
+export type SelectedAgentEvidenceProofCapsule = [string] | [string, string];
+
 const SOURCE_KIND_LABELS: Record<CollectorEvidenceCoverageSourceKind, string> = {
   workspace_file: 'workspace',
   workspace_root: 'workspace',
@@ -23,7 +25,7 @@ export function deriveSelectedAgentEvidenceGlance({
   selectedAgentId,
   evidenceCoverage,
   sourceHealth
-}: SelectedAgentEvidenceGlanceInput): string | null {
+}: SelectedAgentEvidenceGlanceInput): SelectedAgentEvidenceProofCapsule | null {
   const agentId = normalizeString(selectedAgentId);
   if (!agentId) {
     return null;
@@ -34,21 +36,20 @@ export function deriveSelectedAgentEvidenceGlance({
       (candidate) => candidate.agent_id === agentId
     );
     if (!row) {
-      return 'Evidence · uncovered in snapshot';
+      return ['Proof capsule · Evidence 0 refs · Source unavailable', 'Gap uncovered in snapshot'];
     }
     if (row.status === 'uncovered_in_snapshot') {
-      return 'Evidence · uncovered in snapshot';
+      return ['Proof capsule · Evidence 0 refs · Source unavailable', 'Gap uncovered in snapshot'];
     }
 
     return [
-      'Evidence',
-      renderEvidenceRefCount(row.evidence_ref_count),
-      renderSourceKindSummary(row.source_kinds),
-      row.status === 'low_confidence_evidence' ? 'low-confidence' : row.confidence,
-      `latest ${row.latest_evidence_at ?? 'unavailable'}`
-    ]
-      .filter((part): part is string => Boolean(part))
-      .join(' · ');
+      `Proof capsule · Evidence ${renderEvidenceRefCount(row.evidence_ref_count)} · Source ${renderSourceKindSummary(row.source_kinds) ?? 'unavailable'}`,
+      [
+        `Gap ${row.status === 'low_confidence_evidence' ? 'low-confidence' : 'covered'}`,
+        renderConfidence(row.confidence),
+        `Latest ${row.latest_evidence_at ?? 'unavailable'}`
+      ].join(' · ')
+    ];
   }
 
   const sourceHealthItem = sourceHealth?.agent_items.find((item) => item.agent_id === agentId);
@@ -57,11 +58,9 @@ export function deriveSelectedAgentEvidenceGlance({
   }
 
   return [
-    'Evidence',
-    renderEvidenceRefCount(sourceHealthItem.evidence_ref_count),
-    'source health',
-    `latest ${sourceHealthItem.latest_evidence_at ?? 'unavailable'}`
-  ].join(' · ');
+    `Proof capsule · Evidence ${renderEvidenceRefCount(sourceHealthItem.evidence_ref_count)} · Source source health`,
+    `Gap source-health only · Latest ${sourceHealthItem.latest_evidence_at ?? 'unavailable'}`
+  ];
 }
 
 function normalizeString(value: string | null | undefined): string | null {
@@ -81,4 +80,8 @@ function renderSourceKindSummary(sourceKinds: CollectorEvidenceCoverageSourceKin
     new Set(sourceKinds.map((sourceKind) => SOURCE_KIND_LABELS[sourceKind]).filter(Boolean))
   );
   return labels.length > 0 ? labels.join(' + ') : null;
+}
+
+function renderConfidence(confidence: string | null) {
+  return confidence ? `${confidence} confidence` : 'confidence unavailable';
 }

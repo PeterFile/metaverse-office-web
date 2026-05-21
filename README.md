@@ -83,11 +83,14 @@ pnpm test:all
 pnpm web:typecheck
 pnpm web:build
 pnpm web:test:browser-smoke
+pnpm web:test:browser-smoke:live-evidence
 pnpm web:test:browser-smoke:dev
 pnpm backend:start
 ```
 
 `pnpm web:test:browser-smoke` runs the Playwright smoke bundle from the repository root (currently the keyboard, active-queue, and layout-visual smokes), starts its own hermetic read-only backend seeded under `./.tmp/browser-smoke`, starts its own Vite shell on ephemeral localhost ports, and passes the resolved base URL into Playwright so stale orphaned processes do not block startup.
+
+`pnpm web:test:browser-smoke:live-evidence` runs only the short Live Evidence journey smoke through the same hermetic wrapper. Use it for focused validation when the changed surface is limited to the live evidence journey; it does not replace the full smoke bundle for broad shell changes.
 
 `pnpm web:test:browser-smoke:dev` runs the same Playwright smoke bundle through the wrapper with `BROWSER_SMOKE_FRONTEND_MODE=dev`, so CI also proves the non-preview Vite path end-to-end instead of only covering that branch in helper tests.
 
@@ -101,6 +104,7 @@ For the browser smoke against your own local backend data instead of the hermeti
 ```bash
 cd apps/web
 VITE_DEV_PROXY_TARGET=http://127.0.0.1:3000 pnpm test:browser-smoke
+VITE_DEV_PROXY_TARGET=http://127.0.0.1:3000 pnpm test:browser-smoke:live-evidence
 VITE_DEV_PROXY_TARGET=http://127.0.0.1:3000 pnpm test:browser-smoke:dev
 ```
 

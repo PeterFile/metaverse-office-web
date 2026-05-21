@@ -1,5 +1,7 @@
 import { EventEmitter } from 'node:events';
+import { readFileSync } from 'node:fs';
 import http from 'node:http';
+import { resolve } from 'node:path';
 import { PassThrough } from 'node:stream';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -30,6 +32,30 @@ afterEach(() => {
 });
 
 describe('run-browser-smoke helpers', () => {
+  it('exposes focused Live Evidence smoke scripts without routing through broad validation commands', () => {
+    const repoPackageJson = JSON.parse(
+      readFileSync(resolve(process.cwd(), '../../package.json'), 'utf8')
+    );
+    const webPackageJson = JSON.parse(readFileSync(resolve(process.cwd(), 'package.json'), 'utf8'));
+
+    expect(repoPackageJson.scripts['web:test:browser-smoke:live-evidence']).toBe(
+      'pnpm --filter @metaverse-office/web test:browser-smoke:live-evidence'
+    );
+    expect(webPackageJson.scripts['test:browser-smoke:live-evidence']).toBe(
+      'node ./scripts/run-browser-smoke.mjs --smoke-lane=live-evidence'
+    );
+
+    const focusedCommands = [
+      repoPackageJson.scripts['web:test:browser-smoke:live-evidence'],
+      webPackageJson.scripts['test:browser-smoke:live-evidence']
+    ];
+
+    for (const command of focusedCommands) {
+      expect(command).toContain('live-evidence');
+      expect(command).not.toMatch(/\btest:all\b|\bweb:build\b|\bbuild\b/);
+    }
+  });
+
   it('keeps explicit fixed-port runs on the managed hermetic path so preview-mode smoke semantics stay consistent', () => {
     expect(
       resolveBrowserSmokeRunMode({

@@ -16,6 +16,7 @@
     "web:preview": "pnpm --filter @metaverse-office/web preview",
     "web:test": "pnpm --filter @metaverse-office/web test",
     "web:test:browser-smoke": "pnpm --filter @metaverse-office/web test:browser-smoke",
+    "web:test:browser-smoke:live-evidence": "pnpm --filter @metaverse-office/web test:browser-smoke:live-evidence",
     "web:test:browser-smoke:dev": "pnpm --filter @metaverse-office/web test:browser-smoke:dev",
     "test": "pnpm test:all",
     "test:all": "pnpm backend:test && pnpm web:test && pnpm web:typecheck && pnpm web:build && pnpm web:test:browser-smoke && pnpm web:test:browser-smoke:dev",

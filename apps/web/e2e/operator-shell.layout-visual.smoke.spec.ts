@@ -1220,6 +1220,10 @@ test.describe('operator shell layout visual smoke', () => {
     await expect(replayPanel.getByRole('heading', { name: 'Timeline Replay' })).toBeVisible();
     await expect(replayPanel.getByRole('heading', { name: 'Correlation Drilldown' })).toBeVisible();
     await expect(replayPanel.getByRole('heading', { name: 'Replay Bundle' })).toBeVisible();
+    const replayProofLadder = replayPanel.locator('li').filter({ hasText: 'Replay Proof Ladder' });
+    await expect(replayProofLadder.getByText(/Verdict · \w+/)).toBeVisible();
+    await expect(replayProofLadder.getByText(/Rows · \d+ total · \d+ replayable/)).toBeVisible();
+    await expect(replayProofLadder.getByText(/Anchor events · \d+/)).toBeVisible();
     await expect(replayPanel.getByText(/Ledger · \d+ entries · derived\/read-only/)).toBeVisible();
 
     await page.getByRole('button', { name: 'Close panel' }).click();

@@ -3441,6 +3441,13 @@ afterEach(() => {
 
     const inspectPeek = await screen.findByRole('region', { name: 'Selected agent inspect peek' });
     expect(within(inspectPeek).getByText('App Engineering Agent')).toBeVisible();
+    expect(
+      within(inspectPeek).getByText('Proof capsule · Evidence 5 refs · Source tmux + workspace')
+    ).toBeVisible();
+    expect(
+      within(inspectPeek).getByText('Gap covered · high confidence · Latest 2026-03-16T08:59:10.000Z')
+    ).toBeVisible();
+    expect(within(inspectPeek).queryAllByText(/^(Proof capsule|Gap )/)).toHaveLength(2);
 
     await act(async () => {});
     let requestedUrls = vi.mocked(globalThis.fetch).mock.calls.map(([request]) => String(request));

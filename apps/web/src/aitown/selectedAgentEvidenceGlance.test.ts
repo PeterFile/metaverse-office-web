@@ -88,7 +88,10 @@ describe('deriveSelectedAgentEvidenceGlance', () => {
         evidenceCoverage: coverage,
         sourceHealth
       })
-    ).toBe('Evidence · 2 refs · tmux + workspace · high · latest 2026-03-09T18:04:45.000Z');
+    ).toEqual([
+      'Proof capsule · Evidence 2 refs · Source tmux + workspace',
+      'Gap covered · high confidence · Latest 2026-03-09T18:04:45.000Z'
+    ]);
   });
 
   it('marks low-confidence and uncovered selected agents', () => {
@@ -98,7 +101,10 @@ describe('deriveSelectedAgentEvidenceGlance', () => {
         evidenceCoverage: coverage,
         sourceHealth
       })
-    ).toBe('Evidence · 1 ref · workspace · low-confidence · latest unavailable');
+    ).toEqual([
+      'Proof capsule · Evidence 1 ref · Source workspace',
+      'Gap low-confidence · medium confidence · Latest unavailable'
+    ]);
 
     expect(
       deriveSelectedAgentEvidenceGlance({
@@ -106,7 +112,7 @@ describe('deriveSelectedAgentEvidenceGlance', () => {
         evidenceCoverage: coverage,
         sourceHealth
       })
-    ).toBe('Evidence · uncovered in snapshot');
+    ).toEqual(['Proof capsule · Evidence 0 refs · Source unavailable', 'Gap uncovered in snapshot']);
   });
 
   it('falls back to source health counts without leaking refs or paths', () => {
@@ -116,10 +122,15 @@ describe('deriveSelectedAgentEvidenceGlance', () => {
       sourceHealth
     });
 
-    expect(glance).toBe('Evidence · 1 ref · source health · latest 2026-03-16T08:59:30.000Z');
-    expect(glance).not.toContain('/tmp/');
-    expect(glance).not.toContain('hermes://');
-    expect(glance).not.toContain('7-web3-support');
+    expect(glance).toEqual([
+      'Proof capsule · Evidence 1 ref · Source source health',
+      'Gap source-health only · Latest 2026-03-16T08:59:30.000Z'
+    ]);
+    expect(glance).toHaveLength(2);
+    const glanceText = glance?.join('\n') ?? '';
+    expect(glanceText).not.toContain('/tmp/');
+    expect(glanceText).not.toContain('hermes://');
+    expect(glanceText).not.toContain('7-web3-support');
   });
 
   it('returns null until a selected agent and loaded read model row exist', () => {

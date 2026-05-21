@@ -2376,7 +2376,7 @@ afterEach(() => {
       });
 
       expect(screen.queryByRole('dialog', { name: 'Hub' })).not.toBeInTheDocument();
-      expect(screen.queryByRole('region', { name: 'Active correlation' })).not.toBeInTheDocument();
+      expect(screen.getByRole('region', { name: 'Active correlation' })).toBeVisible();
       expect(screen.getByTestId('mock-scene-active-correlation-id')).toHaveTextContent('corr-app-review');
       expect(screen.getByTestId('mock-scene-correlation-participants')).toHaveTextContent(
         'app-engineering,team-lead'
@@ -2444,6 +2444,9 @@ afterEach(() => {
     await user.click(screen.getByRole('button', { name: 'Close panel' }));
 
     expect(screen.queryByRole('dialog', { name: 'Hub' })).not.toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Office world' })).toHaveClass(
+      'aitown-panel--peek-with-active-correlation'
+    );
     expect(screen.getByTestId('mock-scene-active-correlation-id')).toHaveTextContent('corr-app-review');
     expect(screen.getByTestId('mock-scene-correlation-participants')).toHaveTextContent(
       'app-engineering,team-lead'
@@ -2451,6 +2454,10 @@ afterEach(() => {
 
     await user.click(screen.getByRole('button', { name: 'Select scene agent team-lead' }));
     expect(screen.queryByRole('dialog', { name: 'Hub' })).not.toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Selected agent inspect peek' })).toBeVisible();
+    expect(screen.getByRole('region', { name: 'Selected agent inspect peek' })).toHaveTextContent(
+      'Correlation · corr-app-review'
+    );
 
     details = await openSelectedAgentPeekInHub(user, 'Team Lead');
     correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');

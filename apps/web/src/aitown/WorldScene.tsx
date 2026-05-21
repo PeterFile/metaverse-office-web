@@ -2701,7 +2701,7 @@ export default function WorldScene({
                     >
                       <span className="aitown-correlation-overlay__agent-copy">
                         <strong>{agent.displayName}</strong>
-                        <span>{agentSelected ? 'Selected in viewport' : 'Inspect in Hub'}</span>
+                        <span>{agentSelected ? 'Selected in viewport' : 'Inspect agent'}</span>
                       </span>
                       {agentSelected ? <span className="aitown-correlation-overlay__agent-marker">Selected</span> : null}
                     </button>

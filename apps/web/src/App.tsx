@@ -2822,7 +2822,13 @@ function AppInner() {
   return (
     <main className="aitown-shell game-background">
       <section className="aitown-shell__layout aitown-shell__layout--fullscreen">
-        <section className="aitown-panel aitown-panel--game aitown-panel--game-fullscreen" role="region" aria-label="Office world">
+        <section
+          className={`aitown-panel aitown-panel--game aitown-panel--game-fullscreen${
+            selectedAgent && !hubOpen && scene.activeCorrelationId ? ' aitown-panel--peek-with-active-correlation' : ''
+          }`}
+          role="region"
+          aria-label="Office world"
+        >
           <div className="aitown-panel__chrome">
             <header className="aitown-shell__header">
             <div className="aitown-shell__brand">
@@ -3154,7 +3160,6 @@ function AppInner() {
                 resetViewSignal={resetViewSignal}
                 agentFocusRequest={agentFocusRequest}
                 zoneFocusRequest={zoneFocusRequest}
-                showActiveCorrelationOverlay={hubOpen}
               />
             </Suspense>
           )}

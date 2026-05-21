@@ -1116,6 +1116,12 @@ button {
   scrollbar-width: thin;
 }
 
+.aitown-panel--peek-with-active-correlation .aitown-correlation-overlay {
+  right: auto;
+  left: 18px;
+  max-height: min(132px, calc(100% - 240px));
+}
+
 .aitown-correlation-overlay__caption {
   display: flex;
   flex-direction: column;

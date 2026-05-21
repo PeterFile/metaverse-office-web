@@ -7,6 +7,17 @@ describe('buildEvidenceProvenanceProof', () => {
   it('extracts replay-safe anchors in deterministic order', () => {
     const proof = buildEvidenceProvenanceProof({
       evidence_id: 'evidence-record-1',
+      source_summary: {
+        kind: 'workspace_file',
+        status: 'observed',
+        role: 'agent_plan',
+        output_candidate: false,
+        mapped: true,
+        time: {
+          observed_at: '2026-03-09T18:58:30.000Z',
+          collected_at: '2026-03-09T18:59:00.000Z'
+        }
+      },
       record: {
         observed_at: '2026-03-09T18:58:30.000Z',
         collected_at: '2026-03-09T18:59:00.000Z',
@@ -41,6 +52,17 @@ describe('buildEvidenceProvenanceProof', () => {
 
     expect(proof).toEqual({
       evidenceId: 'evidence-record-1',
+      sourceSummary: {
+        kind: 'workspace_file',
+        status: 'observed',
+        role: 'agent_plan',
+        outputCandidate: false,
+        mapped: true,
+        time: {
+          observedAt: '2026-03-09T18:58:30.000Z',
+          collectedAt: '2026-03-09T18:59:00.000Z'
+        }
+      },
       record: {
         observedAt: '2026-03-09T18:58:30.000Z',
         collectedAt: '2026-03-09T18:59:00.000Z',
@@ -80,6 +102,21 @@ describe('buildEvidenceProvenanceProof', () => {
   it('omits raw refs, payload-like fields, local paths, and token-like values from helper output', () => {
     const bundle = {
       evidence_id: 'evidence-record-1',
+      source_summary: {
+        kind: 'workspace_file',
+        status: 'observed',
+        role: 'agent_plan',
+        output_candidate: false,
+        mapped: true,
+        snapshot: 'collector-snapshot:2026-03-09T18:59:00.000Z',
+        time: {
+          observed_at: null,
+          collected_at: null
+        },
+        correlation: 'corr-app-review',
+        evidence_ref: '/Users/cwp/secret.txt',
+        raw_payload: 'token=sk-live-1234567890abcdef'
+      },
       evidence_ref: '/Users/cwp/secret.txt',
       payload: {
         token: 'sk-live-1234567890abcdef'
@@ -119,7 +156,10 @@ describe('buildEvidenceProvenanceProof', () => {
     } as unknown as EvidenceProvenanceBundle;
 
     const output = JSON.stringify(buildEvidenceProvenanceProof(bundle));
+    const proof = buildEvidenceProvenanceProof(bundle);
 
+    expect(proof?.sourceSummary).not.toHaveProperty('snapshot');
+    expect(proof?.sourceSummary).not.toHaveProperty('correlation');
     expect(output).not.toContain('/Users/cwp/secret.txt');
     expect(output).not.toContain('sk-live-1234567890abcdef');
     expect(output).not.toContain('evidence_ref');
@@ -129,6 +169,17 @@ describe('buildEvidenceProvenanceProof', () => {
   it('uses evidence_id for replay proof anchors when correlation_id is absent', () => {
     const proof = buildEvidenceProvenanceProof({
       evidence_id: 'evidence-record-1',
+      source_summary: {
+        kind: 'workspace_file',
+        status: 'observed',
+        role: 'agent_plan',
+        output_candidate: false,
+        mapped: true,
+        time: {
+          observed_at: null,
+          collected_at: null
+        }
+      },
       record: {
         observed_at: null,
         collected_at: null,

@@ -3434,36 +3434,84 @@ function projectReplayCheckpointCollectorSnapshot(report) {
 }
 
 function projectEvidenceProvenanceBundle(record) {
+  const sourceFields = projectEvidenceSourceFields(record);
+  const timeFields = projectEvidenceTimeFields(record);
   return {
     evidence_id: record.evidence_id,
+    source_summary: projectEvidenceSourceSummary(record, sourceFields, timeFields),
     record: {
-      observed_at: record.observed_at,
-      collected_at: record.collected_at,
+      observed_at: timeFields.observed_at,
+      collected_at: timeFields.collected_at,
       agent_id: record.agent_id,
-      source_kind: record.source_kind,
-      evidence_role: record.evidence_role,
-      source_status: record.source_status,
+      source_kind: sourceFields.kind,
+      evidence_role: sourceFields.role,
+      source_status: sourceFields.status,
       output_candidate: record.output_candidate === true,
       collector_snapshot_id: record.collector_snapshot_id,
       correlation_id: record.correlation_id,
       unmapped: record.agent_id === null
     },
     anchors: {
-      snapshot: createEvidenceSnapshotAnchor(record),
-      source: createEvidenceSourceAnchor(record),
+      snapshot: createEvidenceSnapshotAnchor(record, sourceFields),
+      source: createEvidenceSourceAnchor(record, sourceFields),
       replay: createEvidenceReplayAnchor(record)
     }
   };
 }
 
-function createEvidenceSnapshotAnchor(record) {
+function projectEvidenceSourceFields(record) {
+  return {
+    kind: projectKnownEvidenceValue(record.source_kind, EVIDENCE_RECORD_SOURCE_KINDS),
+    status: projectKnownEvidenceValue(record.source_status, EVIDENCE_RECORD_SOURCE_STATUSES),
+    role: projectKnownEvidenceValue(record.evidence_role, EVIDENCE_RECORD_ROLES)
+  };
+}
+
+function projectEvidenceTimeFields(record) {
+  return {
+    observed_at: projectEvidenceTimestampValue(record.observed_at),
+    collected_at: projectEvidenceTimestampValue(record.collected_at)
+  };
+}
+
+function projectEvidenceTimestampValue(value) {
+  if (!isValidEvidenceRecordIsoValue(value)) {
+    return null;
+  }
+
+  return new Date(Date.parse(value)).toISOString();
+}
+
+function projectKnownEvidenceValue(value, allowedValues) {
+  return typeof value === 'string' && allowedValues.includes(value) ? value : null;
+}
+
+function projectEvidenceSourceSummary(
+  record,
+  sourceFields = projectEvidenceSourceFields(record),
+  timeFields = projectEvidenceTimeFields(record)
+) {
+  return {
+    kind: sourceFields.kind,
+    status: sourceFields.status,
+    role: sourceFields.role,
+    output_candidate: record.output_candidate === true,
+    mapped: typeof record.agent_id === 'string' && record.agent_id.length > 0,
+    time: {
+      observed_at: timeFields.observed_at,
+      collected_at: timeFields.collected_at
+    }
+  };
+}
+
+function createEvidenceSnapshotAnchor(record, sourceFields = projectEvidenceSourceFields(record)) {
   if (!record.collector_snapshot_id) {
     return null;
   }
 
   const params = new URLSearchParams({ collector_snapshot_id: record.collector_snapshot_id });
-  if (record.source_kind) {
-    params.set('source_kind', record.source_kind);
+  if (sourceFields.kind) {
+    params.set('source_kind', sourceFields.kind);
   }
 
   return {
@@ -3472,16 +3520,16 @@ function createEvidenceSnapshotAnchor(record) {
   };
 }
 
-function createEvidenceSourceAnchor(record) {
-  if (!record.source_kind) {
+function createEvidenceSourceAnchor(record, sourceFields = projectEvidenceSourceFields(record)) {
+  if (!sourceFields.kind) {
     return null;
   }
 
   return {
     evidence_id: record.evidence_id,
-    source_kind: record.source_kind,
-    evidence_role: record.evidence_role,
-    source_status: record.source_status,
+    source_kind: sourceFields.kind,
+    evidence_role: sourceFields.role,
+    source_status: sourceFields.status,
     route: `/evidence-records/${encodeURIComponent(record.evidence_id)}`
   };
 }

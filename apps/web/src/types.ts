@@ -320,13 +320,25 @@ export interface EvidenceProvenanceRecord {
   observed_at: string | null;
   collected_at: string | null;
   agent_id: string | null;
-  source_kind: string;
+  source_kind: string | null;
   evidence_role: string | null;
   source_status: string | null;
   output_candidate: boolean;
   collector_snapshot_id: string;
   correlation_id: string | null;
   unmapped: boolean;
+}
+
+export interface EvidenceProvenanceSourceSummary {
+  kind: string | null;
+  status: string | null;
+  role: string | null;
+  output_candidate: boolean;
+  mapped: boolean;
+  time: {
+    observed_at: string | null;
+    collected_at: string | null;
+  };
 }
 
 export interface EvidenceProvenanceSnapshotAnchor {
@@ -350,6 +362,7 @@ export interface EvidenceProvenanceReplayAnchor {
 
 export interface EvidenceProvenanceBundle {
   evidence_id: string;
+  source_summary: EvidenceProvenanceSourceSummary;
   record: EvidenceProvenanceRecord;
   anchors: {
     snapshot: EvidenceProvenanceSnapshotAnchor | null;

@@ -728,6 +728,31 @@ class PrototypeStore {
     return summary;
   }
 
+  getEvidenceRecordFacets(filters = {}) {
+    const { records, limit } = this.#filterEvidenceRecords(filters);
+    const facets = createEmptyEvidenceRecordFacets(limit);
+
+    for (const record of records) {
+      incrementKnownBucket(facets.source_kind_buckets, record.source_kind);
+      incrementKnownBucket(facets.evidence_role_buckets, record.evidence_role);
+      incrementKnownBucket(facets.source_status_buckets, record.source_status);
+      facets.output_candidate_buckets[String(record.output_candidate === true)] += 1;
+
+      if (typeof record.agent_id === 'string' && record.agent_id.length > 0) {
+        facets.mapped_buckets.mapped += 1;
+        if (Object.hasOwn(facets.agent_id_buckets, record.agent_id)) {
+          facets.agent_id_buckets[record.agent_id] += 1;
+        }
+      } else if (record.agent_id === null) {
+        facets.mapped_buckets.unmapped += 1;
+        facets.agent_id_buckets.unmapped += 1;
+      }
+    }
+
+    facets.total_count = records.length;
+    return facets;
+  }
+
   getEvidenceRecordsSummary(filters = {}) {
     const { records, limit } = this.#filterEvidenceRecords(filters);
     const summary = {
@@ -1878,8 +1903,38 @@ function incrementBucket(buckets, key) {
   buckets[key] = (buckets[key] || 0) + 1;
 }
 
+function incrementKnownBucket(buckets, key) {
+  if (typeof key !== 'string' || !Object.hasOwn(buckets, key)) {
+    return;
+  }
+
+  buckets[key] += 1;
+}
+
 function createZeroBuckets(keys) {
   return Object.fromEntries(keys.map((key) => [key, 0]));
+}
+
+function createEmptyEvidenceRecordFacets(limit) {
+  return {
+    total_count: 0,
+    returned_limit: limit,
+    source_kind_buckets: createZeroBuckets(EVIDENCE_RECORD_SOURCE_KINDS),
+    evidence_role_buckets: createZeroBuckets(EVIDENCE_RECORD_ROLES),
+    source_status_buckets: createZeroBuckets(EVIDENCE_RECORD_SOURCE_STATUSES),
+    output_candidate_buckets: {
+      true: 0,
+      false: 0
+    },
+    mapped_buckets: {
+      mapped: 0,
+      unmapped: 0
+    },
+    agent_id_buckets: {
+      ...createZeroBuckets(SEED_AGENTS.map((agent) => agent.agent_id)),
+      unmapped: 0
+    }
+  };
 }
 
 function sortEvidenceRefRollupBuckets(group) {

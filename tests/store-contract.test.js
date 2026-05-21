@@ -1711,6 +1711,120 @@ test('prototype store summarizes runtime source gaps before limit truncation', a
   assert.equal(unmappedSummary.unmapped_count, 1);
 });
 
+test('prototype store groups runtime source gaps by agent and source without raw refs', async () => {
+  const storeFile = await createStoreFile();
+  const store = await createPrototypeStore({ filePath: storeFile });
+  const leakCanaries = ['/tmp/store-contract/outbox.md', 'tmux://unmapped-session/0.0'];
+
+  await store.appendCollectorReport({
+    ...createCollectorReport(),
+    runtime_source_evidence: {
+      unmapped_tmux_sessions: [
+        {
+          session_name: 'unmapped-session',
+          pane_refs: ['tmux://unmapped-session/0.0'],
+          observed_count: 1,
+          status: 'observed',
+          last_observed_at: '2026-03-09T18:05:50.000Z',
+          degraded_reasons: []
+        }
+      ]
+    }
+  });
+
+  const summary = store.getRuntimeSourceGapAgentSummary({ newest_first: 'true', limit: '1' });
+
+  assert.deepEqual(summary, {
+    total_count: 2,
+    total_groups: 2,
+    returned_limit: 1,
+    groups: [
+      {
+        agent_id: null,
+        source_kind: 'tmux_observation',
+        record_count: 1,
+        mapped_count: 0,
+        unmapped_count: 1,
+        output_candidate_buckets: { true: 0, false: 1 },
+        evidence_role_buckets: { runtime_unmapped: 1 },
+        source_status_buckets: { observed: 1 },
+        first_observed_at: '2026-03-09T18:05:50.000Z',
+        last_observed_at: '2026-03-09T18:05:50.000Z',
+        first_collected_at: '2026-03-09T18:06:00.000Z',
+        last_collected_at: '2026-03-09T18:06:00.000Z'
+      }
+    ]
+  });
+  assert.deepEqual(store.getRuntimeSourceGapAgentSummary({ source_kind: 'kanban_fixture' }), {
+    total_count: 0,
+    total_groups: 0,
+    returned_limit: 50,
+    groups: []
+  });
+
+  const serializedSummary = JSON.stringify(summary);
+  for (const canary of leakCanaries) {
+    assert.equal(serializedSummary.includes(canary), false, `leaked canary: ${canary}`);
+  }
+  assert.equal(serializedSummary.includes('evidence_id'), false);
+  assert.equal(serializedSummary.includes('evidence_ref'), false);
+  assert.equal(serializedSummary.includes('metadata'), false);
+});
+
+test('prototype store keeps literal unmapped agent groups separate from null source gaps', async () => {
+  const storeFile = await createStoreFile();
+  const store = await createPrototypeStore({ filePath: storeFile });
+  const report = createCollectorReport();
+  report.evidence_coverage.agent_items[0].agent_id = 'unmapped';
+  report.items[0].agent_id = 'unmapped';
+  report.items[0].heartbeat.agent_id = 'unmapped';
+  report.items[0].source_health.tmux_session.status = 'degraded';
+  report.items[0].source_health.tmux_session.degraded_reasons = ['tmux source degraded'];
+
+  await store.appendCollectorReport({
+    ...report,
+    runtime_source_evidence: {
+      unmapped_tmux_sessions: [
+        {
+          session_name: 'literal-collision-session',
+          pane_refs: ['tmux://literal-collision-session/0.0'],
+          observed_count: 1,
+          status: 'observed',
+          last_observed_at: '2026-03-09T18:05:50.000Z',
+          degraded_reasons: []
+        }
+      ]
+    }
+  });
+
+  const summary = store.getRuntimeSourceGapAgentSummary({ source_kind: 'tmux_observation' });
+
+  assert.equal(summary.total_count, 2);
+  assert.equal(summary.total_groups, 2);
+  assert.deepEqual(
+    summary.groups.map((group) => ({
+      agent_id: group.agent_id,
+      source_kind: group.source_kind,
+      mapped_count: group.mapped_count,
+      unmapped_count: group.unmapped_count
+    })),
+    [
+      {
+        agent_id: null,
+        source_kind: 'tmux_observation',
+        mapped_count: 0,
+        unmapped_count: 1
+      },
+      {
+        agent_id: 'unmapped',
+        source_kind: 'tmux_observation',
+        mapped_count: 1,
+        unmapped_count: 0
+      }
+    ]
+  );
+});
+
 test('prototype store groups evidence refs with evidence-record filters before group limit', async () => {
   const storeFile = await createStoreFile();
   const store = await createPrototypeStore({ filePath: storeFile });

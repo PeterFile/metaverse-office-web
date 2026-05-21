@@ -753,6 +753,32 @@ class PrototypeStore {
     return facets;
   }
 
+  getRuntimeSourceGapAgentSummary(filters = {}) {
+    const { records, limit } = this.#filterEvidenceRecords(filters);
+    const gapRecords = records.filter(isRuntimeSourceGapRecord);
+    const groups = new Map();
+
+    for (const record of gapRecords) {
+      const groupKey = JSON.stringify([record.agent_id, record.source_kind || null]);
+      if (!groups.has(groupKey)) {
+        groups.set(groupKey, createRuntimeSourceGapAgentGroup(record));
+      }
+
+      addRuntimeSourceGapRecordToAgentGroup(groups.get(groupKey), record);
+    }
+
+    const sortedGroups = Array.from(groups.values())
+      .map(sortRuntimeSourceGapAgentGroupBuckets)
+      .sort(compareRuntimeSourceGapAgentGroups);
+
+    return {
+      total_count: gapRecords.length,
+      total_groups: sortedGroups.length,
+      returned_limit: limit,
+      groups: sortedGroups.slice(0, limit)
+    };
+  }
+
   getEvidenceRecordsSummary(filters = {}) {
     const { records, limit } = this.#filterEvidenceRecords(filters);
     const summary = {
@@ -1948,6 +1974,71 @@ function sortEvidenceRefRollupBuckets(group) {
 
 function sortBucketKeys(buckets) {
   return Object.fromEntries(Object.entries(buckets).sort(([left], [right]) => compareStringsAsc(left, right)));
+}
+
+function createRuntimeSourceGapAgentGroup(record) {
+  return {
+    agent_id: record.agent_id || null,
+    source_kind: record.source_kind || null,
+    record_count: 0,
+    mapped_count: 0,
+    unmapped_count: 0,
+    output_candidate_buckets: {
+      true: 0,
+      false: 0
+    },
+    evidence_role_buckets: {},
+    source_status_buckets: {},
+    first_observed_at: null,
+    last_observed_at: null,
+    first_collected_at: null,
+    last_collected_at: null
+  };
+}
+
+function addRuntimeSourceGapRecordToAgentGroup(group, record) {
+  group.record_count += 1;
+
+  if (typeof record.agent_id === 'string' && record.agent_id.length > 0) {
+    group.mapped_count += 1;
+  } else if (record.agent_id === null) {
+    group.unmapped_count += 1;
+  }
+
+  group.output_candidate_buckets[String(record.output_candidate === true)] += 1;
+  incrementBucket(group.evidence_role_buckets, record.evidence_role);
+  incrementBucket(group.source_status_buckets, record.source_status);
+  group.first_observed_at = getEarliestEvidenceRecordIsoValue(group.first_observed_at, record.observed_at);
+  group.last_observed_at = getLatestEvidenceRecordIsoValue(group.last_observed_at, record.observed_at);
+  group.first_collected_at = getEarliestEvidenceRecordIsoValue(group.first_collected_at, record.collected_at);
+  group.last_collected_at = getLatestEvidenceRecordIsoValue(group.last_collected_at, record.collected_at);
+}
+
+function sortRuntimeSourceGapAgentGroupBuckets(group) {
+  return {
+    ...group,
+    evidence_role_buckets: sortBucketKeys(group.evidence_role_buckets),
+    source_status_buckets: sortBucketKeys(group.source_status_buckets)
+  };
+}
+
+function compareRuntimeSourceGapAgentGroups(left, right) {
+  const countComparison = right.record_count - left.record_count;
+  if (countComparison !== 0) {
+    return countComparison;
+  }
+
+  const unmappedComparison = Number(left.agent_id !== null) - Number(right.agent_id !== null);
+  if (unmappedComparison !== 0) {
+    return unmappedComparison;
+  }
+
+  const sourceComparison = compareStringsAsc(left.source_kind || '', right.source_kind || '');
+  if (sourceComparison !== 0) {
+    return sourceComparison;
+  }
+
+  return compareStringsAsc(left.agent_id || '', right.agent_id || '');
 }
 
 function compareEvidenceRefRollupGroups(left, right) {

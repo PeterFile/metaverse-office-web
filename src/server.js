@@ -458,6 +458,29 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
     return;
   }
 
+  if (method === 'GET' && pathname === '/runtime/source-gaps/agent-summary') {
+    sendJson(res, 200, {
+      item: store.getRuntimeSourceGapAgentSummary({
+        evidence_id: url.searchParams.get('evidence_id'),
+        agent_id: url.searchParams.get('agent_id'),
+        source_kind: url.searchParams.get('source_kind'),
+        evidence_role: url.searchParams.get('evidence_role'),
+        output_candidate: url.searchParams.get('output_candidate'),
+        source_status: url.searchParams.get('source_status'),
+        collector_snapshot_id: url.searchParams.get('collector_snapshot_id'),
+        correlation_id: url.searchParams.get('correlation_id'),
+        mapped: url.searchParams.get('mapped'),
+        observed_since: url.searchParams.get('observed_since'),
+        observed_until: url.searchParams.get('observed_until'),
+        collected_since: url.searchParams.get('collected_since'),
+        collected_until: url.searchParams.get('collected_until'),
+        newest_first: url.searchParams.get('newest_first'),
+        limit: url.searchParams.get('limit')
+      })
+    });
+    return;
+  }
+
   if (method === 'GET' && pathname === '/evidence-records/facets') {
     sendJson(res, 200, {
       item: store.getEvidenceRecordFacets({

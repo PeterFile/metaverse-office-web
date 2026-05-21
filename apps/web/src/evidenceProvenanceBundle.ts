@@ -11,6 +11,17 @@ export interface EvidenceProvenanceProofAnchor {
 
 export interface EvidenceProvenanceProof {
   evidenceId: string;
+  sourceSummary: {
+    kind: string | null;
+    status: string | null;
+    role: string | null;
+    outputCandidate: boolean;
+    mapped: boolean;
+    time: {
+      observedAt: string | null;
+      collectedAt: string | null;
+    };
+  } | null;
   record: {
     observedAt: string | null;
     collectedAt: string | null;
@@ -62,11 +73,12 @@ export function buildEvidenceProvenanceProof(
 
   return {
     evidenceId: safeValue(bundle.evidence_id) ?? REDACTED,
+    sourceSummary: buildSourceSummary(bundle),
     record: {
       observedAt: safeNullableValue(bundle.record.observed_at),
       collectedAt: safeNullableValue(bundle.record.collected_at),
       agentId: safeNullableValue(bundle.record.agent_id),
-      sourceKind: safeValue(bundle.record.source_kind) ?? REDACTED,
+      sourceKind: safeValue(bundle.record.source_kind ?? undefined) ?? REDACTED,
       evidenceRole: safeNullableValue(bundle.record.evidence_role),
       sourceStatus: safeNullableValue(bundle.record.source_status),
       outputCandidate: bundle.record.output_candidate === true,
@@ -75,6 +87,25 @@ export function buildEvidenceProvenanceProof(
       unmapped: bundle.record.unmapped === true
     },
     anchors
+  };
+}
+
+function buildSourceSummary(bundle: EvidenceProvenanceBundle): EvidenceProvenanceProof['sourceSummary'] {
+  const summary = bundle.source_summary;
+  if (!summary) {
+    return null;
+  }
+
+  return {
+    kind: safeNullableValue(summary.kind),
+    status: safeNullableValue(summary.status),
+    role: safeNullableValue(summary.role),
+    outputCandidate: summary.output_candidate === true,
+    mapped: summary.mapped === true,
+    time: {
+      observedAt: safeNullableValue(summary.time?.observed_at ?? null),
+      collectedAt: safeNullableValue(summary.time?.collected_at ?? null)
+    }
   };
 }
 

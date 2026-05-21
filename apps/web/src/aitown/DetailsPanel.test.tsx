@@ -883,6 +883,18 @@ function buildEvidenceRecord(overrides: Partial<EvidenceRecord> = {}): EvidenceR
 function buildEvidenceProvenanceBundle(
   overrides: Partial<EvidenceProvenanceBundle> = {}
 ): EvidenceProvenanceBundle {
+  const sourceSummary = overrides.source_summary ?? {
+    kind: 'workspace_file',
+    status: 'observed',
+    role: 'agent_output',
+    output_candidate: true,
+    mapped: true,
+    time: {
+      observed_at: '2026-03-16T08:58:00.000Z',
+      collected_at: '2026-03-16T08:59:00.000Z'
+    }
+  };
+
   return {
     evidence_id: 'output-1',
     record: {
@@ -917,7 +929,8 @@ function buildEvidenceProvenanceBundle(
         route: '/accountability/replay?correlation_id=corr-app-review-with-secret-token-that-must-not-render'
       }
     },
-    ...overrides
+    ...overrides,
+    source_summary: sourceSummary
   };
 }
 

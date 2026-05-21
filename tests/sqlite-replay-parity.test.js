@@ -328,4 +328,26 @@ test('JSONL and SQLite stores replay evidence read models with parity', async (t
     JSON.stringify(sqliteProjection.provenanceBundle).includes(root),
     false
   );
+  assert.deepEqual(jsonlProjection.provenanceBundle.source_summary, {
+    kind: 'workspace_file',
+    status: 'degraded',
+    role: 'agent_output',
+    output_candidate: true,
+    mapped: true,
+    time: {
+      observed_at: '2026-03-09T18:05:00.000Z',
+      collected_at: '2026-03-09T18:07:00.000Z'
+    }
+  });
+  assert.deepEqual(sqliteProjection.provenanceBundle.source_summary, {
+    kind: 'workspace_file',
+    status: 'degraded',
+    role: 'agent_output',
+    output_candidate: true,
+    mapped: true,
+    time: {
+      observed_at: '2026-03-09T18:05:00.000Z',
+      collected_at: '2026-03-09T18:07:00.000Z'
+    }
+  });
 });

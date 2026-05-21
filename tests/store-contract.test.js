@@ -1655,11 +1655,124 @@ test('prototype store projects evidence provenance bundles without raw refs or c
   const provenanceBundle = store.getEvidenceProvenanceBundle(outboxRecord.evidence_id);
   const serializedBundle = JSON.stringify(provenanceBundle);
 
+  assert.deepEqual(provenanceBundle.source_summary, {
+    kind: 'workspace_file',
+    status: 'degraded',
+    role: 'agent_output',
+    output_candidate: true,
+    mapped: true,
+    time: {
+      observed_at: '2026-03-09T18:05:20.000Z',
+      collected_at: '2026-03-09T18:06:00.000Z'
+    }
+  });
   assert.equal(serializedBundle.includes('/tmp/store-contract'), false);
   assert.equal(serializedBundle.includes('evidence_ref'), false);
   assert.equal(serializedBundle.includes('metadata'), false);
   assert.equal(serializedBundle.includes('degraded_reasons'), false);
   for (const canary of leakCanaries) {
+    assert.equal(serializedBundle.includes(canary), false, `leaked canary: ${canary}`);
+  }
+});
+
+test('prototype store bounds provenance source summaries for unmapped missing fields', async () => {
+  const storeFile = await createStoreFile();
+  const store = await createPrototypeStore({ filePath: storeFile });
+
+  await store.appendCollectorReport({
+    ...createCollectorReport(),
+    runtime_source_evidence: {
+      unmapped_tmux_sessions: [
+        {
+          session_name: 'unmapped-session',
+          pane_refs: ['tmux://unmapped-session/0.0'],
+          observed_count: 1,
+          status: 'observed',
+          last_observed_at: null,
+          degraded_reasons: ['tmux socket token=secret']
+        }
+      ]
+    }
+  });
+
+  const unmappedRecord = store.listEvidenceRecords({ mapped: 'false' })[0];
+  const provenanceBundle = store.getEvidenceProvenanceBundle(unmappedRecord.evidence_id);
+
+  assert.deepEqual(provenanceBundle.source_summary, {
+    kind: 'tmux_observation',
+    status: 'observed',
+    role: 'runtime_unmapped',
+    output_candidate: false,
+    mapped: false,
+    time: {
+      observed_at: null,
+      collected_at: '2026-03-09T18:06:00.000Z'
+    }
+  });
+  assert.equal(JSON.stringify(provenanceBundle).includes('token=secret'), false);
+  assert.equal(JSON.stringify(provenanceBundle).includes('tmux://unmapped-session'), false);
+});
+
+test('prototype store drops unsafe provenance source summary enum values', async () => {
+  const storeFile = await createStoreFile();
+  const unsafeSourceKind = 'https://hooks.slack.com/services/provenance-webhook';
+  const unsafeSourceStatus = 'token=provenance-status-secret';
+  const unsafeEvidenceRole = 'POST /control-plane/dispatch tmux://unsafe-role/0.0';
+  const unsafeObservedAt = '/tmp/provenance-unsafe/observed-token.txt';
+  const unsafeCollectedAt = 'https://hooks.slack.com/services/provenance-time-token';
+  const unsafeEvidenceRef = '/tmp/provenance-unsafe/evidence.md';
+  await writeFile(
+    storeFile,
+    `${JSON.stringify({
+      kind: 'evidence_record',
+      payload: {
+        evidence_id: 'unsafe-provenance-record',
+        observed_at: unsafeObservedAt,
+        collected_at: unsafeCollectedAt,
+        agent_id: null,
+        source_kind: unsafeSourceKind,
+        evidence_ref: unsafeEvidenceRef,
+        evidence_role: unsafeEvidenceRole,
+        source_status: unsafeSourceStatus,
+        output_candidate: false,
+        collector_snapshot_id: 'collector-snapshot:2026-03-09T18:06:00.000Z',
+        correlation_id: 'corr-unsafe-provenance',
+        degraded_reasons: [unsafeSourceStatus],
+        metadata: { raw_role: unsafeEvidenceRole }
+      }
+    })}\n`,
+    'utf8'
+  );
+
+  const store = await createPrototypeStore({ filePath: storeFile });
+  const provenanceBundle = store.getEvidenceProvenanceBundle('unsafe-provenance-record');
+  const serializedBundle = JSON.stringify(provenanceBundle);
+
+  assert.deepEqual(provenanceBundle.source_summary, {
+    kind: null,
+    status: null,
+    role: null,
+    output_candidate: false,
+    mapped: false,
+    time: {
+      observed_at: null,
+      collected_at: null
+    }
+  });
+  assert.equal(provenanceBundle.record.observed_at, null);
+  assert.equal(provenanceBundle.record.collected_at, null);
+  assert.equal(provenanceBundle.record.source_kind, null);
+  assert.equal(provenanceBundle.record.source_status, null);
+  assert.equal(provenanceBundle.record.evidence_role, null);
+  assert.equal(provenanceBundle.anchors.source, null);
+  for (const canary of [
+    unsafeSourceKind,
+    unsafeSourceStatus,
+    unsafeEvidenceRole,
+    unsafeObservedAt,
+    unsafeCollectedAt,
+    unsafeEvidenceRef
+  ]) {
     assert.equal(serializedBundle.includes(canary), false, `leaked canary: ${canary}`);
   }
 });

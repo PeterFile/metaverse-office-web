@@ -350,7 +350,17 @@ describe('read-only frontend/backend contract smoke', () => {
     );
 
     const api = await loadApi(harness.baseUrl);
-    const records = await api.fetchEvidenceRecords({ limit: 1 });
+    const records = await api.fetchEvidenceRecords({
+      agentId: 'app-engineering',
+      sourceKind: 'workspace_file',
+      evidenceRef: '/tmp/app-engineering/todo.md',
+      sourceStatus: 'degraded',
+      collectorSnapshotId: 'collector-snapshot:2026-03-09T18:59:00.000Z',
+      correlationId: 'collector-snapshot:2026-03-09T18:59:00.000Z',
+      outputCandidate: true,
+      mapped: true,
+      limit: 1
+    });
     const detail = await api.fetchEvidenceRecord(records[0].evidence_id);
     const bundle = await api.fetchEvidenceProvenanceBundle(records[0].evidence_id);
 
@@ -360,8 +370,16 @@ describe('read-only frontend/backend contract smoke', () => {
         origin: harness.baseUrl,
         pathname: '/evidence-records',
         query: [
+          ['agent_id', 'app-engineering'],
+          ['collector_snapshot_id', 'collector-snapshot:2026-03-09T18:59:00.000Z'],
+          ['correlation_id', 'collector-snapshot:2026-03-09T18:59:00.000Z'],
+          ['evidence_ref', '/tmp/app-engineering/todo.md'],
           ['limit', '1'],
-          ['newest_first', 'true']
+          ['mapped', 'true'],
+          ['newest_first', 'true'],
+          ['output_candidate', 'true'],
+          ['source_kind', 'workspace_file'],
+          ['source_status', 'degraded']
         ]
       },
       {
@@ -2084,6 +2102,15 @@ function expectEvidenceProvenanceBundleContract(
   expect(bundle?.record).toMatchObject({
     collector_snapshot_id: 'collector-snapshot:2026-03-09T18:59:00.000Z'
   });
+  expect(bundle?.source_summary).toMatchObject({
+    kind: 'workspace_file',
+    status: 'degraded',
+    role: 'agent_plan',
+    output_candidate: true,
+    mapped: true
+  });
+  expect(bundle?.source_summary).not.toHaveProperty('snapshot');
+  expect(bundle?.source_summary).not.toHaveProperty('correlation');
   expect(bundle?.anchors.snapshot?.collector_snapshot_id).toBe(
     'collector-snapshot:2026-03-09T18:59:00.000Z'
   );

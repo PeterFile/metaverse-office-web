@@ -5738,6 +5738,17 @@ test('GET /evidence-records lists stored evidence records read-only with exact f
   assert.deepEqual(provenanceBundle.body, {
     item: {
       evidence_id: evidenceId,
+      source_summary: {
+        kind: 'workspace_file',
+        status: 'observed',
+        role: 'agent_output',
+        output_candidate: true,
+        mapped: true,
+        time: {
+          observed_at: '2026-03-09T18:05:00.000Z',
+          collected_at: '2026-03-09T18:06:00.000Z'
+        }
+      },
       record: {
         observed_at: '2026-03-09T18:05:00.000Z',
         collected_at: '2026-03-09T18:06:00.000Z',

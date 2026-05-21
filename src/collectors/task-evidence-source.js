@@ -8,6 +8,14 @@ const SUPPORTED_SOURCE_KINDS = new Set([
 ]);
 const REQUIRED_FIELDS = Object.freeze(['task_ref', 'source_kind', 'observed_at', 'correlation_id']);
 const FILE_OPTIONAL_IDENTIFIER_FIELDS = Object.freeze(['id', 'agent_id', 'local_path', 'path']);
+const CONTROL_FIELD_CATEGORIES = Object.freeze({
+  claim: new Set(['claim', 'claimed', 'claiming']),
+  complete: new Set(['complete', 'completed', 'completing', 'completion']),
+  assign: new Set(['assign', 'assigned', 'assigning', 'assignment', 'assignee']),
+  dispatch: new Set(['dispatch', 'dispatched', 'dispatching']),
+  route: new Set(['route', 'routed', 'routing']),
+  mutate: new Set(['mutate', 'mutated', 'mutating', 'mutation'])
+});
 const SAFE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/;
 const SECRET_ID_PATTERNS = Object.freeze([
   /^xox[a-z]-/i,
@@ -328,6 +336,16 @@ function normalizeTaskEvidenceFact(fact, index) {
     };
   }
 
+  const controlFields = controlPlaneFields(fact);
+  if (controlFields.length > 0) {
+    return {
+      status: 'invalid',
+      index,
+      missing_fields: controlFields,
+      error: 'task evidence fact contains control-plane fields'
+    };
+  }
+
   const candidate = {
     status: 'observed',
     task_ref: taskRef,
@@ -355,6 +373,46 @@ function normalizeTaskEvidenceFact(fact, index) {
   }
 
   return candidate;
+}
+
+function controlPlaneFields(fact) {
+  const categories = new Set();
+
+  for (const field of Object.keys(fact)) {
+    const fieldCategories = controlPlaneFieldCategories(field);
+    fieldCategories.forEach((category) => categories.add(category));
+  }
+
+  return Array.from(categories).sort();
+}
+
+function controlPlaneFieldCategories(field) {
+  const tokens = tokenizeFieldName(field);
+  const categories = new Set();
+
+  tokens.forEach((token, index) => {
+    if (token === 'writeback' || (token === 'write' && tokens[index + 1] === 'back')) {
+      categories.add('writeback');
+      return;
+    }
+
+    for (const [category, terms] of Object.entries(CONTROL_FIELD_CATEGORIES)) {
+      if (terms.has(token)) {
+        categories.add(category);
+      }
+    }
+  });
+
+  return Array.from(categories);
+}
+
+function tokenizeFieldName(field) {
+  return `${field}`
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
 }
 
 function safeIdentifier(value) {

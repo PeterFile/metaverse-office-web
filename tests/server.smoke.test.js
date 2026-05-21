@@ -4802,6 +4802,15 @@ test('collector snapshot persists opt-in task evidence without heartbeat advance
       }
     ]
   );
+
+  const sourceGaps = await requestJson(`${baseUrl}/runtime/source-gaps?source_kind=kanban_fixture`);
+  const sourceGapSummary = await requestJson(
+    `${baseUrl}/runtime/source-gaps/summary?source_kind=kanban_fixture`
+  );
+  assert.equal(sourceGaps.response.status, 200);
+  assert.deepEqual(sourceGaps.body.items, []);
+  assert.equal(sourceGapSummary.response.status, 200);
+  assert.equal(sourceGapSummary.body.item.total_count, 0);
 });
 
 test('collector snapshot rejects unsafe task evidence file paths before append', async (t) => {

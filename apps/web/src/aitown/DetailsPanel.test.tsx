@@ -1669,14 +1669,28 @@ describe('DetailsPanel selected-agent workflow lifecycle', () => {
     expect(within(facetsRecord!).getByText('Counterparties · growth-revenue, team-lead')).toBeVisible();
   });
 
-  it('renders selected-agent evidence ledger groups without inferring idle or dumping raw metadata', () => {
+  it('renders selected-agent evidence ledger bucket chips without inferring idle or dumping raw metadata', () => {
+    const onInspectSelectedAgentEvidenceRecord = vi.fn();
+    const selectedAgentEvidenceLedger = buildSelectedAgentEvidenceLedger();
+    selectedAgentEvidenceLedger.sourceRefGroups = [
+      ...selectedAgentEvidenceLedger.sourceRefGroups,
+      {
+        sourceKind: 'hermes_runtime',
+        evidenceRef: 'hermes://session/hermes-session-app-engineering',
+        evidenceRole: 'runtime_profile',
+        sourceStatus: 'degraded',
+        totalCount: 1
+      }
+    ];
+
     render(
       <DetailsPanel
         {...buildProps({
           activeHubCategory: 'evidence',
           selectedAgentDrilldownTab: 'evidence',
-          selectedAgentEvidenceLedger: buildSelectedAgentEvidenceLedger(),
-          selectedAgentEvidenceLedgerState: 'ready'
+          selectedAgentEvidenceLedger,
+          selectedAgentEvidenceLedgerState: 'ready',
+          onInspectSelectedAgentEvidenceRecord
         })}
       />
     );
@@ -1693,8 +1707,13 @@ describe('DetailsPanel selected-agent workflow lifecycle', () => {
     expect(within(section!).getAllByText('Ref · [local path] outbox.md')[0]).toBeVisible();
     expect(within(section!).getByText('Role · agent_output')).toBeVisible();
     expect(within(section!).getByText('Ref · [local path] app')).toBeVisible();
-    expect(within(section!).getByText('Ref · tmux://unmapped/0.1')).toBeVisible();
-    expect(within(section!).getByText('Source/ref · tmux_observation · runtime_unmapped · observed · tmux://session/window/pane · 1')).toBeVisible();
+    expect(within(section!).getByText('Ref · [tmux ref]')).toBeVisible();
+    expect(
+      within(section!).getAllByText('Source/ref · tmux_observation · runtime_unmapped · observed · [tmux ref] · 1')[0]
+    ).toBeVisible();
+    expect(
+      within(section!).getByText('Source/ref · hermes_runtime · runtime_profile · degraded · [runtime ref] · 1')
+    ).toBeVisible();
     expect(within(section!).getByText('Degraded · no seeded roster mapping')).toBeVisible();
     expect(section!).not.toHaveTextContent('/tmp/app/outbox.md');
     expect(section!).not.toHaveTextContent('metadata');
@@ -1702,6 +1721,32 @@ describe('DetailsPanel selected-agent workflow lifecycle', () => {
     expect(section!).not.toHaveTextContent('offline');
     expect(section!).not.toHaveTextContent('No work');
     expect(section!).not.toHaveTextContent('productivity');
+    expect(section!).not.toHaveTextContent('tmux://');
+    expect(section!).not.toHaveTextContent('hermes://');
+    expect(section!).not.toHaveTextContent('hermes-session-app-engineering');
+    expect(onInspectSelectedAgentEvidenceRecord).not.toHaveBeenCalled();
+  });
+
+  it('hides zero-count selected-agent evidence bucket chips without misleading empty copy', () => {
+    render(
+      <DetailsPanel
+        {...buildProps({
+          activeHubCategory: 'evidence',
+          selectedAgentDrilldownTab: 'evidence',
+          selectedAgentEvidenceLedger: buildSelectedAgentEvidenceLedger({
+            nonOutputEvidence: { totalCount: 0, overflowCount: 0, items: [] },
+            degradedEvidence: { totalCount: 0, overflowCount: 0, items: [] }
+          }),
+          selectedAgentEvidenceLedgerState: 'ready'
+        })}
+      />
+    );
+
+    const section = screen.getByRole('heading', { name: 'Evidence Ledger' }).closest('section');
+    expect(section).not.toBeNull();
+    expect(within(section!).getByText('Buckets · Output 1 · Unmapped 1')).toBeVisible();
+    expect(section!).not.toHaveTextContent('Non-output 0');
+    expect(section!).not.toHaveTextContent('Degraded 0');
   });
 
   it('renders bounded selected-agent evidence provenance without replay claims', () => {
@@ -1836,7 +1881,7 @@ describe('DetailsPanel selected-agent workflow lifecycle', () => {
     expect(section!).not.toHaveTextContent('secret_token');
   });
 
-  it('preserves non-file provenance URI refs while redacting adjacent local paths', () => {
+  it('redacts runtime provenance refs and adjacent local paths', () => {
     const baseBundle = buildEvidenceProvenanceBundle();
     render(
       <DetailsPanel
@@ -1853,7 +1898,7 @@ describe('DetailsPanel selected-agent workflow lifecycle', () => {
               ...baseBundle.anchors,
               source: {
                 evidence_id:
-                  'tmux://session/window/pane /Users/cwp/private/note.md secret-token',
+                  'tmux://session/window/pane hermes://session/hermes-session-app profile://profile-app session://window /Users/cwp/private/note.md',
                 source_kind: 'tmux_observation',
                 evidence_role: 'runtime_unmapped',
                 source_status: 'observed',
@@ -1870,10 +1915,14 @@ describe('DetailsPanel selected-agent workflow lifecycle', () => {
     expect(section).not.toBeNull();
     expect(
       within(section!).getByText(
-        /Source anchor · tmux:\/\/session\/window\/pane \[local path\] note\.md \[redacted\] · tmux_observation · runtime_unmapped · observed/
+        /Source anchor · \[tmux ref\] \[runtime ref\] \[runtime ref\] \[runtime ref\] \[local path\] (?:note\.md|not\.\.\.) · tmux_observation · runtime_unmapped · observed/
       )
     ).toBeVisible();
     expect(section!).not.toHaveTextContent('/Users/cwp/private/note.md');
+    expect(section!).not.toHaveTextContent('tmux://session/window/pane');
+    expect(section!).not.toHaveTextContent('hermes://session/hermes-session-app');
+    expect(section!).not.toHaveTextContent('profile://profile-app');
+    expect(section!).not.toHaveTextContent('session://window');
     expect(section!).not.toHaveTextContent('secret-token');
     expect(section!).not.toHaveTextContent('/evidence-records/output-1');
   });

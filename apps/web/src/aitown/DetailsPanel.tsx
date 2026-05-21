@@ -262,6 +262,11 @@ type SharedMemoryBacklinkSummary = {
   overflowCount: number;
 };
 
+type SelectedAgentEvidenceLedgerBucket = {
+  label: string;
+  totalCount: number;
+};
+
 function dedupeIncidents(incidents: WorkflowIncident[]) {
   return incidents.filter(
     (incident, index, list) => list.findIndex((item) => item.incident_id === incident.incident_id) === index
@@ -1162,6 +1167,7 @@ function renderTimestamp(value: string | null | undefined, fallback: string) {
 
 const SENSITIVE_EVIDENCE_LEDGER_TOKEN_PATTERN = /(?:access[_-]?token|api[_-]?key|secret|password|credential|bearer|token)(?:[-_=:.][A-Za-z0-9][A-Za-z0-9._:-]*)?/gi;
 const FILE_EVIDENCE_LEDGER_REF_PATTERN = /file:\/\/\/?[^\s,;:)]+/g;
+const SENSITIVE_EVIDENCE_LEDGER_URI_REF_PATTERN = /(?:tmux|hermes|session|profile):\/\/[^\s,;)]+/gi;
 const NON_FILE_URI_EVIDENCE_LEDGER_REF_PATTERN = /[A-Za-z][A-Za-z0-9+.-]*:\/\/[^\s,;)]+/g;
 const LOCAL_EVIDENCE_LEDGER_REF_PATTERN = /(^|[^/])((?:\/(?!\/)[^\s,;:)/]+(?:\/[^\s,;)]+)+)|(?:~\/[^\s,;)]+)|(?:[A-Za-z]:(?![\\/]{2})[\\/][^\s,;)]+))/g;
 
@@ -1169,6 +1175,19 @@ function formatLocalEvidenceLedgerPathToken(value: string) {
   const trimmed = value.trim().replace(/^file:\/\//, '');
   const basename = trimmed.split(/[\\/]/).filter(Boolean).pop();
   return basename ? `[local path] ${basename}` : '[local path]';
+}
+
+function formatSensitiveEvidenceLedgerUriToken(value: string) {
+  const normalized = value.trim().toLowerCase();
+  if (normalized.startsWith('tmux://')) {
+    return '[tmux ref]';
+  }
+
+  if (normalized.startsWith('hermes://') || normalized.startsWith('session://') || normalized.startsWith('profile://')) {
+    return '[runtime ref]';
+  }
+
+  return null;
 }
 
 function redactLocalEvidenceLedgerPathChunk(value: string) {
@@ -1181,7 +1200,11 @@ function redactLocalEvidenceLedgerPathChunk(value: string) {
 }
 
 function redactLocalEvidenceLedgerRefs(value: string) {
-  const fileRefsRedacted = value.replace(
+  const sensitiveUriRefsRedacted = value.replace(
+    SENSITIVE_EVIDENCE_LEDGER_URI_REF_PATTERN,
+    (match) => formatSensitiveEvidenceLedgerUriToken(match) ?? match
+  );
+  const fileRefsRedacted = sensitiveUriRefsRedacted.replace(
     FILE_EVIDENCE_LEDGER_REF_PATTERN,
     (match) => formatLocalEvidenceLedgerPathToken(match)
   );
@@ -1215,6 +1238,11 @@ function formatBoundedEvidenceLedgerToken(value: string) {
 
 function formatEvidenceLedgerRef(value: string) {
   const normalized = value.trim();
+  const sensitiveUriToken = formatSensitiveEvidenceLedgerUriToken(normalized);
+  if (sensitiveUriToken) {
+    return sensitiveUriToken;
+  }
+
   if (
     normalized.startsWith('/') ||
     normalized.startsWith('~/') ||
@@ -1242,13 +1270,25 @@ function renderSelectedAgentEvidenceProofCompass(model: SelectedAgentEvidenceLed
     return null;
   }
 
-  const buckets: Array<readonly [string, number]> = [
-    ['Output', model.outputEvidence.totalCount],
-    ['Non-output', model.nonOutputEvidence.totalCount],
-    ['Degraded', model.degradedEvidence.totalCount],
-    ['Unmapped', model.unmappedEvidence.totalCount]
+  const buckets: SelectedAgentEvidenceLedgerBucket[] = [
+    {
+      label: 'Output',
+      totalCount: model.outputEvidence.totalCount
+    },
+    {
+      label: 'Non-output',
+      totalCount: model.nonOutputEvidence.totalCount
+    },
+    {
+      label: 'Degraded',
+      totalCount: model.degradedEvidence.totalCount
+    },
+    {
+      label: 'Unmapped',
+      totalCount: model.unmappedEvidence.totalCount
+    }
   ];
-  const visibleBuckets = buckets.filter(([, count]) => count > 0);
+  const visibleBuckets = buckets.filter((bucket) => bucket.totalCount > 0);
   const sourceRefGroups = model.sourceRefGroups.filter((group) => group.totalCount > 0);
 
   if (visibleBuckets.length === 0 && sourceRefGroups.length === 0) {
@@ -1259,7 +1299,7 @@ function renderSelectedAgentEvidenceProofCompass(model: SelectedAgentEvidenceLed
     <li className="aitown-record">
       <strong>Proof Compass</strong>
       {visibleBuckets.length > 0 ? (
-        <span>{`Buckets · ${visibleBuckets.map(([label, count]) => `${label} ${count}`).join(' · ')}`}</span>
+        <span>{`Buckets · ${visibleBuckets.map((bucket) => `${bucket.label} ${bucket.totalCount}`).join(' · ')}`}</span>
       ) : null}
       {sourceRefGroups.map((group) => renderSelectedAgentEvidenceSourceRefGroup(group))}
     </li>

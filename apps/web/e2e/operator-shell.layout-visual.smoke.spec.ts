@@ -833,6 +833,29 @@ test.describe('operator shell layout visual smoke', () => {
       }
     });
 
+    await page.route('**/collectors/controller-snapshot/evidence-coverage', async (route) => {
+      await route.fulfill({
+        json: {
+          item: {
+            evidence_ref_count: 1,
+            covered_agent_count: 1,
+            low_confidence_agent_ids: ['growth-revenue'],
+            source_kind_buckets: { workspace_file: 1, workspace_root: 1, tmux_observation: 1 },
+            agent_items: [
+              {
+                agent_id: 'growth-revenue',
+                evidence_ref_count: 3,
+                evidence_refs: ['/tmp/launch-note.md', 'tmux://6-web3-growth-revenue/2.0', '/tmp/growth-revenue'],
+                source_kinds: ['tmux_observation', 'workspace_file', 'workspace_root'],
+                latest_evidence_at: '2026-03-16T08:58:40.000Z',
+                confidence_level: 'medium'
+              }
+            ]
+          }
+        }
+      });
+    });
+
     await page.goto('/');
 
     await expect(page.locator('.aitown-world__host canvas')).toBeVisible();
@@ -848,6 +871,12 @@ test.describe('operator shell layout visual smoke', () => {
     const ledgerCta = inspectPeek.getByRole('button', { name: 'Open Growth Revenue Agent Evidence Ledger' });
     await expect(inspectPeek).toBeVisible();
     await expect(ledgerCta).toBeVisible();
+    await expect(inspectPeek.getByText(/Proof capsule · Evidence \d+ refs? · Source/)).toBeVisible();
+    const proofCapsuleText = await inspectPeek.innerText();
+    expect(
+      proofCapsuleText,
+      'Hub-closed proof capsule should summarize evidence without raw refs or runtime payloads'
+    ).not.toMatch(/\/tmp\/|tmux:\/\/|hermes:\/\/|\b\d+-web3-[a-z0-9-]+\b|profile-[a-z0-9-]+/i);
     expect(evidenceRecordRequests, 'Hub-closed inspect peek should not prefetch evidence records').toEqual([]);
 
     await ledgerCta.click();

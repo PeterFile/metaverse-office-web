@@ -6153,6 +6153,74 @@ test('GET evidence and source read routes keep JSONL and SQLite parity', async (
   assert.equal(sqlite.store.records.length, before.sqlite);
 });
 
+test('GET read route purity matrix leaves replay records and checkpoints unchanged', async (t) => {
+  let collectCount = 0;
+  const controllerSnapshotCollector = {
+    async collectSnapshot() {
+      collectCount += 1;
+      throw new Error('GET read route purity matrix must not collect');
+    }
+  };
+  const { baseUrl, store, storeFile } = await createHarness(t, { controllerSnapshotCollector });
+
+  await store.appendCollectorReport(createRouteParityCollectorReport());
+  const evidenceRecord = store.listEvidenceRecords({
+    agent_id: 'app-engineering',
+    source_kind: 'workspace_file',
+    evidence_role: 'agent_output',
+    output_candidate: 'true',
+    limit: '1'
+  })[0];
+  assert.ok(evidenceRecord);
+
+  const before = {
+    recordCount: store.records.length,
+    counts: store.getCounts(),
+    checkpoint: store.getReplayCheckpointSummary(),
+    file: await readFile(storeFile, 'utf8')
+  };
+
+  const paths = [
+    '/evidence-records?mapped=true&output_candidate=true&limit=2',
+    `/evidence-records/${encodeURIComponent(evidenceRecord.evidence_id)}`,
+    '/evidence-records/summary?mapped=true&output_candidate=true&limit=1',
+    '/evidence-records/ref-rollup?mapped=true&output_candidate=true&limit=2',
+    `/evidence-records/${encodeURIComponent(evidenceRecord.evidence_id)}/provenance-bundle`,
+    `/accountability/replay?evidence_id=${encodeURIComponent(evidenceRecord.evidence_id)}&limit=5&window=60m`,
+    '/accountability/replay/checkpoint-summary',
+    '/runtime/source-gaps?newest_first=true&limit=10',
+    '/runtime/source-gaps/summary?newest_first=true&limit=1'
+  ];
+
+  for (const pathname of paths) {
+    const response = await requestJson(`${baseUrl}${pathname}`);
+    assert.equal(response.response.status, 200, pathname);
+    assert.equal(store.records.length, before.recordCount, pathname);
+    assert.deepEqual(store.getCounts(), before.counts, pathname);
+    assert.deepEqual(store.getReplayCheckpointSummary(), before.checkpoint, pathname);
+    assert.equal(await readFile(storeFile, 'utf8'), before.file, pathname);
+  }
+
+  const unknownReplay = await requestJson(
+    `${baseUrl}/accountability/replay?evidence_id=missing-evidence-id&limit=5&window=60m`
+  );
+  assert.equal(unknownReplay.response.status, 200);
+  assert.deepEqual(unknownReplay.body.query, {
+    evidence_id: 'missing-evidence-id',
+    limit: 5,
+    window: '60m'
+  });
+  assert.deepEqual(unknownReplay.body.events, []);
+  assert.deepEqual(unknownReplay.body.interactions, []);
+  assert.deepEqual(unknownReplay.body.memory_artifacts, []);
+  assert.deepEqual(unknownReplay.body.ledger, []);
+  assert.equal(store.records.length, before.recordCount);
+  assert.deepEqual(store.getCounts(), before.counts);
+  assert.deepEqual(store.getReplayCheckpointSummary(), before.checkpoint);
+  assert.equal(await readFile(storeFile, 'utf8'), before.file);
+  assert.equal(collectCount, 0);
+});
+
 test('collector snapshot POST exposes shared artifact rollups for refs shared by multiple agents', async (t) => {
   const sharedArtifactRef = '/tmp/shared-controller-snapshot/todo.md';
   const controllerSnapshotCollector = {

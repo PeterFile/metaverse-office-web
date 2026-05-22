@@ -624,6 +624,10 @@ class PrototypeStore {
     return projectCollectorSnapshotHistorySummary(this.collectorReports, filters);
   }
 
+  getCollectorSnapshotDiff(filters = {}) {
+    return projectCollectorSnapshotDiff(this.collectorReports, filters);
+  }
+
   getReplayCheckpointSummary() {
     return projectReplayCheckpointSummary({
       records: this.records,
@@ -4040,6 +4044,133 @@ function projectCollectorSnapshotHistorySummary(reports = [], filters = {}) {
     status_buckets: aggregate.status_buckets,
     items
   };
+}
+
+function projectCollectorSnapshotDiff(reports = [], filters = {}) {
+  const pair = selectCollectorSnapshotDiffReports(reports, filters);
+  if (!pair) {
+    return null;
+  }
+
+  const { fromReport, toReport } = pair;
+  const limit = parseLimit(filters.limit);
+  const fromHealth = createCollectorSnapshotDiffHealthAggregate(fromReport);
+  const toHealth = createCollectorSnapshotDiffHealthAggregate(toReport);
+  const agentChanges = createCollectorSnapshotDiffAgentChanges(fromReport, toReport);
+
+  return {
+    from_collector_snapshot_id: createCollectorSnapshotId(fromReport),
+    to_collector_snapshot_id: createCollectorSnapshotId(toReport),
+    from_collected_at: fromReport.collected_at || null,
+    to_collected_at: toReport.collected_at || null,
+    summary_delta: createCollectorSnapshotSummaryDelta(fromReport, toReport),
+    source_health_delta: {
+      source_kind_buckets: subtractNestedBuckets(toHealth.source_kind_buckets, fromHealth.source_kind_buckets),
+      status_buckets: subtractBuckets(toHealth.status_buckets, fromHealth.status_buckets)
+    },
+    agent_change_count: agentChanges.length,
+    returned_limit: limit,
+    agent_changes: agentChanges.slice(0, limit)
+  };
+}
+
+function selectCollectorSnapshotDiffReports(reports = [], filters = {}) {
+  if (reports.length < 2) return null;
+  const fromId = normalizeFilterValue(filters.from_collector_snapshot_id || filters.from);
+  const toId = normalizeFilterValue(filters.to_collector_snapshot_id || filters.to);
+  if (Boolean(fromId) !== Boolean(toId)) return null;
+  const findIndex = (id) => reports.findIndex((report) => createCollectorSnapshotId(report) === id);
+  const toIndex = toId ? findIndex(toId) : reports.length - 1;
+  const fromIndex = fromId ? findIndex(fromId) : toIndex - 1;
+  return toIndex >= 0 && fromIndex >= 0
+    ? { fromReport: reports[fromIndex], toReport: reports[toIndex] }
+    : null;
+}
+
+function createCollectorSnapshotId(report) {
+  return createCollectorCorrelationId(
+    normalizeCollectorTimestamp(report?.collected_at) || report?.collected_at || 'unknown'
+  );
+}
+
+function createCollectorSnapshotSummaryDelta(fromReport, toReport) {
+  const fromSummary = fromReport.summary || {};
+  const toSummary = toReport.summary || {};
+  return Object.fromEntries([
+    'agent_count',
+    'heartbeat_count',
+    'tmux_observed_count',
+    'workspace_observed_count',
+    'reboot_recommended_count'
+  ].map((field) => [field, normalizeCount(toSummary[field]) - normalizeCount(fromSummary[field])]));
+}
+
+function createCollectorSnapshotDiffHealthAggregate(report) {
+  return createCollectorSnapshotHistoryAggregateFromReportItems(report.items || [], {
+    sourceHealthKeys: SOURCE_HEALTH_KEYS,
+    status: null
+  });
+}
+
+function subtractNestedBuckets(toBuckets, fromBuckets) {
+  return Object.fromEntries(
+    Object.keys(toBuckets).map((key) => [key, subtractBuckets(toBuckets[key], fromBuckets[key])])
+  );
+}
+
+function subtractBuckets(toBuckets, fromBuckets) {
+  return Object.fromEntries(
+    Object.keys(toBuckets).map((key) => [key, normalizeCount(toBuckets[key]) - normalizeCount(fromBuckets?.[key])])
+  );
+}
+
+function createCollectorSnapshotDiffAgentChanges(fromReport, toReport) {
+  const toItemMap = (report) => new Map(
+    (report.items || [])
+      .filter((item) => item && typeof item.agent_id === 'string' && item.agent_id.length > 0)
+      .map((item) => [item.agent_id, item])
+  );
+  const fromItems = toItemMap(fromReport);
+  const toItems = toItemMap(toReport);
+  return normalizeAgentIds([...fromItems.keys(), ...toItems.keys()])
+    .map((agentId) => createCollectorSnapshotDiffAgentChange(
+      agentId,
+      fromItems.get(agentId) || null,
+      toItems.get(agentId) || null
+    ))
+    .filter(Boolean);
+}
+
+function createCollectorSnapshotDiffAgentChange(agentId, fromItem, toItem) {
+  const changeType = !fromItem ? 'added' : !toItem ? 'removed' : 'changed';
+  const sourceHealthStatusChanges = createSourceHealthStatusChanges(fromItem, toItem);
+  const heartbeatChanged = createCollectorHeartbeatDiffSignature(fromItem) !==
+    createCollectorHeartbeatDiffSignature(toItem);
+  if (changeType === 'changed' && !heartbeatChanged && Object.keys(sourceHealthStatusChanges).length === 0) return null;
+  return { agent_id: agentId, change_type: changeType, heartbeat_changed: heartbeatChanged, source_health_status_changes: sourceHealthStatusChanges };
+}
+
+function createSourceHealthStatusChanges(fromItem, toItem) {
+  const changes = {};
+  for (const key of SOURCE_HEALTH_KEYS) {
+    const fromStatus = normalizeSourceHealthStatus(fromItem?.source_health?.[key]?.status);
+    const toStatus = normalizeSourceHealthStatus(toItem?.source_health?.[key]?.status);
+    if (fromStatus !== toStatus) changes[key] = { from: fromStatus, to: toStatus };
+  }
+  return changes;
+}
+
+function createCollectorHeartbeatDiffSignature(item) {
+  const heartbeat = item?.heartbeat || null;
+  return heartbeat ? [
+    heartbeat.current_state || '',
+    heartbeat.active_task || '',
+    heartbeat.last_meaningful_output_at || '',
+    heartbeat.last_file_write_at || '',
+    heartbeat.current_blocker || '',
+    heartbeat.confidence_level || '',
+    heartbeat.reboot_recommended ? '1' : '0'
+  ].join('|') : '';
 }
 
 function projectCollectorSnapshotHistoryItem(report, { agentId, sourceHealthKeys, status }) {

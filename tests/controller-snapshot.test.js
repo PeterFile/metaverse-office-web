@@ -2059,6 +2059,109 @@ test('store projects latest collector source health with filters and bounded row
   assert.equal(blankLimit.agent_items.length, 2);
 });
 
+test('store projects compact collector snapshot diff without raw snapshot evidence', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'metaverse-office-store-'));
+  const storeFile = path.join(root, 'prototype-store.jsonl');
+  const store = await createPrototypeStore({ filePath: storeFile });
+  const createDiffReport = ({ collectedAt, status, outputAt }) =>
+    createCollectorReport({
+      collectedAt,
+      items: [
+        {
+          ...createReportItem({
+            collectedAt,
+            agentId: 'app-engineering',
+            evidenceRefs: ['/tmp/diff/app/outbox.md', 'tmux://5-web3-app-engineering/0.1'],
+            currentState: 'coding',
+            activeTask: 'Implement compact diff',
+            lastMeaningfulOutputAt: outputAt,
+            lastFileWriteAt: outputAt
+          }),
+          source_health: {
+            workspace_root: {
+              status: 'observed',
+              path: '/tmp/diff/app',
+              last_observed_at: outputAt,
+              degraded_reasons: []
+            },
+            workspace_files: {
+              status,
+              expected_files: ['inbox.md', 'outbox.md', 'todo.md'],
+              observed_count: status === 'observed' ? 3 : 1,
+              missing_count: status === 'observed' ? 0 : 2,
+              error_count: 0,
+              last_observed_at: outputAt,
+              degraded_reasons: status === 'observed' ? [] : ['missing workspace files']
+            }
+          }
+        }
+      ]
+    });
+
+  assert.equal(store.getCollectorSnapshotDiff(), null);
+  await store.appendCollectorReport(createDiffReport({
+    collectedAt: '2026-03-09T18:05:00.000Z',
+    status: 'degraded',
+    outputAt: '2026-03-09T18:04:00.000Z'
+  }));
+  await store.appendCollectorReport(createDiffReport({
+    collectedAt: '2026-03-09T18:10:00.000Z',
+    status: 'observed',
+    outputAt: '2026-03-09T18:09:00.000Z'
+  }));
+
+  const diff = store.getCollectorSnapshotDiff();
+  assert.deepEqual(diff.summary_delta, {
+    agent_count: 0,
+    heartbeat_count: 0,
+    tmux_observed_count: 0,
+    workspace_observed_count: 0,
+    reboot_recommended_count: 0
+  });
+  assert.deepEqual(diff.source_health_delta.status_buckets, {
+    observed: 1,
+    degraded: -1,
+    missing: 0,
+    error: 0
+  });
+  assert.deepEqual(diff.agent_changes, [
+    {
+      agent_id: 'app-engineering',
+      change_type: 'changed',
+      heartbeat_changed: true,
+      source_health_status_changes: {
+        workspace_files: {
+          from: 'degraded',
+          to: 'observed'
+        }
+      }
+    }
+  ]);
+  assert.equal(JSON.stringify(diff).includes('/tmp/diff'), false);
+  assert.equal(JSON.stringify(diff).includes('tmux://'), false);
+  assert.equal(JSON.stringify(diff).includes('evidence_refs'), false);
+  assert.equal(JSON.stringify(diff).includes('metadata'), false);
+
+  const explicit = store.getCollectorSnapshotDiff({
+    from_collector_snapshot_id: 'collector-snapshot:2026-03-09T18:05:00.000Z',
+    to_collector_snapshot_id: 'collector-snapshot:2026-03-09T18:10:00.000Z',
+    limit: '1'
+  });
+  assert.equal(explicit.returned_limit, 1);
+  assert.deepEqual(explicit.agent_changes, diff.agent_changes);
+  assert.deepEqual(explicit.source_health_delta, diff.source_health_delta);
+  assert.equal(store.getCollectorSnapshotDiff({
+    from_collector_snapshot_id: 'collector-snapshot:2026-03-09T18:05:00.000Z'
+  }), null);
+  assert.equal(store.getCollectorSnapshotDiff({
+    to: 'collector-snapshot:2026-03-09T18:10:00.000Z'
+  }), null);
+  assert.equal(store.getCollectorSnapshotDiff({
+    from_collector_snapshot_id: 'collector-snapshot:unknown',
+    to_collector_snapshot_id: 'collector-snapshot:2026-03-09T18:10:00.000Z'
+  }), null);
+});
+
 test('store appends collector report with pane-id-only tmux observation', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'metaverse-office-store-'));
   const storeFile = path.join(root, 'prototype-store.jsonl');

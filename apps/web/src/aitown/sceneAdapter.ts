@@ -186,10 +186,7 @@ export function adaptWorldToScene(
       ...(evidenceFloor
         ? {
             evidenceFloor: {
-              highestSeverity: evidenceFloor.highest_severity,
-              occupantCount: evidenceFloor.occupant_count,
-              signalCount: evidenceFloor.signal_count,
-              signals: evidenceFloor.signals
+              present: true as const
             }
           }
         : {})

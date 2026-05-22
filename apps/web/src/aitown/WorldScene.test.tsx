@@ -1203,7 +1203,7 @@ describe('WorldScene watch overlay caption gating', () => {
     expect(textLabels).not.toContain('Review Zone');
   });
 
-  it('renders passive zone evidence floors without creating zone labels or pointer targets', async () => {
+  it('renders neutral passive zone evidence floors without labels, severity payload, or pointer targets', async () => {
     appInitMock.mockReset().mockResolvedValue(undefined);
     vi.mocked(loadAiTownAssets).mockResolvedValue(makeAssets());
     const scene = {
@@ -1216,13 +1216,10 @@ describe('WorldScene watch overlay caption gating', () => {
           anchor: { x: 10, y: 10 },
           occupantIds: ['app-engineering'],
           evidenceFloor: {
-            highestSeverity: 'orange' as const,
-            occupantCount: 1,
-            signalCount: 3,
-            signals: ['severity', 'blocked', 'open_alert_or_incident']
+            present: true
           }
         }
-      ]
+      ],
     } satisfies AiTownSceneModel;
 
     render(<WorldScene scene={scene} onSelectAgent={vi.fn()} />);

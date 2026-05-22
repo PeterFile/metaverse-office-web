@@ -48,12 +48,7 @@ const SEVERITY_COLORS = {
   red: 0xf26767
 } as const;
 
-const ZONE_EVIDENCE_FLOOR_STROKE_ALPHA = {
-  normal: 0.34,
-  yellow: 0.44,
-  orange: 0.54,
-  red: 0.62
-} as const;
+const ZONE_EVIDENCE_FLOOR_COLOR = 0x8be9d5;
 
 const SOURCE_EVIDENCE_HEALTH_COLORS = {
   degraded: 0xf8d34b,
@@ -927,21 +922,20 @@ function createZoneEvidenceFloor(zone: SceneZone, tileDim: number) {
 
   const container = new Container();
   const marker = new Graphics();
-  const color = SEVERITY_COLORS[zone.evidenceFloor.highestSeverity];
   const radiusScale = zone.kind === 'desk' ? 0.92 : 1.28;
-  const radiusX = tileDim * (radiusScale + Math.min(zone.evidenceFloor.occupantCount, 3) * 0.14);
-  const radiusY = tileDim * (0.52 + Math.min(zone.evidenceFloor.signalCount, 4) * 0.06);
+  const radiusX = tileDim * radiusScale;
+  const radiusY = tileDim * 0.52;
 
   container.eventMode = 'none';
   container.position.set(zone.anchor.x * tileDim, zone.anchor.y * tileDim);
   marker.ellipse(0, 0, radiusX, radiusY).fill({
-    color,
+    color: ZONE_EVIDENCE_FLOOR_COLOR,
     alpha: 0.08
   });
   marker.ellipse(0, 0, radiusX, radiusY).stroke({
-    color,
-    width: zone.evidenceFloor.signalCount >= 3 ? 2 : 1,
-    alpha: ZONE_EVIDENCE_FLOOR_STROKE_ALPHA[zone.evidenceFloor.highestSeverity]
+    color: ZONE_EVIDENCE_FLOOR_COLOR,
+    width: 1,
+    alpha: 0.34
   });
   container.addChild(marker);
 

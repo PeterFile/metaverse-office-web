@@ -499,6 +499,93 @@ test('prototype store exposes sanitized replay checkpoint summary that survives 
   assert.deepEqual(reloadedStore.getReplayCheckpointSummary(), summary);
 });
 
+test('prototype store exposes bounded sanitized replay checkpoint log that survives reload', async () => {
+  const storeFile = await createStoreFile();
+  const store = await createPrototypeStore({ filePath: storeFile });
+
+  await store.appendEvent(createEvent());
+  await store.appendHeartbeat(createHeartbeat());
+  await store.appendCollectorReport(createCollectorReport());
+
+  const log = store.listReplayCheckpointLog({ limit: '3' });
+  assert.deepEqual(log, [
+    {
+      append_index: 7,
+      record_kind: 'evidence_record',
+      checkpoint: {
+        observed_at: '2026-03-09T18:05:20.000Z',
+        collected_at: '2026-03-09T18:06:00.000Z',
+        agent_id: 'app-engineering',
+        source_kind: 'workspace_file',
+        evidence_role: 'agent_output',
+        source_status: 'degraded',
+        output_candidate: true,
+        collector_snapshot_id: 'collector-snapshot:2026-03-09T18:06:00.000Z',
+        correlation_id: 'collector-snapshot:2026-03-09T18:06:00.000Z',
+        unmapped: false
+      }
+    },
+    {
+      append_index: 8,
+      record_kind: 'evidence_record',
+      checkpoint: {
+        observed_at: '2026-03-09T18:05:30.000Z',
+        collected_at: '2026-03-09T18:06:00.000Z',
+        agent_id: 'app-engineering',
+        source_kind: 'tmux_observation',
+        evidence_role: 'runtime_activity',
+        source_status: 'observed',
+        output_candidate: true,
+        collector_snapshot_id: 'collector-snapshot:2026-03-09T18:06:00.000Z',
+        correlation_id: 'collector-snapshot:2026-03-09T18:06:00.000Z',
+        unmapped: false
+      }
+    },
+    {
+      append_index: 9,
+      record_kind: 'collector_snapshot',
+      checkpoint: {
+        collector_snapshot_id: 'collector-snapshot:2026-03-09T18:06:00.000Z',
+        collected_at: '2026-03-09T18:06:00.000Z',
+        actor_id: 'team-lead',
+        item_count: 1
+      }
+    }
+  ]);
+  assert.equal(JSON.stringify(log).includes('/tmp/store-contract'), false);
+  assert.equal(JSON.stringify(log).includes('store-contract'), false);
+  assert.equal(JSON.stringify(log).includes('tmux://'), false);
+  assert.equal(JSON.stringify(log).includes('5-web3-app-engineering'), false);
+
+  const reloadedStore = await createPrototypeStore({ filePath: storeFile });
+  assert.deepEqual(reloadedStore.listReplayCheckpointLog({ limit: '3' }), log);
+});
+
+test('prototype store bounds replay checkpoint log record kinds', async () => {
+  const storeFile = await createStoreFile();
+  await writeFile(
+    storeFile,
+    `${JSON.stringify({
+      kind: '/tmp/store-contract/raw-kind',
+      payload: {
+        evidence_ref: 'tmux://5-web3-app-engineering/0.1',
+        metadata: {
+          local_path: '/tmp/store-contract/raw-payload'
+        }
+      }
+    })}\n`
+  );
+
+  const store = await createPrototypeStore({ filePath: storeFile });
+  assert.deepEqual(store.listReplayCheckpointLog({ limit: '1' }), [
+    {
+      append_index: 1,
+      record_kind: 'unknown',
+      checkpoint: null
+    }
+  ]);
+});
+
 test('JSONL prototype store appends and replays collector evidence records without changing counts', async () => {
   const storeFile = await createStoreFile();
   const store = await createPrototypeStore({ filePath: storeFile });

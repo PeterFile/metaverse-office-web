@@ -8564,26 +8564,26 @@ describe('DetailsPanel accountability signals', () => {
     expect(collectorSection).not.toBeNull();
     expect(within(collectorSection!).getByText('Unmapped tmux source gap · 1 session, 2 panes')).toBeVisible();
     expect(within(collectorSection!).getByText('Runtime tmux source drilldown · degraded')).toBeVisible();
-    expect(within(collectorSection!).getByText('Unmapped tmux session · outside-tools · 2 panes')).toBeInTheDocument();
+    expect(within(collectorSection!).getByText('Unmapped tmux session · 2 panes')).toBeInTheDocument();
     expect(
       within(collectorSection!).getByText('Unmapped tmux observed at · 2026-03-16T08:58:00.000Z')
     ).toBeInTheDocument();
     expect(
-      within(collectorSection!).getByText('Unmapped tmux panes · tmux://outside-tools/0.0, tmux://outside-tools/0.1')
+      within(collectorSection!).getByText('Unmapped tmux pane refs · 2 observed')
     ).toBeInTheDocument();
 
     const appEngineeringRecord = within(collectorSection!).getByText('App Engineering Agent').closest('li');
     expect(appEngineeringRecord).not.toBeNull();
     expect(appEngineeringRecord!).toHaveTextContent('Source health · Workspace source · Observed');
     expect(appEngineeringRecord!).toHaveTextContent('Source health · Workspace files source gap · 1 missing, 1 error, 1 observed');
-    expect(appEngineeringRecord!).toHaveTextContent('Source health · Tmux source gap · Expected sess-1 missing');
+    expect(appEngineeringRecord!).toHaveTextContent('Source health · Tmux source gap · Session missing');
     expect(appEngineeringRecord!).toHaveTextContent('Source health · Workspace source drilldown · degraded');
-    expect(appEngineeringRecord!).toHaveTextContent('Workspace root path · /workspace/app-engineering');
+    expect(appEngineeringRecord!).toHaveTextContent('Workspace root configured · Yes');
     expect(appEngineeringRecord!).toHaveTextContent('Workspace files gaps · 1 missing, 1 error, 1 observed');
-    expect(appEngineeringRecord!).toHaveTextContent('Workspace files reason · workspace file source incomplete');
+    expect(appEngineeringRecord!).toHaveTextContent('Workspace files reason · Reported');
     expect(appEngineeringRecord!).toHaveTextContent('Source health · Tmux source drilldown · missing');
-    expect(appEngineeringRecord!).toHaveTextContent('Expected tmux session · sess-1');
-    expect(appEngineeringRecord!).toHaveTextContent('Tmux session reason · tmux session not observed');
+    expect(appEngineeringRecord!).toHaveTextContent('Expected tmux session · configured');
+    expect(appEngineeringRecord!).toHaveTextContent('Tmux session reason · Reported');
 
     const growthRevenueRecord = within(collectorSection!).getByText('Growth Revenue Agent').closest('li');
     expect(growthRevenueRecord).not.toBeNull();
@@ -8591,7 +8591,7 @@ describe('DetailsPanel accountability signals', () => {
     expect(growthRevenueRecord!).toHaveTextContent('Source health · Workspace files source · Observed 2/2');
     expect(growthRevenueRecord!).toHaveTextContent('Source health · Tmux source · Observed 2 panes');
     expect(growthRevenueRecord!).toHaveTextContent('Source health · Workspace source drilldown · missing');
-    expect(growthRevenueRecord!).toHaveTextContent('Workspace root reason · workspace root not observed');
+    expect(growthRevenueRecord!).toHaveTextContent('Workspace root reason · Reported');
     expect(growthRevenueRecord!).toHaveTextContent('Source health · Tmux source drilldown · observed');
     expect(growthRevenueRecord!).toHaveTextContent('Tmux panes observed · 2');
   });
@@ -8651,14 +8651,14 @@ describe('DetailsPanel accountability signals', () => {
     expect(collectorObservationSection).not.toBeNull();
     expect(collectorObservationSection!).toHaveTextContent('Source health · Workspace source · Observed');
     expect(collectorObservationSection!).toHaveTextContent('Source health · Workspace files source · Observed 3/3');
-    expect(collectorObservationSection!).toHaveTextContent('Source health · Tmux source gap · Expected sess-1 degraded');
+    expect(collectorObservationSection!).toHaveTextContent('Source health · Tmux source gap · Session degraded');
     expect(collectorObservationSection!).toHaveTextContent('Source health · Workspace source drilldown · observed');
-    expect(collectorObservationSection!).toHaveTextContent('Workspace root path · /workspace/app-engineering');
+    expect(collectorObservationSection!).toHaveTextContent('Workspace root configured · Yes');
     expect(collectorObservationSection!).toHaveTextContent('Workspace files observed · 3/3');
     expect(collectorObservationSection!).toHaveTextContent('Source health · Tmux source drilldown · degraded');
-    expect(collectorObservationSection!).toHaveTextContent('Expected tmux session · sess-1');
+    expect(collectorObservationSection!).toHaveTextContent('Expected tmux session · configured');
     expect(collectorObservationSection!).toHaveTextContent('Tmux panes observed · 1');
-    expect(collectorObservationSection!).toHaveTextContent('Tmux session reason · expected tmux pane missing');
+    expect(collectorObservationSection!).toHaveTextContent('Tmux session reason · Reported');
     expect(
       within(collectorObservationSection!).getByText('Source health · Hermes source drilldown · observed')
     ).toBeVisible();

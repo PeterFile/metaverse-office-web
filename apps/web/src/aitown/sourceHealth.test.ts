@@ -134,7 +134,7 @@ describe('deriveCollectorItemSourceHealthFacts', () => {
       },
       {
         key: 'tmux-session',
-        label: 'Tmux source gap · Expected sess-app missing',
+        label: 'Tmux source gap · Session missing',
         status: 'missing'
       }
     ]);
@@ -165,12 +165,12 @@ describe('deriveCollectorItemSourceHealthFacts', () => {
     ).toEqual([
       {
         key: 'hermes-profile',
-        label: 'Hermes profile source · Observed profile-app-engineering',
+        label: 'Hermes profile source · Observed',
         status: 'observed'
       },
       {
         key: 'hermes-session',
-        label: 'Hermes session source gap · Expected hermes-session-app degraded',
+        label: 'Hermes session source gap · Session degraded',
         status: 'degraded'
       }
     ]);
@@ -224,7 +224,7 @@ describe('deriveCollectorItemSourceDrilldownGroups', () => {
         summary: 'Workspace source drilldown · degraded',
         details: [
           { key: 'workspace-root-status', label: 'Workspace root status · observed' },
-          { key: 'workspace-root-path', label: 'Workspace root path · /workspace/app-engineering' },
+          { key: 'workspace-root-path', label: 'Workspace root configured · Yes' },
           { key: 'workspace-root-observed', label: 'Workspace root observed · 2026-03-16T08:55:00.000Z' },
           { key: 'workspace-files-status', label: 'Workspace files status · degraded' },
           { key: 'workspace-files-expected', label: 'Expected files · inbox.md, outbox.md, todo.md, +1 more' },
@@ -233,9 +233,9 @@ describe('deriveCollectorItemSourceDrilldownGroups', () => {
           { key: 'workspace-files-observed-at', label: 'Workspace files observed at · 2026-03-16T08:56:00.000Z' },
           {
             key: 'workspace-files-reason-0',
-            label: 'Workspace files reason · missing workspace files: outbox.md, todo.md'
+            label: 'Workspace files reason · Reported'
           },
-          { key: 'workspace-files-reason-1', label: 'Workspace files reason · workspace file read error: scratch.md' },
+          { key: 'workspace-files-reason-1', label: 'Workspace files reason · Reported' },
           { key: 'workspace-files-reason-overflow', label: 'Workspace files reasons · +1 more' }
         ]
       },
@@ -246,10 +246,10 @@ describe('deriveCollectorItemSourceDrilldownGroups', () => {
         summary: 'Tmux source drilldown · missing',
         details: [
           { key: 'tmux-session-status', label: 'Tmux session status · missing' },
-          { key: 'tmux-session-expected', label: 'Expected tmux session · sess-app' },
+          { key: 'tmux-session-expected', label: 'Expected tmux session · configured' },
           { key: 'tmux-session-observed', label: 'Tmux panes observed · 0' },
           { key: 'tmux-session-observed-at', label: 'Tmux session observed at · None' },
-          { key: 'tmux-session-reason-0', label: 'Tmux session reason · tmux session not observed' }
+          { key: 'tmux-session-reason-0', label: 'Tmux session reason · Reported' }
         ]
       }
     ]);
@@ -289,23 +289,23 @@ describe('deriveCollectorItemSourceDrilldownGroups', () => {
         summary: 'Hermes source drilldown · degraded',
         details: [
           { key: 'hermes-profile-status', label: 'Hermes profile status · observed' },
-          { key: 'hermes-profile-id', label: 'Hermes profile id · profile-app-engineering' },
+          { key: 'hermes-profile-id', label: 'Hermes profile id · available' },
           {
             key: 'hermes-profile-evidence',
-            label: 'Hermes profile evidence ref · https://hermes.example.test/runtime/profiles/profile-app-engineering?long=true'
+            label: 'Hermes profile evidence ref · available'
           },
           { key: 'hermes-profile-observed-at', label: 'Hermes profile observed at · 2026-03-16T08:55:00.000Z' },
           { key: 'hermes-session-status', label: 'Hermes session status · degraded' },
-          { key: 'hermes-session-expected', label: 'Expected Hermes session · hermes-session-app' },
+          { key: 'hermes-session-expected', label: 'Expected Hermes session · configured' },
           {
             key: 'hermes-session-evidence',
-            label: 'Hermes session evidence ref · https://hermes.example.test/runtime/sessions/hermes-session-app?long=true'
+            label: 'Hermes session evidence ref · available'
           },
           { key: 'hermes-session-observed-at', label: 'Hermes session observed at · None' },
-          { key: 'hermes-session-reason-0', label: 'Hermes session reason · hermes session evidence incomplete' },
+          { key: 'hermes-session-reason-0', label: 'Hermes session reason · Reported' },
           {
             key: 'hermes-session-reason-1',
-            label: 'Hermes session reason · hermes session snapshot missing coverage field'
+            label: 'Hermes session reason · Reported'
           },
           { key: 'hermes-session-reason-overflow', label: 'Hermes session reasons · +1 more' }
         ]
@@ -407,11 +407,11 @@ describe('deriveRuntimeSourceDrilldownGroups', () => {
         status: 'degraded',
         summary: 'Runtime tmux source drilldown · degraded',
         details: [
-          { key: 'unmapped-tmux-session-0', label: 'Unmapped tmux session · outside-tools · 4 panes' },
+          { key: 'unmapped-tmux-session-0', label: 'Unmapped tmux session · 4 panes' },
           { key: 'unmapped-tmux-observed-0', label: 'Unmapped tmux observed at · 2026-03-16T08:58:00.000Z' },
           {
             key: 'unmapped-tmux-panes-0',
-            label: 'Unmapped tmux panes · tmux://outside-tools/0.0, tmux://outside-tools/0.1, tmux://outside-tools/0.2, +1 more'
+            label: 'Unmapped tmux pane refs · 4 observed'
           }
         ]
       }
@@ -420,7 +420,6 @@ describe('deriveRuntimeSourceDrilldownGroups', () => {
 
   it('groups unmapped Hermes runtime source gaps with bounded refs, sources, and reasons', () => {
     const longEvidenceRef = `https://hermes.example.test/runtime/profiles/profile-long/${'x'.repeat(160)}`;
-    const boundedLongEvidenceRef = `${longEvidenceRef.slice(0, 119)}…`;
     const groups = deriveRuntimeSourceDrilldownGroups({
       unmapped_tmux_sessions: [],
       unmapped_hermes_sources: [
@@ -474,29 +473,29 @@ describe('deriveRuntimeSourceDrilldownGroups', () => {
         status: 'degraded',
         summary: 'Runtime Hermes source drilldown · degraded',
         details: [
-          { key: 'unmapped-hermes-source-0', label: 'Unmapped Hermes profile · profile-outside · observed' },
+          { key: 'unmapped-hermes-source-0', label: 'Unmapped Hermes profile · profile ref available · observed' },
           {
             key: 'unmapped-hermes-evidence-0',
-            label: 'Unmapped Hermes evidence ref · https://hermes.example.test/runtime/profiles/profile-outside?long=true'
+            label: 'Unmapped Hermes evidence ref · available'
           },
           { key: 'unmapped-hermes-observed-0', label: 'Unmapped Hermes observed at · 2026-03-16T08:54:00.000Z' },
-          { key: 'unmapped-hermes-source-1', label: 'Unmapped Hermes session · session-outside · degraded' },
+          { key: 'unmapped-hermes-source-1', label: 'Unmapped Hermes session · session ref available · degraded' },
           {
             key: 'unmapped-hermes-evidence-1',
-            label: 'Unmapped Hermes evidence ref · https://hermes.example.test/runtime/sessions/session-outside?long=true'
+            label: 'Unmapped Hermes evidence ref · available'
           },
           { key: 'unmapped-hermes-observed-1', label: 'Unmapped Hermes observed at · None' },
           {
             key: 'unmapped-hermes-1-reason-0',
-            label: 'Unmapped Hermes source reason · hermes source has no mapped collector item'
+            label: 'Unmapped Hermes source reason · Reported'
           },
           {
             key: 'unmapped-hermes-1-reason-1',
-            label: 'Unmapped Hermes source reason · hermes session lacks profile mapping'
+            label: 'Unmapped Hermes source reason · Reported'
           },
           { key: 'unmapped-hermes-1-reason-overflow', label: 'Unmapped Hermes source reasons · +1 more' },
-          { key: 'unmapped-hermes-source-2', label: 'Unmapped Hermes profile · profile-long · observed' },
-          { key: 'unmapped-hermes-evidence-2', label: `Unmapped Hermes evidence ref · ${boundedLongEvidenceRef}` },
+          { key: 'unmapped-hermes-source-2', label: 'Unmapped Hermes profile · profile ref available · observed' },
+          { key: 'unmapped-hermes-evidence-2', label: 'Unmapped Hermes evidence ref · available' },
           { key: 'unmapped-hermes-observed-2', label: 'Unmapped Hermes observed at · 2026-03-16T09:00:00.000Z' },
           { key: 'unmapped-hermes-source-overflow', label: 'Unmapped Hermes sources · +1 more' }
         ]

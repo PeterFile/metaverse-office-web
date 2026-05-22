@@ -71,7 +71,7 @@ export function deriveCollectorItemSourceHealthFacts(item: CollectorItem): Sourc
       label:
         tmuxSession.status === 'observed'
           ? `Tmux source · Observed ${tmuxSession.observed_count} ${pluralize('pane', tmuxSession.observed_count)}`
-          : `Tmux source gap · Expected ${tmuxSession.expected_session_ref} ${tmuxSession.status}`,
+          : `Tmux source gap · Session ${tmuxSession.status}`,
       status: tmuxSession.status
     });
   }
@@ -83,8 +83,8 @@ export function deriveCollectorItemSourceHealthFacts(item: CollectorItem): Sourc
       key: 'hermes-profile',
       label:
         hermesProfile.status === 'observed'
-          ? `Hermes profile source · Observed ${hermesProfile.profile_id}`
-          : `Hermes profile source gap · Profile ${hermesProfile.profile_id} ${hermesProfile.status}`,
+          ? 'Hermes profile source · Observed'
+          : `Hermes profile source gap · Profile ${hermesProfile.status}`,
       status: hermesProfile.status
     });
   }
@@ -96,8 +96,8 @@ export function deriveCollectorItemSourceHealthFacts(item: CollectorItem): Sourc
       key: 'hermes-session',
       label:
         hermesSession.status === 'observed'
-          ? `Hermes session source · Observed ${hermesSession.expected_session_ref}`
-          : `Hermes session source gap · Expected ${hermesSession.expected_session_ref} ${hermesSession.status}`,
+          ? 'Hermes session source · Observed'
+          : `Hermes session source gap · Session ${hermesSession.status}`,
       status: hermesSession.status
     });
   }
@@ -157,7 +157,7 @@ export function deriveCollectorItemSourceDrilldownGroups(item: CollectorItem): S
     workspaceStatuses.push(root.status);
     workspaceDetails.push(
       { key: 'workspace-root-status', label: `Workspace root status · ${root.status}` },
-      { key: 'workspace-root-path', label: `Workspace root path · ${root.path}` },
+      { key: 'workspace-root-path', label: `Workspace root configured · ${root.path ? 'Yes' : 'No'}` },
       { key: 'workspace-root-observed', label: `Workspace root observed · ${renderNullable(root.last_observed_at)}` },
       ...renderReasons('workspace-root', 'Workspace root', root.degraded_reasons)
     );
@@ -191,7 +191,7 @@ export function deriveCollectorItemSourceDrilldownGroups(item: CollectorItem): S
     groups.push(
       createGroup('tmux', 'Tmux source drilldown', tmuxSession.status, [
         { key: 'tmux-session-status', label: `Tmux session status · ${tmuxSession.status}` },
-        { key: 'tmux-session-expected', label: `Expected tmux session · ${tmuxSession.expected_session_ref}` },
+        { key: 'tmux-session-expected', label: `Expected tmux session · ${tmuxSession.expected_session_ref ? 'configured' : 'None'}` },
         { key: 'tmux-session-observed', label: `Tmux panes observed · ${tmuxSession.observed_count}` },
         {
           key: 'tmux-session-observed-at',
@@ -210,7 +210,7 @@ export function deriveCollectorItemSourceDrilldownGroups(item: CollectorItem): S
     hermesStatuses.push(hermesProfile.status);
     hermesDetails.push(
       { key: 'hermes-profile-status', label: `Hermes profile status · ${hermesProfile.status}` },
-      { key: 'hermes-profile-id', label: `Hermes profile id · ${hermesProfile.profile_id}` },
+      { key: 'hermes-profile-id', label: `Hermes profile id · ${hermesProfile.profile_id ? 'available' : 'None'}` },
       { key: 'hermes-profile-evidence', label: `Hermes profile evidence ref · ${renderEvidenceRef(hermesProfile.evidence_ref)}` },
       {
         key: 'hermes-profile-observed-at',
@@ -225,7 +225,7 @@ export function deriveCollectorItemSourceDrilldownGroups(item: CollectorItem): S
     hermesStatuses.push(hermesSession.status);
     hermesDetails.push(
       { key: 'hermes-session-status', label: `Hermes session status · ${hermesSession.status}` },
-      { key: 'hermes-session-expected', label: `Expected Hermes session · ${hermesSession.expected_session_ref}` },
+      { key: 'hermes-session-expected', label: `Expected Hermes session · ${hermesSession.expected_session_ref ? 'configured' : 'None'}` },
       { key: 'hermes-session-evidence', label: `Hermes session evidence ref · ${renderEvidenceRef(hermesSession.evidence_ref)}` },
       {
         key: 'hermes-session-observed-at',
@@ -258,7 +258,7 @@ export function deriveRuntimeSourceDrilldownGroups(
         unmappedTmuxSessions.flatMap((session, index) => [
           {
             key: `unmapped-tmux-session-${index}`,
-            label: `Unmapped tmux session · ${session.session_name} · ${session.observed_count} ${pluralize('pane', session.observed_count)}`
+            label: `Unmapped tmux session · ${session.observed_count} ${pluralize('pane', session.observed_count)}`
           },
           {
             key: `unmapped-tmux-observed-${index}`,
@@ -266,7 +266,7 @@ export function deriveRuntimeSourceDrilldownGroups(
           },
           {
             key: `unmapped-tmux-panes-${index}`,
-            label: `Unmapped tmux panes · ${renderBoundedList(session.pane_refs)}`
+            label: `Unmapped tmux pane refs · ${session.pane_refs.length} observed`
           }
         ])
       )
@@ -378,18 +378,22 @@ function renderHermesSourceKind(sourceKind: 'hermes_profile' | 'hermes_session')
 
 function renderHermesRuntimeSourceRef(source: NonNullable<CollectorRuntimeSourceEvidence['unmapped_hermes_sources']>[number]) {
   return source.source_kind === 'hermes_profile'
-    ? renderNullable(source.profile_id)
-    : renderNullable(source.session_ref);
+    ? source.profile_id
+      ? 'profile ref available'
+      : 'profile ref unavailable'
+    : source.session_ref
+      ? 'session ref available'
+      : 'session ref unavailable';
 }
 
 function renderEvidenceRef(value: string | null) {
-  return renderBoundedText(renderNullable(value));
+  return value ? 'available' : 'None';
 }
 
 function renderReasons(keyPrefix: string, labelPrefix: string, reasons: string[]): SourceDrilldownDetail[] {
-  const details = reasons.slice(0, BOUNDED_REASON_LIMIT).map((reason, index) => ({
+  const details = reasons.slice(0, BOUNDED_REASON_LIMIT).map((_, index) => ({
     key: `${keyPrefix}-reason-${index}`,
-    label: `${labelPrefix} reason · ${reason}`
+    label: `${labelPrefix} reason · Reported`
   }));
 
   if (reasons.length > BOUNDED_REASON_LIMIT) {

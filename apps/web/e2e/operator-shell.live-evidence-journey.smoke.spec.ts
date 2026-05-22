@@ -75,6 +75,68 @@ const sourceHealth = {
   runtime_source_evidence: { unmapped_tmux_sessions: [] }
 };
 
+const runtimeSourceGaps = {
+  items: [
+    {
+      observed_at: '2026-03-16T08:58:30.000Z',
+      collected_at: '2026-03-16T09:01:00.000Z',
+      agent_id: 'app-engineering',
+      source_kind: 'workspace_file',
+      evidence_role: 'agent_output',
+      source_status: 'degraded',
+      output_candidate: false,
+      collector_snapshot_id: 'collector-snapshot:2026-03-16T09:01:00.000Z',
+      correlation_id: 'collector-snapshot:2026-03-16T09:01:00.000Z',
+      degraded_reasons: ['workspace file degraded'],
+      unmapped: false
+    },
+    {
+      observed_at: null,
+      collected_at: '2026-03-16T09:01:00.000Z',
+      agent_id: 'app-engineering',
+      source_kind: 'hermes_profile',
+      evidence_role: 'runtime_presence',
+      source_status: 'missing',
+      output_candidate: false,
+      collector_snapshot_id: 'collector-snapshot:2026-03-16T09:01:00.000Z',
+      correlation_id: 'collector-snapshot:2026-03-16T09:01:00.000Z',
+      degraded_reasons: ['Hermes profile missing'],
+      unmapped: false
+    },
+    {
+      observed_at: '2026-03-16T08:58:35.000Z',
+      collected_at: '2026-03-16T09:01:00.000Z',
+      agent_id: 'app-engineering',
+      source_kind: 'hermes_session',
+      evidence_role: 'runtime_presence',
+      source_status: 'degraded',
+      output_candidate: false,
+      collector_snapshot_id: 'collector-snapshot:2026-03-16T09:01:00.000Z',
+      correlation_id: 'collector-snapshot:2026-03-16T09:01:00.000Z',
+      degraded_reasons: ['Hermes session degraded'],
+      unmapped: false
+    }
+  ]
+};
+
+const runtimeSourceGapsSummary = {
+  total_count: 3,
+  returned_limit: 3,
+  mapped_count: 3,
+  unmapped_count: 0,
+  output_candidate_buckets: { true: 0, false: 3 },
+  source_kind_buckets: {
+    workspace_file: 1,
+    hermes_profile: 1,
+    hermes_session: 1
+  },
+  evidence_role_buckets: { agent_output: 1, runtime_presence: 2 },
+  source_status_buckets: { degraded: 2, missing: 1 },
+  collector_snapshot_id_buckets: {
+    'collector-snapshot:2026-03-16T09:01:00.000Z': 3
+  }
+};
+
 const snapshotCorrelationId = 'collector-snapshot%3A2026-03-10T23%3A59%3A40.000Z';
 const expectedApiGets = new Set([
   'GET /office/overview',
@@ -82,6 +144,8 @@ const expectedApiGets = new Set([
   'GET /collectors/controller-snapshot',
   'GET /collectors/controller-snapshot/evidence-coverage',
   'GET /collectors/controller-snapshot/source-health?limit=7',
+  'GET /runtime/source-gaps?newest_first=true&limit=3',
+  'GET /runtime/source-gaps/summary?newest_first=true&limit=3',
   'GET /agents/app-engineering/workflow?limit=10&window=60m',
   'GET /office/operations?agent_id=app-engineering',
   `GET /timeline?limit=10&window=60m&agent_id=app-engineering&correlation_id=${snapshotCorrelationId}`,
@@ -92,6 +156,9 @@ const expectedApiGets = new Set([
   `GET /correlations/${snapshotCorrelationId}?limit=10&window=60m`
 ]);
 
+const visibleProofRawRefPattern =
+  /\/(?:tmp|Users|Volumes|private|var|home|workspace|mnt)\/|[A-Za-z]:\\|tmux:\/\/|hermes:\/\/|\b\d+-web3-[a-z0-9-]+\b|profile-[a-z0-9-]+|session\/[a-z0-9-]+|session:\/\/|access[_-]?token|secret|payload|metadata|missing workspace files|Hermes session stale/i;
+
 function apiRequestKey(request: Request) {
   const url = new URL(request.url());
   return `${request.method()} ${url.pathname}${url.search}`;
@@ -99,12 +166,18 @@ function apiRequestKey(request: Request) {
 
 function isApiPath(pathname: string) {
   return [
+    '/control-plane',
+    '/dispatch',
     '/office',
     '/incidents',
     '/collectors',
     '/agents',
+    '/tasks',
+    '/claims',
+    '/kanban',
     '/peer-watch',
     '/memory',
+    '/runtime',
     '/timeline',
     '/correlations'
   ].some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
@@ -113,6 +186,14 @@ function isApiPath(pathname: string) {
 async function installLiveEvidenceFixtures(page: Page) {
   await page.route('**/collectors/controller-snapshot/evidence-coverage', async (route) => {
     await route.fulfill({ json: { item: evidenceCoverage } });
+  });
+
+  await page.route('**/runtime/source-gaps?*', async (route) => {
+    await route.fulfill({ json: runtimeSourceGaps });
+  });
+
+  await page.route('**/runtime/source-gaps/summary?*', async (route) => {
+    await route.fulfill({ json: { item: runtimeSourceGapsSummary } });
   });
 
   await page.route('**/collectors/controller-snapshot/source-health**', async (route) => {
@@ -189,7 +270,14 @@ test.describe('operator shell live evidence journey smoke', () => {
       await expect(evidenceFocus.getByText('3 coverage gaps', { exact: true })).toBeVisible();
       await expect(sourceGapFocus.getByText('3 provenance gaps', { exact: true })).toBeVisible();
       await expect(hermesSessionGapChip).toContainText('Hermes session · degraded');
-      await expect(hermesSessionGapChip).not.toContainText('hermes://');
+      await expect(
+        sourceGapFocus,
+        'HUD source-gap focus should summarize evidence without raw refs or runtime payloads'
+      ).not.toContainText(visibleProofRawRefPattern);
+      await expect(
+        hermesSessionGapChip,
+        'source-gap chip should not expose raw refs, profile ids, session refs, or degraded reasons'
+      ).not.toContainText(visibleProofRawRefPattern);
 
       await hermesSessionGapChip.click();
 
@@ -201,6 +289,10 @@ test.describe('operator shell live evidence journey smoke', () => {
       await expect(detailsPanel.getByText('App Engineering Agent · supervision and collector observation.')).toBeVisible();
       await expect(hermesDrilldown).toHaveAttribute('data-source-gap-focus', 'true');
       await expect(hermesDrilldown).toContainText('Hermes session status · degraded');
+      await expect(
+        hermesDrilldown,
+        'source-gap drilldown should not expose raw refs, profile ids, session refs, or degraded reasons'
+      ).not.toContainText(visibleProofRawRefPattern);
       expect(apiRequestViolations).toEqual([]);
     } finally {
       page.off('request', handleRequest);

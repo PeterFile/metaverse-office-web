@@ -12,6 +12,7 @@ import {
   selectRuntimeBackfillEvidence,
   selectRuntimeEvidenceAccountabilitySummary,
   selectWatchEdgeRisk,
+  selectZoneEvidenceFloors,
 } from './selectors';
 import type { WatchEdgeSnapshot, WorldAgent, WorldState, ZoneSnapshot } from './types';
 
@@ -870,5 +871,65 @@ describe('selectHotZones', () => {
     });
 
     expect(selectHotZones(world)).toEqual([]);
+  });
+});
+
+describe('selectZoneEvidenceFloors', () => {
+  it('projects passive zone floor evidence from observable runtime signals only', () => {
+    const world = makeWorldState({
+      agents: new Map([
+        [
+          'blocked',
+          makeWorldAgent({
+            agent_id: 'blocked',
+            display_name: 'Blocked',
+            zone: 'review-zone',
+            severity: 'orange',
+            phase: 'blocked',
+            open_alert_count: 1,
+          }),
+        ],
+        [
+          'freshness',
+          makeWorldAgent({
+            agent_id: 'freshness',
+            display_name: 'Freshness',
+            zone: 'review-zone',
+            staleness: {
+              severity: 'yellow',
+              stale_for_ms: 180000,
+              stale_for_minutes: 3,
+              last_meaningful_output_at: '2026-03-14T09:57:00Z',
+            },
+          }),
+        ],
+        ['steady', makeWorldAgent({ agent_id: 'steady', display_name: 'Steady', zone: 'quiet-zone' })],
+      ]),
+      zones: [
+        makeZoneSnapshot({
+          zone_id: 'review-zone',
+          label: 'Review Zone',
+          kind: 'shared',
+          occupant_ids: ['blocked', 'freshness'],
+        }),
+        makeZoneSnapshot({
+          zone_id: 'quiet-zone',
+          label: 'Quiet Zone',
+          kind: 'shared',
+          occupant_ids: ['steady'],
+        }),
+      ],
+    });
+
+    expect(selectZoneEvidenceFloors(world)).toEqual([
+      {
+        zone_id: 'review-zone',
+        label: 'Review Zone',
+        highest_severity: 'orange',
+        occupant_count: 2,
+        signal_count: 4,
+        signals: ['severity', 'blocked', 'open_alert_or_incident', 'runtime_freshness_degraded'],
+      },
+    ]);
   });
 });

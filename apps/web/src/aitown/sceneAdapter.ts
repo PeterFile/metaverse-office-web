@@ -2,6 +2,7 @@ import type { WorldAgent, WorldState } from '../world/types';
 
 import { CHARACTER_KEYS } from './characters';
 import { AI_TOWN_GENERATED_MAPS, AI_TOWN_GATEWAYS, AI_TOWN_MAP_BY_ID, DEFAULT_AI_TOWN_MAP_ID, GENTLE_MAP } from './mapData';
+import type { SourceGapWorldPin } from './sourceGapSignals';
 import type {
   AiTownSceneModel,
   CharacterKey,
@@ -29,6 +30,8 @@ const SHARED_ANCHORS: ScenePoint[] = [
   { x: 16.5, y: 21.5 },
   { x: 26.5, y: 22.5 }
 ];
+
+const UNMAPPED_SOURCE_GAP_PIN_ANCHOR: ScenePoint = { x: 12.5, y: 28.5 };
 
 const FIXED_SHARED_ZONE_ANCHORS: Record<string, ScenePoint> = {
   'meeting-zone': { x: 20.5, y: 14.5 },
@@ -163,7 +166,8 @@ export function adaptWorldToScene(
   world: WorldState,
   selectedAgentId: string | null,
   activeCorrelationId: string | null = null,
-  correlationParticipantAgentIds: string[] = []
+  correlationParticipantAgentIds: string[] = [],
+  sourceGapWorldPins: SourceGapWorldPin[] = []
 ): AiTownSceneModel {
   const map = AI_TOWN_MAP_BY_ID.get(DEFAULT_AI_TOWN_MAP_ID) ?? GENTLE_MAP;
   const sceneZones: SceneZone[] = world.zones.map((zone) => ({
@@ -226,6 +230,36 @@ export function adaptWorldToScene(
   });
 
   const sceneAgentIds = new Set(agents.map((agent) => agent.agentId));
+  const agentById = new Map(agents.map((agent) => [agent.agentId, agent]));
+  let unmappedSourceGapPinIndex = 0;
+  const sourceGapPins = sourceGapWorldPins
+    .map((pin) => {
+      const agent = pin.agentId ? agentById.get(pin.agentId) : null;
+      if (pin.agentId && !agent) {
+        return null;
+      }
+
+      const position = agent
+        ? { x: agent.position.x, y: agent.position.y - 42 }
+        : toPixel({
+            x: UNMAPPED_SOURCE_GAP_PIN_ANCHOR.x + unmappedSourceGapPinIndex++ * 0.8,
+            y: UNMAPPED_SOURCE_GAP_PIN_ANCHOR.y
+          });
+
+      return {
+        pinId: pin.pinId,
+        agentId: pin.agentId,
+        displayName: pin.displayName,
+        isMapped: pin.isMapped,
+        sourceKind: pin.sourceKind,
+        sourceLabel: pin.sourceLabel,
+        status: pin.status,
+        lifecycleLabel: pin.lifecycleLabel,
+        observedAtLabel: pin.observedAtLabel,
+        position
+      };
+    })
+    .filter((pin): pin is NonNullable<typeof pin> => pin !== null);
   const visibleCorrelationParticipantAgentIds =
     activeCorrelationId === null
       ? []
@@ -255,6 +289,7 @@ export function adaptWorldToScene(
     zones,
     agents,
     watchEdges,
+    sourceGapPins,
     selectedAgentId,
     activeCorrelationId,
     correlationParticipantAgentIds: visibleCorrelationParticipantAgentIds,

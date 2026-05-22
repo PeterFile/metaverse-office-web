@@ -71,6 +71,19 @@ export type RuntimeSourceGapLifecycleOptions = {
   priorRows?: RuntimeSourceGap[] | null;
 };
 
+export type SourceGapWorldPin = {
+  pinId: string;
+  agentId: string | null;
+  displayName: string;
+  isMapped: boolean;
+  sourceDrilldownGroupKey: SourceGapDrilldownGroupKey | null;
+  sourceKind: DisplayedSourceGapKind;
+  status: CollectorSourceHealthStatus;
+  sourceLabel: string;
+  lifecycleLabel?: string;
+  observedAtLabel: string;
+};
+
 const MAX_SOURCE_GAP_CHIPS = 3;
 const SELECTED_SOURCE_GAP_REASON_LIMIT = 96;
 
@@ -221,6 +234,26 @@ export function deriveRuntimeSourceGapChips(
       return SOURCE_KIND_ORDER.indexOf(left.sourceKind) - SOURCE_KIND_ORDER.indexOf(right.sourceKind);
     })
     .slice(0, MAX_SOURCE_GAP_CHIPS);
+}
+
+export function deriveRuntimeSourceGapWorldPins(
+  runtimeSourceGaps: RuntimeSourceGap[] | null | undefined,
+  agents: SourceGapAgent[] | null | undefined
+): SourceGapWorldPin[] {
+  return deriveRuntimeSourceGapChips(runtimeSourceGaps, agents)
+    .filter((chip) => chip.status !== 'observed' || chip.isMapped === false)
+    .map((chip, index) => ({
+      pinId: `source-gap:${chip.agentId ?? 'unmapped'}:${chip.sourceKind}:${chip.status}:${index}`,
+      agentId: chip.agentId,
+      displayName: chip.displayName,
+      isMapped: chip.isMapped !== false,
+      sourceDrilldownGroupKey: chip.sourceDrilldownGroupKey,
+      sourceKind: chip.sourceKind,
+      status: chip.status,
+      sourceLabel: chip.sourceLabel,
+      lifecycleLabel: chip.lifecycleLabel,
+      observedAtLabel: chip.observedAtLabel
+    }));
 }
 
 export function deriveRuntimeSourceGapLifecycle(
@@ -449,7 +482,7 @@ function renderSourceGapDetail(
 
 function renderRuntimeSourceGapDetail(gap: RuntimeSourceGap) {
   if (gap.unmapped || !gap.agent_id) {
-    return `${renderEvidenceRoleLabel(gap.evidence_role)} · not mapped to an agent`;
+    return 'unmapped runtime source · not mapped to an agent';
   }
 
   return gap.output_candidate

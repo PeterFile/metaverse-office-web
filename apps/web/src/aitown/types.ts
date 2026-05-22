@@ -120,6 +120,19 @@ export interface SceneWatchEdge {
   riskLevel: Severity;
 }
 
+export interface SceneSourceGapPin {
+  pinId: string;
+  agentId: string | null;
+  displayName: string;
+  isMapped: boolean;
+  sourceKind: string;
+  sourceLabel: string;
+  status: Exclude<CollectorSourceHealthStatus, 'observed'> | 'observed';
+  lifecycleLabel?: string;
+  observedAtLabel: string;
+  position: ScenePoint;
+}
+
 export interface AiTownGateway {
   gatewayId: string;
   label: string;
@@ -137,6 +150,7 @@ export interface AiTownSceneModel {
   zones: SceneZone[];
   agents: SceneAgent[];
   watchEdges: SceneWatchEdge[];
+  sourceGapPins?: SceneSourceGapPin[];
   selectedAgentId: string | null;
   activeCorrelationId: string | null;
   correlationParticipantAgentIds: string[];

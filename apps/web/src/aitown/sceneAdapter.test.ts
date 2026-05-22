@@ -473,4 +473,67 @@ describe('adaptWorldToScene', () => {
     expect(scene.activeCorrelationId).toBe('corr-app-review');
     expect(scene.correlationParticipantAgentIds).toEqual(['app-engineering', 'team-lead']);
   });
+
+  it('places mapped source-gap pins near agents and unmapped runtime evidence in a separate passive world marker', () => {
+    const scene = adaptWorldToScene(world, null, null, [], [
+      {
+        pinId: 'source-gap:app-engineering:workspace_files:degraded:0',
+        agentId: 'app-engineering',
+        displayName: 'App Engineering Agent',
+        isMapped: true,
+        sourceDrilldownGroupKey: 'workspace',
+        sourceKind: 'workspace_files',
+        status: 'degraded',
+        sourceLabel: 'Workspace files',
+        lifecycleLabel: 'Current gap',
+        observedAtLabel: 'Observed 2026-03-16T08:59:30.000Z'
+      },
+      {
+        pinId: 'source-gap:unmapped:tmux_session:observed:1',
+        agentId: null,
+        displayName: 'Unmapped runtime source',
+        isMapped: false,
+        sourceDrilldownGroupKey: null,
+        sourceKind: 'tmux_session',
+        status: 'observed',
+        sourceLabel: 'Tmux session',
+        lifecycleLabel: 'Unmapped observed',
+        observedAtLabel: 'Observed 2026-03-16T08:58:30.000Z'
+      }
+    ]);
+    const appEngineering = scene.agents.find((agent) => agent.agentId === 'app-engineering')!;
+
+    expect(scene.sourceGapPins).toEqual([
+      {
+        pinId: 'source-gap:app-engineering:workspace_files:degraded:0',
+        agentId: 'app-engineering',
+        displayName: 'App Engineering Agent',
+        isMapped: true,
+        sourceKind: 'workspace_files',
+        sourceLabel: 'Workspace files',
+        status: 'degraded',
+        lifecycleLabel: 'Current gap',
+        observedAtLabel: 'Observed 2026-03-16T08:59:30.000Z',
+        position: {
+          x: appEngineering.position.x,
+          y: appEngineering.position.y - 42
+        }
+      },
+      {
+        pinId: 'source-gap:unmapped:tmux_session:observed:1',
+        agentId: null,
+        displayName: 'Unmapped runtime source',
+        isMapped: false,
+        sourceKind: 'tmux_session',
+        sourceLabel: 'Tmux session',
+        status: 'observed',
+        lifecycleLabel: 'Unmapped observed',
+        observedAtLabel: 'Observed 2026-03-16T08:58:30.000Z',
+        position: {
+          x: 12.5 * scene.map.tileDim,
+          y: 28.5 * scene.map.tileDim
+        }
+      }
+    ]);
+  });
 });

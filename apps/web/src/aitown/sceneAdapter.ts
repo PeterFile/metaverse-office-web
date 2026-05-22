@@ -1,4 +1,5 @@
 import type { WorldAgent, WorldState } from '../world/types';
+import { selectZoneEvidenceFloors } from '../world/selectors';
 
 import { CHARACTER_KEYS } from './characters';
 import { AI_TOWN_GENERATED_MAPS, AI_TOWN_GATEWAYS, AI_TOWN_MAP_BY_ID, DEFAULT_AI_TOWN_MAP_ID, GENTLE_MAP } from './mapData';
@@ -170,13 +171,30 @@ export function adaptWorldToScene(
   sourceGapWorldPins: SourceGapWorldPin[] = []
 ): AiTownSceneModel {
   const map = AI_TOWN_MAP_BY_ID.get(DEFAULT_AI_TOWN_MAP_ID) ?? GENTLE_MAP;
-  const sceneZones: SceneZone[] = world.zones.map((zone) => ({
-    zoneId: zone.zone_id,
-    label: zone.label,
-    kind: zone.kind,
-    anchor: { x: 0, y: 0 },
-    occupantIds: zone.occupant_ids
-  }));
+  const evidenceFloorByZoneId = new Map(
+    selectZoneEvidenceFloors(world).map((floor) => [floor.zone_id, floor])
+  );
+  const sceneZones: SceneZone[] = world.zones.map((zone) => {
+    const evidenceFloor = evidenceFloorByZoneId.get(zone.zone_id);
+
+    return {
+      zoneId: zone.zone_id,
+      label: zone.label,
+      kind: zone.kind,
+      anchor: { x: 0, y: 0 },
+      occupantIds: zone.occupant_ids,
+      ...(evidenceFloor
+        ? {
+            evidenceFloor: {
+              highestSeverity: evidenceFloor.highest_severity,
+              occupantCount: evidenceFloor.occupant_count,
+              signalCount: evidenceFloor.signal_count,
+              signals: evidenceFloor.signals
+            }
+          }
+        : {})
+    };
+  });
 
   const deskAssignments = assignAnchors(
     sceneZones.filter((zone) => zone.kind === 'desk'),

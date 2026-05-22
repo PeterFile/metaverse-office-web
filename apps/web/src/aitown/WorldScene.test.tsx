@@ -1203,6 +1203,41 @@ describe('WorldScene watch overlay caption gating', () => {
     expect(textLabels).not.toContain('Review Zone');
   });
 
+  it('renders passive zone evidence floors without creating zone labels or pointer targets', async () => {
+    appInitMock.mockReset().mockResolvedValue(undefined);
+    vi.mocked(loadAiTownAssets).mockResolvedValue(makeAssets());
+    const scene = {
+      ...makeScene(),
+      zones: [
+        {
+          zoneId: 'delivery-desk',
+          label: 'Delivery Desk',
+          kind: 'desk' as const,
+          anchor: { x: 10, y: 10 },
+          occupantIds: ['app-engineering'],
+          evidenceFloor: {
+            highestSeverity: 'orange' as const,
+            occupantCount: 1,
+            signalCount: 3,
+            signals: ['severity', 'blocked', 'open_alert_or_incident']
+          }
+        }
+      ]
+    } satisfies AiTownSceneModel;
+
+    render(<WorldScene scene={scene} onSelectAgent={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(readZoneLayer()?.children).toHaveLength(1);
+    });
+
+    const [floor] = readZoneLayer()?.children ?? [];
+    const textLabels = collectPixiTextLabels(appInstances.at(-1)?.stage);
+
+    expect(floor?.eventMode).toBe('none');
+    expect(textLabels).not.toContain('Delivery Desk');
+  });
+
   it('renders compact source evidence health badges without creating pointer targets', async () => {
     appInitMock.mockReset().mockResolvedValue(undefined);
     vi.mocked(loadAiTownAssets).mockResolvedValue(makeAssets());

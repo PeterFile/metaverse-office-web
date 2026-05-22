@@ -46,6 +46,22 @@ export interface HotZoneSummary {
   runtime_freshness_degraded_count: number;
 }
 
+export type ZoneEvidenceFloorSignal =
+  | 'severity'
+  | 'blocked'
+  | 'reboot'
+  | 'open_alert_or_incident'
+  | 'runtime_freshness_degraded';
+
+export interface ZoneEvidenceFloorSummary {
+  zone_id: string;
+  label: string;
+  highest_severity: Severity;
+  occupant_count: number;
+  signal_count: number;
+  signals: ZoneEvidenceFloorSignal[];
+}
+
 export interface DataQualitySummary {
   degraded_reasons: string[];
   last_overview_at: string | null;
@@ -480,6 +496,38 @@ export function selectHotZones(
   }
 
   return hotZones.sort(compareHotZones).slice(0, limit);
+}
+
+export function selectZoneEvidenceFloors(
+  world: WorldState | null | undefined
+): ZoneEvidenceFloorSummary[] {
+  return selectHotZones(world, Number.MAX_SAFE_INTEGER).map((zone) => {
+    const signals: ZoneEvidenceFloorSignal[] = [];
+    if (SEVERITY_RANK[zone.highest_severity] > SEVERITY_RANK.normal) {
+      signals.push('severity');
+    }
+    if (zone.blocked_count > 0) {
+      signals.push('blocked');
+    }
+    if (zone.reboot_count > 0) {
+      signals.push('reboot');
+    }
+    if (zone.open_alert_or_incident_occupant_count > 0) {
+      signals.push('open_alert_or_incident');
+    }
+    if (zone.runtime_freshness_degraded_count > 0) {
+      signals.push('runtime_freshness_degraded');
+    }
+
+    return {
+      zone_id: zone.zone_id,
+      label: zone.label,
+      highest_severity: zone.highest_severity,
+      occupant_count: zone.occupant_count,
+      signal_count: signals.length,
+      signals,
+    };
+  });
 }
 
 // ── Internal helpers ──

@@ -15,7 +15,7 @@ import { Viewport } from 'pixi-viewport';
 
 import { loadAiTownAssets, type AiTownAssetLoadOptions } from './assetLoader';
 import { findTriggeredGateway, resolveAgentNavigationRoute, type AgentNavigationRoutePoint } from './navigation';
-import type { AiTownSceneModel, Facing, SceneAgent, ScenePoint } from './types';
+import type { AiTownSceneModel, Facing, SceneAgent, ScenePoint, SceneZone } from './types';
 import {
   DEFAULT_ALLOW_VIEWPORT_DRAG_OUTSIDE,
   DEFAULT_MAX_VIEWPORT_SCALE,
@@ -46,6 +46,13 @@ const SEVERITY_COLORS = {
   yellow: 0xf8d34b,
   orange: 0xff9551,
   red: 0xf26767
+} as const;
+
+const ZONE_EVIDENCE_FLOOR_STROKE_ALPHA = {
+  normal: 0.34,
+  yellow: 0.44,
+  orange: 0.54,
+  red: 0.62
 } as const;
 
 const SOURCE_EVIDENCE_HEALTH_COLORS = {
@@ -911,6 +918,48 @@ function createSourceGapPin(pin: SourceGapPin) {
   container.addChild(marker, label);
 
   return container;
+}
+
+function createZoneEvidenceFloor(zone: SceneZone, tileDim: number) {
+  if (!zone.evidenceFloor) {
+    return null;
+  }
+
+  const container = new Container();
+  const marker = new Graphics();
+  const color = SEVERITY_COLORS[zone.evidenceFloor.highestSeverity];
+  const radiusScale = zone.kind === 'desk' ? 0.92 : 1.28;
+  const radiusX = tileDim * (radiusScale + Math.min(zone.evidenceFloor.occupantCount, 3) * 0.14);
+  const radiusY = tileDim * (0.52 + Math.min(zone.evidenceFloor.signalCount, 4) * 0.06);
+
+  container.eventMode = 'none';
+  container.position.set(zone.anchor.x * tileDim, zone.anchor.y * tileDim);
+  marker.ellipse(0, 0, radiusX, radiusY).fill({
+    color,
+    alpha: 0.08
+  });
+  marker.ellipse(0, 0, radiusX, radiusY).stroke({
+    color,
+    width: zone.evidenceFloor.signalCount >= 3 ? 2 : 1,
+    alpha: ZONE_EVIDENCE_FLOOR_STROKE_ALPHA[zone.evidenceFloor.highestSeverity]
+  });
+  container.addChild(marker);
+
+  return container;
+}
+
+function createZoneEvidenceFloorOverlay(scene: AiTownSceneModel) {
+  const container = new Container();
+  container.eventMode = 'none';
+
+  for (const zone of scene.zones) {
+    const floor = createZoneEvidenceFloor(zone, scene.map.tileDim);
+    if (floor) {
+      container.addChild(floor);
+    }
+  }
+
+  return container.children.length > 0 ? container : null;
 }
 
 function resolveMapPixelWidth(scene: Pick<AiTownSceneModel, 'map'>) {
@@ -2596,6 +2645,10 @@ export default function WorldScene({
       );
       const correlationParticipantIds = new Set(sceneForRender.correlationParticipantAgentIds);
 
+      const zoneEvidenceFloorOverlay = createZoneEvidenceFloorOverlay(sceneForRender);
+      if (zoneEvidenceFloorOverlay) {
+        zoneLayer.addChild(zoneEvidenceFloorOverlay);
+      }
       watchLayer.addChild(createWatchOverlay(sceneForRender));
       mapDepthSpritesRef.current = createMapDepthSprites(sceneForRender, assets.generatedMapTextures);
       for (const propSprite of mapDepthSpritesRef.current) {

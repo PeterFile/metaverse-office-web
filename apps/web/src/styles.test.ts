@@ -164,6 +164,7 @@ describe('AI Town shell styles', () => {
     expect(styles).toMatch(/\.aitown-panel__signal-panel \.aitown-panel__focus-chips\s*\{[\s\S]*?max-height:\s*min\(18dvh, 156px\);[\s\S]*?overflow-y:\s*auto;[\s\S]*?overscroll-behavior:\s*contain;/);
     expect(styles).toMatch(/\.aitown-status-legend\s*\{[\s\S]*?overflow-y:\s*auto;[\s\S]*?scrollbar-gutter:\s*stable;/);
     expect(styles).toMatch(/\.aitown-selected-agent-peek\s*\{[\s\S]*?overflow-y:\s*auto;[\s\S]*?overscroll-behavior:\s*contain;/);
+    expect(styles).toMatch(/\.aitown-selected-agent-peek__proof\s*\{[\s\S]*?display:\s*grid;[\s\S]*?border-left:\s*2px solid rgba\(139, 233, 213, 0\.46\);/);
     expect(styles).toMatch(/\.aitown-selected-agent-peek__facts\s*\{[\s\S]*?display:\s*grid;[\s\S]*?grid-template-columns:\s*repeat\(auto-fit, minmax\(132px, 1fr\)\);[\s\S]*?max-height:\s*132px;[\s\S]*?overflow-y:\s*auto;/);
     expect(styles).toMatch(/\.aitown-hub-sheet__body--selected-agent\s*\{[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\);[\s\S]*?grid-template-rows:\s*auto minmax\(0, 1fr\);/);
     expect(styles).not.toContain('grid-template-columns: minmax(220px, 300px) minmax(0, 1fr);');

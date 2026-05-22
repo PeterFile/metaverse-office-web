@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   deriveRuntimeSourceGapWorldPins,
+  deriveRuntimeSourceGapInspectPeek,
   deriveRuntimeSourceGapLifecycle,
   deriveSelectedAgentSourceGapFact,
   deriveRuntimeSourceGapChips,
@@ -465,6 +466,37 @@ describe('deriveRuntimeSourceGapChips', () => {
     expect(JSON.stringify(pins)).not.toContain('agent output');
     expect(JSON.stringify(pins)).not.toContain('collector-snapshot:');
     expect(JSON.stringify(pins)).not.toContain('clickable');
+  });
+
+  it('derives a sanitized source-gap inspect peek for the active mapped focus', () => {
+    const peek = deriveRuntimeSourceGapInspectPeek(
+      runtimeSourceGaps,
+      'app-engineering',
+      {
+        agentId: 'app-engineering',
+        sourceDrilldownGroupKey: 'workspace'
+      },
+      [{ agent_id: 'app-engineering', display_name: 'App Engineering Agent' }]
+    );
+
+    expect(peek).toEqual({
+      agentId: 'app-engineering',
+      displayName: 'App Engineering Agent',
+      evidenceOnlyLabel: 'Evidence only',
+      mappingLabel: 'Mapped source',
+      sourceKindLabel: 'Workspace files',
+      statusLabel: 'degraded',
+      observedAtLabel: 'Observed 2026-03-16T08:59:30.000Z',
+      collectedAtLabel: 'Collected 2026-03-16T09:01:00.000Z'
+    });
+    expect(JSON.stringify(peek)).not.toContain('/tmp/app-engineering');
+    expect(JSON.stringify(peek)).not.toContain('collector-snapshot:');
+    expect(JSON.stringify(peek)).not.toContain('raw path');
+    expect(JSON.stringify(peek)).not.toContain('assign');
+    expect(JSON.stringify(peek)).not.toContain('claim');
+    expect(JSON.stringify(peek)).not.toContain('dispatch');
+    expect(JSON.stringify(peek)).not.toContain('kanban');
+    expect(JSON.stringify(peek)).not.toContain('route');
   });
 });
 

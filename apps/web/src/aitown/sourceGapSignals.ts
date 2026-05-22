@@ -84,6 +84,22 @@ export type SourceGapWorldPin = {
   observedAtLabel: string;
 };
 
+export type RuntimeSourceGapInspectFocus = {
+  agentId: string;
+  sourceDrilldownGroupKey: SourceGapDrilldownGroupKey;
+};
+
+export type RuntimeSourceGapInspectPeek = {
+  agentId: string;
+  displayName: string;
+  evidenceOnlyLabel: 'Evidence only';
+  mappingLabel: 'Mapped source';
+  sourceKindLabel: string;
+  statusLabel: CollectorSourceHealthStatus;
+  observedAtLabel: string;
+  collectedAtLabel: string;
+};
+
 const MAX_SOURCE_GAP_CHIPS = 3;
 const SELECTED_SOURCE_GAP_REASON_LIMIT = 96;
 
@@ -254,6 +270,47 @@ export function deriveRuntimeSourceGapWorldPins(
       lifecycleLabel: chip.lifecycleLabel,
       observedAtLabel: chip.observedAtLabel
     }));
+}
+
+export function deriveRuntimeSourceGapInspectPeek(
+  runtimeSourceGaps: RuntimeSourceGap[] | null | undefined,
+  selectedAgentId: string | null | undefined,
+  focus: RuntimeSourceGapInspectFocus | null | undefined,
+  agents: SourceGapAgent[] | null | undefined
+): RuntimeSourceGapInspectPeek | null {
+  if (!runtimeSourceGaps?.length || !selectedAgentId || !focus || focus.agentId !== selectedAgentId) {
+    return null;
+  }
+
+  const matchingGaps = runtimeSourceGaps
+    .map((gap) => ({ gap, sourceKind: RUNTIME_SOURCE_KIND_MAP[gap.source_kind] }))
+    .filter(
+      (item): item is { gap: RuntimeSourceGap; sourceKind: DisplayedSourceGapKind } =>
+        Boolean(item.sourceKind) &&
+        item.gap.agent_id === selectedAgentId &&
+        !item.gap.unmapped &&
+        resolveSourceGapDrilldownGroupKey(item.sourceKind as DisplayedSourceGapKind) === focus.sourceDrilldownGroupKey
+    )
+    .sort(compareRuntimeSourceGapInspectCandidates);
+
+  const selected = matchingGaps[0];
+  if (!selected) {
+    return null;
+  }
+
+  const displayName =
+    (agents ?? []).find((agent) => agent.agent_id === selectedAgentId)?.display_name ?? selectedAgentId;
+
+  return {
+    agentId: selectedAgentId,
+    displayName,
+    evidenceOnlyLabel: 'Evidence only',
+    mappingLabel: 'Mapped source',
+    sourceKindLabel: SOURCE_KIND_LABELS[selected.sourceKind],
+    statusLabel: selected.gap.source_status,
+    observedAtLabel: renderObservedAtLabel(selected.gap.observed_at),
+    collectedAtLabel: renderCollectedAtLabel(selected.gap.collected_at)
+  };
 }
 
 export function deriveRuntimeSourceGapLifecycle(
@@ -452,6 +509,23 @@ function compareRuntimeSourceGapLifecycleItems(
   return left.key.localeCompare(right.key);
 }
 
+function compareRuntimeSourceGapInspectCandidates(
+  left: { gap: RuntimeSourceGap; sourceKind: DisplayedSourceGapKind },
+  right: { gap: RuntimeSourceGap; sourceKind: DisplayedSourceGapKind }
+) {
+  const statusRank = SOURCE_GAP_STATUS_RANK[left.gap.source_status] - SOURCE_GAP_STATUS_RANK[right.gap.source_status];
+  if (statusRank !== 0) {
+    return statusRank;
+  }
+
+  const sourceRank = SOURCE_KIND_ORDER.indexOf(left.sourceKind) - SOURCE_KIND_ORDER.indexOf(right.sourceKind);
+  if (sourceRank !== 0) {
+    return sourceRank;
+  }
+
+  return (right.gap.observed_at ?? '').localeCompare(left.gap.observed_at ?? '');
+}
+
 function minNullableTimestamp(left: string | null, right: string | null) {
   if (!left) {
     return right;
@@ -616,4 +690,8 @@ function renderObservationCount(count: number) {
 
 function renderObservedAtLabel(lastObservedAt: string | null | undefined) {
   return lastObservedAt ? `Observed ${lastObservedAt}` : 'Not observed';
+}
+
+function renderCollectedAtLabel(collectedAt: string | null | undefined) {
+  return collectedAt ? `Collected ${collectedAt}` : 'Not collected';
 }

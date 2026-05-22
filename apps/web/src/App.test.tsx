@@ -3797,6 +3797,17 @@ afterEach(() => {
     await waitFor(() =>
       expect(details).toHaveAttribute('data-selected-agent-supervision-panel', 'collector')
     );
+    const inspectPeek = await screen.findByRole('region', { name: 'Source gap inspect peek' });
+    expect(inspectPeek).toHaveTextContent('Evidence only');
+    expect(inspectPeek).toHaveTextContent('Workspace files · degraded');
+    expect(inspectPeek).toHaveTextContent('Mapped source');
+    expect(inspectPeek).toHaveTextContent('Observed 2026-03-16T08:57:45.000Z');
+    expect(inspectPeek).toHaveTextContent('Collected 2026-03-16T09:01:00.000Z');
+    expect(within(inspectPeek).getByRole('button', { name: 'Open Evidence drilldown' })).toBeVisible();
+    expect(inspectPeek).not.toHaveTextContent('/tmp/growth-revenue');
+    expect(inspectPeek).not.toHaveTextContent('6-web3-growth-revenue');
+    expect(inspectPeek).not.toHaveTextContent('collector-snapshot:');
+    expect(inspectPeek).not.toHaveTextContent(/assign|claim|complete|dispatch|kanban|route/i);
     const workspaceGroup = document.getElementById('aitown-selected-agent-source-drilldown-workspace');
     const tmuxGroup = document.getElementById('aitown-selected-agent-source-drilldown-tmux');
     expect(workspaceGroup).not.toBeNull();

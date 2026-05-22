@@ -2036,6 +2036,47 @@ button {
   outline-offset: 2px;
 }
 
+.aitown-hub-focus-ribbon__source-gap-inspect {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+  gap: 4px;
+  min-width: 0;
+  padding: 5px 7px;
+  border-left: 2px solid rgba(245, 217, 141, 0.58);
+  background: rgba(7, 12, 15, 0.22);
+}
+
+.aitown-hub-focus-ribbon__source-gap-inspect strong,
+.aitown-hub-focus-ribbon__source-gap-inspect span,
+.aitown-hub-focus-ribbon__source-gap-inspect-link {
+  color: #d8eadf;
+  font-size: 0.72rem;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.aitown-hub-focus-ribbon__source-gap-inspect strong,
+.aitown-hub-focus-ribbon__source-gap-inspect-label {
+  color: #fff7df;
+}
+
+.aitown-hub-focus-ribbon__source-gap-inspect-link {
+  width: fit-content;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #8be9d5;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+}
+
+.aitown-hub-focus-ribbon__source-gap-inspect-link:focus-visible {
+  outline: 2px solid #8be9d5;
+  outline-offset: 2px;
+}
+
 .aitown-hub-focus-ribbon__facts .aitown-hub-focus-ribbon__facts-label {
   grid-column: 1 / -1;
   border-left-color: rgba(245, 217, 141, 0.48);

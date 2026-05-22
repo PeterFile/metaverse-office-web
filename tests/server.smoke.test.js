@@ -6420,6 +6420,33 @@ test('GET evidence and source read routes keep JSONL and SQLite parity', async (
   assert.equal(JSON.stringify(jsonlReplayCheckpointLog).includes('tmux://'), false);
   assert.equal(JSON.stringify(jsonlReplayCheckpointLog).includes('5-web3-app-engineering'), false);
 
+  const [jsonlFilteredCheckpointLog, sqliteFilteredCheckpointLog] = await parityRequest(
+    '/accountability/replay/checkpoint-log?record_kind=evidence_record&limit=1'
+  );
+  assert.deepEqual(sqliteFilteredCheckpointLog, jsonlFilteredCheckpointLog);
+  assert.deepEqual(
+    jsonlFilteredCheckpointLog.items.map((item) => item.record_kind),
+    ['evidence_record']
+  );
+  assert.deepEqual(
+    jsonlFilteredCheckpointLog.items.map((item) => item.append_index),
+    [before.jsonl - 1]
+  );
+  assert.equal(
+    Object.hasOwn(jsonlFilteredCheckpointLog.items[0].checkpoint, 'evidence_id'),
+    false
+  );
+  assert.equal(JSON.stringify(jsonlFilteredCheckpointLog).includes('/tmp/route-parity'), false);
+  assert.equal(JSON.stringify(jsonlFilteredCheckpointLog).includes('route-parity'), false);
+  assert.equal(JSON.stringify(jsonlFilteredCheckpointLog).includes('tmux://'), false);
+  assert.equal(JSON.stringify(jsonlFilteredCheckpointLog).includes('payload'), false);
+
+  const [jsonlUnknownCheckpointLog, sqliteUnknownCheckpointLog] = await parityRequest(
+    '/accountability/replay/checkpoint-log?record_kind=not_a_kind&limit=3'
+  );
+  assert.deepEqual(sqliteUnknownCheckpointLog, jsonlUnknownCheckpointLog);
+  assert.deepEqual(jsonlUnknownCheckpointLog, { items: [] });
+
   const [jsonlCoverage, sqliteCoverage] = await parityRequest(
     '/collectors/controller-snapshot/evidence-coverage?source_kind=workspace_file&confidence_level=high&limit=10'
   );
@@ -6494,6 +6521,37 @@ test('GET evidence and source read routes keep JSONL and SQLite parity', async (
 
   assert.equal(jsonl.store.records.length, before.jsonl);
   assert.equal(sqlite.store.records.length, before.sqlite);
+});
+
+test('GET replay checkpoint-log filters record_kind before limit without leaking raw fields', async (t) => {
+  const { baseUrl, store } = await createHarness(t);
+
+  await store.appendCollectorReport(createRouteParityCollectorReport());
+  const before = store.records.length;
+
+  const filtered = await requestJson(
+    `${baseUrl}/accountability/replay/checkpoint-log?record_kind=evidence_record&limit=1`
+  );
+  assert.equal(filtered.response.status, 200);
+  assert.deepEqual(
+    filtered.body.items.map((item) => item.record_kind),
+    ['evidence_record']
+  );
+  assert.deepEqual(
+    filtered.body.items.map((item) => item.append_index),
+    [before - 1]
+  );
+  assert.equal(Object.hasOwn(filtered.body.items[0].checkpoint, 'evidence_id'), false);
+  assert.equal(JSON.stringify(filtered.body).includes('/tmp/route-parity'), false);
+  assert.equal(JSON.stringify(filtered.body).includes('route-parity'), false);
+  assert.equal(JSON.stringify(filtered.body).includes('tmux://'), false);
+  assert.equal(JSON.stringify(filtered.body).includes('payload'), false);
+
+  const unknown = await requestJson(
+    `${baseUrl}/accountability/replay/checkpoint-log?record_kind=not_a_kind&limit=3`
+  );
+  assert.equal(unknown.response.status, 200);
+  assert.deepEqual(unknown.body, { items: [] });
 });
 
 test('GET read route purity matrix leaves replay records and checkpoints unchanged', async (t) => {

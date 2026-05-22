@@ -1,4 +1,4 @@
-import { expect, test, type Page, type Request } from '@playwright/test';
+import { expect, test, type Page, type Request, type Route } from '@playwright/test';
 
 const evidenceCoverage = {
   evidence_ref_count: 1,
@@ -157,7 +157,7 @@ const expectedApiGets = new Set([
 ]);
 
 const visibleProofRawRefPattern =
-  /\/(?:tmp|Users|Volumes|private|var|home|workspace|mnt)\/|[A-Za-z]:\\|tmux:\/\/|hermes:\/\/|\b\d+-web3-[a-z0-9-]+\b|profile-[a-z0-9-]+|session\/[a-z0-9-]+|session:\/\/|access[_-]?token|secret|payload|metadata|missing workspace files|Hermes session stale/i;
+  /\/(?:tmp|Users|Volumes|private|var|home|workspace|mnt)\/|[A-Za-z]:\\|tmux:\/\/|hermes:\/\/|\b\d+-web3-[a-z0-9-]+\b|profile-[a-z0-9-]+|session\/[a-z0-9-]+|session:\/\/|webhook|access[_-]?token|secret|payload|metadata|degraded_reasons|missing workspace files|Hermes session stale|control-plane|dispatch|route|writeback|mutate|claim|complete|assign/i;
 
 function apiRequestKey(request: Request) {
   const url = new URL(request.url());
@@ -184,30 +184,23 @@ function isApiPath(pathname: string) {
 }
 
 async function installLiveEvidenceFixtures(page: Page) {
-  await page.route('**/collectors/controller-snapshot/evidence-coverage', async (route) => {
+  await routeExpectedApiGet(page, 'GET /collectors/controller-snapshot/evidence-coverage', async (route) => {
     await route.fulfill({ json: { item: evidenceCoverage } });
   });
 
-  await page.route('**/runtime/source-gaps?*', async (route) => {
+  await routeExpectedApiGet(page, 'GET /runtime/source-gaps?newest_first=true&limit=3', async (route) => {
     await route.fulfill({ json: runtimeSourceGaps });
   });
 
-  await page.route('**/runtime/source-gaps/summary?*', async (route) => {
+  await routeExpectedApiGet(page, 'GET /runtime/source-gaps/summary?newest_first=true&limit=3', async (route) => {
     await route.fulfill({ json: { item: runtimeSourceGapsSummary } });
   });
 
-  await page.route('**/collectors/controller-snapshot/source-health**', async (route) => {
+  await routeExpectedApiGet(page, 'GET /collectors/controller-snapshot/source-health?limit=7', async (route) => {
     await route.fulfill({ json: { item: sourceHealth } });
   });
 
-  await page.route('**/collectors/controller-snapshot', async (route) => {
-    const request = route.request();
-    const url = new URL(request.url());
-    if (request.method() !== 'GET' || url.pathname !== '/collectors/controller-snapshot') {
-      await route.continue();
-      return;
-    }
-
+  await routeExpectedApiGet(page, 'GET /collectors/controller-snapshot', async (route) => {
     const response = await route.fetch();
     const payload = await response.json();
     const sourceHealthByAgentId = new Map(sourceHealth.agent_items.map((item) => [item.agent_id, item] as const));
@@ -234,6 +227,22 @@ async function installLiveEvidenceFixtures(page: Page) {
       }
     });
   });
+}
+
+async function routeExpectedApiGet(page: Page, expectedKey: string, handler: (route: Route) => Promise<void>) {
+  const expectedPathAndSearch = expectedKey.slice('GET '.length);
+
+  await page.route(
+    (url) => `${url.pathname}${url.search}` === expectedPathAndSearch,
+    async (route) => {
+      if (apiRequestKey(route.request()) !== expectedKey) {
+        await route.continue();
+        return;
+      }
+
+      await handler(route);
+    }
+  );
 }
 
 test.describe('operator shell live evidence journey smoke', () => {

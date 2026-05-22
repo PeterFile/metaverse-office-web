@@ -14,6 +14,8 @@ import {
   fetchEvidenceProvenanceBundle,
   fetchEvidenceRecord,
   fetchEvidenceRecords,
+  fetchRuntimeSourceGapAgentSummary,
+  fetchRuntimeSourceGapTrend,
   fetchRuntimeSourceGaps,
   fetchMemoryArtifacts,
   fetchOfficeOperations,
@@ -1150,6 +1152,162 @@ describe('fetchRuntimeSourceGaps', () => {
       status: 400,
       code: 'bad_request',
       message: 'invalid limit'
+    });
+  });
+});
+
+describe('fetchRuntimeSourceGapAgentSummary', () => {
+  it('requests a bounded newest-first source-gap agent summary by default', async () => {
+    const item = {
+      total_count: 0,
+      total_groups: 0,
+      returned_limit: 200,
+      groups: []
+    };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ item }), {
+          headers: JSON_HEADERS
+        })
+      )
+    );
+
+    await expect(fetchRuntimeSourceGapAgentSummary()).resolves.toEqual(item);
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/runtime/source-gaps/agent-summary?newest_first=true&limit=200',
+      expect.objectContaining({ signal: undefined })
+    );
+  });
+
+  it('passes supported source-gap filters through with backend query names', async () => {
+    const item = {
+      total_count: 0,
+      total_groups: 0,
+      returned_limit: 7,
+      groups: []
+    };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ item }), {
+          headers: JSON_HEADERS
+        })
+      )
+    );
+
+    await expect(
+      fetchRuntimeSourceGapAgentSummary({
+        agentId: 'app engineering',
+        sourceKind: 'workspace_file',
+        evidenceRole: 'agent output',
+        evidenceId: 'evidence:app/review#1',
+        sourceStatus: 'degraded',
+        collectorSnapshotId: 'snapshot 2026/03/09',
+        correlationId: 'corr app/review#1',
+        outputCandidate: false,
+        mapped: true,
+        observedSince: '2026-03-09T18:58:30.000Z',
+        observedUntil: '2026-03-09T18:59:00.000Z',
+        collectedSince: '2026-03-09T18:59:00.000Z',
+        collectedUntil: '2026-03-09T19:00:00.000Z',
+        limit: 7
+      })
+    ).resolves.toEqual(item);
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/runtime/source-gaps/agent-summary?agent_id=app+engineering&source_kind=workspace_file&evidence_role=agent+output&evidence_id=evidence%3Aapp%2Freview%231&source_status=degraded&collector_snapshot_id=snapshot+2026%2F03%2F09&correlation_id=corr+app%2Freview%231&output_candidate=false&mapped=true&observed_since=2026-03-09T18%3A58%3A30.000Z&observed_until=2026-03-09T18%3A59%3A00.000Z&collected_since=2026-03-09T18%3A59%3A00.000Z&collected_until=2026-03-09T19%3A00%3A00.000Z&newest_first=true&limit=7',
+      expect.objectContaining({ signal: undefined })
+    );
+  });
+});
+
+describe('fetchRuntimeSourceGapTrend', () => {
+  it('requests a bounded newest-first source-gap trend without forcing bucket by default', async () => {
+    const item = {
+      bucket: 'hour',
+      total_count: 0,
+      total_buckets: 0,
+      returned_limit: 200,
+      buckets: []
+    };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ item }), {
+          headers: JSON_HEADERS
+        })
+      )
+    );
+
+    await expect(fetchRuntimeSourceGapTrend()).resolves.toEqual(item);
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/runtime/source-gaps/trend?newest_first=true&limit=200',
+      expect.objectContaining({ signal: undefined })
+    );
+  });
+
+  it('passes bucket day and supported source-gap filters through with backend query names', async () => {
+    const item = {
+      bucket: 'day',
+      total_count: 0,
+      total_buckets: 0,
+      returned_limit: 7,
+      buckets: []
+    };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ item }), {
+          headers: JSON_HEADERS
+        })
+      )
+    );
+
+    await expect(
+      fetchRuntimeSourceGapTrend({
+        agentId: 'app engineering',
+        sourceKind: 'workspace_file',
+        evidenceRole: 'agent output',
+        evidenceId: 'evidence:app/review#1',
+        sourceStatus: 'degraded',
+        collectorSnapshotId: 'snapshot 2026/03/09',
+        correlationId: 'corr app/review#1',
+        outputCandidate: false,
+        mapped: true,
+        observedSince: '2026-03-09T18:58:30.000Z',
+        observedUntil: '2026-03-09T18:59:00.000Z',
+        collectedSince: '2026-03-09T18:59:00.000Z',
+        collectedUntil: '2026-03-09T19:00:00.000Z',
+        bucket: 'day',
+        limit: 7
+      })
+    ).resolves.toEqual(item);
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/runtime/source-gaps/trend?agent_id=app+engineering&source_kind=workspace_file&evidence_role=agent+output&evidence_id=evidence%3Aapp%2Freview%231&source_status=degraded&collector_snapshot_id=snapshot+2026%2F03%2F09&correlation_id=corr+app%2Freview%231&output_candidate=false&mapped=true&observed_since=2026-03-09T18%3A58%3A30.000Z&observed_until=2026-03-09T18%3A59%3A00.000Z&collected_since=2026-03-09T18%3A59%3A00.000Z&collected_until=2026-03-09T19%3A00%3A00.000Z&newest_first=true&limit=7&bucket=day',
+      expect.objectContaining({ signal: undefined })
+    );
+  });
+
+  it('throws RequestError for source-gap trend backend problem responses', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ error: 'bad_request', details: 'invalid bucket' }), {
+          status: 400,
+          headers: JSON_HEADERS
+        })
+      )
+    );
+
+    await expect(fetchRuntimeSourceGapTrend({ bucket: 'day' })).rejects.toMatchObject({
+      name: 'RequestError',
+      status: 400,
+      code: 'bad_request',
+      message: 'invalid bucket'
     });
   });
 });

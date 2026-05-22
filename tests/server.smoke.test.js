@@ -6317,6 +6317,28 @@ test('GET evidence and source read routes keep JSONL and SQLite parity', async (
   assert.equal(JSON.stringify(jsonlReplayCheckpoint).includes('tmux://'), false);
   assert.equal(JSON.stringify(jsonlReplayCheckpoint).includes('5-web3-app-engineering'), false);
 
+  const [jsonlReplayCheckpointLog, sqliteReplayCheckpointLog] = await parityRequest(
+    '/accountability/replay/checkpoint-log?limit=3'
+  );
+  assert.deepEqual(sqliteReplayCheckpointLog, jsonlReplayCheckpointLog);
+  assert.deepEqual(
+    jsonlReplayCheckpointLog.items.map((item) => item.record_kind),
+    ['evidence_record', 'evidence_record', 'collector_snapshot']
+  );
+  const expectedCheckpointLogAppendIndexes = [before.jsonl - 2, before.jsonl - 1, before.jsonl];
+  assert.deepEqual(
+    jsonlReplayCheckpointLog.items.map((item) => item.append_index),
+    expectedCheckpointLogAppendIndexes
+  );
+  assert.equal(
+    Object.hasOwn(jsonlReplayCheckpointLog.items[0].checkpoint, 'evidence_id'),
+    false
+  );
+  assert.equal(JSON.stringify(jsonlReplayCheckpointLog).includes('/tmp/route-parity'), false);
+  assert.equal(JSON.stringify(jsonlReplayCheckpointLog).includes('route-parity'), false);
+  assert.equal(JSON.stringify(jsonlReplayCheckpointLog).includes('tmux://'), false);
+  assert.equal(JSON.stringify(jsonlReplayCheckpointLog).includes('5-web3-app-engineering'), false);
+
   const [jsonlCoverage, sqliteCoverage] = await parityRequest(
     '/collectors/controller-snapshot/evidence-coverage?source_kind=workspace_file&confidence_level=high&limit=10'
   );
@@ -6429,6 +6451,7 @@ test('GET read route purity matrix leaves replay records and checkpoints unchang
     `/evidence-records/${encodeURIComponent(evidenceRecord.evidence_id)}/provenance-bundle`,
     `/accountability/replay?evidence_id=${encodeURIComponent(evidenceRecord.evidence_id)}&limit=5&window=60m`,
     '/accountability/replay/checkpoint-summary',
+    '/accountability/replay/checkpoint-log?limit=3',
     '/runtime/source-gaps?newest_first=true&limit=10',
     '/runtime/source-gaps/summary?newest_first=true&limit=1',
     '/runtime/source-gaps/agent-summary?newest_first=true&limit=1'

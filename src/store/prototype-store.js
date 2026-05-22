@@ -635,6 +635,13 @@ class PrototypeStore {
     });
   }
 
+  listReplayCheckpointLog(filters = {}) {
+    return projectReplayCheckpointLog({
+      records: this.records,
+      limit: parseLimit(filters.limit)
+    });
+  }
+
   listEvidenceRecords(filters = {}) {
     const { records, limit, newestFirst } = this.#filterEvidenceRecords(filters);
 
@@ -3365,6 +3372,48 @@ function projectReplayCheckpointSummary({
     latest_evidence_record: projectReplayCheckpointEvidenceRecord(evidenceRecords.at(-1)),
     latest_collector_snapshot: projectReplayCheckpointCollectorSnapshot(collectorReports.at(-1))
   };
+}
+
+function projectReplayCheckpointLog({ records, limit }) {
+  const startIndex = Math.max(0, records.length - limit);
+  return records.slice(startIndex).map((record, offset) => ({
+    append_index: startIndex + offset + 1,
+    record_kind: projectReplayCheckpointRecordKind(record),
+    checkpoint: projectReplayCheckpointRecord(record)
+  }));
+}
+
+function projectReplayCheckpointRecordKind(record) {
+  if (
+    record.kind === 'event' ||
+    record.kind === 'heartbeat' ||
+    record.kind === EVIDENCE_RECORD_KIND ||
+    record.kind === COLLECTOR_SNAPSHOT_RECORD_KIND
+  ) {
+    return record.kind;
+  }
+
+  return 'unknown';
+}
+
+function projectReplayCheckpointRecord(record) {
+  if (record.kind === 'event') {
+    return projectReplayCheckpointEvent(record.payload);
+  }
+
+  if (record.kind === 'heartbeat') {
+    return projectReplayCheckpointHeartbeat(record.payload);
+  }
+
+  if (record.kind === EVIDENCE_RECORD_KIND) {
+    return projectReplayCheckpointEvidenceRecord(record.payload);
+  }
+
+  if (record.kind === COLLECTOR_SNAPSHOT_RECORD_KIND) {
+    return projectReplayCheckpointCollectorSnapshot(record.payload);
+  }
+
+  return null;
 }
 
 function createRecordKindBuckets(records) {

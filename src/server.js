@@ -283,6 +283,15 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
     return;
   }
 
+  if (method === 'GET' && pathname === '/accountability/replay/checkpoint-log') {
+    sendJson(res, 200, {
+      items: store.listReplayCheckpointLog({
+        limit: url.searchParams.get('limit')
+      })
+    });
+    return;
+  }
+
   if (method === 'GET' && pathname === '/peer-watch/alerts') {
     sendJson(res, 200, {
       items: store.listPeerWatchAlerts({

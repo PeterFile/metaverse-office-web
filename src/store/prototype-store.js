@@ -786,6 +786,42 @@ class PrototypeStore {
     };
   }
 
+  getRuntimeSourceGapTrend(filters = {}) {
+    const { records, limit, newestFirst } = this.#filterEvidenceRecords(filters);
+    const bucket = normalizeRuntimeSourceGapTrendBucket(filters.bucket);
+    const gapRecords = records.filter(isRuntimeSourceGapRecord);
+    const buckets = new Map();
+
+    for (const record of gapRecords) {
+      const bucketStart = getRuntimeSourceGapTrendBucketStart(record, bucket);
+      if (!bucketStart) {
+        continue;
+      }
+
+      if (!buckets.has(bucketStart)) {
+        buckets.set(bucketStart, createRuntimeSourceGapTrendBucket(bucketStart));
+      }
+
+      addRuntimeSourceGapRecordToTrendBucket(buckets.get(bucketStart), record);
+    }
+
+    const sortedBuckets = Array.from(buckets.values())
+      .map(sortRuntimeSourceGapTrendBucket)
+      .sort((left, right) =>
+        newestFirst
+          ? compareStringsAsc(right.bucket_start, left.bucket_start)
+          : compareStringsAsc(left.bucket_start, right.bucket_start)
+      );
+
+    return {
+      bucket,
+      total_count: gapRecords.length,
+      total_buckets: sortedBuckets.length,
+      returned_limit: limit,
+      buckets: sortedBuckets.slice(0, limit)
+    };
+  }
+
   getEvidenceRecordsSummary(filters = {}) {
     const { records, limit } = this.#filterEvidenceRecords(filters);
     const summary = {
@@ -2046,6 +2082,77 @@ function compareRuntimeSourceGapAgentGroups(left, right) {
   }
 
   return compareStringsAsc(left.agent_id || '', right.agent_id || '');
+}
+
+function normalizeRuntimeSourceGapTrendBucket(value) {
+  return value === 'day' ? 'day' : 'hour';
+}
+
+function getRuntimeSourceGapTrendBucketStart(record, bucket) {
+  const timestamp = getEvidenceRecordTimestamp(record.observed_at || record.collected_at);
+  if (timestamp === 0) {
+    return null;
+  }
+
+  const date = new Date(timestamp);
+  date.setUTCMinutes(0, 0, 0);
+  if (bucket === 'day') {
+    date.setUTCHours(0, 0, 0, 0);
+  }
+
+  return date.toISOString();
+}
+
+function createRuntimeSourceGapTrendBucket(bucketStart) {
+  return {
+    bucket_start: bucketStart,
+    total_count: 0,
+    mapped_count: 0,
+    unmapped_count: 0,
+    output_candidate_buckets: {
+      true: 0,
+      false: 0
+    },
+    source_kind_buckets: {},
+    evidence_role_buckets: {},
+    source_status_buckets: {}
+  };
+}
+
+function addRuntimeSourceGapRecordToTrendBucket(bucket, record) {
+  bucket.total_count += 1;
+
+  if (typeof record.agent_id === 'string' && record.agent_id.length > 0) {
+    bucket.mapped_count += 1;
+  } else if (record.agent_id === null) {
+    bucket.unmapped_count += 1;
+  }
+
+  bucket.output_candidate_buckets[String(record.output_candidate === true)] += 1;
+  incrementAllowedBucket(bucket.source_kind_buckets, record.source_kind, EVIDENCE_RECORD_SOURCE_KINDS);
+  incrementAllowedBucket(bucket.evidence_role_buckets, record.evidence_role, EVIDENCE_RECORD_ROLES);
+  incrementAllowedBucket(
+    bucket.source_status_buckets,
+    record.source_status,
+    EVIDENCE_RECORD_SOURCE_STATUSES
+  );
+}
+
+function sortRuntimeSourceGapTrendBucket(bucket) {
+  return {
+    ...bucket,
+    source_kind_buckets: sortBucketKeys(bucket.source_kind_buckets),
+    evidence_role_buckets: sortBucketKeys(bucket.evidence_role_buckets),
+    source_status_buckets: sortBucketKeys(bucket.source_status_buckets)
+  };
+}
+
+function incrementAllowedBucket(buckets, key, allowedKeys) {
+  if (!allowedKeys.includes(key)) {
+    return;
+  }
+
+  incrementBucket(buckets, key);
 }
 
 function compareEvidenceRefRollupGroups(left, right) {

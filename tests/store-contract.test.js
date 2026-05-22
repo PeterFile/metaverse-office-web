@@ -1911,6 +1911,62 @@ test('prototype store summarizes runtime source gaps before limit truncation', a
   assert.equal(unmappedSummary.unmapped_count, 1);
 });
 
+test('prototype store trends runtime source gaps with safe count buckets only', async () => {
+  const storeFile = await createStoreFile();
+  const store = await createPrototypeStore({ filePath: storeFile });
+  const firstReport = createCollectorReport();
+  const secondReport = createCollectorReport();
+  secondReport.collected_at = '2026-03-09T19:06:00.000Z';
+  secondReport.items[0].workspace_observations[0].last_modified_at =
+    '2026-03-09T19:05:20.000Z';
+  secondReport.items[0].source_health.workspace_files.last_observed_at =
+    '2026-03-09T19:05:20.000Z';
+  secondReport.items[0].source_health.workspace_files.degraded_reasons = [
+    '/tmp/source-gap-trend/secret.md',
+    'token=source-gap-trend-secret'
+  ];
+  secondReport.items[0].evidence_refs.push('/tmp/source-gap-trend/secret.md');
+
+  await store.appendCollectorReport(firstReport);
+  await store.appendCollectorReport(secondReport);
+
+  const trend = store.getRuntimeSourceGapTrend({ newest_first: 'true', limit: '1' });
+
+  assert.deepEqual(trend, {
+    bucket: 'hour',
+    total_count: 2,
+    total_buckets: 2,
+    returned_limit: 1,
+    buckets: [
+      {
+        bucket_start: '2026-03-09T19:00:00.000Z',
+        total_count: 1,
+        mapped_count: 1,
+        unmapped_count: 0,
+        output_candidate_buckets: { true: 1, false: 0 },
+        source_kind_buckets: { workspace_file: 1 },
+        evidence_role_buckets: { agent_output: 1 },
+        source_status_buckets: { degraded: 1 }
+      }
+    ]
+  });
+
+  const dailyTrend = store.getRuntimeSourceGapTrend({ bucket: 'day' });
+  assert.equal(dailyTrend.bucket, 'day');
+  assert.equal(dailyTrend.total_count, 2);
+  assert.equal(dailyTrend.total_buckets, 1);
+  assert.equal(dailyTrend.buckets[0].bucket_start, '2026-03-09T00:00:00.000Z');
+  assert.equal(dailyTrend.buckets[0].total_count, 2);
+
+  const serializedTrend = JSON.stringify(trend);
+  assert.equal(serializedTrend.includes('evidence_id'), false);
+  assert.equal(serializedTrend.includes('evidence_ref'), false);
+  assert.equal(serializedTrend.includes('metadata'), false);
+  assert.equal(serializedTrend.includes('degraded_reasons'), false);
+  assert.equal(serializedTrend.includes('/tmp/source-gap-trend'), false);
+  assert.equal(serializedTrend.includes('token=source-gap-trend-secret'), false);
+});
+
 test('prototype store groups runtime source gaps by agent and source without raw refs', async () => {
   const storeFile = await createStoreFile();
   const store = await createPrototypeStore({ filePath: storeFile });

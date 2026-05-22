@@ -49,6 +49,7 @@ import { resolveRolePawnAssetUrl } from './aitown/rolePawnAssets';
 import { adaptWorldToScene } from './aitown/sceneAdapter';
 import {
   deriveRuntimeSourceGapChips,
+  deriveRuntimeSourceGapWorldPins,
   deriveSelectedAgentSourceGapFact
 } from './aitown/sourceGapSignals';
 import { deriveSelectedAgentEvidenceGlance } from './aitown/selectedAgentEvidenceGlance';
@@ -1450,9 +1451,17 @@ function AppInner() {
         projectedWorld,
         selectedAgentId,
         activeCorrelationSpotlight?.correlation_id ?? null,
-        activeCorrelationParticipantAgentIds
+        activeCorrelationParticipantAgentIds,
+        deriveRuntimeSourceGapWorldPins(runtimeSourceGapsResource.data, overviewResource.data?.agents)
       ),
-    [activeCorrelationParticipantAgentIds, activeCorrelationSpotlight?.correlation_id, projectedWorld, selectedAgentId]
+    [
+      activeCorrelationParticipantAgentIds,
+      activeCorrelationSpotlight?.correlation_id,
+      overviewResource.data?.agents,
+      projectedWorld,
+      runtimeSourceGapsResource.data,
+      selectedAgentId
+    ]
   );
   const liveFocusAgents = useMemo(() => selectAttentionQueue(projectedWorld), [projectedWorld]);
   const liveFocusReasonLine = useMemo(() => resolveLiveFocusReasonLine(liveFocusAgents), [liveFocusAgents]);

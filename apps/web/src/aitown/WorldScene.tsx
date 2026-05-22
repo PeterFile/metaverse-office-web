@@ -82,6 +82,7 @@ const VIEWPORT_CULL_OVERSCAN_PX = 96;
 const AGENT_SPRITE_CULL_WIDTH = 64;
 const AGENT_SPRITE_CULL_HEIGHT = 96;
 const AGENT_SPRITE_RETIRED_POOL_LIMIT = 96;
+const SOURCE_GAP_PIN_AGENT_Y_OFFSET = 42;
 
 type AgentMotionProfile = {
   seed: number;
@@ -121,6 +122,8 @@ type AgentPresenceOverride = {
   sourceX: number;
   sourceY: number;
 };
+
+type SourceGapPin = NonNullable<AiTownSceneModel['sourceGapPins']>[number];
 
 type AgentMotionState = {
   agentId: string;
@@ -196,11 +199,34 @@ function buildCurrentMapScene(
     .map((agent) => resolveSceneAgentPresence(agent, fallbackMapId, agentPresenceById[agent.agentId]))
     .filter((agent) => agent.mapId === activeMapId);
   const visibleAgentIds = new Set(agents.map((agent) => agent.agentId));
+  const visibleAgentById = new Map(agents.map((agent) => [agent.agentId, agent]));
+  const sourceGapPins = (scene.sourceGapPins ?? []).flatMap((pin): SourceGapPin[] => {
+    if (pin.agentId === null) {
+      return [pin];
+    }
+
+    const agent = visibleAgentById.get(pin.agentId);
+
+    if (!agent) {
+      return [];
+    }
+
+    return [
+      {
+        ...pin,
+        position: {
+          x: agent.position.x,
+          y: agent.position.y - SOURCE_GAP_PIN_AGENT_Y_OFFSET
+        }
+      }
+    ];
+  });
 
   return {
     ...scene,
     map: activeMap,
     agents,
+    sourceGapPins,
     watchEdges: scene.watchEdges.filter(
       (edge) => visibleAgentIds.has(edge.fromAgentId) && visibleAgentIds.has(edge.toAgentId)
     ),
@@ -841,6 +867,48 @@ function createWatchOverlay(scene: AiTownSceneModel) {
     edgeContainer.addChild(path, endpoints);
     container.addChild(edgeContainer);
   }
+
+  return container;
+}
+
+function createSourceGapPin(pin: SourceGapPin) {
+  const container = new Container();
+  const color = pin.status === 'error'
+    ? SOURCE_EVIDENCE_HEALTH_COLORS.error
+    : pin.status === 'missing'
+      ? SOURCE_EVIDENCE_HEALTH_COLORS.missing
+      : pin.status === 'degraded'
+        ? SOURCE_EVIDENCE_HEALTH_COLORS.degraded
+        : 0x8be9d5;
+  const labelText = pin.isMapped ? 'SRC GAP' : 'UNMAPPED SRC';
+  const marker = new Graphics();
+  const markerWidth = pin.isMapped ? 52 : 78;
+
+  marker.roundRect(-markerWidth / 2, -9, markerWidth, 18, 5).fill({
+    color: pin.isMapped ? 0x251a28 : 0x1f2630,
+    alpha: 0.94
+  });
+  marker.roundRect(-markerWidth / 2, -9, markerWidth, 18, 5).stroke({
+    color,
+    width: 1,
+    alpha: 0.9
+  });
+  marker.moveTo(-5, 9);
+  marker.lineTo(0, 17);
+  marker.lineTo(5, 9);
+  marker.fill({ color, alpha: 0.82 });
+
+  const label = new Text({
+    text: labelText,
+    style: statusBadgeStyle,
+    resolution: 2
+  });
+  label.anchor.set(0.5, 0.5);
+
+  container.eventMode = 'none';
+  container.position.set(pin.position.x, pin.position.y);
+  container.zIndex = pin.position.y + 0.5;
+  container.addChild(marker, label);
 
   return container;
 }
@@ -2557,6 +2625,10 @@ export default function WorldScene({
             previousAgentMotionStates.find((state) => state.agentId === agent.agentId)
           )
         );
+      }
+
+      for (const pin of sceneForRender.sourceGapPins ?? []) {
+        agentLayer.addChild(createSourceGapPin(pin));
       }
 
       for (const child of removedAgentLayerChildren) {

@@ -1034,6 +1034,66 @@ describe('WorldScene watch overlay caption gating', () => {
     });
   });
 
+  it('keeps mapped source-gap pins attached to a presence-resolved gateway arrival', async () => {
+    appInitMock.mockReset().mockResolvedValue(undefined);
+    vi.mocked(loadAiTownAssets).mockResolvedValue(makeGeneratedAssets());
+    const baseScene = makeGeneratedScene();
+    const scene = {
+      ...baseScene,
+      zones: [],
+      gateways: baseScene.gateways?.map((gateway) => ({
+        ...gateway,
+        arrival: { x: 180, y: 640 }
+      })),
+      agents: [
+        makeAgent({
+          position: { x: 1120, y: 520 },
+          mapId: 'map-a',
+          phase: 'active',
+          severity: 'normal'
+        })
+      ],
+      selectedAgentId: 'app-engineering',
+      sourceGapPins: [
+        {
+          pinId: 'source-gap:app-engineering:workspace_files:degraded:0',
+          agentId: 'app-engineering',
+          displayName: 'App Engineering Agent',
+          isMapped: true,
+          sourceKind: 'workspace_files',
+          sourceLabel: 'Workspace files',
+          status: 'degraded',
+          lifecycleLabel: 'Current gap',
+          observedAtLabel: 'Observed 2026-03-16T08:59:30.000Z',
+          position: { x: 1120, y: 478 }
+        }
+      ]
+    } satisfies AiTownSceneModel;
+
+    render(<WorldScene scene={scene} onSelectAgent={vi.fn()} />);
+
+    await screen.findByText('Map A');
+
+    act(() => {
+      const ticker = appInstances.at(-1)?.ticker;
+
+      for (let frame = 0; frame < 120; frame += 1) {
+        ticker?.tick(1000 / 12);
+      }
+    });
+
+    await waitFor(() => {
+      const [agentSprite] = readAgentSprites();
+      const sourceGapPin = readAgentLayer()?.children.find((child) => child.zIndex === 598.5);
+
+      expect(screen.getByText('Map B')).toBeInTheDocument();
+      expect(agentSprite?.x).toBe(180);
+      expect(agentSprite?.y).toBe(640);
+      expect(sourceGapPin?.x).toBe(180);
+      expect(sourceGapPin?.y).toBe(598);
+    });
+  });
+
   it('scales generated agent bodies down to match layered map props', async () => {
     appInitMock.mockReset().mockResolvedValue(undefined);
     vi.mocked(loadAiTownAssets).mockResolvedValue(makeGeneratedAssets());
@@ -1175,6 +1235,53 @@ describe('WorldScene watch overlay caption gating', () => {
     const sourceBadgeText = findPixiTextNode(appInstances.at(-1)?.stage, 'SRC');
     expect(sourceBadgeText?.eventMode).toBeUndefined();
     expect(readAgentSprites()).toHaveLength(2);
+  });
+
+  it('renders source-gap world pins while keeping unmapped runtime evidence passive', async () => {
+    appInitMock.mockReset().mockResolvedValue(undefined);
+    vi.mocked(loadAiTownAssets).mockResolvedValue(makeAssets());
+    const scene = {
+      ...makeScene(),
+      sourceGapPins: [
+        {
+          pinId: 'source-gap:app-engineering:workspace_files:degraded:0',
+          agentId: 'app-engineering',
+          displayName: 'App Engineering Agent',
+          isMapped: true,
+          sourceKind: 'workspace_files',
+          sourceLabel: 'Workspace files',
+          status: 'degraded',
+          lifecycleLabel: 'Current gap',
+          observedAtLabel: 'Observed 2026-03-16T08:59:30.000Z',
+          position: { x: 160, y: 120 }
+        },
+        {
+          pinId: 'source-gap:unmapped:tmux_session:observed:1',
+          agentId: null,
+          displayName: 'Unmapped runtime source',
+          isMapped: false,
+          sourceKind: 'tmux_session',
+          sourceLabel: 'Tmux session',
+          status: 'observed',
+          lifecycleLabel: 'Unmapped observed',
+          observedAtLabel: 'Observed 2026-03-16T08:58:30.000Z',
+          position: { x: 220, y: 180 }
+        }
+      ]
+    } satisfies AiTownSceneModel;
+
+    render(<WorldScene scene={scene} onSelectAgent={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(collectPixiTextLabels(appInstances.at(-1)?.stage)).toContain('UNMAPPED SRC');
+    });
+
+    const textLabels = collectPixiTextLabels(appInstances.at(-1)?.stage);
+    expect(textLabels.filter((label) => label === 'SRC GAP')).toHaveLength(1);
+    expect(textLabels.filter((label) => label === 'UNMAPPED SRC')).toHaveLength(1);
+
+    const unmappedPinText = findPixiTextNode(appInstances.at(-1)?.stage, 'UNMAPPED SRC');
+    expect(unmappedPinText?.eventMode).toBeUndefined();
   });
 
   it('keeps selected watch-link captions hidden while the renderer is still failed', async () => {

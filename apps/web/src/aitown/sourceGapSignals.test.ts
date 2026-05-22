@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  deriveRuntimeSourceGapWorldPins,
   deriveRuntimeSourceGapLifecycle,
   deriveSelectedAgentSourceGapFact,
   deriveRuntimeSourceGapChips,
@@ -404,13 +405,66 @@ describe('deriveRuntimeSourceGapChips', () => {
         status: 'observed',
         sourceLabel: 'Tmux session',
         lifecycleLabel: 'Unmapped observed',
-        detail: 'runtime unmapped · not mapped to an agent',
+        detail: 'unmapped runtime source · not mapped to an agent',
         observedAtLabel: 'Observed 2026-03-16T08:58:30.000Z'
       }
     ]);
     expect(JSON.stringify(chips)).not.toContain('/tmp/app-engineering');
     expect(JSON.stringify(chips)).not.toContain('tmux://');
     expect(JSON.stringify(chips)).not.toContain('collector-snapshot:');
+  });
+
+  it('does not label unmapped runtime evidence as agent output', () => {
+    const [chip] = deriveRuntimeSourceGapChips(
+      [
+        {
+          ...runtimeSourceGaps[1],
+          evidence_role: 'agent_output'
+        }
+      ],
+      [{ agent_id: 'app-engineering', display_name: 'App Engineering Agent' }]
+    );
+
+    expect(chip.detail).toBe('unmapped runtime source · not mapped to an agent');
+    expect(chip.detail).not.toContain('agent output');
+  });
+
+  it('projects runtime source gaps as passive world pins with unmapped evidence kept separate', () => {
+    const pins = deriveRuntimeSourceGapWorldPins(runtimeSourceGaps, [
+      { agent_id: 'app-engineering', display_name: 'App Engineering Agent' }
+    ]);
+
+    expect(pins).toEqual([
+      {
+        pinId: 'source-gap:app-engineering:workspace_files:degraded:0',
+        agentId: 'app-engineering',
+        displayName: 'App Engineering Agent',
+        isMapped: true,
+        sourceDrilldownGroupKey: 'workspace',
+        sourceKind: 'workspace_files',
+        status: 'degraded',
+        sourceLabel: 'Workspace files',
+        lifecycleLabel: 'Current gap',
+        observedAtLabel: 'Observed 2026-03-16T08:59:30.000Z'
+      },
+      {
+        pinId: 'source-gap:unmapped:tmux_session:observed:1',
+        agentId: null,
+        displayName: 'Unmapped runtime source',
+        isMapped: false,
+        sourceDrilldownGroupKey: null,
+        sourceKind: 'tmux_session',
+        status: 'observed',
+        sourceLabel: 'Tmux session',
+        lifecycleLabel: 'Unmapped observed',
+        observedAtLabel: 'Observed 2026-03-16T08:58:30.000Z'
+      }
+    ]);
+    expect(JSON.stringify(pins)).not.toContain('/tmp/app-engineering');
+    expect(JSON.stringify(pins)).not.toContain('tmux://');
+    expect(JSON.stringify(pins)).not.toContain('agent output');
+    expect(JSON.stringify(pins)).not.toContain('collector-snapshot:');
+    expect(JSON.stringify(pins)).not.toContain('clickable');
   });
 });
 

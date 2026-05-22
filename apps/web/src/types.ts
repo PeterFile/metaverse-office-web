@@ -399,10 +399,63 @@ export interface RuntimeSourceGapsSummary {
   evidence_role_buckets: Record<string, number>;
   source_status_buckets: Record<string, number>;
   collector_snapshot_id_buckets: Record<string, number>;
+  first_observed_at: string | null;
+  last_observed_at: string | null;
+  first_collected_at: string | null;
+  last_collected_at: string | null;
 }
 
 export interface RuntimeSourceGapsSummaryResponse {
   item: RuntimeSourceGapsSummary;
+}
+
+export interface RuntimeSourceGapAgentSummaryGroup {
+  agent_id: string | null;
+  source_kind: string | null;
+  record_count: number;
+  mapped_count: number;
+  unmapped_count: number;
+  output_candidate_buckets: Record<string, number>;
+  evidence_role_buckets: Record<string, number>;
+  source_status_buckets: Record<string, number>;
+  first_observed_at: string | null;
+  last_observed_at: string | null;
+  first_collected_at: string | null;
+  last_collected_at: string | null;
+}
+
+export interface RuntimeSourceGapAgentSummary {
+  total_count: number;
+  total_groups: number;
+  returned_limit: number;
+  groups: RuntimeSourceGapAgentSummaryGroup[];
+}
+
+export interface RuntimeSourceGapAgentSummaryResponse {
+  item: RuntimeSourceGapAgentSummary;
+}
+
+export interface RuntimeSourceGapTrendBucket {
+  bucket_start: string;
+  total_count: number;
+  mapped_count: number;
+  unmapped_count: number;
+  output_candidate_buckets: Record<string, number>;
+  source_kind_buckets: Record<string, number>;
+  evidence_role_buckets: Record<string, number>;
+  source_status_buckets: Record<string, number>;
+}
+
+export interface RuntimeSourceGapTrend {
+  bucket: 'hour' | 'day';
+  total_count: number;
+  total_buckets: number;
+  returned_limit: number;
+  buckets: RuntimeSourceGapTrendBucket[];
+}
+
+export interface RuntimeSourceGapTrendResponse {
+  item: RuntimeSourceGapTrend;
 }
 
 export interface CollectorSnapshot {

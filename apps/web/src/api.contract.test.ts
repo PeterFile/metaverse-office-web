@@ -471,6 +471,149 @@ describe('read-only frontend/backend contract smoke', () => {
     expect(Object.hasOwn(gaps[0], 'metadata')).toBe(false);
   });
 
+  it('passes source-gap agent-summary and trend filters through to the real backend', async () => {
+    harness = await createHarness(() => '2026-03-09T19:00:00.000Z');
+    await seedContractSlice(harness.store);
+
+    const api = await loadApi(harness.baseUrl);
+    const sourceGapRecords = await api.fetchEvidenceRecords({
+      agentId: 'app-engineering',
+      sourceKind: 'workspace_file',
+      evidenceRef: '/tmp/app-engineering/todo.md',
+      sourceStatus: 'degraded',
+      collectorSnapshotId: 'collector-snapshot:2026-03-09T18:59:00.000Z',
+      correlationId: 'collector-snapshot:2026-03-09T18:59:00.000Z',
+      outputCandidate: true,
+      mapped: true,
+      limit: 1
+    });
+    const evidenceId = sourceGapRecords[0].evidence_id;
+
+    const nativeFetch = globalThis.fetch.bind(globalThis);
+    const requests: RequestContract[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+        requests.push(getRequestContract(input, harness!.baseUrl, init));
+        return nativeFetch(input, init);
+      })
+    );
+
+    const [agentSummary, trend] = await Promise.all([
+      api.fetchRuntimeSourceGapAgentSummary({
+        agentId: 'app-engineering',
+        sourceKind: 'workspace_file',
+        evidenceRole: 'agent_plan',
+        evidenceId,
+        sourceStatus: 'degraded',
+        collectorSnapshotId: 'collector-snapshot:2026-03-09T18:59:00.000Z',
+        correlationId: 'collector-snapshot:2026-03-09T18:59:00.000Z',
+        outputCandidate: true,
+        mapped: true,
+        observedSince: '2026-03-09T18:58:00.000Z',
+        observedUntil: '2026-03-09T18:59:00.000Z',
+        collectedSince: '2026-03-09T18:58:00.000Z',
+        collectedUntil: '2026-03-09T19:00:00.000Z',
+        newestFirst: false,
+        limit: 5
+      }),
+      api.fetchRuntimeSourceGapTrend({
+        agentId: 'app-engineering',
+        sourceKind: 'workspace_file',
+        evidenceRole: 'agent_plan',
+        evidenceId,
+        sourceStatus: 'degraded',
+        collectorSnapshotId: 'collector-snapshot:2026-03-09T18:59:00.000Z',
+        correlationId: 'collector-snapshot:2026-03-09T18:59:00.000Z',
+        outputCandidate: true,
+        mapped: true,
+        observedSince: '2026-03-09T18:58:00.000Z',
+        observedUntil: '2026-03-09T18:59:00.000Z',
+        collectedSince: '2026-03-09T18:58:00.000Z',
+        collectedUntil: '2026-03-09T19:00:00.000Z',
+        bucket: 'day',
+        newestFirst: false,
+        limit: 5
+      })
+    ]);
+
+    expect(requests).toEqual([
+      {
+        method: 'GET',
+        origin: harness.baseUrl,
+        pathname: '/runtime/source-gaps/agent-summary',
+        query: [
+          ['agent_id', 'app-engineering'],
+          ['collected_since', '2026-03-09T18:58:00.000Z'],
+          ['collected_until', '2026-03-09T19:00:00.000Z'],
+          ['collector_snapshot_id', 'collector-snapshot:2026-03-09T18:59:00.000Z'],
+          ['correlation_id', 'collector-snapshot:2026-03-09T18:59:00.000Z'],
+          ['evidence_id', evidenceId],
+          ['evidence_role', 'agent_plan'],
+          ['limit', '5'],
+          ['mapped', 'true'],
+          ['newest_first', 'false'],
+          ['observed_since', '2026-03-09T18:58:00.000Z'],
+          ['observed_until', '2026-03-09T18:59:00.000Z'],
+          ['output_candidate', 'true'],
+          ['source_kind', 'workspace_file'],
+          ['source_status', 'degraded']
+        ]
+      },
+      {
+        method: 'GET',
+        origin: harness.baseUrl,
+        pathname: '/runtime/source-gaps/trend',
+        query: [
+          ['agent_id', 'app-engineering'],
+          ['bucket', 'day'],
+          ['collected_since', '2026-03-09T18:58:00.000Z'],
+          ['collected_until', '2026-03-09T19:00:00.000Z'],
+          ['collector_snapshot_id', 'collector-snapshot:2026-03-09T18:59:00.000Z'],
+          ['correlation_id', 'collector-snapshot:2026-03-09T18:59:00.000Z'],
+          ['evidence_id', evidenceId],
+          ['evidence_role', 'agent_plan'],
+          ['limit', '5'],
+          ['mapped', 'true'],
+          ['newest_first', 'false'],
+          ['observed_since', '2026-03-09T18:58:00.000Z'],
+          ['observed_until', '2026-03-09T18:59:00.000Z'],
+          ['output_candidate', 'true'],
+          ['source_kind', 'workspace_file'],
+          ['source_status', 'degraded']
+        ]
+      }
+    ]);
+    expect(agentSummary).toMatchObject({
+      total_count: 1,
+      total_groups: 1,
+      returned_limit: 5,
+      groups: [
+        expect.objectContaining({
+          agent_id: 'app-engineering',
+          source_kind: 'workspace_file',
+          record_count: 1,
+          mapped_count: 1,
+          unmapped_count: 0
+        })
+      ]
+    });
+    expect(trend).toMatchObject({
+      bucket: 'day',
+      total_count: 1,
+      total_buckets: 1,
+      returned_limit: 5,
+      buckets: [
+        expect.objectContaining({
+          bucket_start: '2026-03-09T00:00:00.000Z',
+          total_count: 1,
+          mapped_count: 1,
+          unmapped_count: 0
+        })
+      ]
+    });
+  });
+
   it('passes timeline correlation_id replay filters through to the real backend and preserves seeded replay semantics', async () => {
     harness = await createHarness(() => '2026-03-09T19:00:00.000Z');
     await seedContractSlice(harness.store);

@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   RequestError,
   fetchAccountabilityReplay,
+  fetchReplayCheckpointLog,
   fetchAgentDetail,
   fetchAgentEvents,
   fetchAgentIncidents,
@@ -227,6 +228,59 @@ describe('fetchAccountabilityReplay', () => {
       '/accountability/replay?limit=3&window=15m&event_id=evt+app%2Freview%231&evidence_ref=%2Ftmp%2Fevidence+ref%231.md&correlation_id=corr+replay&agent_id=app-engineering&source_kind=workspace_file&artifact_kind=evidence_ref',
       expect.objectContaining({ signal: undefined })
     );
+  });
+});
+
+describe('fetchReplayCheckpointLog', () => {
+  it('passes limit and record kind to the backend checkpoint log query string', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            items: []
+          }),
+          {
+            headers: JSON_HEADERS
+          }
+        )
+      )
+    );
+
+    await fetchReplayCheckpointLog({
+      limit: 3,
+      recordKind: 'event'
+    });
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/accountability/replay/checkpoint-log?limit=3&record_kind=event',
+      expect.objectContaining({ signal: undefined })
+    );
+  });
+
+  it('throws a RequestError when the backend returns a checkpoint log problem response', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            error: 'invalid_limit',
+            details: 'limit must be positive'
+          }),
+          {
+            status: 400,
+            headers: JSON_HEADERS
+          }
+        )
+      )
+    );
+
+    await expect(fetchReplayCheckpointLog({ limit: -1 })).rejects.toMatchObject({
+      name: 'RequestError',
+      status: 400,
+      code: 'invalid_limit',
+      message: 'limit must be positive'
+    });
   });
 });
 

@@ -19,6 +19,7 @@ import type {
   OfficeOverview,
   PeerWatchAlertsResponse,
   ProblemResponse,
+  ReplayCheckpointLogResponse,
   RuntimeSourceGapAgentSummary,
   RuntimeSourceGapAgentSummaryResponse,
   RuntimeSourceGap,
@@ -746,6 +747,25 @@ export async function fetchAccountabilityReplay(
   });
 
   return parseJson<AccountabilityReplayBundle>(response);
+}
+
+export async function fetchReplayCheckpointLog(
+  options: { limit?: number; recordKind?: string; signal?: AbortSignal } = {}
+): Promise<ReplayCheckpointLogResponse> {
+  const params = new URLSearchParams();
+  if (options.limit !== undefined) {
+    params.set('limit', String(options.limit));
+  }
+  if (options.recordKind) {
+    params.set('record_kind', options.recordKind);
+  }
+
+  const suffix = params.size > 0 ? `?${params.toString()}` : '';
+  const response = await fetch(resolveApiUrl(`/accountability/replay/checkpoint-log${suffix}`), {
+    signal: options.signal
+  });
+
+  return parseJson<ReplayCheckpointLogResponse>(response);
 }
 
 export async function fetchPeerWatchAlerts(

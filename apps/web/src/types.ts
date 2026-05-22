@@ -714,6 +714,56 @@ export interface AccountabilityReplayBundle {
   memory_artifacts: MemoryArtifact[];
 }
 
+export interface ReplayCheckpointEvent {
+  event_id: string;
+  ts: string;
+  agent_id: string;
+  event_type: string;
+  correlation_id: string | null;
+  source_kind: string | null;
+}
+
+export interface ReplayCheckpointHeartbeat {
+  agent_id: string;
+  received_at: string;
+}
+
+export interface ReplayCheckpointEvidenceRecord {
+  observed_at: string | null;
+  collected_at: string | null;
+  agent_id: string | null;
+  source_kind: string | null;
+  evidence_role: string | null;
+  source_status: string | null;
+  output_candidate: boolean;
+  collector_snapshot_id: string;
+  correlation_id: string | null;
+  unmapped: boolean;
+}
+
+export interface ReplayCheckpointCollectorSnapshot {
+  collector_snapshot_id: string;
+  collected_at: string | null;
+  actor_id: string | null;
+  item_count: number;
+}
+
+export type ReplayCheckpoint =
+  | ReplayCheckpointEvent
+  | ReplayCheckpointHeartbeat
+  | ReplayCheckpointEvidenceRecord
+  | ReplayCheckpointCollectorSnapshot;
+
+export interface ReplayCheckpointLogItem {
+  append_index: number;
+  record_kind: string;
+  checkpoint: ReplayCheckpoint | null;
+}
+
+export interface ReplayCheckpointLogResponse {
+  items: ReplayCheckpointLogItem[];
+}
+
 export interface WorkflowSummary {
   incident_count: number;
   interaction_count: number;

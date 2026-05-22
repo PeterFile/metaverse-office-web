@@ -23,6 +23,7 @@ import type {
   OfficeOperations,
   OfficeOverview,
   PeerWatchAlertsResponse,
+  ReplayCheckpointLogResponse,
   TimelineReplayResponse
 } from './types';
 
@@ -1008,6 +1009,40 @@ describe('read-only frontend/backend contract smoke', () => {
       }
     ]);
     expectAccountabilityReplayContract(replay);
+  });
+
+  it('loads /accountability/replay/checkpoint-log from the real backend with limit and record_kind filters', async () => {
+    harness = await createHarness(() => '2026-03-09T19:00:00.000Z');
+    await seedContractSlice(harness.store);
+
+    const nativeFetch = globalThis.fetch.bind(globalThis);
+    const requests: RequestContract[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+        requests.push(getRequestContract(input, harness!.baseUrl, init));
+        return nativeFetch(input, init);
+      })
+    );
+
+    const api = await loadApi(harness.baseUrl);
+    const log = await api.fetchReplayCheckpointLog({
+      limit: 3,
+      recordKind: 'event'
+    });
+
+    expect(requests).toEqual([
+      {
+        method: 'GET',
+        origin: harness.baseUrl,
+        pathname: '/accountability/replay/checkpoint-log',
+        query: [
+          ['limit', '3'],
+          ['record_kind', 'event']
+        ]
+      }
+    ]);
+    expectReplayCheckpointLogContract(log, ['event', 'event', 'event']);
   });
 
   it('passes office-operations agent_id filters through to the real backend without widening the request surface', async () => {
@@ -2494,6 +2529,43 @@ function expectAccountabilityReplayContract(replay: AccountabilityReplayBundle) 
       )
     )
   ).toBe(true);
+}
+
+function expectReplayCheckpointLogContract(
+  log: ReplayCheckpointLogResponse,
+  expectedRecordKinds: string[] = ['evidence_record', 'evidence_record', 'collector_snapshot']
+) {
+  expect(log.items.map((item) => item.record_kind)).toEqual(expectedRecordKinds);
+  expect(log.items.map((item) => item.append_index)).toEqual(
+    log.items.map((item) => item.append_index).slice().sort((left, right) => left - right)
+  );
+  expect(log.items.every((item) => Number.isInteger(item.append_index) && item.append_index > 0)).toBe(true);
+  if (expectedRecordKinds.includes('evidence_record')) {
+    expect(log.items[0].checkpoint).toEqual({
+      observed_at: '2026-03-09T18:58:30.000Z',
+      collected_at: '2026-03-09T18:59:00.000Z',
+      agent_id: 'app-engineering',
+      source_kind: 'workspace_file',
+      evidence_role: 'agent_plan',
+      source_status: 'degraded',
+      output_candidate: true,
+      collector_snapshot_id: 'collector-snapshot:2026-03-09T18:59:00.000Z',
+      correlation_id: 'collector-snapshot:2026-03-09T18:59:00.000Z',
+      unmapped: false
+    });
+  }
+  if (expectedRecordKinds.includes('collector_snapshot')) {
+    expect(log.items[2].checkpoint).toEqual({
+      collector_snapshot_id: 'collector-snapshot:2026-03-09T18:59:00.000Z',
+      collected_at: '2026-03-09T18:59:00.000Z',
+      actor_id: 'team-lead',
+      item_count: 1
+    });
+  }
+  expect(JSON.stringify(log)).not.toContain('/tmp/app-engineering');
+  expect(JSON.stringify(log)).not.toContain('tmux://');
+  expect(JSON.stringify(log)).not.toContain('5-web3-app-engineering');
+  expect(JSON.stringify(log)).not.toContain('Need review evidence');
 }
 
 function expectCorrelationContract(correlation: CorrelationDrilldown) {

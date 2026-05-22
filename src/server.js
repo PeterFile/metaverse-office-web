@@ -286,7 +286,8 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
   if (method === 'GET' && pathname === '/accountability/replay/checkpoint-log') {
     sendJson(res, 200, {
       items: store.listReplayCheckpointLog({
-        limit: url.searchParams.get('limit')
+        limit: url.searchParams.get('limit'),
+        record_kind: url.searchParams.get('record_kind')
       })
     });
     return;

@@ -642,7 +642,8 @@ class PrototypeStore {
   listReplayCheckpointLog(filters = {}) {
     return projectReplayCheckpointLog({
       records: this.records,
-      limit: parseLimit(filters.limit)
+      limit: parseLimit(filters.limit),
+      recordKind: filters.record_kind
     });
   }
 
@@ -3485,10 +3486,18 @@ function projectReplayCheckpointSummary({
   };
 }
 
-function projectReplayCheckpointLog({ records, limit }) {
-  const startIndex = Math.max(0, records.length - limit);
-  return records.slice(startIndex).map((record, offset) => ({
-    append_index: startIndex + offset + 1,
+function projectReplayCheckpointLog({ records, limit, recordKind }) {
+  const requestedRecordKind =
+    typeof recordKind === 'string' && recordKind.trim().length > 0 ? recordKind.trim() : null;
+  const entries = records
+    .map((record, index) => ({ record, appendIndex: index + 1 }))
+    .filter(({ record }) => (
+      requestedRecordKind === null ||
+      projectReplayCheckpointRecordKind(record) === requestedRecordKind
+    ));
+  const startIndex = Math.max(0, entries.length - limit);
+  return entries.slice(startIndex).map(({ record, appendIndex }) => ({
+    append_index: appendIndex,
     record_kind: projectReplayCheckpointRecordKind(record),
     checkpoint: projectReplayCheckpointRecord(record)
   }));

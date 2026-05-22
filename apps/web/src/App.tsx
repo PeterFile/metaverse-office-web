@@ -49,6 +49,7 @@ import { resolveRolePawnAssetUrl } from './aitown/rolePawnAssets';
 import { adaptWorldToScene } from './aitown/sceneAdapter';
 import {
   deriveRuntimeSourceGapChips,
+  deriveRuntimeSourceGapInspectPeek,
   deriveRuntimeSourceGapWorldPins,
   deriveSelectedAgentSourceGapFact
 } from './aitown/sourceGapSignals';
@@ -2771,6 +2772,16 @@ function AppInner() {
     [latestSourceHealth, selectedAgentId, visibleEvidenceCoverage]
   );
   const selectedAgentSourceGapFact = deriveSelectedAgentSourceGapFact(latestSourceHealth, selectedAgentId);
+  const selectedAgentSourceGapInspectPeek = useMemo(
+    () =>
+      deriveRuntimeSourceGapInspectPeek(
+        runtimeSourceGapsResource.data,
+        selectedAgentId,
+        sourceGapFocusIntent,
+        overviewResource.data?.agents
+      ),
+    [overviewResource.data?.agents, runtimeSourceGapsResource.data, selectedAgentId, sourceGapFocusIntent]
+  );
   const selectedAgentSourceGapSummary = selectedAgentSourceGapFact
     ? [
         'Source health',
@@ -3239,6 +3250,30 @@ function AppInner() {
                       >
                         {selectedAgentSourceGapSummary}
                       </button>
+                    ) : null}
+                    {selectedAgentSourceGapInspectPeek ? (
+                      <section
+                        className="aitown-hub-focus-ribbon__source-gap-inspect"
+                        role="region"
+                        aria-label="Source gap inspect peek"
+                      >
+                        <span className="aitown-hub-focus-ribbon__source-gap-inspect-label">
+                          {selectedAgentSourceGapInspectPeek.evidenceOnlyLabel}
+                        </span>
+                        <strong>
+                          {`${selectedAgentSourceGapInspectPeek.sourceKindLabel} · ${selectedAgentSourceGapInspectPeek.statusLabel}`}
+                        </strong>
+                        <span>{selectedAgentSourceGapInspectPeek.mappingLabel}</span>
+                        <span>{selectedAgentSourceGapInspectPeek.observedAtLabel}</span>
+                        <span>{selectedAgentSourceGapInspectPeek.collectedAtLabel}</span>
+                        <button
+                          type="button"
+                          className="aitown-hub-focus-ribbon__source-gap-inspect-link"
+                          onClick={handleSelectedAgentEvidenceLedgerOpen}
+                        >
+                          Open Evidence drilldown
+                        </button>
+                      </section>
                     ) : null}
                   </div>
                 </section>

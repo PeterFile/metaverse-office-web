@@ -36,18 +36,18 @@ export function deriveSelectedAgentEvidenceGlance({
       (candidate) => candidate.agent_id === agentId
     );
     if (!row) {
-      return ['Proof capsule · Evidence 0 refs · Source unavailable', 'Gap uncovered in snapshot'];
+      return ['Proof capsule · 0 evidence refs · Sources unavailable', 'Coverage uncovered in loaded snapshot'];
     }
     if (row.status === 'uncovered_in_snapshot') {
-      return ['Proof capsule · Evidence 0 refs · Source unavailable', 'Gap uncovered in snapshot'];
+      return ['Proof capsule · 0 evidence refs · Sources unavailable', 'Coverage uncovered in loaded snapshot'];
     }
 
     return [
-      `Proof capsule · Evidence ${renderEvidenceRefCount(row.evidence_ref_count)} · Source ${renderSourceKindSummary(row.source_kinds) ?? 'unavailable'}`,
+      `Proof capsule · ${renderEvidenceRefCount(row.evidence_ref_count)} · Sources ${renderSourceKindSummary(row.source_kinds) ?? 'unavailable'}`,
       [
-        `Gap ${row.status === 'low_confidence_evidence' ? 'low-confidence' : 'covered'}`,
+        `Coverage ${row.status === 'low_confidence_evidence' ? 'low confidence' : 'backed'}`,
         renderConfidence(row.confidence),
-        `Latest ${row.latest_evidence_at ?? 'unavailable'}`
+        `Latest evidence ${row.latest_evidence_at ?? 'unavailable'}`
       ].join(' · ')
     ];
   }
@@ -58,8 +58,8 @@ export function deriveSelectedAgentEvidenceGlance({
   }
 
   return [
-    `Proof capsule · Evidence ${renderEvidenceRefCount(sourceHealthItem.evidence_ref_count)} · Source source health`,
-    `Gap source-health only · Latest ${sourceHealthItem.latest_evidence_at ?? 'unavailable'}`
+    `Proof capsule · ${renderEvidenceRefCount(sourceHealthItem.evidence_ref_count)} · Source-health snapshot`,
+    `Coverage source-health only · Latest evidence ${sourceHealthItem.latest_evidence_at ?? 'unavailable'}`
   ];
 }
 
@@ -72,7 +72,7 @@ function normalizeString(value: string | null | undefined): string | null {
 }
 
 function renderEvidenceRefCount(count: number) {
-  return `${count} ${count === 1 ? 'ref' : 'refs'}`;
+  return `${count} evidence ${count === 1 ? 'ref' : 'refs'}`;
 }
 
 function renderSourceKindSummary(sourceKinds: CollectorEvidenceCoverageSourceKind[]) {
@@ -83,5 +83,5 @@ function renderSourceKindSummary(sourceKinds: CollectorEvidenceCoverageSourceKin
 }
 
 function renderConfidence(confidence: string | null) {
-  return confidence ? `${confidence} confidence` : 'confidence unavailable';
+  return confidence ? `Confidence ${confidence}` : 'Confidence unavailable';
 }

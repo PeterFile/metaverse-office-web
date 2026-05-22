@@ -761,7 +761,8 @@ test.describe('operator shell layout visual smoke', () => {
     const inspectPeek = page.getByRole('region', { name: 'Selected agent inspect peek' });
     await expect(inspectPeek).toBeVisible();
     await expect(inspectPeek.getByText('Growth Revenue Agent')).toBeVisible();
-    await expect(inspectPeek.getByText(/Yellow .* planning/)).toBeVisible();
+    await expect(inspectPeek.getByText('State · planning')).toBeVisible();
+    await expect(inspectPeek.getByText(/Yellow .* planning/)).toHaveCount(0);
     await expect(inspectPeek.getByText('Inspect facts')).toBeVisible();
     await expect(inspectPeek.getByText('Operation · Prepare handoff notes')).toBeHidden();
     expect(workflowRequests, 'Hub-closed inspect peek should not request selected-agent workflow').toHaveLength(0);
@@ -871,7 +872,7 @@ test.describe('operator shell layout visual smoke', () => {
     const ledgerCta = inspectPeek.getByRole('button', { name: 'Open Growth Revenue Agent Evidence Ledger' });
     await expect(inspectPeek).toBeVisible();
     await expect(ledgerCta).toBeVisible();
-    await expect(inspectPeek.getByText(/Proof capsule · Evidence \d+ refs? · Source/)).toBeVisible();
+    await expect(inspectPeek.getByText(/Proof capsule · \d+ evidence refs? · Source/)).toBeVisible();
     const proofCapsuleText = await inspectPeek.innerText();
     expect(
       proofCapsuleText,

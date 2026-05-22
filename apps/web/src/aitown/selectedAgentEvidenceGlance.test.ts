@@ -89,8 +89,8 @@ describe('deriveSelectedAgentEvidenceGlance', () => {
         sourceHealth
       })
     ).toEqual([
-      'Proof capsule · Evidence 2 refs · Source tmux + workspace',
-      'Gap covered · high confidence · Latest 2026-03-09T18:04:45.000Z'
+      'Proof capsule · 2 evidence refs · Sources tmux + workspace',
+      'Coverage backed · Confidence high · Latest evidence 2026-03-09T18:04:45.000Z'
     ]);
   });
 
@@ -102,8 +102,8 @@ describe('deriveSelectedAgentEvidenceGlance', () => {
         sourceHealth
       })
     ).toEqual([
-      'Proof capsule · Evidence 1 ref · Source workspace',
-      'Gap low-confidence · medium confidence · Latest unavailable'
+      'Proof capsule · 1 evidence ref · Sources workspace',
+      'Coverage low confidence · Confidence medium · Latest evidence unavailable'
     ]);
 
     expect(
@@ -112,7 +112,10 @@ describe('deriveSelectedAgentEvidenceGlance', () => {
         evidenceCoverage: coverage,
         sourceHealth
       })
-    ).toEqual(['Proof capsule · Evidence 0 refs · Source unavailable', 'Gap uncovered in snapshot']);
+    ).toEqual([
+      'Proof capsule · 0 evidence refs · Sources unavailable',
+      'Coverage uncovered in loaded snapshot'
+    ]);
   });
 
   it('falls back to source health counts without leaking refs or paths', () => {
@@ -123,8 +126,8 @@ describe('deriveSelectedAgentEvidenceGlance', () => {
     });
 
     expect(glance).toEqual([
-      'Proof capsule · Evidence 1 ref · Source source health',
-      'Gap source-health only · Latest 2026-03-16T08:59:30.000Z'
+      'Proof capsule · 1 evidence ref · Source-health snapshot',
+      'Coverage source-health only · Latest evidence 2026-03-16T08:59:30.000Z'
     ]);
     expect(glance).toHaveLength(2);
     const glanceText = glance?.join('\n') ?? '';

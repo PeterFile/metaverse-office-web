@@ -3105,8 +3105,14 @@ function AppInner() {
               <div className="aitown-selected-agent-peek__head">
                 <span className="aitown-selected-agent-peek__eyebrow">Selected agent</span>
                 <strong>{selectedAgent.display_name}</strong>
-                <span>{`${HOT_ZONE_SEVERITY_LABELS[selectedAgentPeekSeverity]} · ${selectedAgentPeekStatus}`}</span>
-                {selectedAgentEvidenceGlance?.map((line) => <span key={line}>{line}</span>)}
+                <span>{`State · ${selectedAgentPeekStatus}`}</span>
+                {selectedAgentEvidenceGlance ? (
+                  <span className="aitown-selected-agent-peek__proof" role="group" aria-label="Selected agent proof capsule">
+                    {selectedAgentEvidenceGlance.map((line) => (
+                      <span key={line}>{line}</span>
+                    ))}
+                  </span>
+                ) : null}
                 {selectedAgentSourceGapSummary && selectedAgentSourceGapFact ? (
                   <button
                     type="button"

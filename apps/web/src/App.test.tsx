@@ -3046,7 +3046,8 @@ afterEach(() => {
     await act(async () => {});
     expect(vi.mocked(globalThis.fetch).mock.calls.map(([request]) => String(request))).not.toContain(workflowUrl);
     expect(within(inspectPeek).getByText('App Engineering Agent')).toBeVisible();
-    expect(within(inspectPeek).getByText('Orange · blocked')).toBeVisible();
+    expect(within(inspectPeek).getByText('State · blocked')).toBeVisible();
+    expect(within(inspectPeek).queryByText('Orange · blocked')).not.toBeInTheDocument();
 
     await user.click(await screen.findByRole('button', { name: 'Queue' }));
 
@@ -3448,13 +3449,14 @@ afterEach(() => {
 
     const inspectPeek = await screen.findByRole('region', { name: 'Selected agent inspect peek' });
     expect(within(inspectPeek).getByText('App Engineering Agent')).toBeVisible();
+    expect(within(inspectPeek).getByRole('group', { name: 'Selected agent proof capsule' })).toBeVisible();
     expect(
-      within(inspectPeek).getByText('Proof capsule · Evidence 5 refs · Source tmux + workspace')
+      within(inspectPeek).getByText('Proof capsule · 5 evidence refs · Sources tmux + workspace')
     ).toBeVisible();
     expect(
-      within(inspectPeek).getByText('Gap covered · high confidence · Latest 2026-03-16T08:59:10.000Z')
+      within(inspectPeek).getByText('Coverage backed · Confidence high · Latest evidence 2026-03-16T08:59:10.000Z')
     ).toBeVisible();
-    expect(within(inspectPeek).queryAllByText(/^(Proof capsule|Gap )/)).toHaveLength(2);
+    expect(within(inspectPeek).queryAllByText(/^(Proof capsule|Coverage )/)).toHaveLength(2);
 
     await act(async () => {});
     let requestedUrls = vi.mocked(globalThis.fetch).mock.calls.map(([request]) => String(request));

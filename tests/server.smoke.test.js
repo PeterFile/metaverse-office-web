@@ -5512,6 +5512,7 @@ test('GET /runtime/source-gaps returns compact gap and unmapped evidence read-on
   const agentSummary = await requestJson(
     `${baseUrl}/runtime/source-gaps/agent-summary?newest_first=true&limit=1`
   );
+  const trend = await requestJson(`${baseUrl}/runtime/source-gaps/trend?newest_first=true&limit=1`);
 
   assert.equal(response.response.status, 200);
   assert.deepEqual(
@@ -5595,6 +5596,31 @@ test('GET /runtime/source-gaps returns compact gap and unmapped evidence read-on
   assert.equal(JSON.stringify(agentSummary.body).includes('evidence_id'), false);
   assert.equal(JSON.stringify(agentSummary.body).includes('evidence_ref'), false);
   assert.equal(JSON.stringify(agentSummary.body).includes('metadata'), false);
+  assert.equal(trend.response.status, 200);
+  assert.deepEqual(trend.body.item, {
+    bucket: 'hour',
+    total_count: 2,
+    total_buckets: 1,
+    returned_limit: 1,
+    buckets: [
+      {
+        bucket_start: '2026-03-09T18:00:00.000Z',
+        total_count: 2,
+        mapped_count: 1,
+        unmapped_count: 1,
+        output_candidate_buckets: { true: 1, false: 1 },
+        source_kind_buckets: { tmux_observation: 1, workspace_file: 1 },
+        evidence_role_buckets: { agent_output: 1, runtime_unmapped: 1 },
+        source_status_buckets: { degraded: 1, observed: 1 }
+      }
+    ]
+  });
+  assert.equal(JSON.stringify(trend.body).includes('/tmp/source-gaps'), false);
+  assert.equal(JSON.stringify(trend.body).includes('tmux://'), false);
+  assert.equal(JSON.stringify(trend.body).includes('evidence_id'), false);
+  assert.equal(JSON.stringify(trend.body).includes('evidence_ref'), false);
+  assert.equal(JSON.stringify(trend.body).includes('metadata'), false);
+  assert.equal(JSON.stringify(trend.body).includes('degraded_reasons'), false);
   assert.equal(collectCount, 0);
   assert.equal(store.getLatestCollectorReport(), latestBeforeRead);
   assert.equal(await readFile(storeFile, 'utf8'), fileBeforeRead);
@@ -6439,6 +6465,7 @@ test('GET read route purity matrix leaves replay records and checkpoints unchang
     recordCount: store.records.length,
     counts: store.getCounts(),
     checkpoint: store.getReplayCheckpointSummary(),
+    checkpointLog: store.listReplayCheckpointLog({ limit: '3' }),
     file: await readFile(storeFile, 'utf8')
   };
 
@@ -6454,7 +6481,8 @@ test('GET read route purity matrix leaves replay records and checkpoints unchang
     '/accountability/replay/checkpoint-log?limit=3',
     '/runtime/source-gaps?newest_first=true&limit=10',
     '/runtime/source-gaps/summary?newest_first=true&limit=1',
-    '/runtime/source-gaps/agent-summary?newest_first=true&limit=1'
+    '/runtime/source-gaps/agent-summary?newest_first=true&limit=1',
+    '/runtime/source-gaps/trend?newest_first=true&limit=1'
   ];
 
   for (const pathname of paths) {
@@ -6463,6 +6491,7 @@ test('GET read route purity matrix leaves replay records and checkpoints unchang
     assert.equal(store.records.length, before.recordCount, pathname);
     assert.deepEqual(store.getCounts(), before.counts, pathname);
     assert.deepEqual(store.getReplayCheckpointSummary(), before.checkpoint, pathname);
+    assert.deepEqual(store.listReplayCheckpointLog({ limit: '3' }), before.checkpointLog, pathname);
     assert.equal(await readFile(storeFile, 'utf8'), before.file, pathname);
   }
 
@@ -6482,6 +6511,7 @@ test('GET read route purity matrix leaves replay records and checkpoints unchang
   assert.equal(store.records.length, before.recordCount);
   assert.deepEqual(store.getCounts(), before.counts);
   assert.deepEqual(store.getReplayCheckpointSummary(), before.checkpoint);
+  assert.deepEqual(store.listReplayCheckpointLog({ limit: '3' }), before.checkpointLog);
   assert.equal(await readFile(storeFile, 'utf8'), before.file);
   assert.equal(collectCount, 0);
 });

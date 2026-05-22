@@ -875,7 +875,7 @@ describe('selectHotZones', () => {
 });
 
 describe('selectZoneEvidenceFloors', () => {
-  it('projects passive zone floor evidence from observable runtime signals only', () => {
+  it('projects passive zone floor presence without carrying severity or counts', () => {
     const world = makeWorldState({
       agents: new Map([
         [
@@ -925,10 +925,6 @@ describe('selectZoneEvidenceFloors', () => {
       {
         zone_id: 'review-zone',
         label: 'Review Zone',
-        highest_severity: 'orange',
-        occupant_count: 2,
-        signal_count: 4,
-        signals: ['severity', 'blocked', 'open_alert_or_incident', 'runtime_freshness_degraded'],
       },
     ]);
   });

@@ -1,7 +1,6 @@
 import type { CollectorSourceHealthStatus } from '../types';
 import type { Severity } from '../world/types';
 import type { AgentPhase } from '../world/types';
-import type { ZoneEvidenceFloorSignal } from '../world/selectors';
 
 export interface AnimatedMapSprite {
   x: number;
@@ -91,10 +90,7 @@ export interface SceneZone {
   anchor: ScenePoint;
   occupantIds: string[];
   evidenceFloor?: {
-    highestSeverity: Severity;
-    occupantCount: number;
-    signalCount: number;
-    signals: ZoneEvidenceFloorSignal[];
+    present: true;
   };
 }
 

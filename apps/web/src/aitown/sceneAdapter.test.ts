@@ -195,17 +195,17 @@ describe('adaptWorldToScene', () => {
     expect(growthRevenue?.sourceEvidenceHealthStatus).toBe('missing');
   });
 
-  it('attaches passive zone evidence floors to scene zones without changing agent semantics', () => {
+  it('attaches neutral passive zone evidence floors without severity or count encodings', () => {
     const scene = adaptWorldToScene(world, 'app-engineering');
     const meetingZone = scene.zones.find((zone) => zone.zoneId === 'meeting-zone');
     const leadDesk = scene.zones.find((zone) => zone.zoneId === 'lead-desk');
 
     expect(meetingZone?.evidenceFloor).toEqual({
-      highestSeverity: 'orange',
-      occupantCount: 1,
-      signalCount: 5,
-      signals: ['severity', 'blocked', 'reboot', 'open_alert_or_incident', 'runtime_freshness_degraded']
+      present: true
     });
+    expect(meetingZone?.evidenceFloor).not.toHaveProperty('highestSeverity');
+    expect(meetingZone?.evidenceFloor).not.toHaveProperty('occupantCount');
+    expect(meetingZone?.evidenceFloor).not.toHaveProperty('signalCount');
     expect(leadDesk?.evidenceFloor).toBeUndefined();
     expect(scene.agents.find((agent) => agent.agentId === 'app-engineering')).toMatchObject({
       zoneId: 'meeting-zone',

@@ -5369,6 +5369,61 @@ test('GET /collectors/controller-snapshot/source-health projects latest source h
   assert.equal(records[records.length - 1].kind, 'collector_snapshot');
 });
 
+test('GET /collectors/controller-snapshot/diff projects compact read-only snapshot deltas', async (t) => {
+  const { baseUrl, store, storeFile } = await createHarness(t);
+  const firstReport = createRouteParityCollectorReport();
+  const secondBase = createRouteParityCollectorReport();
+  const secondReport = {
+    ...secondBase,
+    collected_at: '2026-03-09T18:11:00.000Z',
+    items: secondBase.items.map((item) =>
+      item.agent_id === 'app-engineering'
+        ? {
+          ...item,
+          source_health: {
+            ...item.source_health,
+            workspace_files: {
+              ...item.source_health.workspace_files,
+              status: 'observed',
+              missing_count: 0,
+              degraded_reasons: []
+            }
+          }
+        }
+        : item
+    )
+  };
+
+  await store.appendCollectorReport(firstReport);
+  await store.appendCollectorReport(secondReport);
+  const beforeRead = await readFile(storeFile, 'utf8');
+  const beforeCounts = store.getCounts();
+
+  const diff = await requestJson(`${baseUrl}/collectors/controller-snapshot/diff?limit=10`);
+  assert.equal(diff.response.status, 200);
+  assert.equal(diff.body.item.from_collector_snapshot_id, 'collector-snapshot:2026-03-09T18:06:00.000Z');
+  assert.equal(diff.body.item.to_collector_snapshot_id, 'collector-snapshot:2026-03-09T18:11:00.000Z');
+  assert.deepEqual(diff.body.item.agent_changes, [
+    {
+      agent_id: 'app-engineering',
+      change_type: 'changed',
+      heartbeat_changed: false,
+      source_health_status_changes: {
+        workspace_files: {
+          from: 'degraded',
+          to: 'observed'
+        }
+      }
+    }
+  ]);
+  assert.equal(JSON.stringify(diff.body).includes('/tmp/route-parity'), false);
+  assert.equal(JSON.stringify(diff.body).includes('tmux://'), false);
+  assert.equal(JSON.stringify(diff.body).includes('evidence_refs'), false);
+  assert.equal(JSON.stringify(diff.body).includes('metadata'), false);
+  assert.deepEqual(store.getCounts(), beforeCounts);
+  assert.equal(await readFile(storeFile, 'utf8'), beforeRead);
+});
+
 test('GET /collectors/controller-snapshot/source-health projects requested historical snapshot', async (t) => {
   let collectCount = 0;
   const controllerSnapshotCollector = {

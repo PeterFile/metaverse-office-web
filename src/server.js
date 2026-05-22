@@ -397,6 +397,19 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
     return;
   }
 
+  if (method === 'GET' && pathname === '/collectors/controller-snapshot/diff') {
+    sendJson(res, 200, {
+      item: store.getCollectorSnapshotDiff({
+        from_collector_snapshot_id:
+          url.searchParams.get('from_collector_snapshot_id') || url.searchParams.get('from'),
+        to_collector_snapshot_id:
+          url.searchParams.get('to_collector_snapshot_id') || url.searchParams.get('to'),
+        limit: url.searchParams.get('limit')
+      })
+    });
+    return;
+  }
+
   if (method === 'GET' && pathname === '/evidence-records') {
     sendJson(res, 200, {
       items: store.listEvidenceRecords({

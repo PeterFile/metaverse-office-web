@@ -791,6 +791,40 @@ class PrototypeStore {
     };
   }
 
+  getRuntimeSourceGapLifecycle(filters = {}) {
+    const { records, limit, newestFirst } = this.#filterEvidenceRecords(filters);
+    const groups = new Map();
+
+    for (const record of records.filter(isRuntimeSourceLifecycleRecord)) {
+      const groupKey = JSON.stringify([
+        record.agent_id,
+        record.source_kind || null,
+        record.evidence_role || null
+      ]);
+      if (!groups.has(groupKey)) {
+        groups.set(groupKey, createRuntimeSourceGapLifecycleGroup(record));
+      }
+
+      addRuntimeSourceRecordToLifecycleGroup(groups.get(groupKey), record);
+    }
+
+    const lifecycleGroups = Array.from(groups.values())
+      .filter((group) => group.has_lifecycle_signal)
+      .map(projectRuntimeSourceGapLifecycleGroup)
+      .sort((left, right) =>
+        newestFirst
+          ? compareRuntimeSourceGapLifecycleGroupsByRecency(left, right)
+          : compareRuntimeSourceGapLifecycleGroups(left, right)
+      );
+
+    return {
+      total_count: lifecycleGroups.reduce((total, group) => total + group.record_count, 0),
+      total_groups: lifecycleGroups.length,
+      returned_limit: limit,
+      groups: lifecycleGroups.map(omitRuntimeSourceGapLifecycleRecordCount).slice(0, limit)
+    };
+  }
+
   getRuntimeSourceGapTrend(filters = {}) {
     const { records, limit, newestFirst } = this.#filterEvidenceRecords(filters);
     const bucket = normalizeRuntimeSourceGapTrendBucket(filters.bucket);
@@ -2125,6 +2159,140 @@ function compareRuntimeSourceGapAgentGroups(left, right) {
   const sourceComparison = compareStringsAsc(left.source_kind || '', right.source_kind || '');
   if (sourceComparison !== 0) {
     return sourceComparison;
+  }
+
+  return compareStringsAsc(left.agent_id || '', right.agent_id || '');
+}
+
+function isRuntimeSourceLifecycleRecord(record) {
+  return !(record.evidence_role === 'task_reference' && TASK_EVIDENCE_SOURCE_KINDS.has(record.source_kind));
+}
+
+function createRuntimeSourceGapLifecycleGroup(record) {
+  return {
+    agent_id: record.agent_id || null,
+    source_kind: projectKnownEvidenceValue(record.source_kind, EVIDENCE_RECORD_SOURCE_KINDS),
+    evidence_role: projectKnownEvidenceValue(record.evidence_role, EVIDENCE_RECORD_ROLES),
+    first_observed_at: null,
+    last_observed_at: null,
+    first_collected_at: null,
+    last_collected_at: null,
+    snapshot_ids: new Set(),
+    source_status_buckets: {},
+    records: [],
+    has_lifecycle_signal: false
+  };
+}
+
+function addRuntimeSourceRecordToLifecycleGroup(group, record) {
+  group.records.push(record);
+  group.has_lifecycle_signal ||= isRuntimeSourceGapRecord(record);
+  if (record.collector_snapshot_id) {
+    group.snapshot_ids.add(record.collector_snapshot_id);
+  }
+
+  incrementAllowedBucket(
+    group.source_status_buckets,
+    record.source_status,
+    EVIDENCE_RECORD_SOURCE_STATUSES
+  );
+  group.first_observed_at = getEarliestEvidenceRecordIsoValue(group.first_observed_at, record.observed_at);
+  group.last_observed_at = getLatestEvidenceRecordIsoValue(group.last_observed_at, record.observed_at);
+  group.first_collected_at = getEarliestEvidenceRecordIsoValue(group.first_collected_at, record.collected_at);
+  group.last_collected_at = getLatestEvidenceRecordIsoValue(group.last_collected_at, record.collected_at);
+}
+
+function projectRuntimeSourceGapLifecycleGroup(group) {
+  const recordsByRecency = group.records.slice().sort(compareRuntimeSourceLifecycleRecordRecency);
+  const currentRecord = recordsByRecency[0] || null;
+
+  return {
+    record_count: group.records.length,
+    agent_id: group.agent_id,
+    source_kind: group.source_kind,
+    evidence_role: group.evidence_role,
+    current_status: projectKnownEvidenceValue(
+      currentRecord?.source_status,
+      EVIDENCE_RECORD_SOURCE_STATUSES
+    ),
+    lifecycle_state: deriveRuntimeSourceGapLifecycleState(recordsByRecency),
+    first_observed_at: group.first_observed_at,
+    last_observed_at: group.last_observed_at,
+    first_collected_at: group.first_collected_at,
+    last_collected_at: group.last_collected_at,
+    snapshot_count: group.snapshot_ids.size,
+    source_status_buckets: sortBucketKeys(group.source_status_buckets)
+  };
+}
+
+function omitRuntimeSourceGapLifecycleRecordCount(group) {
+  const { record_count, ...publicGroup } = group;
+  return publicGroup;
+}
+
+function deriveRuntimeSourceGapLifecycleState(recordsByRecency) {
+  const currentRecord = recordsByRecency[0] || null;
+  if (
+    currentRecord?.agent_id === null &&
+    currentRecord.evidence_role === 'runtime_unmapped' &&
+    currentRecord.source_status === 'observed'
+  ) {
+    return 'observed_unmapped';
+  }
+
+  if (currentRecord?.source_status === 'observed') {
+    return 'resolved';
+  }
+
+  const previousRecord = recordsByRecency[1] || null;
+  return previousRecord && RUNTIME_SOURCE_GAP_STATUSES.includes(previousRecord.source_status)
+    ? 'continuing'
+    : 'opened';
+}
+
+function compareRuntimeSourceGapLifecycleGroupsByRecency(left, right) {
+  const lastCollectedComparison =
+    getEvidenceRecordTimestamp(right.last_collected_at) -
+    getEvidenceRecordTimestamp(left.last_collected_at);
+  if (lastCollectedComparison !== 0) {
+    return lastCollectedComparison;
+  }
+
+  const lastObservedComparison =
+    getEvidenceRecordTimestamp(right.last_observed_at) -
+    getEvidenceRecordTimestamp(left.last_observed_at);
+  if (lastObservedComparison !== 0) {
+    return lastObservedComparison;
+  }
+
+  return compareRuntimeSourceGapLifecycleGroups(left, right);
+}
+
+function compareRuntimeSourceLifecycleRecordRecency(left, right) {
+  const collectedComparison =
+    getEvidenceRecordTimestamp(right.collected_at) - getEvidenceRecordTimestamp(left.collected_at);
+  if (collectedComparison !== 0) {
+    return collectedComparison;
+  }
+
+  const observedComparison =
+    getEvidenceRecordTimestamp(right.observed_at) - getEvidenceRecordTimestamp(left.observed_at);
+  if (observedComparison !== 0) {
+    return observedComparison;
+  }
+
+  return compareStringsAsc(getEvidenceRecordTieKey(left), getEvidenceRecordTieKey(right));
+}
+
+function compareRuntimeSourceGapLifecycleGroups(left, right) {
+  const sourceComparison = compareStringsAsc(left.source_kind || '', right.source_kind || '');
+  if (sourceComparison !== 0) {
+    return sourceComparison;
+  }
+
+  const roleComparison = compareStringsAsc(left.evidence_role || '', right.evidence_role || '');
+  if (roleComparison !== 0) {
+    return roleComparison;
   }
 
   return compareStringsAsc(left.agent_id || '', right.agent_id || '');

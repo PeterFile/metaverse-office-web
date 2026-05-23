@@ -902,6 +902,7 @@ test.describe('operator shell layout visual smoke', () => {
   }) => {
     const evidenceId =
       'ev_collector-snapshot_2026-03-10T23_59_40_000Z_app-engineering_workspace_file__tmp_revenue-handoff_md_1';
+    const boundedEvidenceId = `${evidenceId.slice(0, 69)}...`;
     const expectedEvidenceRecordGets = [
       '/evidence-records?agent_id=app-engineering&newest_first=true&limit=12',
       `/evidence-records/${evidenceId}`,
@@ -985,8 +986,11 @@ test.describe('operator shell layout visual smoke', () => {
     const evidencePanel = page.getByRole('tabpanel', { name: 'Evidence' });
     await expect(evidencePanel.getByRole('heading', { name: 'Evidence Ledger' })).toBeVisible();
     await expect.poll(() => evidenceRecordRequests.slice()).toEqual([expectedEvidenceRecordGets[0]]);
+    await expect(
+      evidencePanel.getByRole('button', { name: `Inspect evidence record ${evidenceId}` })
+    ).toHaveCount(0);
 
-    await evidencePanel.getByRole('button', { name: `Inspect evidence record ${evidenceId}` }).click();
+    await evidencePanel.getByRole('button', { name: `Inspect evidence record ${boundedEvidenceId}` }).click();
 
     await expect.poll(() => evidenceRecordRequests.slice()).toEqual(expectedEvidenceRecordGets);
     const detailSection = evidencePanel.locator('section').filter({

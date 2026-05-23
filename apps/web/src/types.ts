@@ -662,6 +662,7 @@ export interface TimelineReplayResponse {
 
 export interface AccountabilityReplayQuery {
   event_id?: string;
+  evidence_id?: string;
   evidence_ref?: string;
   correlation_id?: string;
   agent_id?: string;

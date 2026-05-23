@@ -176,6 +176,8 @@ const growthRevenueSecondarySelectedTimelineUrl =
   '/timeline?limit=10&window=60m&agent_id=growth-revenue&correlation_id=corr-app-secondary';
 const appEngineeringReviewAccountabilityReplayUrl =
   '/accountability/replay?limit=10&window=60m&correlation_id=corr-app-review&agent_id=app-engineering';
+const appEngineeringEvidenceAccountabilityReplayUrl =
+  '/accountability/replay?limit=10&window=60m&evidence_id=output-1&agent_id=app-engineering';
 const appEngineeringReviewAccountabilityReplayCheckpointUrl =
   '/accountability/replay?limit=10&window=60m&event_id=evt-memory-replay-anchor&correlation_id=corr-app-review&agent_id=app-engineering';
 const teamLeadAccountabilityReplayUrl =
@@ -1328,8 +1330,9 @@ const evidenceProvenanceBundleFixture = {
         route: '/evidence-records/output-1-with-secret-token-that-must-not-render'
       },
       replay: {
+        evidence_id: 'output-1',
         correlation_id: 'corr-app-review-with-secret-token-that-must-not-render',
-        route: '/accountability/replay?correlation_id=corr-app-review-with-secret-token-that-must-not-render'
+        route: '/accountability/replay?evidence_id=output-1&correlation_id=corr-app-review-with-secret-token-that-must-not-render'
       }
     }
   }
@@ -1556,19 +1559,23 @@ function buildAccountabilityReplayFixture(url: string): AccountabilityReplayBund
   const agentId = parsedUrl.searchParams.get('agent_id') ?? 'app-engineering';
   const correlationId = parsedUrl.searchParams.get('correlation_id');
   const eventId = parsedUrl.searchParams.get('event_id');
+  const evidenceId = parsedUrl.searchParams.get('evidence_id');
   const evidenceRef = parsedUrl.searchParams.get('evidence_ref');
   const limit = Number(parsedUrl.searchParams.get('limit') ?? '10');
   const windowValue = parsedUrl.searchParams.get('window') ?? '60m';
   const summaryAgent = agentId === 'team-lead' ? 'Team Lead' : 'App Engineering Agent';
   const summary = eventId
     ? `${summaryAgent} accountability checkpoint bundle`
+    : evidenceId
+      ? `${summaryAgent} evidence accountability replay bundle`
     : `${summaryAgent} accountability replay bundle`;
-  const basisEventId = eventId ?? `evt-accountability-${agentId}`;
+  const basisEventId = eventId ?? (evidenceId ? `evt-accountability-${evidenceId}` : `evt-accountability-${agentId}`);
 
   return {
     generated_at: '2026-03-16T09:00:00.000Z',
     query: {
       ...(eventId ? { event_id: eventId } : {}),
+      ...(evidenceId ? { evidence_id: evidenceId } : {}),
       ...(evidenceRef ? { evidence_ref: evidenceRef } : {}),
       ...(correlationId ? { correlation_id: correlationId } : {}),
       agent_id: agentId,
@@ -3588,6 +3595,71 @@ afterEach(() => {
     10_000
   );
 
+  it('replays an inspected evidence record by evidence_id with read-only accountability GETs', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const roster = await screen.findByRole('navigation', { name: 'Agent roster' });
+    await user.click(
+      within(roster).getByRole('button', {
+        name: 'Select and locate App Engineering Agent'
+      })
+    );
+
+    const inspectPeek = await screen.findByRole('region', { name: 'Selected agent inspect peek' });
+    await user.click(
+      within(inspectPeek).getByRole('button', {
+        name: 'Open App Engineering Agent Evidence Ledger'
+      })
+    );
+
+    const details = await screen.findByRole('complementary', { name: 'Agent details' });
+    await findHubSection(details, 'Evidence Ledger');
+
+    await user.click(
+      within(details).getByRole('button', {
+        name: 'Inspect evidence record output-1'
+      })
+    );
+
+    const detailSection = await findHubSection(details, 'Evidence Record Detail');
+    const replayButton = await within(detailSection).findByRole('button', {
+      name: 'Replay this evidence output-1'
+    });
+    const callsBeforeReplay = vi.mocked(globalThis.fetch).mock.calls.length;
+
+    await user.click(replayButton);
+
+    const replayPanel = await screen.findByRole('tabpanel', { name: 'Replay / Correlation' });
+    const replayBundleSection = (await within(replayPanel).findByRole('heading', { name: 'Replay Bundle' })).closest(
+      'section'
+    );
+    expect(replayBundleSection).not.toBeNull();
+
+    await waitFor(() => {
+      expect(
+        within(replayBundleSection!).getByText('App Engineering Agent evidence accountability replay bundle')
+      ).toBeVisible();
+      expect(
+        within(replayBundleSection!).getByText('Query anchor · agent_id app-engineering, evidence_id output-1')
+      ).toBeVisible();
+    });
+
+    const replayRequests = vi
+      .mocked(globalThis.fetch)
+      .mock.calls.slice(callsBeforeReplay)
+      .filter(([input]) => {
+        const url = typeof input === 'string' ? input : input.toString();
+        return url.startsWith('/accountability/replay?');
+      });
+    const replayUrls = replayRequests.map(([input]) => (typeof input === 'string' ? input : input.toString()));
+
+    expect(replayUrls).toContain(appEngineeringEvidenceAccountabilityReplayUrl);
+    expect(replayUrls).not.toContain(appEngineeringReviewAccountabilityReplayUrl);
+    expect(replayUrls.some((url) => url.includes('evidence_ref='))).toBe(false);
+    expect(replayRequests.every(([, init]) => !init || !('method' in init) || init.method === 'GET')).toBe(true);
+  });
+
   it('clears stale selected-agent evidence detail when the next detail response is empty', async () => {
     const user = userEvent.setup();
     const missingEvidenceRecordsFixture = {
@@ -3689,6 +3761,64 @@ afterEach(() => {
       missingEvidenceRecordDetailUrl,
       missingEvidenceProvenanceBundleUrl
     ]);
+  });
+
+  it('preserves last-good selected-agent evidence detail when the next detail request fails', async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === appEngineeringEvidenceRecordsUrl) {
+          return jsonResponse({
+            items: [
+              evidenceRecordsFixture.items[0],
+              {
+                ...evidenceRecordsFixture.items[1],
+                evidence_id: 'missing-1',
+                evidence_ref: '/tmp/app/missing.md'
+              }
+            ]
+          });
+        }
+
+        if (url === missingEvidenceRecordDetailUrl || url === missingEvidenceProvenanceBundleUrl) {
+          return new Response(JSON.stringify({ error: 'not_found', details: 'detail refresh failed' }), {
+            status: 500,
+            headers: { 'content-type': 'application/json' }
+          });
+        }
+
+        return resolveTestFetchResponse(url);
+      })
+    );
+
+    render(<App />);
+
+    const roster = await screen.findByRole('navigation', { name: 'Agent roster' });
+    await user.click(within(roster).getByRole('button', { name: 'Select and locate App Engineering Agent' }));
+
+    const inspectPeek = await screen.findByRole('region', { name: 'Selected agent inspect peek' });
+    await user.click(within(inspectPeek).getByRole('button', { name: 'Open App Engineering Agent Evidence Ledger' }));
+
+    const details = await screen.findByRole('complementary', { name: 'Agent details' });
+    await findHubSection(details, 'Evidence Ledger');
+    await user.click(within(details).getByRole('button', { name: 'Inspect evidence record output-1' }));
+
+    let detailSection = await findHubSection(details, 'Evidence Record Detail');
+    await waitFor(() => expect(detailSection).toHaveTextContent('Evidence id · output-1'));
+
+    await user.click(within(details).getByRole('button', { name: 'Inspect evidence record missing-1' }));
+
+    detailSection = await findHubSection(details, 'Evidence Record Detail');
+    await waitFor(() => {
+      expect(detailSection).toHaveTextContent('Evidence id · output-1');
+      expect(detailSection).toHaveTextContent('Last-good detail · Refresh failed: detail refresh failed');
+      expect(detailSection).not.toHaveTextContent('No evidence record found for missing-1.');
+      expect(detailSection).not.toHaveTextContent('Replay checkpoint');
+      expect(detailSection).not.toHaveTextContent('evt-');
+    });
   });
 
   it('surfaces source-gap chips as provenance health and opens Supervision from a chip', async () => {

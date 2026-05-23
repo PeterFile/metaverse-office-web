@@ -710,6 +710,7 @@ export async function fetchAccountabilityReplay(
     limit?: number;
     window?: string;
     eventId?: string;
+    evidenceId?: string;
     evidenceRef?: string;
     correlationId?: string;
     agentId?: string;
@@ -725,6 +726,9 @@ export async function fetchAccountabilityReplay(
 
   if (options.eventId) {
     params.set('event_id', options.eventId);
+  }
+  if (options.evidenceId) {
+    params.set('evidence_id', options.evidenceId);
   }
   if (options.evidenceRef) {
     params.set('evidence_ref', options.evidenceRef);

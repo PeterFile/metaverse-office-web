@@ -176,6 +176,7 @@ type DetailsPanelProps = {
   onSelectOperationsSeverity: (severity: Severity | null) => void;
   onSelectOperation: (operation: OfficeOperation, options?: SelectOperationOptions) => void;
   onInspectSelectedAgentEvidenceRecord: (evidenceId: string) => void;
+  onReplaySelectedAgentEvidenceRecord: (evidenceId: string) => void;
   onFocusSharedMemoryArtifact?: (artifactRef: string, scope?: SharedMemoryJumpScope) => void;
   onOpenReplayCheckpoint?: (eventId: string) => void;
   onFocusWorldZone?: (zoneId: string) => void;
@@ -1352,13 +1353,13 @@ function renderSelectedAgentEvidenceLedgerItem(
       <span>{`Role · ${item.evidenceRole ?? 'unclassified'}`}</span>
       <span>{`Status · ${item.sourceStatus ?? 'unknown'}`}</span>
       <span>{`Observed · ${renderTimestamp(item.observedAt, 'No observed timestamp')}`}</span>
-      <span>{item.agentId ? `Agent · ${item.agentId}` : 'Agent · unmapped'}</span>
-      {item.correlationId ? <span>{`Correlation · ${item.correlationId}`}</span> : null}
+      <span>{item.agentId ? `Agent · ${formatBoundedEvidenceLedgerToken(item.agentId)}` : 'Agent · unmapped'}</span>
+      {item.correlationId ? <span>{`Correlation · ${formatBoundedEvidenceLedgerToken(item.correlationId)}`}</span> : null}
       {degradedReasons ? <span>{`Degraded · ${degradedReasons}`}</span> : null}
       <button
         type="button"
         className="aitown-link-button"
-        aria-label={`Inspect evidence record ${item.evidenceId}`}
+        aria-label={`Inspect evidence record ${evidenceId}`}
         onClick={() => onInspectRecord(item.evidenceId)}
       >
         Inspect record
@@ -1374,13 +1375,15 @@ function renderSelectedAgentEvidenceRecordDetail(
   requestedEvidenceId: string | null,
   provenanceBundle: EvidenceProvenanceBundle | null,
   provenanceState: LoadState,
-  provenanceError: string | null
+  provenanceError: string | null,
+  onReplayRecord: (evidenceId: string) => void
 ) {
   if (!requestedEvidenceId && !record) {
     return null;
   }
 
   const evidenceId = record?.evidence_id ?? requestedEvidenceId ?? 'unknown';
+  const boundedEvidenceId = formatBoundedEvidenceLedgerToken(evidenceId);
 
   return (
     <section
@@ -1389,17 +1392,17 @@ function renderSelectedAgentEvidenceRecordDetail(
       <h3>Evidence Record Detail</h3>
       <ul className="aitown-records">
         {state === 'loading' && !record ? (
-          <li className="aitown-record">{`Loading evidence record detail for ${evidenceId}...`}</li>
+          <li className="aitown-record">{`Loading evidence record detail for ${boundedEvidenceId}...`}</li>
         ) : null}
         {error && !record ? (
-          <li className="aitown-record">{`Unable to load evidence record ${evidenceId}. ${error}`}</li>
+          <li className="aitown-record">{`Unable to load evidence record ${boundedEvidenceId}. ${error}`}</li>
         ) : null}
         {state === 'ready' && !error && !record ? (
-          <li className="aitown-record">{`No evidence record found for ${evidenceId}.`}</li>
+          <li className="aitown-record">{`No evidence record found for ${boundedEvidenceId}.`}</li>
         ) : null}
         {record ? (
           <li className="aitown-record">
-            <strong>{`Evidence id · ${formatBoundedEvidenceLedgerToken(record.evidence_id)}`}</strong>
+            <strong>{`Evidence id · ${boundedEvidenceId}`}</strong>
             {state === 'loading' ? <span>Refreshing evidence record detail...</span> : null}
             {error ? <span>{`Last-good detail · Refresh failed: ${error}`}</span> : null}
             <span>{`Observed · ${renderTimestamp(record.observed_at, 'No observed timestamp')}`}</span>
@@ -1409,16 +1412,52 @@ function renderSelectedAgentEvidenceRecordDetail(
             <span>{`Role · ${record.evidence_role ?? 'unclassified'}`}</span>
             <span>{`Output candidate · ${String(record.output_candidate)}`}</span>
             <span>{`Snapshot · ${formatBoundedEvidenceLedgerToken(record.collector_snapshot_id)}`}</span>
-            <span>{`Correlation · ${record.correlation_id ?? 'none'}`}</span>
+            <span>{`Correlation · ${record.correlation_id ? formatBoundedEvidenceLedgerToken(record.correlation_id) : 'none'}`}</span>
             <span>
               {`Degraded · ${record.degraded_reasons.length > 0 ? record.degraded_reasons.map(formatEvidenceLedgerReason).join(', ') : 'none'}`}
             </span>
             <span>{`Ref · ${formatEvidenceLedgerRef(record.evidence_ref)}`}</span>
             {renderSelectedAgentEvidenceProvenanceAnchors(provenanceBundle, provenanceState, provenanceError)}
+            {renderSelectedAgentEvidenceReplayAction(record, provenanceBundle, provenanceState, onReplayRecord)}
           </li>
         ) : null}
       </ul>
     </section>
+  );
+}
+
+function renderSelectedAgentEvidenceReplayAction(
+  record: EvidenceRecord,
+  provenanceBundle: EvidenceProvenanceBundle | null,
+  provenanceState: LoadState,
+  onReplayRecord: (evidenceId: string) => void
+) {
+  if (provenanceState === 'loading' && !provenanceBundle) {
+    return null;
+  }
+
+  if (provenanceState === 'error' && !provenanceBundle) {
+    return <span>Replay · unavailable without provenance anchor</span>;
+  }
+
+  const replayEvidenceId = provenanceBundle?.anchors.replay?.evidence_id?.trim() ?? '';
+  if (!replayEvidenceId) {
+    return <span>Replay · not available for collector-only evidence</span>;
+  }
+
+  if (replayEvidenceId !== record.evidence_id) {
+    return <span>Replay · not available for this evidence</span>;
+  }
+
+  return (
+    <button
+      type="button"
+      className="aitown-link-button"
+      aria-label={`Replay this evidence ${formatBoundedEvidenceLedgerToken(record.evidence_id)}`}
+      onClick={() => onReplayRecord(record.evidence_id)}
+    >
+      Replay this evidence
+    </button>
   );
 }
 
@@ -2822,10 +2861,13 @@ function renderReplayBundleSourceKindCounts(sourceKindBuckets: Record<string, nu
 
 function renderReplayBundleQueryAnchors(bundle: AccountabilityReplayBundle) {
   const anchors = dedupeNonEmptyStrings([
-    bundle.query.agent_id ? `agent_id ${bundle.query.agent_id}` : null,
-    bundle.query.correlation_id ? `correlation_id ${bundle.query.correlation_id}` : null,
-    bundle.query.event_id ? `event_id ${bundle.query.event_id}` : null,
-    bundle.query.evidence_ref ? `evidence_ref ${bundle.query.evidence_ref}` : null
+    bundle.query.agent_id ? `agent_id ${formatBoundedEvidenceLedgerToken(bundle.query.agent_id)}` : null,
+    bundle.query.correlation_id
+      ? `correlation_id ${formatBoundedEvidenceLedgerToken(bundle.query.correlation_id)}`
+      : null,
+    bundle.query.event_id ? `event_id ${formatBoundedEvidenceLedgerToken(bundle.query.event_id)}` : null,
+    bundle.query.evidence_id ? `evidence_id ${formatBoundedEvidenceLedgerToken(bundle.query.evidence_id)}` : null,
+    bundle.query.evidence_ref ? `evidence_ref ${formatEvidenceLedgerRef(bundle.query.evidence_ref)}` : null
   ]);
 
   return renderNamedList(anchors, 'No query anchors');
@@ -2850,6 +2892,7 @@ function renderReplayProofLadder(replayBundle: AccountabilityReplayBundle) {
       <span>
         {`Unavailable anchors · ${unavailableAnchorCount} total · ${counts.collector_observation_without_event_id_row_count} collector-only · ${counts.unsupported_unbacked_row_count} unsupported`}
       </span>
+      <span>{`Query anchor · ${renderReplayBundleQueryAnchors(replayBundle)}`}</span>
       <span>{`Replayable · ${replayableLabel}`}</span>
     </li>
   );
@@ -4342,6 +4385,7 @@ export function DetailsPanel({
   onSelectOperationsSeverity,
   onSelectOperation,
   onInspectSelectedAgentEvidenceRecord,
+  onReplaySelectedAgentEvidenceRecord,
   onFocusSharedMemoryArtifact,
   onOpenReplayCheckpoint,
   onFocusWorldZone
@@ -6172,7 +6216,8 @@ export function DetailsPanel({
         selectedAgentEvidenceRecordId,
         selectedAgentEvidenceProvenanceBundle,
         selectedAgentEvidenceProvenanceBundleState,
-        selectedAgentEvidenceProvenanceBundleError
+        selectedAgentEvidenceProvenanceBundleError,
+        onReplaySelectedAgentEvidenceRecord
       )}
 
       <section

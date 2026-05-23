@@ -873,7 +873,11 @@ function createWatchOverlay(scene: AiTownSceneModel) {
   return container;
 }
 
-function createSourceGapPin(pin: SourceGapPin) {
+function createSourceGapPin(
+  pin: SourceGapPin,
+  onSelectSourceGapPin?: (pin: SourceGapPin) => void,
+  selectPayload: SourceGapPin = pin
+) {
   const container = new Container();
   const color = pin.status === 'error'
     ? SOURCE_EVIDENCE_HEALTH_COLORS.error
@@ -907,7 +911,17 @@ function createSourceGapPin(pin: SourceGapPin) {
   });
   label.anchor.set(0.5, 0.5);
 
-  container.eventMode = 'none';
+  if (pin.agentId && pin.sourceDrilldownGroupKey && onSelectSourceGapPin) {
+    container.eventMode = 'static';
+    container.cursor = 'pointer';
+    container.hitArea = new Rectangle(-markerWidth / 2, -12, markerWidth, 32);
+    container.on('pointertap', (event) => {
+      event.stopPropagation();
+      onSelectSourceGapPin(selectPayload);
+    });
+  } else {
+    container.eventMode = 'none';
+  }
   container.position.set(pin.position.x, pin.position.y);
   container.zIndex = pin.position.y + 0.5;
   container.addChild(marker, label);
@@ -1467,6 +1481,7 @@ function createAgentSprite(
 type WorldSceneProps = {
   scene: AiTownSceneModel;
   onSelectAgent: (agentId: string | null) => void;
+  onSelectSourceGapPin?: (pin: SourceGapPin) => void;
   resetViewSignal?: number;
   agentFocusRequest?: {
     agentId: string;
@@ -1497,6 +1512,7 @@ type AgentFocusTarget = CenteredAgentState & {
 export default function WorldScene({
   scene,
   onSelectAgent,
+  onSelectSourceGapPin,
   resetViewSignal = 0,
   agentFocusRequest = null,
   zoneFocusRequest = null,
@@ -1525,6 +1541,7 @@ export default function WorldScene({
   const retiredAgentSpritePoolRef = useRef(new Map<string, AgentSpriteContainer[]>());
   const mapDepthSpritesRef = useRef<Sprite[]>([]);
   const onSelectAgentRef = useRef(onSelectAgent);
+  const onSelectSourceGapPinRef = useRef(onSelectSourceGapPin);
   const lastCenteredAgentRef = useRef<CenteredAgentState | null>(null);
   const selectedAgentRef = useRef<CenteredAgentState | null>(null);
   const selectedAgentIdRef = useRef(scene.selectedAgentId);
@@ -1791,6 +1808,10 @@ export default function WorldScene({
   useEffect(() => {
     onSelectAgentRef.current = onSelectAgent;
   }, [onSelectAgent]);
+
+  useEffect(() => {
+    onSelectSourceGapPinRef.current = onSelectSourceGapPin;
+  }, [onSelectSourceGapPin]);
 
   useLayoutEffect(() => {
     const previousSelectedAgentId = lastSelectionAgentIdRef.current;
@@ -2638,6 +2659,7 @@ export default function WorldScene({
         sceneForRender.watchEdges
       );
       const correlationParticipantIds = new Set(sceneForRender.correlationParticipantAgentIds);
+      const sourceGapPinPayloadById = new Map((scene.sourceGapPins ?? []).map((pin) => [pin.pinId, pin]));
 
       const zoneEvidenceFloorOverlay = createZoneEvidenceFloorOverlay(sceneForRender);
       if (zoneEvidenceFloorOverlay) {
@@ -2675,7 +2697,9 @@ export default function WorldScene({
       }
 
       for (const pin of sceneForRender.sourceGapPins ?? []) {
-        agentLayer.addChild(createSourceGapPin(pin));
+        agentLayer.addChild(
+          createSourceGapPin(pin, onSelectSourceGapPinRef.current, sourceGapPinPayloadById.get(pin.pinId) ?? pin)
+        );
       }
 
       for (const child of removedAgentLayerChildren) {

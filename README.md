@@ -23,7 +23,7 @@ The next product milestone is `Live Evidence Spine`: connect the current read mo
 - controlled writes remain limited to `POST /events`, `POST /heartbeats`, and `POST /collectors/controller-snapshot`
 - storage defaults to the local append-only JSONL prototype at `data/prototype-store.jsonl`, replayed into memory; an opt-in SQLite append-only backend can store the same canonical record stream at `data/prototype-store.sqlite` with idempotently backfilled derived sidecar indexes for evidence lookup
 - domain still uses the canonical seven-actor office model: six employee agents plus `team-lead`
-- frontend is a React + TypeScript + PixiJS AI Town operator world with roster, category Hub, selected-agent drilldowns, supervision/evidence/replay/memory surfaces, and real browser smoke coverage
+- frontend is a React + TypeScript + PixiJS AI Town operator world with roster, category Hub, selected-agent drilldowns, supervision/evidence/replay/memory surfaces, mapped source-gap world-pin inspect peeks, and real browser smoke coverage
 
 ## Key documents
 - `docs/current-direction.md` — current vision, implementation facts, next milestone, and documentation discipline
@@ -323,7 +323,7 @@ This keeps employee writes self-scoped and reserves cross-agent task dispatch pl
 - the shell polls every 15 seconds and must surface explicit loading, empty, and error states instead of inventing motion or liveness
 - HUD evidence coverage focus uses the collector evidence coverage read model and shows low-confidence or uncovered employee coverage without raw evidence refs or path metadata
 - HUD source-gap focus uses the runtime source-gap read model and summary as a bounded queue; mapped gap chips can open the selected-agent source drilldown, while unmapped runtime sources stay non-clickable and must not expose local paths, tmux refs, Hermes payloads, or inferred liveness/productivity
-- the Hub-closed selected-agent inspect peek shows a compact two-line proof capsule derived only from already loaded evidence coverage/source-health projections; the Evidence Ledger CTA is the explicit boundary before `/evidence-records` reads or deep inspection, and the capsule must not expose local paths, tmux refs, Hermes payloads, or raw metadata
+- the Hub-closed selected-agent inspect peek shows a compact two-line proof capsule derived only from already loaded evidence coverage/source-health projections; mapped source-gap world pins can open the same Hub-closed evidence-only inspect peek while keeping unmapped runtime sources passive, and the Evidence Ledger CTA is the explicit boundary before `/evidence-records` reads or deep inspection; the capsule and source-gap peek must not expose local paths, tmux refs, Hermes payloads, or raw metadata
 - the selected-agent Evidence Ledger starts with a compact Proof Compass/basis summary derived only from already loaded evidence records; it redacts local path-like evidence refs in the summary, preserves the detailed ledger behind explicit inspection, and does not add write/control-plane requests
 - the selected-agent Replay Bundle starts with a compact Replay Proof Ladder derived from the existing accountability replay audit verdict; it shows replayable row counts, collector-only gaps, unsupported gaps, and anchor event counts without exposing raw evidence refs, local paths, or making collector-only gaps look clickable
 - once overview, workflow, incident, or correlation data has loaded successfully, later refresh failures keep the last-good surface visible with an explicit degraded-refresh notice

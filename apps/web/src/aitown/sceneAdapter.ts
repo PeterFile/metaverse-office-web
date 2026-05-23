@@ -266,6 +266,7 @@ export function adaptWorldToScene(
         agentId: pin.agentId,
         displayName: pin.displayName,
         isMapped: pin.isMapped,
+        sourceDrilldownGroupKey: pin.sourceDrilldownGroupKey,
         sourceKind: pin.sourceKind,
         sourceLabel: pin.sourceLabel,
         status: pin.status,

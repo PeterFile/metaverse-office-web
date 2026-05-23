@@ -2322,19 +2322,22 @@ function expectCollectorSourceHealthContract(sourceHealth: CollectorSourceHealth
     agent_items: [
       {
         agent_id: 'app-engineering',
-        workspace_root: '/tmp/app-engineering',
-        session_ref: '5-web3-app-engineering',
         evidence_ref_count: 2,
         latest_evidence_at: '2026-03-09T18:58:45.000Z',
         source_health: {
           workspace_files: {
-            status: 'degraded',
-            missing_count: 2
+            status: 'degraded'
           }
         }
       }
     ]
   });
+  expect(sourceHealth?.agent_items[0]).not.toHaveProperty('workspace_root');
+  expect(sourceHealth?.agent_items[0]).not.toHaveProperty('session_ref');
+  expect(sourceHealth?.agent_items[0]).not.toHaveProperty('evidence_refs');
+  expect(sourceHealth?.agent_items[0].source_health.workspace_files).not.toHaveProperty(
+    'missing_count'
+  );
 }
 
 function expectCollectorSnapshotHistoryContract(history: CollectorSnapshotHistory | null) {

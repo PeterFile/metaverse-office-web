@@ -1462,10 +1462,8 @@ test('store keeps runtime source gaps from overwriting agent output state', asyn
   const sourceHealth = store.getLatestCollectorSourceHealth();
   assert.equal(sourceHealth.agent_items[0].source_health.workspace_files.status, 'degraded');
   assert.equal(sourceHealth.agent_items[0].source_health.tmux_session.status, 'missing');
-  assert.deepEqual(sourceHealth.agent_items[0].evidence_refs.slice().sort(), [
-    '/tmp/runtime-source-gap/app-engineering',
-    '/tmp/runtime-source-gap/app-engineering/inbox.md'
-  ]);
+  assert.equal(sourceHealth.agent_items[0].evidence_ref_count, 2);
+  assert.equal('evidence_refs' in sourceHealth.agent_items[0], false);
 });
 
 test('store persists missing and error expected workspace files as non-output evidence', async () => {
@@ -1971,34 +1969,24 @@ test('store projects latest collector source health with filters and bounded row
   ]);
   assert.deepEqual(all.agent_items[0], {
     agent_id: 'app-engineering',
-    workspace_root: '/tmp/app-engineering',
-    session_ref: '5-web3-app-engineering',
+    collector_snapshot_id: 'collector-snapshot:2026-03-09T18:05:00.000Z',
     source_health: {
       workspace_root: {
         status: 'observed',
-        path: '/tmp/app-engineering',
-        last_observed_at: '2026-03-09T18:04:00.000Z',
-        degraded_reasons: []
+        last_observed_at: '2026-03-09T18:04:00.000Z'
       },
       workspace_files: {
         status: 'degraded',
-        expected_files: ['inbox.md', 'outbox.md', 'todo.md'],
         observed_count: 1,
-        missing_count: 2,
-        error_count: 0,
-        last_observed_at: '2026-03-09T18:04:00.000Z',
-        degraded_reasons: ['missing workspace files: inbox.md, todo.md']
+        last_observed_at: '2026-03-09T18:04:00.000Z'
       },
       tmux_session: {
         status: 'observed',
-        expected_session_ref: '5-web3-app-engineering',
         observed_count: 1,
-        last_observed_at: '2026-03-09T18:04:30.000Z',
-        degraded_reasons: []
+        last_observed_at: '2026-03-09T18:04:30.000Z'
       }
     },
     evidence_ref_count: 2,
-    evidence_refs: ['/tmp/app-engineering/outbox.md', 'tmux://5-web3-app-engineering/0.0'],
     latest_evidence_at: '2026-03-09T18:04:30.000Z'
   });
 
@@ -2039,17 +2027,11 @@ test('store projects latest collector source health with filters and bounded row
   });
 
   const projected = store.getLatestCollectorSourceHealth();
-  projected.agent_items[0].source_health.workspace_files.expected_files.push('mutated.md');
-  projected.agent_items[0].source_health.workspace_files.degraded_reasons.push('mutated reason');
+  projected.agent_items[0].source_health.workspace_files.status = 'observed';
+  projected.agent_items[0].source_health.workspace_files.observed_count = 99;
   const reread = store.getLatestCollectorSourceHealth();
-  assert.equal(
-    reread.agent_items[0].source_health.workspace_files.expected_files.includes('mutated.md'),
-    false
-  );
-  assert.equal(
-    reread.agent_items[0].source_health.workspace_files.degraded_reasons.includes('mutated reason'),
-    false
-  );
+  assert.equal(reread.agent_items[0].source_health.workspace_files.status, 'degraded');
+  assert.equal(reread.agent_items[0].source_health.workspace_files.observed_count, 1);
 
   const blankLimit = store.getLatestCollectorSourceHealth({
     source_kind: '',

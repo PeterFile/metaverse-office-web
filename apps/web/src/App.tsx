@@ -160,6 +160,7 @@ type SelectedAgentAccountabilityReplayPayload = {
   targetAgentId: string;
   correlationId: string | null;
   eventId: string | null;
+  evidenceId: string | null;
   replayBundle: AccountabilityReplayBundle;
 };
 
@@ -1031,6 +1032,7 @@ function AppInner() {
   const [focusedSharedMemoryArtifactRef, setFocusedSharedMemoryArtifactRef] = useState<string | null>(null);
   const [sharedMemoryJumpStatus, setSharedMemoryJumpStatus] = useState<string | null>(null);
   const [replayCheckpointFocus, setReplayCheckpointFocus] = useState<ReplayCheckpointFocus | null>(null);
+  const [selectedAgentReplayEvidenceId, setSelectedAgentReplayEvidenceId] = useState<string | null>(null);
   const [cachedCorrelationSpotlight, setCachedCorrelationSpotlight] = useState<CorrelationSpotlight | null>(null);
   const [selectedAgentDrilldownTab, setSelectedAgentDrilldownTab] =
     useState<SelectedAgentDrilldownTab>('now');
@@ -1333,6 +1335,7 @@ function AppInner() {
 
   useEffect(() => {
     setReplayCheckpointFocus(null);
+    setSelectedAgentReplayEvidenceId(null);
   }, [selectedAgentId, selectedCorrelationId]);
 
   const memoryArtifacts = useMemo<MemoryArtifactIndex | null>(() => {
@@ -1665,6 +1668,9 @@ function AppInner() {
     replayCheckpointFocus.selectedCorrelationId === selectedCorrelationId
       ? replayCheckpointFocus.eventId
       : null;
+  const activeSelectedAgentReplayEvidenceId = selectedAgentReplayCheckpointEventId
+    ? null
+    : selectedAgentReplayEvidenceId;
   const activeSelectedAgentReplaySeverity = selectedAgentReplayCheckpointEventId ? null : selectedAgentReplaySeverity;
   const selectedAgentTimelineReplayResourceKey = selectedAgentId
     ? `selected-agent-timeline-replay:${selectedAgentId}:correlation=${selectedAgentScopedCorrelationId ?? '__all__'}:severity=${activeSelectedAgentReplaySeverity ?? '__all__'}:event=${selectedAgentReplayCheckpointEventId ?? '__all__'}`
@@ -1726,7 +1732,12 @@ function AppInner() {
       selectedAgentTimelineReplayResourceKey;
   }, [selectedAgentTimelineReplayResourceKey]);
   const selectedAgentAccountabilityReplayResourceKey = selectedAgentId
-    ? `selected-agent-accountability-replay:${selectedAgentId}:correlation=${selectedAgentScopedCorrelationId ?? '__all__'}:event=${selectedAgentReplayCheckpointEventId ?? '__all__'}`
+    ? [
+        `selected-agent-accountability-replay:${selectedAgentId}`,
+        `correlation=${selectedAgentScopedCorrelationId ?? '__all__'}`,
+        `event=${selectedAgentReplayCheckpointEventId ?? '__all__'}`,
+        `evidence=${activeSelectedAgentReplayEvidenceId ?? '__all__'}`
+      ].join(':')
     : null;
   const previousSelectedAgentAccountabilityReplayResourceKeyRef = useRef<string | null>(
     selectedAgentAccountabilityReplayResourceKey
@@ -1739,14 +1750,18 @@ function AppInner() {
       !selectedAgentTimelineReplayDefaultCorrelationPending,
     load: async (signal) => ({
       targetAgentId: selectedAgentId!,
-      correlationId: selectedAgentScopedCorrelationId,
+      correlationId: activeSelectedAgentReplayEvidenceId ? null : selectedAgentScopedCorrelationId,
       eventId: selectedAgentReplayCheckpointEventId,
+      evidenceId: activeSelectedAgentReplayEvidenceId,
       replayBundle: await fetchAccountabilityReplay({
         limit: DEFAULT_WORKFLOW_LIMIT,
         window: DEFAULT_WORKFLOW_WINDOW,
         agentId: selectedAgentId!,
-        correlationId: selectedAgentScopedCorrelationId ?? undefined,
+        correlationId: activeSelectedAgentReplayEvidenceId
+          ? undefined
+          : selectedAgentScopedCorrelationId ?? undefined,
         eventId: selectedAgentReplayCheckpointEventId ?? undefined,
+        evidenceId: activeSelectedAgentReplayEvidenceId ?? undefined,
         signal
       })
     }),
@@ -1759,8 +1774,10 @@ function AppInner() {
       selectedAgentAccountabilityReplayResourceKey;
   const selectedAgentAccountabilityReplayPayloadMatches =
     selectedAgentAccountabilityReplayResource.data?.targetAgentId === selectedAgentId &&
-    selectedAgentAccountabilityReplayResource.data?.correlationId === selectedAgentScopedCorrelationId &&
-    selectedAgentAccountabilityReplayResource.data?.eventId === selectedAgentReplayCheckpointEventId;
+    selectedAgentAccountabilityReplayResource.data?.correlationId ===
+      (activeSelectedAgentReplayEvidenceId ? null : selectedAgentScopedCorrelationId) &&
+    selectedAgentAccountabilityReplayResource.data?.eventId === selectedAgentReplayCheckpointEventId &&
+    selectedAgentAccountabilityReplayResource.data?.evidenceId === activeSelectedAgentReplayEvidenceId;
   const selectedAgentAccountabilityReplaySurfaceIsStale =
     selectedAgentAccountabilityReplaySelectionChanged ||
     (selectedAgentAccountabilityReplayResource.data !== null &&
@@ -1898,7 +1915,6 @@ function AppInner() {
     evidenceRecordDetailAbortControllerRef.current?.abort();
     evidenceRecordDetailAbortControllerRef.current = controller;
     setSelectedAgentEvidenceRecordId(evidenceId);
-    setSelectedAgentEvidenceRecord(null);
     setSelectedAgentEvidenceRecordError(null);
     setSelectedAgentEvidenceRecordState('loading');
     setSelectedAgentEvidenceProvenanceBundle(null);
@@ -1926,7 +1942,6 @@ function AppInner() {
           return;
         }
 
-        setSelectedAgentEvidenceRecord(null);
         setSelectedAgentEvidenceRecordError(formatUnknownError(error));
         setSelectedAgentEvidenceRecordState('error');
       });
@@ -2117,6 +2132,7 @@ function AppInner() {
       setSelectedCorrelationId(correlationId);
       setSelectedCorrelationWasExplicit(isExplicitSelection);
       setSelectedCorrelationCarryForward(correlationId !== null && !keepAutoSelection);
+      setSelectedAgentReplayEvidenceId(null);
       if (correlationId) {
         activeHubCategoryFromSelectedAgentTabRef.current = false;
         setActiveHubCategory('replay');
@@ -2171,6 +2187,7 @@ function AppInner() {
   const handleSelectSelectedAgentDrilldownTab = useCallback((tab: SelectedAgentDrilldownTab) => {
     requestedSelectedAgentDrilldownTabRef.current = null;
     setSourceGapFocusIntent(null);
+    setSelectedAgentReplayEvidenceId(null);
     setSelectedAgentDrilldownTab(tab);
     activeHubCategoryFromSelectedAgentTabRef.current = true;
     setActiveHubCategory((currentCategory) => resolveSelectedAgentTabHubCategory(tab, currentCategory));
@@ -2208,6 +2225,7 @@ function AppInner() {
         return;
       }
 
+      setSelectedAgentReplayEvidenceId(null);
       setReplayCheckpointFocus({
         eventId: nextEventId,
         selectedAgentId,
@@ -2223,6 +2241,7 @@ function AppInner() {
   const handleSelectSelectedAgentReplaySeverity = useCallback(
     (severity: Severity | null) => {
       setReplayCheckpointFocus(null);
+      setSelectedAgentReplayEvidenceId(null);
       setSelectedAgentReplayFilter(
         selectedAgentId !== null
           ? {
@@ -2844,6 +2863,21 @@ function AppInner() {
     setSelectedAgentDrilldownTab('evidence');
     setHubOpen(true);
   }, [selectedAgentId]);
+  const handleReplaySelectedAgentEvidenceRecord = useCallback((evidenceId: string) => {
+    const replayEvidenceId = evidenceId.trim();
+    if (!replayEvidenceId) {
+      return;
+    }
+
+    setReplayCheckpointFocus(null);
+    setSelectedAgentReplayEvidenceId(replayEvidenceId);
+    requestedSelectedAgentDrilldownTabRef.current = 'replay';
+    activeHubCategoryFromSelectedAgentTabRef.current = false;
+    setSourceGapFocusIntent(null);
+    setActiveHubCategory('replay');
+    setSelectedAgentDrilldownTab('replay');
+    setHubOpen(true);
+  }, []);
   const hudSignalSummary = [
     `Viewport · ${viewportToplineStatus.status}`,
     evidenceCoverageFocusItems.length > 0 ? `Evidence · ${evidenceCoverageFocusItems.length}` : null,
@@ -3492,6 +3526,7 @@ function AppInner() {
               onSelectOperationsSeverity={setSelectedOperationsSeverity}
               onSelectOperation={handleSelectOperation}
               onInspectSelectedAgentEvidenceRecord={handleInspectSelectedAgentEvidenceRecord}
+              onReplaySelectedAgentEvidenceRecord={handleReplaySelectedAgentEvidenceRecord}
               onFocusSharedMemoryArtifact={handleFocusSharedMemoryArtifact}
               onOpenReplayCheckpoint={handleOpenReplayCheckpoint}
               onFocusWorldZone={handleFocusWorldZone}

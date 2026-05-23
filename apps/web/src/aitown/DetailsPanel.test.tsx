@@ -727,6 +727,7 @@ function buildProps(overrides: Partial<DetailsPanelProps> = {}): DetailsPanelPro
     onSelectOperationsSeverity: vi.fn(),
     onSelectOperation: vi.fn(),
     onInspectSelectedAgentEvidenceRecord: vi.fn(),
+    onReplaySelectedAgentEvidenceRecord: vi.fn(),
     ...overrides
   };
 }
@@ -1813,6 +1814,14 @@ describe('DetailsPanel selected-agent workflow lifecycle', () => {
     expect(section!).not.toHaveTextContent('access_token');
     expect(section!).not.toHaveTextContent('secret-value');
     expect(section!).not.toHaveTextContent('must-not-render');
+    expect(
+      within(section!).getByRole('button', {
+        name: /Inspect evidence record evidence-app-engineering-output-with-a-very-long-sensitive-\[redacted\]/
+      })
+    ).toBeVisible();
+    expect(
+      within(section!).queryByRole('button', { name: /token-secret|access_token|secret-value|must-not-render/ })
+    ).not.toBeInTheDocument();
     expect(section!).not.toHaveTextContent('event-backed');
     expect(section!).not.toHaveTextContent('replayable');
   });
@@ -1892,6 +1901,119 @@ describe('DetailsPanel selected-agent workflow lifecycle', () => {
     expect(section!).not.toHaveTextContent('metadata');
     expect(section!).not.toHaveTextContent('raw_tmux_capture');
     expect(section!).not.toHaveTextContent('secret_token');
+  });
+
+  it('offers evidence replay only for replay-backed evidence ids', async () => {
+    const user = userEvent.setup();
+    const onReplaySelectedAgentEvidenceRecord = vi.fn();
+    const { rerender } = render(
+      <DetailsPanel
+        {...buildProps({
+          activeHubCategory: 'evidence',
+          selectedAgentDrilldownTab: 'evidence',
+          selectedAgentEvidenceLedger: buildSelectedAgentEvidenceLedger(),
+          selectedAgentEvidenceLedgerState: 'ready',
+          selectedAgentEvidenceRecord: buildEvidenceRecord(),
+          selectedAgentEvidenceRecordId: 'output-1',
+          selectedAgentEvidenceRecordState: 'ready',
+          selectedAgentEvidenceProvenanceBundle: buildEvidenceProvenanceBundle({
+            anchors: {
+              ...buildEvidenceProvenanceBundle().anchors,
+              replay: {
+                evidence_id: 'output-1',
+                route: '/accountability/replay?evidence_id=output-1'
+              }
+            }
+          }),
+          selectedAgentEvidenceProvenanceBundleState: 'ready',
+          onReplaySelectedAgentEvidenceRecord
+        })}
+      />
+    );
+
+    const section = screen.getByRole('heading', { name: 'Evidence Record Detail' }).closest('section');
+    expect(section).not.toBeNull();
+    const replayButton = within(section!).getByRole('button', { name: 'Replay this evidence output-1' });
+    expect(within(section!).getByText('Replay anchor · output-1')).toBeVisible();
+    expect(section!).not.toHaveTextContent('/accountability/replay');
+
+    await user.click(replayButton);
+    expect(onReplaySelectedAgentEvidenceRecord).toHaveBeenCalledWith('output-1');
+
+    const sensitiveReplayEvidenceId = 'output-1-with-a-very-long-secret-token-that-must-not-render';
+    rerender(
+      <DetailsPanel
+        {...buildProps({
+          activeHubCategory: 'evidence',
+          selectedAgentDrilldownTab: 'evidence',
+          selectedAgentEvidenceLedger: buildSelectedAgentEvidenceLedger(),
+          selectedAgentEvidenceLedgerState: 'ready',
+          selectedAgentEvidenceRecord: buildEvidenceRecord({ evidence_id: sensitiveReplayEvidenceId }),
+          selectedAgentEvidenceRecordId: sensitiveReplayEvidenceId,
+          selectedAgentEvidenceRecordState: 'ready',
+          selectedAgentEvidenceProvenanceBundle: buildEvidenceProvenanceBundle({
+            evidence_id: sensitiveReplayEvidenceId,
+            anchors: {
+              ...buildEvidenceProvenanceBundle().anchors,
+              replay: {
+                evidence_id: sensitiveReplayEvidenceId,
+                route: `/accountability/replay?evidence_id=${sensitiveReplayEvidenceId}`
+              }
+            }
+          }),
+          selectedAgentEvidenceProvenanceBundleState: 'ready',
+          onReplaySelectedAgentEvidenceRecord
+        })}
+      />
+    );
+
+    const boundedReplaySection = screen.getByRole('heading', { name: 'Evidence Record Detail' }).closest('section');
+    expect(boundedReplaySection).not.toBeNull();
+    expect(
+      within(boundedReplaySection!).getByRole('button', {
+        name: /Replay this evidence output-1-with-a-very-long-\[redacted\]/
+      })
+    ).toBeVisible();
+    expect(
+      within(boundedReplaySection!).queryByRole('button', { name: /secret-token|must-not-render/ })
+    ).not.toBeInTheDocument();
+    expect(boundedReplaySection!).not.toHaveTextContent('secret-token');
+    expect(boundedReplaySection!).not.toHaveTextContent('must-not-render');
+
+    rerender(
+      <DetailsPanel
+        {...buildProps({
+          activeHubCategory: 'evidence',
+          selectedAgentDrilldownTab: 'evidence',
+          selectedAgentEvidenceLedger: buildSelectedAgentEvidenceLedger(),
+          selectedAgentEvidenceLedgerState: 'ready',
+          selectedAgentEvidenceRecord: buildEvidenceRecord({
+            evidence_id: 'presence-1',
+            evidence_role: 'workspace_presence',
+            output_candidate: false
+          }),
+          selectedAgentEvidenceRecordId: 'presence-1',
+          selectedAgentEvidenceRecordState: 'ready',
+          selectedAgentEvidenceProvenanceBundle: buildEvidenceProvenanceBundle({
+            evidence_id: 'presence-1',
+            anchors: {
+              snapshot: null,
+              source: null,
+              replay: null
+            }
+          }),
+          selectedAgentEvidenceProvenanceBundleState: 'ready',
+          onReplaySelectedAgentEvidenceRecord
+        })}
+      />
+    );
+
+    const collectorOnlySection = screen.getByRole('heading', { name: 'Evidence Record Detail' }).closest('section');
+    expect(collectorOnlySection).not.toBeNull();
+    expect(within(collectorOnlySection!).getByText('Replay · not available for collector-only evidence')).toBeVisible();
+    expect(
+      within(collectorOnlySection!).queryByRole('button', { name: /Replay this evidence/ })
+    ).not.toBeInTheDocument();
   });
 
   it('redacts runtime provenance refs and adjacent local paths', () => {
@@ -3847,6 +3969,9 @@ describe('DetailsPanel accountability signals', () => {
       within(proofLadderRecord!).getByText('Unavailable anchors · 1 total · 1 collector-only · 0 unsupported')
     ).toBeVisible();
     expect(within(proofLadderRecord!).getByText('Replayable · partial')).toBeVisible();
+    expect(
+      within(proofLadderRecord!).getByText('Query anchor · agent_id app-engineering, correlation_id corr-app-review')
+    ).toBeVisible();
     expect(proofLadderRecord!).not.toHaveTextContent('tmux://');
     expect(proofLadderRecord!).not.toHaveTextContent('/evidence/replay.md');
     expect(within(section!).getByText('Basis · event_log_and_existing_read_models')).toBeVisible();
@@ -3872,6 +3997,34 @@ describe('DetailsPanel accountability signals', () => {
     expect(within(collectorOnlyRecord!).getByText('Provenance · collector_observation_without_event_id')).toBeVisible();
     expect(collectorOnlyRecord).not.toHaveTextContent(/evt-/);
     expect(collectorOnlyRecord).not.toHaveTextContent(/Replay checkpoint/);
+  });
+
+  it('shows evidence_id query anchors in the replay proof ladder without raw evidence refs', () => {
+    render(
+      <DetailsPanel
+        {...buildProps({
+          selectedAgentDrilldownTab: 'replay',
+          selectedAgentAccountabilityReplay: buildAccountabilityReplayBundle({
+            query: {
+              agent_id: 'app-engineering',
+              evidence_id: 'output-1',
+              limit: 10,
+              window: '60m'
+            }
+          }),
+          selectedAgentAccountabilityReplayError: null,
+          selectedAgentAccountabilityReplayState: 'ready'
+        })}
+      />
+    );
+
+    const section = screen.getByRole('heading', { name: 'Replay Bundle' }).closest('section');
+    expect(section).not.toBeNull();
+    const proofLadderRecord = within(section!).getByText('Replay Proof Ladder').closest('li');
+    expect(proofLadderRecord).not.toBeNull();
+    expect(within(proofLadderRecord!).getByText('Query anchor · agent_id app-engineering, evidence_id output-1')).toBeVisible();
+    expect(proofLadderRecord!).not.toHaveTextContent('/evidence/replay.md');
+    expect(proofLadderRecord!).not.toHaveTextContent('tmux://');
   });
 
   it('renders empty replay proof ladder as unavailable without inventing anchors', () => {

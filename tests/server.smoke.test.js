@@ -5394,7 +5394,15 @@ test('GET /collectors/controller-snapshot/diff projects compact read-only snapsh
     )
   };
 
+  const missing = await requestJson(`${baseUrl}/collectors/controller-snapshot/diff`);
+  assert.equal(missing.response.status, 200);
+  assert.equal(missing.body.item, null);
+
   await store.appendCollectorReport(firstReport);
+  const oneSided = await requestJson(`${baseUrl}/collectors/controller-snapshot/diff`);
+  assert.equal(oneSided.response.status, 200);
+  assert.equal(oneSided.body.item, null);
+
   await store.appendCollectorReport(secondReport);
   const beforeRead = await readFile(storeFile, 'utf8');
   const beforeCounts = store.getCounts();

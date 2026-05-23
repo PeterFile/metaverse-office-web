@@ -1,4 +1,4 @@
-import { expect, test, type Page, type Request, type Route } from '@playwright/test';
+import { expect, test, type Locator, type Page, type Request, type Route } from '@playwright/test';
 
 const evidenceCoverage = {
   evidence_ref_count: 1,
@@ -138,6 +138,16 @@ const runtimeSourceGapsSummary = {
 };
 
 const snapshotCorrelationId = 'collector-snapshot%3A2026-03-10T23%3A59%3A40.000Z';
+const replayEvidenceId =
+  'ev_collector-snapshot_2026-03-10T23_59_40_000Z_app-engineering_workspace_file__tmp_revenue-handoff_md_1';
+const boundedReplayEvidenceId = `${replayEvidenceId.slice(0, 69)}...`;
+const replayEvidenceRecordGets = [
+  'GET /evidence-records?agent_id=app-engineering&newest_first=true&limit=12',
+  `GET /evidence-records/${replayEvidenceId}`,
+  `GET /evidence-records/${replayEvidenceId}/provenance-bundle`
+];
+const replayByEvidenceIdGet =
+  `GET /accountability/replay?limit=10&window=60m&evidence_id=${replayEvidenceId}&agent_id=app-engineering`;
 const expectedApiGets = new Set([
   'GET /office/overview',
   'GET /incidents?limit=200&window=8760h',
@@ -148,6 +158,7 @@ const expectedApiGets = new Set([
   'GET /runtime/source-gaps/summary?newest_first=true&limit=3',
   'GET /agents/app-engineering/workflow?limit=10&window=60m',
   'GET /office/operations?agent_id=app-engineering',
+  'GET /timeline?limit=10&window=60m&agent_id=app-engineering',
   `GET /timeline?limit=10&window=60m&agent_id=app-engineering&correlation_id=${snapshotCorrelationId}`,
   'GET /peer-watch/alerts?target_agent_id=app-engineering&limit=4',
   `GET /peer-watch/alerts?target_agent_id=app-engineering&correlation_id=${snapshotCorrelationId}&limit=4`,
@@ -200,8 +211,20 @@ function isApiPath(pathname: string) {
     '/memory',
     '/runtime',
     '/timeline',
-    '/correlations'
+    '/correlations',
+    '/evidence-records',
+    '/accountability'
   ].some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
+}
+
+async function readRect(locator: Locator) {
+  return locator.evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    return {
+      width: rect.width,
+      height: rect.height
+    };
+  });
 }
 
 async function installLiveEvidenceFixtures(page: Page) {
@@ -267,6 +290,161 @@ async function routeExpectedApiGet(page: Page, expectedKey: string, handler: (ro
 }
 
 test.describe('operator shell live evidence journey smoke', () => {
+  test('@journey @evidence-live keeps selected-agent source-health inspect peek compact and read-only', async ({
+    page
+  }) => {
+    const apiRequestViolations: string[] = [];
+    const eagerDrilldownRequests: string[] = [];
+    const handleRequest = (request: Request) => {
+      const url = new URL(request.url());
+      if (!isApiPath(url.pathname)) {
+        return;
+      }
+
+      const key = apiRequestKey(request);
+      if (request.method() !== 'GET' || !expectedApiGets.has(key)) {
+        apiRequestViolations.push(key);
+      }
+      if (url.pathname.startsWith('/evidence-records') || url.pathname.startsWith('/accountability/')) {
+        eagerDrilldownRequests.push(key);
+      }
+    };
+
+    await installLiveEvidenceFixtures(page);
+    page.on('request', handleRequest);
+
+    try {
+      await page.goto('/');
+      await expect(page.locator('.aitown-world__host canvas')).toBeVisible();
+
+      await page
+        .getByRole('navigation', { name: 'Agent roster' })
+        .getByRole('button', { name: 'Select and locate App Engineering Agent' })
+        .click();
+
+      const hub = page.getByRole('dialog', { name: 'Hub' });
+      const inspectPeek = page.getByRole('region', { name: 'Selected agent inspect peek' });
+      const sourceHealthPeek = page.getByRole('region', { name: 'Selected agent source-health inspect peek' });
+
+      await expect(hub).toHaveCount(0);
+      await expect(page.getByRole('complementary', { name: 'Agent details' })).toHaveCount(0);
+      await expect(inspectPeek).toBeVisible();
+      await expect(sourceHealthPeek).toBeVisible();
+      await expect(sourceHealthPeek).toContainText('Evidence only');
+      await expect(sourceHealthPeek).toContainText('Hermes profile · missing');
+      await expect(sourceHealthPeek).toContainText('Mapped source');
+      await expect(sourceHealthPeek).toContainText('Reason · Redacted');
+      await expect(
+        sourceHealthPeek,
+        'selected-agent source-health peek should not expose raw refs, sessions, profiles, payloads, or reasons'
+      ).not.toContainText(visibleProofRawRefPattern);
+      expect(eagerDrilldownRequests, 'source-health inspect peek should not prefetch evidence or replay records').toEqual(
+        []
+      );
+
+      const peekRect = await readRect(inspectPeek);
+      expect(peekRect.width, 'source-health inspect peek should stay compact').toBeLessThanOrEqual(420);
+      expect(peekRect.height, 'source-health inspect peek should stay compact').toBeLessThanOrEqual(300);
+
+      await sourceHealthPeek
+        .getByRole('button', {
+          name: 'Open source gap supervision for App Engineering Agent hermes profile missing'
+        })
+        .click();
+
+      await expect(hub).toBeVisible();
+      expect(apiRequestViolations).toEqual([]);
+    } finally {
+      page.off('request', handleRequest);
+    }
+  });
+
+  test('@journey @evidence-live replays inspected evidence by evidence id only after explicit CTAs', async ({
+    page
+  }) => {
+    const allowedApiGets = new Set([
+      ...expectedApiGets,
+      ...replayEvidenceRecordGets,
+      replayByEvidenceIdGet
+    ]);
+    const evidenceRecordRequests: string[] = [];
+    const replayRequests: string[] = [];
+    const apiRequestViolations: string[] = [];
+    const handleRequest = (request: Request) => {
+      const url = new URL(request.url());
+      if (!isApiPath(url.pathname)) {
+        return;
+      }
+
+      const key = apiRequestKey(request);
+      if (request.method() !== 'GET' || !allowedApiGets.has(key)) {
+        apiRequestViolations.push(key);
+      }
+      if (url.pathname.startsWith('/evidence-records')) {
+        evidenceRecordRequests.push(key);
+      }
+      if (url.pathname.startsWith('/accountability/replay')) {
+        replayRequests.push(key);
+      }
+    };
+
+    await installLiveEvidenceFixtures(page);
+    page.on('request', handleRequest);
+
+    try {
+      await page.goto('/');
+      await expect(page.locator('.aitown-world__host canvas')).toBeVisible();
+
+      await page
+        .getByRole('navigation', { name: 'Agent roster' })
+        .getByRole('button', { name: 'Select and locate App Engineering Agent' })
+        .click();
+
+      const hub = page.getByRole('dialog', { name: 'Hub' });
+      const inspectPeek = page.getByRole('region', { name: 'Selected agent inspect peek' });
+      const ledgerCta = inspectPeek.getByRole('button', { name: 'Open App Engineering Agent Evidence Ledger' });
+      await expect(hub).toHaveCount(0);
+      await expect(ledgerCta).toBeVisible();
+      expect(evidenceRecordRequests, 'selecting an agent should not prefetch evidence records').toEqual([]);
+      expect(replayRequests, 'selecting an agent should not prefetch replay records').toEqual([]);
+
+      await ledgerCta.click();
+
+      const evidencePanel = page.getByRole('tabpanel', { name: 'Evidence' });
+      await expect(hub).toBeVisible();
+      await expect(evidencePanel.getByRole('heading', { name: 'Evidence Ledger' })).toBeVisible();
+      await expect.poll(() => evidenceRecordRequests.slice()).toEqual([replayEvidenceRecordGets[0]]);
+      expect(replayRequests, 'opening Evidence Ledger should not prefetch replay records').toEqual([]);
+
+      await evidencePanel
+        .getByRole('button', { name: `Inspect evidence record ${boundedReplayEvidenceId}` })
+        .click();
+
+      await expect.poll(() => evidenceRecordRequests.slice()).toEqual(replayEvidenceRecordGets);
+      const detailSection = evidencePanel.locator('section').filter({
+        has: page.getByRole('heading', { name: 'Evidence Record Detail' })
+      });
+      await expect(
+        detailSection.getByRole('button', { name: `Replay this evidence ${boundedReplayEvidenceId}` })
+      ).toBeVisible();
+      await expect(detailSection).toContainText('Replay anchor · collector-snapshot:2026-03-10T23:59:40.000Z');
+      await expect(detailSection).not.toContainText('/accountability/replay');
+      await expect(detailSection).not.toContainText('/evidence-records/');
+      await expect(detailSection).not.toContainText('/tmp/revenue-handoff.md');
+      expect(replayRequests, 'inspecting evidence detail should not prefetch replay records').toEqual([]);
+
+      await detailSection.getByRole('button', { name: `Replay this evidence ${boundedReplayEvidenceId}` }).click();
+
+      const replayPanel = page.getByRole('tabpanel', { name: 'Replay / Correlation' });
+      await expect(replayPanel).toBeVisible();
+      await expect(replayPanel.getByRole('heading', { name: 'Replay Bundle' })).toBeVisible();
+      await expect.poll(() => replayRequests.slice()).toEqual([replayByEvidenceIdGet]);
+      expect(apiRequestViolations).toEqual([]);
+    } finally {
+      page.off('request', handleRequest);
+    }
+  });
+
   test('@journey @evidence-live opens source-gap evidence from live HUD with only exact read GETs', async ({ page }) => {
     const apiRequestViolations: string[] = [];
     for (const forbiddenSample of visibleProofForbiddenSamples) {

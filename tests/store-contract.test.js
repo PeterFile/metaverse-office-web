@@ -2158,6 +2158,96 @@ test('prototype store keeps literal unmapped agent groups separate from null sou
   );
 });
 
+test('prototype store derives compact runtime source gap lifecycle across snapshots', async () => {
+  const storeFile = await createStoreFile();
+  const store = await createPrototypeStore({ filePath: storeFile });
+  const firstReport = createCollectorReport();
+  const secondReport = createCollectorReport();
+  secondReport.collected_at = '2026-03-09T18:07:00.000Z';
+  secondReport.items[0].workspace_observations[0].last_modified_at =
+    '2026-03-09T18:06:40.000Z';
+  secondReport.items[0].source_health.workspace_files.status = 'observed';
+  secondReport.items[0].source_health.workspace_files.last_observed_at =
+    '2026-03-09T18:06:40.000Z';
+  secondReport.items[0].source_health.workspace_files.degraded_reasons = [];
+  secondReport.items[0].source_health.tmux_session.status = 'missing';
+  secondReport.items[0].source_health.tmux_session.degraded_reasons = [
+    '/tmp/lifecycle/tmux-secret',
+    'token=lifecycle-secret'
+  ];
+  secondReport.items[0].evidence_refs.push('/tmp/lifecycle/tmux-secret');
+
+  await store.appendCollectorReport(firstReport);
+  await store.appendCollectorReport({
+    ...secondReport,
+    runtime_source_evidence: {
+      unmapped_tmux_sessions: [
+        {
+          session_name: 'unmapped-session',
+          pane_refs: ['tmux://unmapped-session/0.0'],
+          observed_count: 1,
+          status: 'observed',
+          last_observed_at: '2026-03-09T18:06:50.000Z',
+          degraded_reasons: ['token=lifecycle-secret']
+        }
+      ]
+    }
+  });
+
+  const lifecycle = store.getRuntimeSourceGapLifecycle({ newest_first: 'true', limit: '2' });
+
+  assert.deepEqual(lifecycle, {
+    total_count: 5,
+    total_groups: 3,
+    returned_limit: 2,
+    groups: [
+      {
+        agent_id: null,
+        source_kind: 'tmux_observation',
+        evidence_role: 'runtime_unmapped',
+        current_status: 'observed',
+        lifecycle_state: 'observed_unmapped',
+        first_observed_at: '2026-03-09T18:06:50.000Z',
+        last_observed_at: '2026-03-09T18:06:50.000Z',
+        first_collected_at: '2026-03-09T18:07:00.000Z',
+        last_collected_at: '2026-03-09T18:07:00.000Z',
+        snapshot_count: 1,
+        source_status_buckets: { observed: 1 }
+      },
+      {
+        agent_id: 'app-engineering',
+        source_kind: 'workspace_file',
+        evidence_role: 'agent_output',
+        current_status: 'observed',
+        lifecycle_state: 'resolved',
+        first_observed_at: '2026-03-09T18:05:20.000Z',
+        last_observed_at: '2026-03-09T18:06:40.000Z',
+        first_collected_at: '2026-03-09T18:06:00.000Z',
+        last_collected_at: '2026-03-09T18:07:00.000Z',
+        snapshot_count: 2,
+        source_status_buckets: { degraded: 1, observed: 1 }
+      }
+    ]
+  });
+
+  const tmuxLifecycle = store.getRuntimeSourceGapLifecycle({
+    source_kind: 'tmux_observation',
+    mapped: 'true'
+  });
+  assert.equal(tmuxLifecycle.groups[0].lifecycle_state, 'opened');
+  assert.equal(tmuxLifecycle.groups[0].current_status, 'missing');
+
+  const serializedLifecycle = JSON.stringify(lifecycle);
+  for (const canary of ['/tmp/lifecycle', 'token=lifecycle-secret', 'tmux://unmapped-session']) {
+    assert.equal(serializedLifecycle.includes(canary), false, `leaked canary: ${canary}`);
+  }
+  assert.equal(serializedLifecycle.includes('evidence_id'), false);
+  assert.equal(serializedLifecycle.includes('evidence_ref'), false);
+  assert.equal(serializedLifecycle.includes('metadata'), false);
+  assert.equal(serializedLifecycle.includes('degraded_reasons'), false);
+  assert.equal(serializedLifecycle.includes('collector_snapshot_id'), false);
+});
+
 test('prototype store groups evidence refs with evidence-record filters before group limit', async () => {
   const storeFile = await createStoreFile();
   const store = await createPrototypeStore({ filePath: storeFile });

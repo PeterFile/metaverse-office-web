@@ -5581,6 +5581,9 @@ test('GET /runtime/source-gaps returns compact gap and unmapped evidence read-on
     `${baseUrl}/runtime/source-gaps/agent-summary?newest_first=true&limit=1`
   );
   const trend = await requestJson(`${baseUrl}/runtime/source-gaps/trend?newest_first=true&limit=1`);
+  const lifecycle = await requestJson(
+    `${baseUrl}/runtime/source-gaps/lifecycle?newest_first=true&limit=1`
+  );
 
   assert.equal(response.response.status, 200);
   assert.deepEqual(
@@ -5689,6 +5692,34 @@ test('GET /runtime/source-gaps returns compact gap and unmapped evidence read-on
   assert.equal(JSON.stringify(trend.body).includes('evidence_ref'), false);
   assert.equal(JSON.stringify(trend.body).includes('metadata'), false);
   assert.equal(JSON.stringify(trend.body).includes('degraded_reasons'), false);
+  assert.equal(lifecycle.response.status, 200);
+  assert.deepEqual(lifecycle.body.item, {
+    total_count: 2,
+    total_groups: 2,
+    returned_limit: 1,
+    groups: [
+      {
+        agent_id: null,
+        source_kind: 'tmux_observation',
+        evidence_role: 'runtime_unmapped',
+        current_status: 'observed',
+        lifecycle_state: 'observed_unmapped',
+        first_observed_at: '2026-03-09T18:05:50.000Z',
+        last_observed_at: '2026-03-09T18:05:50.000Z',
+        first_collected_at: '2026-03-09T18:06:00.000Z',
+        last_collected_at: '2026-03-09T18:06:00.000Z',
+        snapshot_count: 1,
+        source_status_buckets: { observed: 1 }
+      }
+    ]
+  });
+  assert.equal(JSON.stringify(lifecycle.body).includes('/tmp/source-gaps'), false);
+  assert.equal(JSON.stringify(lifecycle.body).includes('tmux://'), false);
+  assert.equal(JSON.stringify(lifecycle.body).includes('evidence_id'), false);
+  assert.equal(JSON.stringify(lifecycle.body).includes('evidence_ref'), false);
+  assert.equal(JSON.stringify(lifecycle.body).includes('collector_snapshot_id'), false);
+  assert.equal(JSON.stringify(lifecycle.body).includes('metadata'), false);
+  assert.equal(JSON.stringify(lifecycle.body).includes('degraded_reasons'), false);
   assert.equal(collectCount, 0);
   assert.equal(store.getLatestCollectorReport(), latestBeforeRead);
   assert.equal(await readFile(storeFile, 'utf8'), fileBeforeRead);
@@ -6645,6 +6676,7 @@ test('GET read route purity matrix leaves replay records and checkpoints unchang
     '/runtime/source-gaps?newest_first=true&limit=10',
     '/runtime/source-gaps/summary?newest_first=true&limit=1',
     '/runtime/source-gaps/agent-summary?newest_first=true&limit=1',
+    '/runtime/source-gaps/lifecycle?newest_first=true&limit=1',
     '/runtime/source-gaps/trend?newest_first=true&limit=1'
   ];
 

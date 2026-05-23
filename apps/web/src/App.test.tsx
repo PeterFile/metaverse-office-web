@@ -2841,7 +2841,7 @@ afterEach(() => {
       name: 'Open source gap supervision for App Engineering Agent workspace files degraded'
     });
     expect(sourceGapFact).toHaveTextContent(
-      'Source health · Workspace files · degraded · 1 missing file, 1 observed'
+      'Source health · Workspace files · degraded · Mapped source · Reason · Redacted'
     );
     expect(focusRibbon).not.toHaveTextContent('/tmp/app-engineering');
     expect(focusRibbon).not.toHaveTextContent('5-web3-app-engineering');
@@ -3130,28 +3130,19 @@ afterEach(() => {
             agent_items: [
               {
                 agent_id: 'app-engineering',
-                workspace_root: '/tmp/app-engineering',
-                session_ref: '5-web3-app-engineering',
+                collector_snapshot_id: 'collector-source-health-1',
                 source_health: {
                   workspace_files: {
                     status: 'degraded',
-                    expected_files: ['inbox.md', 'outbox.md', 'todo.md'],
                     observed_count: 1,
-                    missing_count: 2,
-                    error_count: 0,
-                    last_observed_at: '2026-03-16T08:58:30.000Z',
-                    degraded_reasons: ['missing workspace files: inbox.md, todo.md']
+                    last_observed_at: '2026-03-16T08:58:30.000Z'
                   },
                   hermes_session: {
                     status: 'missing',
-                    expected_session_ref: '5-web3-app-engineering',
-                    evidence_ref: 'hermes://session/5-web3-app-engineering',
-                    last_observed_at: null,
-                    degraded_reasons: ['Hermes session missing']
+                    last_observed_at: null
                   }
                 },
                 evidence_ref_count: 4,
-                evidence_refs: ['/tmp/app-engineering/outbox.md', 'hermes://session/5-web3-app-engineering'],
                 latest_evidence_at: '2026-03-16T08:58:40.000Z'
               }
             ],
@@ -3184,10 +3175,18 @@ afterEach(() => {
       expect(requestedUrls).not.toContain(workflowUrl);
       expect(requestedUrls).not.toContain(appEngineeringEvidenceRecordsUrl);
     });
-    const sourceHealthFact = await waitFor(() =>
-      within(inspectPeek).getByText('Source health · Hermes session · missing · 4 refs · Hermes session missing')
-    );
-    expect(sourceHealthFact).toBeVisible();
+    const sourceHealthPeek = await within(inspectPeek).findByRole('region', {
+      name: 'Selected agent source-health inspect peek'
+    });
+    expect(within(sourceHealthPeek).getByText('Evidence only')).toBeVisible();
+    expect(within(sourceHealthPeek).getByText('Hermes session · missing')).toBeVisible();
+    expect(within(sourceHealthPeek).getByText('Mapped source')).toBeVisible();
+    expect(within(sourceHealthPeek).getByText('Configured · Yes')).toBeVisible();
+    expect(within(sourceHealthPeek).getByText('Evidence refs · Available')).toBeVisible();
+    expect(within(sourceHealthPeek).getByText('Reason · Redacted')).toBeVisible();
+    expect(within(sourceHealthPeek).getByText('Not observed')).toBeVisible();
+    expect(within(sourceHealthPeek).getByText('Collected 2026-03-16T09:01:00.000Z')).toBeVisible();
+    expect(sourceHealthPeek).not.toHaveTextContent('Hermes session missing');
     expect(inspectPeek).not.toHaveTextContent('/tmp/');
     expect(inspectPeek).not.toHaveTextContent('hermes://');
     expect(inspectPeek).not.toHaveTextContent('5-web3-app-engineering');
@@ -3299,7 +3298,14 @@ afterEach(() => {
       const sourceHealthFact = await within(inspectPeek).findByRole('button', {
         name: 'Open source gap supervision for App Engineering Agent workspace files degraded'
       });
-      expect(sourceHealthFact).toHaveTextContent('Source health · Workspace files · degraded · 1 missing file, 1 observed');
+      expect(sourceHealthFact).toHaveTextContent('Open Supervision');
+      const sourceHealthPeek = within(inspectPeek).getByRole('region', {
+        name: 'Selected agent source-health inspect peek'
+      });
+      expect(sourceHealthPeek).toHaveTextContent('Workspace files · degraded');
+      expect(sourceHealthPeek).toHaveTextContent('Mapped source');
+      expect(sourceHealthPeek).toHaveTextContent('Configured · Yes');
+      expect(sourceHealthPeek).toHaveTextContent('Reason · Redacted');
       expect(inspectPeek).not.toHaveTextContent('/tmp/app-engineering');
 
       await waitFor(() => {

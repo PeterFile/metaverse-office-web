@@ -615,7 +615,8 @@ function renderSelectedSourceGapReason(
   item: CollectorSourceHealthProjectionAgentItem,
   sourceKind: DisplayedSourceGapKind
 ) {
-  const reason = item.source_health[sourceKind]?.degraded_reasons[0];
+  const reasons = item.source_health[sourceKind]?.degraded_reasons;
+  const reason = Array.isArray(reasons) ? reasons[0] : null;
   if (!reason) {
     return null;
   }
@@ -655,7 +656,10 @@ function collectSensitiveSelectedSourceGapLabels(item: CollectorSourceHealthProj
     { value: sourceHealth.hermes_profile?.profile_id, label: '[hermes ref]' },
     { value: sourceHealth.hermes_profile?.evidence_ref, label: '[hermes ref]' },
     { value: sourceHealth.hermes_session?.evidence_ref, label: '[hermes ref]' },
-    ...item.evidence_refs.map((evidenceRef) => ({ value: evidenceRef, label: '[ref]' }))
+    ...((Array.isArray(item.evidence_refs) ? item.evidence_refs : []).map((evidenceRef) => ({
+      value: evidenceRef,
+      label: '[ref]'
+    })))
   ];
 }
 

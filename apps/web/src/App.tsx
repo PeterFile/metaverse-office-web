@@ -53,6 +53,7 @@ import {
   deriveRuntimeSourceGapWorldPins,
   deriveSelectedAgentSourceGapFact
 } from './aitown/sourceGapSignals';
+import { deriveSelectedAgentSourceHealthInspectPeek } from './aitown/sourceHealth';
 import { deriveSelectedAgentEvidenceGlance } from './aitown/selectedAgentEvidenceGlance';
 import { WorldProvider, useWorld } from './context/WorldContext';
 import { usePolledResource, type LoadState } from './hooks/usePolledResource';
@@ -2812,6 +2813,10 @@ function AppInner() {
     [latestSourceHealth, selectedAgentId, visibleEvidenceCoverage]
   );
   const selectedAgentSourceGapFact = deriveSelectedAgentSourceGapFact(latestSourceHealth, selectedAgentId);
+  const selectedAgentSourceHealthInspectPeek = useMemo(
+    () => deriveSelectedAgentSourceHealthInspectPeek(latestSourceHealth, selectedAgentId),
+    [latestSourceHealth, selectedAgentId]
+  );
   const selectedAgentSourceGapInspectPeek = useMemo(
     () =>
       deriveRuntimeSourceGapInspectPeek(
@@ -2822,17 +2827,6 @@ function AppInner() {
       ),
     [overviewResource.data?.agents, runtimeSourceGapsResource.data, selectedAgentId, sourceGapFocusIntent]
   );
-  const selectedAgentSourceGapSummary = selectedAgentSourceGapFact
-    ? [
-        'Source health',
-        selectedAgentSourceGapFact.sourceLabel,
-        selectedAgentSourceGapFact.status,
-        selectedAgentSourceGapFact.countLabel,
-        selectedAgentSourceGapFact.reason
-      ]
-        .filter(Boolean)
-        .join(' · ')
-    : null;
   const handleSelectedAgentSourceGapFactOpen = useCallback(() => {
     if (!selectedAgentSourceGapFact) {
       return;
@@ -3188,15 +3182,33 @@ function AppInner() {
                     ))}
                   </span>
                 ) : null}
-                {selectedAgentSourceGapSummary && selectedAgentSourceGapFact ? (
-                  <button
-                    type="button"
-                    className="aitown-selected-agent-peek__source-gap-fact"
-                    aria-label={`Open source gap supervision for ${selectedAgent.display_name} ${selectedAgentSourceGapFact.sourceLabel.toLowerCase()} ${selectedAgentSourceGapFact.status}`}
-                    onClick={handleSelectedAgentSourceGapFactOpen}
+                {selectedAgentSourceHealthInspectPeek && selectedAgentSourceGapFact ? (
+                  <section
+                    className="aitown-selected-agent-peek__source-health-inspect"
+                    role="region"
+                    aria-label="Selected agent source-health inspect peek"
                   >
-                    {selectedAgentSourceGapSummary}
-                  </button>
+                    <span className="aitown-selected-agent-peek__source-health-inspect-label">
+                      {selectedAgentSourceHealthInspectPeek.evidenceOnlyLabel}
+                    </span>
+                    <strong>
+                      {`${selectedAgentSourceHealthInspectPeek.sourceKindLabel} · ${selectedAgentSourceHealthInspectPeek.statusLabel}`}
+                    </strong>
+                    <span>{selectedAgentSourceHealthInspectPeek.mappingLabel}</span>
+                    <span>{selectedAgentSourceHealthInspectPeek.configuredLabel}</span>
+                    <span>{selectedAgentSourceHealthInspectPeek.evidenceRefsLabel}</span>
+                    <span>{selectedAgentSourceHealthInspectPeek.reasonLabel}</span>
+                    <span>{selectedAgentSourceHealthInspectPeek.observedAtLabel}</span>
+                    <span>{selectedAgentSourceHealthInspectPeek.collectedAtLabel}</span>
+                    <button
+                      type="button"
+                      className="aitown-selected-agent-peek__source-gap-fact"
+                      aria-label={`Open source gap supervision for ${selectedAgent.display_name} ${selectedAgentSourceGapFact.sourceLabel.toLowerCase()} ${selectedAgentSourceGapFact.status}`}
+                      onClick={handleSelectedAgentSourceGapFactOpen}
+                    >
+                      Open Supervision
+                    </button>
+                  </section>
                 ) : null}
                 {selectedAgentSourceGapInspectPeek ? (
                   <section
@@ -3321,14 +3333,20 @@ function AppInner() {
                       <span>{`Correlation · ${selectedAgentPeekCorrelationId}`}</span>
                     ) : null}
                     {selectedAgentPeekEvidenceRef ? <span>{`Evidence · ${selectedAgentPeekEvidenceRef}`}</span> : null}
-                    {selectedAgentSourceGapSummary && selectedAgentSourceGapFact ? (
+                    {selectedAgentSourceHealthInspectPeek && selectedAgentSourceGapFact ? (
                       <button
                         type="button"
                         className="aitown-hub-focus-ribbon__source-gap-fact"
                         aria-label={`Open source gap supervision for ${selectedAgent.display_name} ${selectedAgentSourceGapFact.sourceLabel.toLowerCase()} ${selectedAgentSourceGapFact.status}`}
                         onClick={handleSelectedAgentSourceGapFactOpen}
                       >
-                        {selectedAgentSourceGapSummary}
+                        {[
+                          'Source health',
+                          selectedAgentSourceHealthInspectPeek.sourceKindLabel,
+                          selectedAgentSourceHealthInspectPeek.statusLabel,
+                          selectedAgentSourceHealthInspectPeek.mappingLabel,
+                          selectedAgentSourceHealthInspectPeek.reasonLabel
+                        ].join(' · ')}
                       </button>
                     ) : null}
                     {selectedAgentSourceGapInspectPeek ? (

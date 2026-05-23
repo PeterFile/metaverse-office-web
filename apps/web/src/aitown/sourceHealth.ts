@@ -1,6 +1,9 @@
 import type {
   CollectorItem,
   CollectorRuntimeSourceEvidence,
+  CollectorSourceHealth,
+  CollectorSourceHealthKind,
+  CollectorSourceHealthProjection,
   CollectorSourceHealthStatus
 } from '../types';
 
@@ -25,10 +28,105 @@ export interface SourceDrilldownGroup {
   details: SourceDrilldownDetail[];
 }
 
+export type SelectedAgentSourceHealthDrilldownGroupKey = 'workspace' | 'tmux' | 'hermes';
+
+export interface SelectedAgentSourceHealthInspectPeek {
+  agentId: string;
+  sourceDrilldownGroupKey: SelectedAgentSourceHealthDrilldownGroupKey;
+  evidenceOnlyLabel: 'Evidence only';
+  mappingLabel: 'Mapped source';
+  sourceKindLabel: string;
+  statusLabel: Exclude<CollectorSourceHealthStatus, 'observed'>;
+  configuredLabel: string;
+  evidenceRefsLabel: string;
+  reasonLabel: string;
+  observedAtLabel: string;
+  collectedAtLabel: string;
+}
+
 const BOUNDED_DETAIL_LIMIT = 3;
 const BOUNDED_REASON_LIMIT = 2;
 const BOUNDED_RUNTIME_SOURCE_LIMIT = 3;
 const BOUNDED_TEXT_LIMIT = 120;
+
+const SELECTED_SOURCE_HEALTH_STATUS_RANK: Record<CollectorSourceHealthStatus, number> = {
+  error: 0,
+  missing: 1,
+  degraded: 2,
+  observed: 3
+};
+
+const SELECTED_SOURCE_HEALTH_KIND_LABELS: Record<CollectorSourceHealthKind, string> = {
+  workspace_root: 'Workspace root',
+  workspace_files: 'Workspace files',
+  tmux_session: 'Tmux session',
+  hermes_profile: 'Hermes profile',
+  hermes_session: 'Hermes session'
+};
+
+const SELECTED_SOURCE_HEALTH_KIND_ORDER: CollectorSourceHealthKind[] = [
+  'workspace_root',
+  'workspace_files',
+  'tmux_session',
+  'hermes_profile',
+  'hermes_session'
+];
+
+export function deriveSelectedAgentSourceHealthInspectPeek(
+  sourceHealth: CollectorSourceHealthProjection | null | undefined,
+  selectedAgentId: string | null | undefined
+): SelectedAgentSourceHealthInspectPeek | null {
+  if (!sourceHealth?.agent_items.length || !selectedAgentId) {
+    return null;
+  }
+
+  const item = sourceHealth.agent_items.find((agentItem) => agentItem.agent_id === selectedAgentId);
+  if (!item) {
+    return null;
+  }
+
+  const selectedSourceKind = SELECTED_SOURCE_HEALTH_KIND_ORDER.reduce<CollectorSourceHealthKind | null>(
+    (selectedKind, sourceKind) => {
+      const status = getSourceHealthStatus(item.source_health, sourceKind);
+      if (!status || status === 'observed') {
+        return selectedKind;
+      }
+
+      if (!selectedKind) {
+        return sourceKind;
+      }
+
+      const selectedStatus = getSourceHealthStatus(item.source_health, selectedKind);
+      return !selectedStatus ||
+        SELECTED_SOURCE_HEALTH_STATUS_RANK[status] < SELECTED_SOURCE_HEALTH_STATUS_RANK[selectedStatus]
+        ? sourceKind
+        : selectedKind;
+    },
+    null
+  );
+  if (!selectedSourceKind) {
+    return null;
+  }
+
+  const selectedHealth = item.source_health[selectedSourceKind];
+  if (!selectedHealth || selectedHealth.status === 'observed') {
+    return null;
+  }
+
+  return {
+    agentId: item.agent_id,
+    sourceDrilldownGroupKey: resolveSelectedSourceHealthDrilldownGroupKey(selectedSourceKind),
+    evidenceOnlyLabel: 'Evidence only',
+    mappingLabel: 'Mapped source',
+    sourceKindLabel: SELECTED_SOURCE_HEALTH_KIND_LABELS[selectedSourceKind],
+    statusLabel: selectedHealth.status as Exclude<CollectorSourceHealthStatus, 'observed'>,
+    configuredLabel: `Configured · ${renderSelectedSourceHealthConfigured(selectedHealth)}`,
+    evidenceRefsLabel: `Evidence refs · ${item.evidence_ref_count > 0 ? 'Available' : 'None'}`,
+    reasonLabel: renderSelectedSourceHealthReasonLabel(),
+    observedAtLabel: renderObservedAtLabel(selectedHealth.last_observed_at),
+    collectedAtLabel: renderCollectedAtLabel(sourceHealth.collected_at)
+  };
+}
 
 export function deriveCollectorItemSourceHealthFacts(item: CollectorItem): SourceHealthFact[] {
   const sourceHealth = item.source_health;
@@ -372,6 +470,32 @@ function resolveUnmappedRuntimeSourceStatus(statuses: CollectorSourceHealthStatu
   return 'degraded';
 }
 
+function getSourceHealthStatus(sourceHealth: CollectorSourceHealth, sourceKind: CollectorSourceHealthKind) {
+  return sourceHealth[sourceKind]?.status;
+}
+
+function resolveSelectedSourceHealthDrilldownGroupKey(
+  sourceKind: CollectorSourceHealthKind
+): SelectedAgentSourceHealthDrilldownGroupKey {
+  if (sourceKind === 'tmux_session') {
+    return 'tmux';
+  }
+
+  if (sourceKind === 'hermes_profile' || sourceKind === 'hermes_session') {
+    return 'hermes';
+  }
+
+  return 'workspace';
+}
+
+function renderSelectedSourceHealthConfigured(sourceHealth: { status?: CollectorSourceHealthStatus }) {
+  return sourceHealth.status ? 'Yes' : 'No';
+}
+
+function renderSelectedSourceHealthReasonLabel() {
+  return 'Reason · Redacted';
+}
+
 function renderHermesSourceKind(sourceKind: 'hermes_profile' | 'hermes_session') {
   return sourceKind === 'hermes_profile' ? 'profile' : 'session';
 }
@@ -422,6 +546,14 @@ function renderBoundedText(value: string) {
 
 function renderNullable(value: string | null) {
   return value ?? 'None';
+}
+
+function renderObservedAtLabel(value: string | null | undefined) {
+  return value ? `Observed ${value}` : 'Not observed';
+}
+
+function renderCollectedAtLabel(value: string | null | undefined) {
+  return value ? `Collected ${value}` : 'Not collected';
 }
 
 function pluralize(noun: string, count: number) {

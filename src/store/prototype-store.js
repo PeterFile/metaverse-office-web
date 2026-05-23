@@ -3743,7 +3743,6 @@ function projectRuntimeSourceGapRecord(record) {
     output_candidate: record.output_candidate === true,
     collector_snapshot_id: record.collector_snapshot_id,
     correlation_id: record.correlation_id,
-    degraded_reasons: Array.isArray(record.degraded_reasons) ? record.degraded_reasons.slice() : [],
     unmapped: record.agent_id === null
   };
 }
@@ -3966,6 +3965,9 @@ function projectCollectorSourceHealth(report, filters = {}) {
   const status = normalizeSourceHealthStatus(requestedStatus);
   const hasUnknownStatus = Boolean(requestedStatus) && !status;
   const limit = parseLimit(filters.limit);
+  const collectorSnapshotId = createCollectorCorrelationId(
+    normalizeCollectorTimestamp(report.collected_at) || report.collected_at || 'unknown'
+  );
   const evidenceCoverageRows = new Map(
     (report.evidence_coverage?.agent_items || [])
       .filter(isEvidenceCoverageAgentItem)
@@ -3983,15 +3985,14 @@ function projectCollectorSourceHealth(report, filters = {}) {
 
   return {
     collected_at: report.collected_at || null,
-    collector_snapshot_id: createCollectorCorrelationId(
-      normalizeCollectorTimestamp(report.collected_at) || report.collected_at || 'unknown'
-    ),
+    collector_snapshot_id: collectorSnapshotId,
     actor_id: report.actor_id || null,
     summary: createSourceHealthSummary(selectedItems, sourceHealthKeys, status),
     runtime_source_evidence: cloneRuntimeSourceEvidence(report.runtime_source_evidence),
     agent_items: selectedItems.map((item) =>
       projectSourceHealthAgentItem({
         item,
+        collectorSnapshotId,
         sourceHealthKeys,
         status,
         evidenceCoverageRow: evidenceCoverageRows.get(item.agent_id) || null
@@ -4339,18 +4340,22 @@ function normalizeSourceHealthStatus(status) {
   return SOURCE_HEALTH_STATUSES.includes(status) ? status : null;
 }
 
-function projectSourceHealthAgentItem({ item, sourceHealthKeys, status, evidenceCoverageRow }) {
+function projectSourceHealthAgentItem({
+  item,
+  collectorSnapshotId,
+  sourceHealthKeys,
+  status,
+  evidenceCoverageRow
+}) {
   const evidenceRefs = normalizeEvidenceRefs(item.evidence_refs);
 
   return {
     agent_id: item.agent_id,
-    workspace_root: item.workspace_root || item.source_health?.workspace_root?.path || null,
-    session_ref: item.session_ref || item.source_health?.tmux_session?.expected_session_ref || null,
+    collector_snapshot_id: collectorSnapshotId,
     source_health: projectSourceHealth(item.source_health, sourceHealthKeys, status),
     evidence_ref_count: evidenceCoverageRow
       ? normalizeCount(evidenceCoverageRow.evidence_ref_count)
       : evidenceRefs.length,
-    evidence_refs: evidenceRefs,
     latest_evidence_at: evidenceCoverageRow?.latest_evidence_at || deriveLatestCollectorEvidenceAt(item)
   };
 }
@@ -4371,17 +4376,13 @@ function projectSourceHealth(sourceHealth = {}, sourceHealthKeys, statusFilter =
 }
 
 function cloneSourceHealthEntry(health) {
-  const cloned = { ...health };
-
-  if (Array.isArray(cloned.expected_files)) {
-    cloned.expected_files = cloned.expected_files.slice();
-  }
-
-  if (Array.isArray(cloned.degraded_reasons)) {
-    cloned.degraded_reasons = cloned.degraded_reasons.slice();
-  }
-
-  return cloned;
+  return {
+    status: normalizeSourceHealthStatus(health.status),
+    last_observed_at: normalizeCollectorTimestamp(health.last_observed_at) || null,
+    ...(Number.isFinite(health.observed_count)
+      ? { observed_count: health.observed_count }
+      : {})
+  };
 }
 
 function cloneUnmappedTmuxSessions(sessions) {
@@ -4390,8 +4391,9 @@ function cloneUnmappedTmuxSessions(sessions) {
   }
 
   return sessions.map((session) => ({
-    ...session,
-    pane_refs: Array.isArray(session.pane_refs) ? session.pane_refs.slice() : []
+    status: normalizeSourceHealthStatus(session.status) || 'observed',
+    observed_count: normalizeCount(session.observed_count),
+    last_observed_at: normalizeCollectorTimestamp(session.last_observed_at) || null
   }));
 }
 
@@ -4403,10 +4405,11 @@ function cloneRuntimeSourceEvidence(runtimeSourceEvidence = {}) {
     ...(Array.isArray(runtimeSourceEvidence?.unmapped_hermes_sources)
       ? {
           unmapped_hermes_sources: runtimeSourceEvidence.unmapped_hermes_sources.map((source) => ({
-            ...source,
-            degraded_reasons: Array.isArray(source.degraded_reasons)
-              ? source.degraded_reasons.slice()
-              : []
+            source_kind: projectKnownEvidenceValue(source.source_kind, EVIDENCE_RECORD_SOURCE_KINDS),
+            status: normalizeSourceHealthStatus(source.status),
+            observed_count: normalizeCount(source.observed_count),
+            last_observed_at:
+              normalizeCollectorTimestamp(source.last_observed_at || source.observed_at) || null
           }))
         }
       : {})

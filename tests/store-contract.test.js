@@ -828,7 +828,14 @@ test('prototype store persists Hermes runtime source facts as read-only evidence
   );
   assert.deepEqual(
     jsonlStore.getLatestCollectorSourceHealth().runtime_source_evidence.unmapped_hermes_sources,
-    report.runtime_source_evidence.unmapped_hermes_sources
+    [
+      {
+        source_kind: 'hermes_profile',
+        status: 'observed',
+        observed_count: 0,
+        last_observed_at: '2026-03-09T18:06:40.000Z'
+      }
+    ]
   );
   assert.equal(
     jsonlStore.getLatestCollectorSourceHealth().agent_items[0].latest_evidence_at,
@@ -1717,6 +1724,7 @@ test('prototype store lists compact runtime source gaps without normal observed 
   assert.equal(gaps.some((gap) => Object.hasOwn(gap, 'evidence_id')), false);
   assert.equal(gaps.some((gap) => Object.hasOwn(gap, 'evidence_ref')), false);
   assert.equal(gaps.some((gap) => Object.hasOwn(gap, 'metadata')), false);
+  assert.equal(gaps.some((gap) => Object.hasOwn(gap, 'degraded_reasons')), false);
   const serializedGaps = JSON.stringify(gaps);
   for (const canary of leakCanaries) {
     assert.equal(serializedGaps.includes(canary), false, `leaked canary: ${canary}`);
@@ -2378,7 +2386,20 @@ test('prototype store projects collector source health for requested snapshot id
   });
   assert.equal(historical.collector_snapshot_id, 'collector-snapshot:2026-03-09T18:06:00.000Z');
   assert.deepEqual(historical.agent_items.map((item) => item.agent_id), ['app-engineering']);
+  assert.equal(
+    historical.agent_items[0].collector_snapshot_id,
+    'collector-snapshot:2026-03-09T18:06:00.000Z'
+  );
   assert.equal(historical.agent_items[0].source_health.workspace_files.status, 'degraded');
+  assert.equal(Object.hasOwn(historical.agent_items[0], 'workspace_root'), false);
+  assert.equal(Object.hasOwn(historical.agent_items[0], 'session_ref'), false);
+  assert.equal(Object.hasOwn(historical.agent_items[0], 'evidence_refs'), false);
+  assert.equal(
+    Object.hasOwn(historical.agent_items[0].source_health.workspace_files, 'degraded_reasons'),
+    false
+  );
+  assert.equal(JSON.stringify(historical).includes('/tmp/store-contract'), false);
+  assert.equal(JSON.stringify(historical).includes('tmux://'), false);
 
   const latest = store.getLatestCollectorSourceHealth({
     source_kind: 'workspace_file',

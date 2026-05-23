@@ -5306,10 +5306,9 @@ test('GET /collectors/controller-snapshot/source-health projects latest source h
   assert.equal(sourceHealth.body.item.actor_id, 'team-lead');
   assert.deepEqual(sourceHealth.body.item.runtime_source_evidence.unmapped_tmux_sessions, [
     {
-      session_name: 'unmapped-session',
+      status: 'observed',
       observed_count: 1,
-      last_observed_at: '2026-03-09T18:02:00.000Z',
-      pane_refs: ['tmux://unmapped-session/0.0']
+      last_observed_at: '2026-03-09T18:02:00.000Z'
     }
   ]);
   assert.deepEqual(sourceHealth.body.item.agent_items.map((item) => item.agent_id), [
@@ -5319,8 +5318,14 @@ test('GET /collectors/controller-snapshot/source-health projects latest source h
   assert.equal(sourceHealth.body.item.agent_items[0].source_health.workspace_root.status, 'observed');
   assert.equal(sourceHealth.body.item.agent_items[0].source_health.workspace_files.status, 'degraded');
   assert.equal(sourceHealth.body.item.agent_items[0].source_health.tmux_session.status, 'observed');
+  assert.equal(
+    sourceHealth.body.item.agent_items[0].collector_snapshot_id,
+    'collector-snapshot:2026-03-09T18:05:00.000Z'
+  );
   assert.equal(sourceHealth.body.item.agent_items[0].evidence_ref_count, 3);
   assert.equal(sourceHealth.body.item.agent_items[0].latest_evidence_at, '2026-03-09T18:04:30.000Z');
+  assert.equal(JSON.stringify(sourceHealth.body).includes('/tmp/source-health'), false);
+  assert.equal(JSON.stringify(sourceHealth.body).includes('tmux://'), false);
   assert.equal(Object.hasOwn(sourceHealth.body.item, 'items'), false);
   assert.equal(collectCount, 1);
   assert.equal(store.getLatestCollectorReport(), latestBeforeRead);

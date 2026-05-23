@@ -128,6 +128,7 @@ export interface SceneSourceGapPin {
   agentId: string | null;
   displayName: string;
   isMapped: boolean;
+  sourceDrilldownGroupKey?: 'workspace' | 'tmux' | 'hermes' | null;
   sourceKind: string;
   sourceLabel: string;
   status: Exclude<CollectorSourceHealthStatus, 'observed'> | 'observed';

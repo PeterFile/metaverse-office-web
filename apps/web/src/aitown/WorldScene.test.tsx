@@ -1060,6 +1060,7 @@ describe('WorldScene watch overlay caption gating', () => {
           agentId: 'app-engineering',
           displayName: 'App Engineering Agent',
           isMapped: true,
+          sourceDrilldownGroupKey: 'workspace',
           sourceKind: 'workspace_files',
           sourceLabel: 'Workspace files',
           status: 'degraded',
@@ -1272,6 +1273,7 @@ describe('WorldScene watch overlay caption gating', () => {
   it('renders source-gap world pins while keeping unmapped runtime evidence passive', async () => {
     appInitMock.mockReset().mockResolvedValue(undefined);
     vi.mocked(loadAiTownAssets).mockResolvedValue(makeAssets());
+    const onSelectSourceGapPin = vi.fn();
     const scene = {
       ...makeScene(),
       sourceGapPins: [
@@ -1280,6 +1282,7 @@ describe('WorldScene watch overlay caption gating', () => {
           agentId: 'app-engineering',
           displayName: 'App Engineering Agent',
           isMapped: true,
+          sourceDrilldownGroupKey: 'workspace',
           sourceKind: 'workspace_files',
           sourceLabel: 'Workspace files',
           status: 'degraded',
@@ -1302,7 +1305,13 @@ describe('WorldScene watch overlay caption gating', () => {
       ]
     } satisfies AiTownSceneModel;
 
-    render(<WorldScene scene={scene} onSelectAgent={vi.fn()} />);
+    render(
+      <WorldScene
+        scene={scene}
+        onSelectAgent={vi.fn()}
+        onSelectSourceGapPin={onSelectSourceGapPin}
+      />
+    );
 
     await waitFor(() => {
       expect(collectPixiTextLabels(appInstances.at(-1)?.stage)).toContain('UNMAPPED SRC');
@@ -1314,6 +1323,28 @@ describe('WorldScene watch overlay caption gating', () => {
 
     const unmappedPinText = findPixiTextNode(appInstances.at(-1)?.stage, 'UNMAPPED SRC');
     expect(unmappedPinText?.eventMode).toBeUndefined();
+
+    const pins = readAgentLayer()?.children.slice(scene.agents.length) as
+      | Array<{
+          cursor?: string;
+          eventMode?: string;
+          emit: (event: string) => { stopPropagation: ReturnType<typeof vi.fn> };
+        }>
+      | undefined;
+    const [mappedPin, unmappedPin] = pins ?? [];
+
+    expect(mappedPin?.eventMode).toBe('static');
+    expect(mappedPin?.cursor).toBe('pointer');
+    expect(unmappedPin?.eventMode).toBe('none');
+    expect(unmappedPin?.cursor).toBeUndefined();
+
+    const mappedEvent = mappedPin?.emit('pointertap');
+    const unmappedEvent = unmappedPin?.emit('pointertap');
+
+    expect(mappedEvent?.stopPropagation).toHaveBeenCalledTimes(1);
+    expect(onSelectSourceGapPin).toHaveBeenCalledTimes(1);
+    expect(onSelectSourceGapPin).toHaveBeenCalledWith(scene.sourceGapPins[0]);
+    expect(unmappedEvent?.stopPropagation).not.toHaveBeenCalled();
   });
 
   it('keeps selected watch-link captions hidden while the renderer is still failed', async () => {

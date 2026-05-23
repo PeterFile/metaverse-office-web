@@ -6,6 +6,7 @@ vi.mock('./aitown/WorldScene', () => ({
   default: function MockWorldScene({
     scene,
     onSelectAgent,
+    onSelectSourceGapPin,
     resetViewSignal = 0,
     agentFocusRequest = null,
     zoneFocusRequest = null,
@@ -15,6 +16,18 @@ vi.mock('./aitown/WorldScene', () => ({
       selectedAgentId: string | null;
       activeCorrelationId: string | null;
       correlationParticipantAgentIds: string[];
+      sourceGapPins?: Array<{
+        pinId: string;
+        agentId: string | null;
+        displayName: string;
+        isMapped: boolean;
+        sourceDrilldownGroupKey?: 'workspace' | 'tmux' | 'hermes' | null;
+        sourceKind: string;
+        sourceLabel: string;
+        status: 'observed' | 'degraded' | 'missing' | 'error';
+        lifecycleLabel?: string;
+        observedAtLabel: string;
+      }>;
       watchEdges: Array<{
         fromAgentId: string;
         toAgentId: string;
@@ -28,6 +41,18 @@ vi.mock('./aitown/WorldScene', () => ({
       }>;
     };
     onSelectAgent: (agentId: string | null) => void;
+    onSelectSourceGapPin?: (pin: {
+      pinId: string;
+      agentId: string | null;
+      displayName: string;
+      isMapped: boolean;
+      sourceDrilldownGroupKey?: 'workspace' | 'tmux' | 'hermes' | null;
+      sourceKind: string;
+      sourceLabel: string;
+      status: 'observed' | 'degraded' | 'missing' | 'error';
+      lifecycleLabel?: string;
+      observedAtLabel: string;
+    }) => void;
     resetViewSignal?: number;
     agentFocusRequest?: { agentId: string; requestId: number } | null;
     zoneFocusRequest?: { zoneId: string; requestId: number } | null;
@@ -61,6 +86,18 @@ vi.mock('./aitown/WorldScene', () => ({
         {scene.agents.map((agent) => (
           <button key={agent.agentId} type="button" onClick={() => onSelectAgent(agent.agentId)}>
             {`Select scene agent ${agent.agentId}`}
+          </button>
+        ))}
+        {(scene.sourceGapPins ?? []).map((pin) => (
+          <button
+            key={pin.pinId}
+            type="button"
+            disabled={!pin.agentId || !pin.sourceDrilldownGroupKey}
+            onClick={() => onSelectSourceGapPin?.(pin)}
+          >
+            {pin.agentId
+              ? `Select source gap pin ${pin.agentId} ${pin.sourceLabel} ${pin.status}`
+              : `Passive source gap pin ${pin.sourceLabel} ${pin.status}`}
           </button>
         ))}
         {scene.watchEdges.length > 0 ? (
@@ -3819,6 +3856,51 @@ afterEach(() => {
     for (const canary of leakCanaries) {
       expect(document.body).not.toHaveTextContent(canary);
     }
+  });
+
+  it('selects and focuses mapped world source-gap pins without opening Hub or prefetching evidence records', async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString();
+
+      if (url === runtimeSourceGapsUrl) {
+        return jsonResponse(growthRevenueRuntimeSourceGapsFixture);
+      }
+
+      if (url === runtimeSourceGapsSummaryUrl) {
+        return jsonResponse({ item: growthRevenueRuntimeSourceGapsSummaryFixture });
+      }
+
+      return resolveTestFetchResponse(url);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    setNavigatorUserAgent('VitestBrowser');
+    render(<App />);
+
+    const sourceGapPin = await screen.findByRole('button', {
+      name: 'Select source gap pin growth-revenue Workspace files degraded'
+    });
+
+    await user.click(sourceGapPin);
+
+    expect(screen.queryByRole('dialog', { name: 'Hub' })).not.toBeInTheDocument();
+    expect(screen.getByTestId('mock-scene-selected-agent-id')).toHaveTextContent('growth-revenue');
+    await waitFor(() => expect(screen.getByTestId('mock-agent-focus-request')).toHaveTextContent('growth-revenue:1'));
+
+    const inspectPeek = await screen.findByRole('region', { name: 'Source gap inspect peek' });
+    expect(inspectPeek).toHaveTextContent('Evidence only');
+    expect(inspectPeek).toHaveTextContent('Workspace files · degraded');
+    expect(inspectPeek).toHaveTextContent('Mapped source');
+    expect(inspectPeek).toHaveTextContent('Observed 2026-03-16T08:57:45.000Z');
+    expect(inspectPeek).toHaveTextContent('Collected 2026-03-16T09:01:00.000Z');
+    expect(inspectPeek).not.toHaveTextContent('/tmp/growth-revenue');
+    expect(inspectPeek).not.toHaveTextContent('6-web3-growth-revenue');
+    expect(inspectPeek).not.toHaveTextContent('collector-snapshot:');
+    expect(inspectPeek).not.toHaveTextContent(/assign|claim|complete|dispatch|kanban|route/i);
+
+    const requestedUrls = fetchMock.mock.calls.map(([request]) => String(request));
+    expect(requestedUrls.some((url) => url.startsWith('/evidence-records'))).toBe(false);
   });
 
   it('shows no-snapshot evidence coverage read-model status when collector coverage is absent', async () => {

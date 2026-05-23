@@ -87,7 +87,7 @@ import {
   selectHotZones,
   type HotZoneSummary
 } from './world/selectors';
-import type { SceneAgent } from './aitown/types';
+import type { SceneAgent, SceneSourceGapPin } from './aitown/types';
 
 type AgentRosterStatusState = Pick<
   SceneAgent,
@@ -2161,10 +2161,8 @@ function AppInner() {
   useEffect(() => {
     if (
       sourceGapFocusIntent &&
-      (!hubOpen ||
-        selectedAgentId !== sourceGapFocusIntent.agentId ||
-        activeHubCategory !== 'supervision' ||
-        selectedAgentDrilldownTab !== 'evidence')
+      (selectedAgentId !== sourceGapFocusIntent.agentId ||
+        (hubOpen && (activeHubCategory !== 'supervision' || selectedAgentDrilldownTab !== 'evidence')))
     ) {
       setSourceGapFocusIntent(null);
     }
@@ -2585,6 +2583,29 @@ function AppInner() {
       setHubOpen(true);
     },
     [handleSelectAgentForInspection]
+  );
+
+  const handleSourceGapWorldPinInspect = useCallback(
+    (pin: SceneSourceGapPin) => {
+      if (!pin.agentId || !pin.sourceDrilldownGroupKey) {
+        return;
+      }
+
+      sourceGapFocusRequestIdRef.current += 1;
+      requestedSelectedAgentDrilldownTabRef.current = 'evidence';
+      activeHubCategoryFromSelectedAgentTabRef.current = false;
+      setActiveHubCategory('supervision');
+      handleSelectAgentForInspection(pin.agentId);
+      requestAgentFocus(pin.agentId);
+      setSelectedAgentDrilldownTab('evidence');
+      setSourceGapFocusIntent({
+        agentId: pin.agentId,
+        sourceDrilldownGroupKey: pin.sourceDrilldownGroupKey,
+        requestId: sourceGapFocusRequestIdRef.current
+      });
+      setHubOpen(false);
+    },
+    [handleSelectAgentForInspection, requestAgentFocus]
   );
 
   const handleSelectOperation = useCallback(
@@ -3143,6 +3164,30 @@ function AppInner() {
                     {selectedAgentSourceGapSummary}
                   </button>
                 ) : null}
+                {selectedAgentSourceGapInspectPeek ? (
+                  <section
+                    className="aitown-selected-agent-peek__source-gap-inspect"
+                    role="region"
+                    aria-label="Source gap inspect peek"
+                  >
+                    <span className="aitown-selected-agent-peek__source-gap-inspect-label">
+                      {selectedAgentSourceGapInspectPeek.evidenceOnlyLabel}
+                    </span>
+                    <strong>
+                      {`${selectedAgentSourceGapInspectPeek.sourceKindLabel} · ${selectedAgentSourceGapInspectPeek.statusLabel}`}
+                    </strong>
+                    <span>{selectedAgentSourceGapInspectPeek.mappingLabel}</span>
+                    <span>{selectedAgentSourceGapInspectPeek.observedAtLabel}</span>
+                    <span>{selectedAgentSourceGapInspectPeek.collectedAtLabel}</span>
+                    <button
+                      type="button"
+                      className="aitown-selected-agent-peek__source-gap-inspect-link"
+                      onClick={handleSelectedAgentEvidenceLedgerOpen}
+                    >
+                      Open Evidence drilldown
+                    </button>
+                  </section>
+                ) : null}
                 <button
                   type="button"
                   className="aitown-button aitown-selected-agent-peek__action"
@@ -3183,6 +3228,7 @@ function AppInner() {
               <LazyWorldScene
                 scene={scene}
                 onSelectAgent={handleSceneSelectAgent}
+                onSelectSourceGapPin={handleSourceGapWorldPinInspect}
                 resetViewSignal={resetViewSignal}
                 agentFocusRequest={agentFocusRequest}
                 zoneFocusRequest={zoneFocusRequest}

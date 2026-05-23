@@ -157,7 +157,28 @@ const expectedApiGets = new Set([
 ]);
 
 const visibleProofRawRefPattern =
-  /\/(?:tmp|Users|Volumes|private|var|home|workspace|mnt)\/|[A-Za-z]:\\|tmux:\/\/|hermes:\/\/|\b\d+-web3-[a-z0-9-]+\b|profile-[a-z0-9-]+|session\/[a-z0-9-]+|session:\/\/|webhook|access[_-]?token|secret|payload|metadata|degraded_reasons|missing workspace files|Hermes session stale|control-plane|dispatch|route|writeback|mutate|claim|complete|assign/i;
+  /\/(?:tmp|Users|Volumes|private|var|home|workspace|mnt)\/|[A-Za-z]:\\|tmux:\/\/|hermes:\/\/|\b\d+-web3-[a-z0-9-]+\b|profile-[a-z0-9-]+|session\/[a-z0-9-]+|session:\/\/|workspace_(?:root|files?)|tmux_session|hermes_(?:profile|session)|profile_id|session_ref|evidence_refs?|source_health|collector_snapshot_id|correlation_id|source_kind|source_status|evidence_role|output_candidate|unmapped_tmux_sessions|webhook|access[_-]?token|secret|payload|metadata|degraded_reasons|missing workspace files|Hermes session stale|control-plane|dispatch|route|writeback|mutate|claim|complete|assign/i;
+const visibleProofForbiddenSamples = [
+  '/tmp/app-engineering',
+  '5-web3-app-engineering',
+  'hermes://session/5-web3-app-engineering',
+  'profile_id',
+  'session_ref',
+  'evidence_refs',
+  'source_kind',
+  'source_status',
+  'workspace_root',
+  'tmux_session',
+  'hermes_profile',
+  'hermes_session',
+  'collector_snapshot_id',
+  'correlation_id',
+  'degraded_reasons',
+  'payload',
+  'metadata',
+  'claim',
+  'complete'
+];
 
 function apiRequestKey(request: Request) {
   const url = new URL(request.url());
@@ -248,6 +269,12 @@ async function routeExpectedApiGet(page: Page, expectedKey: string, handler: (ro
 test.describe('operator shell live evidence journey smoke', () => {
   test('@journey @evidence-live opens source-gap evidence from live HUD with only exact read GETs', async ({ page }) => {
     const apiRequestViolations: string[] = [];
+    for (const forbiddenSample of visibleProofForbiddenSamples) {
+      expect(forbiddenSample, `${forbiddenSample} must be covered by the visible proof redaction guard`).toMatch(
+        visibleProofRawRefPattern
+      );
+    }
+
     const handleRequest = (request: Request) => {
       const url = new URL(request.url());
       if (!isApiPath(url.pathname)) {

@@ -265,6 +265,12 @@ describe('run-browser-smoke helpers', () => {
     ]);
   });
 
+  it('rejects unknown browser smoke lanes instead of falling back to the broad smoke bundle', () => {
+    expect(() => resolvePlaywrightArgs(['--smoke-lane=live-evidence-nextwave'])).toThrow(
+      /Unknown browser smoke lane "live-evidence-nextwave"/
+    );
+  });
+
   it('threads the inspectable backend origin into Playwright only when the smoke target exposes request logs', () => {
     expect(
       resolveBrowserSmokePlaywrightEnv('http://127.0.0.1:4173', 'http://127.0.0.1:3210')

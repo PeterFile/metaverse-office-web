@@ -272,6 +272,13 @@ function projectParityReadModels(store, root) {
         newest_first: 'true',
         limit: '1'
       }),
+      filteredCheckpointLog: store.listReplayCheckpointLog({
+        record_kind: 'evidence_record',
+        collector_snapshot_id: 'collector-snapshot:2026-03-09T18:07:00.000Z',
+        correlation_id: 'collector-snapshot:2026-03-09T18:07:00.000Z',
+        source_kind: 'workspace_file',
+        limit: '1'
+      }),
       provenanceBundle: store.getEvidenceProvenanceBundle(outputRecord.evidence_id)
     },
     root
@@ -326,6 +333,28 @@ test('JSONL and SQLite stores replay evidence read models with parity', async (t
   );
   assert.equal(
     JSON.stringify(sqliteProjection.provenanceBundle).includes(root),
+    false
+  );
+  assert.deepEqual(jsonlProjection.filteredCheckpointLog, [
+    {
+      append_index: 16,
+      record_kind: 'evidence_record',
+      checkpoint: {
+        observed_at: '2026-03-09T18:05:00.000Z',
+        collected_at: '2026-03-09T18:07:00.000Z',
+        agent_id: 'app-engineering',
+        source_kind: 'workspace_file',
+        evidence_role: 'agent_output',
+        source_status: 'degraded',
+        output_candidate: true,
+        collector_snapshot_id: 'collector-snapshot:2026-03-09T18:07:00.000Z',
+        correlation_id: 'collector-snapshot:2026-03-09T18:07:00.000Z',
+        unmapped: false
+      }
+    }
+  ]);
+  assert.equal(
+    Object.hasOwn(jsonlProjection.filteredCheckpointLog[0].checkpoint, 'evidence_id'),
     false
   );
   assert.deepEqual(jsonlProjection.provenanceBundle.source_summary, {

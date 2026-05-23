@@ -643,7 +643,7 @@ class PrototypeStore {
     return projectReplayCheckpointLog({
       records: this.records,
       limit: parseLimit(filters.limit),
-      recordKind: filters.record_kind
+      filters
     });
   }
 
@@ -3527,21 +3527,60 @@ function projectReplayCheckpointSummary({
   };
 }
 
-function projectReplayCheckpointLog({ records, limit, recordKind }) {
+function projectReplayCheckpointLog({ records, limit, filters = {} }) {
   const requestedRecordKind =
-    typeof recordKind === 'string' && recordKind.trim().length > 0 ? recordKind.trim() : null;
+    typeof filters.record_kind === 'string' && filters.record_kind.trim().length > 0
+      ? filters.record_kind.trim()
+      : null;
+  const exactFilters = {
+    evidence_id: normalizeFilterValue(filters.evidence_id),
+    collector_snapshot_id: normalizeFilterValue(filters.collector_snapshot_id),
+    correlation_id: normalizeFilterValue(filters.correlation_id),
+    source_kind: normalizeFilterValue(filters.source_kind)
+  };
   const entries = records
     .map((record, index) => ({ record, appendIndex: index + 1 }))
     .filter(({ record }) => (
       requestedRecordKind === null ||
       projectReplayCheckpointRecordKind(record) === requestedRecordKind
-    ));
+    ))
+    .filter(({ record }) => matchesReplayCheckpointLogFilters(record, exactFilters));
   const startIndex = Math.max(0, entries.length - limit);
   return entries.slice(startIndex).map(({ record, appendIndex }) => ({
     append_index: appendIndex,
     record_kind: projectReplayCheckpointRecordKind(record),
     checkpoint: projectReplayCheckpointRecord(record)
   }));
+}
+
+function matchesReplayCheckpointLogFilters(record, filters) {
+  return (
+    matchesReplayCheckpointLogField(record, 'evidence_id', filters.evidence_id) &&
+    matchesReplayCheckpointLogField(
+      record,
+      'collector_snapshot_id',
+      filters.collector_snapshot_id
+    ) &&
+    matchesReplayCheckpointLogField(record, 'correlation_id', filters.correlation_id) &&
+    matchesReplayCheckpointLogField(record, 'source_kind', filters.source_kind)
+  );
+}
+
+function matchesReplayCheckpointLogField(record, field, expected) {
+  if (!expected) {
+    return true;
+  }
+
+  const payload = record && record.payload ? record.payload : null;
+  if (!payload) {
+    return false;
+  }
+
+  if (field === 'collector_snapshot_id' && record.kind === COLLECTOR_SNAPSHOT_RECORD_KIND) {
+    return createCollectorCorrelationId(payload.collected_at) === expected;
+  }
+
+  return payload[field] === expected;
 }
 
 function projectReplayCheckpointRecordKind(record) {

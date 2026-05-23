@@ -586,6 +586,75 @@ test('prototype store bounds replay checkpoint log record kinds', async () => {
   ]);
 });
 
+test('prototype store filters replay checkpoint log by exact evidence provenance before limit', async () => {
+  const storeFile = await createStoreFile();
+  const store = await createPrototypeStore({ filePath: storeFile });
+
+  await store.appendEvent(createEvent());
+  await store.appendHeartbeat(createHeartbeat());
+  await store.appendCollectorReport(createCollectorReport());
+
+  const tmuxRecord = store
+    .listEvidenceRecords({ source_kind: 'tmux_observation', limit: '10' })
+    .find((record) => record.agent_id === 'app-engineering');
+  assert.ok(tmuxRecord);
+
+  const byEvidenceId = store.listReplayCheckpointLog({
+    evidence_id: tmuxRecord.evidence_id,
+    limit: '1'
+  });
+  assert.deepEqual(byEvidenceId, [
+    {
+      append_index: 8,
+      record_kind: 'evidence_record',
+      checkpoint: {
+        observed_at: '2026-03-09T18:05:30.000Z',
+        collected_at: '2026-03-09T18:06:00.000Z',
+        agent_id: 'app-engineering',
+        source_kind: 'tmux_observation',
+        evidence_role: 'runtime_activity',
+        source_status: 'observed',
+        output_candidate: true,
+        collector_snapshot_id: 'collector-snapshot:2026-03-09T18:06:00.000Z',
+        correlation_id: 'collector-snapshot:2026-03-09T18:06:00.000Z',
+        unmapped: false
+      }
+    }
+  ]);
+  assert.equal(Object.hasOwn(byEvidenceId[0].checkpoint, 'evidence_id'), false);
+
+  const bySourceKind = store.listReplayCheckpointLog({
+    source_kind: 'workspace_file',
+    limit: '1'
+  });
+  assert.deepEqual(
+    bySourceKind.map((item) => [item.append_index, item.checkpoint.source_kind]),
+    [[7, 'workspace_file']]
+  );
+
+  const bySnapshotAndCorrelation = store.listReplayCheckpointLog({
+    collector_snapshot_id: 'collector-snapshot:2026-03-09T18:06:00.000Z',
+    correlation_id: 'collector-snapshot:2026-03-09T18:06:00.000Z',
+    record_kind: 'evidence_record',
+    limit: '2'
+  });
+  assert.deepEqual(
+    bySnapshotAndCorrelation.map((item) => [item.append_index, item.checkpoint.source_kind]),
+    [
+      [7, 'workspace_file'],
+      [8, 'tmux_observation']
+    ]
+  );
+
+  assert.deepEqual(
+    store.listReplayCheckpointLog({
+      evidence_id: tmuxRecord.evidence_id.slice(0, -2),
+      limit: '10'
+    }),
+    []
+  );
+});
+
 test('JSONL prototype store appends and replays collector evidence records without changing counts', async () => {
   const storeFile = await createStoreFile();
   const store = await createPrototypeStore({ filePath: storeFile });

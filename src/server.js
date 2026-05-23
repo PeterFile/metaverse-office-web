@@ -287,7 +287,11 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
     sendJson(res, 200, {
       items: store.listReplayCheckpointLog({
         limit: url.searchParams.get('limit'),
-        record_kind: url.searchParams.get('record_kind')
+        record_kind: url.searchParams.get('record_kind'),
+        evidence_id: url.searchParams.get('evidence_id'),
+        collector_snapshot_id: url.searchParams.get('collector_snapshot_id'),
+        correlation_id: url.searchParams.get('correlation_id'),
+        source_kind: url.searchParams.get('source_kind')
       })
     });
     return;

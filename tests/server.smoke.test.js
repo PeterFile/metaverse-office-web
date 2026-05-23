@@ -6567,6 +6567,43 @@ test('GET replay checkpoint-log filters record_kind before limit without leaking
   assert.deepEqual(unknown.body, { items: [] });
 });
 
+test('GET replay checkpoint-log filters exact evidence provenance before limit', async (t) => {
+  const { baseUrl, store } = await createHarness(t);
+
+  await store.appendCollectorReport(createRouteParityCollectorReport());
+  const evidenceRecord = store
+    .listEvidenceRecords({ source_kind: 'tmux_observation', limit: '10' })
+    .find((record) => record.agent_id === 'app-engineering');
+  assert.ok(evidenceRecord);
+
+  const byEvidenceId = await requestJson(
+    `${baseUrl}/accountability/replay/checkpoint-log?evidence_id=${encodeURIComponent(evidenceRecord.evidence_id)}&limit=1`
+  );
+  assert.equal(byEvidenceId.response.status, 200);
+  assert.deepEqual(
+    byEvidenceId.body.items.map((item) => [item.record_kind, item.checkpoint.source_kind]),
+    [['evidence_record', 'tmux_observation']]
+  );
+  assert.equal(Object.hasOwn(byEvidenceId.body.items[0].checkpoint, 'evidence_id'), false);
+  assert.equal(JSON.stringify(byEvidenceId.body).includes('/tmp/route-parity'), false);
+  assert.equal(JSON.stringify(byEvidenceId.body).includes('tmux://'), false);
+
+  const combined = await requestJson(
+    `${baseUrl}/accountability/replay/checkpoint-log?record_kind=evidence_record&collector_snapshot_id=collector-snapshot%3A2026-03-09T18%3A06%3A00.000Z&correlation_id=collector-snapshot%3A2026-03-09T18%3A06%3A00.000Z&source_kind=workspace_file&limit=1`
+  );
+  assert.equal(combined.response.status, 200);
+  assert.deepEqual(
+    combined.body.items.map((item) => [item.record_kind, item.checkpoint.source_kind]),
+    [['evidence_record', 'workspace_file']]
+  );
+
+  const substringEvidenceId = await requestJson(
+    `${baseUrl}/accountability/replay/checkpoint-log?evidence_id=${encodeURIComponent(evidenceRecord.evidence_id.slice(0, -2))}&limit=10`
+  );
+  assert.equal(substringEvidenceId.response.status, 200);
+  assert.deepEqual(substringEvidenceId.body, { items: [] });
+});
+
 test('GET read route purity matrix leaves replay records and checkpoints unchanged', async (t) => {
   let collectCount = 0;
   const controllerSnapshotCollector = {

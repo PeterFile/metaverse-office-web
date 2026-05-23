@@ -2104,6 +2104,7 @@ test('store projects compact collector snapshot diff without raw snapshot eviden
     status: 'degraded',
     outputAt: '2026-03-09T18:04:00.000Z'
   }));
+  assert.equal(store.getCollectorSnapshotDiff(), null);
   await store.appendCollectorReport(createDiffReport({
     collectedAt: '2026-03-09T18:10:00.000Z',
     status: 'observed',

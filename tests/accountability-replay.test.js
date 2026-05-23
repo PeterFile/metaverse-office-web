@@ -209,6 +209,73 @@ async function seedReplayFacetSlice(store) {
   );
 }
 
+function createReplayEvidenceCollectorReport({
+  evidenceRef,
+  collectedAt = '2026-03-09T18:46:00.000Z',
+  observedAt = '2026-03-09T18:45:30.000Z'
+}) {
+  return {
+    collected_at: collectedAt,
+    actor_id: 'team-lead',
+    summary: {
+      agent_count: 1,
+      heartbeat_count: 0,
+      tmux_observed_count: 0,
+      workspace_observed_count: 1,
+      reboot_recommended_count: 0
+    },
+    evidence_coverage: {
+      evidence_ref_count: 1,
+      covered_agent_count: 1,
+      low_confidence_agent_ids: [],
+      source_kind_buckets: {
+        workspace_file: 1,
+        workspace_root: 0,
+        tmux_observation: 0
+      },
+      agent_items: [
+        {
+          agent_id: 'app-engineering',
+          evidence_ref_count: 1,
+          source_kinds: ['workspace_file'],
+          latest_evidence_at: observedAt,
+          confidence_level: 'high'
+        }
+      ]
+    },
+    runtime_source_evidence: {
+      unmapped_tmux_sessions: []
+    },
+    items: [
+      {
+        agent_id: 'app-engineering',
+        evidence_refs: [evidenceRef],
+        workspace_observations: [
+          {
+            path: evidenceRef,
+            file_name: path.basename(evidenceRef),
+            kind: 'workspace_file',
+            evidence_role: 'agent_output',
+            last_modified_at: observedAt
+          }
+        ],
+        tmux_observations: [],
+        source_health: {
+          workspace_files: {
+            status: 'observed',
+            expected_files: [path.basename(evidenceRef)],
+            observed_count: 1,
+            missing_count: 0,
+            error_count: 0,
+            last_observed_at: observedAt,
+            degraded_reasons: []
+          }
+        }
+      }
+    ]
+  };
+}
+
 async function countStoreLines(storeFile) {
   const content = await readFile(storeFile, 'utf8');
   return content.split('\n').filter((line) => line.trim()).length;
@@ -279,10 +346,81 @@ test('GET /accountability/replay returns an empty bundle for unknown evidence_id
   assert.deepEqual(body.interactions, []);
   assert.deepEqual(body.memory_artifacts, []);
   assert.deepEqual(body.ledger, []);
+  assert.deepEqual(body.replay_audit, {
+    evidence_id_status: 'unknown_evidence_id',
+    event_count: 0,
+    interaction_count: 0,
+    artifact_count: 0,
+    ledger_entry_count: 0,
+    anchor_event_count: 0,
+    anchor_event_ids: []
+  });
   assert.equal(body.accountability.event_count, 0);
   assert.equal(body.accountability.interaction_count, 0);
   assert.equal(body.accountability.artifact_count, 0);
   assert.deepEqual(body.accountability.evidence_refs, []);
+});
+
+test('GET /accountability/replay audits collector-only evidence_id anchors without event ids', async (t) => {
+  const { baseUrl, store } = await createHarness(t);
+  await store.appendCollectorReport(
+    createReplayEvidenceCollectorReport({
+      evidenceRef: '/tmp/replay-collector-only.md'
+    })
+  );
+  const evidenceRecord = store.listEvidenceRecords({
+    evidence_ref: '/tmp/replay-collector-only.md'
+  })[0];
+
+  const { response, body } = await requestJson(
+    `${baseUrl}/accountability/replay?evidence_id=${encodeURIComponent(evidenceRecord.evidence_id)}&limit=5&window=15m`
+  );
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(body.events, []);
+  assert.equal(body.memory_artifacts.length, 1);
+  assert.equal(body.replay_audit.evidence_id_status, 'collector_only');
+  assert.equal(body.replay_audit.event_count, 0);
+  assert.equal(body.replay_audit.artifact_count, 1);
+  assert.deepEqual(body.replay_audit.anchor_event_ids, []);
+  assert.equal(JSON.stringify(body.replay_audit).includes('/tmp/replay-collector-only.md'), false);
+  assert.equal(JSON.stringify(body.replay_audit).includes('degraded'), false);
+});
+
+test('GET /accountability/replay audits event-backed evidence_id anchors with safe event ids', async (t) => {
+  const { baseUrl, store } = await createHarness(t);
+  await store.appendCollectorReport(
+    createReplayEvidenceCollectorReport({
+      evidenceRef: '/tmp/replay-start.md'
+    })
+  );
+  const evidenceRecord = store.listEvidenceRecords({
+    evidence_ref: '/tmp/replay-start.md'
+  })[0];
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_replay_evidence_backed',
+      ts: '2026-03-09T18:47:00.000Z',
+      eventType: 'review_started',
+      currentState: 'reviewing',
+      activeTask: 'Review replay bundle',
+      summary: 'Evidence record has a real replay event',
+      severity: 'yellow',
+      correlationId: evidenceRecord.correlation_id,
+      evidenceRefs: ['/tmp/replay-start.md']
+    })
+  );
+
+  const { response, body } = await requestJson(
+    `${baseUrl}/accountability/replay?evidence_id=${encodeURIComponent(evidenceRecord.evidence_id)}&limit=5&window=15m`
+  );
+
+  assert.equal(response.status, 200);
+  assert.equal(body.events.length, 1);
+  assert.equal(body.replay_audit.evidence_id_status, 'event_backed');
+  assert.deepEqual(body.replay_audit.anchor_event_ids, ['evt_replay_evidence_backed']);
+  assert.equal(body.replay_audit.anchor_event_count, 1);
+  assert.equal(JSON.stringify(body.replay_audit).includes('/tmp/replay-start.md'), false);
 });
 
 test('accountability replay ledger drops interaction basis ids that are not event-log ids', async (t) => {

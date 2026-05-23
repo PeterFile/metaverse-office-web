@@ -228,6 +228,7 @@ Optional env:
 - optional `source_kind` and `artifact_kind` are read-only facets over the existing replay read models; `source_kind` narrows events/timeline and memory artifacts, while `artifact_kind` narrows memory artifacts
 - `limit` and `window` bound every returned slice; missing values default to `limit=10` and `window=60m`
 - the response includes `accountability` rollups, chronological `ledger` entries, `events`, `interactions`, and `memory_artifacts`
+- `evidence_id` requests include sanitized `replay_audit` status (`event_backed`, `collector_only`, or `unknown_evidence_id`) with bounded returned counts and anchor event ids only from existing ledger `basis_event_ids`
 - ledger `basis_event_ids` cite only existing event ids; collector-only artifacts remain marked as `collector_observation_without_event_id` and do not fabricate replay checkpoints
 - the web Evidence Record Detail view may open this route with `evidence_id` only when the provenance bundle exposes a replay anchor for that evidence id; collector-only evidence remains labelled non-replayable
 - the route does not add a write path, storage table, command dispatch path, or collector filesystem/tmux read

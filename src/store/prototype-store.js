@@ -1172,6 +1172,14 @@ class PrototypeStore {
       memoryArtifacts,
       eventIds: new Set(this.events.map((event) => event.event_id))
     });
+    const replayAudit = createAccountabilityReplayAudit({
+      filters: normalizedFilters,
+      evidenceRecord,
+      events,
+      interactions,
+      memoryArtifacts,
+      ledger
+    });
 
     return {
       generated_at: normalizedFilters.now || new Date().toISOString(),
@@ -1183,6 +1191,7 @@ class PrototypeStore {
         memoryArtifacts,
         ledger
       }),
+      ...(replayAudit ? { replay_audit: replayAudit } : {}),
       ledger,
       events,
       interactions,
@@ -1824,6 +1833,38 @@ function createAccountabilityReplaySummary({
     }),
     first_ts: ledger[0]?.ts || null,
     last_ts: ledger[ledger.length - 1]?.ts || null
+  };
+}
+
+function createAccountabilityReplayAudit({
+  filters,
+  evidenceRecord,
+  events = [],
+  interactions = [],
+  memoryArtifacts = [],
+  ledger = []
+}) {
+  if (!filters.evidence_id) {
+    return null;
+  }
+
+  const anchorEventIds = normalizeStringValues(
+    ledger.flatMap((entry) => entry.basis_event_ids || [])
+  );
+  const evidenceIdStatus = !evidenceRecord
+    ? 'unknown_evidence_id'
+    : anchorEventIds.length > 0
+      ? 'event_backed'
+      : 'collector_only';
+
+  return {
+    evidence_id_status: evidenceIdStatus,
+    event_count: events.length,
+    interaction_count: interactions.length,
+    artifact_count: memoryArtifacts.length,
+    ledger_entry_count: ledger.length,
+    anchor_event_count: anchorEventIds.length,
+    anchor_event_ids: anchorEventIds
   };
 }
 

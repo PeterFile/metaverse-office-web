@@ -1732,6 +1732,64 @@ test('GET /agents/:id/workflow returns 404 for unknown agents', async (t) => {
   assert.equal(response.body.error, 'not_found');
 });
 
+test('GET /agents/:id/evidence-spine returns bounded safe aggregate read-only', async (t) => {
+  let collectCount = 0;
+  const controllerSnapshotCollector = {
+    async collectSnapshot() {
+      collectCount += 1;
+      throw new Error('GET evidence spine must not collect');
+    }
+  };
+  const { baseUrl, store, storeFile } = await createHarness(t, { controllerSnapshotCollector });
+
+  await store.appendCollectorReport(createRouteParityCollectorReport());
+  const fileBeforeRead = await readFile(storeFile, 'utf8');
+  const recordCountBeforeRead = store.records.length;
+
+  const response = await requestJson(
+    `${baseUrl}/agents/app-engineering/evidence-spine?source_kind=workspace_file&output_candidate=true&newest_first=true&limit=1`
+  );
+  assert.equal(response.response.status, 200);
+  assert.equal(response.body.item.agent_id, 'app-engineering');
+  assert.equal(response.body.item.returned_limit, 1);
+  assert.equal(response.body.item.evidence_summary.total_count, 1);
+  assert.deepEqual(response.body.item.recent_evidence, [
+    {
+      observed_at: '2026-03-09T18:05:00.000Z',
+      collected_at: '2026-03-09T18:06:00.000Z',
+      source_kind: 'workspace_file',
+      evidence_role: 'agent_output',
+      source_status: 'degraded',
+      output_candidate: true,
+      collector_snapshot_id: 'collector-snapshot:2026-03-09T18:06:00.000Z',
+      correlation_id: 'collector-snapshot:2026-03-09T18:06:00.000Z',
+      unmapped: false
+    }
+  ]);
+  assert.equal(response.body.item.source_gaps.summary.total_count, 1);
+  assert.equal(response.body.item.source_health.agent_items.length, 1);
+  assert.equal(Object.hasOwn(response.body.item.source_health, 'runtime_source_evidence'), false);
+  assert.equal(collectCount, 0);
+  assert.equal(store.records.length, recordCountBeforeRead);
+  assert.equal(await readFile(storeFile, 'utf8'), fileBeforeRead);
+
+  const serialized = JSON.stringify(response.body);
+  assert.equal(serialized.includes('/tmp/route-parity'), false);
+  assert.equal(serialized.includes('tmux://'), false);
+  assert.equal(serialized.includes('runtime_source_evidence'), false);
+  assert.equal(serialized.includes('metadata'), false);
+  assert.equal(serialized.includes('degraded_reasons'), false);
+});
+
+test('GET /agents/:id/evidence-spine returns 404 for unknown agents', async (t) => {
+  const { baseUrl } = await createHarness(t);
+
+  const response = await requestJson(`${baseUrl}/agents/missing-agent/evidence-spine`);
+  assert.equal(response.response.status, 404);
+  assert.equal(response.body.error, 'not_found');
+  assert.equal(response.body.details, 'unknown agent missing-agent');
+});
+
 test('GET /peer-watch/alerts supports evidence-oriented filters and fields', async (t) => {
   const { baseUrl, store } = await createHarness(t, {
     now: () => '2026-03-09T18:20:00.000Z'
@@ -6563,6 +6621,17 @@ test('GET evidence and source read routes keep JSONL and SQLite parity', async (
     ['/tmp/route-parity/app/outbox.md', 'tmux://5-web3-app-engineering/0.1']
   );
 
+  const [jsonlSpine, sqliteSpine] = await parityRequest(
+    '/agents/app-engineering/evidence-spine?source_kind=workspace_file&output_candidate=true&newest_first=true&limit=1'
+  );
+  assert.deepEqual(sqliteSpine, jsonlSpine);
+  assert.equal(jsonlSpine.item.evidence_summary.total_count, 1);
+  assert.equal(jsonlSpine.item.recent_evidence.length, 1);
+  assert.equal(JSON.stringify(jsonlSpine).includes('/tmp/route-parity'), false);
+  assert.equal(JSON.stringify(jsonlSpine).includes('tmux://'), false);
+  assert.equal(JSON.stringify(jsonlSpine).includes('metadata'), false);
+  assert.equal(JSON.stringify(jsonlSpine).includes('degraded_reasons'), false);
+
   assert.equal(jsonl.store.records.length, before.jsonl);
   assert.equal(sqlite.store.records.length, before.sqlite);
 });
@@ -6677,7 +6746,8 @@ test('GET read route purity matrix leaves replay records and checkpoints unchang
     '/runtime/source-gaps/summary?newest_first=true&limit=1',
     '/runtime/source-gaps/agent-summary?newest_first=true&limit=1',
     '/runtime/source-gaps/lifecycle?newest_first=true&limit=1',
-    '/runtime/source-gaps/trend?newest_first=true&limit=1'
+    '/runtime/source-gaps/trend?newest_first=true&limit=1',
+    '/agents/app-engineering/evidence-spine?newest_first=true&limit=1'
   ];
 
   for (const pathname of paths) {

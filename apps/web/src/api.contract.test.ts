@@ -24,6 +24,7 @@ import type {
   OfficeOverview,
   PeerWatchAlertsResponse,
   ReplayCheckpointLogResponse,
+  RuntimeSourceGapLifecycle,
   TimelineReplayResponse
 } from './types';
 
@@ -613,6 +614,95 @@ describe('read-only frontend/backend contract smoke', () => {
         })
       ]
     });
+  });
+
+  it('passes source-gap lifecycle filters through to the real backend without raw fields', async () => {
+    harness = await createHarness(() => '2026-03-09T19:00:00.000Z');
+    await seedContractSlice(harness.store);
+
+    const sourceGapRecords = await (await loadApi(harness.baseUrl)).fetchEvidenceRecords({
+      agentId: 'app-engineering',
+      sourceKind: 'workspace_file',
+      evidenceRef: '/tmp/app-engineering/todo.md',
+      sourceStatus: 'degraded',
+      collectorSnapshotId: 'collector-snapshot:2026-03-09T18:59:00.000Z',
+      correlationId: 'collector-snapshot:2026-03-09T18:59:00.000Z',
+      outputCandidate: true,
+      mapped: true,
+      limit: 1
+    });
+    const evidenceId = sourceGapRecords[0].evidence_id;
+
+    const nativeFetch = globalThis.fetch.bind(globalThis);
+    const requests: RequestContract[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+        requests.push(getRequestContract(input, harness!.baseUrl, init));
+        return nativeFetch(input, init);
+      })
+    );
+
+    const api = await loadApi(harness.baseUrl);
+    const lifecycle = await api.fetchRuntimeSourceGapLifecycle({
+      agentId: 'app-engineering',
+      sourceKind: 'workspace_file',
+      evidenceRole: 'agent_plan',
+      evidenceId,
+      sourceStatus: 'degraded',
+      collectorSnapshotId: 'collector-snapshot:2026-03-09T18:59:00.000Z',
+      correlationId: 'collector-snapshot:2026-03-09T18:59:00.000Z',
+      outputCandidate: true,
+      mapped: true,
+      observedSince: '2026-03-09T18:58:00.000Z',
+      observedUntil: '2026-03-09T18:59:00.000Z',
+      collectedSince: '2026-03-09T18:58:00.000Z',
+      collectedUntil: '2026-03-09T19:00:00.000Z',
+      newestFirst: false,
+      limit: 5
+    });
+
+    expect(requests).toEqual([
+      {
+        method: 'GET',
+        origin: harness.baseUrl,
+        pathname: '/runtime/source-gaps/lifecycle',
+        query: [
+          ['agent_id', 'app-engineering'],
+          ['collected_since', '2026-03-09T18:58:00.000Z'],
+          ['collected_until', '2026-03-09T19:00:00.000Z'],
+          ['collector_snapshot_id', 'collector-snapshot:2026-03-09T18:59:00.000Z'],
+          ['correlation_id', 'collector-snapshot:2026-03-09T18:59:00.000Z'],
+          ['evidence_id', evidenceId],
+          ['evidence_role', 'agent_plan'],
+          ['limit', '5'],
+          ['mapped', 'true'],
+          ['newest_first', 'false'],
+          ['observed_since', '2026-03-09T18:58:00.000Z'],
+          ['observed_until', '2026-03-09T18:59:00.000Z'],
+          ['output_candidate', 'true'],
+          ['source_kind', 'workspace_file'],
+          ['source_status', 'degraded']
+        ]
+      }
+    ]);
+    expect(lifecycle).toMatchObject({
+      total_count: 1,
+      total_groups: 1,
+      returned_limit: 5,
+      groups: [
+        {
+          agent_id: 'app-engineering',
+          source_kind: 'workspace_file',
+          evidence_role: 'agent_plan',
+          current_status: 'degraded',
+          lifecycle_state: 'opened',
+          snapshot_count: 1,
+          source_status_buckets: { degraded: 1 }
+        }
+      ]
+    });
+    expectRuntimeSourceGapLifecycleContract(lifecycle);
   });
 
   it('passes timeline correlation_id replay filters through to the real backend and preserves seeded replay semantics', async () => {
@@ -2569,6 +2659,18 @@ function expectReplayCheckpointLogContract(
   expect(JSON.stringify(log)).not.toContain('tmux://');
   expect(JSON.stringify(log)).not.toContain('5-web3-app-engineering');
   expect(JSON.stringify(log)).not.toContain('Need review evidence');
+}
+
+function expectRuntimeSourceGapLifecycleContract(lifecycle: RuntimeSourceGapLifecycle) {
+  const serialized = JSON.stringify(lifecycle);
+  expect(serialized).not.toContain('/tmp/app-engineering');
+  expect(serialized).not.toContain('tmux://');
+  expect(serialized).not.toContain('5-web3-app-engineering');
+  expect(serialized).not.toContain('Need review evidence');
+  expect(serialized).not.toContain('payload');
+  expect(serialized).not.toContain('metadata');
+  expect(lifecycle.groups.every((group) => !Object.hasOwn(group, 'evidence_id'))).toBe(true);
+  expect(lifecycle.groups.every((group) => !Object.hasOwn(group, 'evidence_ref'))).toBe(true);
 }
 
 function expectCorrelationContract(correlation: CorrelationDrilldown) {

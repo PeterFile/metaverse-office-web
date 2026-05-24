@@ -458,6 +458,37 @@ export interface RuntimeSourceGapTrendResponse {
   item: RuntimeSourceGapTrend;
 }
 
+export type RuntimeSourceGapLifecycleState =
+  | 'opened'
+  | 'continuing'
+  | 'resolved'
+  | 'observed_unmapped';
+
+export interface RuntimeSourceGapLifecycleGroup {
+  agent_id: string | null;
+  source_kind: string | null;
+  evidence_role: string | null;
+  current_status: RuntimeSourceGap['source_status'] | null;
+  lifecycle_state: RuntimeSourceGapLifecycleState;
+  first_observed_at: string | null;
+  last_observed_at: string | null;
+  first_collected_at: string | null;
+  last_collected_at: string | null;
+  snapshot_count: number;
+  source_status_buckets: Record<string, number>;
+}
+
+export interface RuntimeSourceGapLifecycle {
+  total_count: number;
+  total_groups: number;
+  returned_limit: number;
+  groups: RuntimeSourceGapLifecycleGroup[];
+}
+
+export interface RuntimeSourceGapLifecycleResponse {
+  item: RuntimeSourceGapLifecycle;
+}
+
 export interface CollectorSnapshot {
   collected_at: string;
   actor_id: string;

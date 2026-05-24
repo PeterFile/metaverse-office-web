@@ -25,6 +25,8 @@ import type {
   RuntimeSourceGap,
   RuntimeSourceGapTrend,
   RuntimeSourceGapTrendResponse,
+  RuntimeSourceGapLifecycle,
+  RuntimeSourceGapLifecycleResponse,
   RuntimeSourceGapsSummaryResponse,
   RuntimeSourceGapsResponse,
   TimelineReplayResponse
@@ -377,6 +379,18 @@ export async function fetchRuntimeSourceGapAgentSummary(
     signal: options.signal
   });
   const body = await parseJson<RuntimeSourceGapAgentSummaryResponse>(response);
+  return body.item;
+}
+
+export async function fetchRuntimeSourceGapLifecycle(
+  options: RuntimeSourceGapFilterOptions = {}
+): Promise<RuntimeSourceGapLifecycle> {
+  const params = buildRuntimeSourceGapParams(options);
+  const suffix = params.size > 0 ? `?${params.toString()}` : '';
+  const response = await fetch(resolveApiUrl(`/runtime/source-gaps/lifecycle${suffix}`), {
+    signal: options.signal
+  });
+  const body = await parseJson<RuntimeSourceGapLifecycleResponse>(response);
   return body.item;
 }
 

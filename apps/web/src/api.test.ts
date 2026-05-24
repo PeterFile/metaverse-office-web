@@ -16,6 +16,7 @@ import {
   fetchEvidenceRecord,
   fetchEvidenceRecords,
   fetchRuntimeSourceGapAgentSummary,
+  fetchRuntimeSourceGapLifecycle,
   fetchRuntimeSourceGapTrend,
   fetchRuntimeSourceGaps,
   fetchMemoryArtifacts,
@@ -1274,6 +1275,110 @@ describe('fetchRuntimeSourceGapAgentSummary', () => {
       '/runtime/source-gaps/agent-summary?agent_id=app+engineering&source_kind=workspace_file&evidence_role=agent+output&evidence_id=evidence%3Aapp%2Freview%231&source_status=degraded&collector_snapshot_id=snapshot+2026%2F03%2F09&correlation_id=corr+app%2Freview%231&output_candidate=false&mapped=true&observed_since=2026-03-09T18%3A58%3A30.000Z&observed_until=2026-03-09T18%3A59%3A00.000Z&collected_since=2026-03-09T18%3A59%3A00.000Z&collected_until=2026-03-09T19%3A00%3A00.000Z&newest_first=true&limit=7',
       expect.objectContaining({ signal: undefined })
     );
+  });
+});
+
+describe('fetchRuntimeSourceGapLifecycle', () => {
+  it('requests a bounded newest-first source-gap lifecycle by default', async () => {
+    const item = {
+      total_count: 0,
+      total_groups: 0,
+      returned_limit: 200,
+      groups: []
+    };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ item }), {
+          headers: JSON_HEADERS
+        })
+      )
+    );
+
+    await expect(fetchRuntimeSourceGapLifecycle()).resolves.toEqual(item);
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/runtime/source-gaps/lifecycle?newest_first=true&limit=200',
+      expect.objectContaining({ signal: undefined })
+    );
+  });
+
+  it('passes supplied lifecycle filters through with backend query names', async () => {
+    const item = {
+      total_count: 0,
+      total_groups: 0,
+      returned_limit: 7,
+      groups: []
+    };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ item }), {
+          headers: JSON_HEADERS
+        })
+      )
+    );
+
+    await expect(
+      fetchRuntimeSourceGapLifecycle({
+        agentId: 'app engineering',
+        sourceKind: 'workspace_file',
+        evidenceRole: 'agent output',
+        evidenceId: 'evidence:app/review#1',
+        sourceStatus: 'degraded',
+        collectorSnapshotId: 'snapshot 2026/03/09',
+        correlationId: 'corr app/review#1',
+        outputCandidate: false,
+        mapped: true,
+        observedSince: '2026-03-09T18:58:30.000Z',
+        observedUntil: '2026-03-09T18:59:00.000Z',
+        collectedSince: '2026-03-09T18:59:00.000Z',
+        collectedUntil: '2026-03-09T19:00:00.000Z',
+        newestFirst: false,
+        limit: 7
+      })
+    ).resolves.toEqual(item);
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/runtime/source-gaps/lifecycle?agent_id=app+engineering&source_kind=workspace_file&evidence_role=agent+output&evidence_id=evidence%3Aapp%2Freview%231&source_status=degraded&collector_snapshot_id=snapshot+2026%2F03%2F09&correlation_id=corr+app%2Freview%231&output_candidate=false&mapped=true&observed_since=2026-03-09T18%3A58%3A30.000Z&observed_until=2026-03-09T18%3A59%3A00.000Z&collected_since=2026-03-09T18%3A59%3A00.000Z&collected_until=2026-03-09T19%3A00%3A00.000Z&newest_first=false&limit=7',
+      expect.objectContaining({ signal: undefined })
+    );
+  });
+
+  it('unwraps lifecycle envelopes without raw evidence fields', async () => {
+    const item = {
+      total_count: 1,
+      total_groups: 1,
+      returned_limit: 1,
+      groups: [
+        {
+          agent_id: 'app-engineering',
+          source_kind: 'workspace_file',
+          evidence_role: 'agent_plan',
+          current_status: 'degraded',
+          lifecycle_state: 'opened',
+          first_observed_at: '2026-03-09T18:58:30.000Z',
+          last_observed_at: '2026-03-09T18:58:30.000Z',
+          first_collected_at: '2026-03-09T18:59:00.000Z',
+          last_collected_at: '2026-03-09T18:59:00.000Z',
+          snapshot_count: 1,
+          source_status_buckets: { degraded: 1 }
+        }
+      ]
+    };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ item }), {
+          headers: JSON_HEADERS
+        })
+      )
+    );
+
+    await expect(fetchRuntimeSourceGapLifecycle({ limit: 1 })).resolves.toEqual(item);
+    expect(Object.hasOwn(item.groups[0], 'evidence_id')).toBe(false);
+    expect(Object.hasOwn(item.groups[0], 'evidence_ref')).toBe(false);
+    expect(Object.hasOwn(item.groups[0], 'metadata')).toBe(false);
   });
 });
 

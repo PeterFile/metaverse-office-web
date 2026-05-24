@@ -499,6 +499,127 @@ test('prototype store exposes sanitized replay checkpoint summary that survives 
   assert.deepEqual(reloadedStore.getReplayCheckpointSummary(), summary);
 });
 
+test('prototype store exposes deterministic sanitized storage replay manifest', async () => {
+  const storeFile = await createStoreFile();
+  const store = await createPrototypeStore({ filePath: storeFile });
+
+  await store.appendEvent(createEvent());
+  await store.appendHeartbeat(createHeartbeat());
+  await store.appendCollectorReport(createCollectorReport());
+
+  const manifest = store.getStorageReplayManifest();
+  assert.deepEqual(manifest, {
+    record_count: 9,
+    record_kind_buckets: {
+      event: 3,
+      heartbeat: 2,
+      evidence_record: 3,
+      collector_snapshot: 1
+    },
+    canonical_record_hash:
+      'fa36a558fa37a6ac5e6b02f86374f65d7723af1baca8066348cac08d1367aad7'
+  });
+  assert.match(manifest.canonical_record_hash, /^[a-f0-9]{64}$/);
+  assert.equal(JSON.stringify(manifest).includes('/tmp/store-contract'), false);
+  assert.equal(JSON.stringify(manifest).includes('store-contract'), false);
+  assert.equal(JSON.stringify(manifest).includes('tmux://'), false);
+  assert.equal(JSON.stringify(manifest).includes('metadata'), false);
+  assert.equal(JSON.stringify(manifest).includes('degraded_reasons'), false);
+
+  const reloadedStore = await createPrototypeStore({ filePath: storeFile });
+  assert.deepEqual(reloadedStore.getStorageReplayManifest(), manifest);
+
+  const makeRawManifestStore = async ({ rawKind, evidenceRef, tmuxRef, metadataValue }) => {
+    const rawStoreFile = await createStoreFile();
+    const records = [
+      {
+        kind: 'event',
+        payload: {
+          event_id: 'evt_storage_manifest_projection',
+          ts: '2026-03-09T18:07:00.000Z',
+          agent_id: 'app-engineering',
+          event_type: 'review_started',
+          correlation_id: 'corr-storage-manifest',
+          source_kind: 'controller_event',
+          evidence_refs: [evidenceRef, tmuxRef],
+          metadata: { canary: metadataValue }
+        }
+      },
+      {
+        kind: 'evidence_record',
+        payload: {
+          observed_at: '2026-03-09T18:07:10.000Z',
+          collected_at: '2026-03-09T18:07:20.000Z',
+          agent_id: 'app-engineering',
+          source_kind: 'workspace_file',
+          evidence_role: 'agent_output',
+          source_status: 'degraded',
+          output_candidate: true,
+          collector_snapshot_id: 'collector-snapshot:2026-03-09T18:07:20.000Z',
+          correlation_id: 'corr-storage-manifest',
+          evidence_ref: evidenceRef,
+          metadata: { canary: metadataValue },
+          degraded_reasons: [tmuxRef]
+        }
+      },
+      {
+        kind: 'collector_snapshot',
+        payload: {
+          collected_at: '2026-03-09T18:07:20.000Z',
+          actor_id: 'team-lead',
+          items: [
+            {
+              evidence_refs: [evidenceRef, tmuxRef],
+              source_health: {
+                workspace_root: {
+                  status: 'degraded',
+                  path: evidenceRef,
+                  degraded_reasons: [metadataValue]
+                }
+              }
+            }
+          ]
+        }
+      },
+      {
+        kind: rawKind,
+        payload: {
+          evidence_ref: evidenceRef,
+          metadata: { canary: metadataValue }
+        }
+      }
+    ];
+    await writeFile(rawStoreFile, records.map((record) => JSON.stringify(record)).join('\n') + '\n');
+    return createPrototypeStore({ filePath: rawStoreFile });
+  };
+
+  const unsafeA = await makeRawManifestStore({
+    rawKind: '/tmp/manifest-kind-a',
+    evidenceRef: '/tmp/manifest-a/outbox.md',
+    tmuxRef: 'tmux://manifest-a/0.1',
+    metadataValue: 'metadata-a'
+  });
+  const unsafeB = await makeRawManifestStore({
+    rawKind: 'tmux://manifest-kind-b/0.1',
+    evidenceRef: '/tmp/manifest-b/outbox.md',
+    tmuxRef: 'tmux://manifest-b/0.1',
+    metadataValue: 'metadata-b'
+  });
+  const unsafeManifestA = unsafeA.getStorageReplayManifest();
+  assert.deepEqual(unsafeManifestA.record_kind_buckets, {
+    event: 1,
+    evidence_record: 1,
+    collector_snapshot: 1,
+    unknown: 1
+  });
+  assert.equal(unsafeB.getStorageReplayManifest().canonical_record_hash, unsafeManifestA.canonical_record_hash);
+  const unsafeSerialized = JSON.stringify(unsafeManifestA);
+  assert.equal(unsafeSerialized.includes('/tmp/manifest'), false);
+  assert.equal(unsafeSerialized.includes('tmux://manifest'), false);
+  assert.equal(unsafeSerialized.includes('metadata-a'), false);
+  assert.equal(unsafeSerialized.includes('evidence_ref'), false);
+});
+
 test('prototype store exposes bounded sanitized replay checkpoint log that survives reload', async () => {
   const storeFile = await createStoreFile();
   const store = await createPrototypeStore({ filePath: storeFile });

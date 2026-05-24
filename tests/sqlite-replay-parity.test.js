@@ -310,8 +310,32 @@ test('JSONL and SQLite stores replay evidence read models with parity', async (t
   });
   const jsonlProjection = projectParityReadModels(jsonlReloaded, root);
   const sqliteProjection = projectParityReadModels(sqliteReloaded, root);
+  const jsonlManifest = jsonlReloaded.getStorageReplayManifest();
+  const sqliteManifest = sqliteReloaded.getStorageReplayManifest();
 
   assert.deepEqual(sqliteProjection, jsonlProjection);
+  assert.deepEqual(sqliteManifest, jsonlManifest);
+  assert.deepEqual(
+    {
+      ...jsonlManifest,
+      canonical_record_hash: '<sha256>'
+    },
+    {
+      record_count: 20,
+      record_kind_buckets: {
+        event: 3,
+        heartbeat: 3,
+        evidence_record: 12,
+        collector_snapshot: 2
+      },
+      canonical_record_hash: '<sha256>'
+    }
+  );
+  assert.match(jsonlManifest.canonical_record_hash, /^[a-f0-9]{64}$/);
+  assert.equal(JSON.stringify(jsonlManifest).includes(root), false);
+  assert.equal(JSON.stringify(jsonlManifest).includes('tmux://'), false);
+  assert.equal(JSON.stringify(jsonlManifest).includes('metadata'), false);
+  assert.equal(JSON.stringify(jsonlManifest).includes('degraded_reasons'), false);
   assert.deepEqual(
     jsonlProjection.newestEvidenceOrder.map(
       (record) => `${record.collected_at}|${record.source_kind}|${record.evidence_ref}`

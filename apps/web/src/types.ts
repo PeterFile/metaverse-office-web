@@ -296,6 +296,38 @@ export interface CollectorSnapshotHistory {
   items: CollectorSnapshotHistoryItem[];
 }
 
+export type CollectorSnapshotDiffAgentChangeType = 'added' | 'removed' | 'changed';
+
+export interface CollectorSnapshotDiffAgentChange {
+  agent_id: string;
+  change_type: CollectorSnapshotDiffAgentChangeType;
+  heartbeat_changed: boolean;
+  source_health_status_changes: Partial<
+    Record<
+      CollectorSourceHealthKind,
+      {
+        from: CollectorSourceHealthStatus | null;
+        to: CollectorSourceHealthStatus | null;
+      }
+    >
+  >;
+}
+
+export interface CollectorSnapshotDiff {
+  from_collector_snapshot_id: string;
+  to_collector_snapshot_id: string;
+  from_collected_at: string | null;
+  to_collected_at: string | null;
+  summary_delta: CollectorSnapshotSummary;
+  source_health_delta: {
+    source_kind_buckets: Record<CollectorSourceHealthKind, number>;
+    status_buckets: Record<CollectorSourceHealthStatus, number>;
+  };
+  agent_change_count: number;
+  returned_limit: number;
+  agent_changes: CollectorSnapshotDiffAgentChange[];
+}
+
 export interface EvidenceRecord {
   evidence_id: string;
   observed_at: string | null;

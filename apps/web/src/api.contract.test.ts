@@ -16,6 +16,7 @@ import type {
   EvidenceRecord,
   EvidenceProvenanceBundle,
   CollectorSnapshot,
+  CollectorSnapshotDiff,
   CollectorSnapshotHistory,
   CollectorSourceHealthProjection,
   CorrelationDrilldown,
@@ -270,6 +271,70 @@ describe('read-only frontend/backend contract smoke', () => {
     expectCollectorSnapshotHistoryContract(collectorSnapshotHistory);
     expectMemoryArtifactContract(memoryArtifacts);
     expectCorrelationContract(correlation);
+  });
+
+  it('loads the sanitized collector snapshot diff from latest-vs-previous reports', async () => {
+    harness = await createHarness(() => '2026-03-09T19:00:00.000Z');
+    await seedCollectorSnapshotDiffSlice(harness.store);
+
+    const nativeFetch = globalThis.fetch.bind(globalThis);
+    const requests: RequestContract[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+        requests.push(getRequestContract(input, harness!.baseUrl, init));
+        return nativeFetch(input, init);
+      })
+    );
+
+    const api = await loadApi(harness.baseUrl);
+    const [defaultDiff, explicitDiff, nullDiff] = await Promise.all([
+      api.fetchCollectorSnapshotDiff(),
+      api.fetchCollectorSnapshotDiff({
+        fromCollectorSnapshotId: 'collector-snapshot:2026-03-09T18:58:00.000Z',
+        toCollectorSnapshotId: 'collector-snapshot:2026-03-09T18:59:00.000Z',
+        limit: 1
+      }),
+      api.fetchCollectorSnapshotDiff({
+        fromCollectorSnapshotId: 'collector-snapshot:2026-03-09T18:58:00.000Z'
+      })
+    ]);
+
+    expect(requests).toEqual([
+      {
+        method: 'GET',
+        origin: harness.baseUrl,
+        pathname: '/collectors/controller-snapshot/diff',
+        query: []
+      },
+      {
+        method: 'GET',
+        origin: harness.baseUrl,
+        pathname: '/collectors/controller-snapshot/diff',
+        query: [
+          ['from_collector_snapshot_id', 'collector-snapshot:2026-03-09T18:58:00.000Z'],
+          ['limit', '1'],
+          ['to_collector_snapshot_id', 'collector-snapshot:2026-03-09T18:59:00.000Z']
+        ]
+      },
+      {
+        method: 'GET',
+        origin: harness.baseUrl,
+        pathname: '/collectors/controller-snapshot/diff',
+        query: [['from_collector_snapshot_id', 'collector-snapshot:2026-03-09T18:58:00.000Z']]
+      }
+    ]);
+    expectCollectorSnapshotDiffContract(defaultDiff);
+    expect(explicitDiff?.agent_changes).toHaveLength(1);
+    expect(nullDiff).toBeNull();
+  });
+
+  it('returns null for collector snapshot diff when fewer than two snapshots exist', async () => {
+    harness = await createHarness(() => '2026-03-09T19:00:00.000Z');
+
+    const api = await loadApi(harness.baseUrl);
+
+    await expect(api.fetchCollectorSnapshotDiff()).resolves.toBeNull();
   });
 
   it('passes evidence-record exact filters through to the real backend', async () => {
@@ -1883,6 +1948,126 @@ function getRequestContract(
   };
 }
 
+async function seedCollectorSnapshotDiffSlice(store: BackendStore) {
+  await store.appendCollectorReport(
+    createCollectorDiffSnapshot({
+      collectedAt: '2026-03-09T18:58:00.000Z',
+      activeTask: 'Collect baseline evidence',
+      workspaceFilesStatus: 'observed',
+      observedFileCount: 3,
+      missingFileCount: 0
+    })
+  );
+  await store.appendCollectorReport(
+    createCollectorDiffSnapshot({
+      collectedAt: '2026-03-09T18:59:00.000Z',
+      activeTask: 'Fix the contract drift',
+      workspaceFilesStatus: 'degraded',
+      observedFileCount: 1,
+      missingFileCount: 2
+    })
+  );
+}
+
+function createCollectorDiffSnapshot({
+  collectedAt,
+  activeTask,
+  workspaceFilesStatus,
+  observedFileCount,
+  missingFileCount
+}: {
+  collectedAt: string;
+  activeTask: string;
+  workspaceFilesStatus: 'observed' | 'degraded';
+  observedFileCount: number;
+  missingFileCount: number;
+}): CollectorSnapshot {
+  return {
+    collected_at: collectedAt,
+    actor_id: 'team-lead',
+    summary: {
+      agent_count: 1,
+      heartbeat_count: 1,
+      tmux_observed_count: 1,
+      workspace_observed_count: observedFileCount,
+      reboot_recommended_count: 0
+    },
+    shared_artifacts: [],
+    items: [
+      {
+        agent_id: 'app-engineering',
+        workspace_root: 'opaque-workspace-root',
+        session_ref: 'opaque-runtime-session',
+        source_health: {
+          workspace_root: {
+            status: 'observed',
+            path: 'opaque-workspace-root',
+            last_observed_at: collectedAt,
+            degraded_reasons: []
+          },
+          workspace_files: {
+            status: workspaceFilesStatus,
+            expected_files: ['inbox.md', 'outbox.md', 'todo.md'],
+            observed_count: observedFileCount,
+            missing_count: missingFileCount,
+            error_count: 0,
+            last_observed_at: collectedAt,
+            degraded_reasons:
+              missingFileCount > 0 ? ['missing workspace files: inbox.md, outbox.md'] : []
+          },
+          tmux_session: {
+            status: 'observed',
+            expected_session_ref: 'opaque-runtime-session',
+            observed_count: 1,
+            last_observed_at: collectedAt,
+            degraded_reasons: []
+          }
+        },
+        evidence_refs: ['opaque-workspace-evidence', 'opaque-runtime-evidence'],
+        workspace_observations: [
+          {
+            path: 'opaque-workspace-evidence',
+            file_name: 'todo.md',
+            kind: 'workspace_file',
+            last_modified_at: collectedAt
+          }
+        ],
+        tmux_observations: [
+          {
+            session_name: 'opaque-runtime-session',
+            window_index: '0',
+            pane_index: '1',
+            pane_id: '%11',
+            pane_title: activeTask,
+            pane_current_command: 'nvim',
+            pane_active: true,
+            pane_dead: false,
+            pane_activity_at: collectedAt
+          }
+        ],
+        supervision: {
+          watch_target: 'growth-revenue',
+          watched_by: ['team-lead'],
+          needs_attention: false
+        },
+        heartbeat: {
+          agent_id: 'app-engineering',
+          actor_id: 'team-lead',
+          received_at: collectedAt,
+          current_state: 'blocked',
+          active_task: activeTask,
+          current_location: 'desk-app-engineering',
+          last_meaningful_output_at: collectedAt,
+          last_file_write_at: collectedAt,
+          current_blocker: 'Need review evidence',
+          confidence_level: 'high',
+          reboot_recommended: false
+        }
+      }
+    ]
+  };
+}
+
 async function seedContractSlice(store: BackendStore) {
   await store.appendEvent(
     createEvent({
@@ -2553,6 +2738,64 @@ function expectCollectorSnapshotHistoryContract(history: CollectorSnapshotHistor
       }
     ]
   });
+}
+
+function expectCollectorSnapshotDiffContract(diff: CollectorSnapshotDiff | null) {
+  expect(diff).toMatchObject({
+    from_collector_snapshot_id: 'collector-snapshot:2026-03-09T18:58:00.000Z',
+    to_collector_snapshot_id: 'collector-snapshot:2026-03-09T18:59:00.000Z',
+    from_collected_at: '2026-03-09T18:58:00.000Z',
+    to_collected_at: '2026-03-09T18:59:00.000Z',
+    summary_delta: {
+      agent_count: 0,
+      heartbeat_count: 0,
+      tmux_observed_count: 0,
+      workspace_observed_count: -2,
+      reboot_recommended_count: 0
+    },
+    source_health_delta: {
+      source_kind_buckets: {
+        workspace_root: 0,
+        workspace_files: 0,
+        tmux_session: 0,
+        hermes_profile: 0,
+        hermes_session: 0
+      },
+      status_buckets: {
+        observed: -1,
+        degraded: 1,
+        missing: 0,
+        error: 0
+      }
+    },
+    agent_change_count: 1,
+    returned_limit: 50,
+    agent_changes: [
+      {
+        agent_id: 'app-engineering',
+        change_type: 'changed',
+        heartbeat_changed: true,
+        source_health_status_changes: {
+          workspace_files: {
+            from: 'observed',
+            to: 'degraded'
+          }
+        }
+      }
+    ]
+  });
+
+  const serializedDiff = JSON.stringify(diff);
+  expect(serializedDiff).not.toContain('opaque-workspace-root');
+  expect(serializedDiff).not.toContain('opaque-workspace-evidence');
+  expect(serializedDiff).not.toContain('opaque-runtime-evidence');
+  expect(serializedDiff).not.toContain('opaque-runtime-session');
+  expect(serializedDiff).not.toContain('workspace_observations');
+  expect(serializedDiff).not.toContain('tmux_observations');
+  expect(serializedDiff).not.toContain('evidence_refs');
+  expect(serializedDiff).not.toContain('session_ref');
+  expect(serializedDiff).not.toContain('current_blocker');
+  expect(serializedDiff).not.toContain('degraded_reasons');
 }
 
 function expectMemoryArtifactContract(memoryArtifacts: MemoryArtifactIndex) {

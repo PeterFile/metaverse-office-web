@@ -6,6 +6,7 @@ import { PassThrough } from 'node:stream';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import viteConfig from '../vite.config';
 import {
   BROWSER_SMOKE_FRONTEND_READY_PATH,
   BROWSER_SMOKE_PROXY_READY_PATH,
@@ -32,6 +33,18 @@ afterEach(() => {
 });
 
 describe('run-browser-smoke helpers', () => {
+  it('keeps runtime source-gap reads on the managed Vite proxy surface', async () => {
+    const config = await (typeof viteConfig === 'function'
+      ? viteConfig({
+          mode: 'development',
+          command: 'serve'
+        } as never)
+      : viteConfig);
+
+    expect(Object.hasOwn(config.server?.proxy ?? {}, '/runtime')).toBe(true);
+    expect(Object.hasOwn(config.preview?.proxy ?? {}, '/runtime')).toBe(true);
+  });
+
   it('exposes focused Live Evidence smoke scripts without routing through broad validation commands', () => {
     const repoPackageJson = JSON.parse(
       readFileSync(resolve(process.cwd(), '../../package.json'), 'utf8')

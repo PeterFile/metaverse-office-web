@@ -768,7 +768,15 @@ export async function fetchAccountabilityReplay(
 }
 
 export async function fetchReplayCheckpointLog(
-  options: { limit?: number; recordKind?: string; signal?: AbortSignal } = {}
+  options: {
+    limit?: number;
+    recordKind?: string;
+    evidenceId?: string;
+    collectorSnapshotId?: string;
+    correlationId?: string;
+    sourceKind?: string;
+    signal?: AbortSignal;
+  } = {}
 ): Promise<ReplayCheckpointLogResponse> {
   const params = new URLSearchParams();
   if (options.limit !== undefined) {
@@ -776,6 +784,18 @@ export async function fetchReplayCheckpointLog(
   }
   if (options.recordKind) {
     params.set('record_kind', options.recordKind);
+  }
+  if (options.evidenceId) {
+    params.set('evidence_id', options.evidenceId);
+  }
+  if (options.collectorSnapshotId) {
+    params.set('collector_snapshot_id', options.collectorSnapshotId);
+  }
+  if (options.correlationId) {
+    params.set('correlation_id', options.correlationId);
+  }
+  if (options.sourceKind) {
+    params.set('source_kind', options.sourceKind);
   }
 
   const suffix = params.size > 0 ? `?${params.toString()}` : '';

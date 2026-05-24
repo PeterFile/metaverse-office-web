@@ -233,6 +233,29 @@ describe('fetchAccountabilityReplay', () => {
 });
 
 describe('fetchReplayCheckpointLog', () => {
+  it('omits the checkpoint log query string when filters are not provided', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            items: []
+          }),
+          {
+            headers: JSON_HEADERS
+          }
+        )
+      )
+    );
+
+    await fetchReplayCheckpointLog();
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/accountability/replay/checkpoint-log',
+      expect.objectContaining({ signal: undefined })
+    );
+  });
+
   it('passes limit and record kind to the backend checkpoint log query string', async () => {
     vi.stubGlobal(
       'fetch',
@@ -257,6 +280,74 @@ describe('fetchReplayCheckpointLog', () => {
       '/accountability/replay/checkpoint-log?limit=3&record_kind=event',
       expect.objectContaining({ signal: undefined })
     );
+  });
+
+  it('passes exact checkpoint log filters through with URL encoding and sanitized checkpoint rows', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            items: [
+              {
+                append_index: 7,
+                record_kind: 'evidence_record',
+                checkpoint: {
+                  observed_at: '2026-03-09T18:58:30.000Z',
+                  collected_at: '2026-03-09T18:59:00.000Z',
+                  agent_id: 'app-engineering',
+                  source_kind: 'workspace_file',
+                  evidence_role: 'agent_plan',
+                  source_status: 'degraded',
+                  output_candidate: true,
+                  collector_snapshot_id: 'snapshot 2026/03/09',
+                  correlation_id: 'corr app/review#1',
+                  unmapped: false
+                }
+              }
+            ]
+          }),
+          {
+            headers: JSON_HEADERS
+          }
+        )
+      )
+    );
+
+    const log = await fetchReplayCheckpointLog({
+      limit: 7,
+      recordKind: 'evidence_record',
+      evidenceId: 'evidence:app/review#1',
+      collectorSnapshotId: 'snapshot 2026/03/09',
+      correlationId: 'corr app/review#1',
+      sourceKind: 'workspace_file'
+    });
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/accountability/replay/checkpoint-log?limit=7&record_kind=evidence_record&evidence_id=evidence%3Aapp%2Freview%231&collector_snapshot_id=snapshot+2026%2F03%2F09&correlation_id=corr+app%2Freview%231&source_kind=workspace_file',
+      expect.objectContaining({ signal: undefined })
+    );
+    expect(log.items[0]).toEqual({
+      append_index: 7,
+      record_kind: 'evidence_record',
+      checkpoint: {
+        observed_at: '2026-03-09T18:58:30.000Z',
+        collected_at: '2026-03-09T18:59:00.000Z',
+        agent_id: 'app-engineering',
+        source_kind: 'workspace_file',
+        evidence_role: 'agent_plan',
+        source_status: 'degraded',
+        output_candidate: true,
+        collector_snapshot_id: 'snapshot 2026/03/09',
+        correlation_id: 'corr app/review#1',
+        unmapped: false
+      }
+    });
+    expect(Object.hasOwn(log.items[0].checkpoint ?? {}, 'evidence_id')).toBe(false);
+    expect(Object.hasOwn(log.items[0].checkpoint ?? {}, 'evidence_ref')).toBe(false);
+    expect(Object.hasOwn(log.items[0].checkpoint ?? {}, 'payload')).toBe(false);
+    expect(Object.hasOwn(log.items[0].checkpoint ?? {}, 'metadata')).toBe(false);
+    expect(Object.hasOwn(log.items[0].checkpoint ?? {}, 'degraded_reasons')).toBe(false);
   });
 
   it('throws a RequestError when the backend returns a checkpoint log problem response', async () => {

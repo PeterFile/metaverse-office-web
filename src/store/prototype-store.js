@@ -1,4 +1,5 @@
 const { execFile } = require('node:child_process');
+const { createHash } = require('node:crypto');
 const { appendFile, mkdir, readFile } = require('node:fs/promises');
 const path = require('node:path');
 const { promisify } = require('node:util');
@@ -637,6 +638,10 @@ class PrototypeStore {
       evidenceRecords: this.evidenceRecords,
       collectorReports: this.collectorReports
     });
+  }
+
+  getStorageReplayManifest() {
+    return projectStorageReplayManifest(this.records);
   }
 
   listReplayCheckpointLog(filters = {}) {
@@ -3695,6 +3700,21 @@ function projectReplayCheckpointSummary({
   };
 }
 
+function projectStorageReplayManifest(records) {
+  const canonicalRecords = records.map((record) => ({
+    kind: projectReplayCheckpointRecordKind(record),
+    checkpoint: projectReplayCheckpointRecord(record)
+  }));
+
+  return {
+    record_count: canonicalRecords.length,
+    record_kind_buckets: createRecordKindBuckets(canonicalRecords),
+    canonical_record_hash: createHash('sha256')
+      .update(stableStringify(canonicalRecords))
+      .digest('hex')
+  };
+}
+
 function projectReplayCheckpointLog({ records, limit, filters = {} }) {
   const requestedRecordKind =
     typeof filters.record_kind === 'string' && filters.record_kind.trim().length > 0
@@ -3790,6 +3810,21 @@ function createRecordKindBuckets(records) {
     incrementBucket(buckets, record.kind);
   }
   return buckets;
+}
+
+function stableStringify(value) {
+  if (Array.isArray(value)) {
+    return `[${value.map(stableStringify).join(',')}]`;
+  }
+
+  if (value && typeof value === 'object') {
+    return `{${Object.keys(value)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`)
+      .join(',')}}`;
+  }
+
+  return JSON.stringify(value);
 }
 
 function projectReplayCheckpointEvent(event) {

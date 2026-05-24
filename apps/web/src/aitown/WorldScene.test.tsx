@@ -1328,6 +1328,7 @@ describe('WorldScene watch overlay caption gating', () => {
       | Array<{
           cursor?: string;
           eventMode?: string;
+          children?: unknown[];
           emit: (event: string) => { stopPropagation: ReturnType<typeof vi.fn> };
         }>
       | undefined;
@@ -1335,8 +1336,10 @@ describe('WorldScene watch overlay caption gating', () => {
 
     expect(mappedPin?.eventMode).toBe('static');
     expect(mappedPin?.cursor).toBe('pointer');
+    expect(mappedPin?.children).toHaveLength(3);
     expect(unmappedPin?.eventMode).toBe('none');
     expect(unmappedPin?.cursor).toBeUndefined();
+    expect(unmappedPin?.children).toHaveLength(2);
 
     const mappedEvent = mappedPin?.emit('pointertap');
     const unmappedEvent = unmappedPin?.emit('pointertap');

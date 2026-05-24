@@ -876,7 +876,8 @@ function createWatchOverlay(scene: AiTownSceneModel) {
 function createSourceGapPin(
   pin: SourceGapPin,
   onSelectSourceGapPin?: (pin: SourceGapPin) => void,
-  selectPayload: SourceGapPin = pin
+  selectPayload: SourceGapPin = pin,
+  selected = false
 ) {
   const container = new Container();
   const color = pin.status === 'error'
@@ -910,6 +911,16 @@ function createSourceGapPin(
     resolution: 2
   });
   label.anchor.set(0.5, 0.5);
+
+  if (selected) {
+    const selectedRing = new Graphics();
+    selectedRing.roundRect(-markerWidth / 2 - 4, -13, markerWidth + 8, 26, 7).stroke({
+      color: WATCH_PARTICIPANT_HIGHLIGHT_COLOR,
+      width: 2,
+      alpha: 0.86
+    });
+    container.addChild(selectedRing);
+  }
 
   if (pin.agentId && pin.sourceDrilldownGroupKey && onSelectSourceGapPin) {
     container.eventMode = 'static';
@@ -2698,7 +2709,12 @@ export default function WorldScene({
 
       for (const pin of sceneForRender.sourceGapPins ?? []) {
         agentLayer.addChild(
-          createSourceGapPin(pin, onSelectSourceGapPinRef.current, sourceGapPinPayloadById.get(pin.pinId) ?? pin)
+          createSourceGapPin(
+            pin,
+            onSelectSourceGapPinRef.current,
+            sourceGapPinPayloadById.get(pin.pinId) ?? pin,
+            Boolean(pin.agentId && pin.agentId === sceneForRender.selectedAgentId)
+          )
         );
       }
 

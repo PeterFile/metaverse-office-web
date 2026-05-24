@@ -71,6 +71,29 @@ export type RuntimeSourceGapLifecycleOptions = {
   priorRows?: RuntimeSourceGap[] | null;
 };
 
+export type RuntimeSourceGapLifecycleStripRow = {
+  key: string;
+  sourceLabel: string;
+  statusLabel: CollectorSourceHealthStatus;
+  lifecycleLabel: string;
+  countLabel: string;
+  observedAtLabel: string;
+};
+
+export type RuntimeSourceGapLifecycleStrip = {
+  status: 'loading' | 'error' | 'no_snapshot' | 'empty' | 'ready';
+  summaryLabel: string;
+  mappedRows: RuntimeSourceGapLifecycleStripRow[];
+  unmappedRows: RuntimeSourceGapLifecycleStripRow[];
+};
+
+export type RuntimeSourceGapLifecycleStripOptions = {
+  runtimeSourceGaps: RuntimeSourceGap[] | null | undefined;
+  selectedAgentId: string | null | undefined;
+  state: 'idle' | 'loading' | 'ready' | 'error';
+  error: string | null | undefined;
+};
+
 export type SourceGapWorldPin = {
   pinId: string;
   agentId: string | null;
@@ -365,6 +388,86 @@ export function deriveRuntimeSourceGapLifecycle(
   return lifecycle.sort(compareRuntimeSourceGapLifecycleItems);
 }
 
+export function deriveRuntimeSourceGapLifecycleStrip({
+  runtimeSourceGaps,
+  selectedAgentId,
+  state,
+  error
+}: RuntimeSourceGapLifecycleStripOptions): RuntimeSourceGapLifecycleStrip | null {
+  if (!selectedAgentId) {
+    return null;
+  }
+
+  if (state === 'loading' && !runtimeSourceGaps) {
+    return {
+      status: 'loading',
+      summaryLabel: 'Lifecycle · loading runtime source-gap rows',
+      mappedRows: [],
+      unmappedRows: []
+    };
+  }
+
+  if (!runtimeSourceGaps) {
+    return {
+      status: state === 'error' ? 'error' : 'no_snapshot',
+      summaryLabel:
+        state === 'error'
+          ? 'Lifecycle · unable to load runtime source-gap rows'
+          : 'Lifecycle · no runtime source-gap snapshot',
+      mappedRows: [],
+      unmappedRows: []
+    };
+  }
+
+  const lifecycle = deriveRuntimeSourceGapLifecycle(runtimeSourceGaps);
+  const mappedRows = lifecycle
+    .filter((item) => item.agentId === selectedAgentId)
+    .map(renderRuntimeSourceGapLifecycleStripRow);
+  const unmappedRows = lifecycle
+    .filter((item) => item.agentId === null)
+    .map(renderRuntimeSourceGapLifecycleStripRow);
+
+  if (state === 'loading') {
+    return {
+      status: 'loading',
+      summaryLabel:
+        mappedRows.length > 0 || unmappedRows.length > 0
+          ? 'Lifecycle · refreshing runtime source-gap rows'
+          : 'Lifecycle · loading runtime source-gap rows',
+      mappedRows,
+      unmappedRows
+    };
+  }
+
+  if (state === 'error' || error) {
+    return {
+      status: 'error',
+      summaryLabel:
+        mappedRows.length > 0 || unmappedRows.length > 0
+          ? 'Lifecycle · refresh error; showing last runtime source-gap rows'
+          : 'Lifecycle · unable to load runtime source-gap rows',
+      mappedRows,
+      unmappedRows
+    };
+  }
+
+  if (mappedRows.length === 0 && unmappedRows.length === 0) {
+    return {
+      status: 'empty',
+      summaryLabel: 'Lifecycle · no runtime source-gap rows in current slice',
+      mappedRows,
+      unmappedRows
+    };
+  }
+
+  return {
+    status: 'ready',
+    summaryLabel: `Lifecycle · ${mappedRows.length} mapped · ${unmappedRows.length} unmapped`,
+    mappedRows,
+    unmappedRows
+  };
+}
+
 export function deriveSelectedAgentSourceGapFact(
   sourceHealth: CollectorSourceHealthProjection | null | undefined,
   selectedAgentId: string | null | undefined
@@ -490,6 +593,19 @@ function renderRuntimeSourceGapLifecycleLabel(state: RuntimeSourceGapLifecycleSt
     case 'current_gap':
       return 'Current gap';
   }
+}
+
+function renderRuntimeSourceGapLifecycleStripRow(
+  item: RuntimeSourceGapLifecycleItem
+): RuntimeSourceGapLifecycleStripRow {
+  return {
+    key: item.key,
+    sourceLabel: item.agentId === null ? 'Runtime source' : SOURCE_KIND_LABELS[item.sourceKind],
+    statusLabel: item.status,
+    lifecycleLabel: renderRuntimeSourceGapLifecycleLabel(item.state),
+    countLabel: `${item.count} row${item.count === 1 ? '' : 's'}`,
+    observedAtLabel: renderObservedAtLabel(item.lastObservedAt)
+  };
 }
 
 function compareRuntimeSourceGapLifecycleItems(

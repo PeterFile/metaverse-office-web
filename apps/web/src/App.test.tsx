@@ -244,6 +244,7 @@ const appEngineeringEvidenceRecordsUrl =
   '/evidence-records?agent_id=app-engineering&newest_first=true&limit=12';
 const appEngineeringEvidenceRecordDetailUrl = '/evidence-records/output-1';
 const appEngineeringEvidenceProvenanceBundleUrl = '/evidence-records/output-1/provenance-bundle';
+const appEngineeringEvidenceCheckpointLogUrl = '/accountability/replay/checkpoint-log?limit=3&evidence_id=output-1';
 const missingEvidenceRecordDetailUrl = '/evidence-records/missing-1';
 const missingEvidenceProvenanceBundleUrl = '/evidence-records/missing-1/provenance-bundle';
 
@@ -1338,6 +1339,37 @@ const evidenceProvenanceBundleFixture = {
   }
 };
 
+const evidenceCheckpointLogFixture = {
+  items: [
+    {
+      append_index: 21,
+      record_kind: 'evidence_record',
+      checkpoint: {
+        observed_at: '2026-03-16T08:58:00.000Z',
+        collected_at: '2026-03-16T08:59:00.000Z',
+        agent_id: 'app-engineering',
+        source_kind: 'workspace_file',
+        evidence_role: 'agent_output',
+        source_status: 'observed',
+        output_candidate: true,
+        collector_snapshot_id: 'collector-20260316',
+        correlation_id: 'corr-app-review',
+        unmapped: false
+      }
+    },
+    {
+      append_index: 22,
+      record_kind: 'collector_snapshot',
+      checkpoint: {
+        collector_snapshot_id: 'collector-20260316',
+        collected_at: '2026-03-16T08:59:00.000Z',
+        actor_id: 'team-lead',
+        item_count: 1
+      }
+    }
+  ]
+};
+
 const emptyRuntimeSourceGapsSummaryFixture = {
   total_count: 0,
   returned_limit: 3,
@@ -1845,6 +1877,10 @@ function resolveDefaultFetchResponse(url: string) {
 
   if (url === appEngineeringEvidenceProvenanceBundleUrl) {
     return jsonResponse(evidenceProvenanceBundleFixture);
+  }
+
+  if (url.startsWith('/accountability/replay/checkpoint-log?')) {
+    return jsonResponse(url === appEngineeringEvidenceCheckpointLogUrl ? evidenceCheckpointLogFixture : { items: [] });
   }
 
   return null;
@@ -3565,6 +3601,7 @@ afterEach(() => {
         expect(requestedUrls).toContain(appEngineeringEvidenceRecordsUrl);
         expect(requestedUrls).not.toContain(appEngineeringEvidenceRecordDetailUrl);
         expect(requestedUrls).not.toContain(appEngineeringEvidenceProvenanceBundleUrl);
+        expect(requestedUrls).not.toContain(appEngineeringEvidenceCheckpointLogUrl);
       });
 
       await user.click(
@@ -3577,6 +3614,7 @@ afterEach(() => {
         const requestedUrls = vi.mocked(globalThis.fetch).mock.calls.map(([request]) => String(request));
         expect(requestedUrls).toContain(appEngineeringEvidenceRecordDetailUrl);
         expect(requestedUrls).toContain(appEngineeringEvidenceProvenanceBundleUrl);
+        expect(requestedUrls).toContain(appEngineeringEvidenceCheckpointLogUrl);
       });
 
       const detailSection = await findHubSection(details, 'Evidence Record Detail');
@@ -3593,12 +3631,21 @@ afterEach(() => {
         'Source anchor · output-1-with-[redacted] · workspace_file · agent_output · observed'
       );
       expect(detailSection).toHaveTextContent('Replay anchor · corr-app-review-with-[redacted]');
+      expect(detailSection).toHaveTextContent('Checkpoint proof');
+      expect(detailSection).toHaveTextContent(
+        '#21 · evidence_record · workspace_file · agent_output · observed · output candidate · corr-app-review · 2026-03-16T08:58:00.000Z'
+      );
+      expect(detailSection).toHaveTextContent(
+        '#22 · collector_snapshot · collector-20260316 · 1 items · 2026-03-16T08:59:00.000Z'
+      );
       expect(detailSection).not.toHaveTextContent('raw_tmux_capture');
       expect(detailSection).not.toHaveTextContent('/collectors/controller-snapshot');
       expect(detailSection).not.toHaveTextContent('/evidence-records/output-1');
       expect(detailSection).not.toHaveTextContent('/accountability/replay');
       expect(detailSection).not.toHaveTextContent('access_token');
       expect(detailSection).not.toHaveTextContent('secret-token');
+      expect(detailSection).not.toHaveTextContent('/tmp/app/outbox.md');
+      expect(detailSection).not.toHaveTextContent('degraded_reasons');
     },
     10_000
   );

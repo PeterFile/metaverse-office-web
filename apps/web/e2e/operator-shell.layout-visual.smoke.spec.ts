@@ -908,6 +908,9 @@ test.describe('operator shell layout visual smoke', () => {
       `/evidence-records/${evidenceId}`,
       `/evidence-records/${evidenceId}/provenance-bundle`
     ];
+    const expectedCheckpointLogGet = `/accountability/replay/checkpoint-log?limit=3&evidence_id=${encodeURIComponent(
+      evidenceId
+    )}`;
     const allowedApiGets = new Set([
       '/office/overview',
       '/incidents?limit=200&window=8760h',
@@ -925,8 +928,10 @@ test.describe('operator shell layout visual smoke', () => {
       '/peer-watch/alerts?target_agent_id=app-engineering&limit=4',
       '/peer-watch/alerts?target_agent_id=app-engineering&correlation_id=collector-snapshot%3A2026-03-10T23%3A59%3A40.000Z&limit=4',
       '/correlations/collector-snapshot%3A2026-03-10T23%3A59%3A40.000Z?limit=10&window=60m',
+      expectedCheckpointLogGet,
       ...expectedEvidenceRecordGets
     ]);
+    const checkpointLogRequests: string[] = [];
     const evidenceRecordRequests: string[] = [];
     const evidenceRecordViolations: string[] = [];
     const apiRequestViolations: string[] = [];
@@ -955,6 +960,10 @@ test.describe('operator shell layout visual smoke', () => {
         apiRequestViolations.push(key);
       }
 
+      if (url.pathname === '/accountability/replay/checkpoint-log') {
+        checkpointLogRequests.push(relativeUrl);
+      }
+
       if (!url.pathname.startsWith('/evidence-records')) {
         return;
       }
@@ -963,6 +972,36 @@ test.describe('operator shell layout visual smoke', () => {
       if (request.method() !== 'GET' || !expectedEvidenceRecordGets.includes(relativeUrl)) {
         evidenceRecordViolations.push(key);
       }
+    });
+
+    await page.route('**/accountability/replay/checkpoint-log?*', async (route) => {
+      const url = new URL(route.request().url());
+      const relativeUrl = `${url.pathname}${url.search}`;
+      await route.fulfill({
+        json:
+          relativeUrl === expectedCheckpointLogGet
+            ? {
+                items: [
+                  {
+                    append_index: 87,
+                    record_kind: 'evidence_record',
+                    checkpoint: {
+                      observed_at: '2026-03-10T23:59:40.000Z',
+                      collected_at: '2026-03-10T23:59:40.000Z',
+                      agent_id: 'app-engineering',
+                      source_kind: 'workspace_file',
+                      evidence_role: 'agent_output',
+                      source_status: 'unknown',
+                      output_candidate: true,
+                      collector_snapshot_id: 'collector-snapshot:2026-03-10T23:59:40.000Z',
+                      correlation_id: 'collector-snapshot:2026-03-10T23:59:40.000Z',
+                      unmapped: false
+                    }
+                  }
+                ]
+              }
+            : { items: [] }
+      });
     });
 
     await page.goto('/');
@@ -993,6 +1032,7 @@ test.describe('operator shell layout visual smoke', () => {
     await evidencePanel.getByRole('button', { name: `Inspect evidence record ${boundedEvidenceId}` }).click();
 
     await expect.poll(() => evidenceRecordRequests.slice()).toEqual(expectedEvidenceRecordGets);
+    await expect.poll(() => checkpointLogRequests.slice()).toEqual([expectedCheckpointLogGet]);
     const detailSection = evidencePanel.locator('section').filter({
       has: page.getByRole('heading', { name: 'Evidence Record Detail' })
     });
@@ -1002,6 +1042,10 @@ test.describe('operator shell layout visual smoke', () => {
     await expect(detailSection).toContainText('Source anchor ·');
     await expect(detailSection).toContainText('workspace_file · agent_output · unknown');
     await expect(detailSection).toContainText('Replay anchor · collector-snapshot:2026-03-10T23:59:40.000Z');
+    await expect(detailSection).toContainText('Checkpoint proof');
+    await expect(detailSection).toContainText(
+      '#87 · evidence_record · workspace_file · agent_output · unknown · output candidate · collector-snapshot:2026-03-10T23:59:40.000Z · 2026-03-10T23:59:40.000Z'
+    );
     await expect(detailSection).not.toContainText('/collectors/controller-snapshot');
     await expect(detailSection).not.toContainText('/accountability/replay');
     await expect(detailSection).not.toContainText('/evidence-records/');

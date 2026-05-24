@@ -21,6 +21,8 @@ import type {
   OfficeOperations,
   OfficeZone,
   PeerWatchAlertsResponse,
+  ReplayCheckpoint,
+  ReplayCheckpointLogResponse,
   Severity,
   TimelineReplayResponse,
   WorkflowIncident,
@@ -160,6 +162,9 @@ type DetailsPanelProps = {
   selectedAgentEvidenceProvenanceBundle: EvidenceProvenanceBundle | null;
   selectedAgentEvidenceProvenanceBundleError: string | null;
   selectedAgentEvidenceProvenanceBundleState: LoadState;
+  selectedAgentEvidenceCheckpointLog: ReplayCheckpointLogResponse | null;
+  selectedAgentEvidenceCheckpointLogError: string | null;
+  selectedAgentEvidenceCheckpointLogState: LoadState;
   workflow: AgentWorkflow | null;
   workflowError: string | null;
   workflowState: LoadState;
@@ -1376,6 +1381,9 @@ function renderSelectedAgentEvidenceRecordDetail(
   provenanceBundle: EvidenceProvenanceBundle | null,
   provenanceState: LoadState,
   provenanceError: string | null,
+  checkpointLog: ReplayCheckpointLogResponse | null,
+  checkpointLogState: LoadState,
+  checkpointLogError: string | null,
   onReplayRecord: (evidenceId: string) => void
 ) {
   if (!requestedEvidenceId && !record) {
@@ -1413,17 +1421,91 @@ function renderSelectedAgentEvidenceRecordDetail(
             <span>{`Output candidate · ${String(record.output_candidate)}`}</span>
             <span>{`Snapshot · ${formatBoundedEvidenceLedgerToken(record.collector_snapshot_id)}`}</span>
             <span>{`Correlation · ${record.correlation_id ? formatBoundedEvidenceLedgerToken(record.correlation_id) : 'none'}`}</span>
-            <span>
-              {`Degraded · ${record.degraded_reasons.length > 0 ? record.degraded_reasons.map(formatEvidenceLedgerReason).join(', ') : 'none'}`}
-            </span>
+            <span>{`Degraded count · ${record.degraded_reasons.length}`}</span>
             <span>{`Ref · ${formatEvidenceLedgerRef(record.evidence_ref)}`}</span>
             {renderSelectedAgentEvidenceProvenanceAnchors(provenanceBundle, provenanceState, provenanceError)}
+            {renderSelectedAgentEvidenceCheckpointProofStrip(checkpointLog, checkpointLogState, checkpointLogError)}
             {renderSelectedAgentEvidenceReplayAction(record, provenanceBundle, provenanceState, onReplayRecord)}
           </li>
         ) : null}
       </ul>
     </section>
   );
+}
+
+function renderSelectedAgentEvidenceCheckpointProofStrip(
+  log: ReplayCheckpointLogResponse | null,
+  state: LoadState,
+  error: string | null
+) {
+  if (state === 'loading' && !log) {
+    return <span>Checkpoint proof · loading selected evidence rows...</span>;
+  }
+
+  if (error && !log) {
+    return <span>{`Checkpoint proof · unavailable · ${error}`}</span>;
+  }
+
+  if (!log) {
+    return null;
+  }
+
+  const rows = log.items.slice(0, 3);
+
+  if (rows.length === 0) {
+    return <span>Checkpoint proof · none for selected evidence</span>;
+  }
+
+  return (
+    <span className="aitown-evidence-proof-strip" aria-label="Selected evidence checkpoint proof">
+      <span>Checkpoint proof</span>
+      {rows.map((item) => (
+        <span key={`${item.append_index}:${item.record_kind}`} className="aitown-evidence-proof-strip__row">
+          {renderSelectedAgentEvidenceCheckpointProofRow(item.append_index, item.record_kind, item.checkpoint)}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+function renderSelectedAgentEvidenceCheckpointProofRow(
+  appendIndex: number,
+  recordKind: string,
+  checkpoint: ReplayCheckpoint | null
+) {
+  const facts = [`#${appendIndex}`, recordKind];
+
+  if (checkpoint && 'event_id' in checkpoint) {
+    facts.push(formatBoundedEvidenceLedgerToken(checkpoint.event_id), checkpoint.event_type);
+    if (checkpoint.source_kind) {
+      facts.push(checkpoint.source_kind);
+    }
+    facts.push(renderTimestamp(checkpoint.ts, 'No timestamp'));
+  } else if (checkpoint && 'received_at' in checkpoint) {
+    facts.push(
+      formatBoundedEvidenceLedgerToken(checkpoint.agent_id),
+      renderTimestamp(checkpoint.received_at, 'No timestamp')
+    );
+  } else if (checkpoint && 'item_count' in checkpoint) {
+    facts.push(
+      formatBoundedEvidenceLedgerToken(checkpoint.collector_snapshot_id),
+      `${checkpoint.item_count} items`,
+      renderTimestamp(checkpoint.collected_at, 'No collected timestamp')
+    );
+  } else if (checkpoint) {
+    facts.push(
+      checkpoint.source_kind ?? 'unknown source',
+      checkpoint.evidence_role ?? 'unclassified',
+      checkpoint.source_status ?? 'unknown',
+      checkpoint.output_candidate ? 'output candidate' : 'non-output',
+      checkpoint.correlation_id ? formatBoundedEvidenceLedgerToken(checkpoint.correlation_id) : 'no correlation',
+      renderTimestamp(checkpoint.observed_at, 'No observed timestamp')
+    );
+  } else {
+    facts.push('empty checkpoint');
+  }
+
+  return facts.join(' · ');
 }
 
 function renderSelectedAgentEvidenceReplayAction(
@@ -4369,6 +4451,9 @@ export function DetailsPanel({
   selectedAgentEvidenceProvenanceBundle,
   selectedAgentEvidenceProvenanceBundleError,
   selectedAgentEvidenceProvenanceBundleState,
+  selectedAgentEvidenceCheckpointLog,
+  selectedAgentEvidenceCheckpointLogError,
+  selectedAgentEvidenceCheckpointLogState,
   workflow,
   workflowError,
   workflowState,
@@ -6217,6 +6302,9 @@ export function DetailsPanel({
         selectedAgentEvidenceProvenanceBundle,
         selectedAgentEvidenceProvenanceBundleState,
         selectedAgentEvidenceProvenanceBundleError,
+        selectedAgentEvidenceCheckpointLog,
+        selectedAgentEvidenceCheckpointLogState,
+        selectedAgentEvidenceCheckpointLogError,
         onReplaySelectedAgentEvidenceRecord
       )}
 

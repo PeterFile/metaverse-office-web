@@ -2815,6 +2815,15 @@ button {
   grid-column: 1 / -1;
 }
 
+.aitown-evidence-proof-strip {
+  display: grid;
+  gap: 4px;
+}
+
+.aitown-evidence-proof-strip__row {
+  color: rgba(232, 246, 242, 0.78);
+}
+
 .aitown-hub-sheet .aitown-queue-record__preview,
 .aitown-hub-sheet .aitown-record span:not(:first-child) {
   display: block;

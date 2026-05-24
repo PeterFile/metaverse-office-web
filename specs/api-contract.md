@@ -12,6 +12,7 @@ This is the current API/read-model contract for Metaverse Office Web. It grew ou
 - `GET /agents/:id/incidents?kind=&severity=&status=&correlation_id=&limit=&window=`
 - `GET /agents/:id/interactions?event_id=&evidence_ref=&interaction_type=&counterparty_agent_id=&severity=&correlation_id=&limit=&window=`
 - `GET /agents/:id/workflow?limit=&window=`
+- `GET /agents/:id/evidence-spine?source_kind=&evidence_role=&output_candidate=&source_status=&status=&collector_snapshot_id=&correlation_id=&mapped=&observed_since=&observed_until=&collected_since=&collected_until=&newest_first=&limit=`
 - `GET /collectors/controller-snapshot`
 - `GET /collectors/controller-snapshot/evidence-coverage?agent_id=&source_kind=&confidence_level=&limit=`
 - `GET /collectors/controller-snapshot/source-health?collector_snapshot_id=&agent_id=&source_kind=&status=&limit=`
@@ -207,6 +208,10 @@ This is the current API/read-model contract for Metaverse Office Web. It grew ou
 - `latest_heartbeat` returns the most recent append-only heartbeat for the agent or `null`
 - `open_peer_watch_alerts` is derived from unresolved peer-watch alerts, not from raw historical `peer_watch_alert_raised` events
 - `recent_incidents` is derived from the same normalized read-only incident feed used by `GET /incidents`, scoped to the requested agent
+- `GET /agents/:id/evidence-spine` is a read-only aggregate over replayed evidence records, runtime source-gap projections, and collector source-health projections for one known agent; unknown agents return `404`
+- evidence-spine filters are exact and additive: `source_kind`, `evidence_role`, `output_candidate`, `source_status` (or `status` for source-health aliasing), `collector_snapshot_id`, `correlation_id`, `mapped`, inclusive observed/collected windows, `newest_first`, and post-filter `limit`
+- evidence-spine `evidence_summary` and `source_gaps.summary` compute counts, buckets, and extrema before `limit`; `recent_evidence`, `source_gaps.items`, and `source_health.agent_items` are bounded after filters by the parsed `returned_limit`
+- evidence-spine returns only bounded source/status/role/count/time fields plus existing sanitized collector/correlation ids; it never returns raw evidence refs, local paths, tmux/Hermes/session/profile refs, raw payloads, metadata, degraded reason arrays, liveness/productivity/severity inference, or control-plane actions, and it never triggers collection, tmux/filesystem reads, or append-only writes
 
 ## Agent detail response shape
 ```json

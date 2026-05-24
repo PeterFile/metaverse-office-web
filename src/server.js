@@ -181,6 +181,37 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
     return;
   }
 
+  const agentEvidenceSpineMatch = pathname.match(/^\/agents\/([^/]+)\/evidence-spine$/);
+  if (method === 'GET' && agentEvidenceSpineMatch) {
+    const agentId = decodeURIComponent(agentEvidenceSpineMatch[1]);
+    const item = store.getAgentEvidenceSpine(agentId, {
+      source_kind: url.searchParams.get('source_kind'),
+      evidence_role: url.searchParams.get('evidence_role'),
+      output_candidate: url.searchParams.get('output_candidate'),
+      source_status: url.searchParams.get('source_status') || url.searchParams.get('status'),
+      collector_snapshot_id: url.searchParams.get('collector_snapshot_id'),
+      correlation_id: url.searchParams.get('correlation_id'),
+      mapped: url.searchParams.get('mapped'),
+      observed_since: url.searchParams.get('observed_since'),
+      observed_until: url.searchParams.get('observed_until'),
+      collected_since: url.searchParams.get('collected_since'),
+      collected_until: url.searchParams.get('collected_until'),
+      newest_first: url.searchParams.get('newest_first'),
+      limit: url.searchParams.get('limit')
+    });
+
+    if (!item) {
+      sendJson(res, 404, {
+        error: 'not_found',
+        details: `unknown agent ${agentId}`
+      });
+      return;
+    }
+
+    sendJson(res, 200, { item });
+    return;
+  }
+
   const agentMatch = pathname.match(/^\/agents\/([^/]+)$/);
   if (method === 'GET' && agentMatch) {
     const agentId = decodeURIComponent(agentMatch[1]);

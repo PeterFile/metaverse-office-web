@@ -1090,6 +1090,59 @@ class PrototypeStore {
     };
   }
 
+  getAgentEvidenceSpine(agentId, filters = {}) {
+    const agent = this.getAgent(agentId);
+    if (!agent) {
+      return null;
+    }
+
+    const limit = parseLimit(filters.limit);
+    const recordFilters = {
+      agent_id: agentId,
+      source_kind: filters.source_kind,
+      evidence_role: filters.evidence_role,
+      output_candidate: filters.output_candidate,
+      source_status: filters.source_status,
+      collector_snapshot_id: filters.collector_snapshot_id,
+      correlation_id: filters.correlation_id,
+      mapped: filters.mapped,
+      observed_since: filters.observed_since,
+      observed_until: filters.observed_until,
+      collected_since: filters.collected_since,
+      collected_until: filters.collected_until,
+      newest_first: filters.newest_first,
+      limit
+    };
+    const sourceHealth =
+      normalizeOptionalBoolean(filters.mapped) === false
+        ? projectCollectorSourceHealth(null, filters)
+        : this.getLatestCollectorSourceHealth({
+            collector_snapshot_id: filters.collector_snapshot_id,
+            agent_id: agentId,
+            source_kind: filters.source_kind,
+            status: filters.source_status || filters.status,
+            limit
+          });
+
+    return {
+      agent_id: agentId,
+      returned_limit: limit,
+      evidence_summary: this.getEvidenceRecordsSummary(recordFilters),
+      recent_evidence: this.listEvidenceRecords(recordFilters).map(projectAgentEvidenceSpineRecord),
+      source_gaps: {
+        summary: this.getRuntimeSourceGapsSummary(recordFilters),
+        items: this.listRuntimeSourceGaps(recordFilters)
+      },
+      source_health: projectAgentEvidenceSpineSourceHealth(sourceHealth, filters) || {
+        collected_at: null,
+        collector_snapshot_id: null,
+        actor_id: null,
+        summary: createSourceHealthSummary([], resolveSourceHealthKeys(filters.source_kind), null),
+        agent_items: []
+      }
+    };
+  }
+
   getAgentWorkflow(agentId, filters = {}) {
     const limit = filters.limit === undefined ? null : filters.limit;
     const window = filters.window || '60m';
@@ -4027,6 +4080,40 @@ function projectRuntimeSourceGapRecord(record) {
     collector_snapshot_id: record.collector_snapshot_id,
     correlation_id: record.correlation_id,
     unmapped: record.agent_id === null
+  };
+}
+
+function projectAgentEvidenceSpineRecord(record) {
+  return {
+    observed_at: projectEvidenceTimestampValue(record.observed_at),
+    collected_at: projectEvidenceTimestampValue(record.collected_at),
+    source_kind: projectKnownEvidenceValue(record.source_kind, EVIDENCE_RECORD_SOURCE_KINDS),
+    evidence_role: projectKnownEvidenceValue(record.evidence_role, EVIDENCE_RECORD_ROLES),
+    source_status: projectKnownEvidenceValue(record.source_status, EVIDENCE_RECORD_SOURCE_STATUSES),
+    output_candidate: record.output_candidate === true,
+    collector_snapshot_id: record.collector_snapshot_id || null,
+    correlation_id: record.correlation_id || null,
+    unmapped: record.agent_id === null
+  };
+}
+
+function projectAgentEvidenceSpineSourceHealth(sourceHealth, filters = {}) {
+  if (!sourceHealth) {
+    return null;
+  }
+
+  return {
+    collected_at: sourceHealth.collected_at || null,
+    collector_snapshot_id: sourceHealth.collector_snapshot_id || null,
+    actor_id: sourceHealth.actor_id || null,
+    summary:
+      sourceHealth.summary ||
+      createSourceHealthSummary(
+        [],
+        resolveSourceHealthKeys(filters.source_kind),
+        normalizeSourceHealthStatus(normalizeFilterValue(filters.source_status || filters.status))
+      ),
+    agent_items: Array.isArray(sourceHealth.agent_items) ? sourceHealth.agent_items : []
   };
 }
 

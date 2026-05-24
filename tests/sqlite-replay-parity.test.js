@@ -272,6 +272,12 @@ function projectParityReadModels(store, root) {
         newest_first: 'true',
         limit: '1'
       }),
+      agentEvidenceSpine: store.getAgentEvidenceSpine('app-engineering', {
+        source_kind: 'workspace_file',
+        output_candidate: 'true',
+        newest_first: 'true',
+        limit: '1'
+      }),
       filteredCheckpointLog: store.listReplayCheckpointLog({
         record_kind: 'evidence_record',
         collector_snapshot_id: 'collector-snapshot:2026-03-09T18:07:00.000Z',

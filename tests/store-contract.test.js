@@ -312,6 +312,69 @@ function createHermesRuntimeCollectorReport() {
   };
 }
 
+test('agent evidence spine aggregates bounded safe projections with exact filters', async () => {
+  const store = new PrototypeStore({ filePath: await createStoreFile() });
+  await store.load();
+  await store.appendCollectorReport(createCollectorReport());
+
+  const spine = store.getAgentEvidenceSpine('app-engineering', {
+    source_kind: 'workspace_file',
+    output_candidate: 'true',
+    newest_first: 'true',
+    limit: '1'
+  });
+
+  assert.equal(spine.agent_id, 'app-engineering');
+  assert.equal(spine.returned_limit, 1);
+  assert.equal(spine.evidence_summary.total_count, 1);
+  assert.equal(spine.evidence_summary.source_kind_buckets.workspace_file, 1);
+  assert.deepEqual(spine.recent_evidence, [
+    {
+      observed_at: '2026-03-09T18:05:20.000Z',
+      collected_at: '2026-03-09T18:06:00.000Z',
+      source_kind: 'workspace_file',
+      evidence_role: 'agent_output',
+      source_status: 'degraded',
+      output_candidate: true,
+      collector_snapshot_id: 'collector-snapshot:2026-03-09T18:06:00.000Z',
+      correlation_id: 'collector-snapshot:2026-03-09T18:06:00.000Z',
+      unmapped: false
+    }
+  ]);
+  assert.deepEqual(spine.source_gaps.items, [
+    {
+      observed_at: '2026-03-09T18:05:20.000Z',
+      collected_at: '2026-03-09T18:06:00.000Z',
+      agent_id: 'app-engineering',
+      source_kind: 'workspace_file',
+      evidence_role: 'agent_output',
+      source_status: 'degraded',
+      output_candidate: true,
+      collector_snapshot_id: 'collector-snapshot:2026-03-09T18:06:00.000Z',
+      correlation_id: 'collector-snapshot:2026-03-09T18:06:00.000Z',
+      unmapped: false
+    }
+  ]);
+  assert.equal(spine.source_health.agent_items.length, 1);
+  assert.equal(spine.source_health.agent_items[0].agent_id, 'app-engineering');
+  assert.equal(Object.hasOwn(spine.source_health, 'runtime_source_evidence'), false);
+
+  const serialized = JSON.stringify(spine);
+  assert.equal(serialized.includes('/tmp/store-contract'), false);
+  assert.equal(serialized.includes('tmux://'), false);
+  assert.equal(serialized.includes('hermes://'), false);
+  assert.equal(serialized.includes('runtime_source_evidence'), false);
+  assert.equal(serialized.includes('metadata'), false);
+  assert.equal(serialized.includes('degraded_reasons'), false);
+});
+
+test('agent evidence spine returns null for unknown agents', async () => {
+  const store = new PrototypeStore({ filePath: await createStoreFile() });
+  await store.load();
+
+  assert.equal(store.getAgentEvidenceSpine('missing-agent'), null);
+});
+
 function createTieTimestampCollectorReport(collectedAt) {
   const report = JSON.parse(JSON.stringify(createCollectorReport()));
   report.collected_at = collectedAt;

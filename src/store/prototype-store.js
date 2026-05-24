@@ -4445,7 +4445,7 @@ function projectCollectorSnapshotDiff(reports = [], filters = {}) {
     to_collected_at: toReport.collected_at || null,
     summary_delta: createCollectorSnapshotSummaryDelta(fromReport, toReport),
     source_health_delta: {
-      source_kind_buckets: subtractNestedBuckets(toHealth.source_kind_buckets, fromHealth.source_kind_buckets),
+      source_kind_buckets: subtractBuckets(toHealth.source_kind_buckets, fromHealth.source_kind_buckets),
       status_buckets: subtractBuckets(toHealth.status_buckets, fromHealth.status_buckets)
     },
     agent_change_count: agentChanges.length,
@@ -4490,12 +4490,6 @@ function createCollectorSnapshotDiffHealthAggregate(report) {
     sourceHealthKeys: SOURCE_HEALTH_KEYS,
     status: null
   });
-}
-
-function subtractNestedBuckets(toBuckets, fromBuckets) {
-  return Object.fromEntries(
-    Object.keys(toBuckets).map((key) => [key, subtractBuckets(toBuckets[key], fromBuckets[key])])
-  );
 }
 
 function subtractBuckets(toBuckets, fromBuckets) {

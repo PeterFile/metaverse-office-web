@@ -9,6 +9,7 @@ import {
   fetchAgentIncidents,
   fetchAgentInteractions,
   fetchCollectorEvidenceCoverage,
+  fetchCollectorSnapshotDiff,
   fetchCollectorSnapshot,
   fetchCollectorSnapshotHistory,
   fetchCollectorSourceHealth,
@@ -978,6 +979,92 @@ describe('fetchCollectorSnapshotHistory', () => {
       status: 400,
       code: 'invalid_request',
       message: 'invalid collected_since'
+    });
+  });
+});
+
+describe('fetchCollectorSnapshotDiff', () => {
+  it('requests the default latest-vs-previous collector snapshot diff without query parameters', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ item: null }), {
+          headers: JSON_HEADERS
+        })
+      )
+    );
+
+    await expect(fetchCollectorSnapshotDiff()).resolves.toBeNull();
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/collectors/controller-snapshot/diff',
+      expect.objectContaining({ signal: undefined })
+    );
+  });
+
+  it('passes explicit diff ids and limit using backend query names', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ item: null }), {
+          headers: JSON_HEADERS
+        })
+      )
+    );
+
+    const signal = new AbortController().signal;
+    await expect(
+      fetchCollectorSnapshotDiff({
+        fromCollectorSnapshotId: 'collector-snapshot:2026-03-09T18:58:00.000Z',
+        toCollectorSnapshotId: 'collector-snapshot:2026-03-09T18:59:00.000Z',
+        limit: 3,
+        signal
+      })
+    ).resolves.toBeNull();
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/collectors/controller-snapshot/diff?from_collector_snapshot_id=collector-snapshot%3A2026-03-09T18%3A58%3A00.000Z&to_collector_snapshot_id=collector-snapshot%3A2026-03-09T18%3A59%3A00.000Z&limit=3',
+      expect.objectContaining({ signal })
+    );
+  });
+
+  it('unwraps null diff comparisons and surfaces not_found responses as RequestError metadata', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ item: null }), {
+          headers: JSON_HEADERS
+        })
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            error: 'not_found',
+            details: 'unknown collector snapshot'
+          }),
+          {
+            status: 404,
+            headers: JSON_HEADERS
+          }
+        )
+      );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      fetchCollectorSnapshotDiff({
+        fromCollectorSnapshotId: 'collector-snapshot:2026-03-09T18:58:00.000Z'
+      })
+    ).resolves.toBeNull();
+    await expect(
+      fetchCollectorSnapshotDiff({
+        fromCollectorSnapshotId: 'missing-from',
+        toCollectorSnapshotId: 'missing-to'
+      })
+    ).rejects.toMatchObject({
+      name: 'RequestError',
+      status: 404,
+      code: 'not_found',
+      message: 'unknown collector snapshot'
     });
   });
 });

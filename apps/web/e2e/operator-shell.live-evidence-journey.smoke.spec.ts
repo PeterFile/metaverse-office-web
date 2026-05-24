@@ -333,7 +333,9 @@ test.describe('operator shell live evidence journey smoke', () => {
       await expect(sourceHealthPeek).toContainText('Evidence only');
       await expect(sourceHealthPeek).toContainText('Hermes profile · missing');
       await expect(sourceHealthPeek).toContainText('Mapped source');
-      await expect(sourceHealthPeek).toContainText('Reason · Redacted');
+      await expect(sourceHealthPeek).toContainText('Diff · No comparison');
+      await expect(sourceHealthPeek).not.toContainText('Reason · Redacted');
+      await expect(sourceHealthPeek).not.toContainText('Configured · Yes');
       await expect(
         sourceHealthPeek,
         'selected-agent source-health peek should not expose raw refs, sessions, profiles, payloads, or reasons'

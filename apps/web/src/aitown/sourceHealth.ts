@@ -37,11 +37,7 @@ export interface SelectedAgentSourceHealthInspectPeek {
   mappingLabel: 'Mapped source';
   sourceKindLabel: string;
   statusLabel: Exclude<CollectorSourceHealthStatus, 'observed'>;
-  configuredLabel: string;
-  evidenceRefsLabel: string;
-  reasonLabel: string;
-  observedAtLabel: string;
-  collectedAtLabel: string;
+  diffLineLabel: string;
 }
 
 const BOUNDED_DETAIL_LIMIT = 3;
@@ -74,7 +70,8 @@ const SELECTED_SOURCE_HEALTH_KIND_ORDER: CollectorSourceHealthKind[] = [
 
 export function deriveSelectedAgentSourceHealthInspectPeek(
   sourceHealth: CollectorSourceHealthProjection | null | undefined,
-  selectedAgentId: string | null | undefined
+  selectedAgentId: string | null | undefined,
+  previousSourceHealth?: CollectorSourceHealthProjection | null
 ): SelectedAgentSourceHealthInspectPeek | null {
   if (!sourceHealth?.agent_items.length || !selectedAgentId) {
     return null;
@@ -85,46 +82,25 @@ export function deriveSelectedAgentSourceHealthInspectPeek(
     return null;
   }
 
-  const selectedSourceKind = SELECTED_SOURCE_HEALTH_KIND_ORDER.reduce<CollectorSourceHealthKind | null>(
-    (selectedKind, sourceKind) => {
-      const status = getSourceHealthStatus(item.source_health, sourceKind);
-      if (!status || status === 'observed') {
-        return selectedKind;
-      }
-
-      if (!selectedKind) {
-        return sourceKind;
-      }
-
-      const selectedStatus = getSourceHealthStatus(item.source_health, selectedKind);
-      return !selectedStatus ||
-        SELECTED_SOURCE_HEALTH_STATUS_RANK[status] < SELECTED_SOURCE_HEALTH_STATUS_RANK[selectedStatus]
-        ? sourceKind
-        : selectedKind;
-    },
-    null
-  );
-  if (!selectedSourceKind) {
+  const currentGap = selectSourceHealthGap(item.source_health);
+  if (!currentGap) {
     return null;
   }
 
-  const selectedHealth = item.source_health[selectedSourceKind];
-  if (!selectedHealth || selectedHealth.status === 'observed') {
-    return null;
-  }
+  const previousGap = previousSourceHealth?.agent_items.length
+    ? selectSourceHealthGap(
+        previousSourceHealth.agent_items.find((agentItem) => agentItem.agent_id === selectedAgentId)?.source_health
+      )
+    : null;
 
   return {
     agentId: item.agent_id,
-    sourceDrilldownGroupKey: resolveSelectedSourceHealthDrilldownGroupKey(selectedSourceKind),
+    sourceDrilldownGroupKey: resolveSelectedSourceHealthDrilldownGroupKey(currentGap.sourceKind),
     evidenceOnlyLabel: 'Evidence only',
     mappingLabel: 'Mapped source',
-    sourceKindLabel: SELECTED_SOURCE_HEALTH_KIND_LABELS[selectedSourceKind],
-    statusLabel: selectedHealth.status as Exclude<CollectorSourceHealthStatus, 'observed'>,
-    configuredLabel: `Configured · ${renderSelectedSourceHealthConfigured(selectedHealth)}`,
-    evidenceRefsLabel: `Evidence refs · ${item.evidence_ref_count > 0 ? 'Available' : 'None'}`,
-    reasonLabel: renderSelectedSourceHealthReasonLabel(),
-    observedAtLabel: renderObservedAtLabel(selectedHealth.last_observed_at),
-    collectedAtLabel: renderCollectedAtLabel(sourceHealth.collected_at)
+    sourceKindLabel: SELECTED_SOURCE_HEALTH_KIND_LABELS[currentGap.sourceKind],
+    statusLabel: currentGap.status,
+    diffLineLabel: renderSelectedSourceHealthDiffLine(previousGap, currentGap)
   };
 }
 
@@ -474,6 +450,45 @@ function getSourceHealthStatus(sourceHealth: CollectorSourceHealth, sourceKind: 
   return sourceHealth[sourceKind]?.status;
 }
 
+function selectSourceHealthGap(sourceHealth: CollectorSourceHealth | null | undefined) {
+  if (!sourceHealth) {
+    return null;
+  }
+
+  const selectedSourceKind = SELECTED_SOURCE_HEALTH_KIND_ORDER.reduce<CollectorSourceHealthKind | null>(
+    (selectedKind, sourceKind) => {
+      const status = getSourceHealthStatus(sourceHealth, sourceKind);
+      if (!status || status === 'observed') {
+        return selectedKind;
+      }
+
+      if (!selectedKind) {
+        return sourceKind;
+      }
+
+      const selectedStatus = getSourceHealthStatus(sourceHealth, selectedKind);
+      return !selectedStatus ||
+        SELECTED_SOURCE_HEALTH_STATUS_RANK[status] < SELECTED_SOURCE_HEALTH_STATUS_RANK[selectedStatus]
+        ? sourceKind
+        : selectedKind;
+    },
+    null
+  );
+  if (!selectedSourceKind) {
+    return null;
+  }
+
+  const selectedHealth = sourceHealth[selectedSourceKind];
+  if (!selectedHealth || selectedHealth.status === 'observed') {
+    return null;
+  }
+
+  return {
+    sourceKind: selectedSourceKind,
+    status: selectedHealth.status as Exclude<CollectorSourceHealthStatus, 'observed'>
+  };
+}
+
 function resolveSelectedSourceHealthDrilldownGroupKey(
   sourceKind: CollectorSourceHealthKind
 ): SelectedAgentSourceHealthDrilldownGroupKey {
@@ -488,12 +503,19 @@ function resolveSelectedSourceHealthDrilldownGroupKey(
   return 'workspace';
 }
 
-function renderSelectedSourceHealthConfigured(sourceHealth: { status?: CollectorSourceHealthStatus }) {
-  return sourceHealth.status ? 'Yes' : 'No';
+function renderSelectedSourceHealthDiffLine(
+  previousGap: ReturnType<typeof selectSourceHealthGap>,
+  currentGap: NonNullable<ReturnType<typeof selectSourceHealthGap>>
+) {
+  if (!previousGap) {
+    return 'Diff · No comparison';
+  }
+
+  return `Diff · ${renderSelectedSourceHealthDiffEndpoint(previousGap)} → ${renderSelectedSourceHealthDiffEndpoint(currentGap)}`;
 }
 
-function renderSelectedSourceHealthReasonLabel() {
-  return 'Reason · Redacted';
+function renderSelectedSourceHealthDiffEndpoint(gap: NonNullable<ReturnType<typeof selectSourceHealthGap>>) {
+  return `${SELECTED_SOURCE_HEALTH_KIND_LABELS[gap.sourceKind]} ${gap.status}`;
 }
 
 function renderHermesSourceKind(sourceKind: 'hermes_profile' | 'hermes_session') {

@@ -2841,8 +2841,9 @@ afterEach(() => {
       name: 'Open source gap supervision for App Engineering Agent workspace files degraded'
     });
     expect(sourceGapFact).toHaveTextContent(
-      'Source health · Workspace files · degraded · Mapped source · Reason · Redacted'
+      'Source health · Workspace files · degraded · Mapped source · Diff · No comparison'
     );
+    expect(sourceGapFact).not.toHaveTextContent('Reason · Redacted');
     expect(focusRibbon).not.toHaveTextContent('/tmp/app-engineering');
     expect(focusRibbon).not.toHaveTextContent('5-web3-app-engineering');
 
@@ -3181,11 +3182,11 @@ afterEach(() => {
     expect(within(sourceHealthPeek).getByText('Evidence only')).toBeVisible();
     expect(within(sourceHealthPeek).getByText('Hermes session · missing')).toBeVisible();
     expect(within(sourceHealthPeek).getByText('Mapped source')).toBeVisible();
-    expect(within(sourceHealthPeek).getByText('Configured · Yes')).toBeVisible();
-    expect(within(sourceHealthPeek).getByText('Evidence refs · Available')).toBeVisible();
-    expect(within(sourceHealthPeek).getByText('Reason · Redacted')).toBeVisible();
-    expect(within(sourceHealthPeek).getByText('Not observed')).toBeVisible();
-    expect(within(sourceHealthPeek).getByText('Collected 2026-03-16T09:01:00.000Z')).toBeVisible();
+    expect(within(sourceHealthPeek).getByText('Diff · No comparison')).toBeVisible();
+    expect(sourceHealthPeek).not.toHaveTextContent('Configured · Yes');
+    expect(sourceHealthPeek).not.toHaveTextContent('Evidence refs · Available');
+    expect(sourceHealthPeek).not.toHaveTextContent('Reason · Redacted');
+    expect(sourceHealthPeek).not.toHaveTextContent('Collected 2026-03-16T09:01:00.000Z');
     expect(sourceHealthPeek).not.toHaveTextContent('Hermes session missing');
     expect(inspectPeek).not.toHaveTextContent('/tmp/');
     expect(inspectPeek).not.toHaveTextContent('hermes://');
@@ -3304,8 +3305,9 @@ afterEach(() => {
       });
       expect(sourceHealthPeek).toHaveTextContent('Workspace files · degraded');
       expect(sourceHealthPeek).toHaveTextContent('Mapped source');
-      expect(sourceHealthPeek).toHaveTextContent('Configured · Yes');
-      expect(sourceHealthPeek).toHaveTextContent('Reason · Redacted');
+      expect(sourceHealthPeek).toHaveTextContent('Diff · No comparison');
+      expect(sourceHealthPeek).not.toHaveTextContent('Configured · Yes');
+      expect(sourceHealthPeek).not.toHaveTextContent('Reason · Redacted');
       expect(inspectPeek).not.toHaveTextContent('/tmp/app-engineering');
 
       await waitFor(() => {

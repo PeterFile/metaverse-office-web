@@ -13,6 +13,7 @@ import type {
   AgentInteractionsResponse,
   AgentWorkflow,
   CollectorEvidenceCoverage,
+  EvidenceRecord,
   EvidenceProvenanceBundle,
   CollectorSnapshot,
   CollectorSnapshotHistory,
@@ -44,6 +45,7 @@ type BackendStore = {
   appendEvent(event: BackendEvent): Promise<BackendEvent>;
   appendHeartbeat(heartbeat: BackendHeartbeat): Promise<BackendHeartbeat>;
   appendCollectorReport(report: CollectorSnapshot): Promise<CollectorSnapshot>;
+  listEvidenceRecords(filters?: Record<string, unknown>): EvidenceRecord[];
   listMemoryArtifacts(filters?: Record<string, unknown>): MemoryArtifactIndex['items'];
 };
 
@@ -1133,6 +1135,62 @@ describe('read-only frontend/backend contract smoke', () => {
       }
     ]);
     expectReplayCheckpointLogContract(log, ['event', 'event', 'event']);
+  });
+
+  it('passes checkpoint-log exact filters through to the real backend without leaking raw fields', async () => {
+    harness = await createHarness(() => '2026-03-09T19:00:00.000Z');
+    await seedContractSlice(harness.store);
+    const evidenceRecord = harness.store
+      .listEvidenceRecords({ source_kind: 'workspace_file', limit: '10' })
+      .find((record) => record.agent_id === 'app-engineering');
+    expect(evidenceRecord).toBeDefined();
+
+    const nativeFetch = globalThis.fetch.bind(globalThis);
+    const requests: RequestContract[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+        requests.push(getRequestContract(input, harness!.baseUrl, init));
+        return nativeFetch(input, init);
+      })
+    );
+
+    const api = await loadApi(harness.baseUrl);
+    const log = await api.fetchReplayCheckpointLog({
+      limit: 1,
+      recordKind: 'evidence_record',
+      evidenceId: evidenceRecord!.evidence_id,
+      collectorSnapshotId: 'collector-snapshot:2026-03-09T18:59:00.000Z',
+      correlationId: 'collector-snapshot:2026-03-09T18:59:00.000Z',
+      sourceKind: 'workspace_file'
+    });
+
+    expect(requests).toEqual([
+      {
+        method: 'GET',
+        origin: harness.baseUrl,
+        pathname: '/accountability/replay/checkpoint-log',
+        query: [
+          ['collector_snapshot_id', 'collector-snapshot:2026-03-09T18:59:00.000Z'],
+          ['correlation_id', 'collector-snapshot:2026-03-09T18:59:00.000Z'],
+          ['evidence_id', evidenceRecord!.evidence_id],
+          ['limit', '1'],
+          ['record_kind', 'evidence_record'],
+          ['source_kind', 'workspace_file']
+        ]
+      }
+    ]);
+    expectReplayCheckpointLogContract(log, ['evidence_record']);
+    expect(log.items[0].checkpoint).toMatchObject({
+      source_kind: 'workspace_file',
+      collector_snapshot_id: 'collector-snapshot:2026-03-09T18:59:00.000Z',
+      correlation_id: 'collector-snapshot:2026-03-09T18:59:00.000Z'
+    });
+    expect(Object.hasOwn(log.items[0].checkpoint ?? {}, 'evidence_id')).toBe(false);
+    expect(Object.hasOwn(log.items[0].checkpoint ?? {}, 'evidence_ref')).toBe(false);
+    expect(Object.hasOwn(log.items[0].checkpoint ?? {}, 'payload')).toBe(false);
+    expect(Object.hasOwn(log.items[0].checkpoint ?? {}, 'metadata')).toBe(false);
+    expect(Object.hasOwn(log.items[0].checkpoint ?? {}, 'degraded_reasons')).toBe(false);
   });
 
   it('passes office-operations agent_id filters through to the real backend without widening the request surface', async () => {

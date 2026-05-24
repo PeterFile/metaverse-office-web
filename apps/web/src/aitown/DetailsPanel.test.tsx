@@ -15,6 +15,7 @@ import type {
   OfficeOperation,
   OfficeOperations,
   PeerWatchAlertsResponse,
+  ReplayCheckpointLogResponse,
   WorkflowPeerWatchAlert,
   WorkflowInteraction,
   WorkflowTimelineEvent
@@ -711,6 +712,9 @@ function buildProps(overrides: Partial<DetailsPanelProps> = {}): DetailsPanelPro
     selectedAgentEvidenceProvenanceBundle: null,
     selectedAgentEvidenceProvenanceBundleError: null,
     selectedAgentEvidenceProvenanceBundleState: 'idle',
+    selectedAgentEvidenceCheckpointLog: null,
+    selectedAgentEvidenceCheckpointLogError: null,
+    selectedAgentEvidenceCheckpointLogState: 'idle',
     workflow: buildWorkflow(),
     workflowError: null,
     workflowState: 'ready',
@@ -932,6 +936,63 @@ function buildEvidenceProvenanceBundle(
     },
     ...overrides,
     source_summary: sourceSummary
+  };
+}
+
+function buildEvidenceCheckpointLog(): ReplayCheckpointLogResponse {
+  return {
+    items: [
+      {
+        append_index: 21,
+        record_kind: 'evidence_record',
+        checkpoint: {
+          observed_at: '2026-03-16T08:58:00.000Z',
+          collected_at: '2026-03-16T08:59:00.000Z',
+          agent_id: 'app-engineering',
+          source_kind: 'workspace_file',
+          evidence_role: 'agent_output',
+          source_status: 'observed',
+          output_candidate: true,
+          collector_snapshot_id: 'collector-20260316',
+          correlation_id: 'corr-app-review',
+          unmapped: false
+        }
+      },
+      {
+        append_index: 22,
+        record_kind: 'event',
+        checkpoint: {
+          event_id: 'evt-real-replay-anchor',
+          ts: '2026-03-16T08:58:30.000Z',
+          agent_id: 'app-engineering',
+          event_type: 'workflow_reviewed',
+          correlation_id: 'corr-app-review',
+          source_kind: 'controller_event'
+        }
+      },
+      {
+        append_index: 23,
+        record_kind: 'collector_snapshot',
+        checkpoint: {
+          collector_snapshot_id: 'collector-20260316',
+          collected_at: '2026-03-16T08:59:00.000Z',
+          actor_id: 'team-lead',
+          item_count: 1
+        }
+      },
+      {
+        append_index: 24,
+        record_kind: 'event',
+        checkpoint: {
+          event_id: 'evt-overflow',
+          ts: '2026-03-16T08:59:30.000Z',
+          agent_id: 'app-engineering',
+          event_type: 'overflow',
+          correlation_id: 'corr-app-review',
+          source_kind: 'controller_event'
+        }
+      }
+    ]
   };
 }
 
@@ -1883,7 +1944,7 @@ describe('DetailsPanel selected-agent workflow lifecycle', () => {
     expect(within(section!).getByText('Output candidate · true')).toBeVisible();
     expect(within(section!).getByText('Snapshot · collector-20260316')).toBeVisible();
     expect(within(section!).getByText('Correlation · corr-app-review')).toBeVisible();
-    expect(within(section!).getByText('Degraded · collector lag')).toBeVisible();
+    expect(within(section!).getByText('Degraded count · 1')).toBeVisible();
     expect(within(section!).getByText('Ref · [local path] outbox.md')).toBeVisible();
     expect(
       within(section!).getByText(/Snapshot anchor · collector-snapshot-20260316-with-a-very-long-\[redacted\]/)
@@ -1901,6 +1962,54 @@ describe('DetailsPanel selected-agent workflow lifecycle', () => {
     expect(section!).not.toHaveTextContent('metadata');
     expect(section!).not.toHaveTextContent('raw_tmux_capture');
     expect(section!).not.toHaveTextContent('secret_token');
+  });
+
+  it('renders a bounded sanitized selected-evidence checkpoint proof strip', () => {
+    render(
+      <DetailsPanel
+        {...buildProps({
+          activeHubCategory: 'evidence',
+          selectedAgentDrilldownTab: 'evidence',
+          selectedAgentEvidenceLedger: buildSelectedAgentEvidenceLedger(),
+          selectedAgentEvidenceLedgerState: 'ready',
+          selectedAgentEvidenceRecord: buildEvidenceRecord(),
+          selectedAgentEvidenceRecordId: 'output-1',
+          selectedAgentEvidenceRecordState: 'ready',
+          selectedAgentEvidenceProvenanceBundle: buildEvidenceProvenanceBundle(),
+          selectedAgentEvidenceProvenanceBundleState: 'ready',
+          selectedAgentEvidenceCheckpointLog: buildEvidenceCheckpointLog(),
+          selectedAgentEvidenceCheckpointLogState: 'ready'
+        })}
+      />
+    );
+
+    const section = screen.getByRole('heading', { name: 'Evidence Record Detail' }).closest('section');
+    expect(section).not.toBeNull();
+    const proofStrip = within(section!).getByLabelText('Selected evidence checkpoint proof');
+
+    expect(within(proofStrip).getByText('Checkpoint proof')).toBeVisible();
+    expect(
+      within(proofStrip).getByText(
+        '#21 · evidence_record · workspace_file · agent_output · observed · output candidate · corr-app-review · 2026-03-16T08:58:00.000Z'
+      )
+    ).toBeVisible();
+    expect(
+      within(proofStrip).getByText(
+        '#22 · event · evt-real-replay-anchor · workflow_reviewed · controller_event · 2026-03-16T08:58:30.000Z'
+      )
+    ).toBeVisible();
+    expect(
+      within(proofStrip).getByText('#23 · collector_snapshot · collector-20260316 · 1 items · 2026-03-16T08:59:00.000Z')
+    ).toBeVisible();
+    expect(proofStrip).not.toHaveTextContent('evt-overflow');
+    expect(proofStrip).not.toHaveTextContent('/tmp/app/outbox.md');
+    expect(proofStrip).not.toHaveTextContent('tmux://');
+    expect(proofStrip).not.toHaveTextContent('Hermes');
+    expect(proofStrip).not.toHaveTextContent('session://');
+    expect(proofStrip).not.toHaveTextContent('profile://');
+    expect(proofStrip).not.toHaveTextContent('payload');
+    expect(proofStrip).not.toHaveTextContent('metadata');
+    expect(proofStrip).not.toHaveTextContent('degraded_reasons');
   });
 
   it('offers evidence replay only for replay-backed evidence ids', async () => {

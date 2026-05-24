@@ -22,6 +22,7 @@ import {
   fetchEvidenceRecord,
   fetchEvidenceProvenanceBundle,
   fetchEvidenceRecords,
+  fetchReplayCheckpointLog,
   fetchIncidents,
   fetchMemoryArtifacts,
   fetchOfficeOperations,
@@ -72,6 +73,7 @@ import type {
   CorrelationDrilldown,
   EvidenceProvenanceBundle,
   EvidenceRecord,
+  ReplayCheckpointLogResponse,
   MemoryArtifact,
   MemoryArtifactIndex,
   OfficeAgent,
@@ -1091,6 +1093,12 @@ function AppInner() {
     useState<LoadState>('idle');
   const [selectedAgentEvidenceProvenanceBundleError, setSelectedAgentEvidenceProvenanceBundleError] =
     useState<string | null>(null);
+  const [selectedAgentEvidenceCheckpointLog, setSelectedAgentEvidenceCheckpointLog] =
+    useState<ReplayCheckpointLogResponse | null>(null);
+  const [selectedAgentEvidenceCheckpointLogState, setSelectedAgentEvidenceCheckpointLogState] =
+    useState<LoadState>('idle');
+  const [selectedAgentEvidenceCheckpointLogError, setSelectedAgentEvidenceCheckpointLogError] =
+    useState<string | null>(null);
   const [defaultEvidenceCoverage, setDefaultEvidenceCoverage] =
     useState<CollectorEvidenceCoverage | null>(null);
   const [defaultEvidenceCoverageState, setDefaultEvidenceCoverageState] =
@@ -1133,6 +1141,9 @@ function AppInner() {
     setSelectedAgentEvidenceProvenanceBundle(null);
     setSelectedAgentEvidenceProvenanceBundleError(null);
     setSelectedAgentEvidenceProvenanceBundleState('idle');
+    setSelectedAgentEvidenceCheckpointLog(null);
+    setSelectedAgentEvidenceCheckpointLogError(null);
+    setSelectedAgentEvidenceCheckpointLogState('idle');
   }, []);
 
   const overviewResource = usePolledResource({
@@ -1971,6 +1982,9 @@ function AppInner() {
     setSelectedAgentEvidenceProvenanceBundle(null);
     setSelectedAgentEvidenceProvenanceBundleError(null);
     setSelectedAgentEvidenceProvenanceBundleState('loading');
+    setSelectedAgentEvidenceCheckpointLog(null);
+    setSelectedAgentEvidenceCheckpointLogError(null);
+    setSelectedAgentEvidenceCheckpointLogState('loading');
 
     void fetchEvidenceRecord(evidenceId, { signal: controller.signal })
       .then((record) => {
@@ -2019,6 +2033,30 @@ function AppInner() {
         setSelectedAgentEvidenceProvenanceBundle(null);
         setSelectedAgentEvidenceProvenanceBundleError(formatUnknownError(error));
         setSelectedAgentEvidenceProvenanceBundleState('error');
+      });
+
+    void fetchReplayCheckpointLog({ evidenceId, limit: 3, signal: controller.signal })
+      .then((checkpointLog) => {
+        if (evidenceRecordDetailRequestIdRef.current !== requestId) {
+          return;
+        }
+
+        setSelectedAgentEvidenceCheckpointLog(checkpointLog);
+        setSelectedAgentEvidenceCheckpointLogError(null);
+        setSelectedAgentEvidenceCheckpointLogState('ready');
+      })
+      .catch((error: unknown) => {
+        if (evidenceRecordDetailRequestIdRef.current !== requestId) {
+          return;
+        }
+
+        if (error instanceof Error && error.name === 'AbortError') {
+          return;
+        }
+
+        setSelectedAgentEvidenceCheckpointLog(null);
+        setSelectedAgentEvidenceCheckpointLogError(formatUnknownError(error));
+        setSelectedAgentEvidenceCheckpointLogState('error');
       });
   }, []);
 
@@ -3555,6 +3593,9 @@ function AppInner() {
               selectedAgentEvidenceProvenanceBundle={selectedAgentEvidenceProvenanceBundle}
               selectedAgentEvidenceProvenanceBundleError={selectedAgentEvidenceProvenanceBundleError}
               selectedAgentEvidenceProvenanceBundleState={selectedAgentEvidenceProvenanceBundleState}
+              selectedAgentEvidenceCheckpointLog={selectedAgentEvidenceCheckpointLog}
+              selectedAgentEvidenceCheckpointLogError={selectedAgentEvidenceCheckpointLogError}
+              selectedAgentEvidenceCheckpointLogState={selectedAgentEvidenceCheckpointLogState}
               workflow={activeWorkflow}
               workflowError={workflowError}
               workflowState={workflowState}

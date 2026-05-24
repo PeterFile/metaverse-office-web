@@ -39,7 +39,7 @@ function buildCollectorItem(overrides: Partial<CollectorItem> = {}): CollectorIt
 }
 
 describe('deriveSelectedAgentSourceHealthInspectPeek', () => {
-  it('selects mapped source-health gaps with sanitized provenance labels', () => {
+  it('selects mapped source-health gaps with a compact no-comparison diff label', () => {
     expect(
       deriveSelectedAgentSourceHealthInspectPeek(
         {
@@ -100,12 +100,80 @@ describe('deriveSelectedAgentSourceHealthInspectPeek', () => {
       mappingLabel: 'Mapped source',
       sourceKindLabel: 'Hermes session',
       statusLabel: 'missing',
-      configuredLabel: 'Configured · Yes',
-      evidenceRefsLabel: 'Evidence refs · Available',
-      reasonLabel: 'Reason · Redacted',
-      observedAtLabel: 'Not observed',
-      collectedAtLabel: 'Collected 2026-03-16T09:01:00.000Z'
+      diffLineLabel: 'Diff · No comparison'
     });
+  });
+
+  it('renders only a sanitized source-kind/status diff when a previous collector sample exists', () => {
+    const previousSourceHealth = {
+      collector_snapshot_id: 'collector-source-health-1',
+      collected_at: '2026-03-16T09:00:00.000Z',
+      summary: {
+        agent_count: 1,
+        source_kind_buckets: {
+          workspace_root: { observed: 0, degraded: 0, missing: 0, error: 0 },
+          workspace_files: { observed: 0, degraded: 1, missing: 0, error: 0 },
+          tmux_session: { observed: 0, degraded: 0, missing: 0, error: 0 },
+          hermes_profile: { observed: 0, degraded: 0, missing: 0, error: 0 },
+          hermes_session: { observed: 0, degraded: 0, missing: 0, error: 0 }
+        },
+        status_buckets: {
+          observed: 0,
+          degraded: 1,
+          missing: 0,
+          error: 0
+        }
+      },
+      agent_items: [
+        {
+          agent_id: 'app-engineering',
+          collector_snapshot_id: 'collector-source-health-1',
+          source_health: {
+            workspace_files: {
+              status: 'degraded',
+              observed_count: 0,
+              last_observed_at: '2026-03-16T08:58:30.000Z',
+              heartbeat_changed: true,
+              degraded_reasons: ['raw /tmp/path should never render']
+            }
+          },
+          evidence_ref_count: 1,
+          latest_evidence_at: '2026-03-16T08:58:40.000Z'
+        }
+      ]
+    } as any;
+    const currentSourceHealth = {
+      ...previousSourceHealth,
+      collector_snapshot_id: 'collector-source-health-2',
+      collected_at: '2026-03-16T09:01:00.000Z',
+      agent_items: [
+        {
+          agent_id: 'app-engineering',
+          collector_snapshot_id: 'collector-source-health-2',
+          source_health: {
+            hermes_session: {
+              status: 'missing',
+              expected_session_ref: '5-web3-app-engineering',
+              last_observed_at: null,
+              degraded_reasons: ['missing hermes://session/raw']
+            }
+          },
+          evidence_ref_count: 2,
+          latest_evidence_at: '2026-03-16T08:59:40.000Z'
+        }
+      ]
+    } as any;
+
+    const peek = deriveSelectedAgentSourceHealthInspectPeek(
+      currentSourceHealth,
+      'app-engineering',
+      previousSourceHealth
+    );
+
+    expect(peek?.diffLineLabel).toBe('Diff · Workspace files degraded → Hermes session missing');
+    expect(Object.values(peek ?? {}).join(' ')).not.toMatch(
+      /heartbeat_changed|\/tmp|hermes:\/\/|5-web3-app-engineering|raw/
+    );
   });
 
   it('returns no peek for observed or unmapped-only source health', () => {

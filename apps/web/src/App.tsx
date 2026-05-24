@@ -1059,6 +1059,8 @@ function AppInner() {
     useState<string | null>(null);
   const [latestSourceHealth, setLatestSourceHealth] =
     useState<CollectorSourceHealthProjection | null>(null);
+  const [previousSourceHealth, setPreviousSourceHealth] =
+    useState<CollectorSourceHealthProjection | null>(null);
   const [sourceGapFocusIntent, setSourceGapFocusIntent] =
     useState<SourceGapFocusIntent | null>(null);
   const requestedSelectedAgentDrilldownTabRef = useRef<SelectedAgentDrilldownTab | null>(null);
@@ -1182,9 +1184,17 @@ function AppInner() {
 
   useEffect(() => {
     if (sourceHealthResource.state === 'ready') {
+      if (
+        latestSourceHealth &&
+        sourceHealthResource.data &&
+        latestSourceHealth.collector_snapshot_id !== sourceHealthResource.data.collector_snapshot_id
+      ) {
+        setPreviousSourceHealth(latestSourceHealth);
+      }
+
       setLatestSourceHealth(sourceHealthResource.data);
     }
-  }, [sourceHealthResource.data, sourceHealthResource.state]);
+  }, [latestSourceHealth, sourceHealthResource.data, sourceHealthResource.state]);
 
   useEffect(() => {
     if (hubOpen || selectedAgentId !== null || !defaultEvidenceCoverageReady || defaultEvidenceCoverageRequestedRef.current) {
@@ -2814,8 +2824,8 @@ function AppInner() {
   );
   const selectedAgentSourceGapFact = deriveSelectedAgentSourceGapFact(latestSourceHealth, selectedAgentId);
   const selectedAgentSourceHealthInspectPeek = useMemo(
-    () => deriveSelectedAgentSourceHealthInspectPeek(latestSourceHealth, selectedAgentId),
-    [latestSourceHealth, selectedAgentId]
+    () => deriveSelectedAgentSourceHealthInspectPeek(latestSourceHealth, selectedAgentId, previousSourceHealth),
+    [latestSourceHealth, previousSourceHealth, selectedAgentId]
   );
   const selectedAgentSourceGapInspectPeek = useMemo(
     () =>
@@ -3195,11 +3205,7 @@ function AppInner() {
                       {`${selectedAgentSourceHealthInspectPeek.sourceKindLabel} · ${selectedAgentSourceHealthInspectPeek.statusLabel}`}
                     </strong>
                     <span>{selectedAgentSourceHealthInspectPeek.mappingLabel}</span>
-                    <span>{selectedAgentSourceHealthInspectPeek.configuredLabel}</span>
-                    <span>{selectedAgentSourceHealthInspectPeek.evidenceRefsLabel}</span>
-                    <span>{selectedAgentSourceHealthInspectPeek.reasonLabel}</span>
-                    <span>{selectedAgentSourceHealthInspectPeek.observedAtLabel}</span>
-                    <span>{selectedAgentSourceHealthInspectPeek.collectedAtLabel}</span>
+                    <span>{selectedAgentSourceHealthInspectPeek.diffLineLabel}</span>
                     <button
                       type="button"
                       className="aitown-selected-agent-peek__source-gap-fact"
@@ -3345,7 +3351,7 @@ function AppInner() {
                           selectedAgentSourceHealthInspectPeek.sourceKindLabel,
                           selectedAgentSourceHealthInspectPeek.statusLabel,
                           selectedAgentSourceHealthInspectPeek.mappingLabel,
-                          selectedAgentSourceHealthInspectPeek.reasonLabel
+                          selectedAgentSourceHealthInspectPeek.diffLineLabel
                         ].join(' · ')}
                       </button>
                     ) : null}

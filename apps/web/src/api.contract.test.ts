@@ -418,7 +418,7 @@ describe('read-only frontend/backend contract smoke', () => {
     );
 
     const api = await loadApi(harness.baseUrl);
-    const gaps = await api.fetchRuntimeSourceGaps({
+    const sourceGapFilters = {
       agentId: 'app-engineering',
       sourceKind: 'workspace_file',
       evidenceRole: 'agent_plan',
@@ -433,13 +433,36 @@ describe('read-only frontend/backend contract smoke', () => {
       collectedUntil: '2026-03-09T19:00:00.000Z',
       newestFirst: false,
       limit: 5
-    });
+    } as const;
+    const gaps = await api.fetchRuntimeSourceGaps(sourceGapFilters);
+    const summary = await api.fetchRuntimeSourceGapsSummary(sourceGapFilters);
 
     expect(requests).toEqual([
       {
         method: 'GET',
         origin: harness.baseUrl,
         pathname: '/runtime/source-gaps',
+        query: [
+          ['agent_id', 'app-engineering'],
+          ['collected_since', '2026-03-09T18:58:00.000Z'],
+          ['collected_until', '2026-03-09T19:00:00.000Z'],
+          ['collector_snapshot_id', 'collector-snapshot:2026-03-09T18:59:00.000Z'],
+          ['correlation_id', 'collector-snapshot:2026-03-09T18:59:00.000Z'],
+          ['evidence_role', 'agent_plan'],
+          ['limit', '5'],
+          ['mapped', 'true'],
+          ['newest_first', 'false'],
+          ['observed_since', '2026-03-09T18:58:00.000Z'],
+          ['observed_until', '2026-03-09T18:59:00.000Z'],
+          ['output_candidate', 'true'],
+          ['source_kind', 'workspace_file'],
+          ['source_status', 'degraded']
+        ]
+      },
+      {
+        method: 'GET',
+        origin: harness.baseUrl,
+        pathname: '/runtime/source-gaps/summary',
         query: [
           ['agent_id', 'app-engineering'],
           ['collected_since', '2026-03-09T18:58:00.000Z'],
@@ -473,6 +496,11 @@ describe('read-only frontend/backend contract smoke', () => {
     expect(Object.hasOwn(gaps[0], 'evidence_id')).toBe(false);
     expect(Object.hasOwn(gaps[0], 'evidence_ref')).toBe(false);
     expect(Object.hasOwn(gaps[0], 'metadata')).toBe(false);
+    expect(summary).toMatchObject({
+      total_count: 1,
+      returned_limit: 5
+    });
+    expect(Object.hasOwn(summary, 'total_groups')).toBe(false);
   });
 
   it('passes source-gap agent-summary and trend filters through to the real backend', async () => {

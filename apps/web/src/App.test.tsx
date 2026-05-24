@@ -3978,6 +3978,10 @@ afterEach(() => {
     expect(inspectPeek).toHaveTextContent('Mapped source');
     expect(inspectPeek).toHaveTextContent('Observed 2026-03-16T08:57:45.000Z');
     expect(inspectPeek).toHaveTextContent('Collected 2026-03-16T09:01:00.000Z');
+    expect(inspectPeek).toHaveTextContent('Lifecycle · 1 mapped · 0 unmapped');
+    expect(inspectPeek).toHaveTextContent('Mapped lifecycle');
+    expect(inspectPeek).toHaveTextContent('Workspace files · degraded · Current gap');
+    expect(inspectPeek).toHaveTextContent('1 row · Observed 2026-03-16T08:57:45.000Z');
     expect(within(inspectPeek).getByRole('button', { name: 'Open Evidence drilldown' })).toBeVisible();
     expect(inspectPeek).not.toHaveTextContent('/tmp/growth-revenue');
     expect(inspectPeek).not.toHaveTextContent('6-web3-growth-revenue');

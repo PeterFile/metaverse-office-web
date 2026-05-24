@@ -50,8 +50,10 @@ import { adaptWorldToScene } from './aitown/sceneAdapter';
 import {
   deriveRuntimeSourceGapChips,
   deriveRuntimeSourceGapInspectPeek,
+  deriveRuntimeSourceGapLifecycleStrip,
   deriveRuntimeSourceGapWorldPins,
-  deriveSelectedAgentSourceGapFact
+  deriveSelectedAgentSourceGapFact,
+  type RuntimeSourceGapLifecycleStrip
 } from './aitown/sourceGapSignals';
 import { deriveSelectedAgentSourceHealthInspectPeek } from './aitown/sourceHealth';
 import { deriveSelectedAgentEvidenceGlance } from './aitown/selectedAgentEvidenceGlance';
@@ -494,6 +496,44 @@ function renderEvidenceCoverageFocusLatest(item: CollectorEvidenceCoverageFocusI
   return item.latest_evidence_at
     ? `Latest evidence · ${item.latest_evidence_at}`
     : 'Latest evidence unavailable';
+}
+
+function renderRuntimeSourceGapLifecycleStrip(strip: RuntimeSourceGapLifecycleStrip | null) {
+  if (!strip) {
+    return null;
+  }
+
+  return (
+    <section
+      className={`aitown-source-gap-lifecycle-strip aitown-source-gap-lifecycle-strip--${strip.status}`}
+      role="region"
+      aria-label="Source gap lifecycle"
+    >
+      <span className="aitown-source-gap-lifecycle-strip__summary">{strip.summaryLabel}</span>
+      {strip.mappedRows.length > 0 ? (
+        <span className="aitown-source-gap-lifecycle-strip__group" role="group" aria-label="Mapped lifecycle">
+          <span className="aitown-source-gap-lifecycle-strip__group-label">Mapped lifecycle</span>
+          {strip.mappedRows.map((row) => (
+            <span key={row.key} className="aitown-source-gap-lifecycle-strip__row">
+              <span>{`${row.sourceLabel} · ${row.statusLabel} · ${row.lifecycleLabel}`}</span>
+              <span>{`${row.countLabel} · ${row.observedAtLabel}`}</span>
+            </span>
+          ))}
+        </span>
+      ) : null}
+      {strip.unmappedRows.length > 0 ? (
+        <span className="aitown-source-gap-lifecycle-strip__group" role="group" aria-label="Unmapped lifecycle">
+          <span className="aitown-source-gap-lifecycle-strip__group-label">Unmapped lifecycle</span>
+          {strip.unmappedRows.map((row) => (
+            <span key={row.key} className="aitown-source-gap-lifecycle-strip__row">
+              <span>{`${row.sourceLabel} · ${row.statusLabel} · ${row.lifecycleLabel}`}</span>
+              <span>{`${row.countLabel} · ${row.observedAtLabel}`}</span>
+            </span>
+          ))}
+        </span>
+      ) : null}
+    </section>
+  );
 }
 
 function formatUnknownError(error: unknown) {
@@ -2837,6 +2877,27 @@ function AppInner() {
       ),
     [overviewResource.data?.agents, runtimeSourceGapsResource.data, selectedAgentId, sourceGapFocusIntent]
   );
+  const selectedAgentSourceGapLifecycleStrip = useMemo(
+    () => {
+      if (!selectedAgentId || sourceGapFocusIntent?.agentId !== selectedAgentId) {
+        return null;
+      }
+
+      return deriveRuntimeSourceGapLifecycleStrip({
+        runtimeSourceGaps: runtimeSourceGapsResource.data,
+        selectedAgentId,
+        state: runtimeSourceGapsResource.state,
+        error: runtimeSourceGapsResource.error
+      });
+    },
+    [
+      runtimeSourceGapsResource.data,
+      runtimeSourceGapsResource.error,
+      runtimeSourceGapsResource.state,
+      selectedAgentId,
+      sourceGapFocusIntent
+    ]
+  );
   const handleSelectedAgentSourceGapFactOpen = useCallback(() => {
     if (!selectedAgentSourceGapFact) {
       return;
@@ -3216,21 +3277,26 @@ function AppInner() {
                     </button>
                   </section>
                 ) : null}
-                {selectedAgentSourceGapInspectPeek ? (
+                {selectedAgentSourceGapInspectPeek || selectedAgentSourceGapLifecycleStrip ? (
                   <section
                     className="aitown-selected-agent-peek__source-gap-inspect"
                     role="region"
                     aria-label="Source gap inspect peek"
                   >
-                    <span className="aitown-selected-agent-peek__source-gap-inspect-label">
-                      {selectedAgentSourceGapInspectPeek.evidenceOnlyLabel}
-                    </span>
-                    <strong>
-                      {`${selectedAgentSourceGapInspectPeek.sourceKindLabel} · ${selectedAgentSourceGapInspectPeek.statusLabel}`}
-                    </strong>
-                    <span>{selectedAgentSourceGapInspectPeek.mappingLabel}</span>
-                    <span>{selectedAgentSourceGapInspectPeek.observedAtLabel}</span>
-                    <span>{selectedAgentSourceGapInspectPeek.collectedAtLabel}</span>
+                    {selectedAgentSourceGapInspectPeek ? (
+                      <>
+                        <span className="aitown-selected-agent-peek__source-gap-inspect-label">
+                          {selectedAgentSourceGapInspectPeek.evidenceOnlyLabel}
+                        </span>
+                        <strong>
+                          {`${selectedAgentSourceGapInspectPeek.sourceKindLabel} · ${selectedAgentSourceGapInspectPeek.statusLabel}`}
+                        </strong>
+                        <span>{selectedAgentSourceGapInspectPeek.mappingLabel}</span>
+                        <span>{selectedAgentSourceGapInspectPeek.observedAtLabel}</span>
+                        <span>{selectedAgentSourceGapInspectPeek.collectedAtLabel}</span>
+                      </>
+                    ) : null}
+                    {renderRuntimeSourceGapLifecycleStrip(selectedAgentSourceGapLifecycleStrip)}
                     <button
                       type="button"
                       className="aitown-selected-agent-peek__source-gap-inspect-link"
@@ -3355,21 +3421,26 @@ function AppInner() {
                         ].join(' · ')}
                       </button>
                     ) : null}
-                    {selectedAgentSourceGapInspectPeek ? (
+                    {selectedAgentSourceGapInspectPeek || selectedAgentSourceGapLifecycleStrip ? (
                       <section
                         className="aitown-hub-focus-ribbon__source-gap-inspect"
                         role="region"
                         aria-label="Source gap inspect peek"
                       >
-                        <span className="aitown-hub-focus-ribbon__source-gap-inspect-label">
-                          {selectedAgentSourceGapInspectPeek.evidenceOnlyLabel}
-                        </span>
-                        <strong>
-                          {`${selectedAgentSourceGapInspectPeek.sourceKindLabel} · ${selectedAgentSourceGapInspectPeek.statusLabel}`}
-                        </strong>
-                        <span>{selectedAgentSourceGapInspectPeek.mappingLabel}</span>
-                        <span>{selectedAgentSourceGapInspectPeek.observedAtLabel}</span>
-                        <span>{selectedAgentSourceGapInspectPeek.collectedAtLabel}</span>
+                        {selectedAgentSourceGapInspectPeek ? (
+                          <>
+                            <span className="aitown-hub-focus-ribbon__source-gap-inspect-label">
+                              {selectedAgentSourceGapInspectPeek.evidenceOnlyLabel}
+                            </span>
+                            <strong>
+                              {`${selectedAgentSourceGapInspectPeek.sourceKindLabel} · ${selectedAgentSourceGapInspectPeek.statusLabel}`}
+                            </strong>
+                            <span>{selectedAgentSourceGapInspectPeek.mappingLabel}</span>
+                            <span>{selectedAgentSourceGapInspectPeek.observedAtLabel}</span>
+                            <span>{selectedAgentSourceGapInspectPeek.collectedAtLabel}</span>
+                          </>
+                        ) : null}
+                        {renderRuntimeSourceGapLifecycleStrip(selectedAgentSourceGapLifecycleStrip)}
                         <button
                           type="button"
                           className="aitown-hub-focus-ribbon__source-gap-inspect-link"

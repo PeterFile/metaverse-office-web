@@ -1,6 +1,6 @@
 # Current Direction: Live Evidence Spine
 
-Updated: 2026-05-19T05:14:00+08:00
+Updated: 2026-05-26T23:10:00+08:00
 
 ## Product vision
 
@@ -52,6 +52,21 @@ Every future PR that changes one of these areas must update docs in the same PR:
 - Milestone completion or product direction changes: update this document first, then any historical references that could mislead future agents.
 
 Historical `phase1-*` documents remain useful implementation records. They are not the current roadmap. If a future agent uses a Phase 1 file as authority without checking `docs/current-direction.md`, that is a process bug.
+
+## Delivery gate
+
+Every Live Evidence Spine delivery should be small enough to review and score against this 100-point gate:
+
+- Product fit (20): preserves the evidence-first operator-world boundary and does not add dashboard, Kanban, or control-plane product semantics.
+- Scope control (15): ships the smallest coherent slice, with no unrelated route, API, storage, UI, or roadmap churn.
+- Contract integrity (20): keeps API/storage/event semantics explicit, backward-compatible, and documented in the same PR when they change.
+- Tests and verification (20): includes focused automated coverage or a documented narrow verification path that proves the evidence claim.
+- Documentation durability (15): updates persistent direction/spec/runbook docs when behavior changes, without creating temporary progress markdown.
+- Delivery risk (10): keeps PR size, migration risk, rollout assumptions, and degraded-source behavior obvious to reviewers.
+
+Hard-fail any delivery that adds control-plane/task dispatch semantics, leaks raw refs/paths/tokens, fabricates liveness or productivity, is oversized for review, or changes semantics without matching documentation.
+
+Transient progress belongs in Slack, Linear, or the controller/runtime systems that own that state. Do not add new markdown files for progress logs, temporary roadmaps, or status dumps.
 
 ## Current non-goals
 

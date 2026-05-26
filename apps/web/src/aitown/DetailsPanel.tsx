@@ -1178,9 +1178,20 @@ const SENSITIVE_EVIDENCE_LEDGER_URI_REF_PATTERN = /(?:tmux|hermes|session|profil
 const NON_FILE_URI_EVIDENCE_LEDGER_REF_PATTERN = /[A-Za-z][A-Za-z0-9+.-]*:\/\/[^\s,;)]+/g;
 const LOCAL_EVIDENCE_LEDGER_REF_PATTERN = /(^|[^/])((?:\/(?!\/)[^\s,;:)/]+(?:\/[^\s,;)]+)+)|(?:~\/[^\s,;)]+)|(?:[A-Za-z]:(?![\\/]{2})[\\/][^\s,;)]+))/g;
 
-function formatLocalEvidenceLedgerPathToken(value: string) {
+type EvidenceLedgerLocalPathFormatOptions = {
+  includeBasename?: boolean;
+};
+
+type EvidenceLedgerTokenFormatOptions = {
+  includeLocalPathBasename?: boolean;
+};
+
+function formatLocalEvidenceLedgerPathToken(value: string, options: EvidenceLedgerLocalPathFormatOptions = {}) {
   const trimmed = value.trim().replace(/^file:\/\//, '');
   const basename = trimmed.split(/[\\/]/).filter(Boolean).pop();
+  if (options.includeBasename === false) {
+    return '[local path]';
+  }
   return basename ? `[local path] ${basename}` : '[local path]';
 }
 
@@ -1197,35 +1208,35 @@ function formatSensitiveEvidenceLedgerUriToken(value: string) {
   return null;
 }
 
-function redactLocalEvidenceLedgerPathChunk(value: string) {
+function redactLocalEvidenceLedgerPathChunk(value: string, options: EvidenceLedgerLocalPathFormatOptions = {}) {
   return value.replace(
     LOCAL_EVIDENCE_LEDGER_REF_PATTERN,
     (_match, prefix: string, localRef: string) => (
-      `${prefix}${formatLocalEvidenceLedgerPathToken(localRef)}`
+      `${prefix}${formatLocalEvidenceLedgerPathToken(localRef, options)}`
     )
   );
 }
 
-function redactLocalEvidenceLedgerRefs(value: string) {
+function redactLocalEvidenceLedgerRefs(value: string, options: EvidenceLedgerLocalPathFormatOptions = {}) {
   const sensitiveUriRefsRedacted = value.replace(
     SENSITIVE_EVIDENCE_LEDGER_URI_REF_PATTERN,
     (match) => formatSensitiveEvidenceLedgerUriToken(match) ?? match
   );
   const fileRefsRedacted = sensitiveUriRefsRedacted.replace(
     FILE_EVIDENCE_LEDGER_REF_PATTERN,
-    (match) => formatLocalEvidenceLedgerPathToken(match)
+    (match) => formatLocalEvidenceLedgerPathToken(match, options)
   );
 
   let cursor = 0;
   let redacted = '';
   for (const match of fileRefsRedacted.matchAll(NON_FILE_URI_EVIDENCE_LEDGER_REF_PATTERN)) {
     const matchIndex = match.index ?? 0;
-    redacted += redactLocalEvidenceLedgerPathChunk(fileRefsRedacted.slice(cursor, matchIndex));
+    redacted += redactLocalEvidenceLedgerPathChunk(fileRefsRedacted.slice(cursor, matchIndex), options);
     redacted += match[0];
     cursor = matchIndex + match[0].length;
   }
 
-  redacted += redactLocalEvidenceLedgerPathChunk(fileRefsRedacted.slice(cursor));
+  redacted += redactLocalEvidenceLedgerPathChunk(fileRefsRedacted.slice(cursor), options);
   return redacted;
 }
 
@@ -1233,9 +1244,11 @@ function redactSensitiveEvidenceLedgerToken(value: string) {
   return value.replace(SENSITIVE_EVIDENCE_LEDGER_TOKEN_PATTERN, '[redacted]');
 }
 
-function formatBoundedEvidenceLedgerToken(value: string) {
+function formatBoundedEvidenceLedgerToken(value: string, options: EvidenceLedgerTokenFormatOptions = {}) {
   const normalized = value.trim();
-  const redacted = redactSensitiveEvidenceLedgerToken(redactLocalEvidenceLedgerRefs(normalized));
+  const redacted = redactSensitiveEvidenceLedgerToken(
+    redactLocalEvidenceLedgerRefs(normalized, { includeBasename: options.includeLocalPathBasename ?? true })
+  );
   if (redacted.length <= EVIDENCE_LEDGER_TOKEN_LIMIT) {
     return redacted;
   }
@@ -1572,7 +1585,7 @@ function renderSelectedAgentEvidenceProvenanceAnchors(
       ) : null}
       {source ? (
         <span>
-          {`Source anchor · ${formatBoundedEvidenceLedgerToken(source.evidence_id)} · ${source.source_kind} · ${source.evidence_role ?? 'unclassified'} · ${source.source_status ?? 'unknown'}`}
+          {`Source anchor · ${formatBoundedEvidenceLedgerToken(source.evidence_id, { includeLocalPathBasename: false })} · ${source.source_kind} · ${source.evidence_role ?? 'unclassified'} · ${source.source_status ?? 'unknown'}`}
         </span>
       ) : null}
       {replay && replayAnchorLabel ? (

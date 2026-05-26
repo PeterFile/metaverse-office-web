@@ -1950,7 +1950,7 @@ describe('DetailsPanel selected-agent workflow lifecycle', () => {
       within(section!).getByText(/Snapshot anchor · collector-snapshot-20260316-with-a-very-long-\[redacted\]/)
     ).toBeVisible();
     expect(
-      within(section!).getByText(/Source anchor · output-1:\[local path\] outbox\.md:\[redacted\] · workspace_file · agent_output · observed/)
+      within(section!).getByText(/Source anchor · output-1:\[local path\] · workspace_file · agent_output · observed/)
     ).toBeVisible();
     expect(within(section!).getByText(/Replay anchor · corr-app-review-with-\[redacted\]/)).toBeVisible();
     expect(section!).not.toHaveTextContent('/tmp/app/outbox.md');
@@ -2159,10 +2159,11 @@ describe('DetailsPanel selected-agent workflow lifecycle', () => {
     expect(section).not.toBeNull();
     expect(
       within(section!).getByText(
-        /Source anchor · \[tmux ref\] \[runtime ref\] \[runtime ref\] \[runtime ref\] \[local path\] (?:note\.md|not\.\.\.) · tmux_observation · runtime_unmapped · observed/
+        /Source anchor · \[tmux ref\] \[runtime ref\] \[runtime ref\] \[runtime ref\] \[local path\] · tmux_observation · runtime_unmapped · observed/
       )
     ).toBeVisible();
     expect(section!).not.toHaveTextContent('/Users/cwp/private/note.md');
+    expect(section!).not.toHaveTextContent('note.md');
     expect(section!).not.toHaveTextContent('tmux://session/window/pane');
     expect(section!).not.toHaveTextContent('hermes://session/hermes-session-app');
     expect(section!).not.toHaveTextContent('profile://profile-app');

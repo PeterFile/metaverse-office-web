@@ -6504,6 +6504,12 @@ test('GET evidence and source read routes keep JSONL and SQLite parity', async (
     '/storage/replay-manifest'
   );
   assert.deepEqual(sqliteStorageManifest, jsonlStorageManifest);
+  assert.deepEqual(Object.keys(jsonlStorageManifest), ['item']);
+  assert.deepEqual(Object.keys(jsonlStorageManifest.item), [
+    'record_count',
+    'record_kind_buckets',
+    'canonical_record_hash'
+  ]);
   assert.deepEqual(
     {
       ...jsonlStorageManifest.item,
@@ -6521,11 +6527,22 @@ test('GET evidence and source read routes keep JSONL and SQLite parity', async (
     }
   );
   assert.match(jsonlStorageManifest.item.canonical_record_hash, /^[a-f0-9]{64}$/);
-  assert.equal(JSON.stringify(jsonlStorageManifest).includes('/tmp/route-parity'), false);
-  assert.equal(JSON.stringify(jsonlStorageManifest).includes('route-parity'), false);
-  assert.equal(JSON.stringify(jsonlStorageManifest).includes('tmux://'), false);
-  assert.equal(JSON.stringify(jsonlStorageManifest).includes('payload'), false);
-  assert.equal(JSON.stringify(jsonlStorageManifest).includes('metadata'), false);
+  const serializedStorageManifest = JSON.stringify(jsonlStorageManifest);
+  for (const unsafeFragment of [
+    '/tmp',
+    '/Users',
+    '/Volumes',
+    'route-parity',
+    'tmux://',
+    'evidence_ref',
+    'payload',
+    'metadata',
+    'token',
+    'webhook',
+    'degraded_reasons'
+  ]) {
+    assert.equal(serializedStorageManifest.includes(unsafeFragment), false, unsafeFragment);
+  }
 
   const [jsonlReplayCheckpointLog, sqliteReplayCheckpointLog] = await parityRequest(
     '/accountability/replay/checkpoint-log?limit=3'

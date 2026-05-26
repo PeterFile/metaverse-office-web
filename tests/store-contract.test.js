@@ -592,7 +592,16 @@ test('prototype store exposes deterministic sanitized storage replay manifest', 
   const reloadedStore = await createPrototypeStore({ filePath: storeFile });
   assert.deepEqual(reloadedStore.getStorageReplayManifest(), manifest);
 
-  const makeRawManifestStore = async ({ rawKind, evidenceRef, tmuxRef, metadataValue }) => {
+  const makeRawManifestStore = async ({
+    rawKind,
+    evidenceRef,
+    tmuxRef,
+    metadataValue,
+    localUserPath,
+    localVolumePath,
+    tokenValue,
+    webhookValue
+  }) => {
     const rawStoreFile = await createStoreFile();
     const records = [
       {
@@ -604,8 +613,8 @@ test('prototype store exposes deterministic sanitized storage replay manifest', 
           event_type: 'review_started',
           correlation_id: 'corr-storage-manifest',
           source_kind: 'controller_event',
-          evidence_refs: [evidenceRef, tmuxRef],
-          metadata: { canary: metadataValue }
+          evidence_refs: [evidenceRef, tmuxRef, localUserPath, localVolumePath],
+          metadata: { canary: metadataValue, token: tokenValue, webhook: webhookValue }
         }
       },
       {
@@ -621,8 +630,8 @@ test('prototype store exposes deterministic sanitized storage replay manifest', 
           collector_snapshot_id: 'collector-snapshot:2026-03-09T18:07:20.000Z',
           correlation_id: 'corr-storage-manifest',
           evidence_ref: evidenceRef,
-          metadata: { canary: metadataValue },
-          degraded_reasons: [tmuxRef]
+          metadata: { canary: metadataValue, token: tokenValue, webhook: webhookValue },
+          degraded_reasons: [tmuxRef, localUserPath, localVolumePath]
         }
       },
       {
@@ -632,12 +641,12 @@ test('prototype store exposes deterministic sanitized storage replay manifest', 
           actor_id: 'team-lead',
           items: [
             {
-              evidence_refs: [evidenceRef, tmuxRef],
+              evidence_refs: [evidenceRef, tmuxRef, localUserPath, localVolumePath],
               source_health: {
                 workspace_root: {
                   status: 'degraded',
-                  path: evidenceRef,
-                  degraded_reasons: [metadataValue]
+                  path: localVolumePath,
+                  degraded_reasons: [metadataValue, tokenValue, webhookValue]
                 }
               }
             }
@@ -648,7 +657,8 @@ test('prototype store exposes deterministic sanitized storage replay manifest', 
         kind: rawKind,
         payload: {
           evidence_ref: evidenceRef,
-          metadata: { canary: metadataValue }
+          payload: { nested_path: localUserPath },
+          metadata: { canary: metadataValue, token: tokenValue, webhook: webhookValue }
         }
       }
     ];
@@ -660,13 +670,21 @@ test('prototype store exposes deterministic sanitized storage replay manifest', 
     rawKind: '/tmp/manifest-kind-a',
     evidenceRef: '/tmp/manifest-a/outbox.md',
     tmuxRef: 'tmux://manifest-a/0.1',
-    metadataValue: 'metadata-a'
+    metadataValue: 'metadata-a',
+    localUserPath: '/Users/alice/manifest-a/secret.md',
+    localVolumePath: '/Volumes/HDD/manifest-a/secret.md',
+    tokenValue: 'token=manifest-a-secret',
+    webhookValue: 'https://hooks.example.test/manifest-a'
   });
   const unsafeB = await makeRawManifestStore({
     rawKind: 'tmux://manifest-kind-b/0.1',
     evidenceRef: '/tmp/manifest-b/outbox.md',
     tmuxRef: 'tmux://manifest-b/0.1',
-    metadataValue: 'metadata-b'
+    metadataValue: 'metadata-b',
+    localUserPath: '/Users/bob/manifest-b/secret.md',
+    localVolumePath: '/Volumes/HDD/manifest-b/secret.md',
+    tokenValue: 'token=manifest-b-secret',
+    webhookValue: 'https://hooks.example.test/manifest-b'
   });
   const unsafeManifestA = unsafeA.getStorageReplayManifest();
   assert.deepEqual(unsafeManifestA.record_kind_buckets, {
@@ -678,9 +696,16 @@ test('prototype store exposes deterministic sanitized storage replay manifest', 
   assert.equal(unsafeB.getStorageReplayManifest().canonical_record_hash, unsafeManifestA.canonical_record_hash);
   const unsafeSerialized = JSON.stringify(unsafeManifestA);
   assert.equal(unsafeSerialized.includes('/tmp/manifest'), false);
+  assert.equal(unsafeSerialized.includes('/Users/'), false);
+  assert.equal(unsafeSerialized.includes('/Volumes/'), false);
   assert.equal(unsafeSerialized.includes('tmux://manifest'), false);
   assert.equal(unsafeSerialized.includes('metadata-a'), false);
+  assert.equal(unsafeSerialized.includes('token='), false);
+  assert.equal(unsafeSerialized.includes('webhook'), false);
+  assert.equal(unsafeSerialized.includes('hooks.example.test'), false);
   assert.equal(unsafeSerialized.includes('evidence_ref'), false);
+  assert.equal(unsafeSerialized.includes('payload'), false);
+  assert.equal(unsafeSerialized.includes('degraded_reasons'), false);
 });
 
 test('prototype store exposes bounded sanitized replay checkpoint log that survives reload', async () => {

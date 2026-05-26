@@ -3,6 +3,26 @@ const http = require('node:http');
 const { getAgentById, validateEventPayload, validateHeartbeatPayload } = require('./domain');
 const { createControllerSnapshotCollector } = require('./collectors/controller-snapshot');
 
+function getSourceEvidenceQuery(searchParams, { sourceStatusAlias = false } = {}) {
+  const sourceStatus = searchParams.get('source_status');
+
+  return {
+    source_kind: searchParams.get('source_kind'),
+    evidence_role: searchParams.get('evidence_role'),
+    output_candidate: searchParams.get('output_candidate'),
+    source_status: sourceStatusAlias ? sourceStatus || searchParams.get('status') : sourceStatus,
+    collector_snapshot_id: searchParams.get('collector_snapshot_id'),
+    correlation_id: searchParams.get('correlation_id'),
+    mapped: searchParams.get('mapped'),
+    observed_since: searchParams.get('observed_since'),
+    observed_until: searchParams.get('observed_until'),
+    collected_since: searchParams.get('collected_since'),
+    collected_until: searchParams.get('collected_until'),
+    newest_first: searchParams.get('newest_first'),
+    limit: searchParams.get('limit')
+  };
+}
+
 function createAppServer({
   store,
   now = () => new Date().toISOString(),
@@ -184,21 +204,10 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
   const agentEvidenceSpineMatch = pathname.match(/^\/agents\/([^/]+)\/evidence-spine$/);
   if (method === 'GET' && agentEvidenceSpineMatch) {
     const agentId = decodeURIComponent(agentEvidenceSpineMatch[1]);
-    const item = store.getAgentEvidenceSpine(agentId, {
-      source_kind: url.searchParams.get('source_kind'),
-      evidence_role: url.searchParams.get('evidence_role'),
-      output_candidate: url.searchParams.get('output_candidate'),
-      source_status: url.searchParams.get('source_status') || url.searchParams.get('status'),
-      collector_snapshot_id: url.searchParams.get('collector_snapshot_id'),
-      correlation_id: url.searchParams.get('correlation_id'),
-      mapped: url.searchParams.get('mapped'),
-      observed_since: url.searchParams.get('observed_since'),
-      observed_until: url.searchParams.get('observed_until'),
-      collected_since: url.searchParams.get('collected_since'),
-      collected_until: url.searchParams.get('collected_until'),
-      newest_first: url.searchParams.get('newest_first'),
-      limit: url.searchParams.get('limit')
-    });
+    const item = store.getAgentEvidenceSpine(
+      agentId,
+      getSourceEvidenceQuery(url.searchParams, { sourceStatusAlias: true })
+    );
 
     if (!item) {
       sendJson(res, 404, {
@@ -458,20 +467,8 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
       items: store.listEvidenceRecords({
         evidence_id: url.searchParams.get('evidence_id'),
         agent_id: url.searchParams.get('agent_id'),
-        source_kind: url.searchParams.get('source_kind'),
-        evidence_role: url.searchParams.get('evidence_role'),
-        output_candidate: url.searchParams.get('output_candidate'),
         evidence_ref: url.searchParams.get('evidence_ref'),
-        source_status: url.searchParams.get('source_status'),
-        collector_snapshot_id: url.searchParams.get('collector_snapshot_id'),
-        correlation_id: url.searchParams.get('correlation_id'),
-        mapped: url.searchParams.get('mapped'),
-        observed_since: url.searchParams.get('observed_since'),
-        observed_until: url.searchParams.get('observed_until'),
-        collected_since: url.searchParams.get('collected_since'),
-        collected_until: url.searchParams.get('collected_until'),
-        newest_first: url.searchParams.get('newest_first'),
-        limit: url.searchParams.get('limit')
+        ...getSourceEvidenceQuery(url.searchParams)
       })
     });
     return;
@@ -482,19 +479,7 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
       items: store.listRuntimeSourceGaps({
         evidence_id: url.searchParams.get('evidence_id'),
         agent_id: url.searchParams.get('agent_id'),
-        source_kind: url.searchParams.get('source_kind'),
-        evidence_role: url.searchParams.get('evidence_role'),
-        output_candidate: url.searchParams.get('output_candidate'),
-        source_status: url.searchParams.get('source_status'),
-        collector_snapshot_id: url.searchParams.get('collector_snapshot_id'),
-        correlation_id: url.searchParams.get('correlation_id'),
-        mapped: url.searchParams.get('mapped'),
-        observed_since: url.searchParams.get('observed_since'),
-        observed_until: url.searchParams.get('observed_until'),
-        collected_since: url.searchParams.get('collected_since'),
-        collected_until: url.searchParams.get('collected_until'),
-        newest_first: url.searchParams.get('newest_first'),
-        limit: url.searchParams.get('limit')
+        ...getSourceEvidenceQuery(url.searchParams)
       })
     });
     return;
@@ -505,19 +490,7 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
       item: store.getRuntimeSourceGapsSummary({
         evidence_id: url.searchParams.get('evidence_id'),
         agent_id: url.searchParams.get('agent_id'),
-        source_kind: url.searchParams.get('source_kind'),
-        evidence_role: url.searchParams.get('evidence_role'),
-        output_candidate: url.searchParams.get('output_candidate'),
-        source_status: url.searchParams.get('source_status'),
-        collector_snapshot_id: url.searchParams.get('collector_snapshot_id'),
-        correlation_id: url.searchParams.get('correlation_id'),
-        mapped: url.searchParams.get('mapped'),
-        observed_since: url.searchParams.get('observed_since'),
-        observed_until: url.searchParams.get('observed_until'),
-        collected_since: url.searchParams.get('collected_since'),
-        collected_until: url.searchParams.get('collected_until'),
-        newest_first: url.searchParams.get('newest_first'),
-        limit: url.searchParams.get('limit')
+        ...getSourceEvidenceQuery(url.searchParams)
       })
     });
     return;
@@ -528,19 +501,7 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
       item: store.getRuntimeSourceGapAgentSummary({
         evidence_id: url.searchParams.get('evidence_id'),
         agent_id: url.searchParams.get('agent_id'),
-        source_kind: url.searchParams.get('source_kind'),
-        evidence_role: url.searchParams.get('evidence_role'),
-        output_candidate: url.searchParams.get('output_candidate'),
-        source_status: url.searchParams.get('source_status'),
-        collector_snapshot_id: url.searchParams.get('collector_snapshot_id'),
-        correlation_id: url.searchParams.get('correlation_id'),
-        mapped: url.searchParams.get('mapped'),
-        observed_since: url.searchParams.get('observed_since'),
-        observed_until: url.searchParams.get('observed_until'),
-        collected_since: url.searchParams.get('collected_since'),
-        collected_until: url.searchParams.get('collected_until'),
-        newest_first: url.searchParams.get('newest_first'),
-        limit: url.searchParams.get('limit')
+        ...getSourceEvidenceQuery(url.searchParams)
       })
     });
     return;
@@ -551,19 +512,7 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
       item: store.getRuntimeSourceGapLifecycle({
         evidence_id: url.searchParams.get('evidence_id'),
         agent_id: url.searchParams.get('agent_id'),
-        source_kind: url.searchParams.get('source_kind'),
-        evidence_role: url.searchParams.get('evidence_role'),
-        output_candidate: url.searchParams.get('output_candidate'),
-        source_status: url.searchParams.get('source_status'),
-        collector_snapshot_id: url.searchParams.get('collector_snapshot_id'),
-        correlation_id: url.searchParams.get('correlation_id'),
-        mapped: url.searchParams.get('mapped'),
-        observed_since: url.searchParams.get('observed_since'),
-        observed_until: url.searchParams.get('observed_until'),
-        collected_since: url.searchParams.get('collected_since'),
-        collected_until: url.searchParams.get('collected_until'),
-        newest_first: url.searchParams.get('newest_first'),
-        limit: url.searchParams.get('limit')
+        ...getSourceEvidenceQuery(url.searchParams)
       })
     });
     return;
@@ -574,20 +523,8 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
       item: store.getRuntimeSourceGapTrend({
         evidence_id: url.searchParams.get('evidence_id'),
         agent_id: url.searchParams.get('agent_id'),
-        source_kind: url.searchParams.get('source_kind'),
-        evidence_role: url.searchParams.get('evidence_role'),
-        output_candidate: url.searchParams.get('output_candidate'),
-        source_status: url.searchParams.get('source_status'),
-        collector_snapshot_id: url.searchParams.get('collector_snapshot_id'),
-        correlation_id: url.searchParams.get('correlation_id'),
-        mapped: url.searchParams.get('mapped'),
-        observed_since: url.searchParams.get('observed_since'),
-        observed_until: url.searchParams.get('observed_until'),
-        collected_since: url.searchParams.get('collected_since'),
-        collected_until: url.searchParams.get('collected_until'),
-        newest_first: url.searchParams.get('newest_first'),
-        bucket: url.searchParams.get('bucket'),
-        limit: url.searchParams.get('limit')
+        ...getSourceEvidenceQuery(url.searchParams),
+        bucket: url.searchParams.get('bucket')
       })
     });
     return;
@@ -598,20 +535,8 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
       item: store.getEvidenceRecordFacets({
         evidence_id: url.searchParams.get('evidence_id'),
         agent_id: url.searchParams.get('agent_id'),
-        source_kind: url.searchParams.get('source_kind'),
-        evidence_role: url.searchParams.get('evidence_role'),
-        output_candidate: url.searchParams.get('output_candidate'),
         evidence_ref: url.searchParams.get('evidence_ref'),
-        source_status: url.searchParams.get('source_status'),
-        collector_snapshot_id: url.searchParams.get('collector_snapshot_id'),
-        correlation_id: url.searchParams.get('correlation_id'),
-        mapped: url.searchParams.get('mapped'),
-        observed_since: url.searchParams.get('observed_since'),
-        observed_until: url.searchParams.get('observed_until'),
-        collected_since: url.searchParams.get('collected_since'),
-        collected_until: url.searchParams.get('collected_until'),
-        newest_first: url.searchParams.get('newest_first'),
-        limit: url.searchParams.get('limit')
+        ...getSourceEvidenceQuery(url.searchParams)
       })
     });
     return;
@@ -622,20 +547,8 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
       item: store.getEvidenceRecordsSummary({
         evidence_id: url.searchParams.get('evidence_id'),
         agent_id: url.searchParams.get('agent_id'),
-        source_kind: url.searchParams.get('source_kind'),
-        evidence_role: url.searchParams.get('evidence_role'),
-        output_candidate: url.searchParams.get('output_candidate'),
         evidence_ref: url.searchParams.get('evidence_ref'),
-        source_status: url.searchParams.get('source_status'),
-        collector_snapshot_id: url.searchParams.get('collector_snapshot_id'),
-        correlation_id: url.searchParams.get('correlation_id'),
-        mapped: url.searchParams.get('mapped'),
-        observed_since: url.searchParams.get('observed_since'),
-        observed_until: url.searchParams.get('observed_until'),
-        collected_since: url.searchParams.get('collected_since'),
-        collected_until: url.searchParams.get('collected_until'),
-        newest_first: url.searchParams.get('newest_first'),
-        limit: url.searchParams.get('limit')
+        ...getSourceEvidenceQuery(url.searchParams)
       })
     });
     return;
@@ -646,20 +559,8 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
       item: store.getEvidenceRefRollup({
         evidence_id: url.searchParams.get('evidence_id'),
         agent_id: url.searchParams.get('agent_id'),
-        source_kind: url.searchParams.get('source_kind'),
-        evidence_role: url.searchParams.get('evidence_role'),
-        output_candidate: url.searchParams.get('output_candidate'),
         evidence_ref: url.searchParams.get('evidence_ref'),
-        source_status: url.searchParams.get('source_status'),
-        collector_snapshot_id: url.searchParams.get('collector_snapshot_id'),
-        correlation_id: url.searchParams.get('correlation_id'),
-        mapped: url.searchParams.get('mapped'),
-        observed_since: url.searchParams.get('observed_since'),
-        observed_until: url.searchParams.get('observed_until'),
-        collected_since: url.searchParams.get('collected_since'),
-        collected_until: url.searchParams.get('collected_until'),
-        newest_first: url.searchParams.get('newest_first'),
-        limit: url.searchParams.get('limit')
+        ...getSourceEvidenceQuery(url.searchParams)
       })
     });
     return;

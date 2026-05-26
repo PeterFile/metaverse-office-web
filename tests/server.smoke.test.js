@@ -13,7 +13,7 @@ const {
   createHermesRuntimeSourcesFileReader
 } = require('../src/collectors/controller-snapshot');
 const { SEED_AGENTS } = require('../src/domain');
-const { createAppServer } = require('../src/server');
+const { createAppServer, formatPublicError } = require('../src/server');
 const { createPrototypeStore } = require('../src/store/prototype-store');
 const { taskEvidenceFileReaderFrom } = require('../src/collectors/task-evidence-source');
 
@@ -74,6 +74,51 @@ async function requestJson(url, init) {
   const body = await response.json();
   return { response, body };
 }
+
+test('server error redaction bounds unexpected internal details while preserving safe public errors', () => {
+  const unexpected = formatPublicError(
+    new Error(
+      [
+        'runtime exploded',
+        '/Users/alice/private/runtime.json',
+        'file:///tmp/private/runtime.json',
+        'tmux://private-session/0.0',
+        'hermes://profile/private-runtime',
+        'session_ref=private-session',
+        'profile_id=private-profile',
+        'token=collector-secret',
+        '{"raw_payload":true}'
+      ].join(' ')
+    )
+  );
+
+  assert.deepEqual(unexpected, {
+    statusCode: 500,
+    error: 'internal_error',
+    details: 'internal_error'
+  });
+
+  const invalidJson = new Error('Unexpected token');
+  invalidJson.statusCode = 400;
+  invalidJson.publicMessage = 'invalid_json';
+  invalidJson.publicDetails = 'invalid_json';
+  assert.deepEqual(formatPublicError(invalidJson), {
+    statusCode: 400,
+    error: 'invalid_json',
+    details: 'invalid_json'
+  });
+
+  assert.deepEqual(
+    formatPublicError(
+      new Error('Invalid Hermes runtime source fact at Hermes runtime source input 1 record 1: invalid status')
+    ),
+    {
+      statusCode: 500,
+      error: 'internal_error',
+      details: 'Invalid Hermes runtime source fact at Hermes runtime source input 1 record 1: invalid status'
+    }
+  );
+});
 
 function createEvent({
   eventId,
@@ -4449,6 +4494,20 @@ test('GET /correlations/:correlation_id keeps full interaction counts when slice
 test('write endpoints reject missing headers, invalid payloads, and actor-boundary violations', async (t) => {
   const { baseUrl } = await createHarness(t);
 
+  const invalidJson = await requestJson(`${baseUrl}/events`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-actor-id': 'team-lead'
+    },
+    body: '{"/tmp/private/token=invalid-json"'
+  });
+
+  assert.equal(invalidJson.response.status, 400);
+  assert.equal(invalidJson.body.error, 'invalid_json');
+  assert.equal(invalidJson.body.details.includes('/tmp/private'), false);
+  assert.equal(invalidJson.body.details.includes('token='), false);
+
   const missingActor = await requestJson(`${baseUrl}/events`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -4918,6 +4977,49 @@ test('collector snapshot rejects unsafe task evidence file paths before append',
   assert.equal(collected.body.details.includes(root), false);
   assert.equal(collected.body.details.includes('/tmp/private'), false);
   assert.equal(collected.body.details.includes('token='), false);
+  await assert.rejects(() => readFile(storeFile, 'utf8'), { code: 'ENOENT' });
+});
+
+test('collector snapshot error redaction hides unexpected internal failures before append', async (t) => {
+  const controllerSnapshotCollector = {
+    async collectSnapshot() {
+      throw new Error(
+        [
+          'runtime exploded',
+          '/Users/alice/private/runtime.json',
+          'file:///tmp/private/runtime.json',
+          'tmux://private-session/0.0',
+          'hermes://profile/private-runtime',
+          'session_ref=private-session',
+          'profile_id=private-profile',
+          'token=collector-secret',
+          '{"raw_payload":true}'
+        ].join(' ')
+      );
+    }
+  };
+  const { baseUrl, store, storeFile } = await createHarness(t, { controllerSnapshotCollector });
+  const beforeCounts = store.getCounts();
+
+  const collected = await requestJson(`${baseUrl}/collectors/controller-snapshot`, {
+    method: 'POST',
+    headers: {
+      'x-actor-id': 'team-lead'
+    }
+  });
+
+  assert.equal(collected.response.status, 500);
+  assert.equal(collected.body.error, 'internal_error');
+  assert.equal(collected.body.details, 'internal_error');
+  assert.deepEqual(store.getCounts(), beforeCounts);
+  assert.equal(JSON.stringify(collected.body).includes('/Users/alice'), false);
+  assert.equal(JSON.stringify(collected.body).includes('file://'), false);
+  assert.equal(JSON.stringify(collected.body).includes('tmux://'), false);
+  assert.equal(JSON.stringify(collected.body).includes('hermes://'), false);
+  assert.equal(JSON.stringify(collected.body).includes('private-session'), false);
+  assert.equal(JSON.stringify(collected.body).includes('private-profile'), false);
+  assert.equal(JSON.stringify(collected.body).includes('token='), false);
+  assert.equal(JSON.stringify(collected.body).includes('raw_payload'), false);
   await assert.rejects(() => readFile(storeFile, 'utf8'), { code: 'ENOENT' });
 });
 

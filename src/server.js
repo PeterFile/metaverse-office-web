@@ -3,6 +3,9 @@ const http = require('node:http');
 const { getAgentById, validateEventPayload, validateHeartbeatPayload } = require('./domain');
 const { createControllerSnapshotCollector } = require('./collectors/controller-snapshot');
 
+const INTERNAL_ERROR_DETAIL = 'internal_error';
+const MAX_PUBLIC_ERROR_DETAIL_LENGTH = 200;
+
 function getSourceEvidenceQuery(searchParams, { sourceStatusAlias = false } = {}) {
   const sourceStatus = searchParams.get('source_status');
 
@@ -31,9 +34,10 @@ function createAppServer({
 }) {
   return http.createServer((req, res) => {
     handleRequest({ req, res, store, now, controllerSnapshotCollector, allowedOrigins }).catch((error) => {
-      sendJson(res, error.statusCode || 500, {
-        error: error.publicMessage || 'internal_error',
-        details: error.details || error.message
+      const publicError = formatPublicError(error);
+      sendJson(res, publicError.statusCode, {
+        error: publicError.error,
+        details: publicError.details
       });
     });
   });
@@ -762,8 +766,117 @@ async function readJsonBody(req) {
   } catch (error) {
     error.statusCode = 400;
     error.publicMessage = 'invalid_json';
+    error.publicDetails = 'invalid_json';
     throw error;
   }
+}
+
+function formatPublicError(error) {
+  const statusCode = normalizeStatusCode(error?.statusCode);
+
+  if (statusCode < 500) {
+    const publicError = sanitizePublicErrorLabel(error?.publicMessage) || 'bad_request';
+    const details = sanitizePublicErrorDetails(error?.publicDetails || error?.details || error?.message);
+    return {
+      statusCode,
+      error: publicError,
+      details: hasPublicErrorLeak(details) ? publicError : details || publicError
+    };
+  }
+
+  const knownDetails = sanitizeKnownInternalErrorDetails(error?.publicDetails || error?.message);
+  return {
+    statusCode,
+    error: 'internal_error',
+    details: knownDetails || INTERNAL_ERROR_DETAIL
+  };
+}
+
+function normalizeStatusCode(statusCode) {
+  return Number.isInteger(statusCode) && statusCode >= 400 && statusCode <= 599
+    ? statusCode
+    : 500;
+}
+
+function sanitizePublicErrorLabel(value) {
+  const label = typeof value === 'string' ? value.trim() : '';
+  return /^[a-z][a-z0-9_]{0,63}$/.test(label) ? label : null;
+}
+
+function sanitizeKnownInternalErrorDetails(value) {
+  if (!isKnownSafeInternalError(value)) {
+    return null;
+  }
+
+  const details = sanitizeKnownInternalDetails(value);
+  return hasPublicErrorLeak(details) ? null : details;
+}
+
+function isKnownSafeInternalError(value) {
+  if (typeof value !== 'string') {
+    return false;
+  }
+
+  return (
+    value.startsWith('Invalid task evidence input:') ||
+    value.startsWith('Invalid Hermes runtime source') ||
+    value.startsWith('Invalid Hermes runtime sources') ||
+    value.startsWith('Unable to stat Hermes runtime source input ') ||
+    value.startsWith('Unable to read Hermes runtime sources file') ||
+    value.startsWith('Hermes runtime source input ') ||
+    value.startsWith('Hermes runtime sources file ')
+  );
+}
+
+function sanitizeKnownInternalDetails(value) {
+  const details = sanitizePublicErrorDetails(value);
+  if (typeof details !== 'string') {
+    return '';
+  }
+
+  return details
+    .replace(/\b(?:file|tmux|hermes):\/\/\S+/gi, '[redacted-uri]')
+    .replace(/\bhttps?:\/\/\S+/gi, '[redacted-uri]')
+    .replace(/(?:^|\s)(?:\/Users\/|\/Volumes\/|\/private\/|\/tmp\/|~\/)[^\s,;)]+/g, ' [redacted-path]')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function sanitizePublicErrorDetails(value) {
+  if (Array.isArray(value)) {
+    return value.map(sanitizePublicErrorDetails).filter(Boolean);
+  }
+
+  if (value && typeof value === 'object') {
+    return INTERNAL_ERROR_DETAIL;
+  }
+
+  const details = typeof value === 'string' ? value.replace(/\s+/g, ' ').trim() : '';
+  if (!details) {
+    return '';
+  }
+
+  return details.slice(0, MAX_PUBLIC_ERROR_DETAIL_LENGTH);
+}
+
+function hasPublicErrorLeak(value) {
+  if (Array.isArray(value)) {
+    return value.some(hasPublicErrorLeak);
+  }
+
+  if (typeof value !== 'string') {
+    return false;
+  }
+
+  return (
+    /(?:^|[\s"'(])(?:\/Users\/|\/Volumes\/|\/private\/|\/tmp\/|~\/|[A-Za-z]:\\)/.test(value) ||
+    /\b(?:file|tmux|hermes|https?):\/\//i.test(value) ||
+    /\b(?:session|profile)_(?:id|ref)\b/i.test(value) ||
+    /\b(?:token|webhook|callback|secret|api[_-]?key|authorization|bearer)\b\s*[:=]/i.test(value) ||
+    /\braw[_-]?payload\b/i.test(value) ||
+    /\b(?:control[_-]?plane|append(?:ed)?|write|delete|update)\b/i.test(value) ||
+    /[{}]/.test(value)
+  );
 }
 
 function sendJson(res, statusCode, payload) {
@@ -775,6 +888,7 @@ function sendJson(res, statusCode, payload) {
 
 module.exports = {
   createAppServer,
+  formatPublicError,
   handleRequest,
   readJsonBody,
   sendJson

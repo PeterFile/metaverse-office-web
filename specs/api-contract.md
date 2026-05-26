@@ -58,6 +58,7 @@ This is the current API/read-model contract for Metaverse Office Web. It grew ou
 - event location is system-derived from event/state mapping; callers must not control office placement
 - `agent_received_task` remains queryable through the existing read models but does not advance `last_meaningful_output_at`; staleness still derives from real agent output/heartbeat evidence
 - `POST /events` validates source provenance at the write boundary: `controller_event` requires the team lead actor, `workspace_file` requires non-empty non-`tmux://` `evidence_ref` values and rejects `tmux://` refs, `tmux_observation` requires canonical `tmux://` `evidence_ref` values without boundary whitespace and rejects non-tmux refs, and `raw_transcript` requires a non-empty `evidence_ref`; refs are never inferred from metadata
+- public write and collector API errors preserve intentional 4xx labels such as `invalid_json` and `validation_failed`, but unexpected 5xx responses return bounded public details and must not expose local paths, URI refs, session/profile refs, token/webhook/callback-shaped values, raw payloads, or control-plane internals
 
 ## Storage contract
 - The default append-only store remains JSONL at `data/prototype-store.jsonl`, or `METAVERSE_OFFICE_STORE_FILE` when set.

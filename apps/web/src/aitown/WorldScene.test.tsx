@@ -242,6 +242,7 @@ vi.mock('pixi-viewport', () => ({
     worldHeight: number;
     screenWorldWidth: number;
     screenWorldHeight: number;
+    clampBounds?: { left: number; right: number; top: number; bottom: number };
     plugins = {
       remove: (_name: string) => {}
     };
@@ -276,7 +277,14 @@ vi.mock('pixi-viewport', () => ({
       return this;
     }
 
-    clamp(_options: unknown) {
+    clamp(options: { left?: number; right?: number; top?: number; bottom?: number }) {
+      this.clampBounds = {
+        left: options.left ?? 0,
+        right: options.right ?? this.worldWidth,
+        top: options.top ?? 0,
+        bottom: options.bottom ?? this.worldHeight
+      };
+      this.updateBounds();
       return this;
     }
 
@@ -307,16 +315,11 @@ vi.mock('pixi-viewport', () => ({
     }
 
     moveCorner(x: number, y: number) {
-      this.left = x;
-      this.top = y;
-      this.right = x + this.screenWorldWidth;
-      this.bottom = y + this.screenWorldHeight;
       this.center = {
         x: x + this.screenWorldWidth / 2,
         y: y + this.screenWorldHeight / 2
       };
-      this.x = x;
-      this.y = y;
+      this.updateBounds();
       return this;
     }
 
@@ -324,12 +327,21 @@ vi.mock('pixi-viewport', () => ({
       const scale = this.scale.x || 1;
       this.screenWorldWidth = this.screenWidth / scale;
       this.screenWorldHeight = this.screenHeight / scale;
-      this.left = this.center.x - this.screenWorldWidth / 2;
-      this.top = this.center.y - this.screenWorldHeight / 2;
+      const unclampedLeft = this.center.x - this.screenWorldWidth / 2;
+      const unclampedTop = this.center.y - this.screenWorldHeight / 2;
+      const bounds = this.clampBounds;
+      const maxLeft = Math.max(bounds ? bounds.right - this.screenWorldWidth : this.worldWidth - this.screenWorldWidth, 0);
+      const maxTop = Math.max(bounds ? bounds.bottom - this.screenWorldHeight : this.worldHeight - this.screenWorldHeight, 0);
+      this.left = Math.min(Math.max(unclampedLeft, bounds?.left ?? 0), maxLeft);
+      this.top = Math.min(Math.max(unclampedTop, bounds?.top ?? 0), maxTop);
       this.right = this.left + this.screenWorldWidth;
       this.bottom = this.top + this.screenWorldHeight;
       this.x = this.left;
       this.y = this.top;
+      this.center = {
+        x: this.left + this.screenWorldWidth / 2,
+        y: this.top + this.screenWorldHeight / 2
+      };
     }
   }
 }));
@@ -1606,7 +1618,7 @@ describe('WorldScene watch overlay caption gating', () => {
       pointerId: 7,
       pointerType: 'mouse',
       buttons: 1,
-      clientX: 512,
+      clientX: 488,
       clientY: 322
     });
 
@@ -1617,12 +1629,96 @@ describe('WorldScene watch overlay caption gating', () => {
       pointerId: 7,
       pointerType: 'mouse',
       button: 0,
-      clientX: 512,
+      clientX: 488,
       clientY: 322
     });
 
     expect((host as HTMLDivElement).releasePointerCapture).toHaveBeenCalledWith(7);
     expect(onSelectAgent).not.toHaveBeenCalled();
+  });
+
+  it('keeps the default viewport draggable without exposing void at either horizontal edge', async () => {
+    appInitMock.mockReset().mockResolvedValue(undefined);
+    vi.mocked(loadAiTownAssets).mockResolvedValue(makeAssets());
+
+    const scene = makeWideSelectedAgentScene();
+    const { container } = render(<WorldScene scene={scene} onSelectAgent={vi.fn()} />);
+
+    const host = container.querySelector('.aitown-world__host');
+    expect(host).toBeInstanceOf(HTMLDivElement);
+
+    let capturedPointerId: number | null = null;
+    (host as HTMLDivElement).setPointerCapture = vi.fn((pointerId: number) => {
+      capturedPointerId = pointerId;
+    });
+    (host as HTMLDivElement).releasePointerCapture = vi.fn((pointerId: number) => {
+      if (capturedPointerId === pointerId) {
+        capturedPointerId = null;
+      }
+    });
+    (host as HTMLDivElement).hasPointerCapture = vi.fn((pointerId: number) => capturedPointerId === pointerId);
+    setElementRect(host as HTMLDivElement, { left: 0, top: 0, width: 1000, height: 800 });
+
+    await waitFor(() => {
+      expect(readViewportInspector()).toBeDefined();
+    });
+
+    const initial = readViewportInspector()?.read();
+    expect(initial).toBeDefined();
+
+    fireEvent.pointerDown(host as HTMLDivElement, {
+      pointerId: 21,
+      pointerType: 'mouse',
+      button: 0,
+      buttons: 1,
+      clientX: 500,
+      clientY: 400
+    });
+    fireEvent.pointerMove(host as HTMLDivElement, {
+      pointerId: 21,
+      pointerType: 'mouse',
+      buttons: 1,
+      clientX: 420,
+      clientY: 400
+    });
+
+    const afterLeftDrag = readViewportInspector()?.read();
+    expect(afterLeftDrag?.left).toBeGreaterThan(initial?.left ?? 0);
+
+    fireEvent.pointerMove(host as HTMLDivElement, {
+      pointerId: 21,
+      pointerType: 'mouse',
+      buttons: 1,
+      clientX: 500,
+      clientY: 400
+    });
+
+    const afterRightDrag = readViewportInspector()?.read();
+    expect(afterRightDrag?.left).toBeLessThan(afterLeftDrag?.left ?? 0);
+
+    fireEvent.pointerMove(host as HTMLDivElement, {
+      pointerId: 21,
+      pointerType: 'mouse',
+      buttons: 1,
+      clientX: 2900,
+      clientY: 400
+    });
+
+    const atLeftBoundary = readViewportInspector()?.read();
+    expect(atLeftBoundary?.left).toBeCloseTo(0, 4);
+    expect(atLeftBoundary?.right).toBeLessThanOrEqual(atLeftBoundary?.worldWidth ?? 0);
+
+    fireEvent.pointerMove(host as HTMLDivElement, {
+      pointerId: 21,
+      pointerType: 'mouse',
+      buttons: 1,
+      clientX: -900,
+      clientY: 400
+    });
+
+    const atRightBoundary = readViewportInspector()?.read();
+    expect(atRightBoundary?.left).toBeGreaterThanOrEqual(0);
+    expect(atRightBoundary?.right).toBeCloseTo(atRightBoundary?.worldWidth ?? 0, 4);
   });
 
   it('clears a pending mouse drag when the pointer returns without the primary button pressed', async () => {
@@ -4349,6 +4445,7 @@ describe('WorldScene watch overlay caption gating', () => {
         top: 0,
         right: 240
       });
+      expect(readAgentLayer()?.children).toHaveLength(scene.agents.length);
     });
 
     const inspectionBeforeReset = readViewportInspector()?.read();
@@ -4696,7 +4793,7 @@ describe('WorldScene watch overlay caption gating', () => {
     } satisfies AiTownSceneModel;
     const movedAgent = makeAgent({
       ...initialAgent,
-      position: { x: initialAgent.position.x + 700, y: initialAgent.position.y + 260 }
+      position: { x: initialAgent.position.x + 700, y: initialAgent.position.y + 160 }
     });
     const movedScene = {
       ...initialScene,

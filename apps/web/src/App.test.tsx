@@ -3577,6 +3577,47 @@ afterEach(() => {
     'fetches selected-agent Evidence Record detail and provenance only after Inspect record',
     async () => {
       const user = userEvent.setup();
+      const sensitiveEvidenceRecordDetailFixture = {
+        item: {
+          ...evidenceRecordsFixture.items[0],
+          evidence_ref: '/Volumes/HDD/private/outbox.md',
+          metadata: {
+            raw_tmux_capture: 'tmux://5-web3-app-engineering/0.1 must not render',
+            webhook_url: 'https://hooks.example.test/webhook-token-that-must-not-render'
+          }
+        }
+      };
+      const sensitiveEvidenceProvenanceBundleFixture = {
+        item: {
+          ...evidenceProvenanceBundleFixture.item,
+          anchors: {
+            ...evidenceProvenanceBundleFixture.item.anchors,
+            source: {
+              ...evidenceProvenanceBundleFixture.item.anchors.source,
+              evidence_id:
+                'output-1 tmux://5-web3-app-engineering/0.1 hermes://session/app profile://agent /Users/cwp/private.md'
+            }
+          }
+        }
+      };
+
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (input: RequestInfo | URL) => {
+          const url = typeof input === 'string' ? input : input.toString();
+
+          if (url === appEngineeringEvidenceRecordDetailUrl) {
+            return jsonResponse(sensitiveEvidenceRecordDetailFixture);
+          }
+
+          if (url === appEngineeringEvidenceProvenanceBundleUrl) {
+            return jsonResponse(sensitiveEvidenceProvenanceBundleFixture);
+          }
+
+          return resolveTestFetchResponse(url);
+        })
+      );
+
       render(<App />);
 
       const roster = await screen.findByRole('navigation', { name: 'Agent roster' });
@@ -3595,15 +3636,19 @@ afterEach(() => {
 
       const details = await screen.findByRole('complementary', { name: 'Agent details' });
       await findHubSection(details, 'Evidence Ledger');
+      const detailReadAllowlist = [
+        appEngineeringEvidenceRecordDetailUrl,
+        appEngineeringEvidenceProvenanceBundleUrl,
+        appEngineeringEvidenceCheckpointLogUrl
+      ];
 
       await waitFor(() => {
         const requestedUrls = vi.mocked(globalThis.fetch).mock.calls.map(([request]) => String(request));
         expect(requestedUrls).toContain(appEngineeringEvidenceRecordsUrl);
-        expect(requestedUrls).not.toContain(appEngineeringEvidenceRecordDetailUrl);
-        expect(requestedUrls).not.toContain(appEngineeringEvidenceProvenanceBundleUrl);
-        expect(requestedUrls).not.toContain(appEngineeringEvidenceCheckpointLogUrl);
+        expect(requestedUrls.filter((url) => detailReadAllowlist.includes(url))).toEqual([]);
       });
 
+      const callsBeforeInspect = vi.mocked(globalThis.fetch).mock.calls.length;
       await user.click(
         within(details).getByRole('button', {
           name: 'Inspect evidence record output-1'
@@ -3616,6 +3661,25 @@ afterEach(() => {
         expect(requestedUrls).toContain(appEngineeringEvidenceProvenanceBundleUrl);
         expect(requestedUrls).toContain(appEngineeringEvidenceCheckpointLogUrl);
       });
+      const drilldownRequests = vi
+        .mocked(globalThis.fetch)
+        .mock.calls.slice(callsBeforeInspect)
+        .map(([request, init]) => ({
+          method: init?.method ?? 'GET',
+          url: String(request)
+        }))
+        .filter(({ url }) => detailReadAllowlist.includes(url));
+      expect(drilldownRequests).toEqual([
+        { method: 'GET', url: appEngineeringEvidenceRecordDetailUrl },
+        { method: 'GET', url: appEngineeringEvidenceProvenanceBundleUrl },
+        { method: 'GET', url: appEngineeringEvidenceCheckpointLogUrl }
+      ]);
+      expect(
+        vi
+          .mocked(globalThis.fetch)
+          .mock.calls.slice(callsBeforeInspect)
+          .some(([, init]) => init?.method && init.method !== 'GET')
+      ).toBe(false);
 
       const detailSection = await findHubSection(details, 'Evidence Record Detail');
       expect(detailSection).toHaveTextContent('Evidence id · output-1');
@@ -3627,9 +3691,11 @@ afterEach(() => {
       expect(detailSection).toHaveTextContent('Output candidate · true');
       expect(detailSection).toHaveTextContent('Snapshot · collector-20260316');
       expect(detailSection).toHaveTextContent('Snapshot anchor · collector-20260316-with-[redacted]');
-      expect(detailSection).toHaveTextContent(
-        'Source anchor · output-1-with-[redacted] · workspace_file · agent_output · observed'
-      );
+      expect(
+        within(detailSection).getByText(
+          'Source anchor · output-1 [tmux ref] [runtime ref] [runtime ref] [local path] · workspace_file · agent_output · observed'
+        )
+      ).toBeVisible();
       expect(detailSection).toHaveTextContent('Replay anchor · corr-app-review-with-[redacted]');
       expect(detailSection).toHaveTextContent('Checkpoint proof');
       expect(detailSection).toHaveTextContent(
@@ -3645,6 +3711,22 @@ afterEach(() => {
       expect(detailSection).not.toHaveTextContent('access_token');
       expect(detailSection).not.toHaveTextContent('secret-token');
       expect(detailSection).not.toHaveTextContent('/tmp/app/outbox.md');
+      expect(detailSection).not.toHaveTextContent('/Users');
+      expect(detailSection).not.toHaveTextContent('/Volumes');
+      expect(detailSection).not.toHaveTextContent('private.md');
+      expect(detailSection).not.toHaveTextContent('5-web3-app-engineering');
+      expect(detailSection).not.toHaveTextContent('tmux://');
+      expect(detailSection).not.toHaveTextContent('Hermes');
+      expect(detailSection).not.toHaveTextContent('hermes://');
+      expect(detailSection).not.toHaveTextContent('session://');
+      expect(detailSection).not.toHaveTextContent('session/app');
+      expect(detailSection).not.toHaveTextContent('profile://');
+      expect(detailSection).not.toHaveTextContent('profile://agent');
+      expect(detailSection).not.toHaveTextContent('hooks.example.test');
+      expect(detailSection).not.toHaveTextContent('https://hooks');
+      expect(detailSection).not.toHaveTextContent('token-that-must-not-render');
+      expect(detailSection).not.toHaveTextContent('webhook-token');
+      expect(detailSection).not.toHaveTextContent('webhook_url');
       expect(detailSection).not.toHaveTextContent('degraded_reasons');
     },
     10_000

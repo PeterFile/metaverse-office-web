@@ -2655,6 +2655,34 @@ test('JSONL prototype store loads old record kinds without evidence records', as
   });
 });
 
+test('JSONL prototype store hard-fails malformed JSONL with bounded redacted details', async () => {
+  const storeFile = await createStoreFile();
+  const rawLineCanary =
+    '{"kind":"event","payload":{"secret":"ghp_1234567890abcdefghijklmnopqrstuvwxyz","webhook":"https://hooks.slack.com/services/T000/B000/XXXXXXXXXXXXXXXXXXXXXXXX"}}';
+  await writeFile(
+    storeFile,
+    [
+      JSON.stringify({ kind: 'event', payload: createEvent() }),
+      `${rawLineCanary}{`
+    ].join('\n') + '\n',
+    'utf8'
+  );
+
+  await assert.rejects(
+    () => createPrototypeStore({ filePath: storeFile }),
+    (error) => {
+      assert.equal(error.name, 'SyntaxError');
+      assert.match(error.message, /JSONL parse error/);
+      assert.match(error.message, /line 2/);
+      assert.equal(error.message.includes(rawLineCanary), false);
+      assert.equal(error.message.includes(storeFile), false);
+      assert.equal(error.message.includes('ghp_1234567890abcdefghijklmnopqrstuvwxyz'), false);
+      assert.equal(error.message.includes('hooks.slack.com/services'), false);
+      return true;
+    }
+  );
+});
+
 test('prototype store summarizes bounded collector snapshot history with exact filters', async () => {
   const storeFile = await createStoreFile();
   const store = await createPrototypeStore({ filePath: storeFile });

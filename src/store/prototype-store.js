@@ -145,10 +145,20 @@ class JsonlRecordLog {
       return [];
     }
 
-    return content
-      .split('\n')
-      .filter((line) => line.trim())
-      .map((line) => JSON.parse(line));
+    const records = [];
+    const lines = content.split('\n');
+    for (let index = 0; index < lines.length; index += 1) {
+      const line = lines[index];
+      if (!line.trim()) {
+        continue;
+      }
+      try {
+        records.push(JSON.parse(line));
+      } catch {
+        throw new SyntaxError(`JSONL parse error: SyntaxError at line ${index + 1}`);
+      }
+    }
+    return records;
   }
 
   async appendRecord(record) {

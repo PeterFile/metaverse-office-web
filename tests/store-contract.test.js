@@ -2039,6 +2039,7 @@ test('prototype store projects evidence provenance bundles without raw refs or c
       collected_at: '2026-03-09T18:06:00.000Z'
     }
   });
+  assert.equal(Object.hasOwn(provenanceBundle, 'input_proof'), false);
   assert.equal(serializedBundle.includes('/tmp/store-contract'), false);
   assert.equal(serializedBundle.includes('evidence_ref'), false);
   assert.equal(serializedBundle.includes('metadata'), false);
@@ -2046,6 +2047,30 @@ test('prototype store projects evidence provenance bundles without raw refs or c
   for (const canary of leakCanaries) {
     assert.equal(serializedBundle.includes(canary), false, `leaked canary: ${canary}`);
   }
+});
+
+test('prototype store projects sanitized Hermes input proof in provenance bundles', async () => {
+  const storeFile = await createStoreFile();
+  const store = await createPrototypeStore({ filePath: storeFile });
+
+  await store.appendCollectorReport(createHermesRuntimeCollectorReport());
+
+  const sessionRecord = store.listEvidenceRecords({
+    source_kind: 'hermes_session',
+    evidence_role: 'runtime_presence'
+  })[0];
+  const provenanceBundle = store.getEvidenceProvenanceBundle(sessionRecord.evidence_id);
+  const serializedBundle = JSON.stringify(provenanceBundle);
+
+  assert.deepEqual(provenanceBundle.input_proof, {
+    source_format: 'jsonl',
+    source_index: 2,
+    line: 4,
+    source_input_ordinal: 1,
+    source_file_ordinal: 2
+  });
+  assert.equal(serializedBundle.includes('source_provenance'), false);
+  assert.equal(serializedBundle.includes('metadata'), false);
 });
 
 test('prototype store bounds provenance source summaries for unmapped missing fields', async () => {
@@ -2094,6 +2119,7 @@ test('prototype store drops unsafe provenance source summary enum values', async
   const unsafeObservedAt = '/tmp/provenance-unsafe/observed-token.txt';
   const unsafeCollectedAt = 'https://hooks.slack.com/services/provenance-time-token';
   const unsafeEvidenceRef = '/tmp/provenance-unsafe/evidence.md';
+  const unsafeInputProofFormat = 'https://hooks.slack.com/services/provenance-input-proof';
   await writeFile(
     storeFile,
     `${JSON.stringify({
@@ -2111,7 +2137,16 @@ test('prototype store drops unsafe provenance source summary enum values', async
         collector_snapshot_id: 'collector-snapshot:2026-03-09T18:06:00.000Z',
         correlation_id: 'corr-unsafe-provenance',
         degraded_reasons: [unsafeSourceStatus],
-        metadata: { raw_role: unsafeEvidenceRole }
+        metadata: {
+          raw_role: unsafeEvidenceRole,
+          source_provenance: {
+            source_format: unsafeInputProofFormat,
+            source_index: 0,
+            line: 1,
+            source_input_ordinal: 1,
+            source_file_ordinal: 1
+          }
+        }
       }
     })}\n`,
     'utf8'
@@ -2138,13 +2173,15 @@ test('prototype store drops unsafe provenance source summary enum values', async
   assert.equal(provenanceBundle.record.source_status, null);
   assert.equal(provenanceBundle.record.evidence_role, null);
   assert.equal(provenanceBundle.anchors.source, null);
+  assert.equal(Object.hasOwn(provenanceBundle, 'input_proof'), false);
   for (const canary of [
     unsafeSourceKind,
     unsafeSourceStatus,
     unsafeEvidenceRole,
     unsafeObservedAt,
     unsafeCollectedAt,
-    unsafeEvidenceRef
+    unsafeEvidenceRef,
+    unsafeInputProofFormat
   ]) {
     assert.equal(serializedBundle.includes(canary), false, `leaked canary: ${canary}`);
   }

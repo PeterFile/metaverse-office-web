@@ -3951,7 +3951,8 @@ function projectReplayCheckpointCollectorSnapshot(report) {
 function projectEvidenceProvenanceBundle(record) {
   const sourceFields = projectEvidenceSourceFields(record);
   const timeFields = projectEvidenceTimeFields(record);
-  return {
+  const inputProof = projectEvidenceInputProof(record);
+  const bundle = {
     evidence_id: record.evidence_id,
     source_summary: projectEvidenceSourceSummary(record, sourceFields, timeFields),
     record: {
@@ -3972,6 +3973,16 @@ function projectEvidenceProvenanceBundle(record) {
       replay: createEvidenceReplayAnchor(record)
     }
   };
+
+  if (inputProof) {
+    bundle.input_proof = inputProof;
+  }
+
+  return bundle;
+}
+
+function projectEvidenceInputProof(record) {
+  return normalizeHermesSourceProvenance(record?.metadata?.source_provenance);
 }
 
 function projectEvidenceSourceFields(record) {

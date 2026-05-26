@@ -6500,6 +6500,33 @@ test('GET evidence and source read routes keep JSONL and SQLite parity', async (
   assert.equal(JSON.stringify(jsonlReplayCheckpoint).includes('tmux://'), false);
   assert.equal(JSON.stringify(jsonlReplayCheckpoint).includes('5-web3-app-engineering'), false);
 
+  const [jsonlStorageManifest, sqliteStorageManifest] = await parityRequest(
+    '/storage/replay-manifest'
+  );
+  assert.deepEqual(sqliteStorageManifest, jsonlStorageManifest);
+  assert.deepEqual(
+    {
+      ...jsonlStorageManifest.item,
+      canonical_record_hash: '<sha256>'
+    },
+    {
+      record_count: before.jsonl,
+      record_kind_buckets: {
+        event: 2,
+        heartbeat: 1,
+        evidence_record: 6,
+        collector_snapshot: 1
+      },
+      canonical_record_hash: '<sha256>'
+    }
+  );
+  assert.match(jsonlStorageManifest.item.canonical_record_hash, /^[a-f0-9]{64}$/);
+  assert.equal(JSON.stringify(jsonlStorageManifest).includes('/tmp/route-parity'), false);
+  assert.equal(JSON.stringify(jsonlStorageManifest).includes('route-parity'), false);
+  assert.equal(JSON.stringify(jsonlStorageManifest).includes('tmux://'), false);
+  assert.equal(JSON.stringify(jsonlStorageManifest).includes('payload'), false);
+  assert.equal(JSON.stringify(jsonlStorageManifest).includes('metadata'), false);
+
   const [jsonlReplayCheckpointLog, sqliteReplayCheckpointLog] = await parityRequest(
     '/accountability/replay/checkpoint-log?limit=3'
   );
@@ -6742,6 +6769,7 @@ test('GET read route purity matrix leaves replay records and checkpoints unchang
     `/accountability/replay?evidence_id=${encodeURIComponent(evidenceRecord.evidence_id)}&limit=5&window=60m`,
     '/accountability/replay/checkpoint-summary',
     '/accountability/replay/checkpoint-log?limit=3',
+    '/storage/replay-manifest',
     '/runtime/source-gaps?newest_first=true&limit=10',
     '/runtime/source-gaps/summary?newest_first=true&limit=1',
     '/runtime/source-gaps/agent-summary?newest_first=true&limit=1',

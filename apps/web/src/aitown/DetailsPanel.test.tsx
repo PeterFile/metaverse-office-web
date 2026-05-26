@@ -1009,6 +1009,31 @@ const SELECTED_AGENT_CATEGORY_TABS: Record<HubCategory, NonNullable<DetailsPanel
   replay: 'replay',
   memory: 'evidence'
 };
+const FORBIDDEN_OPERATOR_CONTROL_LABELS = [
+  'Assign task',
+  'Run task',
+  'Dispatch',
+  'Claim',
+  'Complete',
+  'Reboot now',
+  'Control plane',
+  'Profile route'
+] as const;
+const FORBIDDEN_UNPROVEN_LIVENESS_LABELS = ['Live', 'Healthy'] as const;
+
+function expectEvidenceJourneyReadOnly(scope: HTMLElement) {
+  for (const label of FORBIDDEN_OPERATOR_CONTROL_LABELS) {
+    expect(within(scope).queryByRole('button', { name: label })).not.toBeInTheDocument();
+    expect(within(scope).queryByText(new RegExp(`^${label}$`, 'i'))).not.toBeInTheDocument();
+  }
+}
+
+function expectNoUnprovenLivenessLabels(scope: HTMLElement) {
+  for (const label of FORBIDDEN_UNPROVEN_LIVENESS_LABELS) {
+    expect(within(scope).queryByRole('button', { name: label })).not.toBeInTheDocument();
+    expect(within(scope).queryByText(new RegExp(`^${label}$`, 'i'))).not.toBeInTheDocument();
+  }
+}
 
 describe('DetailsPanel selected-agent category IA', () => {
   it('marks every selected-agent detail section with a concrete hub category lane', () => {
@@ -1962,6 +1987,8 @@ describe('DetailsPanel selected-agent workflow lifecycle', () => {
     expect(section!).not.toHaveTextContent('metadata');
     expect(section!).not.toHaveTextContent('raw_tmux_capture');
     expect(section!).not.toHaveTextContent('secret_token');
+    expectEvidenceJourneyReadOnly(section!);
+    expectNoUnprovenLivenessLabels(section!);
   });
 
   it('renders a bounded sanitized selected-evidence checkpoint proof strip', () => {
@@ -2010,6 +2037,8 @@ describe('DetailsPanel selected-agent workflow lifecycle', () => {
     expect(proofStrip).not.toHaveTextContent('payload');
     expect(proofStrip).not.toHaveTextContent('metadata');
     expect(proofStrip).not.toHaveTextContent('degraded_reasons');
+    expectEvidenceJourneyReadOnly(proofStrip);
+    expectNoUnprovenLivenessLabels(proofStrip);
   });
 
   it('offers evidence replay only for replay-backed evidence ids', async () => {
@@ -2123,6 +2152,8 @@ describe('DetailsPanel selected-agent workflow lifecycle', () => {
     expect(
       within(collectorOnlySection!).queryByRole('button', { name: /Replay this evidence/ })
     ).not.toBeInTheDocument();
+    expectEvidenceJourneyReadOnly(collectorOnlySection!);
+    expectNoUnprovenLivenessLabels(collectorOnlySection!);
   });
 
   it('redacts runtime provenance refs and adjacent local paths', () => {

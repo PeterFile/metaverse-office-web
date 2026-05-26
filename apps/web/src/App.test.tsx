@@ -1895,6 +1895,31 @@ function resolveTestFetchResponse(url: string) {
   throw new Error(`Unexpected request: ${url}`);
 }
 type HubCategoryLabel = 'Crew' | 'Queue' | 'Supervision' | 'Evidence' | 'Replay' | 'Memory';
+const FORBIDDEN_OPERATOR_CONTROL_LABELS = [
+  'Assign task',
+  'Run task',
+  'Dispatch',
+  'Claim',
+  'Complete',
+  'Reboot now',
+  'Control plane',
+  'Profile route'
+] as const;
+const FORBIDDEN_UNPROVEN_LIVENESS_LABELS = ['Live', 'Healthy'] as const;
+
+function expectEvidenceJourneyReadOnly(scope: HTMLElement) {
+  for (const label of FORBIDDEN_OPERATOR_CONTROL_LABELS) {
+    expect(within(scope).queryByRole('button', { name: label })).not.toBeInTheDocument();
+    expect(within(scope).queryByText(new RegExp(`^${label}$`, 'i'))).not.toBeInTheDocument();
+  }
+}
+
+function expectNoUnprovenLivenessLabels(scope: HTMLElement) {
+  for (const label of FORBIDDEN_UNPROVEN_LIVENESS_LABELS) {
+    expect(within(scope).queryByRole('button', { name: label })).not.toBeInTheDocument();
+    expect(within(scope).queryByText(new RegExp(`^${label}$`, 'i'))).not.toBeInTheDocument();
+  }
+}
 
 async function openHub(user: ReturnType<typeof userEvent.setup>, category: HubCategoryLabel = 'Crew') {
   await user.click(await screen.findByRole('button', { name: category }, { timeout: 5000 }));
@@ -3728,6 +3753,8 @@ afterEach(() => {
       expect(detailSection).not.toHaveTextContent('webhook-token');
       expect(detailSection).not.toHaveTextContent('webhook_url');
       expect(detailSection).not.toHaveTextContent('degraded_reasons');
+      expectEvidenceJourneyReadOnly(detailSection);
+      expectNoUnprovenLivenessLabels(detailSection);
     },
     10_000
   );
@@ -3795,6 +3822,8 @@ afterEach(() => {
     expect(replayUrls).not.toContain(appEngineeringReviewAccountabilityReplayUrl);
     expect(replayUrls.some((url) => url.includes('evidence_ref='))).toBe(false);
     expect(replayRequests.every(([, init]) => !init || !('method' in init) || init.method === 'GET')).toBe(true);
+    expectEvidenceJourneyReadOnly(replayPanel);
+    expectNoUnprovenLivenessLabels(replayPanel);
   });
 
   it('clears stale selected-agent evidence detail when the next detail response is empty', async () => {

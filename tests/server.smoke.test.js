@@ -6731,6 +6731,138 @@ test('GET replay checkpoint-log filters exact evidence provenance before limit',
   assert.deepEqual(substringEvidenceId.body, { items: [] });
 });
 
+test('GET provenance bundle and checkpoint-log redact unsafe historical evidence internals', async (t) => {
+  const { baseUrl, store } = await createHarness(t);
+  const unsafePath = '/tmp/provenance-canary/Hermes runtime source/profile-secret.json';
+  const unsafeTmuxRef = 'tmux://Hermes-runtime-source/0.9';
+  const unsafeProfileRef = 'hermes://profile/profile-secret';
+  const unsafeSessionRef = 'hermes://session/session-secret';
+  const safeSessionEvidenceRef = 'hermes://session/runtime-canary';
+  const unsafeToken = 'ghp_provenanceCanaryToken1234567890';
+  const unsafeWebhook = 'https://hooks.slack.com/services/T000/B000/provenanceCanary';
+  const unsafeFragments = [
+    unsafePath,
+    unsafeTmuxRef,
+    unsafeProfileRef,
+    unsafeSessionRef,
+    unsafeToken,
+    unsafeWebhook,
+    'payload_dump',
+    'metadata_dump',
+    'profile-secret',
+    'session-secret'
+  ];
+
+  await store.appendCollectorReport({
+    collected_at: '2026-03-09T18:06:00.000Z',
+    actor_id: 'team-lead',
+    summary: {
+      agent_count: 1,
+      heartbeat_count: 0,
+      tmux_observed_count: 0,
+      workspace_observed_count: 0,
+      reboot_recommended_count: 0
+    },
+    items: [
+      {
+        agent_id: 'app-engineering',
+        evidence_refs: [unsafePath, unsafeTmuxRef, unsafeProfileRef, unsafeSessionRef],
+        hermes_runtime_observations: [
+          {
+            source_kind: 'hermes_session',
+            evidence_ref: safeSessionEvidenceRef,
+            profile_id: 'profile-secret',
+            session_ref: 'session-secret',
+            status: 'observed',
+            observed_at: '2026-03-09T18:05:40.000Z',
+            degraded_reasons: [`payload_dump ${unsafeWebhook}`],
+            metadata: {
+              token: unsafeToken,
+              webhook_url: unsafeWebhook,
+              local_path: unsafePath,
+              tmux_ref: unsafeTmuxRef,
+              profile_ref: unsafeProfileRef,
+              session_ref: unsafeSessionRef,
+              metadata_dump: {
+                payload_dump: unsafeToken
+              }
+            }
+          }
+        ],
+        source_health: {
+          hermes_session: {
+            status: 'observed',
+            profile_id: 'profile-secret',
+            expected_session_ref: 'session-secret',
+            last_observed_at: '2026-03-09T18:05:40.000Z',
+            degraded_reasons: [`metadata_dump ${unsafeToken}`]
+          }
+        }
+      }
+    ]
+  });
+
+  const evidenceRecord = store
+    .listEvidenceRecords({ source_kind: 'hermes_session', limit: '10' })
+    .find((record) => record.evidence_ref === safeSessionEvidenceRef);
+  assert.ok(evidenceRecord);
+  const evidenceAppendIndex =
+    store.records.findIndex(
+      (record) =>
+        record.kind === 'evidence_record' &&
+        record.payload?.evidence_id === evidenceRecord.evidence_id
+    ) + 1;
+  assert.equal(evidenceAppendIndex > 0, true);
+
+  const provenanceBundle = await requestJson(
+    `${baseUrl}/evidence-records/${encodeURIComponent(evidenceRecord.evidence_id)}/provenance-bundle`
+  );
+  assert.equal(provenanceBundle.response.status, 200);
+  assert.deepEqual(Object.keys(provenanceBundle.body.item).sort(), [
+    'anchors',
+    'evidence_id',
+    'record',
+    'source_summary'
+  ]);
+  assert.deepEqual(provenanceBundle.body.item.record, {
+    observed_at: '2026-03-09T18:05:40.000Z',
+    collected_at: '2026-03-09T18:06:00.000Z',
+    agent_id: 'app-engineering',
+    source_kind: 'hermes_session',
+    evidence_role: 'runtime_presence',
+    source_status: 'observed',
+    output_candidate: false,
+    collector_snapshot_id: 'collector-snapshot:2026-03-09T18:06:00.000Z',
+    correlation_id: 'collector-snapshot:2026-03-09T18:06:00.000Z',
+    unmapped: false
+  });
+
+  const checkpointLog = await requestJson(
+    `${baseUrl}/accountability/replay/checkpoint-log?evidence_id=${encodeURIComponent(evidenceRecord.evidence_id)}&limit=1`
+  );
+  assert.equal(checkpointLog.response.status, 200);
+  assert.deepEqual(checkpointLog.body.items, [
+    {
+      append_index: evidenceAppendIndex,
+      record_kind: 'evidence_record',
+      checkpoint: provenanceBundle.body.item.record
+    }
+  ]);
+
+  for (const body of [provenanceBundle.body, checkpointLog.body]) {
+    const serialized = JSON.stringify(body);
+    for (const unsafeFragment of unsafeFragments) {
+      assert.equal(serialized.includes(unsafeFragment), false, unsafeFragment);
+    }
+    assert.equal(serialized.includes('evidence_ref'), false);
+    assert.equal(serialized.includes('degraded_reasons'), false);
+    assert.equal(serialized.includes('payload'), false);
+    assert.equal(serialized.includes('metadata'), false);
+    assert.equal(serialized.includes('webhook'), false);
+    assert.equal(serialized.includes('token'), false);
+  }
+});
+
 test('GET read route purity matrix leaves replay records and checkpoints unchanged', async (t) => {
   let collectCount = 0;
   const controllerSnapshotCollector = {

@@ -9,6 +9,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type {
   AccountabilityReplayBundle,
   AgentDetail,
+  AgentEvidenceSpine,
+  AgentEvidenceSpineSummary,
   AgentEventsResponse,
   AgentInteractionsResponse,
   AgentWorkflow,
@@ -566,6 +568,72 @@ describe('read-only frontend/backend contract smoke', () => {
       returned_limit: 5
     });
     expect(Object.hasOwn(summary, 'total_groups')).toBe(false);
+  });
+
+  it('passes evidence-spine filters through to the real backend and unwraps compact sanitized shapes', async () => {
+    harness = await createHarness(() => '2026-03-09T19:00:00.000Z');
+    await seedContractSlice(harness.store);
+
+    const nativeFetch = globalThis.fetch.bind(globalThis);
+    const requests: RequestContract[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+        requests.push(getRequestContract(input, harness!.baseUrl, init));
+        return nativeFetch(input, init);
+      })
+    );
+
+    const api = await loadApi(harness.baseUrl);
+    const evidenceSpineFilters = {
+      sourceKind: 'workspace_file',
+      evidenceRole: 'agent_plan',
+      sourceStatus: 'degraded',
+      collectorSnapshotId: 'collector-snapshot:2026-03-09T18:59:00.000Z',
+      correlationId: 'collector-snapshot:2026-03-09T18:59:00.000Z',
+      outputCandidate: true,
+      mapped: true,
+      observedSince: '2026-03-09T18:58:00.000Z',
+      observedUntil: '2026-03-09T18:59:00.000Z',
+      collectedSince: '2026-03-09T18:58:00.000Z',
+      collectedUntil: '2026-03-09T19:00:00.000Z',
+      newestFirst: false,
+      limit: 5
+    } as const;
+    const summary = await api.fetchAgentEvidenceSpineSummary(evidenceSpineFilters);
+    const spine = await api.fetchAgentEvidenceSpine('app-engineering', evidenceSpineFilters);
+
+    const expectedQuery = [
+      ['collected_since', '2026-03-09T18:58:00.000Z'],
+      ['collected_until', '2026-03-09T19:00:00.000Z'],
+      ['collector_snapshot_id', 'collector-snapshot:2026-03-09T18:59:00.000Z'],
+      ['correlation_id', 'collector-snapshot:2026-03-09T18:59:00.000Z'],
+      ['evidence_role', 'agent_plan'],
+      ['limit', '5'],
+      ['mapped', 'true'],
+      ['newest_first', 'false'],
+      ['observed_since', '2026-03-09T18:58:00.000Z'],
+      ['observed_until', '2026-03-09T18:59:00.000Z'],
+      ['output_candidate', 'true'],
+      ['source_kind', 'workspace_file'],
+      ['source_status', 'degraded']
+    ];
+    expect(requests).toEqual([
+      {
+        method: 'GET',
+        origin: harness.baseUrl,
+        pathname: '/agents/evidence-spine/summary',
+        query: expectedQuery
+      },
+      {
+        method: 'GET',
+        origin: harness.baseUrl,
+        pathname: '/agents/app-engineering/evidence-spine',
+        query: expectedQuery
+      }
+    ]);
+    expectAgentEvidenceSpineSummaryContract(summary);
+    expectAgentEvidenceSpineContract(spine);
   });
 
   it('passes source-gap agent-summary and trend filters through to the real backend', async () => {
@@ -2207,7 +2275,11 @@ async function seedContractSlice(store: BackendStore) {
             missing_count: 2,
             error_count: 0,
             last_observed_at: '2026-03-09T18:58:30.000Z',
-            degraded_reasons: ['missing workspace files: inbox.md, outbox.md']
+            degraded_reasons: [
+              'missing workspace files: inbox.md, outbox.md',
+              'webhook https://hooks.slack.com/services/evidence-spine-client',
+              'token=evidence-spine-client-secret'
+            ]
           },
           tmux_session: {
             status: 'observed',
@@ -2699,6 +2771,115 @@ function expectCollectorSourceHealthContract(sourceHealth: CollectorSourceHealth
   expect(sourceHealth?.agent_items[0].source_health.workspace_files).not.toHaveProperty(
     'missing_count'
   );
+}
+
+function expectAgentEvidenceSpineSummaryContract(summary: AgentEvidenceSpineSummary) {
+  expect(summary).toMatchObject({
+    agent_count: expect.any(Number),
+    returned_limit: 5,
+    total_count: 1,
+    mapped_count: 1,
+    unmapped_count: 0,
+    unmapped_evidence_summary: {
+      total_count: 0
+    }
+  });
+  expect(summary.agents).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        agent_id: 'app-engineering',
+        evidence_count: 1,
+        latest_observed_at: '2026-03-09T18:58:30.000Z',
+        latest_collected_at: '2026-03-09T18:59:00.000Z'
+      })
+    ])
+  );
+  expectSafeEvidenceSpinePayload(summary);
+  const serialized = JSON.stringify(summary);
+  expect(serialized).not.toContain('collector_snapshot_id');
+  expect(serialized).not.toContain('correlation_id');
+}
+
+function expectAgentEvidenceSpineContract(spine: AgentEvidenceSpine) {
+  expect(spine).toMatchObject({
+    agent_id: 'app-engineering',
+    returned_limit: 5,
+    evidence_summary: {
+      total_count: 1,
+      returned_limit: 5,
+      mapped_count: 1,
+      unmapped_count: 0
+    },
+    source_gaps: {
+      summary: {
+        total_count: 1,
+        returned_limit: 5
+      },
+      items: [
+        expect.objectContaining({
+          agent_id: 'app-engineering',
+          source_kind: 'workspace_file',
+          evidence_role: 'agent_plan',
+          source_status: 'degraded',
+          output_candidate: true,
+          unmapped: false
+        })
+      ]
+    },
+    source_health: {
+      summary: {
+        agent_count: 1,
+        status_buckets: {
+          observed: 0,
+          degraded: 1,
+          missing: 0,
+          error: 0
+        }
+      },
+      agent_items: [
+        expect.objectContaining({
+          agent_id: 'app-engineering',
+          evidence_count: 2,
+          latest_evidence_at: '2026-03-09T18:58:45.000Z'
+        })
+      ]
+    }
+  });
+  expect(spine.recent_evidence).toEqual([
+    expect.objectContaining({
+      source_kind: 'workspace_file',
+      evidence_role: 'agent_plan',
+      source_status: 'degraded',
+      output_candidate: true,
+      unmapped: false
+    })
+  ]);
+  expect(Object.hasOwn(spine.recent_evidence[0], 'evidence_id')).toBe(false);
+  expect(Object.hasOwn(spine.recent_evidence[0], 'evidence_ref')).toBe(false);
+  expect(Object.hasOwn(spine.recent_evidence[0], 'metadata')).toBe(false);
+  expect(Object.hasOwn(spine.recent_evidence[0], 'degraded_reasons')).toBe(false);
+  expect(spine.source_health.agent_items[0]).not.toHaveProperty('workspace_root');
+  expect(spine.source_health.agent_items[0]).not.toHaveProperty('session_ref');
+  expect(spine.source_health.agent_items[0]).not.toHaveProperty('evidence_refs');
+  expect(spine.source_health.agent_items[0]).not.toHaveProperty('evidence_ref_count');
+  expect(spine.source_health.agent_items[0].source_health.workspace_files).not.toHaveProperty(
+    'expected_files'
+  );
+  expectSafeEvidenceSpinePayload(spine);
+}
+
+function expectSafeEvidenceSpinePayload(payload: unknown) {
+  const serialized = JSON.stringify(payload);
+  expect(serialized).not.toContain('/tmp/app-engineering');
+  expect(serialized).not.toContain('tmux://');
+  expect(serialized).not.toContain('5-web3-app-engineering');
+  expect(serialized).not.toContain('metadata');
+  expect(serialized).not.toContain('payload');
+  expect(serialized).not.toContain('degraded_reasons');
+  expect(serialized).not.toContain('expected_files');
+  expect(serialized).not.toContain('missing workspace files');
+  expect(serialized).not.toContain('https://hooks.slack.com/services/evidence-spine-client');
+  expect(serialized).not.toContain('token=evidence-spine-client-secret');
 }
 
 function expectCollectorSnapshotHistoryContract(history: CollectorSnapshotHistory | null) {

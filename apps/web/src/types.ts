@@ -521,6 +521,106 @@ export interface RuntimeSourceGapLifecycleResponse {
   item: RuntimeSourceGapLifecycle;
 }
 
+export interface AgentEvidenceSpineRecord {
+  observed_at: string | null;
+  collected_at: string | null;
+  source_kind: string | null;
+  evidence_role: string | null;
+  source_status: string | null;
+  output_candidate: boolean;
+  collector_snapshot_id: string | null;
+  correlation_id: string | null;
+  unmapped: boolean;
+}
+
+export interface AgentEvidenceSpineSourceGap {
+  observed_at: string | null;
+  collected_at: string | null;
+  agent_id: string | null;
+  source_kind: string;
+  evidence_role: string | null;
+  source_status: RuntimeSourceGap['source_status'];
+  output_candidate: boolean;
+  collector_snapshot_id: string;
+  correlation_id: string | null;
+  unmapped: boolean;
+}
+
+export interface AgentEvidenceSpineSourceHealthEntry {
+  status: CollectorSourceHealthStatus | null;
+  last_observed_at: string | null;
+  observed_count?: number;
+}
+
+export interface AgentEvidenceSpineSourceHealthAgentItem {
+  agent_id: string;
+  collector_snapshot_id: string;
+  source_health: Partial<
+    Record<CollectorSourceHealthKind, AgentEvidenceSpineSourceHealthEntry>
+  >;
+  evidence_count: number;
+  latest_evidence_at: string | null;
+}
+
+export interface AgentEvidenceSpineSourceHealth {
+  collected_at: string | null;
+  collector_snapshot_id: string | null;
+  actor_id: string | null;
+  summary: CollectorSourceHealthProjection['summary'];
+  agent_items: AgentEvidenceSpineSourceHealthAgentItem[];
+}
+
+export interface AgentEvidenceSpineSummaryAgent {
+  agent_id: string;
+  evidence_count: number;
+  output_candidate_buckets: Record<'true' | 'false', number>;
+  source_kind_buckets: Record<string, number>;
+  evidence_role_buckets: Record<string, number>;
+  source_status_buckets: Record<string, number>;
+  source_gap_buckets: Record<string, number>;
+  latest_observed_at: string | null;
+  latest_collected_at: string | null;
+}
+
+export interface AgentEvidenceSpineUnmappedSummary {
+  total_count: number;
+  source_kind_buckets: Record<string, number>;
+  evidence_role_buckets: Record<string, number>;
+  source_status_buckets: Record<string, number>;
+  latest_observed_at: string | null;
+  latest_collected_at: string | null;
+}
+
+export interface AgentEvidenceSpineSummary {
+  agent_count: number;
+  returned_limit: number;
+  total_count: number;
+  mapped_count: number;
+  unmapped_count: number;
+  agents: AgentEvidenceSpineSummaryAgent[];
+  unmapped_evidence_summary: AgentEvidenceSpineUnmappedSummary;
+}
+
+export interface AgentEvidenceSpine {
+  agent_id: string;
+  returned_limit: number;
+  evidence_summary: RuntimeSourceGapsSummary;
+  recent_evidence: AgentEvidenceSpineRecord[];
+  source_gaps: {
+    summary: RuntimeSourceGapsSummary;
+    items: AgentEvidenceSpineSourceGap[];
+  };
+  source_health: AgentEvidenceSpineSourceHealth;
+}
+
+export interface AgentEvidenceSpineSummaryResponse {
+  item: AgentEvidenceSpineSummary;
+}
+
+export interface AgentEvidenceSpineResponse {
+  item: AgentEvidenceSpine;
+}
+
 export interface CollectorSnapshot {
   collected_at: string;
   actor_id: string;

@@ -7074,6 +7074,7 @@ test('GET read route purity matrix leaves replay records and checkpoints unchang
     '/evidence-records/summary?mapped=true&output_candidate=true&limit=1',
     '/evidence-records/ref-rollup?mapped=true&output_candidate=true&limit=2',
     `/evidence-records/${encodeURIComponent(evidenceRecord.evidence_id)}/provenance-bundle`,
+    `/evidence-records/${encodeURIComponent(evidenceRecord.evidence_id)}/source-context`,
     `/accountability/replay?evidence_id=${encodeURIComponent(evidenceRecord.evidence_id)}&limit=5&window=60m`,
     '/accountability/replay/checkpoint-summary',
     '/accountability/replay/checkpoint-log?limit=3',
@@ -7116,6 +7117,96 @@ test('GET read route purity matrix leaves replay records and checkpoints unchang
   assert.deepEqual(store.listReplayCheckpointLog({ limit: '3' }), before.checkpointLog);
   assert.equal(await readFile(storeFile, 'utf8'), before.file);
   assert.equal(collectCount, 0);
+});
+
+test('GET evidence source-context is bounded, sanitized, and 404s unknown evidence', async (t) => {
+  const { baseUrl, store } = await createHarness(t);
+  const unsafeFragments = [
+    '/tmp/source-context-route',
+    '/Users/cwp/private/source-context-route.md',
+    'tmux://source-context-route/0.1',
+    'hermes://profile/source-context-route',
+    'hermes://session/source-context-route',
+    'session-source-context-route',
+    'profile-source-context-route',
+    'payload_dump',
+    'metadata_dump',
+    'token=source-context-route',
+    'https://hooks.slack.com/services/source-context-route'
+  ];
+
+  await store.appendCollectorReport({
+    collected_at: '2026-03-09T18:06:00.000Z',
+    actor_id: 'team-lead',
+    summary: {
+      agent_count: 1,
+      heartbeat_count: 0,
+      tmux_observed_count: 0,
+      workspace_observed_count: 1,
+      reboot_recommended_count: 0
+    },
+    items: [
+      {
+        agent_id: 'app-engineering',
+        evidence_refs: unsafeFragments,
+        workspace_observations: [
+          {
+            path: '/tmp/source-context-route/outbox.md',
+            file_name: 'outbox.md',
+            kind: 'workspace_file',
+            evidence_role: 'agent_output',
+            last_modified_at: '2026-03-09T18:05:20.000Z'
+          }
+        ],
+        source_health: {
+          workspace_files: {
+            status: 'degraded',
+            observed_count: 1,
+            last_observed_at: '2026-03-09T18:05:20.000Z',
+            degraded_reasons: unsafeFragments
+          }
+        }
+      }
+    ]
+  });
+
+  const evidenceRecord = store.listEvidenceRecords({
+    source_kind: 'workspace_file',
+    evidence_role: 'agent_output',
+    limit: '1'
+  })[0];
+  assert.ok(evidenceRecord);
+  const beforeCount = store.records.length;
+
+  const unknown = await requestJson(`${baseUrl}/evidence-records/missing-evidence-id/source-context`);
+  assert.equal(unknown.response.status, 404);
+  assert.deepEqual(unknown.body, {
+    error: 'not_found',
+    details: 'unknown evidence record'
+  });
+
+  const sourceContext = await requestJson(
+    `${baseUrl}/evidence-records/${encodeURIComponent(evidenceRecord.evidence_id)}/source-context`
+  );
+  assert.equal(sourceContext.response.status, 200);
+  assert.equal(sourceContext.body.item.evidence_id, evidenceRecord.evidence_id);
+  assert.equal(sourceContext.body.item.source_summary.kind, 'workspace_file');
+  assert.equal(sourceContext.body.item.source_gaps.items.length, 1);
+  assert.equal(sourceContext.body.item.source_health.agent_items.length, 1);
+  assert.equal(store.records.length, beforeCount);
+
+  const serialized = JSON.stringify(sourceContext.body);
+  assert.equal(serialized.includes('collector_snapshot_id'), false);
+  assert.equal(serialized.includes('correlation_id'), false);
+  assert.equal(serialized.includes('evidence_ref'), false);
+  assert.equal(serialized.includes('metadata'), false);
+  assert.equal(serialized.includes('degraded_reasons'), false);
+  assert.equal(serialized.includes('payload'), false);
+  assert.equal(serialized.includes('webhook'), false);
+  assert.equal(serialized.includes('token'), false);
+  for (const unsafeFragment of unsafeFragments) {
+    assert.equal(serialized.includes(unsafeFragment), false, unsafeFragment);
+  }
 });
 
 test('collector snapshot POST exposes shared artifact rollups for refs shared by multiple agents', async (t) => {

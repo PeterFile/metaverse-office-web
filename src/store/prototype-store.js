@@ -691,6 +691,44 @@ class PrototypeStore {
     return projectEvidenceProvenanceBundle(record);
   }
 
+  getEvidenceSourceContext(evidenceId) {
+    const record = this.getEvidenceRecord(evidenceId);
+    if (!record) {
+      return null;
+    }
+
+    const sourceFilters = {
+      evidence_id: record.evidence_id,
+      source_kind: record.source_kind,
+      source_status: record.source_status,
+      collector_snapshot_id: record.collector_snapshot_id,
+      limit: 1
+    };
+    const healthFilters = {
+      collector_snapshot_id: record.collector_snapshot_id,
+      agent_id: record.agent_id,
+      source_kind: record.source_kind,
+      status: record.source_status,
+      limit: 1
+    };
+    const sourceHealth =
+      record.agent_id === null
+        ? null
+        : projectAgentEvidenceSpineSourceHealth(
+            this.getLatestCollectorSourceHealth(healthFilters),
+            healthFilters
+          );
+
+    return projectEvidenceSourceContext({
+      record,
+      sourceHealth: projectEvidenceSourceContextHealth(
+        sourceHealth || createEmptyEvidenceSourceContextHealth(healthFilters)
+      ),
+      sourceGapsSummary: this.getRuntimeSourceGapsSummary(sourceFilters),
+      sourceGapItems: this.listRuntimeSourceGaps(sourceFilters)
+    });
+  }
+
   listRuntimeSourceGaps(filters = {}) {
     const { records, limit, newestFirst } = this.#filterEvidenceRecords(filters);
     const gapRecords = records.filter(isRuntimeSourceGapRecord);
@@ -4082,6 +4120,49 @@ function projectEvidenceProvenanceBundle(record) {
   return bundle;
 }
 
+function projectEvidenceSourceContext({ record, sourceHealth, sourceGapsSummary, sourceGapItems }) {
+  const sourceFields = projectEvidenceSourceFields(record);
+  const timeFields = projectEvidenceTimeFields(record);
+
+  return {
+    evidence_id: record.evidence_id,
+    source_summary: projectEvidenceSourceSummary(record, sourceFields, timeFields),
+    record: {
+      observed_at: timeFields.observed_at,
+      collected_at: timeFields.collected_at,
+      agent_id: record.agent_id,
+      source_kind: sourceFields.kind,
+      evidence_role: sourceFields.role,
+      source_status: sourceFields.status,
+      output_candidate: record.output_candidate === true,
+      unmapped: record.agent_id === null
+    },
+    source_health: sourceHealth,
+    source_gaps: {
+      summary: projectEvidenceSourceContextGapsSummary(sourceGapsSummary),
+      items: sourceGapItems.map(projectEvidenceSourceContextGapItem)
+    }
+  };
+}
+
+function projectEvidenceSourceContextGapsSummary(summary = {}) {
+  const { collector_snapshot_id_buckets, ...publicSummary } = summary;
+  return publicSummary;
+}
+
+function projectEvidenceSourceContextGapItem(item) {
+  return {
+    observed_at: projectEvidenceTimestampValue(item.observed_at),
+    collected_at: projectEvidenceTimestampValue(item.collected_at),
+    agent_id: item.agent_id,
+    source_kind: projectKnownEvidenceValue(item.source_kind, EVIDENCE_RECORD_SOURCE_KINDS),
+    evidence_role: projectKnownEvidenceValue(item.evidence_role, EVIDENCE_RECORD_ROLES),
+    source_status: projectKnownEvidenceValue(item.source_status, EVIDENCE_RECORD_SOURCE_STATUSES),
+    output_candidate: item.output_candidate === true,
+    unmapped: item.agent_id === null
+  };
+}
+
 function projectEvidenceInputProof(record) {
   return normalizeHermesSourceProvenance(record?.metadata?.source_provenance);
 }
@@ -4236,6 +4317,33 @@ function projectAgentEvidenceSpineSourceHealth(sourceHealth, filters = {}) {
         normalizeSourceHealthStatus(normalizeFilterValue(filters.source_status || filters.status))
       ),
     agent_items: Array.isArray(sourceHealth.agent_items) ? sourceHealth.agent_items : []
+  };
+}
+
+function createEmptyEvidenceSourceContextHealth(filters = {}) {
+  return {
+    collected_at: null,
+    summary: createSourceHealthSummary(
+      [],
+      resolveSourceHealthKeys(filters.source_kind),
+      normalizeSourceHealthStatus(normalizeFilterValue(filters.status))
+    ),
+    agent_items: []
+  };
+}
+
+function projectEvidenceSourceContextHealth(sourceHealth) {
+  return {
+    collected_at: sourceHealth.collected_at || null,
+    summary: sourceHealth.summary,
+    agent_items: Array.isArray(sourceHealth.agent_items)
+      ? sourceHealth.agent_items.map((item) => ({
+          agent_id: item.agent_id,
+          source_health: item.source_health || {},
+          evidence_count: normalizeCount(item.evidence_ref_count),
+          latest_evidence_at: item.latest_evidence_at || null
+        }))
+      : []
   };
 }
 

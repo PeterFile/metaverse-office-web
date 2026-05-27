@@ -15,6 +15,7 @@ import {
   fetchCollectorSnapshot,
   fetchCollectorSnapshotHistory,
   fetchCollectorSourceHealth,
+  fetchEvidenceSourceContext,
   fetchEvidenceProvenanceBundle,
   fetchEvidenceRecord,
   fetchEvidenceRecords,
@@ -815,6 +816,168 @@ describe('fetchEvidenceProvenanceBundle', () => {
       status: 404,
       code: 'not_found',
       message: 'unknown evidence record missing-evidence'
+    });
+  });
+});
+
+describe('fetchEvidenceSourceContext', () => {
+  it('fetches source context by URL-encoded evidence_id', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            item: {
+              evidence_id: 'evidence:app/review#1',
+              source_summary: {
+                kind: 'workspace_file',
+                status: 'degraded',
+                role: 'agent_plan',
+                output_candidate: true,
+                mapped: true,
+                time: {
+                  observed_at: '2026-03-09T18:58:30.000Z',
+                  collected_at: '2026-03-09T18:59:00.000Z'
+                }
+              },
+              record: {
+                observed_at: '2026-03-09T18:58:30.000Z',
+                collected_at: '2026-03-09T18:59:00.000Z',
+                agent_id: 'app-engineering',
+                source_kind: 'workspace_file',
+                evidence_role: 'agent_plan',
+                source_status: 'degraded',
+                output_candidate: true,
+                unmapped: false
+              },
+              source_health: {
+                collected_at: '2026-03-09T18:59:00.000Z',
+                summary: {
+                  agent_count: 1,
+                  source_kind_buckets: {
+                    workspace_files: {
+                      observed: 0,
+                      degraded: 1,
+                      missing: 0,
+                      error: 0
+                    }
+                  },
+                  status_buckets: {
+                    observed: 0,
+                    degraded: 1,
+                    missing: 0,
+                    error: 0
+                  }
+                },
+                agent_items: [
+                  {
+                    agent_id: 'app-engineering',
+                    source_health: {
+                      workspace_files: {
+                        status: 'degraded',
+                        observed_count: 1,
+                        missing_count: 2,
+                        error_count: 0,
+                        last_observed_at: '2026-03-09T18:58:30.000Z'
+                      }
+                    },
+                    evidence_count: 2,
+                    latest_evidence_at: '2026-03-09T18:58:45.000Z'
+                  }
+                ]
+              },
+              source_gaps: {
+                summary: {
+                  total_count: 1,
+                  returned_limit: 1,
+                  mapped_count: 1,
+                  unmapped_count: 0,
+                  output_candidate_buckets: { true: 1, false: 0 },
+                  source_kind_buckets: { workspace_file: 1 },
+                  evidence_role_buckets: { agent_plan: 1 },
+                  source_status_buckets: { degraded: 1 },
+                  first_observed_at: '2026-03-09T18:58:30.000Z',
+                  last_observed_at: '2026-03-09T18:58:30.000Z',
+                  first_collected_at: '2026-03-09T18:59:00.000Z',
+                  last_collected_at: '2026-03-09T18:59:00.000Z'
+                },
+                items: [
+                  {
+                    observed_at: '2026-03-09T18:58:30.000Z',
+                    collected_at: '2026-03-09T18:59:00.000Z',
+                    agent_id: 'app-engineering',
+                    source_kind: 'workspace_file',
+                    evidence_role: 'agent_plan',
+                    source_status: 'degraded',
+                    output_candidate: true,
+                    unmapped: false
+                  }
+                ]
+              }
+            }
+          }),
+          { headers: JSON_HEADERS }
+        )
+      )
+    );
+
+    await expect(fetchEvidenceSourceContext('evidence:app/review#1')).resolves.toMatchObject({
+      evidence_id: 'evidence:app/review#1',
+      source_summary: {
+        kind: 'workspace_file',
+        status: 'degraded'
+      },
+      source_gaps: {
+        items: [
+          {
+            source_kind: 'workspace_file',
+            source_status: 'degraded'
+          }
+        ]
+      }
+    });
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/evidence-records/evidence%3Aapp%2Freview%231/source-context',
+      expect.objectContaining({ signal: undefined })
+    );
+  });
+
+  it('returns null when the source context item is null', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ item: null }), {
+          headers: JSON_HEADERS
+        })
+      )
+    );
+
+    await expect(fetchEvidenceSourceContext('missing-evidence')).resolves.toBeNull();
+  });
+
+  it('surfaces not_found responses as RequestError metadata', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            error: 'not_found',
+            details: 'unknown evidence record'
+          }),
+          {
+            status: 404,
+            headers: JSON_HEADERS
+          }
+        )
+      )
+    );
+
+    await expect(fetchEvidenceSourceContext('missing-evidence')).rejects.toMatchObject({
+      name: 'RequestError',
+      status: 404,
+      code: 'not_found',
+      message: 'unknown evidence record'
     });
   });
 });

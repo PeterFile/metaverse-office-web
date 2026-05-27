@@ -1826,6 +1826,63 @@ test('GET /agents/:id/evidence-spine returns bounded safe aggregate read-only', 
   assert.equal(serialized.includes('degraded_reasons'), false);
 });
 
+test('GET /agents/evidence-spine/summary returns compact seven-agent evidence summary read-only', async (t) => {
+  let collectCount = 0;
+  const controllerSnapshotCollector = {
+    async collectSnapshot() {
+      collectCount += 1;
+      throw new Error('GET evidence spine summary must not collect');
+    }
+  };
+  const { baseUrl, store, storeFile } = await createHarness(t, { controllerSnapshotCollector });
+
+  await store.appendCollectorReport(createRouteParityCollectorReport());
+  const fileBeforeRead = await readFile(storeFile, 'utf8');
+  const recordCountBeforeRead = store.records.length;
+
+  const response = await requestJson(
+    `${baseUrl}/agents/evidence-spine/summary?output_candidate=false&newest_first=true&limit=1`
+  );
+  assert.equal(response.response.status, 200);
+  assert.deepEqual(
+    response.body.item.agents.map((agent) => agent.agent_id),
+    [
+      'team-lead',
+      'market-intel',
+      'product-pmf',
+      'tokenomics',
+      'protocol-engineering',
+      'app-engineering',
+      'growth-revenue'
+    ]
+  );
+  assert.equal(response.body.item.agent_count, 7);
+  assert.equal(response.body.item.returned_limit, 1);
+  assert.equal(response.body.item.total_count, 4);
+  assert.equal(response.body.item.mapped_count, 3);
+  assert.equal(response.body.item.unmapped_count, 1);
+  assert.equal(
+    response.body.item.agents.reduce((total, agent) => total + agent.evidence_count, 0),
+    3
+  );
+  assert.equal(response.body.item.unmapped_evidence_summary.total_count, 1);
+  assert.equal(response.body.item.unmapped_evidence_summary.source_kind_buckets.tmux_observation, 1);
+  assert.equal(response.body.item.unmapped_evidence_summary.latest_observed_at, '2026-03-09T18:05:50.000Z');
+  assert.equal(collectCount, 0);
+  assert.equal(store.records.length, recordCountBeforeRead);
+  assert.equal(await readFile(storeFile, 'utf8'), fileBeforeRead);
+
+  const serialized = JSON.stringify(response.body);
+  assert.equal(serialized.includes('evidence_id'), false);
+  assert.equal(serialized.includes('evidence_ref'), false);
+  assert.equal(serialized.includes('collector_snapshot_id'), false);
+  assert.equal(serialized.includes('correlation_id'), false);
+  assert.equal(serialized.includes('/tmp/route-parity'), false);
+  assert.equal(serialized.includes('tmux://'), false);
+  assert.equal(serialized.includes('metadata'), false);
+  assert.equal(serialized.includes('degraded_reasons'), false);
+});
+
 test('GET /agents/:id/evidence-spine returns 404 for unknown agents', async (t) => {
   const { baseUrl } = await createHarness(t);
 
@@ -7026,6 +7083,7 @@ test('GET read route purity matrix leaves replay records and checkpoints unchang
     '/runtime/source-gaps/agent-summary?newest_first=true&limit=1',
     '/runtime/source-gaps/lifecycle?newest_first=true&limit=1',
     '/runtime/source-gaps/trend?newest_first=true&limit=1',
+    '/agents/evidence-spine/summary?newest_first=true&limit=1',
     '/agents/app-engineering/evidence-spine?newest_first=true&limit=1'
   ];
 

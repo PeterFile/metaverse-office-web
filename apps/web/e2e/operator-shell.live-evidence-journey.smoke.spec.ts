@@ -148,6 +148,8 @@ const replayEvidenceRecordGets = [
 ];
 const replayByEvidenceIdGet =
   `GET /accountability/replay?limit=10&window=60m&evidence_id=${replayEvidenceId}&agent_id=app-engineering`;
+const checkpointLogByEvidenceIdGet =
+  `GET /accountability/replay/checkpoint-log?limit=3&evidence_id=${replayEvidenceId}`;
 const expectedApiGets = new Set([
   'GET /office/overview',
   'GET /incidents?limit=200&window=8760h',
@@ -367,9 +369,11 @@ test.describe('operator shell live evidence journey smoke', () => {
     const allowedApiGets = new Set([
       ...expectedApiGets,
       ...replayEvidenceRecordGets,
+      checkpointLogByEvidenceIdGet,
       replayByEvidenceIdGet
     ]);
     const evidenceRecordRequests: string[] = [];
+    const checkpointLogRequests: string[] = [];
     const replayRequests: string[] = [];
     const apiRequestViolations: string[] = [];
     const handleRequest = (request: Request) => {
@@ -385,7 +389,10 @@ test.describe('operator shell live evidence journey smoke', () => {
       if (url.pathname.startsWith('/evidence-records')) {
         evidenceRecordRequests.push(key);
       }
-      if (url.pathname.startsWith('/accountability/replay')) {
+      if (url.pathname === '/accountability/replay/checkpoint-log') {
+        checkpointLogRequests.push(key);
+      }
+      if (url.pathname === '/accountability/replay') {
         replayRequests.push(key);
       }
     };
@@ -408,6 +415,7 @@ test.describe('operator shell live evidence journey smoke', () => {
       await expect(hub).toHaveCount(0);
       await expect(ledgerCta).toBeVisible();
       expect(evidenceRecordRequests, 'selecting an agent should not prefetch evidence records').toEqual([]);
+      expect(checkpointLogRequests, 'selecting an agent should not prefetch checkpoint proof').toEqual([]);
       expect(replayRequests, 'selecting an agent should not prefetch replay records').toEqual([]);
 
       await ledgerCta.click();
@@ -416,6 +424,7 @@ test.describe('operator shell live evidence journey smoke', () => {
       await expect(hub).toBeVisible();
       await expect(evidencePanel.getByRole('heading', { name: 'Evidence Ledger' })).toBeVisible();
       await expect.poll(() => evidenceRecordRequests.slice()).toEqual([replayEvidenceRecordGets[0]]);
+      expect(checkpointLogRequests, 'opening Evidence Ledger should not prefetch checkpoint proof').toEqual([]);
       expect(replayRequests, 'opening Evidence Ledger should not prefetch replay records').toEqual([]);
 
       await evidencePanel
@@ -429,6 +438,7 @@ test.describe('operator shell live evidence journey smoke', () => {
       await expect(
         detailSection.getByRole('button', { name: `Replay this evidence ${boundedReplayEvidenceId}` })
       ).toBeVisible();
+      await expect.poll(() => checkpointLogRequests.slice()).toEqual([checkpointLogByEvidenceIdGet]);
       await expect(detailSection).toContainText('Replay anchor · collector-snapshot:2026-03-10T23:59:40.000Z');
       await expect(detailSection).not.toContainText('/accountability/replay');
       await expect(detailSection).not.toContainText('/evidence-records/');

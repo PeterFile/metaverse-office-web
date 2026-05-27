@@ -6955,6 +6955,46 @@ test('GET evidence and source read routes keep JSONL and SQLite parity', async (
     ['/tmp/route-parity/app/outbox.md', 'tmux://5-web3-app-engineering/0.1']
   );
 
+  const jsonlSourceContextRecord = jsonl.store.listEvidenceRecords({
+    agent_id: 'app-engineering',
+    source_kind: 'workspace_file',
+    evidence_role: 'agent_output',
+    output_candidate: 'true',
+    limit: '1'
+  })[0];
+  const sqliteSourceContextRecord = sqlite.store.listEvidenceRecords({
+    agent_id: 'app-engineering',
+    source_kind: 'workspace_file',
+    evidence_role: 'agent_output',
+    output_candidate: 'true',
+    limit: '1'
+  })[0];
+  assert.ok(jsonlSourceContextRecord);
+  assert.deepEqual(sqliteSourceContextRecord?.evidence_id, jsonlSourceContextRecord.evidence_id);
+  const [jsonlSourceContext, sqliteSourceContext] = await parityRequest(
+    `/evidence-records/${encodeURIComponent(jsonlSourceContextRecord.evidence_id)}/source-context`
+  );
+  assert.deepEqual(sqliteSourceContext, jsonlSourceContext);
+  assert.equal(jsonlSourceContext.item.evidence_id, jsonlSourceContextRecord.evidence_id);
+  assert.equal(jsonlSourceContext.item.source_summary.kind, 'workspace_file');
+  assert.equal(jsonlSourceContext.item.source_gaps.items.length, 1);
+  assert.equal(jsonlSourceContext.item.source_health.agent_items.length, 1);
+  const serializedSourceContext = JSON.stringify(jsonlSourceContext);
+  for (const unsafeFragment of [
+    '/tmp/route-parity',
+    'tmux://',
+    'collector_snapshot_id',
+    'collector-snapshot:',
+    'correlation_id',
+    'metadata',
+    'degraded_reasons',
+    'payload',
+    'token',
+    'webhook'
+  ]) {
+    assert.equal(serializedSourceContext.includes(unsafeFragment), false, unsafeFragment);
+  }
+
   const [jsonlSpine, sqliteSpine] = await parityRequest(
     '/agents/app-engineering/evidence-spine?source_kind=workspace_file&output_candidate=true&newest_first=true&limit=1'
   );

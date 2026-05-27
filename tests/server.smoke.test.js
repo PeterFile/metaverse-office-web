@@ -305,6 +305,80 @@ function createRouteParityCollectorReport() {
   };
 }
 
+function createEvidenceSpineRedactionCollectorReport() {
+  const report = createRouteParityCollectorReport();
+  const item = report.items[0];
+
+  item.evidence_refs.push('hermes://profile/redaction-profile');
+  item.hermes_runtime_observations = [
+    {
+      source_kind: 'hermes_profile',
+      evidence_ref: 'hermes://profile/redaction-profile',
+      profile_id: 'redaction-profile-id',
+      session_ref: 'redaction-session-ref',
+      status: 'observed',
+      observed_at: '2026-03-09T18:07:20.000Z',
+      source_provenance: {
+        payload: 'token=redaction-profile-payload',
+        webhook: 'https://hooks.slack.com/services/redaction-profile'
+      }
+    }
+  ];
+  item.task_evidence_observations = [
+    {
+      status: 'degraded',
+      task_ref: 'RED-101',
+      source_kind: 'kanban_fixture',
+      observed_at: '2026-03-09T18:07:25.000Z',
+      correlation_id: 'corr-redaction-task',
+      warnings: ['agent_id suppressed'],
+      source_provenance: {
+        payload: 'token=redaction-task-payload',
+        webhook: 'https://hooks.slack.com/services/redaction-task'
+      }
+    }
+  ];
+  item.source_health.hermes_profile = {
+    status: 'observed',
+    profile_id: 'redaction-profile-id',
+    session_ref: 'redaction-session-ref',
+    observed_count: 1,
+    last_observed_at: '2026-03-09T18:07:20.000Z',
+    degraded_reasons: ['token=redaction-hermes-secret']
+  };
+
+  return report;
+}
+
+function assertNoEvidenceSpineRuntimeLeak(payload, { allowCollectorAnchors = false } = {}) {
+  const serialized = JSON.stringify(payload);
+  const forbidden = [
+    'evidence_ref',
+    '/tmp/evidence-spine-redaction',
+    'tmux://redaction-session',
+    'hermes://profile/redaction',
+    'redaction-session-ref',
+    'redaction-profile-id',
+    'metadata',
+    'degraded_reasons',
+    '"payload"',
+    'raw_payload',
+    'token=redaction',
+    'hooks.slack.com/services/redaction',
+    'webhook',
+    'source_provenance',
+    'RED-101'
+  ];
+
+  if (!allowCollectorAnchors) {
+    forbidden.push('collector_snapshot_id', 'correlation_id', 'corr-redaction');
+  }
+
+  for (const canary of forbidden) {
+    assert.equal(serialized.includes(canary), false, `${canary} leaked`);
+  }
+}
+
 test('GET endpoints expose the seeded canonical scaffold', async (t) => {
   const { baseUrl } = await createHarness(t);
 
@@ -1826,6 +1900,37 @@ test('GET /agents/:id/evidence-spine returns bounded safe aggregate read-only', 
   assert.equal(serialized.includes('degraded_reasons'), false);
 });
 
+test('GET /agents/:id/evidence-spine redacts runtime source details and filters before limit', async (t) => {
+  const { baseUrl, store } = await createHarness(t);
+
+  await store.appendCollectorReport(createEvidenceSpineRedactionCollectorReport());
+
+  const response = await requestJson(
+    `${baseUrl}/agents/app-engineering/evidence-spine?source_kind=hermes_profile&newest_first=true&limit=1`
+  );
+  assert.equal(response.response.status, 200);
+  assert.equal(response.body.item.agent_id, 'app-engineering');
+  assert.equal(response.body.item.returned_limit, 1);
+  assert.equal(response.body.item.evidence_summary.total_count, 1);
+  assert.equal(response.body.item.evidence_summary.source_kind_buckets.hermes_profile, 1);
+  assert.deepEqual(
+    response.body.item.recent_evidence.map((record) => record.source_kind),
+    ['hermes_profile']
+  );
+  assert.equal(response.body.item.source_health.summary.agent_count, 1);
+  assert.equal(
+    response.body.item.source_health.summary.source_kind_buckets.hermes_profile.observed,
+    1
+  );
+  assert.equal(response.body.item.source_health.agent_items[0].evidence_count, 3);
+  assert.equal(
+    Object.hasOwn(response.body.item.source_health.agent_items[0], 'evidence_ref_count'),
+    false
+  );
+
+  assertNoEvidenceSpineRuntimeLeak(response.body, { allowCollectorAnchors: true });
+});
+
 test('GET /agents/evidence-spine/summary returns compact seven-agent evidence summary read-only', async (t) => {
   let collectCount = 0;
   const controllerSnapshotCollector = {
@@ -1881,6 +1986,32 @@ test('GET /agents/evidence-spine/summary returns compact seven-agent evidence su
   assert.equal(serialized.includes('tmux://'), false);
   assert.equal(serialized.includes('metadata'), false);
   assert.equal(serialized.includes('degraded_reasons'), false);
+});
+
+test('GET /agents/evidence-spine/summary stays compact under runtime canaries and filters before limit', async (t) => {
+  const { baseUrl, store } = await createHarness(t);
+
+  await store.appendCollectorReport(createEvidenceSpineRedactionCollectorReport());
+
+  const response = await requestJson(
+    `${baseUrl}/agents/evidence-spine/summary?source_kind=kanban_fixture&newest_first=true&limit=1`
+  );
+  assert.equal(response.response.status, 200);
+  assert.equal(response.body.item.agent_count, 7);
+  assert.equal(response.body.item.returned_limit, 1);
+  assert.equal(response.body.item.total_count, 1);
+  assert.equal(response.body.item.mapped_count, 1);
+  assert.equal(response.body.item.unmapped_count, 0);
+
+  const appSummary = response.body.item.agents.find(
+    (agent) => agent.agent_id === 'app-engineering'
+  );
+  assert.ok(appSummary);
+  assert.equal(appSummary.evidence_count, 1);
+  assert.equal(appSummary.source_kind_buckets.kanban_fixture, 1);
+  assert.equal(appSummary.latest_observed_at, '2026-03-09T18:07:25.000Z');
+
+  assertNoEvidenceSpineRuntimeLeak(response.body);
 });
 
 test('GET /agents/:id/evidence-spine returns 404 for unknown agents', async (t) => {

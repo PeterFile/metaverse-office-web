@@ -215,7 +215,7 @@ Optional env:
 - `GET /agents/:id/evidence-spine` is a read-only aggregate over existing replayed evidence-record summaries, runtime source-gap projections, and collector source-health projections for one known agent; unknown agents return `404`
 - filters are exact and additive: `source_kind`, `evidence_role`, `output_candidate`, `source_status` (or `status` for source-health aliasing), `collector_snapshot_id`, `correlation_id`, `mapped`, inclusive observed/collected windows, `newest_first`, and post-filter `limit`
 - `evidence_summary` and `source_gaps.summary` compute counts, buckets, and extrema before `limit`; `recent_evidence`, `source_gaps.items`, and `source_health.agent_items` are bounded after filters by `returned_limit`
-- the route returns bounded source/status/role/count/time fields only and does not expose raw evidence refs, local paths, tmux/Hermes/session/profile refs, payloads, metadata, degraded reasons, liveness/productivity/severity inference, collection, filesystem/tmux reads, writes, or control-plane actions
+- the route returns bounded source/status/role/count/time fields only; `source_health.agent_items` use `evidence_count` rather than evidence-ref field names and do not expose raw evidence refs, local paths, tmux/Hermes/session/profile refs, payloads, metadata, degraded reasons, liveness/productivity/severity inference, collection, filesystem/tmux reads, writes, or control-plane actions
 
 ### Interaction read-model notes
 - `GET /interactions` and `GET /agents/:id/interactions` are read-only query surfaces derived from the existing append-only event log

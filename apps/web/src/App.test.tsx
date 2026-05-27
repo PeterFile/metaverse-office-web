@@ -3544,8 +3544,10 @@ afterEach(() => {
     const ledgerSection = await findHubSection(details, 'Evidence Ledger');
     expect(ledgerSection).toHaveTextContent('Output evidence · 1');
     expect(ledgerSection).toHaveTextContent('Non-output evidence · 1');
-    expect(ledgerSection).toHaveTextContent('Ref · [local path] outbox.md');
-    expect(ledgerSection).not.toHaveTextContent('Ref · /tmp/app/outbox.md');
+    expect(ledgerSection).toHaveTextContent('Source context · workspace_file · agent_output · observed · mapped · 1');
+    expect(ledgerSection).toHaveTextContent('Source · workspace_file · Role · agent_output · Status · observed · mapped');
+    expect(ledgerSection).not.toHaveTextContent('Ref ·');
+    expect(ledgerSection).not.toHaveTextContent('/tmp/app/outbox.md');
     expect(ledgerSection).not.toHaveTextContent('raw_tmux_capture');
   });
 

@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildSelectedAgentEvidenceLedger } from './selectedAgentEvidenceLedger';
+import {
+  buildSelectedAgentEvidenceLedger,
+  selectSelectedAgentEvidenceLedgerSourceContextGroups
+} from './selectedAgentEvidenceLedger';
 import type { EvidenceRecord } from './types';
 
 function evidenceRecord(overrides: Partial<EvidenceRecord>): EvidenceRecord {
@@ -30,6 +33,7 @@ describe('buildSelectedAgentEvidenceLedger', () => {
       nonOutputEvidence: { totalCount: 0, overflowCount: 0, items: [] },
       degradedEvidence: { totalCount: 0, overflowCount: 0, items: [] },
       unmappedEvidence: { totalCount: 0, overflowCount: 0, items: [] },
+      sourceContextGroups: [],
       sourceRefGroups: []
     });
   });
@@ -142,6 +146,44 @@ describe('buildSelectedAgentEvidenceLedger', () => {
         overflowCount: 0,
         items: []
       },
+      sourceContextGroups: [
+        {
+          sourceKind: 'workspace_file',
+          evidenceRole: 'workspace_file',
+          sourceStatus: 'missing',
+          mapped: true,
+          observedAt: '2026-03-09T18:06:00.000Z',
+          collectedAt: '2026-03-09T18:05:00.000Z',
+          totalCount: 1
+        },
+        {
+          sourceKind: 'workspace_file',
+          evidenceRole: 'agent_output',
+          sourceStatus: 'degraded',
+          mapped: true,
+          observedAt: '2026-03-09T18:05:00.000Z',
+          collectedAt: '2026-03-09T18:05:00.000Z',
+          totalCount: 1
+        },
+        {
+          sourceKind: 'workspace_file',
+          evidenceRole: 'agent_output',
+          sourceStatus: 'observed',
+          mapped: true,
+          observedAt: '2026-03-09T18:04:30.000Z',
+          collectedAt: '2026-03-09T18:05:00.000Z',
+          totalCount: 1
+        },
+        {
+          sourceKind: 'workspace_root',
+          evidenceRole: 'workspace_presence',
+          sourceStatus: 'observed',
+          mapped: true,
+          observedAt: '2026-03-09T18:03:00.000Z',
+          collectedAt: '2026-03-09T18:05:00.000Z',
+          totalCount: 1
+        }
+      ],
       sourceRefGroups: [
         {
           sourceKind: 'workspace_file',
@@ -335,5 +377,116 @@ describe('buildSelectedAgentEvidenceLedger', () => {
       }
     ]);
     expect(model.sourceRefGroups[0]).not.toHaveProperty('metadata');
+  });
+});
+
+describe('selectSelectedAgentEvidenceLedgerSourceContextGroups', () => {
+  it('computes source context groups from all records even when visible cards overflow', () => {
+    const model = buildSelectedAgentEvidenceLedger(
+      [
+        evidenceRecord({
+          evidence_id: 'visible-output',
+          evidence_ref: '/tmp/app/visible-output.md',
+          source_kind: 'workspace_file',
+          evidence_role: 'agent_output',
+          source_status: 'observed',
+          output_candidate: true
+        }),
+        evidenceRecord({
+          evidence_id: 'hidden-output',
+          observed_at: '2026-03-09T18:03:00.000Z',
+          evidence_ref: '/tmp/app/hidden-output.md',
+          source_kind: 'workspace_file',
+          evidence_role: 'agent_output',
+          source_status: 'observed',
+          output_candidate: true
+        }),
+        evidenceRecord({
+          evidence_id: 'hidden-runtime',
+          observed_at: '2026-03-09T18:02:00.000Z',
+          agent_id: null,
+          evidence_ref: 'tmux://session/window/pane',
+          source_kind: 'tmux_observation',
+          evidence_role: 'runtime_unmapped',
+          source_status: 'observed',
+          output_candidate: false,
+          degraded_reasons: ['do not render tmux://session/window/pane']
+        })
+      ],
+      { maxItemsPerGroup: 1, maxSourceRefGroups: 4 }
+    );
+
+    expect(model.outputEvidence.items.map((item) => item.evidenceId)).toEqual(['visible-output']);
+    expect(model.outputEvidence.overflowCount).toBe(1);
+    expect(model.unmappedEvidence.items.map((item) => item.evidenceId)).toEqual(['hidden-runtime']);
+    expect(selectSelectedAgentEvidenceLedgerSourceContextGroups(model)).toEqual([
+      {
+        sourceKind: 'workspace_file',
+        evidenceRole: 'agent_output',
+        sourceStatus: 'observed',
+        mapped: true,
+        observedAt: '2026-03-09T18:04:30.000Z',
+        collectedAt: '2026-03-09T18:05:00.000Z',
+        totalCount: 2
+      },
+      {
+        sourceKind: 'tmux_observation',
+        evidenceRole: 'runtime_unmapped',
+        sourceStatus: 'observed',
+        mapped: false,
+        observedAt: '2026-03-09T18:02:00.000Z',
+        collectedAt: '2026-03-09T18:05:00.000Z',
+        totalCount: 1
+      }
+    ]);
+    expect(JSON.stringify(selectSelectedAgentEvidenceLedgerSourceContextGroups(model))).not.toContain('/tmp/app');
+    expect(JSON.stringify(selectSelectedAgentEvidenceLedgerSourceContextGroups(model))).not.toContain('tmux://');
+  });
+
+  it('projects only safe source context fields and deduplicates degraded bucket overlap', () => {
+    const model = buildSelectedAgentEvidenceLedger([
+      evidenceRecord({
+        evidence_id: 'output',
+        evidence_ref: '/tmp/app/output.md',
+        source_kind: 'workspace_file',
+        evidence_role: 'agent_output',
+        source_status: 'degraded',
+        output_candidate: true,
+        degraded_reasons: ['do not render /tmp/app/output.md']
+      }),
+      evidenceRecord({
+        evidence_id: 'unmapped',
+        observed_at: '2026-03-09T18:06:00.000Z',
+        agent_id: null,
+        source_kind: 'tmux_observation',
+        evidence_ref: 'tmux://unmapped/0.1',
+        evidence_role: 'runtime_unmapped',
+        source_status: 'observed',
+        output_candidate: false,
+        collector_snapshot_id: 'collector-secret',
+        correlation_id: null
+      })
+    ]);
+
+    expect(selectSelectedAgentEvidenceLedgerSourceContextGroups(model)).toEqual([
+      {
+        sourceKind: 'tmux_observation',
+        evidenceRole: 'runtime_unmapped',
+        sourceStatus: 'observed',
+        mapped: false,
+        observedAt: '2026-03-09T18:06:00.000Z',
+        collectedAt: '2026-03-09T18:05:00.000Z',
+        totalCount: 1
+      },
+      {
+        sourceKind: 'workspace_file',
+        evidenceRole: 'agent_output',
+        sourceStatus: 'degraded',
+        mapped: true,
+        observedAt: '2026-03-09T18:04:30.000Z',
+        collectedAt: '2026-03-09T18:05:00.000Z',
+        totalCount: 1
+      }
+    ]);
   });
 });

@@ -53,7 +53,7 @@ import type {
   SelectedAgentEvidenceLedgerGroup,
   SelectedAgentEvidenceLedgerItem,
   SelectedAgentEvidenceLedgerModel,
-  SelectedAgentEvidenceLedgerSourceRefGroup
+  SelectedAgentEvidenceLedgerSourceContextGroup
 } from '../selectedAgentEvidenceLedger';
 import type { SourceGapDrilldownGroupKey } from './sourceGapSignals';
 
@@ -1277,14 +1277,6 @@ function formatEvidenceLedgerRef(value: string) {
   return formatBoundedEvidenceLedgerToken(normalized);
 }
 
-function formatEvidenceLedgerReason(value: string) {
-  return formatBoundedEvidenceLedgerToken(
-    value.replace(/(?:file:\/\/)?(?:\/[^\s,;:)]+|~\/[^\s,;:)]+|[A-Za-z]:[\\/][^\s,;:)]+)/g, (match) =>
-      formatEvidenceLedgerRef(match)
-    )
-  );
-}
-
 function renderSelectedAgentEvidenceProofCompass(model: SelectedAgentEvidenceLedgerModel) {
   if (model.isEmpty) {
     return null;
@@ -1309,9 +1301,9 @@ function renderSelectedAgentEvidenceProofCompass(model: SelectedAgentEvidenceLed
     }
   ];
   const visibleBuckets = buckets.filter((bucket) => bucket.totalCount > 0);
-  const sourceRefGroups = model.sourceRefGroups.filter((group) => group.totalCount > 0);
+  const sourceContextGroups = model.sourceContextGroups;
 
-  if (visibleBuckets.length === 0 && sourceRefGroups.length === 0) {
+  if (visibleBuckets.length === 0 && sourceContextGroups.length === 0) {
     return null;
   }
 
@@ -1321,15 +1313,17 @@ function renderSelectedAgentEvidenceProofCompass(model: SelectedAgentEvidenceLed
       {visibleBuckets.length > 0 ? (
         <span>{`Buckets · ${visibleBuckets.map((bucket) => `${bucket.label} ${bucket.totalCount}`).join(' · ')}`}</span>
       ) : null}
-      {sourceRefGroups.map((group) => renderSelectedAgentEvidenceSourceRefGroup(group))}
+      {sourceContextGroups.map((group) => renderSelectedAgentEvidenceSourceContextGroup(group))}
     </li>
   );
 }
 
-function renderSelectedAgentEvidenceSourceRefGroup(group: SelectedAgentEvidenceLedgerSourceRefGroup) {
+function renderSelectedAgentEvidenceSourceContextGroup(group: SelectedAgentEvidenceLedgerSourceContextGroup) {
   return (
-    <span key={`${group.sourceKind}:${group.evidenceRole ?? 'none'}:${group.sourceStatus ?? 'none'}:${group.evidenceRef}`}>
-      {`Source/ref · ${group.sourceKind} · ${group.evidenceRole ?? 'unclassified'} · ${group.sourceStatus ?? 'unknown'} · ${formatEvidenceLedgerRef(group.evidenceRef)} · ${group.totalCount}`}
+    <span
+      key={`${group.sourceKind}:${group.evidenceRole ?? 'none'}:${group.sourceStatus ?? 'none'}:${group.mapped ? 'mapped' : 'unmapped'}`}
+    >
+      {`Source context · ${group.sourceKind} · ${group.evidenceRole ?? 'unclassified'} · ${group.sourceStatus ?? 'unknown'} · ${group.mapped ? 'mapped' : 'unmapped'} · ${group.totalCount} · Observed ${renderTimestamp(group.observedAt, 'No observed timestamp')} · Collected ${renderTimestamp(group.collectedAt, 'No collected timestamp')}`}
     </span>
   );
 }
@@ -1356,24 +1350,12 @@ function renderSelectedAgentEvidenceLedgerItem(
   item: SelectedAgentEvidenceLedgerItem,
   onInspectRecord: (evidenceId: string) => void
 ) {
-  const degradedReasons =
-    item.degradedReasons.length > 0 ? item.degradedReasons.map(formatEvidenceLedgerReason).join(', ') : null;
+  const mapped = item.agentId !== null && item.evidenceRole !== 'runtime_unmapped';
   const evidenceId = formatBoundedEvidenceLedgerToken(item.evidenceId);
-  const collectorSnapshotId = formatBoundedEvidenceLedgerToken(item.collectorSnapshotId);
 
   return (
     <Fragment key={item.evidenceId}>
-      <span>{`Ref · ${formatEvidenceLedgerRef(item.evidenceRef)}`}</span>
-      <span>{`Evidence id · ${evidenceId}`}</span>
-      <span>{`Snapshot · ${collectorSnapshotId}`}</span>
-      <span>{`Collected · ${renderTimestamp(item.collectedAt, 'No collected timestamp')}`}</span>
-      <span>{`Source · ${item.sourceKind}`}</span>
-      <span>{`Role · ${item.evidenceRole ?? 'unclassified'}`}</span>
-      <span>{`Status · ${item.sourceStatus ?? 'unknown'}`}</span>
-      <span>{`Observed · ${renderTimestamp(item.observedAt, 'No observed timestamp')}`}</span>
-      <span>{item.agentId ? `Agent · ${formatBoundedEvidenceLedgerToken(item.agentId)}` : 'Agent · unmapped'}</span>
-      {item.correlationId ? <span>{`Correlation · ${formatBoundedEvidenceLedgerToken(item.correlationId)}`}</span> : null}
-      {degradedReasons ? <span>{`Degraded · ${degradedReasons}`}</span> : null}
+      <span>{`Source · ${item.sourceKind} · Role · ${item.evidenceRole ?? 'unclassified'} · Status · ${item.sourceStatus ?? 'unknown'} · ${mapped ? 'mapped' : 'unmapped'} · Observed · ${renderTimestamp(item.observedAt, 'No observed timestamp')} · Collected · ${renderTimestamp(item.collectedAt, 'No collected timestamp')}`}</span>
       <button
         type="button"
         className="aitown-link-button"

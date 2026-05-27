@@ -29,6 +29,16 @@ export interface SelectedAgentEvidenceLedgerSourceRefGroup {
   totalCount: number;
 }
 
+export interface SelectedAgentEvidenceLedgerSourceContextGroup {
+  sourceKind: string;
+  evidenceRole: string | null;
+  sourceStatus: string | null;
+  mapped: boolean;
+  observedAt: string | null;
+  collectedAt: string | null;
+  totalCount: number;
+}
+
 export interface SelectedAgentEvidenceLedgerModel {
   isEmpty: boolean;
   requestScopeLabel: string;
@@ -36,6 +46,7 @@ export interface SelectedAgentEvidenceLedgerModel {
   nonOutputEvidence: SelectedAgentEvidenceLedgerGroup;
   degradedEvidence: SelectedAgentEvidenceLedgerGroup;
   unmappedEvidence: SelectedAgentEvidenceLedgerGroup;
+  sourceContextGroups: SelectedAgentEvidenceLedgerSourceContextGroup[];
   sourceRefGroups: SelectedAgentEvidenceLedgerSourceRefGroup[];
 }
 
@@ -85,6 +96,7 @@ export function buildSelectedAgentEvidenceLedger(
     nonOutputEvidence: toBoundedGroup(nonOutputEvidence, maxItemsPerGroup),
     degradedEvidence: toBoundedGroup(degradedEvidence, maxItemsPerGroup),
     unmappedEvidence: toBoundedGroup(unmappedEvidence, maxItemsPerGroup),
+    sourceContextGroups: toSourceContextGroups(records, maxSourceRefGroups),
     sourceRefGroups: toSourceRefGroups(records, maxSourceRefGroups)
   };
 }
@@ -140,6 +152,85 @@ function cloneLedgerItem(
     ...item,
     degradedReasons: [...item.degradedReasons]
   };
+}
+
+export function selectSelectedAgentEvidenceLedgerSourceContextGroups(
+  model: SelectedAgentEvidenceLedgerModel,
+  maxGroups = 4
+): SelectedAgentEvidenceLedgerSourceContextGroup[] {
+  return model.sourceContextGroups.slice(0, Math.max(0, maxGroups));
+}
+
+function toSourceContextGroups(
+  records: EvidenceRecord[],
+  maxGroups: number
+): SelectedAgentEvidenceLedgerSourceContextGroup[] {
+  const groupsByKey = new Map<
+    string,
+    SelectedAgentEvidenceLedgerSourceContextGroup & { latestTime: number; firstSourceOrder: number }
+  >();
+  const seenEvidenceIds = new Set<string>();
+
+  records.forEach((record, sourceOrder) => {
+    if (seenEvidenceIds.has(record.evidence_id)) {
+      return;
+    }
+    seenEvidenceIds.add(record.evidence_id);
+
+    const item = toLedgerItem(record);
+    const mapped = item.agentId !== null && item.evidenceRole !== 'runtime_unmapped';
+    const key = JSON.stringify([item.sourceKind, item.evidenceRole, item.sourceStatus, mapped]);
+    const latestTime = getLedgerItemTime(item);
+    const existing = groupsByKey.get(key);
+
+    if (existing) {
+      existing.totalCount += 1;
+      existing.latestTime = Math.max(existing.latestTime, latestTime);
+      existing.observedAt = maxTimestamp(existing.observedAt, item.observedAt);
+      existing.collectedAt = maxTimestamp(existing.collectedAt, item.collectedAt);
+      return;
+    }
+
+    groupsByKey.set(key, {
+      sourceKind: item.sourceKind,
+      evidenceRole: item.evidenceRole,
+      sourceStatus: item.sourceStatus,
+      mapped,
+      observedAt: item.observedAt,
+      collectedAt: item.collectedAt,
+      totalCount: 1,
+      latestTime,
+      firstSourceOrder: sourceOrder
+    });
+  });
+
+  return [...groupsByKey.values()]
+    .sort((left, right) => {
+      const count = right.totalCount - left.totalCount;
+      if (count !== 0) {
+        return count;
+      }
+
+      const recency = right.latestTime - left.latestTime;
+      return recency !== 0 ? recency : left.firstSourceOrder - right.firstSourceOrder;
+    })
+    .slice(0, maxGroups)
+    .map(({ latestTime: _latestTime, firstSourceOrder: _firstSourceOrder, ...group }) => group);
+}
+
+function maxTimestamp(left: string | null, right: string | null): string | null {
+  const leftTime = Date.parse(left ?? '');
+  const rightTime = Date.parse(right ?? '');
+
+  if (!Number.isFinite(leftTime)) {
+    return right;
+  }
+
+  if (!Number.isFinite(rightTime)) {
+    return left;
+  }
+
+  return rightTime > leftTime ? right : left;
 }
 
 function compareLedgerItemRecency(

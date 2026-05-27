@@ -822,6 +822,44 @@ function buildSelectedAgentEvidenceLedger(
         }
       ]
     },
+    sourceContextGroups: [
+      {
+        sourceKind: 'workspace_file',
+        evidenceRole: 'agent_output',
+        sourceStatus: 'observed',
+        mapped: true,
+        observedAt: '2026-03-16T08:58:00.000Z',
+        collectedAt: '2026-03-16T08:59:00.000Z',
+        totalCount: 1
+      },
+      {
+        sourceKind: 'workspace_root',
+        evidenceRole: 'workspace_presence',
+        sourceStatus: 'observed',
+        mapped: true,
+        observedAt: '2026-03-16T08:57:00.000Z',
+        collectedAt: '2026-03-16T08:59:00.000Z',
+        totalCount: 1
+      },
+      {
+        sourceKind: 'workspace_file',
+        evidenceRole: 'workspace_file',
+        sourceStatus: 'missing',
+        mapped: true,
+        observedAt: '2026-03-16T08:56:30.000Z',
+        collectedAt: '2026-03-16T08:59:00.000Z',
+        totalCount: 1
+      },
+      {
+        sourceKind: 'tmux_observation',
+        evidenceRole: 'runtime_unmapped',
+        sourceStatus: 'observed',
+        mapped: false,
+        observedAt: '2026-03-16T08:56:00.000Z',
+        collectedAt: '2026-03-16T08:59:00.000Z',
+        totalCount: 1
+      }
+    ],
     sourceRefGroups: [
       {
         sourceKind: 'workspace_file',
@@ -1769,7 +1807,7 @@ describe('DetailsPanel selected-agent workflow lifecycle', () => {
     expect(within(facetsRecord!).getByText('Counterparties · growth-revenue, team-lead')).toBeVisible();
   });
 
-  it('renders selected-agent evidence ledger bucket chips without inferring idle or dumping raw metadata', () => {
+  it('renders selected-agent Evidence Ledger source context using only safe summary fields', () => {
     const onInspectSelectedAgentEvidenceRecord = vi.fn();
     const selectedAgentEvidenceLedger = buildSelectedAgentEvidenceLedger();
     selectedAgentEvidenceLedger.sourceRefGroups = [
@@ -1804,18 +1842,27 @@ describe('DetailsPanel selected-agent workflow lifecycle', () => {
     expect(within(section!).getByText('Non-output evidence · 1')).toBeVisible();
     expect(within(section!).getByText('Degraded evidence · 1')).toBeVisible();
     expect(within(section!).getByText('Unmapped evidence · 1')).toBeVisible();
-    expect(within(section!).getAllByText('Ref · [local path] outbox.md')[0]).toBeVisible();
-    expect(within(section!).getByText('Role · agent_output')).toBeVisible();
-    expect(within(section!).getByText('Ref · [local path] app')).toBeVisible();
-    expect(within(section!).getByText('Ref · [tmux ref]')).toBeVisible();
     expect(
-      within(section!).getAllByText('Source/ref · tmux_observation · runtime_unmapped · observed · [tmux ref] · 1')[0]
+      within(section!).getByText(
+        'Source context · workspace_file · agent_output · observed · mapped · 1 · Observed 2026-03-16T08:58:00.000Z · Collected 2026-03-16T08:59:00.000Z'
+      )
     ).toBeVisible();
     expect(
-      within(section!).getByText('Source/ref · hermes_runtime · runtime_profile · degraded · [runtime ref] · 1')
+      within(section!).getByText(
+        'Source context · tmux_observation · runtime_unmapped · observed · unmapped · 1 · Observed 2026-03-16T08:56:00.000Z · Collected 2026-03-16T08:59:00.000Z'
+      )
     ).toBeVisible();
-    expect(within(section!).getByText('Degraded · no seeded roster mapping')).toBeVisible();
+    expect(
+      within(section!).getByText(
+        'Source · workspace_file · Role · agent_output · Status · observed · mapped · Observed · 2026-03-16T08:58:00.000Z · Collected · 2026-03-16T08:59:00.000Z'
+      )
+    ).toBeVisible();
     expect(section!).not.toHaveTextContent('/tmp/app/outbox.md');
+    expect(section!).not.toHaveTextContent('Ref ·');
+    expect(section!).not.toHaveTextContent('Evidence id ·');
+    expect(section!).not.toHaveTextContent('Snapshot ·');
+    expect(section!).not.toHaveTextContent('Correlation ·');
+    expect(section!).not.toHaveTextContent('Degraded ·');
     expect(section!).not.toHaveTextContent('metadata');
     expect(section!).not.toHaveTextContent('idle');
     expect(section!).not.toHaveTextContent('offline');
@@ -1849,7 +1896,7 @@ describe('DetailsPanel selected-agent workflow lifecycle', () => {
     expect(section!).not.toHaveTextContent('Degraded 0');
   });
 
-  it('renders bounded selected-agent evidence provenance without replay claims', () => {
+  it('renders bounded selected-agent evidence provenance summary without ids or replay claims', () => {
     render(
       <DetailsPanel
         {...buildProps({
@@ -1877,7 +1924,18 @@ describe('DetailsPanel selected-agent workflow lifecycle', () => {
                   degradedReasons: []
                 }
               ]
-            }
+            },
+            sourceContextGroups: [
+              {
+                sourceKind: 'workspace_file',
+                evidenceRole: 'agent_output',
+                sourceStatus: 'observed',
+                mapped: true,
+                observedAt: null,
+                collectedAt: '2026-03-16T08:59:00.000Z',
+                totalCount: 1
+              }
+            ]
           }),
           selectedAgentEvidenceLedgerState: 'ready'
         })}
@@ -1887,15 +1945,19 @@ describe('DetailsPanel selected-agent workflow lifecycle', () => {
     const section = screen.getByRole('heading', { name: 'Evidence Ledger' }).closest('section');
     expect(section).not.toBeNull();
     expect(
-      within(section!).getByText(/Evidence id · evidence-app-engineering-output-with-a-very-long-sensitive-\[redacted\]/)
+      within(section!).getByText(
+        'Source context · workspace_file · agent_output · observed · mapped · 1 · Observed No observed timestamp · Collected 2026-03-16T08:59:00.000Z'
+      )
     ).toBeVisible();
     expect(
-      within(section!).getByText(/Snapshot · collector-snapshot-20260316-with-a-very-long-\[redacted\]/)
+      within(section!).getByText(
+        'Source · workspace_file · Role · agent_output · Status · observed · mapped · Observed · No observed timestamp · Collected · 2026-03-16T08:59:00.000Z'
+      )
     ).toBeVisible();
-    const collectedProvenance = within(section!).getAllByText('Collected · 2026-03-16T08:59:00.000Z');
-    expect(collectedProvenance).toHaveLength(4);
-    expect(collectedProvenance[0]).toBeVisible();
-    expect(within(section!).getByText('Observed · No observed timestamp')).toBeVisible();
+    expect(section!).not.toHaveTextContent('Evidence id ·');
+    expect(section!).not.toHaveTextContent('Snapshot ·');
+    expect(section!).not.toHaveTextContent('Correlation ·');
+    expect(section!).not.toHaveTextContent('Ref ·');
     expect(section!).not.toHaveTextContent('token-secret');
     expect(section!).not.toHaveTextContent('access_token');
     expect(section!).not.toHaveTextContent('secret-value');
@@ -1931,11 +1993,7 @@ describe('DetailsPanel selected-agent workflow lifecycle', () => {
     const section = screen.getByRole('heading', { name: 'Evidence Ledger' }).closest('section');
     expect(section).not.toBeNull();
 
-    await user.click(
-      within(section!).getByRole('button', {
-        name: 'Inspect evidence record output-1'
-      })
-    );
+    await user.click(within(section!).getByRole('button', { name: 'Inspect evidence record output-1' }));
 
     expect(onInspectSelectedAgentEvidenceRecord).toHaveBeenCalledWith('output-1');
   });

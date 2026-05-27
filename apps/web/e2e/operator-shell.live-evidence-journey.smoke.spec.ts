@@ -179,6 +179,21 @@ const replayEvidenceRecordGets = [
   `GET /evidence-records/${replayEvidenceId}`,
   `GET /evidence-records/${replayEvidenceId}/provenance-bundle`
 ];
+const replaySourceContextGet = `GET /evidence-records/${replayEvidenceId}/source-context`;
+const replaySourceContextFixture = {
+  item: {
+    evidence_id: 'redacted-source-context-id',
+    context_summary: 'Redacted context for the inspected evidence record.',
+    context_lines: [
+      {
+        label: 'handoff summary',
+        text: 'Revenue launch handoff is ready for replay.',
+        line_number: 1
+      }
+    ],
+    redacted: true
+  }
+};
 const replayByEvidenceIdGet =
   `GET /accountability/replay?limit=10&window=60m&evidence_id=${replayEvidenceId}&agent_id=app-engineering`;
 const checkpointLogByEvidenceIdGet =
@@ -229,6 +244,15 @@ const visibleProofForbiddenSamples = [
 function apiRequestKey(request: Request) {
   const url = new URL(request.url());
   return `${request.method()} ${url.pathname}${url.search}`;
+}
+
+function isExactSourceContextReadGet(request: Pick<Request, 'method' | 'url'>, evidenceId = replayEvidenceId) {
+  const url = new URL(request.url());
+  return (
+    request.method() === 'GET' &&
+    url.pathname === `/evidence-records/${evidenceId}/source-context` &&
+    url.search === ''
+  );
 }
 
 function isApiPath(pathname: string) {
@@ -354,7 +378,88 @@ async function routeExpectedApiGet(page: Page, expectedKey: string, handler: (ro
   );
 }
 
+async function routeExpectedSourceContextReadGet(page: Page, handler: (route: Route) => Promise<void>) {
+  await page.route(
+    (url) => url.pathname === `/evidence-records/${replayEvidenceId}/source-context` && url.search === '',
+    async (route) => {
+      if (!isExactSourceContextReadGet(route.request())) {
+        await route.continue();
+        return;
+      }
+
+      await handler(route);
+    }
+  );
+}
+
 test.describe('operator shell live evidence journey smoke', () => {
+  test('@journey @evidence-live prepares exact source-context read guard for the L04 UI path', async ({ page }) => {
+    const apiRequestViolations: string[] = [];
+    const sourceContextRequests: string[] = [];
+    const allowedApiGets = new Set([replaySourceContextGet]);
+    const makeRequest = (method: string, pathAndSearch: string): Pick<Request, 'method' | 'url'> => ({
+      method: () => method,
+      url: () => `http://source-context.test${pathAndSearch}`
+    });
+    const handleRequest = (request: Request) => {
+      const url = new URL(request.url());
+      if (!isApiPath(url.pathname)) {
+        return;
+      }
+
+      const key = apiRequestKey(request);
+      if (isExactSourceContextReadGet(request)) {
+        sourceContextRequests.push(key);
+      }
+      if (request.method() !== 'GET' || !allowedApiGets.has(key)) {
+        apiRequestViolations.push(key);
+      }
+    };
+
+    expect(
+      isExactSourceContextReadGet(makeRequest('GET', `/evidence-records/${replayEvidenceId}/source-context`))
+    ).toBe(true);
+    expect(
+      isExactSourceContextReadGet(makeRequest('POST', `/evidence-records/${replayEvidenceId}/source-context`))
+    ).toBe(false);
+    expect(
+      isExactSourceContextReadGet(makeRequest('GET', `/evidence-records/${replayEvidenceId}/source-context?raw=true`))
+    ).toBe(false);
+    expect(isExactSourceContextReadGet(makeRequest('GET', `/evidence-records/${replayEvidenceId}`))).toBe(false);
+    expect(
+      isExactSourceContextReadGet(makeRequest('GET', `/evidence-records/${replayEvidenceId}/source-context/extra`))
+    ).toBe(false);
+    expect(
+      isExactSourceContextReadGet(makeRequest('GET', `/evidence-records/${replayEvidenceId}/provenance-bundle`))
+    ).toBe(false);
+    expect(JSON.stringify(replaySourceContextFixture)).not.toMatch(visibleProofRawRefPattern);
+
+    await routeExpectedSourceContextReadGet(page, async (route) => {
+      await route.fulfill({
+        headers: { 'access-control-allow-origin': '*' },
+        json: replaySourceContextFixture
+      });
+    });
+    page.on('request', handleRequest);
+
+    try {
+      await page.goto('data:text/html,<html></html>');
+      const response = await page.evaluate(async (url) => {
+        const result = await fetch(url, { method: 'GET' });
+        return {
+          ok: result.ok,
+          payload: await result.json()
+        };
+      }, `http://source-context.test/evidence-records/${replayEvidenceId}/source-context`);
+
+      expect(response).toEqual({ ok: true, payload: replaySourceContextFixture });
+      expect(sourceContextRequests).toEqual([replaySourceContextGet]);
+      expect(apiRequestViolations).toEqual([]);
+    } finally {
+      page.off('request', handleRequest);
+    }
+  });
+
   test('@journey @evidence-live keeps selected-agent source-health inspect peek compact and read-only', async ({
     page
   }) => {

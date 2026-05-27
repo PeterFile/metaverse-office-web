@@ -1,5 +1,8 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 
+import { findStableSample, requireStableSample } from '../scripts/stability';
+import { resolveViewportEdgeDragDelta } from '../scripts/viewport-reachability';
+
 type RectSnapshot = {
   left: number;
   top: number;
@@ -53,6 +56,44 @@ function resolveUpperWorldDragLane(rect: RectSnapshot): RectSnapshot {
 
 async function readViewportState(page: Page) {
   return page.evaluate(() => window.__AITOWN_VIEWPORT__?.read() ?? null);
+}
+
+async function waitForViewportSettle(page: Page, samples = 8, sampleDelayMs = 50) {
+  const states: Array<NonNullable<Awaited<ReturnType<typeof readViewportState>>>> = [];
+  const isViewportStable = (
+    previousState: NonNullable<Awaited<ReturnType<typeof readViewportState>>>,
+    nextState: NonNullable<Awaited<ReturnType<typeof readViewportState>>>
+  ) => Math.abs(nextState.x - previousState.x) <= 0.5 && Math.abs(nextState.y - previousState.y) <= 0.5;
+
+  for (let sample = 0; sample < samples; sample += 1) {
+    const currentState = await readViewportState(page);
+    expect(currentState).not.toBeNull();
+    states.push(currentState!);
+
+    const stableState = findStableSample(states, isViewportStable);
+    if (stableState) {
+      return stableState;
+    }
+
+    if (sample < samples - 1) {
+      await page.waitForTimeout(sampleDelayMs);
+    }
+  }
+
+  return requireStableSample(
+    states,
+    isViewportStable,
+    `viewport did not settle after ${samples} samples`,
+    (state) => ({
+      x: state.x,
+      y: state.y,
+      left: state.left,
+      right: state.right,
+      top: state.top,
+      bottom: state.bottom,
+      scale: state.scale
+    })
+  );
 }
 
 function resolveWorldPointScreenProjection(
@@ -145,6 +186,19 @@ async function expectCanvasDragMovesViewport(page: Page) {
     .toBeGreaterThan(40);
 }
 
+async function dragViewportFromPrimaryLane(page: Page, deltaX: number) {
+  const worldHost = page.locator('.aitown-world__host');
+  const worldRect = await readRect(worldHost);
+  const dragLane = resolvePrimaryDragLane(worldRect);
+  const startX = dragLane.left + dragLane.width * 0.5;
+  const startY = dragLane.top + dragLane.height * 0.5;
+
+  await page.mouse.move(startX, startY);
+  await page.mouse.down();
+  await page.mouse.move(startX + deltaX, startY, { steps: 16 });
+  await page.mouse.up();
+}
+
 function expectViewportWithinHorizontalWorldBounds(
   state: NonNullable<Awaited<ReturnType<typeof readViewportState>>>,
   label: string
@@ -158,7 +212,98 @@ function expectViewportWithinHorizontalWorldBounds(
   );
 }
 
+function expectViewportAtRightHorizontalBoundary(
+  state: NonNullable<Awaited<ReturnType<typeof readViewportState>>>,
+  label: string
+) {
+  const scale = Math.max(state.scale ?? 1, 0.0001);
+  const rightAllowance = (state.clampPadding?.right ?? 0) / scale;
+
+  expectViewportWithinHorizontalWorldBounds(state, label);
+  expect(state.right, `${label} should accept the complete right boundary`).toBeGreaterThanOrEqual(
+    state.worldWidth + rightAllowance - 0.5
+  );
+}
+
+function expectViewportAtLeftHorizontalBoundary(
+  state: NonNullable<Awaited<ReturnType<typeof readViewportState>>>,
+  label: string
+) {
+  expectViewportWithinHorizontalWorldBounds(state, label);
+  expect(state.left, `${label} should accept the left boundary without a black edge`).toBeLessThanOrEqual(0.5);
+}
+
 test.describe('operator shell layout visual smoke', () => {
+  test('keeps default viewport pan-first horizontal drag inside left and right boundaries', async ({ page }) => {
+    await page.goto('/');
+
+    const worldHost = page.locator('.aitown-world__host');
+    await expect(worldHost).toBeVisible();
+    await page.waitForFunction(() => Boolean(window.__AITOWN_VIEWPORT__));
+    await expect(page.getByRole('dialog', { name: 'Hub' })).toHaveCount(0);
+    await expect(page.getByRole('region', { name: 'Selected agent inspect peek' })).toHaveCount(0);
+
+    const initial = await waitForViewportSettle(page);
+    expectViewportWithinHorizontalWorldBounds(initial, 'default viewport');
+
+    const worldRect = await readRect(worldHost);
+    const dragLane = resolvePrimaryDragLane(worldRect);
+    const dragStart = {
+      x: dragLane.left + dragLane.width * 0.5,
+      y: dragLane.top + dragLane.height * 0.5
+    };
+    const hitTarget = await page.evaluate(({ x, y }) => {
+      const target = document.elementFromPoint(x, y);
+
+      return {
+        insideWorld: Boolean(target?.closest('.aitown-world__host')),
+        insideHub: Boolean(target?.closest('#aitown-hub')),
+        insideSignals: Boolean(target?.closest('[aria-label="Office HUD signals"]')),
+        insidePeek: Boolean(target?.closest('[aria-label="Selected agent inspect peek"]')),
+        insideButton: Boolean(target?.closest('button')),
+        tagName: target?.tagName ?? null,
+        className: target instanceof HTMLElement ? target.className : null
+      };
+    }, dragStart);
+    expect(hitTarget.insideWorld, `primary drag lane should hit the world: ${JSON.stringify(hitTarget)}`).toBe(true);
+    expect(hitTarget.insideHub, `default drag lane should not start inside Hub: ${JSON.stringify(hitTarget)}`).toBe(
+      false
+    );
+    expect(hitTarget.insideSignals, `HUD signals should not block default drag lane: ${JSON.stringify(hitTarget)}`).toBe(
+      false
+    );
+    expect(hitTarget.insidePeek, `inspect peek should not block default drag lane: ${JSON.stringify(hitTarget)}`).toBe(
+      false
+    );
+    expect(hitTarget.insideButton, `primary drag lane should not hit chrome controls: ${JSON.stringify(hitTarget)}`).toBe(
+      false
+    );
+
+    const rightDrag = resolveViewportEdgeDragDelta(initial, 'right');
+    expect(Math.abs(rightDrag.deltaX), 'default viewport should have immediate horizontal pan budget').toBeGreaterThan(
+      40
+    );
+    await dragViewportFromPrimaryLane(page, rightDrag.deltaX);
+
+    const rightBoundary = await waitForViewportSettle(page);
+    expectViewportAtRightHorizontalBoundary(rightBoundary, 'right-dragged default viewport');
+    expect(Math.abs(rightBoundary.top - initial.top), 'horizontal drag should keep the vertical lane stable').toBeLessThan(
+      8
+    );
+    expect(rightBoundary.scale, 'pan-first drag must not zoom the viewport').toBeCloseTo(initial.scale ?? 1, 3);
+
+    const leftDrag = resolveViewportEdgeDragDelta(rightBoundary, 'top-left');
+    expect(Math.abs(leftDrag.deltaX), 'right boundary should allow a return drag to the left boundary').toBeGreaterThan(
+      40
+    );
+    await dragViewportFromPrimaryLane(page, leftDrag.deltaX);
+
+    const leftBoundary = await waitForViewportSettle(page);
+    expectViewportAtLeftHorizontalBoundary(leftBoundary, 'left-dragged default viewport');
+    expect(Math.abs(leftBoundary.top - initial.top), 'return drag should stay horizontal').toBeLessThan(8);
+    expect(leftBoundary.scale, 'return pan must not zoom the viewport').toBeCloseTo(initial.scale ?? 1, 3);
+  });
+
   test('centers explicit agent locate requests on the viewport midpoint despite right-side chrome', async ({ page }) => {
     // Keep the explicit locate target within pan bounds; at 1280x720 the
     // Protocol Engineering desk sits near the bottom edge, so world clamp makes

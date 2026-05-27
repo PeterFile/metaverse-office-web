@@ -137,6 +137,39 @@ const runtimeSourceGapsSummary = {
   }
 };
 
+const runtimeSourceGapsWithUnmappedWorldPin = {
+  items: [
+    runtimeSourceGaps.items[0],
+    {
+      observed_at: '2026-03-16T08:58:36.000Z',
+      collected_at: '2026-03-16T09:01:00.000Z',
+      agent_id: null,
+      source_kind: 'tmux_session',
+      evidence_role: 'runtime_unmapped',
+      source_status: 'observed',
+      output_candidate: false,
+      collector_snapshot_id: 'collector-snapshot:2026-03-16T09:01:00.000Z',
+      correlation_id: 'collector-snapshot:2026-03-16T09:01:00.000Z',
+      degraded_reasons: ['unmapped runtime marker'],
+      unmapped: true
+    }
+  ]
+};
+
+const runtimeSourceGapsWithUnmappedWorldPinSummary = {
+  total_count: 2,
+  returned_limit: 2,
+  mapped_count: 1,
+  unmapped_count: 1,
+  output_candidate_buckets: { true: 0, false: 2 },
+  source_kind_buckets: { workspace_file: 1, tmux_session: 1 },
+  evidence_role_buckets: { agent_output: 1, runtime_unmapped: 1 },
+  source_status_buckets: { degraded: 1, observed: 1 },
+  collector_snapshot_id_buckets: {
+    'collector-snapshot:2026-03-16T09:01:00.000Z': 2
+  }
+};
+
 const snapshotCorrelationId = 'collector-snapshot%3A2026-03-10T23%3A59%3A40.000Z';
 const replayEvidenceId =
   'ev_collector-snapshot_2026-03-10T23_59_40_000Z_app-engineering_workspace_file__tmp_revenue-handoff_md_1';
@@ -223,23 +256,53 @@ async function readRect(locator: Locator) {
   return locator.evaluate((element) => {
     const rect = element.getBoundingClientRect();
     return {
+      left: rect.left,
+      top: rect.top,
       width: rect.width,
       height: rect.height
     };
   });
 }
 
-async function installLiveEvidenceFixtures(page: Page) {
+async function readViewportState(page: Page) {
+  return page.evaluate(() => window.__AITOWN_VIEWPORT__?.read() ?? null);
+}
+
+async function moveViewportCenter(page: Page, point: { x: number; y: number }) {
+  await page.evaluate(({ x, y }) => window.__AITOWN_VIEWPORT__?.moveCenter(x, y), point);
+}
+
+async function clickWorldPoint(page: Page, point: { x: number; y: number }) {
+  const [state, hostRect] = await Promise.all([
+    readViewportState(page),
+    readRect(page.locator('.aitown-world__host'))
+  ]);
+  expect(state, 'world viewport inspector should be available').not.toBeNull();
+
+  const x =
+    hostRect.left +
+    ((point.x - state!.left) / Math.max(state!.right - state!.left, Number.EPSILON)) * hostRect.width;
+  const y =
+    hostRect.top +
+    ((point.y - state!.top) / Math.max(state!.bottom - state!.top, Number.EPSILON)) * hostRect.height;
+  await page.mouse.click(x, y);
+}
+
+async function installLiveEvidenceFixtures(
+  page: Page,
+  sourceGaps: { items: unknown[] } = runtimeSourceGaps,
+  sourceGapsSummary: Record<string, unknown> = runtimeSourceGapsSummary
+) {
   await routeExpectedApiGet(page, 'GET /collectors/controller-snapshot/evidence-coverage', async (route) => {
     await route.fulfill({ json: { item: evidenceCoverage } });
   });
 
   await routeExpectedApiGet(page, 'GET /runtime/source-gaps?newest_first=true&limit=3', async (route) => {
-    await route.fulfill({ json: runtimeSourceGaps });
+    await route.fulfill({ json: sourceGaps });
   });
 
   await routeExpectedApiGet(page, 'GET /runtime/source-gaps/summary?newest_first=true&limit=3', async (route) => {
-    await route.fulfill({ json: { item: runtimeSourceGapsSummary } });
+    await route.fulfill({ json: { item: sourceGapsSummary } });
   });
 
   await routeExpectedApiGet(page, 'GET /collectors/controller-snapshot/source-health?limit=7', async (route) => {
@@ -519,6 +582,101 @@ test.describe('operator shell live evidence journey smoke', () => {
         hermesDrilldown,
         'source-gap drilldown should not expose raw refs, profile ids, session refs, or degraded reasons'
       ).not.toContainText(visibleProofRawRefPattern);
+      expect(apiRequestViolations).toEqual([]);
+    } finally {
+      page.off('request', handleRequest);
+    }
+  });
+
+  test('@journey @evidence-live source-gap world pin selects mapped agent and keeps unmapped marker passive', async ({
+    page
+  }) => {
+    const allowedApiGets = new Set([...expectedApiGets, replayEvidenceRecordGets[0]]);
+    const apiRequestViolations: string[] = [];
+    const evidenceRecordRequests: string[] = [];
+    const replayRequests: string[] = [];
+    const handleRequest = (request: Request) => {
+      const url = new URL(request.url());
+      if (!isApiPath(url.pathname)) {
+        return;
+      }
+
+      const key = apiRequestKey(request);
+      if (request.method() !== 'GET' || !allowedApiGets.has(key)) {
+        apiRequestViolations.push(key);
+      }
+      if (url.pathname.startsWith('/evidence-records')) {
+        evidenceRecordRequests.push(key);
+      }
+      if (url.pathname.startsWith('/accountability/replay')) {
+        replayRequests.push(key);
+      }
+    };
+
+    await installLiveEvidenceFixtures(
+      page,
+      runtimeSourceGapsWithUnmappedWorldPin,
+      runtimeSourceGapsWithUnmappedWorldPinSummary
+    );
+    page.on('request', handleRequest);
+
+    try {
+      await page.goto('/');
+      await expect(page.locator('.aitown-world__host canvas')).toBeVisible();
+      await page.waitForFunction(() => Boolean(window.__AITOWN_VIEWPORT__));
+
+      const roster = page.getByRole('navigation', { name: 'Agent roster' });
+      await roster.getByRole('button', { name: 'Select and locate App Engineering Agent' }).click();
+      await expect
+        .poll(async () => (await readViewportState(page))?.selectedAgent?.agentId ?? null)
+        .toBe('app-engineering');
+
+      const appAgent = (await readViewportState(page))!.selectedAgent!;
+      const appSourceGapPin = { x: appAgent.x, y: appAgent.y - 42 };
+      const tileDim = appAgent.x / 9.5;
+      const unmappedRuntimeMarker = { x: 12.5 * tileDim, y: 28.5 * tileDim };
+
+      await page.getByRole('button', { name: 'Clear Selection' }).click();
+      await expect.poll(async () => (await readViewportState(page))?.selectedAgent ?? null).toBeNull();
+      await expect(page.getByRole('dialog', { name: 'Hub' })).toHaveCount(0);
+
+      await moveViewportCenter(page, appSourceGapPin);
+      await clickWorldPoint(page, appSourceGapPin);
+
+      await expect
+        .poll(async () => (await readViewportState(page))?.selectedAgent?.agentId ?? null)
+        .toBe('app-engineering');
+      const sourceGapInspectPeek = page.getByRole('region', { name: 'Source gap inspect peek' });
+      await expect(sourceGapInspectPeek).toBeVisible();
+      await expect(sourceGapInspectPeek).toContainText('Evidence only');
+      await expect(sourceGapInspectPeek).toContainText('Workspace files · degraded');
+      await expect(sourceGapInspectPeek).toContainText('Mapped source');
+      await expect(
+        sourceGapInspectPeek,
+        'source-gap world pin inspect peek should not expose raw refs, runtime payloads, or reasons'
+      ).not.toContainText(visibleProofRawRefPattern);
+
+      await sourceGapInspectPeek.getByRole('button', { name: 'Open Evidence drilldown' }).click();
+      const evidencePanel = page.getByRole('tabpanel', { name: 'Evidence' });
+      await expect(evidencePanel.getByRole('heading', { name: 'Evidence Ledger' })).toBeVisible();
+      await expect.poll(() => evidenceRecordRequests.slice()).toEqual([replayEvidenceRecordGets[0]]);
+      expect(replayRequests, 'source-gap world pin drilldown should not prefetch replay records').toEqual([]);
+
+      await page.getByRole('button', { name: 'Close panel' }).click();
+      await page.getByRole('button', { name: 'Clear Selection' }).click();
+      await expect.poll(async () => (await readViewportState(page))?.selectedAgent ?? null).toBeNull();
+
+      const requestsBeforeUnmappedClick = {
+        evidenceRecords: evidenceRecordRequests.length,
+        replay: replayRequests.length
+      };
+      await moveViewportCenter(page, unmappedRuntimeMarker);
+      await clickWorldPoint(page, unmappedRuntimeMarker);
+
+      await expect.poll(async () => (await readViewportState(page))?.selectedAgent ?? null).toBeNull();
+      await expect(page.getByRole('dialog', { name: 'Hub' })).toHaveCount(0);
+      expect(evidenceRecordRequests).toHaveLength(requestsBeforeUnmappedClick.evidenceRecords);
+      expect(replayRequests).toHaveLength(requestsBeforeUnmappedClick.replay);
       expect(apiRequestViolations).toEqual([]);
     } finally {
       page.off('request', handleRequest);

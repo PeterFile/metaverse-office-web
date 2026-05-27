@@ -403,6 +403,77 @@ export interface EvidenceProvenanceBundle {
   };
 }
 
+export type EvidenceSourceContextRecord = Omit<
+  EvidenceProvenanceRecord,
+  'collector_snapshot_id' | 'correlation_id'
+>;
+
+export interface EvidenceSourceContextWorkspaceRootHealth {
+  status: CollectorSourceHealthStatus;
+  last_observed_at: string | null;
+}
+
+export interface EvidenceSourceContextWorkspaceFilesHealth {
+  status: CollectorSourceHealthStatus;
+  observed_count: number;
+  missing_count: number;
+  error_count: number;
+  last_observed_at: string | null;
+}
+
+export interface EvidenceSourceContextSessionHealth {
+  status: CollectorSourceHealthStatus;
+  observed_count: number;
+  last_observed_at: string | null;
+}
+
+export interface EvidenceSourceContextHermesHealth {
+  status: CollectorSourceHealthStatus;
+  last_observed_at: string | null;
+}
+
+export interface EvidenceSourceContextSourceHealth {
+  workspace_root?: EvidenceSourceContextWorkspaceRootHealth;
+  workspace_files?: EvidenceSourceContextWorkspaceFilesHealth;
+  tmux_session?: EvidenceSourceContextSessionHealth;
+  hermes_profile?: EvidenceSourceContextHermesHealth;
+  hermes_session?: EvidenceSourceContextHermesHealth;
+}
+
+export interface EvidenceSourceContextHealthAgentItem {
+  agent_id: string;
+  source_health: EvidenceSourceContextSourceHealth;
+  evidence_count: number;
+  latest_evidence_at: string | null;
+}
+
+export interface EvidenceSourceContextHealth {
+  collected_at: string | null;
+  summary: CollectorSourceHealthProjection['summary'];
+  agent_items: EvidenceSourceContextHealthAgentItem[];
+}
+
+export type EvidenceSourceContextGapItem = Omit<
+  RuntimeSourceGap,
+  'collector_snapshot_id' | 'correlation_id' | 'degraded_reasons'
+>;
+
+export type EvidenceSourceContextGapsSummary = Omit<
+  RuntimeSourceGapsSummary,
+  'collector_snapshot_id_buckets'
+>;
+
+export interface EvidenceSourceContext {
+  evidence_id: string;
+  source_summary: EvidenceProvenanceSourceSummary;
+  record: EvidenceSourceContextRecord;
+  source_health: EvidenceSourceContextHealth;
+  source_gaps: {
+    summary: EvidenceSourceContextGapsSummary;
+    items: EvidenceSourceContextGapItem[];
+  };
+}
+
 export interface RuntimeSourceGap {
   observed_at: string | null;
   collected_at: string | null;

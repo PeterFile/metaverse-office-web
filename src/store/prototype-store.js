@@ -714,8 +714,12 @@ class PrototypeStore {
     const sourceHealth =
       record.agent_id === null
         ? null
-        : projectAgentEvidenceSpineSourceHealth(
-            this.getLatestCollectorSourceHealth(healthFilters),
+        : projectEvidenceSourceContextCollectorHealth(
+            findCollectorReportByIdOrLatest(
+              this.collectorReports,
+              this.getLatestCollectorReport(),
+              healthFilters
+            ),
             healthFilters
           );
 
@@ -4333,6 +4337,79 @@ function projectAgentEvidenceSpineSourceHealth(sourceHealth, filters = {}) {
   };
 }
 
+function projectEvidenceSourceContextCollectorHealth(report, filters = {}) {
+  if (!report || !Array.isArray(report.items)) {
+    return null;
+  }
+
+  const agentId = normalizeFilterValue(filters.agent_id);
+  const requestedSourceKind = normalizeFilterValue(filters.source_kind);
+  const sourceHealthKeys = resolveSourceHealthKeys(requestedSourceKind);
+  const requestedStatus = normalizeFilterValue(filters.source_status || filters.status);
+  const status = normalizeSourceHealthStatus(requestedStatus);
+  const hasUnknownStatus = Boolean(requestedStatus) && !status;
+  const limit = parseLimit(filters.limit);
+  const evidenceCoverageRows = new Map(
+    (report.evidence_coverage?.agent_items || [])
+      .filter(isEvidenceCoverageAgentItem)
+      .map((item) => [item.agent_id, item])
+  );
+  const selectedItems = hasUnknownStatus
+    ? []
+    : report.items
+        .filter((item) => item && typeof item.agent_id === 'string' && item.agent_id.length > 0)
+        .filter((item) => !agentId || item.agent_id === agentId)
+        .filter(
+          (item) => sourceHealthKeys.length > 0 && matchesSourceHealthStatus(item, sourceHealthKeys, status)
+        )
+        .slice(0, limit);
+
+  return {
+    collected_at: report.collected_at || null,
+    summary: createSourceHealthSummary(selectedItems, sourceHealthKeys, status),
+    agent_items: selectedItems.map((item) =>
+      projectEvidenceSourceContextHealthAgentItem({
+        item,
+        sourceHealthKeys,
+        status,
+        evidenceCoverageRow: evidenceCoverageRows.get(item.agent_id) || null
+      })
+    )
+  };
+}
+
+function projectEvidenceSourceContextHealthAgentItem({
+  item,
+  sourceHealthKeys,
+  status,
+  evidenceCoverageRow
+}) {
+  const evidenceRefs = normalizeEvidenceRefs(item.evidence_refs);
+
+  return {
+    agent_id: item.agent_id,
+    source_health: projectEvidenceSourceContextSourceHealth(item.source_health, sourceHealthKeys, status),
+    evidence_count: evidenceCoverageRow
+      ? normalizeCount(evidenceCoverageRow.evidence_ref_count)
+      : evidenceRefs.length,
+    latest_evidence_at: evidenceCoverageRow?.latest_evidence_at || deriveLatestCollectorEvidenceAt(item)
+  };
+}
+
+function projectEvidenceSourceContextSourceHealth(sourceHealth = {}, sourceHealthKeys, statusFilter = null) {
+  const projected = {};
+
+  for (const key of sourceHealthKeys) {
+    const health = sourceHealth[key];
+    if (!health || (statusFilter && health.status !== statusFilter)) {
+      continue;
+    }
+    projected[key] = health;
+  }
+
+  return projected;
+}
+
 function createEmptyEvidenceSourceContextHealth(filters = {}) {
   return {
     collected_at: null,
@@ -4352,12 +4429,57 @@ function projectEvidenceSourceContextHealth(sourceHealth) {
     agent_items: Array.isArray(sourceHealth.agent_items)
       ? sourceHealth.agent_items.map((item) => ({
           agent_id: item.agent_id,
-          source_health: item.source_health || {},
+          source_health: projectEvidenceSourceContextHealthEntries(item.source_health),
           evidence_count: normalizeCount(item.evidence_count ?? item.evidence_ref_count),
           latest_evidence_at: item.latest_evidence_at || null
         }))
       : []
   };
+}
+
+function projectEvidenceSourceContextHealthEntries(sourceHealth = {}) {
+  const projected = {};
+
+  if (sourceHealth.workspace_root) {
+    projected.workspace_root = {
+      status: normalizeSourceHealthStatus(sourceHealth.workspace_root.status),
+      last_observed_at: normalizeCollectorTimestamp(sourceHealth.workspace_root.last_observed_at) || null
+    };
+  }
+
+  if (sourceHealth.workspace_files) {
+    projected.workspace_files = {
+      status: normalizeSourceHealthStatus(sourceHealth.workspace_files.status),
+      observed_count: normalizeCount(sourceHealth.workspace_files.observed_count),
+      missing_count: normalizeCount(sourceHealth.workspace_files.missing_count),
+      error_count: normalizeCount(sourceHealth.workspace_files.error_count),
+      last_observed_at: normalizeCollectorTimestamp(sourceHealth.workspace_files.last_observed_at) || null
+    };
+  }
+
+  if (sourceHealth.tmux_session) {
+    projected.tmux_session = {
+      status: normalizeSourceHealthStatus(sourceHealth.tmux_session.status),
+      observed_count: normalizeCount(sourceHealth.tmux_session.observed_count),
+      last_observed_at: normalizeCollectorTimestamp(sourceHealth.tmux_session.last_observed_at) || null
+    };
+  }
+
+  if (sourceHealth.hermes_profile) {
+    projected.hermes_profile = {
+      status: normalizeSourceHealthStatus(sourceHealth.hermes_profile.status),
+      last_observed_at: normalizeCollectorTimestamp(sourceHealth.hermes_profile.last_observed_at) || null
+    };
+  }
+
+  if (sourceHealth.hermes_session) {
+    projected.hermes_session = {
+      status: normalizeSourceHealthStatus(sourceHealth.hermes_session.status),
+      last_observed_at: normalizeCollectorTimestamp(sourceHealth.hermes_session.last_observed_at) || null
+    };
+  }
+
+  return projected;
 }
 
 function buildPreviousTmuxRefByPaneId(previousItem = null, previousStableTmuxRefs = []) {

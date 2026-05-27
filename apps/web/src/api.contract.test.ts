@@ -15,6 +15,7 @@ import type {
   AgentInteractionsResponse,
   AgentWorkflow,
   CollectorEvidenceCoverage,
+  EvidenceSourceContext,
   EvidenceRecord,
   EvidenceProvenanceBundle,
   CollectorSnapshot,
@@ -406,7 +407,7 @@ describe('read-only frontend/backend contract smoke', () => {
     });
   });
 
-  it('fetches an evidence-record detail and replay-safe provenance bundle by evidence_id from the real backend', async () => {
+  it('fetches an evidence-record detail, provenance bundle, and source context by evidence_id from the real backend', async () => {
     harness = await createHarness(() => '2026-03-09T19:00:00.000Z');
     await seedContractSlice(harness.store);
 
@@ -434,6 +435,7 @@ describe('read-only frontend/backend contract smoke', () => {
     });
     const detail = await api.fetchEvidenceRecord(records[0].evidence_id);
     const bundle = await api.fetchEvidenceProvenanceBundle(records[0].evidence_id);
+    const sourceContext = await api.fetchEvidenceSourceContext(records[0].evidence_id);
 
     expect(requests).toEqual([
       {
@@ -464,10 +466,17 @@ describe('read-only frontend/backend contract smoke', () => {
         origin: harness.baseUrl,
         pathname: `/evidence-records/${encodeURIComponent(records[0].evidence_id)}/provenance-bundle`,
         query: []
+      },
+      {
+        method: 'GET',
+        origin: harness.baseUrl,
+        pathname: `/evidence-records/${encodeURIComponent(records[0].evidence_id)}/source-context`,
+        query: []
       }
     ]);
     expect(detail).toEqual(records[0]);
     expectEvidenceProvenanceBundleContract(bundle, records[0].evidence_id);
+    expectEvidenceSourceContextContract(sourceContext, records[0].evidence_id);
   });
 
   it('passes runtime source-gap filters through to the real backend and unwraps the compact feed', async () => {
@@ -2731,6 +2740,77 @@ function expectEvidenceProvenanceBundleContract(
   expect(serializedBundle).not.toContain('evidence_ref');
   expect(serializedBundle).not.toContain('metadata');
   expect(serializedBundle).not.toContain('degraded_reasons');
+}
+
+function expectEvidenceSourceContextContract(
+  sourceContext: EvidenceSourceContext | null,
+  evidenceId: string
+) {
+  expect(sourceContext?.evidence_id).toBe(evidenceId);
+  expect(sourceContext?.record).toMatchObject({
+    agent_id: 'app-engineering',
+    source_kind: 'workspace_file',
+    evidence_role: 'agent_plan',
+    source_status: 'degraded',
+    output_candidate: true,
+    unmapped: false
+  });
+  expect(sourceContext?.record).not.toHaveProperty('collector_snapshot_id');
+  expect(sourceContext?.record).not.toHaveProperty('correlation_id');
+  expect(sourceContext?.source_summary).toMatchObject({
+    kind: 'workspace_file',
+    status: 'degraded',
+    role: 'agent_plan',
+    output_candidate: true,
+    mapped: true
+  });
+  expect(sourceContext?.source_health).toMatchObject({
+    collected_at: '2026-03-09T18:59:00.000Z',
+    agent_items: [
+      {
+        agent_id: 'app-engineering',
+        evidence_count: 2,
+        source_health: {
+          workspace_files: {
+            status: 'degraded',
+            observed_count: 1,
+            missing_count: 2,
+            error_count: 0,
+            last_observed_at: '2026-03-09T18:58:30.000Z'
+          }
+        }
+      }
+    ]
+  });
+  expect(sourceContext?.source_gaps.items[0]).toMatchObject({
+    agent_id: 'app-engineering',
+    source_kind: 'workspace_file',
+    evidence_role: 'agent_plan',
+    source_status: 'degraded',
+    output_candidate: true,
+    unmapped: false
+  });
+  expect(sourceContext?.source_gaps.summary).not.toHaveProperty('collector_snapshot_id_buckets');
+
+  const serializedContext = JSON.stringify(sourceContext);
+  expect(serializedContext).not.toContain('/tmp/app-engineering/todo.md');
+  expect(serializedContext).not.toContain('/tmp/app-engineering');
+  expect(serializedContext).not.toContain('5-web3-app-engineering');
+  expect(serializedContext).not.toContain('evidence_ref');
+  expect(serializedContext).not.toContain('evidence_refs');
+  expect(serializedContext).not.toContain('collector_snapshot_id');
+  expect(serializedContext).not.toContain('correlation_id');
+  expect(serializedContext).not.toContain('metadata');
+  expect(serializedContext).not.toContain('degraded_reasons');
+  expect(serializedContext).not.toContain('payload');
+  expect(serializedContext).not.toContain('paths');
+  expect(serializedContext).not.toContain('path');
+  expect(serializedContext).not.toContain('tmux://');
+  expect(serializedContext).not.toContain('hermes://');
+  expect(serializedContext).not.toContain('session_ref');
+  expect(serializedContext).not.toContain('profile_id');
+  expect(serializedContext).not.toContain('access_token');
+  expect(serializedContext).not.toContain('webhook');
 }
 
 function expectCollectorSourceHealthContract(sourceHealth: CollectorSourceHealthProjection | null) {

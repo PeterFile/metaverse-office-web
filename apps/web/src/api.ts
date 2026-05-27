@@ -15,6 +15,7 @@ import type {
   AgentWorkflow,
   CollectorSnapshot,
   CorrelationDrilldown,
+  EvidenceSourceContext,
   EvidenceProvenanceBundle,
   EvidenceRecord,
   EvidenceRecordsResponse,
@@ -392,6 +393,20 @@ export async function fetchEvidenceProvenanceBundle(
     }
   );
   const body = await parseJson<{ item: EvidenceProvenanceBundle | null }>(response);
+  return body.item;
+}
+
+export async function fetchEvidenceSourceContext(
+  evidenceId: string,
+  options: { signal?: AbortSignal } = {}
+): Promise<EvidenceSourceContext | null> {
+  const response = await fetch(
+    resolveApiUrl(`/evidence-records/${encodeURIComponent(evidenceId)}/source-context`),
+    {
+      signal: options.signal
+    }
+  );
+  const body = await parseJson<{ item: EvidenceSourceContext | null }>(response);
   return body.item;
 }
 

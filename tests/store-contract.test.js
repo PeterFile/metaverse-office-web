@@ -2184,6 +2184,128 @@ test('prototype store projects evidence provenance bundles without raw refs or c
   }
 });
 
+test('prototype store projects bounded evidence source context for one evidence id', async () => {
+  const storeFile = await createStoreFile();
+  const store = await createPrototypeStore({ filePath: storeFile });
+  const leakCanaries = [
+    '/Users/cwp/private/source-context-secret.md',
+    '/tmp/store-contract',
+    'tmux://5-web3-app-engineering/0.1',
+    'hermes://profile/source-context-secret',
+    'hermes://session/source-context-secret',
+    'session-secret',
+    'profile-secret',
+    'payload_dump',
+    'metadata_dump',
+    'token=source-context-secret',
+    'https://hooks.slack.com/services/source-context'
+  ];
+  const report = createCollectorReport();
+  report.items[0].evidence_refs.push(...leakCanaries);
+
+  await store.appendCollectorReport(report);
+
+  assert.equal(store.getEvidenceSourceContext('missing-evidence-id'), null);
+
+  const outboxRecord = store.listEvidenceRecords({
+    evidence_ref: '/tmp/store-contract/outbox.md'
+  })[0];
+  const context = store.getEvidenceSourceContext(outboxRecord.evidence_id);
+  const serializedContext = JSON.stringify(context);
+
+  assert.equal(context.evidence_id, outboxRecord.evidence_id);
+  assert.deepEqual(context.source_summary, {
+    kind: 'workspace_file',
+    status: 'degraded',
+    role: 'agent_output',
+    output_candidate: true,
+    mapped: true,
+    time: {
+      observed_at: '2026-03-09T18:05:20.000Z',
+      collected_at: '2026-03-09T18:06:00.000Z'
+    }
+  });
+  assert.deepEqual(context.record, {
+    observed_at: '2026-03-09T18:05:20.000Z',
+    collected_at: '2026-03-09T18:06:00.000Z',
+    agent_id: 'app-engineering',
+    source_kind: 'workspace_file',
+    evidence_role: 'agent_output',
+    source_status: 'degraded',
+    output_candidate: true,
+    unmapped: false
+  });
+  assert.equal(context.source_gaps.items.length, 1);
+  assert.equal(context.source_gaps.items[0].source_kind, 'workspace_file');
+  assert.equal(Object.hasOwn(context.source_gaps.summary, 'collector_snapshot_id_buckets'), false);
+  assert.equal(Object.hasOwn(context.source_gaps.items[0], 'collector_snapshot_id'), false);
+  assert.equal(Object.hasOwn(context.source_gaps.items[0], 'correlation_id'), false);
+  assert.equal(context.source_health.agent_items.length, 1);
+  assert.equal(context.source_health.agent_items[0].agent_id, 'app-engineering');
+  assert.equal(Object.hasOwn(context.source_health, 'collector_snapshot_id'), false);
+  assert.equal(Object.hasOwn(context.source_health.agent_items[0], 'collector_snapshot_id'), false);
+  assert.equal(Object.hasOwn(context.source_health, 'runtime_source_evidence'), false);
+  assert.equal(Object.hasOwn(context, 'input_proof'), false);
+  assert.equal(serializedContext.includes('collector_snapshot_id'), false);
+  assert.equal(serializedContext.includes('correlation_id'), false);
+  assert.equal(serializedContext.includes('evidence_ref'), false);
+  assert.equal(serializedContext.includes('metadata'), false);
+  assert.equal(serializedContext.includes('degraded_reasons'), false);
+  assert.equal(serializedContext.includes('payload'), false);
+  for (const canary of leakCanaries) {
+    assert.equal(serializedContext.includes(canary), false, `leaked canary: ${canary}`);
+  }
+});
+
+test('prototype store keeps unmapped runtime source context unmapped', async () => {
+  const storeFile = await createStoreFile();
+  const store = await createPrototypeStore({ filePath: storeFile });
+
+  await store.appendCollectorReport({
+    ...createCollectorReport(),
+    runtime_source_evidence: {
+      unmapped_tmux_sessions: [
+        {
+          session_name: 'unmapped-source-context',
+          pane_refs: ['tmux://unmapped-source-context/0.0'],
+          observed_count: 1,
+          status: 'observed',
+          last_observed_at: '2026-03-09T18:05:50.000Z',
+          degraded_reasons: ['token=unmapped-source-context']
+        }
+      ]
+    }
+  });
+
+  const unmappedRecord = store.listEvidenceRecords({ mapped: 'false' })[0];
+  const context = store.getEvidenceSourceContext(unmappedRecord.evidence_id);
+
+  assert.equal(context.record.agent_id, null);
+  assert.equal(context.record.unmapped, true);
+  assert.equal(context.source_summary.mapped, false);
+  assert.deepEqual(context.source_health.agent_items, []);
+  assert.deepEqual(
+    context.source_gaps.items.map((item) => ({
+      agent_id: item.agent_id,
+      source_kind: item.source_kind,
+      evidence_role: item.evidence_role,
+      source_status: item.source_status,
+      unmapped: item.unmapped
+    })),
+    [
+      {
+        agent_id: null,
+        source_kind: 'tmux_observation',
+        evidence_role: 'runtime_unmapped',
+        source_status: 'observed',
+        unmapped: true
+      }
+    ]
+  );
+  assert.equal(JSON.stringify(context).includes('tmux://unmapped-source-context'), false);
+  assert.equal(JSON.stringify(context).includes('token=unmapped-source-context'), false);
+});
+
 test('prototype store projects sanitized Hermes input proof in provenance bundles', async () => {
   const storeFile = await createStoreFile();
   const store = await createPrototypeStore({ filePath: storeFile });

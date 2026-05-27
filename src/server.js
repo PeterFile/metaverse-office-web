@@ -597,6 +597,24 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
     return;
   }
 
+  const evidenceSourceContextMatch = pathname.match(
+    /^\/evidence-records\/([^/]+)\/source-context$/
+  );
+  if (method === 'GET' && evidenceSourceContextMatch) {
+    const evidenceId = decodeURIComponent(evidenceSourceContextMatch[1]);
+    const sourceContext = store.getEvidenceSourceContext(evidenceId);
+    if (!sourceContext) {
+      sendJson(res, 404, {
+        error: 'not_found',
+        details: 'unknown evidence record'
+      });
+      return;
+    }
+
+    sendJson(res, 200, { item: sourceContext });
+    return;
+  }
+
   const evidenceRecordMatch = pathname.match(/^\/evidence-records\/([^/]+)$/);
   if (method === 'GET' && evidenceRecordMatch) {
     const evidenceId = decodeURIComponent(evidenceRecordMatch[1]);

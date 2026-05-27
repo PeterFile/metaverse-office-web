@@ -4305,6 +4305,11 @@ function projectAgentEvidenceSpineSourceHealth(sourceHealth, filters = {}) {
     return null;
   }
 
+  const sourceHealthKeys = resolveSourceHealthKeys(normalizeFilterValue(filters.source_kind));
+  const status = normalizeSourceHealthStatus(
+    normalizeFilterValue(filters.source_status || filters.status)
+  );
+
   return {
     collected_at: sourceHealth.collected_at || null,
     collector_snapshot_id: sourceHealth.collector_snapshot_id || null,
@@ -4316,7 +4321,15 @@ function projectAgentEvidenceSpineSourceHealth(sourceHealth, filters = {}) {
         resolveSourceHealthKeys(filters.source_kind),
         normalizeSourceHealthStatus(normalizeFilterValue(filters.source_status || filters.status))
       ),
-    agent_items: Array.isArray(sourceHealth.agent_items) ? sourceHealth.agent_items : []
+    agent_items: Array.isArray(sourceHealth.agent_items)
+      ? sourceHealth.agent_items.map((item) => ({
+          agent_id: item.agent_id,
+          collector_snapshot_id: item.collector_snapshot_id || null,
+          source_health: projectSourceHealth(item.source_health, sourceHealthKeys, status),
+          evidence_count: normalizeCount(item.evidence_ref_count),
+          latest_evidence_at: item.latest_evidence_at || null
+        }))
+      : []
   };
 }
 
@@ -4340,7 +4353,7 @@ function projectEvidenceSourceContextHealth(sourceHealth) {
       ? sourceHealth.agent_items.map((item) => ({
           agent_id: item.agent_id,
           source_health: item.source_health || {},
-          evidence_count: normalizeCount(item.evidence_ref_count),
+          evidence_count: normalizeCount(item.evidence_count ?? item.evidence_ref_count),
           latest_evidence_at: item.latest_evidence_at || null
         }))
       : []

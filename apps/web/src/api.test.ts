@@ -5,6 +5,8 @@ import {
   fetchAccountabilityReplay,
   fetchReplayCheckpointLog,
   fetchAgentDetail,
+  fetchAgentEvidenceSpine,
+  fetchAgentEvidenceSpineSummary,
   fetchAgentEvents,
   fetchAgentIncidents,
   fetchAgentInteractions,
@@ -1645,6 +1647,282 @@ describe('fetchRuntimeSourceGapTrend', () => {
       status: 400,
       code: 'bad_request',
       message: 'invalid bucket'
+    });
+  });
+});
+
+describe('fetchAgentEvidenceSpineSummary', () => {
+  it('requests a bounded newest-first evidence-spine summary by default', async () => {
+    const item = {
+      agent_count: 0,
+      returned_limit: 200,
+      total_count: 0,
+      mapped_count: 0,
+      unmapped_count: 0,
+      agents: [],
+      unmapped_evidence_summary: {
+        total_count: 0,
+        source_kind_buckets: {},
+        evidence_role_buckets: {},
+        source_status_buckets: {},
+        latest_observed_at: null,
+        latest_collected_at: null
+      }
+    };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ item }), {
+          headers: JSON_HEADERS
+        })
+      )
+    );
+
+    await expect(fetchAgentEvidenceSpineSummary()).resolves.toEqual(item);
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/agents/evidence-spine/summary?newest_first=true&limit=200',
+      expect.objectContaining({ signal: undefined })
+    );
+  });
+
+  it('passes supported evidence-spine filters through with backend query names', async () => {
+    const item = {
+      agent_count: 0,
+      returned_limit: 7,
+      total_count: 0,
+      mapped_count: 0,
+      unmapped_count: 0,
+      agents: [],
+      unmapped_evidence_summary: {
+        total_count: 0,
+        source_kind_buckets: {},
+        evidence_role_buckets: {},
+        source_status_buckets: {},
+        latest_observed_at: null,
+        latest_collected_at: null
+      }
+    };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ item }), {
+          headers: JSON_HEADERS
+        })
+      )
+    );
+
+    await expect(
+      fetchAgentEvidenceSpineSummary({
+        sourceKind: 'workspace_file',
+        evidenceRole: 'agent output',
+        sourceStatus: 'degraded',
+        collectorSnapshotId: 'snapshot 2026/03/09',
+        correlationId: 'corr app/review#1',
+        outputCandidate: false,
+        mapped: true,
+        observedSince: '2026-03-09T18:58:30.000Z',
+        observedUntil: '2026-03-09T18:59:00.000Z',
+        collectedSince: '2026-03-09T18:59:00.000Z',
+        collectedUntil: '2026-03-09T19:00:00.000Z',
+        newestFirst: false,
+        limit: 7
+      })
+    ).resolves.toEqual(item);
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/agents/evidence-spine/summary?source_kind=workspace_file&evidence_role=agent+output&source_status=degraded&collector_snapshot_id=snapshot+2026%2F03%2F09&correlation_id=corr+app%2Freview%231&output_candidate=false&mapped=true&observed_since=2026-03-09T18%3A58%3A30.000Z&observed_until=2026-03-09T18%3A59%3A00.000Z&collected_since=2026-03-09T18%3A59%3A00.000Z&collected_until=2026-03-09T19%3A00%3A00.000Z&newest_first=false&limit=7',
+      expect.objectContaining({ signal: undefined })
+    );
+  });
+
+  it('throws RequestError for evidence-spine summary problem responses', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ error: 'bad_request', details: 'invalid limit' }), {
+          status: 400,
+          headers: JSON_HEADERS
+        })
+      )
+    );
+
+    await expect(fetchAgentEvidenceSpineSummary({ limit: 1 })).rejects.toMatchObject({
+      name: 'RequestError',
+      status: 400,
+      code: 'bad_request',
+      message: 'invalid limit'
+    });
+  });
+});
+
+describe('fetchAgentEvidenceSpine', () => {
+  it('URL-encodes the agent id path parameter and requests a bounded newest-first slice by default', async () => {
+    const item = {
+      agent_id: 'app engineering',
+      returned_limit: 200,
+      evidence_summary: {
+        total_count: 0,
+        returned_limit: 200,
+        mapped_count: 0,
+        unmapped_count: 0,
+        output_candidate_buckets: { true: 0, false: 0 },
+        source_kind_buckets: {},
+        evidence_role_buckets: {},
+        source_status_buckets: {},
+        collector_snapshot_id_buckets: {},
+        first_observed_at: null,
+        last_observed_at: null,
+        first_collected_at: null,
+        last_collected_at: null
+      },
+      recent_evidence: [],
+      source_gaps: {
+        summary: {
+          total_count: 0,
+          returned_limit: 200,
+          mapped_count: 0,
+          unmapped_count: 0,
+          output_candidate_buckets: { true: 0, false: 0 },
+          source_kind_buckets: {},
+          evidence_role_buckets: {},
+          source_status_buckets: {},
+          collector_snapshot_id_buckets: {},
+          first_observed_at: null,
+          last_observed_at: null,
+          first_collected_at: null,
+          last_collected_at: null
+        },
+        items: []
+      },
+      source_health: {
+        collected_at: null,
+        collector_snapshot_id: null,
+        actor_id: null,
+        summary: {
+          agent_count: 0,
+          source_kind_buckets: {},
+          status_buckets: {}
+        },
+        agent_items: []
+      }
+    };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ item }), {
+          headers: JSON_HEADERS
+        })
+      )
+    );
+
+    await expect(fetchAgentEvidenceSpine('app engineering')).resolves.toEqual(item);
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/agents/app%20engineering/evidence-spine?newest_first=true&limit=200',
+      expect.objectContaining({ signal: undefined })
+    );
+  });
+
+  it('passes supported evidence-spine filters through with backend query names', async () => {
+    const item = {
+      agent_id: 'app-engineering',
+      returned_limit: 7,
+      evidence_summary: {
+        total_count: 0,
+        returned_limit: 7,
+        mapped_count: 0,
+        unmapped_count: 0,
+        output_candidate_buckets: { true: 0, false: 0 },
+        source_kind_buckets: {},
+        evidence_role_buckets: {},
+        source_status_buckets: {},
+        collector_snapshot_id_buckets: {},
+        first_observed_at: null,
+        last_observed_at: null,
+        first_collected_at: null,
+        last_collected_at: null
+      },
+      recent_evidence: [],
+      source_gaps: {
+        summary: {
+          total_count: 0,
+          returned_limit: 7,
+          mapped_count: 0,
+          unmapped_count: 0,
+          output_candidate_buckets: { true: 0, false: 0 },
+          source_kind_buckets: {},
+          evidence_role_buckets: {},
+          source_status_buckets: {},
+          collector_snapshot_id_buckets: {},
+          first_observed_at: null,
+          last_observed_at: null,
+          first_collected_at: null,
+          last_collected_at: null
+        },
+        items: []
+      },
+      source_health: {
+        collected_at: null,
+        collector_snapshot_id: null,
+        actor_id: null,
+        summary: {
+          agent_count: 0,
+          source_kind_buckets: {},
+          status_buckets: {}
+        },
+        agent_items: []
+      }
+    };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ item }), {
+          headers: JSON_HEADERS
+        })
+      )
+    );
+
+    await expect(
+      fetchAgentEvidenceSpine('app engineering', {
+        sourceKind: 'workspace_file',
+        evidenceRole: 'agent output',
+        sourceStatus: 'degraded',
+        collectorSnapshotId: 'snapshot 2026/03/09',
+        correlationId: 'corr app/review#1',
+        outputCandidate: false,
+        mapped: true,
+        observedSince: '2026-03-09T18:58:30.000Z',
+        observedUntil: '2026-03-09T18:59:00.000Z',
+        collectedSince: '2026-03-09T18:59:00.000Z',
+        collectedUntil: '2026-03-09T19:00:00.000Z',
+        newestFirst: false,
+        limit: 7
+      })
+    ).resolves.toEqual(item);
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/agents/app%20engineering/evidence-spine?source_kind=workspace_file&evidence_role=agent+output&source_status=degraded&collector_snapshot_id=snapshot+2026%2F03%2F09&correlation_id=corr+app%2Freview%231&output_candidate=false&mapped=true&observed_since=2026-03-09T18%3A58%3A30.000Z&observed_until=2026-03-09T18%3A59%3A00.000Z&collected_since=2026-03-09T18%3A59%3A00.000Z&collected_until=2026-03-09T19%3A00%3A00.000Z&newest_first=false&limit=7',
+      expect.objectContaining({ signal: undefined })
+    );
+  });
+
+  it('throws RequestError for unknown agent evidence-spine problem responses', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ error: 'not_found', details: 'unknown agent missing' }), {
+          status: 404,
+          headers: JSON_HEADERS
+        })
+      )
+    );
+
+    await expect(fetchAgentEvidenceSpine('missing')).rejects.toMatchObject({
+      name: 'RequestError',
+      status: 404,
+      code: 'not_found',
+      message: 'unknown agent missing'
     });
   });
 });

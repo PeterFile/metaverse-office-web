@@ -2,6 +2,10 @@ import type {
   AccountabilityReplayBundle,
   AgentDetail,
   AgentDetailResponse,
+  AgentEvidenceSpine,
+  AgentEvidenceSpineResponse,
+  AgentEvidenceSpineSummary,
+  AgentEvidenceSpineSummaryResponse,
   AgentEventsResponse,
   AgentInteractionsResponse,
   CollectorEvidenceCoverage,
@@ -44,6 +48,23 @@ type RuntimeSourceGapFilterOptions = {
   sourceKind?: string | null;
   evidenceRole?: string | null;
   evidenceId?: string | null;
+  sourceStatus?: string | null;
+  collectorSnapshotId?: string | null;
+  correlationId?: string | null;
+  outputCandidate?: boolean | null;
+  mapped?: boolean | null;
+  observedSince?: string | null;
+  observedUntil?: string | null;
+  collectedSince?: string | null;
+  collectedUntil?: string | null;
+  newestFirst?: boolean;
+  limit?: number;
+  signal?: AbortSignal;
+};
+
+type AgentEvidenceSpineFilterOptions = {
+  sourceKind?: string | null;
+  evidenceRole?: string | null;
   sourceStatus?: string | null;
   collectorSnapshotId?: string | null;
   correlationId?: string | null;
@@ -438,6 +459,34 @@ export async function fetchRuntimeSourceGapTrend(
   return body.item;
 }
 
+export async function fetchAgentEvidenceSpineSummary(
+  options: AgentEvidenceSpineFilterOptions = {}
+): Promise<AgentEvidenceSpineSummary> {
+  const params = buildAgentEvidenceSpineParams(options);
+  const suffix = params.size > 0 ? `?${params.toString()}` : '';
+  const response = await fetch(resolveApiUrl(`/agents/evidence-spine/summary${suffix}`), {
+    signal: options.signal
+  });
+  const body = await parseJson<AgentEvidenceSpineSummaryResponse>(response);
+  return body.item;
+}
+
+export async function fetchAgentEvidenceSpine(
+  agentId: string,
+  options: AgentEvidenceSpineFilterOptions = {}
+): Promise<AgentEvidenceSpine> {
+  const params = buildAgentEvidenceSpineParams(options);
+  const suffix = params.size > 0 ? `?${params.toString()}` : '';
+  const response = await fetch(
+    resolveApiUrl(`/agents/${encodeURIComponent(agentId)}/evidence-spine${suffix}`),
+    {
+      signal: options.signal
+    }
+  );
+  const body = await parseJson<AgentEvidenceSpineResponse>(response);
+  return body.item;
+}
+
 function buildRuntimeSourceGapParams(options: RuntimeSourceGapFilterOptions) {
   const params = new URLSearchParams();
   if (options.agentId) {
@@ -481,6 +530,46 @@ function buildRuntimeSourceGapParams(options: RuntimeSourceGapFilterOptions) {
   }
   params.set('newest_first', String(options.newestFirst ?? true));
   params.set('limit', String(options.limit ?? DEFAULT_RUNTIME_SOURCE_GAP_LIMIT));
+  return params;
+}
+
+function buildAgentEvidenceSpineParams(options: AgentEvidenceSpineFilterOptions) {
+  const params = new URLSearchParams();
+  if (options.sourceKind) {
+    params.set('source_kind', options.sourceKind);
+  }
+  if (options.evidenceRole) {
+    params.set('evidence_role', options.evidenceRole);
+  }
+  if (options.sourceStatus) {
+    params.set('source_status', options.sourceStatus);
+  }
+  if (options.collectorSnapshotId) {
+    params.set('collector_snapshot_id', options.collectorSnapshotId);
+  }
+  if (options.correlationId) {
+    params.set('correlation_id', options.correlationId);
+  }
+  if (options.outputCandidate !== undefined && options.outputCandidate !== null) {
+    params.set('output_candidate', String(options.outputCandidate));
+  }
+  if (options.mapped !== undefined && options.mapped !== null) {
+    params.set('mapped', String(options.mapped));
+  }
+  if (options.observedSince) {
+    params.set('observed_since', options.observedSince);
+  }
+  if (options.observedUntil) {
+    params.set('observed_until', options.observedUntil);
+  }
+  if (options.collectedSince) {
+    params.set('collected_since', options.collectedSince);
+  }
+  if (options.collectedUntil) {
+    params.set('collected_until', options.collectedUntil);
+  }
+  params.set('newest_first', String(options.newestFirst ?? true));
+  params.set('limit', String(options.limit ?? DEFAULT_EVIDENCE_RECORD_LIMIT));
   return params;
 }
 

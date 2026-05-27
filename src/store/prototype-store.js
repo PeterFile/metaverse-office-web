@@ -1153,6 +1153,47 @@ class PrototypeStore {
     };
   }
 
+  getAgentEvidenceSpineSummary(filters = {}) {
+    const recordFilters = { ...filters };
+    delete recordFilters.mapped;
+    const { records, limit } = this.#filterEvidenceRecords(recordFilters);
+    const mapped = normalizeOptionalBoolean(filters.mapped);
+    const agentIds = new Set(SEED_AGENTS.map((agent) => agent.agent_id));
+    const agents = SEED_AGENTS.map(createAgentEvidenceSpineSummaryAgent);
+    const agentsById = new Map(agents.map((agent) => [agent.agent_id, agent]));
+    const unmappedEvidenceSummary = createUnmappedAgentEvidenceSummary();
+    let mappedCount = 0;
+    let totalCount = 0;
+
+    for (const record of records) {
+      const agentSummary = agentsById.get(record.agent_id);
+      if ((mapped === true && !agentSummary) || (mapped === false && agentSummary)) {
+        continue;
+      }
+
+      totalCount += 1;
+      if (agentSummary) {
+        mappedCount += 1;
+        addEvidenceRecordToAgentEvidenceSummary(agentSummary, record);
+        continue;
+      }
+
+      if (record.agent_id === null || !agentIds.has(record.agent_id)) {
+        addEvidenceRecordToUnmappedAgentEvidenceSummary(unmappedEvidenceSummary, record);
+      }
+    }
+
+    return {
+      agent_count: agents.length,
+      returned_limit: limit,
+      total_count: totalCount,
+      mapped_count: mappedCount,
+      unmapped_count: unmappedEvidenceSummary.total_count,
+      agents,
+      unmapped_evidence_summary: unmappedEvidenceSummary
+    };
+  }
+
   getAgentWorkflow(agentId, filters = {}) {
     const limit = filters.limit === undefined ? null : filters.limit;
     const window = filters.window || '60m';
@@ -2152,6 +2193,66 @@ function createEmptyEvidenceRecordFacets(limit) {
       unmapped: 0
     }
   };
+}
+
+function createAgentEvidenceSpineSummaryAgent(agent) {
+  return {
+    agent_id: agent.agent_id,
+    evidence_count: 0,
+    output_candidate_buckets: {
+      true: 0,
+      false: 0
+    },
+    source_kind_buckets: createZeroBuckets(EVIDENCE_RECORD_SOURCE_KINDS),
+    evidence_role_buckets: createZeroBuckets(EVIDENCE_RECORD_ROLES),
+    source_status_buckets: createZeroBuckets(EVIDENCE_RECORD_SOURCE_STATUSES),
+    source_gap_buckets: createZeroBuckets(RUNTIME_SOURCE_GAP_STATUSES),
+    latest_observed_at: null,
+    latest_collected_at: null
+  };
+}
+
+function createUnmappedAgentEvidenceSummary() {
+  return {
+    total_count: 0,
+    source_kind_buckets: createZeroBuckets(EVIDENCE_RECORD_SOURCE_KINDS),
+    evidence_role_buckets: createZeroBuckets(EVIDENCE_RECORD_ROLES),
+    source_status_buckets: createZeroBuckets(EVIDENCE_RECORD_SOURCE_STATUSES),
+    latest_observed_at: null,
+    latest_collected_at: null
+  };
+}
+
+function addEvidenceRecordToAgentEvidenceSummary(summary, record) {
+  summary.evidence_count += 1;
+  summary.output_candidate_buckets[String(record.output_candidate === true)] += 1;
+  incrementKnownBucket(summary.source_kind_buckets, record.source_kind);
+  incrementKnownBucket(summary.evidence_role_buckets, record.evidence_role);
+  incrementKnownBucket(summary.source_status_buckets, record.source_status);
+  incrementKnownBucket(summary.source_gap_buckets, record.source_status);
+  summary.latest_observed_at = getLatestEvidenceRecordIsoValue(
+    summary.latest_observed_at,
+    record.observed_at
+  );
+  summary.latest_collected_at = getLatestEvidenceRecordIsoValue(
+    summary.latest_collected_at,
+    record.collected_at
+  );
+}
+
+function addEvidenceRecordToUnmappedAgentEvidenceSummary(summary, record) {
+  summary.total_count += 1;
+  incrementKnownBucket(summary.source_kind_buckets, record.source_kind);
+  incrementKnownBucket(summary.evidence_role_buckets, record.evidence_role);
+  incrementKnownBucket(summary.source_status_buckets, record.source_status);
+  summary.latest_observed_at = getLatestEvidenceRecordIsoValue(
+    summary.latest_observed_at,
+    record.observed_at
+  );
+  summary.latest_collected_at = getLatestEvidenceRecordIsoValue(
+    summary.latest_collected_at,
+    record.collected_at
+  );
 }
 
 function sortEvidenceRefRollupBuckets(group) {

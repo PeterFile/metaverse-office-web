@@ -368,6 +368,141 @@ test('agent evidence spine aggregates bounded safe projections with exact filter
   assert.equal(serialized.includes('degraded_reasons'), false);
 });
 
+test('prototype store summarizes the canonical seven-agent evidence spine without assigning unmapped evidence', async () => {
+  const store = new PrototypeStore({ filePath: await createStoreFile() });
+  await store.load();
+  await store.appendCollectorReport(createCollectorReport());
+  await store.appendCollectorReport(createHermesRuntimeCollectorReport());
+
+  const summary = store.getAgentEvidenceSpineSummary({
+    output_candidate: 'false',
+    newest_first: 'true',
+    limit: '1'
+  });
+
+  assert.deepEqual(
+    summary.agents.map((agent) => agent.agent_id),
+    [
+      'team-lead',
+      'market-intel',
+      'product-pmf',
+      'tokenomics',
+      'protocol-engineering',
+      'app-engineering',
+      'growth-revenue'
+    ]
+  );
+  assert.equal(summary.agent_count, 7);
+  assert.equal(summary.returned_limit, 1);
+  assert.equal(summary.total_count, 4);
+  assert.equal(summary.mapped_count, 3);
+  assert.equal(summary.unmapped_count, 1);
+
+  const appSummary = summary.agents.find((agent) => agent.agent_id === 'app-engineering');
+  assert.equal(appSummary.evidence_count, 3);
+  assert.equal(appSummary.source_kind_buckets.workspace_root, 1);
+  assert.equal(appSummary.source_kind_buckets.workspace_file, 0);
+  assert.equal(appSummary.source_kind_buckets.hermes_profile, 1);
+  assert.equal(appSummary.source_kind_buckets.hermes_session, 1);
+  assert.equal(appSummary.output_candidate_buckets.false, 3);
+  assert.equal(appSummary.latest_observed_at, '2026-03-09T18:06:45.000Z');
+  assert.equal(appSummary.latest_collected_at, '2026-03-09T18:07:00.000Z');
+
+  assert.deepEqual(summary.unmapped_evidence_summary, {
+    total_count: 1,
+    source_kind_buckets: {
+      workspace_root: 0,
+      workspace_file: 0,
+      tmux_observation: 0,
+      hermes_profile: 1,
+      hermes_session: 0,
+      kanban_fixture: 0,
+      linear_fixture: 0,
+      slack_fixture: 0,
+      task_fixture: 0
+    },
+    evidence_role_buckets: {
+      workspace_presence: 0,
+      inbound_task: 0,
+      agent_output: 0,
+      agent_plan: 0,
+      runtime_activity: 0,
+      runtime_presence: 0,
+      runtime_unmapped: 1,
+      task_reference: 0
+    },
+    source_status_buckets: {
+      observed: 1,
+      degraded: 0,
+      missing: 0,
+      error: 0
+    },
+    latest_observed_at: '2026-03-09T18:06:40.000Z',
+    latest_collected_at: '2026-03-09T18:07:00.000Z'
+  });
+
+  assert.equal(
+    summary.agents.reduce((total, agent) => total + agent.evidence_count, 0),
+    summary.mapped_count
+  );
+
+  const serialized = JSON.stringify(summary);
+  assert.equal(serialized.includes('evidence_id'), false);
+  assert.equal(serialized.includes('evidence_ref'), false);
+  assert.equal(serialized.includes('collector_snapshot_id'), false);
+  assert.equal(serialized.includes('correlation_id'), false);
+  assert.equal(serialized.includes('/tmp/store-contract'), false);
+  assert.equal(serialized.includes('tmux://'), false);
+  assert.equal(serialized.includes('hermes://'), false);
+  assert.equal(serialized.includes('metadata'), false);
+  assert.equal(serialized.includes('degraded_reasons'), false);
+});
+
+test('prototype store keeps non-seeded evidence out of canonical agent evidence summary', async () => {
+  const store = new PrototypeStore({ filePath: await createStoreFile() });
+  await store.load();
+  const report = createCollectorReport();
+  report.items[0].agent_id = 'unmapped';
+  report.items[0].heartbeat.agent_id = 'unmapped';
+  await store.appendCollectorReport(report);
+
+  const summary = store.getAgentEvidenceSpineSummary();
+
+  assert.equal(summary.agent_count, 7);
+  assert.equal(summary.mapped_count, 0);
+  assert.equal(summary.unmapped_count, 3);
+  assert.equal(
+    summary.agents.reduce((total, agent) => total + agent.evidence_count, 0),
+    0
+  );
+  assert.deepEqual(
+    summary.agents.map((agent) => agent.agent_id),
+    [
+      'team-lead',
+      'market-intel',
+      'product-pmf',
+      'tokenomics',
+      'protocol-engineering',
+      'app-engineering',
+      'growth-revenue'
+    ]
+  );
+
+  const unmappedOnlySummary = store.getAgentEvidenceSpineSummary({ mapped: 'false' });
+  assert.equal(unmappedOnlySummary.total_count, 3);
+  assert.equal(unmappedOnlySummary.mapped_count, 0);
+  assert.equal(unmappedOnlySummary.unmapped_count, 3);
+  assert.equal(
+    unmappedOnlySummary.agents.reduce((total, agent) => total + agent.evidence_count, 0),
+    0
+  );
+
+  const mappedOnlySummary = store.getAgentEvidenceSpineSummary({ mapped: 'true' });
+  assert.equal(mappedOnlySummary.total_count, 0);
+  assert.equal(mappedOnlySummary.mapped_count, 0);
+  assert.equal(mappedOnlySummary.unmapped_count, 0);
+});
+
 test('agent evidence spine returns null for unknown agents', async () => {
   const store = new PrototypeStore({ filePath: await createStoreFile() });
   await store.load();

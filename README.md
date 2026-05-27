@@ -131,6 +131,7 @@ Optional env:
 - `GET /agents/:id/incidents?kind=&severity=&status=&correlation_id=&limit=&window=`
 - `GET /agents/:id/interactions?event_id=&evidence_ref=&interaction_type=&counterparty_agent_id=&severity=&correlation_id=&limit=&window=`
 - `GET /agents/:id/workflow?limit=&window=`
+- `GET /agents/evidence-spine/summary?source_kind=&evidence_role=&output_candidate=&source_status=&status=&collector_snapshot_id=&correlation_id=&mapped=&observed_since=&observed_until=&collected_since=&collected_until=&newest_first=&limit=`
 - `GET /agents/:id/evidence-spine?source_kind=&evidence_role=&output_candidate=&source_status=&status=&collector_snapshot_id=&correlation_id=&mapped=&observed_since=&observed_until=&collected_since=&collected_until=&newest_first=&limit=`
 - `GET /events?event_id=&agent_id=&event_type=&severity=&source_kind=&evidence_ref=&correlation_id=&limit=`
 - `GET /interactions?event_id=&evidence_ref=&interaction_type=&counterparty_agent_id=&severity=&correlation_id=&limit=&window=`
@@ -209,6 +210,7 @@ Optional env:
 - `counterparty_agent_ids` are deduped from all returned top-level workflow slices: `incidents` and `timeline` contribute their `counterparty_agent_ids`, `interactions` contribute via `participant_agent_ids`, and the final workflow list excludes the focal agent id plus `team-lead`
 
 ### Agent evidence spine query notes
+- `GET /agents/evidence-spine/summary` is a global compact read-only summary for the canonical seven-agent roster; it returns stable per-agent counts/buckets/latest safe timestamps plus a separate unmapped evidence summary, and never promotes unmapped or non-seeded evidence into agent facts
 - `GET /agents/:id/evidence-spine` is a read-only aggregate over existing replayed evidence-record summaries, runtime source-gap projections, and collector source-health projections for one known agent; unknown agents return `404`
 - filters are exact and additive: `source_kind`, `evidence_role`, `output_candidate`, `source_status` (or `status` for source-health aliasing), `collector_snapshot_id`, `correlation_id`, `mapped`, inclusive observed/collected windows, `newest_first`, and post-filter `limit`
 - `evidence_summary` and `source_gaps.summary` compute counts, buckets, and extrema before `limit`; `recent_evidence`, `source_gaps.items`, and `source_health.agent_items` are bounded after filters by `returned_limit`

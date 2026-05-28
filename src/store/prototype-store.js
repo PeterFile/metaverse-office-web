@@ -4723,7 +4723,10 @@ function projectCollectorSourceHealth(report, filters = {}) {
     collector_snapshot_id: collectorSnapshotId,
     actor_id: report.actor_id || null,
     summary: createSourceHealthSummary(selectedItems, sourceHealthKeys, status),
-    runtime_source_evidence: cloneRuntimeSourceEvidence(report.runtime_source_evidence),
+    runtime_source_evidence: cloneRuntimeSourceEvidence(report.runtime_source_evidence, {
+      sourceKind: requestedSourceKind,
+      status: hasUnknownStatus ? '__unknown_status__' : status
+    }),
     agent_items: selectedItems.map((item) =>
       projectSourceHealthAgentItem({
         item,
@@ -5114,32 +5117,105 @@ function cloneSourceHealthEntry(health) {
   };
 }
 
-function cloneUnmappedTmuxSessions(sessions) {
+function cloneUnmappedTmuxSessions(sessions, filters = {}) {
   if (!Array.isArray(sessions)) {
     return [];
   }
 
-  return sessions.map((session) => ({
-    status: normalizeSourceHealthStatus(session.status) || 'observed',
-    observed_count: normalizeCount(session.observed_count),
-    last_observed_at: normalizeCollectorTimestamp(session.last_observed_at) || null
-  }));
+  const sourceHealthKeys = resolveSourceHealthKeys(filters.sourceKind);
+  if (filters.sourceKind && !sourceHealthKeys.includes('tmux_session')) {
+    return [];
+  }
+
+  return sessions
+    .map((session) => ({
+      status: normalizeSourceHealthStatus(session.status) || 'observed',
+      observed_count: normalizeCount(session.observed_count),
+      last_observed_at: normalizeCollectorTimestamp(session.last_observed_at) || null
+    }))
+    .filter((session) => !filters.status || session.status === filters.status);
 }
 
-function cloneRuntimeSourceEvidence(runtimeSourceEvidence = {}) {
+function summarizeUnmappedTaskEvidence(sources, filters = {}) {
+  if (!Array.isArray(sources)) {
+    return [];
+  }
+
+  const summaries = new Map();
+  for (const source of sources) {
+    const taskEvidence = normalizeTaskEvidenceObservation(source);
+    if (!taskEvidence) {
+      continue;
+    }
+    if (!matchesRuntimeSourceEvidenceFilters(taskEvidence, filters)) {
+      continue;
+    }
+
+    const key = `${taskEvidence.source_kind}|${taskEvidence.status}`;
+    const existing = summaries.get(key) || {
+      source_kind: taskEvidence.source_kind,
+      status: taskEvidence.status,
+      observed_count: 0,
+      latest_observed_at: null
+    };
+    existing.observed_count += 1;
+    existing.latest_observed_at = maxCollectorIsoTimestamp([
+      existing.latest_observed_at,
+      taskEvidence.observed_at
+    ]);
+    summaries.set(key, existing);
+  }
+
+  return Array.from(summaries.values()).sort((left, right) => {
+    const sourceKindOrder =
+      EVIDENCE_RECORD_SOURCE_KINDS.indexOf(left.source_kind) -
+      EVIDENCE_RECORD_SOURCE_KINDS.indexOf(right.source_kind);
+    if (sourceKindOrder !== 0) {
+      return sourceKindOrder;
+    }
+
+    return EVIDENCE_RECORD_SOURCE_STATUSES.indexOf(left.status) -
+      EVIDENCE_RECORD_SOURCE_STATUSES.indexOf(right.status);
+  });
+}
+
+function matchesRuntimeSourceEvidenceFilters(source, filters = {}) {
+  if (filters.sourceKind && source.source_kind !== filters.sourceKind) {
+    return false;
+  }
+
+  if (filters.status && source.status !== filters.status) {
+    return false;
+  }
+
+  return true;
+}
+
+function cloneRuntimeSourceEvidence(runtimeSourceEvidence = {}, filters = {}) {
   return {
     unmapped_tmux_sessions: cloneUnmappedTmuxSessions(
-      runtimeSourceEvidence?.unmapped_tmux_sessions
+      runtimeSourceEvidence?.unmapped_tmux_sessions,
+      filters
     ),
     ...(Array.isArray(runtimeSourceEvidence?.unmapped_hermes_sources)
       ? {
-          unmapped_hermes_sources: runtimeSourceEvidence.unmapped_hermes_sources.map((source) => ({
-            source_kind: projectKnownEvidenceValue(source.source_kind, EVIDENCE_RECORD_SOURCE_KINDS),
-            status: normalizeSourceHealthStatus(source.status),
-            observed_count: normalizeCount(source.observed_count),
-            last_observed_at:
-              normalizeCollectorTimestamp(source.last_observed_at || source.observed_at) || null
-          }))
+          unmapped_hermes_sources: runtimeSourceEvidence.unmapped_hermes_sources
+            .map((source) => ({
+              source_kind: projectKnownEvidenceValue(source.source_kind, EVIDENCE_RECORD_SOURCE_KINDS),
+              status: normalizeSourceHealthStatus(source.status),
+              observed_count: normalizeCount(source.observed_count),
+              last_observed_at:
+                normalizeCollectorTimestamp(source.last_observed_at || source.observed_at) || null
+            }))
+            .filter((source) => matchesRuntimeSourceEvidenceFilters(source, filters))
+        }
+      : {}),
+    ...(Array.isArray(runtimeSourceEvidence?.unmapped_task_evidence)
+      ? {
+          unmapped_task_evidence: summarizeUnmappedTaskEvidence(
+            runtimeSourceEvidence.unmapped_task_evidence,
+            filters
+          )
         }
       : {})
   };

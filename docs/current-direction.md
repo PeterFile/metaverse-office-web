@@ -1,6 +1,6 @@
 # Current Direction: Live Evidence Spine
 
-Updated: 2026-05-28T11:09:44+08:00
+Updated: 2026-05-28T12:20:51+08:00
 
 ## Product vision
 
@@ -26,7 +26,7 @@ This project is not a flashy dashboard, not a manual task-dispatch UI, and not a
 - Controlled writes are limited to `POST /events`, `POST /heartbeats`, and `POST /collectors/controller-snapshot` with `x-actor-id` validation.
 - The domain still uses the canonical seven-actor office model: `team-lead` plus `market-intel`, `product-pmf`, `tokenomics`, `protocol-engineering`, `app-engineering`, and `growth-revenue`.
 - Collector snapshots expose source health for workspace roots, watched workspace files, expected tmux sessions, and injected Hermes profile/session runtime facts; missing/degraded sources are explicit evidence state, and inbound `inbox.md`/workspace-root/Hermes presence does not imply agent output.
-- The frontend is React + TypeScript + Vite under `apps/web`, with PixiJS AI Town rendering, world projection, roster, category Hub, selected-agent drilldowns, supervision/evidence/replay/memory surfaces, collector source-health/evidence-coverage surfacing, a bounded runtime source-gap HUD queue, selected-agent evidence ledger helper models, a compact evidence Proof Compass/basis summary, selected-agent replay proof ladder, selected-agent evidence record detail inspection, and browser smoke coverage.
+- The frontend is React + TypeScript + Vite under `apps/web`, with PixiJS AI Town rendering, world projection, roster, category Hub, selected-agent drilldowns, supervision/evidence/replay/memory surfaces, collector source-health/evidence-coverage surfacing, a bounded runtime source-gap HUD queue, selected-agent evidence ledger helper models, a compact evidence Proof Compass/basis summary, selected-agent replay proof ladder, evidence-id scoped replay first-fold context with a safe Back to Evidence path, selected-agent evidence record detail inspection, and browser smoke coverage.
 - The UI consumes read models. It must not infer productivity, liveness, severity, or provenance that is absent from the API.
 
 ## Next milestone

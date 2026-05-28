@@ -1360,6 +1360,44 @@ test('prototype store persists task evidence observations as bounded read-only e
   assert.equal(JSON.stringify(latestReport).includes('/tmp/task-evidence-secret'), false);
   assert.equal(JSON.stringify(latestReport).includes('token='), false);
 
+  const sourceHealth = store.getLatestCollectorSourceHealth();
+  assert.deepEqual(sourceHealth.runtime_source_evidence.unmapped_task_evidence, [
+    {
+      source_kind: 'linear_fixture',
+      status: 'observed',
+      observed_count: 1,
+      latest_observed_at: '2026-05-20T01:01:00.000Z'
+    }
+  ]);
+  assert.deepEqual(
+    store.getLatestCollectorSourceHealth({ source_kind: 'linear_fixture' }).runtime_source_evidence
+      .unmapped_task_evidence,
+    [
+      {
+        source_kind: 'linear_fixture',
+        status: 'observed',
+        observed_count: 1,
+        latest_observed_at: '2026-05-20T01:01:00.000Z'
+      }
+    ]
+  );
+  assert.deepEqual(
+    store.getLatestCollectorSourceHealth({ source_kind: 'kanban_fixture' }).runtime_source_evidence
+      .unmapped_task_evidence,
+    []
+  );
+  assert.deepEqual(
+    store.getLatestCollectorSourceHealth({ status: 'missing' }).runtime_source_evidence
+      .unmapped_task_evidence,
+    []
+  );
+  const serializedSourceHealth = JSON.stringify(sourceHealth.runtime_source_evidence);
+  assert.equal(serializedSourceHealth.includes('task://linear_fixture/TASK-201'), false);
+  assert.equal(serializedSourceHealth.includes('TASK-201'), false);
+  assert.equal(serializedSourceHealth.includes('corr-unmapped'), false);
+  assert.equal(serializedSourceHealth.includes('/tmp/task-evidence-unmapped-secret'), false);
+  assert.equal(serializedSourceHealth.includes('token='), false);
+
   const taskRecords = store.listEvidenceRecords({ evidence_role: 'task_reference' });
   assert.deepEqual(
     taskRecords.map((record) => ({

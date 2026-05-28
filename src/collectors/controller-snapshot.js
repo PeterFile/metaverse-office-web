@@ -1233,6 +1233,7 @@ function createTaskEvidenceObservationFromRecord(record, { agentId }) {
     evidence_ref: record.evidence_ref,
     ...(metadata.fact_id ? { fact_id: metadata.fact_id } : {}),
     ...(Number.isSafeInteger(metadata.source_index) ? { source_index: metadata.source_index } : {}),
+    ...(metadata.source_provenance ? { source_provenance: metadata.source_provenance } : {}),
     ...(record.degraded_reasons.length > 0 ? { warnings: record.degraded_reasons.slice() } : {})
   };
 }

@@ -1288,6 +1288,12 @@ test('prototype store persists task evidence observations as bounded read-only e
       evidence_ref: 'task://kanban_fixture/TASK-200',
       fact_id: 'fixture-row-200',
       source_index: 0,
+      source_provenance: {
+        source_format: 'json_array',
+        source_index: 0,
+        source_input_ordinal: 1,
+        source_file_ordinal: 1
+      },
       local_path: '/tmp/task-evidence-secret',
       raw_payload: 'token=task-secret'
     }
@@ -1300,6 +1306,13 @@ test('prototype store persists task evidence observations as bounded read-only e
       observed_at: '2026-05-20T01:01:00.000Z',
       correlation_id: 'corr-unmapped',
       evidence_ref: 'task://linear_fixture/TASK-201',
+      source_provenance: {
+        source_format: 'jsonl',
+        source_index: 0,
+        line: 1,
+        source_input_ordinal: 1,
+        source_file_ordinal: 1
+      },
       local_path: '/tmp/task-evidence-unmapped-secret',
       raw_payload: 'token=unmapped-task-secret'
     }
@@ -1318,7 +1331,13 @@ test('prototype store persists task evidence observations as bounded read-only e
       agent_id: 'app-engineering',
       evidence_ref: 'task://kanban_fixture/TASK-200',
       fact_id: 'fixture-row-200',
-      source_index: 0
+      source_index: 0,
+      source_provenance: {
+        source_format: 'json_array',
+        source_index: 0,
+        source_input_ordinal: 1,
+        source_file_ordinal: 1
+      }
     }
   ]);
   assert.deepEqual(latestReport.runtime_source_evidence.unmapped_task_evidence, [
@@ -1328,7 +1347,14 @@ test('prototype store persists task evidence observations as bounded read-only e
       source_kind: 'linear_fixture',
       observed_at: '2026-05-20T01:01:00.000Z',
       correlation_id: 'corr-unmapped',
-      evidence_ref: 'task://linear_fixture/TASK-201'
+      evidence_ref: 'task://linear_fixture/TASK-201',
+      source_provenance: {
+        source_format: 'jsonl',
+        source_index: 0,
+        line: 1,
+        source_input_ordinal: 1,
+        source_file_ordinal: 1
+      }
     }
   ]);
   assert.equal(JSON.stringify(latestReport).includes('/tmp/task-evidence-secret'), false);
@@ -1361,7 +1387,13 @@ test('prototype store persists task evidence observations as bounded read-only e
           task_ref: 'TASK-200',
           source_index: 0,
           source_health_key: 'task_evidence',
-          fact_id: 'fixture-row-200'
+          fact_id: 'fixture-row-200',
+          source_provenance: {
+            source_format: 'json_array',
+            source_index: 0,
+            source_input_ordinal: 1,
+            source_file_ordinal: 1
+          }
         }
       },
       {
@@ -1376,11 +1408,27 @@ test('prototype store persists task evidence observations as bounded read-only e
         metadata: {
           task_ref: 'TASK-201',
           source_index: 0,
-          source_health_key: 'runtime_source_evidence.unmapped_task_evidence'
+          source_health_key: 'runtime_source_evidence.unmapped_task_evidence',
+          source_provenance: {
+            source_format: 'jsonl',
+            source_index: 0,
+            line: 1,
+            source_input_ordinal: 1,
+            source_file_ordinal: 1
+          }
         }
       }
     ]
   );
+  const bundle = store.getEvidenceProvenanceBundle(taskRecords[0].evidence_id);
+  assert.deepEqual(bundle.input_proof, {
+    source_format: 'json_array',
+    source_index: 0,
+    source_input_ordinal: 1,
+    source_file_ordinal: 1
+  });
+  assert.equal(JSON.stringify(bundle).includes('source_provenance'), false);
+  assert.equal(JSON.stringify(bundle).includes('metadata'), false);
   assert.equal(JSON.stringify(taskRecords).includes('/tmp/task-evidence-secret'), false);
   assert.equal(JSON.stringify(taskRecords).includes('token='), false);
   assert.equal(store.getEvidenceRecordsSummary().source_kind_buckets.kanban_fixture, 1);

@@ -104,7 +104,18 @@ function parseTaskEvidenceJsonArray(content) {
       return fileFailure('task evidence file must contain a JSON array');
     }
 
-    return { facts: parsed, rejected: [] };
+    return {
+      facts: parsed.map((fact, index) => ({
+        fact,
+        source_provenance: {
+          source_format: 'json_array',
+          source_index: index,
+          source_input_ordinal: 1,
+          source_file_ordinal: 1
+        }
+      })),
+      rejected: []
+    };
   } catch {
     return fileFailure('task evidence file could not be parsed');
   }
@@ -114,14 +125,23 @@ function parseTaskEvidenceJsonLines(content) {
   const facts = [];
   const lines = content.split(/\r?\n/);
 
-  for (const line of lines) {
+  for (const [lineIndex, line] of lines.entries()) {
     const trimmed = line.trim();
     if (!trimmed) {
       continue;
     }
 
     try {
-      facts.push(JSON.parse(trimmed));
+      facts.push({
+        fact: JSON.parse(trimmed),
+        source_provenance: {
+          source_format: 'jsonl',
+          source_index: lineIndex,
+          line: lineIndex + 1,
+          source_input_ordinal: 1,
+          source_file_ordinal: 1
+        }
+      });
     } catch {
       return fileFailure('task evidence file could not be parsed');
     }
@@ -134,7 +154,8 @@ function normalizeTaskEvidenceFileFacts(facts) {
   const candidates = [];
   const rejected = [];
 
-  facts.forEach((fact, index) => {
+  facts.forEach((entry, index) => {
+    const { fact, sourceProvenance } = unwrapTaskEvidenceFileEntry(entry);
     const unsafeFields = unsafeFileIdentifierFields(fact);
     const normalized =
       unsafeFields.length > 0
@@ -151,7 +172,10 @@ function normalizeTaskEvidenceFileFacts(facts) {
       return;
     }
 
-    candidates.push(normalized);
+    candidates.push({
+      ...normalized,
+      ...(sourceProvenance ? { source_provenance: sourceProvenance } : {})
+    });
   });
 
   if (rejected.length > 0) {
@@ -159,6 +183,20 @@ function normalizeTaskEvidenceFileFacts(facts) {
   }
 
   return { candidates, rejected };
+}
+
+function unwrapTaskEvidenceFileEntry(entry) {
+  if (entry && typeof entry === 'object' && !Array.isArray(entry) && Object.hasOwn(entry, 'fact')) {
+    return {
+      fact: entry.fact,
+      sourceProvenance: normalizeTaskEvidenceSourceProvenance(entry.source_provenance)
+    };
+  }
+
+  return {
+    fact: entry,
+    sourceProvenance: normalizeTaskEvidenceSourceProvenance(entry?.source_provenance)
+  };
 }
 
 function unsafeFileIdentifierFields(fact) {
@@ -271,7 +309,8 @@ function projectTaskEvidenceRecord(candidate, { collectedAt, collectorSnapshotId
     task_ref: candidate.task_ref,
     ...(candidate.id ? { fact_id: candidate.id } : {}),
     source_index: index,
-    ...(Array.isArray(candidate.warnings) ? { warnings: candidate.warnings.slice() } : {})
+    ...(Array.isArray(candidate.warnings) ? { warnings: candidate.warnings.slice() } : {}),
+    ...(candidate.source_provenance ? { source_provenance: candidate.source_provenance } : {})
   };
 
   return {
@@ -372,7 +411,49 @@ function normalizeTaskEvidenceFact(fact, index) {
     candidate.warnings = warnings;
   }
 
+  const sourceProvenance = normalizeTaskEvidenceSourceProvenance(fact.source_provenance);
+  if (sourceProvenance) {
+    candidate.source_provenance = sourceProvenance;
+  }
+
   return candidate;
+}
+
+function normalizeTaskEvidenceSourceProvenance(sourceProvenance) {
+  if (!sourceProvenance || typeof sourceProvenance !== 'object' || Array.isArray(sourceProvenance)) {
+    return null;
+  }
+  if (!['json_array', 'jsonl'].includes(sourceProvenance.source_format)) {
+    return null;
+  }
+  if (!Number.isSafeInteger(sourceProvenance.source_index) || sourceProvenance.source_index < 0) {
+    return null;
+  }
+
+  const normalized = {
+    source_format: sourceProvenance.source_format,
+    source_index: sourceProvenance.source_index
+  };
+  if (sourceProvenance.source_format === 'jsonl') {
+    if (!Number.isSafeInteger(sourceProvenance.line) || sourceProvenance.line < 1) {
+      return null;
+    }
+    normalized.line = sourceProvenance.line;
+  }
+  if (
+    Number.isSafeInteger(sourceProvenance.source_input_ordinal) &&
+    sourceProvenance.source_input_ordinal > 0
+  ) {
+    normalized.source_input_ordinal = sourceProvenance.source_input_ordinal;
+  }
+  if (
+    Number.isSafeInteger(sourceProvenance.source_file_ordinal) &&
+    sourceProvenance.source_file_ordinal > 0
+  ) {
+    normalized.source_file_ordinal = sourceProvenance.source_file_ordinal;
+  }
+
+  return normalized;
 }
 
 function controlPlaneFields(fact) {

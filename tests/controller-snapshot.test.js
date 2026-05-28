@@ -695,13 +695,26 @@ test('collector treats injected task evidence facts as evidence only', async () 
           observed_at: '2026-05-20T01:00:00.000Z',
           correlation_id: 'corr-task',
           agent_id: 'app-engineering',
-          id: 'fixture-row-200'
+          id: 'fixture-row-200',
+          source_provenance: {
+            source_format: 'json_array',
+            source_index: 0,
+            source_input_ordinal: 1,
+            source_file_ordinal: 1
+          }
         },
         {
           task_ref: 'TASK-201',
           source_kind: 'linear_fixture',
           observed_at: '2026-05-20T01:01:00.000Z',
-          correlation_id: 'corr-unmapped'
+          correlation_id: 'corr-unmapped',
+          source_provenance: {
+            source_format: 'jsonl',
+            source_index: 1,
+            line: 2,
+            source_input_ordinal: 1,
+            source_file_ordinal: 1
+          }
         }
       ],
       rejected: []
@@ -723,7 +736,13 @@ test('collector treats injected task evidence facts as evidence only', async () 
       agent_id: 'app-engineering',
       evidence_ref: 'task://kanban_fixture/TASK-200',
       fact_id: 'fixture-row-200',
-      source_index: 0
+      source_index: 0,
+      source_provenance: {
+        source_format: 'json_array',
+        source_index: 0,
+        source_input_ordinal: 1,
+        source_file_ordinal: 1
+      }
     }
   ]);
   assert.ok(item.evidence_refs.includes('task://kanban_fixture/TASK-200'));
@@ -743,7 +762,14 @@ test('collector treats injected task evidence facts as evidence only', async () 
       observed_at: '2026-05-20T01:01:00.000Z',
       correlation_id: 'corr-unmapped',
       evidence_ref: 'task://linear_fixture/TASK-201',
-      source_index: 1
+      source_index: 1,
+      source_provenance: {
+        source_format: 'jsonl',
+        source_index: 1,
+        line: 2,
+        source_input_ordinal: 1,
+        source_file_ordinal: 1
+      }
     }
   ]);
 

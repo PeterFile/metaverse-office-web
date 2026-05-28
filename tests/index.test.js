@@ -70,7 +70,14 @@ test('task evidence file env is opt-in and returns normalized candidates only wh
       source_kind: 'kanban_fixture',
       observed_at: '2026-05-20T01:00:00.000Z',
       correlation_id: 'corr-task-300',
-      agent_id: 'app-engineering'
+      agent_id: 'app-engineering',
+      source_provenance: {
+        source_format: 'jsonl',
+        source_index: 0,
+        line: 1,
+        source_input_ordinal: 1,
+        source_file_ordinal: 1
+      }
     }
   ]);
 });

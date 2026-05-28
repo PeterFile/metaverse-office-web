@@ -308,7 +308,13 @@ test('reads opt-in task evidence facts from a JSON array file', async () => {
         source_kind: 'kanban_fixture',
         observed_at: '2026-05-20T01:00:00.000Z',
         correlation_id: 'corr-json',
-        agent_id: 'app-engineering'
+        agent_id: 'app-engineering',
+        source_provenance: {
+          source_format: 'json_array',
+          source_index: 0,
+          source_input_ordinal: 1,
+          source_file_ordinal: 1
+        }
       }
     ],
     rejected: []
@@ -341,6 +347,25 @@ test('reads opt-in task evidence facts from a JSONL file', async () => {
   const result = await reader.readEvidenceCandidates();
 
   assert.deepEqual(result.candidates.map((candidate) => candidate.task_ref), ['TASK-201', 'TASK-202']);
+  assert.deepEqual(
+    result.candidates.map((candidate) => candidate.source_provenance),
+    [
+      {
+        source_format: 'jsonl',
+        source_index: 0,
+        line: 1,
+        source_input_ordinal: 1,
+        source_file_ordinal: 1
+      },
+      {
+        source_format: 'jsonl',
+        source_index: 2,
+        line: 3,
+        source_input_ordinal: 1,
+        source_file_ordinal: 1
+      }
+    ]
+  );
   assert.deepEqual(result.rejected, []);
   assert.equal(JSON.stringify(result).includes(root), false);
   assertNoLeaks(result);
@@ -484,6 +509,12 @@ test('file-reader output projects to canonical task_reference evidence records',
   assert.equal(projected.records[0].evidence_role, 'task_reference');
   assert.equal(projected.records[0].output_candidate, false);
   assert.equal(projected.records[0].source_status, 'observed');
+  assert.deepEqual(projected.records[0].metadata.source_provenance, {
+    source_format: 'json_array',
+    source_index: 0,
+    source_input_ordinal: 1,
+    source_file_ordinal: 1
+  });
   assertNoLeaks(projected);
 });
 

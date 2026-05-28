@@ -244,6 +244,7 @@ const appEngineeringEvidenceRecordsUrl =
   '/evidence-records?agent_id=app-engineering&newest_first=true&limit=12';
 const appEngineeringEvidenceRecordDetailUrl = '/evidence-records/output-1';
 const appEngineeringEvidenceProvenanceBundleUrl = '/evidence-records/output-1/provenance-bundle';
+const appEngineeringEvidenceSourceContextUrl = '/evidence-records/output-1/source-context';
 const appEngineeringEvidenceCheckpointLogUrl = '/accountability/replay/checkpoint-log?limit=3&evidence_id=output-1';
 const missingEvidenceRecordDetailUrl = '/evidence-records/missing-1';
 const missingEvidenceProvenanceBundleUrl = '/evidence-records/missing-1/provenance-bundle';
@@ -1339,6 +1340,86 @@ const evidenceProvenanceBundleFixture = {
   }
 };
 
+const evidenceSourceContextFixture = {
+  item: {
+    evidence_id: 'output-1',
+    source_summary: {
+      kind: 'workspace_file',
+      status: 'observed',
+      role: 'agent_output',
+      output_candidate: true,
+      mapped: true,
+      time: {
+        observed_at: '2026-03-16T08:58:00.000Z',
+        collected_at: '2026-03-16T08:59:00.000Z'
+      }
+    },
+    record: {
+      observed_at: '2026-03-16T08:58:00.000Z',
+      collected_at: '2026-03-16T08:59:00.000Z',
+      agent_id: 'app-engineering',
+      source_kind: 'workspace_file',
+      evidence_role: 'agent_output',
+      source_status: 'observed',
+      output_candidate: true,
+      unmapped: false
+    },
+    source_health: {
+      collected_at: '2026-03-16T08:59:00.000Z',
+      summary: {
+        total_agents: 1,
+        ok_agents: 1,
+        degraded_agents: 0,
+        missing_agents: 0,
+        error_agents: 0
+      },
+      agent_items: [
+        {
+          agent_id: 'app-engineering',
+          evidence_count: 1,
+          latest_evidence_at: '2026-03-16T08:58:00.000Z',
+          source_health: {
+            workspace_files: {
+              status: 'observed',
+              observed_count: 1,
+              missing_count: 0,
+              error_count: 0,
+              last_observed_at: '2026-03-16T08:58:00.000Z'
+            }
+          }
+        }
+      ]
+    },
+    source_gaps: {
+      summary: {
+        total_count: 1,
+        returned_limit: 3,
+        mapped_count: 1,
+        unmapped_count: 0,
+        output_candidate_buckets: { true: 1, false: 0 },
+        source_kind_buckets: { workspace_file: 1 },
+        evidence_role_buckets: { agent_output: 1 },
+        source_status_buckets: { observed: 1 },
+        first_observed_at: '2026-03-16T08:58:00.000Z',
+        last_observed_at: '2026-03-16T08:58:00.000Z',
+        first_collected_at: '2026-03-16T08:59:00.000Z',
+        last_collected_at: '2026-03-16T08:59:00.000Z'
+      },
+      items: [
+        {
+          observed_at: '2026-03-16T08:58:00.000Z',
+          collected_at: '2026-03-16T08:59:00.000Z',
+          agent_id: 'app-engineering',
+          source_kind: 'workspace_file',
+          evidence_role: 'agent_output',
+          source_status: 'observed',
+          output_candidate: true
+        }
+      ]
+    }
+  }
+};
+
 const evidenceCheckpointLogFixture = {
   items: [
     {
@@ -1877,6 +1958,10 @@ function resolveDefaultFetchResponse(url: string) {
 
   if (url === appEngineeringEvidenceProvenanceBundleUrl) {
     return jsonResponse(evidenceProvenanceBundleFixture);
+  }
+
+  if (url === appEngineeringEvidenceSourceContextUrl) {
+    return jsonResponse(evidenceSourceContextFixture);
   }
 
   if (url.startsWith('/accountability/replay/checkpoint-log?')) {
@@ -3666,6 +3751,7 @@ afterEach(() => {
       const detailReadAllowlist = [
         appEngineeringEvidenceRecordDetailUrl,
         appEngineeringEvidenceProvenanceBundleUrl,
+        appEngineeringEvidenceSourceContextUrl,
         appEngineeringEvidenceCheckpointLogUrl
       ];
 
@@ -3731,6 +3817,39 @@ afterEach(() => {
       expect(detailSection).toHaveTextContent(
         '#22 · collector_snapshot · collector-20260316 · 1 items · 2026-03-16T08:59:00.000Z'
       );
+      expect(detailSection).toHaveTextContent('Source context · not loaded');
+      expect(detailSection).not.toHaveTextContent('Source gaps ·');
+      expect(vi.mocked(globalThis.fetch).mock.calls.map(([request]) => String(request))).not.toContain(
+        appEngineeringEvidenceSourceContextUrl
+      );
+
+      const callsBeforeSourceContext = vi.mocked(globalThis.fetch).mock.calls.length;
+      await user.click(
+        within(detailSection).getByRole('button', {
+          name: 'Inspect source context for evidence output-1'
+        })
+      );
+
+      await waitFor(() => {
+        expect(vi.mocked(globalThis.fetch).mock.calls.map(([request]) => String(request))).toContain(
+          appEngineeringEvidenceSourceContextUrl
+        );
+      });
+      const sourceContextRequests = vi
+        .mocked(globalThis.fetch)
+        .mock.calls.slice(callsBeforeSourceContext)
+        .map(([request, init]) => ({
+          method: init?.method ?? 'GET',
+          url: String(request)
+        }))
+        .filter(({ url }) => url === appEngineeringEvidenceSourceContextUrl);
+      expect(sourceContextRequests).toEqual([{ method: 'GET', url: appEngineeringEvidenceSourceContextUrl }]);
+      expect(await within(detailSection).findByText('Evidence Source Context')).toBeVisible();
+      expect(detailSection).toHaveTextContent(
+        'Source context · workspace_file · agent_output · observed · mapped · output candidate'
+      );
+      expect(detailSection).toHaveTextContent('Source gaps · 1 total · 1 mapped · 0 unmapped');
+      expect(detailSection).toHaveTextContent('Source health · 1 evidence · Latest 2026-03-16T08:58:00.000Z');
       expect(detailSection).not.toHaveTextContent('raw_tmux_capture');
       expect(detailSection).not.toHaveTextContent('/collectors/controller-snapshot');
       expect(detailSection).not.toHaveTextContent('/evidence-records/output-1');

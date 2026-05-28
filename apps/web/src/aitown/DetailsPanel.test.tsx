@@ -10,6 +10,7 @@ import type {
   CorrelationDrilldown,
   EvidenceProvenanceBundle,
   EvidenceRecord,
+  EvidenceSourceContext,
   MemoryArtifactIndex,
   OfficeAgent,
   OfficeOperation,
@@ -712,6 +713,9 @@ function buildProps(overrides: Partial<DetailsPanelProps> = {}): DetailsPanelPro
     selectedAgentEvidenceProvenanceBundle: null,
     selectedAgentEvidenceProvenanceBundleError: null,
     selectedAgentEvidenceProvenanceBundleState: 'idle',
+    selectedAgentEvidenceSourceContext: null,
+    selectedAgentEvidenceSourceContextError: null,
+    selectedAgentEvidenceSourceContextState: 'idle',
     selectedAgentEvidenceCheckpointLog: null,
     selectedAgentEvidenceCheckpointLogError: null,
     selectedAgentEvidenceCheckpointLogState: 'idle',
@@ -731,6 +735,7 @@ function buildProps(overrides: Partial<DetailsPanelProps> = {}): DetailsPanelPro
     onSelectOperationsSeverity: vi.fn(),
     onSelectOperation: vi.fn(),
     onInspectSelectedAgentEvidenceRecord: vi.fn(),
+    onInspectSelectedAgentEvidenceSourceContext: vi.fn(),
     onReplaySelectedAgentEvidenceRecord: vi.fn(),
     ...overrides
   };
@@ -974,6 +979,92 @@ function buildEvidenceProvenanceBundle(
     },
     ...overrides,
     source_summary: sourceSummary
+  };
+}
+
+function buildEvidenceSourceContext(overrides: Partial<EvidenceSourceContext> = {}): EvidenceSourceContext {
+  return {
+    evidence_id: 'output-1',
+    source_summary: {
+      kind: 'workspace_file',
+      status: 'observed',
+      role: 'agent_output',
+      output_candidate: true,
+      mapped: true,
+      time: {
+        observed_at: '2026-03-16T08:58:00.000Z',
+        collected_at: '2026-03-16T08:59:00.000Z'
+      }
+    },
+    record: {
+      observed_at: '2026-03-16T08:58:00.000Z',
+      collected_at: '2026-03-16T08:59:00.000Z',
+      agent_id: 'app-engineering',
+      source_kind: 'workspace_file',
+      evidence_role: 'agent_output',
+      source_status: 'observed',
+      output_candidate: true,
+      unmapped: false
+    },
+    source_health: {
+      collected_at: '2026-03-16T08:59:00.000Z',
+      summary: {
+        agent_count: 1,
+        source_kind_buckets: {
+          workspace_root: { observed: 0, degraded: 0, missing: 0, error: 0 },
+          workspace_files: { observed: 1, degraded: 0, missing: 0, error: 0 },
+          tmux_session: { observed: 0, degraded: 0, missing: 0, error: 0 },
+          hermes_profile: { observed: 0, degraded: 0, missing: 0, error: 0 },
+          hermes_session: { observed: 0, degraded: 0, missing: 0, error: 0 }
+        },
+        status_buckets: { observed: 1, degraded: 0, missing: 0, error: 0 }
+      },
+      agent_items: [
+        {
+          agent_id: 'app-engineering',
+          evidence_count: 1,
+          latest_evidence_at: '2026-03-16T08:58:00.000Z',
+          source_health: {
+            workspace_files: {
+              status: 'observed',
+              observed_count: 1,
+              missing_count: 0,
+              error_count: 0,
+              last_observed_at: '2026-03-16T08:58:00.000Z'
+            }
+          }
+        }
+      ]
+    },
+    source_gaps: {
+      summary: {
+        total_count: 1,
+        returned_limit: 3,
+        mapped_count: 1,
+        unmapped_count: 0,
+        output_candidate_buckets: { true: 1, false: 0 },
+        source_kind_buckets: { workspace_file: 1 },
+        evidence_role_buckets: { agent_output: 1 },
+        source_status_buckets: { observed: 1 },
+        first_observed_at: '2026-03-16T08:58:00.000Z',
+        last_observed_at: '2026-03-16T08:58:00.000Z',
+        first_collected_at: '2026-03-16T08:59:00.000Z',
+        last_collected_at: '2026-03-16T08:59:00.000Z'
+      },
+      items: [
+        {
+          observed_at: '2026-03-16T08:58:00.000Z',
+          collected_at: '2026-03-16T08:59:00.000Z',
+          agent_id: 'app-engineering',
+          source_kind: 'workspace_file',
+          evidence_role: 'agent_output',
+          source_status: 'observed',
+          output_candidate: true,
+          unmapped: false
+        }
+      ]
+    },
+    ...overrides
   };
 }
 
@@ -2047,6 +2138,112 @@ describe('DetailsPanel selected-agent workflow lifecycle', () => {
     expect(section!).not.toHaveTextContent('secret_token');
     expectEvidenceJourneyReadOnly(section!);
     expectNoUnprovenLivenessLabels(section!);
+  });
+
+  it('does not expose stale source-context disclosure while a different evidence record is loading', () => {
+    const onInspectSelectedAgentEvidenceSourceContext = vi.fn();
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          activeHubCategory: 'evidence',
+          selectedAgentDrilldownTab: 'evidence',
+          selectedAgentEvidenceLedger: buildSelectedAgentEvidenceLedger(),
+          selectedAgentEvidenceLedgerState: 'ready',
+          selectedAgentEvidenceRecord: buildEvidenceRecord({ evidence_id: 'output-1' }),
+          selectedAgentEvidenceRecordId: 'output-2',
+          selectedAgentEvidenceRecordState: 'loading',
+          selectedAgentEvidenceSourceContext: null,
+          selectedAgentEvidenceSourceContextState: 'idle',
+          onInspectSelectedAgentEvidenceSourceContext
+        })}
+      />
+    );
+
+    const section = screen.getByRole('heading', { name: 'Evidence Record Detail' }).closest('section');
+    expect(section).not.toBeNull();
+    expect(within(section!).getByText('Evidence id · output-1')).toBeVisible();
+    expect(within(section!).getByText('Refreshing evidence record detail...')).toBeVisible();
+    expect(within(section!).getByText('Waiting for evidence record output-2...')).toBeVisible();
+    expect(within(section!).getByText('Source context · waiting for requested evidence record')).toBeVisible();
+    expect(within(section!).queryByRole('button', { name: /Inspect source context/ })).toBeNull();
+    expect(onInspectSelectedAgentEvidenceSourceContext).not.toHaveBeenCalled();
+  });
+
+  it('keeps Evidence Source Context collapsed until explicit disclosure and renders bounded sanitized context', async () => {
+    const user = userEvent.setup();
+    const onInspectSelectedAgentEvidenceSourceContext = vi.fn();
+
+    const { rerender } = render(
+      <DetailsPanel
+        {...buildProps({
+          activeHubCategory: 'evidence',
+          selectedAgentDrilldownTab: 'evidence',
+          selectedAgentEvidenceLedger: buildSelectedAgentEvidenceLedger(),
+          selectedAgentEvidenceLedgerState: 'ready',
+          selectedAgentEvidenceRecord: buildEvidenceRecord({
+            evidence_ref: '/tmp/app/outbox.md',
+            metadata: {
+              raw_tmux_capture: 'tmux://5-web3-app-engineering/0.1',
+              webhook_url: 'https://hooks.example.test/secret-token'
+            }
+          }),
+          selectedAgentEvidenceRecordId: 'output-1',
+          selectedAgentEvidenceRecordState: 'ready',
+          selectedAgentEvidenceSourceContext: null,
+          selectedAgentEvidenceSourceContextState: 'idle',
+          onInspectSelectedAgentEvidenceSourceContext
+        })}
+      />
+    );
+
+    const section = screen.getByRole('heading', { name: 'Evidence Record Detail' }).closest('section');
+    expect(section).not.toBeNull();
+    expect(within(section!).getByText('Source context · not loaded')).toBeVisible();
+    expect(within(section!).getByRole('button', { name: 'Inspect source context for evidence output-1' })).toBeVisible();
+    expect(section!).not.toHaveTextContent('Evidence Source Context');
+    expect(section!).not.toHaveTextContent('Source gaps ·');
+
+    await user.click(within(section!).getByRole('button', { name: 'Inspect source context for evidence output-1' }));
+    expect(onInspectSelectedAgentEvidenceSourceContext).toHaveBeenCalledWith('output-1');
+
+    rerender(
+      <DetailsPanel
+        {...buildProps({
+          activeHubCategory: 'evidence',
+          selectedAgentDrilldownTab: 'evidence',
+          selectedAgentEvidenceLedger: buildSelectedAgentEvidenceLedger(),
+          selectedAgentEvidenceLedgerState: 'ready',
+          selectedAgentEvidenceRecord: buildEvidenceRecord(),
+          selectedAgentEvidenceRecordId: 'output-1',
+          selectedAgentEvidenceRecordState: 'ready',
+          selectedAgentEvidenceSourceContext: buildEvidenceSourceContext(),
+          selectedAgentEvidenceSourceContextState: 'ready',
+          onInspectSelectedAgentEvidenceSourceContext
+        })}
+      />
+    );
+
+    const refreshedSection = screen.getByRole('heading', { name: 'Evidence Record Detail' }).closest('section');
+    expect(refreshedSection).not.toBeNull();
+    expect(within(refreshedSection!).getByText('Evidence Source Context')).toBeVisible();
+    expect(refreshedSection!).toHaveTextContent(
+      'Source context · workspace_file · agent_output · observed · mapped · output candidate'
+    );
+    expect(refreshedSection!).toHaveTextContent('Observed · 2026-03-16T08:58:00.000Z');
+    expect(refreshedSection!).toHaveTextContent('Collected · 2026-03-16T08:59:00.000Z');
+    expect(refreshedSection!).toHaveTextContent('Source gaps · 1 total · 1 mapped · 0 unmapped');
+    expect(refreshedSection!).toHaveTextContent('Source health · 1 evidence · Latest 2026-03-16T08:58:00.000Z');
+    expect(refreshedSection!).not.toHaveTextContent('/tmp/app/outbox.md');
+    expect(refreshedSection!).not.toHaveTextContent('tmux://');
+    expect(refreshedSection!).not.toHaveTextContent('5-web3-app-engineering');
+    expect(refreshedSection!).not.toHaveTextContent('hooks.example.test');
+    expect(refreshedSection!).not.toHaveTextContent('secret-token');
+    expect(refreshedSection!).not.toHaveTextContent('metadata');
+    expect(refreshedSection!).not.toHaveTextContent('raw_tmux_capture');
+    expect(refreshedSection!).not.toHaveTextContent('degraded_reasons');
+    expectEvidenceJourneyReadOnly(refreshedSection!);
+    expectNoUnprovenLivenessLabels(refreshedSection!);
   });
 
   it('renders a bounded sanitized selected-evidence checkpoint proof strip', () => {

@@ -13,6 +13,7 @@ import type {
   CorrelationDrilldown,
   EvidenceProvenanceBundle,
   EvidenceRecord,
+  EvidenceSourceContext,
   IncidentFeedResponse,
   MemoryArtifact,
   MemoryArtifactIndex,
@@ -162,6 +163,9 @@ type DetailsPanelProps = {
   selectedAgentEvidenceProvenanceBundle: EvidenceProvenanceBundle | null;
   selectedAgentEvidenceProvenanceBundleError: string | null;
   selectedAgentEvidenceProvenanceBundleState: LoadState;
+  selectedAgentEvidenceSourceContext: EvidenceSourceContext | null;
+  selectedAgentEvidenceSourceContextError: string | null;
+  selectedAgentEvidenceSourceContextState: LoadState;
   selectedAgentEvidenceCheckpointLog: ReplayCheckpointLogResponse | null;
   selectedAgentEvidenceCheckpointLogError: string | null;
   selectedAgentEvidenceCheckpointLogState: LoadState;
@@ -181,6 +185,7 @@ type DetailsPanelProps = {
   onSelectOperationsSeverity: (severity: Severity | null) => void;
   onSelectOperation: (operation: OfficeOperation, options?: SelectOperationOptions) => void;
   onInspectSelectedAgentEvidenceRecord: (evidenceId: string) => void;
+  onInspectSelectedAgentEvidenceSourceContext: (evidenceId: string) => void;
   onReplaySelectedAgentEvidenceRecord: (evidenceId: string) => void;
   onBackToSelectedAgentEvidenceRecord?: () => void;
   onFocusSharedMemoryArtifact?: (artifactRef: string, scope?: SharedMemoryJumpScope) => void;
@@ -1377,17 +1382,25 @@ function renderSelectedAgentEvidenceRecordDetail(
   provenanceBundle: EvidenceProvenanceBundle | null,
   provenanceState: LoadState,
   provenanceError: string | null,
+  sourceContext: EvidenceSourceContext | null,
+  sourceContextState: LoadState,
+  sourceContextError: string | null,
   checkpointLog: ReplayCheckpointLogResponse | null,
   checkpointLogState: LoadState,
   checkpointLogError: string | null,
+  onInspectSourceContext: (evidenceId: string) => void,
   onReplayRecord: (evidenceId: string) => void
 ) {
   if (!requestedEvidenceId && !record) {
     return null;
   }
 
-  const evidenceId = record?.evidence_id ?? requestedEvidenceId ?? 'unknown';
+  const evidenceId = requestedEvidenceId ?? record?.evidence_id ?? 'unknown';
   const boundedEvidenceId = formatBoundedEvidenceLedgerToken(evidenceId);
+  const recordEvidenceId = record?.evidence_id ?? null;
+  const recordBoundedEvidenceId = recordEvidenceId ? formatBoundedEvidenceLedgerToken(recordEvidenceId) : boundedEvidenceId;
+  const recordMatchesRequestedEvidence = !record || requestedEvidenceId === null || record.evidence_id === requestedEvidenceId;
+  const sourceContextMatchesRecord = !sourceContext || !record || sourceContext.evidence_id === record.evidence_id;
 
   return (
     <section
@@ -1406,8 +1419,9 @@ function renderSelectedAgentEvidenceRecordDetail(
         ) : null}
         {record ? (
           <li className="aitown-record">
-            <strong>{`Evidence id · ${boundedEvidenceId}`}</strong>
+            <strong>{`Evidence id · ${recordBoundedEvidenceId}`}</strong>
             {state === 'loading' ? <span>Refreshing evidence record detail...</span> : null}
+            {!recordMatchesRequestedEvidence ? <span>{`Waiting for evidence record ${boundedEvidenceId}...`}</span> : null}
             {error ? <span>{`Last-good detail · Refresh failed: ${error}`}</span> : null}
             <span>{`Observed · ${renderTimestamp(record.observed_at, 'No observed timestamp')}`}</span>
             <span>{`Collected · ${renderTimestamp(record.collected_at, 'No collected timestamp')}`}</span>
@@ -1420,12 +1434,76 @@ function renderSelectedAgentEvidenceRecordDetail(
             <span>{`Degraded count · ${record.degraded_reasons.length}`}</span>
             <span>{`Ref · ${formatEvidenceLedgerRef(record.evidence_ref)}`}</span>
             {renderSelectedAgentEvidenceProvenanceAnchors(provenanceBundle, provenanceState, provenanceError)}
+            {recordMatchesRequestedEvidence ? (
+              renderSelectedAgentEvidenceSourceContext(
+                record.evidence_id,
+                sourceContextMatchesRecord ? sourceContext : null,
+                sourceContextState,
+                sourceContextError,
+                onInspectSourceContext
+              )
+            ) : (
+              <span>Source context · waiting for requested evidence record</span>
+            )}
             {renderSelectedAgentEvidenceCheckpointProofStrip(checkpointLog, checkpointLogState, checkpointLogError)}
             {renderSelectedAgentEvidenceReplayAction(record, provenanceBundle, provenanceState, onReplayRecord)}
           </li>
         ) : null}
       </ul>
     </section>
+  );
+}
+
+function renderSelectedAgentEvidenceSourceContext(
+  evidenceId: string,
+  sourceContext: EvidenceSourceContext | null,
+  state: LoadState,
+  error: string | null,
+  onInspectSourceContext: (evidenceId: string) => void
+) {
+  if (state === 'loading' && !sourceContext) {
+    return <span>Source context · loading</span>;
+  }
+
+  if (error && !sourceContext) {
+    return <span>{`Source context · unavailable · ${error}`}</span>;
+  }
+
+  if (!sourceContext) {
+    return (
+      <>
+        <span>Source context · not loaded</span>
+        <button
+          type="button"
+          className="aitown-link-button"
+          aria-label={`Inspect source context for evidence ${formatBoundedEvidenceLedgerToken(evidenceId)}`}
+          onClick={() => onInspectSourceContext(evidenceId)}
+        >
+          Inspect source context
+        </button>
+      </>
+    );
+  }
+
+  const summary = sourceContext.source_summary;
+  const healthItem =
+    sourceContext.source_health.agent_items.find((item) => item.agent_id === sourceContext.record.agent_id) ??
+    sourceContext.source_health.agent_items[0] ??
+    null;
+
+  return (
+    <span className="aitown-evidence-source-context" aria-label="Selected evidence source context">
+      <strong>Evidence Source Context</strong>
+      <span>
+        {`Source context · ${summary.kind} · ${summary.role ?? 'unclassified'} · ${summary.status ?? 'unknown'} · ${summary.mapped ? 'mapped' : 'unmapped'} · ${summary.output_candidate ? 'output candidate' : 'non-output'}`}
+      </span>
+      <span>{`Observed · ${renderTimestamp(summary.time.observed_at, 'No observed timestamp')}`}</span>
+      <span>{`Collected · ${renderTimestamp(summary.time.collected_at, 'No collected timestamp')}`}</span>
+      <span>{`Source gaps · ${sourceContext.source_gaps.summary.total_count} total · ${sourceContext.source_gaps.summary.mapped_count} mapped · ${sourceContext.source_gaps.summary.unmapped_count} unmapped`}</span>
+      {healthItem ? (
+        <span>{`Source health · ${healthItem.evidence_count} evidence · Latest ${renderTimestamp(healthItem.latest_evidence_at, 'No evidence timestamp')}`}</span>
+      ) : null}
+    </span>
   );
 }
 
@@ -4478,6 +4556,9 @@ export function DetailsPanel({
   selectedAgentEvidenceProvenanceBundle,
   selectedAgentEvidenceProvenanceBundleError,
   selectedAgentEvidenceProvenanceBundleState,
+  selectedAgentEvidenceSourceContext,
+  selectedAgentEvidenceSourceContextError,
+  selectedAgentEvidenceSourceContextState,
   selectedAgentEvidenceCheckpointLog,
   selectedAgentEvidenceCheckpointLogError,
   selectedAgentEvidenceCheckpointLogState,
@@ -4497,6 +4578,7 @@ export function DetailsPanel({
   onSelectOperationsSeverity,
   onSelectOperation,
   onInspectSelectedAgentEvidenceRecord,
+  onInspectSelectedAgentEvidenceSourceContext,
   onReplaySelectedAgentEvidenceRecord,
   onBackToSelectedAgentEvidenceRecord,
   onFocusSharedMemoryArtifact,
@@ -6330,9 +6412,13 @@ export function DetailsPanel({
         selectedAgentEvidenceProvenanceBundle,
         selectedAgentEvidenceProvenanceBundleState,
         selectedAgentEvidenceProvenanceBundleError,
+        selectedAgentEvidenceSourceContext,
+        selectedAgentEvidenceSourceContextState,
+        selectedAgentEvidenceSourceContextError,
         selectedAgentEvidenceCheckpointLog,
         selectedAgentEvidenceCheckpointLogState,
         selectedAgentEvidenceCheckpointLogError,
+        onInspectSelectedAgentEvidenceSourceContext,
         onReplaySelectedAgentEvidenceRecord
       )}
 

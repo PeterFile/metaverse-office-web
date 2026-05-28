@@ -21,6 +21,7 @@ import {
   fetchCorrelationDrilldown,
   fetchEvidenceRecord,
   fetchEvidenceProvenanceBundle,
+  fetchEvidenceSourceContext,
   fetchEvidenceRecords,
   fetchReplayCheckpointLog,
   fetchIncidents,
@@ -73,6 +74,7 @@ import type {
   CorrelationDrilldown,
   EvidenceProvenanceBundle,
   EvidenceRecord,
+  EvidenceSourceContext,
   ReplayCheckpointLogResponse,
   MemoryArtifact,
   MemoryArtifactIndex,
@@ -1099,6 +1101,12 @@ function AppInner() {
     useState<LoadState>('idle');
   const [selectedAgentEvidenceCheckpointLogError, setSelectedAgentEvidenceCheckpointLogError] =
     useState<string | null>(null);
+  const [selectedAgentEvidenceSourceContext, setSelectedAgentEvidenceSourceContext] =
+    useState<EvidenceSourceContext | null>(null);
+  const [selectedAgentEvidenceSourceContextState, setSelectedAgentEvidenceSourceContextState] =
+    useState<LoadState>('idle');
+  const [selectedAgentEvidenceSourceContextError, setSelectedAgentEvidenceSourceContextError] =
+    useState<string | null>(null);
   const [defaultEvidenceCoverage, setDefaultEvidenceCoverage] =
     useState<CollectorEvidenceCoverage | null>(null);
   const [defaultEvidenceCoverageState, setDefaultEvidenceCoverageState] =
@@ -1126,6 +1134,8 @@ function AppInner() {
   const agentFocusRequestIdRef = useRef(0);
   const evidenceRecordDetailRequestIdRef = useRef(0);
   const evidenceRecordDetailAbortControllerRef = useRef<AbortController | null>(null);
+  const evidenceSourceContextRequestIdRef = useRef(0);
+  const evidenceSourceContextAbortControllerRef = useRef<AbortController | null>(null);
   const zoneFocusRequestIdRef = useRef(0);
   const sourceGapFocusRequestIdRef = useRef(0);
   const wasHubOpenRef = useRef(false);
@@ -1134,6 +1144,9 @@ function AppInner() {
     evidenceRecordDetailRequestIdRef.current += 1;
     evidenceRecordDetailAbortControllerRef.current?.abort();
     evidenceRecordDetailAbortControllerRef.current = null;
+    evidenceSourceContextRequestIdRef.current += 1;
+    evidenceSourceContextAbortControllerRef.current?.abort();
+    evidenceSourceContextAbortControllerRef.current = null;
     setSelectedAgentEvidenceRecord(null);
     setSelectedAgentEvidenceRecordId(null);
     setSelectedAgentEvidenceRecordError(null);
@@ -1144,6 +1157,9 @@ function AppInner() {
     setSelectedAgentEvidenceCheckpointLog(null);
     setSelectedAgentEvidenceCheckpointLogError(null);
     setSelectedAgentEvidenceCheckpointLogState('idle');
+    setSelectedAgentEvidenceSourceContext(null);
+    setSelectedAgentEvidenceSourceContextError(null);
+    setSelectedAgentEvidenceSourceContextState('idle');
   }, []);
 
   const overviewResource = usePolledResource({
@@ -1985,6 +2001,12 @@ function AppInner() {
     setSelectedAgentEvidenceCheckpointLog(null);
     setSelectedAgentEvidenceCheckpointLogError(null);
     setSelectedAgentEvidenceCheckpointLogState('loading');
+    evidenceSourceContextRequestIdRef.current += 1;
+    evidenceSourceContextAbortControllerRef.current?.abort();
+    evidenceSourceContextAbortControllerRef.current = null;
+    setSelectedAgentEvidenceSourceContext(null);
+    setSelectedAgentEvidenceSourceContextError(null);
+    setSelectedAgentEvidenceSourceContextState('idle');
 
     void fetchEvidenceRecord(evidenceId, { signal: controller.signal })
       .then((record) => {
@@ -2057,6 +2079,43 @@ function AppInner() {
         setSelectedAgentEvidenceCheckpointLog(null);
         setSelectedAgentEvidenceCheckpointLogError(formatUnknownError(error));
         setSelectedAgentEvidenceCheckpointLogState('error');
+      });
+  }, []);
+
+  const handleInspectSelectedAgentEvidenceSourceContext = useCallback((evidenceId: string) => {
+    const requestId = evidenceSourceContextRequestIdRef.current + 1;
+    const controller = new AbortController();
+    evidenceSourceContextRequestIdRef.current = requestId;
+    evidenceSourceContextAbortControllerRef.current?.abort();
+    evidenceSourceContextAbortControllerRef.current = controller;
+    setSelectedAgentEvidenceSourceContext(null);
+    setSelectedAgentEvidenceSourceContextError(null);
+    setSelectedAgentEvidenceSourceContextState('loading');
+
+    void fetchEvidenceSourceContext(evidenceId, { signal: controller.signal })
+      .then((context) => {
+        if (evidenceSourceContextRequestIdRef.current !== requestId) {
+          return;
+        }
+
+        evidenceSourceContextAbortControllerRef.current = null;
+        setSelectedAgentEvidenceSourceContext(context);
+        setSelectedAgentEvidenceSourceContextError(null);
+        setSelectedAgentEvidenceSourceContextState('ready');
+      })
+      .catch((error: unknown) => {
+        if (evidenceSourceContextRequestIdRef.current !== requestId) {
+          return;
+        }
+
+        evidenceSourceContextAbortControllerRef.current = null;
+        if (error instanceof Error && error.name === 'AbortError') {
+          return;
+        }
+
+        setSelectedAgentEvidenceSourceContext(null);
+        setSelectedAgentEvidenceSourceContextError(formatUnknownError(error));
+        setSelectedAgentEvidenceSourceContextState('error');
       });
   }, []);
 
@@ -3605,6 +3664,9 @@ function AppInner() {
               selectedAgentEvidenceProvenanceBundle={selectedAgentEvidenceProvenanceBundle}
               selectedAgentEvidenceProvenanceBundleError={selectedAgentEvidenceProvenanceBundleError}
               selectedAgentEvidenceProvenanceBundleState={selectedAgentEvidenceProvenanceBundleState}
+              selectedAgentEvidenceSourceContext={selectedAgentEvidenceSourceContext}
+              selectedAgentEvidenceSourceContextError={selectedAgentEvidenceSourceContextError}
+              selectedAgentEvidenceSourceContextState={selectedAgentEvidenceSourceContextState}
               selectedAgentEvidenceCheckpointLog={selectedAgentEvidenceCheckpointLog}
               selectedAgentEvidenceCheckpointLogError={selectedAgentEvidenceCheckpointLogError}
               selectedAgentEvidenceCheckpointLogState={selectedAgentEvidenceCheckpointLogState}
@@ -3674,6 +3736,7 @@ function AppInner() {
               onSelectOperationsSeverity={setSelectedOperationsSeverity}
               onSelectOperation={handleSelectOperation}
               onInspectSelectedAgentEvidenceRecord={handleInspectSelectedAgentEvidenceRecord}
+              onInspectSelectedAgentEvidenceSourceContext={handleInspectSelectedAgentEvidenceSourceContext}
               onReplaySelectedAgentEvidenceRecord={handleReplaySelectedAgentEvidenceRecord}
               onBackToSelectedAgentEvidenceRecord={
                 selectedAgentEvidenceRecordId ? handleBackToSelectedAgentEvidenceRecord : undefined

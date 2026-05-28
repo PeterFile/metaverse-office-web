@@ -3761,7 +3761,7 @@ afterEach(() => {
     10_000
   );
 
-  it('replays an inspected evidence record by evidence_id with read-only accountability GETs', async () => {
+  it('replays an inspected evidence record by evidence_id with read-only accountability GETs and Back to Evidence reuses detail', async () => {
     const user = userEvent.setup();
     render(<App />);
 
@@ -3826,6 +3826,21 @@ afterEach(() => {
     expect(replayRequests.every(([, init]) => !init || !('method' in init) || init.method === 'GET')).toBe(true);
     expectEvidenceJourneyReadOnly(replayPanel);
     expectNoUnprovenLivenessLabels(replayPanel);
+
+    const callsBeforeBack = vi.mocked(globalThis.fetch).mock.calls.length;
+    await user.click(within(replayBundleSection!).getByRole('button', { name: 'Back to Evidence' }));
+
+    const evidencePanel = await screen.findByRole('tabpanel', { name: 'Evidence' });
+    const restoredDetailSection = await findHubSection(evidencePanel, 'Evidence Record Detail');
+    expect(within(restoredDetailSection).getByText('Evidence id · output-1')).toBeVisible();
+
+    const postBackUrls = vi
+      .mocked(globalThis.fetch)
+      .mock.calls.slice(callsBeforeBack)
+      .map(([input]) => (typeof input === 'string' ? input : input.toString()));
+    expect(postBackUrls).not.toContain(appEngineeringEvidenceRecordDetailUrl);
+    expect(postBackUrls).not.toContain(appEngineeringEvidenceProvenanceBundleUrl);
+    expect(postBackUrls).not.toContain(appEngineeringEvidenceCheckpointLogUrl);
   });
 
   it('clears stale selected-agent evidence detail when the next detail response is empty', async () => {

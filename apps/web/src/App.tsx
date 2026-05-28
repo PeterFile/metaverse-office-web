@@ -2981,6 +2981,18 @@ function AppInner() {
     setSelectedAgentDrilldownTab('replay');
     setHubOpen(true);
   }, []);
+  const handleBackToSelectedAgentEvidenceRecord = useCallback(() => {
+    if (selectedAgentId === null || selectedAgentEvidenceRecordId === null) {
+      return;
+    }
+
+    requestedSelectedAgentDrilldownTabRef.current = 'evidence';
+    activeHubCategoryFromSelectedAgentTabRef.current = false;
+    setSourceGapFocusIntent(null);
+    setActiveHubCategory('evidence');
+    setSelectedAgentDrilldownTab('evidence');
+    setHubOpen(true);
+  }, [selectedAgentEvidenceRecordId, selectedAgentId]);
   const hudSignalSummary = [
     `Viewport · ${viewportToplineStatus.status}`,
     evidenceCoverageFocusItems.length > 0 ? `Evidence · ${evidenceCoverageFocusItems.length}` : null,
@@ -3663,6 +3675,9 @@ function AppInner() {
               onSelectOperation={handleSelectOperation}
               onInspectSelectedAgentEvidenceRecord={handleInspectSelectedAgentEvidenceRecord}
               onReplaySelectedAgentEvidenceRecord={handleReplaySelectedAgentEvidenceRecord}
+              onBackToSelectedAgentEvidenceRecord={
+                selectedAgentEvidenceRecordId ? handleBackToSelectedAgentEvidenceRecord : undefined
+              }
               onFocusSharedMemoryArtifact={handleFocusSharedMemoryArtifact}
               onOpenReplayCheckpoint={handleOpenReplayCheckpoint}
               onFocusWorldZone={handleFocusWorldZone}

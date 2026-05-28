@@ -4226,6 +4226,51 @@ describe('DetailsPanel accountability signals', () => {
     expect(proofLadderRecord!).not.toHaveTextContent('tmux://');
   });
 
+  it('shows selected evidence replay proof scope first-fold with a safe Back to Evidence action', async () => {
+    const user = userEvent.setup();
+    const onBackToSelectedAgentEvidenceRecord = vi.fn();
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          selectedAgentDrilldownTab: 'replay',
+          selectedAgentAccountabilityReplay: buildAccountabilityReplayBundle({
+            query: {
+              agent_id: 'app-engineering',
+              evidence_id: 'output-1-with-a-very-long-secret-token-that-must-not-render',
+              limit: 10,
+              window: '60m'
+            }
+          }),
+          selectedAgentAccountabilityReplayError: null,
+          selectedAgentAccountabilityReplayState: 'ready',
+          onBackToSelectedAgentEvidenceRecord
+        })}
+      />
+    );
+
+    const section = screen.getByRole('heading', { name: 'Replay Bundle' }).closest('section');
+    expect(section).not.toBeNull();
+    const firstRecords = within(section!).getAllByRole('listitem').slice(0, 2);
+
+    expect(within(firstRecords[0]).getByText('Selected Evidence Replay Scope')).toBeVisible();
+    expect(
+      within(firstRecords[0]).getByText(/Evidence · output-1-with-a-very-long-\[redacted\]/)
+    ).toBeVisible();
+    expect(within(firstRecords[0]).getByText('Agent · app-engineering')).toBeVisible();
+    expect(within(firstRecords[0]).getByText('Bounds · limit 10 · window 60m')).toBeVisible();
+    expect(within(firstRecords[0]).getByRole('button', { name: 'Back to Evidence' })).toBeVisible();
+    expect(within(firstRecords[1]).getByText('Replay Proof Ladder')).toBeVisible();
+    expect(firstRecords[0]).not.toHaveTextContent('secret-token');
+    expect(firstRecords[0]).not.toHaveTextContent('/accountability/replay');
+    expect(firstRecords[0]).not.toHaveTextContent('/tmp/');
+    expect(firstRecords[0]).not.toHaveTextContent('tmux://');
+
+    await user.click(within(firstRecords[0]).getByRole('button', { name: 'Back to Evidence' }));
+
+    expect(onBackToSelectedAgentEvidenceRecord).toHaveBeenCalledTimes(1);
+  });
+
   it('renders empty replay proof ladder as unavailable without inventing anchors', () => {
     const replayBundle = buildAccountabilityReplayBundle();
 

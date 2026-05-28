@@ -182,6 +182,7 @@ type DetailsPanelProps = {
   onSelectOperation: (operation: OfficeOperation, options?: SelectOperationOptions) => void;
   onInspectSelectedAgentEvidenceRecord: (evidenceId: string) => void;
   onReplaySelectedAgentEvidenceRecord: (evidenceId: string) => void;
+  onBackToSelectedAgentEvidenceRecord?: () => void;
   onFocusSharedMemoryArtifact?: (artifactRef: string, scope?: SharedMemoryJumpScope) => void;
   onOpenReplayCheckpoint?: (eventId: string) => void;
   onFocusWorldZone?: (zoneId: string) => void;
@@ -2975,6 +2976,32 @@ function renderReplayProofLadder(replayBundle: AccountabilityReplayBundle) {
   );
 }
 
+function renderSelectedEvidenceReplayScope(
+  replayBundle: AccountabilityReplayBundle,
+  onBackToEvidence?: () => void
+) {
+  if (!replayBundle.query.evidence_id) {
+    return null;
+  }
+
+  return (
+    <li className="aitown-record">
+      <strong>Selected Evidence Replay Scope</strong>
+      <span>{`Evidence · ${formatBoundedEvidenceLedgerToken(replayBundle.query.evidence_id)}`}</span>
+      {replayBundle.query.agent_id ? (
+        <span>{`Agent · ${formatBoundedEvidenceLedgerToken(replayBundle.query.agent_id)}`}</span>
+      ) : null}
+      <span>{`Bounds · limit ${replayBundle.query.limit} · window ${replayBundle.query.window}`}</span>
+      <span>Mode · read-only evidence replay</span>
+      {onBackToEvidence ? (
+        <button type="button" className="aitown-link-button" onClick={onBackToEvidence}>
+          Back to Evidence
+        </button>
+      ) : null}
+    </li>
+  );
+}
+
 function renderReplayBundleLedgerSourceKinds(entry: AccountabilityReplayLedgerEntry) {
   const sourceKinds = dedupeNonEmptyStrings([
     entry.source_kind,
@@ -3040,8 +3067,8 @@ function renderReplayBundleLedgerEntry({
 }) {
   return (
     <li key={`${entry.entry_type}:${entry.entry_id}`} className="aitown-record">
-      <strong>{entry.summary ?? entry.entry_id}</strong>
-      <span>{`Ledger entry · ${entry.entry_type} · ${entry.entry_id}`}</span>
+      <strong>{entry.summary ?? formatBoundedEvidenceLedgerToken(entry.entry_id)}</strong>
+      <span>{`Ledger entry · ${entry.entry_type} · ${formatBoundedEvidenceLedgerToken(entry.entry_id)}`}</span>
       <span>{`At · ${renderTimestamp(entry.ts, 'No ledger timestamp')}`}</span>
       <span>Basis events · {renderReplayBundleLedgerBasisEventIds(entry, onOpenReplayCheckpoint)}</span>
       <span>{`Source kinds · ${renderReplayBundleLedgerSourceKinds(entry)}`}</span>
@@ -3054,11 +3081,13 @@ function renderReplayBundleLedgerEntry({
           jumpAriaLabelPrefix: 'Jump to replay bundle evidence ref'
         })}
       </span>
-      {entry.agent_id ? <span>{`Agent · ${entry.agent_id}`}</span> : null}
-      {entry.actor_id ? <span>{`Actor · ${entry.actor_id}`}</span> : null}
-      {entry.correlation_id ? <span>{`Correlation · ${entry.correlation_id}`}</span> : null}
+      {entry.agent_id ? <span>{`Agent · ${formatBoundedEvidenceLedgerToken(entry.agent_id)}`}</span> : null}
+      {entry.actor_id ? <span>{`Actor · ${formatBoundedEvidenceLedgerToken(entry.actor_id)}`}</span> : null}
+      {entry.correlation_id ? (
+        <span>{`Correlation · ${formatBoundedEvidenceLedgerToken(entry.correlation_id)}`}</span>
+      ) : null}
       {entry.correlation_ids && entry.correlation_ids.length > 0 ? (
-        <span>{`Correlations · ${entry.correlation_ids.join(', ')}`}</span>
+        <span>{`Correlations · ${entry.correlation_ids.map((id) => formatBoundedEvidenceLedgerToken(id)).join(', ')}`}</span>
       ) : null}
       {entry.provenance ? <span>{`Provenance · ${entry.provenance}`}</span> : null}
     </li>
@@ -3071,7 +3100,8 @@ function renderSelectedAgentReplayBundleSection({
   replayBundleState,
   sharedMemoryArtifactRefs,
   onFocusSharedMemoryArtifact,
-  onOpenReplayCheckpoint
+  onOpenReplayCheckpoint,
+  onBackToSelectedAgentEvidenceRecord
 }: {
   replayBundle: AccountabilityReplayBundle | null;
   replayBundleError: string | null;
@@ -3079,6 +3109,7 @@ function renderSelectedAgentReplayBundleSection({
   sharedMemoryArtifactRefs: ReadonlySet<string>;
   onFocusSharedMemoryArtifact?: (artifactRef: string, scope?: SharedMemoryJumpScope) => void;
   onOpenReplayCheckpoint?: (eventId: string) => void;
+  onBackToSelectedAgentEvidenceRecord?: () => void;
 }) {
   const replayBundleWarning =
     replayBundleError && replayBundle ? `Showing last replay bundle snapshot. ${replayBundleError}` : null;
@@ -3100,6 +3131,8 @@ function renderSelectedAgentReplayBundleSection({
         {replayBundleWarning ? <li className="aitown-record">{replayBundleWarning}</li> : null}
         {replayBundle ? (
           <>
+            {renderSelectedEvidenceReplayScope(replayBundle, onBackToSelectedAgentEvidenceRecord)}
+            {renderReplayProofLadder(replayBundle)}
             <li className="aitown-record">
               <strong>Replay bundle summary</strong>
               <span>{`Basis · ${replayBundle.accountability.basis}`}</span>
@@ -3139,7 +3172,6 @@ function renderSelectedAgentReplayBundleSection({
                 )} -> ${renderTimestamp(replayBundle.accountability.last_ts, 'No last event timestamp')}`}
               </span>
             </li>
-            {renderReplayProofLadder(replayBundle)}
             {replayBundle.ledger.map((entry) =>
               renderReplayBundleLedgerEntry({
                 entry,
@@ -4466,6 +4498,7 @@ export function DetailsPanel({
   onSelectOperation,
   onInspectSelectedAgentEvidenceRecord,
   onReplaySelectedAgentEvidenceRecord,
+  onBackToSelectedAgentEvidenceRecord,
   onFocusSharedMemoryArtifact,
   onOpenReplayCheckpoint,
   onFocusWorldZone
@@ -6633,7 +6666,8 @@ export function DetailsPanel({
         replayBundleState: selectedAgentAccountabilityReplayState,
         sharedMemoryArtifactRefs,
         onFocusSharedMemoryArtifact,
-        onOpenReplayCheckpoint
+        onOpenReplayCheckpoint,
+        onBackToSelectedAgentEvidenceRecord
       })}
 
       <section className="aitown-details__section aitown-details__section--selected-replay aitown-details__section--hub-replay">

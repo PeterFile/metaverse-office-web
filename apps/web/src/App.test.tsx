@@ -238,6 +238,7 @@ const selectedCorrelationTmuxArtifactExactUrl =
 const collectorSnapshotUrl = '/collectors/controller-snapshot';
 const collectorEvidenceCoverageUrl = '/collectors/controller-snapshot/evidence-coverage';
 const collectorSourceHealthUrl = '/collectors/controller-snapshot/source-health?limit=7';
+const evidenceSpineSummaryUrl = '/agents/evidence-spine/summary?newest_first=true&limit=200';
 const runtimeSourceGapsUrl = '/runtime/source-gaps?newest_first=true&limit=3';
 const runtimeSourceGapsSummaryUrl = '/runtime/source-gaps/summary?newest_first=true&limit=3';
 const appEngineeringEvidenceRecordsUrl =
@@ -1263,6 +1264,65 @@ const collectorSnapshotFixture = {
   ]
 };
 
+const evidenceSpineSummaryFixture = {
+  agent_count: 2,
+  returned_limit: 200,
+  total_count: 10,
+  mapped_count: 8,
+  unmapped_count: 2,
+  agents: [
+    {
+      agent_id: 'app-engineering',
+      evidence_count: 6,
+      output_candidate_buckets: { true: 2, false: 4 },
+      source_kind_buckets: {
+        workspace_file: 3,
+        tmux_observation: 2,
+        hermes_session: 1
+      },
+      evidence_role_buckets: {
+        agent_output: 2,
+        source_evidence: 4
+      },
+      source_status_buckets: {
+        observed: 5,
+        missing: 1
+      },
+      source_gap_buckets: {
+        missing: 1
+      },
+      latest_observed_at: '2026-03-16T08:59:10.000Z',
+      latest_collected_at: '2026-03-16T09:01:00.000Z'
+    },
+    {
+      agent_id: 'growth-revenue',
+      evidence_count: 3,
+      output_candidate_buckets: { true: 1, false: 2 },
+      source_kind_buckets: {
+        workspace_file: 2,
+        tmux_observation: 1
+      },
+      evidence_role_buckets: {
+        source_evidence: 3
+      },
+      source_status_buckets: {
+        observed: 3
+      },
+      source_gap_buckets: {},
+      latest_observed_at: '2026-03-16T08:58:40.000Z',
+      latest_collected_at: '2026-03-16T09:01:00.000Z'
+    }
+  ],
+  unmapped_evidence_summary: {
+    total_count: 2,
+    source_kind_buckets: { hermes_profile: 2 },
+    evidence_role_buckets: { runtime_source: 2 },
+    source_status_buckets: { observed: 2 },
+    latest_observed_at: '2026-03-16T08:57:00.000Z',
+    latest_collected_at: '2026-03-16T09:01:00.000Z'
+  }
+};
+
 const evidenceRecordsFixture = {
   items: [
     {
@@ -1934,6 +1994,10 @@ function resolveDefaultFetchResponse(url: string) {
 
   if (url === collectorEvidenceCoverageUrl) {
     return jsonResponse({ item: collectorSnapshotFixture.evidence_coverage });
+  }
+
+  if (url === evidenceSpineSummaryUrl) {
+    return jsonResponse({ item: evidenceSpineSummaryFixture });
   }
 
   if (url === collectorSourceHealthUrl) {
@@ -3649,17 +3713,20 @@ afterEach(() => {
 
     const inspectPeek = await screen.findByRole('region', { name: 'Selected agent inspect peek' });
     expect(within(inspectPeek).getByText('App Engineering Agent')).toBeVisible();
-    expect(within(inspectPeek).getByRole('group', { name: 'Selected agent proof capsule' })).toBeVisible();
+    expect(within(inspectPeek).getByRole('group', { name: 'Selected agent proof glance' })).toBeVisible();
     expect(
-      within(inspectPeek).getByText('Proof capsule · 5 evidence refs · Sources tmux + workspace')
+      await within(inspectPeek).findByText('Proof glance · 6 records · Sources workspace 3, tmux 2, Hermes 1')
     ).toBeVisible();
     expect(
-      within(inspectPeek).getByText('Coverage backed · Confidence high · Latest evidence 2026-03-16T08:59:10.000Z')
+      within(inspectPeek).getByText(
+        'Coverage gap · 1 · Roles source evidence 4, agent output 2 · Latest observed 2026-03-16T08:59:10.000Z'
+      )
     ).toBeVisible();
-    expect(within(inspectPeek).queryAllByText(/^(Proof capsule|Coverage )/)).toHaveLength(2);
+    expect(within(inspectPeek).queryAllByText(/^(Proof glance|Coverage gap)/)).toHaveLength(2);
 
     await act(async () => {});
     let requestedUrls = vi.mocked(globalThis.fetch).mock.calls.map(([request]) => String(request));
+    expect(requestedUrls).toContain(evidenceSpineSummaryUrl);
     expect(requestedUrls).not.toContain(workflowUrl);
     expect(requestedUrls).not.toContain(appEngineeringEvidenceRecordsUrl);
 

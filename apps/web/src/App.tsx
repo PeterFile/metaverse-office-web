@@ -13,6 +13,7 @@ import {
   DEFAULT_WORKFLOW_LIMIT,
   DEFAULT_WORKFLOW_WINDOW,
   RequestError,
+  fetchAgentEvidenceSpineSummary,
   fetchAgentWorkflow,
   fetchAccountabilityReplay,
   fetchCollectorEvidenceCoverage,
@@ -68,6 +69,7 @@ import {
 } from './selectedAgentEvidenceLedger';
 import type {
   AccountabilityReplayBundle,
+  AgentEvidenceSpineSummary,
   CollectorEvidenceCoverage,
   CollectorSnapshot,
   CollectorSourceHealthProjection,
@@ -1246,6 +1248,11 @@ function AppInner() {
         signal
       }),
     resourceKey: `runtime-source-gaps-summary:limit=${SOURCE_GAP_QUEUE_LIMIT}`
+  });
+  const selectedAgentEvidenceSpineSummaryResource = usePolledResource<AgentEvidenceSpineSummary>({
+    enabled: selectedAgentId !== null && overviewResource.data !== null,
+    load: (signal) => fetchAgentEvidenceSpineSummary({ signal }),
+    resourceKey: selectedAgentId ? `selected-agent-evidence-spine-summary:${selectedAgentId}` : null
   });
   const defaultEvidenceCoverageReady = overviewResource.data !== null;
 
@@ -2954,10 +2961,11 @@ function AppInner() {
     () =>
       deriveSelectedAgentEvidenceGlance({
         selectedAgentId,
+        evidenceSpineSummary: selectedAgentEvidenceSpineSummaryResource.data,
         evidenceCoverage: visibleEvidenceCoverage,
         sourceHealth: latestSourceHealth
       }),
-    [latestSourceHealth, selectedAgentId, visibleEvidenceCoverage]
+    [latestSourceHealth, selectedAgentEvidenceSpineSummaryResource.data, selectedAgentId, visibleEvidenceCoverage]
   );
   const selectedAgentSourceGapFact = deriveSelectedAgentSourceGapFact(latestSourceHealth, selectedAgentId);
   const selectedAgentSourceHealthInspectPeek = useMemo(
@@ -3356,7 +3364,7 @@ function AppInner() {
                 <strong>{selectedAgent.display_name}</strong>
                 <span>{`State · ${selectedAgentPeekStatus}`}</span>
                 {selectedAgentEvidenceGlance ? (
-                  <span className="aitown-selected-agent-peek__proof" role="group" aria-label="Selected agent proof capsule">
+                  <span className="aitown-selected-agent-peek__proof" role="group" aria-label="Selected agent proof glance">
                     {selectedAgentEvidenceGlance.map((line) => (
                       <span key={line}>{line}</span>
                     ))}

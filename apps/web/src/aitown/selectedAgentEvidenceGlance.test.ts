@@ -1,7 +1,63 @@
 import { describe, expect, it } from 'vitest';
 
 import { deriveSelectedAgentEvidenceGlance } from './selectedAgentEvidenceGlance';
-import type { CollectorEvidenceCoverage, CollectorSourceHealthProjection } from '../types';
+import type {
+  AgentEvidenceSpineSummary,
+  CollectorEvidenceCoverage,
+  CollectorSourceHealthProjection
+} from '../types';
+
+const evidenceSpineSummary: AgentEvidenceSpineSummary = {
+  agent_count: 2,
+  returned_limit: 200,
+  total_count: 9,
+  mapped_count: 7,
+  unmapped_count: 2,
+  agents: [
+    {
+      agent_id: 'app-engineering',
+      evidence_count: 6,
+      output_candidate_buckets: { true: 2, false: 4 },
+      source_kind_buckets: {
+        workspace_file: 3,
+        tmux_observation: 2,
+        hermes_session: 1
+      },
+      evidence_role_buckets: {
+        agent_output: 2,
+        source_evidence: 4
+      },
+      source_status_buckets: {
+        observed: 5,
+        missing: 1
+      },
+      source_gap_buckets: {
+        missing: 1
+      },
+      latest_observed_at: '2026-03-09T18:04:45.000Z',
+      latest_collected_at: '2026-03-09T18:05:00.000Z'
+    },
+    {
+      agent_id: 'growth-revenue',
+      evidence_count: 0,
+      output_candidate_buckets: { true: 0, false: 0 },
+      source_kind_buckets: {},
+      evidence_role_buckets: {},
+      source_status_buckets: {},
+      source_gap_buckets: {},
+      latest_observed_at: null,
+      latest_collected_at: null
+    }
+  ],
+  unmapped_evidence_summary: {
+    total_count: 2,
+    source_kind_buckets: { hermes_profile: 2 },
+    evidence_role_buckets: { runtime_source: 2 },
+    source_status_buckets: { observed: 2 },
+    latest_observed_at: '2026-03-09T18:04:00.000Z',
+    latest_collected_at: '2026-03-09T18:05:00.000Z'
+  }
+};
 
 const coverage: CollectorEvidenceCoverage = {
   collected_at: '2026-03-09T18:05:00.000Z',
@@ -81,6 +137,43 @@ const sourceHealth: CollectorSourceHealthProjection = {
 };
 
 describe('deriveSelectedAgentEvidenceGlance', () => {
+  it('summarizes evidence-spine counts and buckets for the selected agent', () => {
+    expect(
+      deriveSelectedAgentEvidenceGlance({
+        selectedAgentId: 'app-engineering',
+        evidenceSpineSummary,
+        evidenceCoverage: coverage,
+        sourceHealth
+      })
+    ).toEqual([
+      'Proof glance · 6 records · Sources workspace 3, tmux 2, Hermes 1',
+      'Coverage gap · 1 · Roles source evidence 4, agent output 2 · Latest observed 2026-03-09T18:04:45.000Z'
+    ]);
+  });
+
+  it('shows missing summary rows as unavailable coverage gaps without fabricated activity', () => {
+    expect(
+      deriveSelectedAgentEvidenceGlance({
+        selectedAgentId: 'missing',
+        evidenceSpineSummary,
+        evidenceCoverage: coverage,
+        sourceHealth
+      })
+    ).toEqual(['Proof glance · unavailable', 'Coverage gap · selected-agent summary unavailable']);
+
+    expect(
+      deriveSelectedAgentEvidenceGlance({
+        selectedAgentId: 'growth-revenue',
+        evidenceSpineSummary,
+        evidenceCoverage: coverage,
+        sourceHealth
+      })
+    ).toEqual([
+      'Proof glance · 0 records · Sources unavailable',
+      'Coverage gap · 0 · Roles unavailable · Latest observed unavailable'
+    ]);
+  });
+
   it('summarizes coverage for the selected agent without raw refs', () => {
     expect(
       deriveSelectedAgentEvidenceGlance({
@@ -89,8 +182,8 @@ describe('deriveSelectedAgentEvidenceGlance', () => {
         sourceHealth
       })
     ).toEqual([
-      'Proof capsule · 2 evidence refs · Sources tmux + workspace',
-      'Coverage backed · Confidence high · Latest evidence 2026-03-09T18:04:45.000Z'
+      'Proof glance · 2 records · Sources tmux + workspace',
+      'Coverage backed · Confidence high · Latest observed 2026-03-09T18:04:45.000Z'
     ]);
   });
 
@@ -102,8 +195,8 @@ describe('deriveSelectedAgentEvidenceGlance', () => {
         sourceHealth
       })
     ).toEqual([
-      'Proof capsule · 1 evidence ref · Sources workspace',
-      'Coverage low confidence · Confidence medium · Latest evidence unavailable'
+      'Proof glance · 1 record · Sources workspace',
+      'Coverage low confidence · Confidence medium · Latest observed unavailable'
     ]);
 
     expect(
@@ -113,8 +206,8 @@ describe('deriveSelectedAgentEvidenceGlance', () => {
         sourceHealth
       })
     ).toEqual([
-      'Proof capsule · 0 evidence refs · Sources unavailable',
-      'Coverage uncovered in loaded snapshot'
+      'Proof glance · 0 records · Sources unavailable',
+      'Coverage gap · loaded snapshot has no row'
     ]);
   });
 
@@ -126,8 +219,8 @@ describe('deriveSelectedAgentEvidenceGlance', () => {
     });
 
     expect(glance).toEqual([
-      'Proof capsule · 1 evidence ref · Source-health snapshot',
-      'Coverage source-health only · Latest evidence 2026-03-16T08:59:30.000Z'
+      'Proof glance · 1 record · Source-health snapshot',
+      'Coverage source-health only · Latest observed 2026-03-16T08:59:30.000Z'
     ]);
     expect(glance).toHaveLength(2);
     const glanceText = glance?.join('\n') ?? '';

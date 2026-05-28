@@ -1,4 +1,6 @@
 import type {
+  AgentEvidenceSpineSummary,
+  AgentEvidenceSpineSummaryAgent,
   CollectorEvidenceCoverage,
   CollectorEvidenceCoverageSourceKind,
   CollectorSourceHealthProjection
@@ -7,6 +9,7 @@ import { deriveCollectorEvidenceCoverageViewModel } from './evidenceCoverage';
 
 export type SelectedAgentEvidenceGlanceInput = {
   selectedAgentId: string | null | undefined;
+  evidenceSpineSummary?: AgentEvidenceSpineSummary | null | undefined;
   evidenceCoverage: CollectorEvidenceCoverage | null | undefined;
   sourceHealth: CollectorSourceHealthProjection | null | undefined;
 };
@@ -23,6 +26,7 @@ const SOURCE_KIND_LABELS: Record<CollectorEvidenceCoverageSourceKind, string> = 
 
 export function deriveSelectedAgentEvidenceGlance({
   selectedAgentId,
+  evidenceSpineSummary,
   evidenceCoverage,
   sourceHealth
 }: SelectedAgentEvidenceGlanceInput): SelectedAgentEvidenceProofCapsule | null {
@@ -31,23 +35,27 @@ export function deriveSelectedAgentEvidenceGlance({
     return null;
   }
 
+  if (evidenceSpineSummary) {
+    return deriveEvidenceSpineProofCapsule(evidenceSpineSummary, agentId);
+  }
+
   if (evidenceCoverage) {
     const row = deriveCollectorEvidenceCoverageViewModel(evidenceCoverage).rows.find(
       (candidate) => candidate.agent_id === agentId
     );
     if (!row) {
-      return ['Proof capsule · 0 evidence refs · Sources unavailable', 'Coverage uncovered in loaded snapshot'];
+      return ['Proof glance · 0 records · Sources unavailable', 'Coverage gap · loaded snapshot has no row'];
     }
     if (row.status === 'uncovered_in_snapshot') {
-      return ['Proof capsule · 0 evidence refs · Sources unavailable', 'Coverage uncovered in loaded snapshot'];
+      return ['Proof glance · 0 records · Sources unavailable', 'Coverage gap · uncovered in loaded snapshot'];
     }
 
     return [
-      `Proof capsule · ${renderEvidenceRefCount(row.evidence_ref_count)} · Sources ${renderSourceKindSummary(row.source_kinds) ?? 'unavailable'}`,
+      `Proof glance · ${renderEvidenceRefCount(row.evidence_ref_count)} · Sources ${renderSourceKindSummary(row.source_kinds) ?? 'unavailable'}`,
       [
         `Coverage ${row.status === 'low_confidence_evidence' ? 'low confidence' : 'backed'}`,
         renderConfidence(row.confidence),
-        `Latest evidence ${row.latest_evidence_at ?? 'unavailable'}`
+        `Latest observed ${row.latest_evidence_at ?? 'unavailable'}`
       ].join(' · ')
     ];
   }
@@ -58,8 +66,27 @@ export function deriveSelectedAgentEvidenceGlance({
   }
 
   return [
-    `Proof capsule · ${renderEvidenceRefCount(sourceHealthItem.evidence_ref_count)} · Source-health snapshot`,
-    `Coverage source-health only · Latest evidence ${sourceHealthItem.latest_evidence_at ?? 'unavailable'}`
+    `Proof glance · ${renderEvidenceRefCount(sourceHealthItem.evidence_ref_count)} · Source-health snapshot`,
+    `Coverage source-health only · Latest observed ${sourceHealthItem.latest_evidence_at ?? 'unavailable'}`
+  ];
+}
+
+function deriveEvidenceSpineProofCapsule(
+  evidenceSpineSummary: AgentEvidenceSpineSummary,
+  agentId: string
+): SelectedAgentEvidenceProofCapsule {
+  const row = evidenceSpineSummary.agents.find((candidate) => candidate.agent_id === agentId);
+  if (!row) {
+    return ['Proof glance · unavailable', 'Coverage gap · selected-agent summary unavailable'];
+  }
+
+  return [
+    `Proof glance · ${renderRecordCount(row.evidence_count)} · Sources ${renderBucketSummary(row.source_kind_buckets, renderSourceKindLabel)}`,
+    [
+      `Coverage gap · ${renderSourceGapCount(row)}`,
+      `Roles ${renderBucketSummary(row.evidence_role_buckets, renderBucketLabel)}`,
+      `Latest observed ${row.latest_observed_at ?? 'unavailable'}`
+    ].join(' · ')
   ];
 }
 
@@ -72,7 +99,11 @@ function normalizeString(value: string | null | undefined): string | null {
 }
 
 function renderEvidenceRefCount(count: number) {
-  return `${count} evidence ${count === 1 ? 'ref' : 'refs'}`;
+  return renderRecordCount(count);
+}
+
+function renderRecordCount(count: number) {
+  return `${count} ${count === 1 ? 'record' : 'records'}`;
 }
 
 function renderSourceKindSummary(sourceKinds: CollectorEvidenceCoverageSourceKind[]) {
@@ -84,4 +115,38 @@ function renderSourceKindSummary(sourceKinds: CollectorEvidenceCoverageSourceKin
 
 function renderConfidence(confidence: string | null) {
   return confidence ? `Confidence ${confidence}` : 'Confidence unavailable';
+}
+
+function renderSourceGapCount(row: AgentEvidenceSpineSummaryAgent) {
+  return Object.values(row.source_gap_buckets).reduce((sum, count) => sum + Math.max(0, count), 0);
+}
+
+function renderBucketSummary(
+  buckets: Record<string, number>,
+  renderKey: (key: string) => string
+) {
+  const parts = Object.entries(buckets)
+    .filter(([, count]) => count > 0)
+    .sort(([leftKey, leftCount], [rightKey, rightCount]) => rightCount - leftCount || leftKey.localeCompare(rightKey))
+    .slice(0, 3)
+    .map(([key, count]) => `${renderKey(key)} ${count}`);
+
+  return parts.length > 0 ? parts.join(', ') : 'unavailable';
+}
+
+function renderSourceKindLabel(sourceKind: string) {
+  if (sourceKind === 'workspace_file' || sourceKind === 'workspace_root') {
+    return 'workspace';
+  }
+  if (sourceKind === 'tmux_observation') {
+    return 'tmux';
+  }
+  if (sourceKind === 'hermes_profile' || sourceKind === 'hermes_session') {
+    return 'Hermes';
+  }
+  return renderBucketLabel(sourceKind);
+}
+
+function renderBucketLabel(value: string) {
+  return value.replace(/_/g, ' ');
 }

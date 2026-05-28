@@ -23,7 +23,7 @@ The next product milestone is `Live Evidence Spine`: connect the current read mo
 - controlled writes remain limited to `POST /events`, `POST /heartbeats`, and `POST /collectors/controller-snapshot`
 - storage defaults to the local append-only JSONL prototype at `data/prototype-store.jsonl`, replayed into memory; an opt-in SQLite append-only backend can store the same canonical record stream at `data/prototype-store.sqlite` with idempotently backfilled derived sidecar indexes for evidence lookup
 - domain still uses the canonical seven-actor office model: six employee agents plus `team-lead`
-- frontend is a React + TypeScript + PixiJS AI Town operator world with roster, category Hub, selected-agent drilldowns, supervision/evidence/replay/memory surfaces, mapped source-gap world-pin inspect peeks, selected evidence replay scope/back affordances, and real browser smoke coverage
+- frontend is a React + TypeScript + PixiJS AI Town operator world with roster, category Hub, selected-agent drilldowns, supervision/evidence/replay/memory surfaces, mapped source-gap world-pin inspect peeks, selected evidence replay scope/back affordances, a compact selected-agent evidence-spine proof glance, and real browser smoke coverage
 
 ## Key documents
 - `docs/current-direction.md` — current vision, implementation facts, next milestone, and documentation discipline

@@ -1017,7 +1017,7 @@ test.describe('operator shell layout visual smoke', () => {
     const ledgerCta = inspectPeek.getByRole('button', { name: 'Open Growth Revenue Agent Evidence Ledger' });
     await expect(inspectPeek).toBeVisible();
     await expect(ledgerCta).toBeVisible();
-    await expect(inspectPeek.getByText(/Proof capsule · \d+ evidence refs? · Source/)).toBeVisible();
+    await expect(inspectPeek.getByText(/Proof glance · \d+ records? · Sources/)).toBeVisible();
     const proofCapsuleText = await inspectPeek.innerText();
     expect(
       proofCapsuleText,
@@ -1063,6 +1063,7 @@ test.describe('operator shell layout visual smoke', () => {
       '/collectors/controller-snapshot/evidence-coverage',
       '/runtime/source-gaps?newest_first=true&limit=3',
       '/runtime/source-gaps/summary?newest_first=true&limit=3',
+      '/agents/evidence-spine/summary?newest_first=true&limit=200',
       '/agents/app-engineering/workflow?limit=10&window=60m',
       '/office/operations?agent_id=app-engineering',
       '/collectors/controller-snapshot',

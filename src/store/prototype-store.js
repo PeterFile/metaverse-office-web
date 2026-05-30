@@ -2765,6 +2765,10 @@ function createCollectorSupervisionEvents({ report, existingEvents }) {
 
 function hasCollectorOutputEvidence(item) {
   const heartbeat = item?.heartbeat || null;
+  if (!heartbeat) {
+    return false;
+  }
+
   const observedAt = normalizeCollectorTimestamp(heartbeat?.last_file_write_at);
 
   return Boolean(

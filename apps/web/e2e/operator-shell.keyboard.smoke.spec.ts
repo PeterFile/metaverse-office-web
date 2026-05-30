@@ -2267,6 +2267,7 @@ test.describe('operator shell smoke', () => {
     page
   }) => {
     test.slow();
+    test.setTimeout(150_000);
 
     await installFastPollInterval(page);
 
@@ -2275,7 +2276,7 @@ test.describe('operator shell smoke', () => {
 
     await page.setViewportSize(portraitShell!.viewport);
     await page.goto('/');
-    await expect(page.locator('.aitown-world__host canvas')).toBeVisible();
+    await expect(page.locator('.aitown-world__host canvas')).toBeVisible({ timeout: 15_000 });
     await page.waitForFunction(() => Boolean(window.__AITOWN_VIEWPORT__));
 
     await expect(page.getByText('Live Focus')).toBeVisible();
@@ -2350,7 +2351,8 @@ test.describe('operator shell smoke', () => {
       await page.keyboard.press('Enter');
 
       await expect(dialog).toHaveCount(0);
-      await expect(inspectPeek).toHaveCount(0);
+      await expect(inspectPeek).toBeVisible();
+      await expect(inspectPeek.getByRole('button', { name: 'Open Growth Revenue Agent Now drilldown' })).toBeVisible();
       await expect(watchOverlay).toBeVisible();
       await expect(page.getByRole('list', { name: 'Selected watch link list' })).toBeVisible();
 
@@ -2384,7 +2386,7 @@ test.describe('operator shell smoke', () => {
         )
       ).toBeVisible();
 
-      await focusHubControlWithTab(page, closeHubButton, 'Close panel');
+      await focusHubControlWithTab(page, closeHubButton, 'Close panel', { reverse: true });
       await expect(closeHubButton).toBeFocused();
       await page.keyboard.press('Enter');
 

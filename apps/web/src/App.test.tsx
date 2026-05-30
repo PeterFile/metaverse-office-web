@@ -2710,8 +2710,12 @@ afterEach(() => {
     expect(screen.queryByRole('dialog', { name: 'Hub' })).not.toBeInTheDocument();
     const inspectPeek = screen.getByRole('region', { name: 'Selected agent inspect peek' });
     expect(inspectPeek).toBeVisible();
+    fireEvent.click(within(inspectPeek).getByText('Inspect facts'));
     expect(inspectPeek).toHaveTextContent('Correlation · available');
     expect(inspectPeek).not.toHaveTextContent('Correlation · corr-app-review');
+    expect(
+      within(inspectPeek).getByRole('button', { name: 'Open Team Lead Replay drilldown' })
+    ).toBeVisible();
 
     fireEvent.click(await screen.findByRole('button', { name: 'Queue' }, { timeout: 5000 }));
     details = await screen.findByRole('complementary', { name: 'Agent details' }, { timeout: 5000 });
@@ -3729,6 +3733,13 @@ afterEach(() => {
       )
     ).toBeVisible();
     expect(within(inspectPeek).queryAllByText(/^(Proof glance|Coverage gap)/)).toHaveLength(2);
+    expect(within(inspectPeek).queryByText('/tmp/evidence.md')).not.toBeInTheDocument();
+    expect(
+      within(inspectPeek).getByRole('button', { name: 'Open App Engineering Agent Now drilldown' })
+    ).toBeVisible();
+    expect(
+      within(inspectPeek).getByRole('button', { name: 'Open App Engineering Agent Replay drilldown' })
+    ).toBeVisible();
 
     await act(async () => {});
     let requestedUrls = vi.mocked(globalThis.fetch).mock.calls.map(([request]) => String(request));
@@ -3757,6 +3768,32 @@ afterEach(() => {
     expect(evidenceRecordRequests).toEqual([appEngineeringEvidenceRecordsUrl]);
     expect(await findHubSection(details, 'Evidence Ledger')).toBeVisible();
   });
+
+  it('opens selected-agent replay from the compact inspect peek without using an automatic Hub dump', async () => {
+    const user = userEvent.setup();
+
+    setNavigatorUserAgent('VitestBrowser');
+    render(<App />);
+
+    await user.click(await screen.findByRole('button', { name: 'Select scene agent app-engineering' }));
+
+    const inspectPeek = await screen.findByRole('region', { name: 'Selected agent inspect peek' });
+    expect(screen.queryByRole('dialog', { name: 'Hub' })).not.toBeInTheDocument();
+    expect(within(inspectPeek).getByText('App Engineering Agent')).toBeVisible();
+    expect(within(inspectPeek).queryByText('/tmp/evidence.md')).not.toBeInTheDocument();
+
+    await user.click(
+      within(inspectPeek).getByRole('button', {
+        name: 'Open App Engineering Agent Replay drilldown'
+      })
+    );
+
+    const details = await screen.findByRole('complementary', { name: 'Agent details' });
+    expect(screen.getByRole('dialog', { name: 'Hub' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Replay' })).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByRole('tab', { name: 'Replay / Correlation' })).toHaveAttribute('aria-selected', 'true');
+    expect(await findHubSection(details, 'Timeline Replay')).toBeVisible();
+  }, 10000);
 
   it(
     'fetches selected-agent Evidence Record detail and provenance only after Inspect record',

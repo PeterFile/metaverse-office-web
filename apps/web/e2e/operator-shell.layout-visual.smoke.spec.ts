@@ -225,12 +225,37 @@ function expectViewportAtRightHorizontalBoundary(
   );
 }
 
+function expectWorldRightEdgeVisible(
+  state: NonNullable<Awaited<ReturnType<typeof readViewportState>>>,
+  label: string
+) {
+  const projection = resolveWorldPointScreenProjection(state, { x: state.worldWidth, y: state.top });
+  const rightChromeInset = state.clampPadding?.right ?? 0;
+
+  expect(projection.x, `${label} should show the world right edge before right-side chrome`).toBeGreaterThanOrEqual(
+    state.screenWidth - rightChromeInset - 1
+  );
+  expect(projection.x, `${label} should keep the world right edge inside the viewport`).toBeLessThanOrEqual(
+    state.screenWidth + 1
+  );
+}
+
 function expectViewportAtLeftHorizontalBoundary(
   state: NonNullable<Awaited<ReturnType<typeof readViewportState>>>,
   label: string
 ) {
   expectViewportWithinHorizontalWorldBounds(state, label);
   expect(state.left, `${label} should accept the left boundary without a black edge`).toBeLessThanOrEqual(0.5);
+}
+
+function expectWorldLeftEdgeVisible(
+  state: NonNullable<Awaited<ReturnType<typeof readViewportState>>>,
+  label: string
+) {
+  const projection = resolveWorldPointScreenProjection(state, { x: 0, y: state.top });
+
+  expect(projection.x, `${label} should keep the world left edge inside the viewport`).toBeGreaterThanOrEqual(-1);
+  expect(projection.x, `${label} should not hide the world left edge offscreen`).toBeLessThanOrEqual(1);
 }
 
 test.describe('operator shell layout visual smoke', () => {
@@ -245,6 +270,10 @@ test.describe('operator shell layout visual smoke', () => {
 
     const initial = await waitForViewportSettle(page);
     expectViewportWithinHorizontalWorldBounds(initial, 'default viewport');
+    expect(
+      Math.abs(resolveViewportEdgeDragDelta(initial, 'top-left').deltaX),
+      'default viewport should have immediate left pan budget'
+    ).toBeGreaterThan(40);
 
     const worldRect = await readRect(worldHost);
     const dragLane = resolvePrimaryDragLane(worldRect);
@@ -287,6 +316,7 @@ test.describe('operator shell layout visual smoke', () => {
 
     const rightBoundary = await waitForViewportSettle(page);
     expectViewportAtRightHorizontalBoundary(rightBoundary, 'right-dragged default viewport');
+    expectWorldRightEdgeVisible(rightBoundary, 'right-dragged default viewport');
     expect(Math.abs(rightBoundary.top - initial.top), 'horizontal drag should keep the vertical lane stable').toBeLessThan(
       8
     );
@@ -300,6 +330,7 @@ test.describe('operator shell layout visual smoke', () => {
 
     const leftBoundary = await waitForViewportSettle(page);
     expectViewportAtLeftHorizontalBoundary(leftBoundary, 'left-dragged default viewport');
+    expectWorldLeftEdgeVisible(leftBoundary, 'left-dragged default viewport');
     expect(Math.abs(leftBoundary.top - initial.top), 'return drag should stay horizontal').toBeLessThan(8);
     expect(leftBoundary.scale, 'return pan must not zoom the viewport').toBeCloseTo(initial.scale ?? 1, 3);
   });

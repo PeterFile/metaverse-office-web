@@ -198,6 +198,7 @@ const replayByEvidenceIdGet =
   `GET /accountability/replay?limit=10&window=60m&evidence_id=${replayEvidenceId}&agent_id=app-engineering`;
 const checkpointLogByEvidenceIdGet =
   `GET /accountability/replay/checkpoint-log?limit=3&evidence_id=${replayEvidenceId}`;
+const evidenceSpineSummaryGet = 'GET /agents/evidence-spine/summary?newest_first=true&limit=200';
 const expectedApiGets = new Set([
   'GET /office/overview',
   'GET /incidents?limit=200&window=8760h',
@@ -206,6 +207,7 @@ const expectedApiGets = new Set([
   'GET /collectors/controller-snapshot/source-health?limit=7',
   'GET /runtime/source-gaps?newest_first=true&limit=3',
   'GET /runtime/source-gaps/summary?newest_first=true&limit=3',
+  evidenceSpineSummaryGet,
   'GET /agents/app-engineering/workflow?limit=10&window=60m',
   'GET /office/operations?agent_id=app-engineering',
   'GET /timeline?limit=10&window=60m&agent_id=app-engineering',
@@ -241,7 +243,7 @@ const visibleProofForbiddenSamples = [
   'complete'
 ];
 
-function apiRequestKey(request: Request) {
+function apiRequestKey(request: Pick<Request, 'method' | 'url'>) {
   const url = new URL(request.url());
   return `${request.method()} ${url.pathname}${url.search}`;
 }
@@ -253,6 +255,10 @@ function isExactSourceContextReadGet(request: Pick<Request, 'method' | 'url'>, e
     url.pathname === `/evidence-records/${evidenceId}/source-context` &&
     url.search === ''
   );
+}
+
+function isAllowedExactApiReadGet(request: Pick<Request, 'method' | 'url'>, allowedApiGets: Set<string>) {
+  return request.method() === 'GET' && allowedApiGets.has(apiRequestKey(request));
 }
 
 function isApiPath(pathname: string) {
@@ -274,6 +280,13 @@ function isApiPath(pathname: string) {
     '/evidence-records',
     '/accountability'
   ].some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
+}
+
+function makeApiRequest(method: string, pathAndSearch: string): Pick<Request, 'method' | 'url'> {
+  return {
+    method: () => method,
+    url: () => `http://live-evidence-guard.test${pathAndSearch}`
+  };
 }
 
 async function readRect(locator: Locator) {
@@ -393,14 +406,70 @@ async function routeExpectedSourceContextReadGet(page: Page, handler: (route: Ro
 }
 
 test.describe('operator shell live evidence journey smoke', () => {
+  test('@journey @evidence-live keeps read guards method-aware and exact for evidence proof surfaces', () => {
+    const allowedApiGets = new Set([
+      ...expectedApiGets,
+      ...replayEvidenceRecordGets,
+      replaySourceContextGet,
+      checkpointLogByEvidenceIdGet,
+      replayByEvidenceIdGet
+    ]);
+    const guardedReadPaths = [
+      '/agents/evidence-spine/summary?newest_first=true&limit=200',
+      '/evidence-records?agent_id=app-engineering&newest_first=true&limit=12',
+      `/evidence-records/${replayEvidenceId}`,
+      `/evidence-records/${replayEvidenceId}/provenance-bundle`,
+      `/evidence-records/${replayEvidenceId}/source-context`,
+      `/accountability/replay/checkpoint-log?limit=3&evidence_id=${replayEvidenceId}`,
+      `/accountability/replay?limit=10&window=60m&evidence_id=${replayEvidenceId}&agent_id=app-engineering`
+    ];
+    const rejectedReadPaths = [
+      '/agents',
+      '/agents/evidence-spine',
+      '/agents/evidence-spine/summary',
+      '/agents/evidence-spine/summary?newest_first=true&limit=200&raw=true',
+      '/agents/app-engineering/evidence-spine?newest_first=true&limit=200',
+      '/evidence-records',
+      '/evidence-records?agent_id=app-engineering&limit=12&newest_first=true',
+      '/evidence-records?agent_id=app-engineering&newest_first=true&limit=12&raw=true',
+      `/evidence-records/${replayEvidenceId}?raw=true`,
+      `/evidence-records/${replayEvidenceId}/provenance-bundle?metadata=true`,
+      `/evidence-records/${replayEvidenceId}/source-context?raw=true`,
+      `/evidence-records/${replayEvidenceId}/source-context/extra`,
+      `/accountability/replay?limit=10&window=60m&evidence_id=${replayEvidenceId}`,
+      `/accountability/replay?limit=10&window=60m&evidence_id=${replayEvidenceId}&agent_id=app-engineering&dispatch=true`,
+      `/accountability/replay/checkpoint-log?evidence_id=${replayEvidenceId}&limit=3`,
+      `/accountability/replay/checkpoint-log?limit=3&evidence_id=${replayEvidenceId}&payload=true`,
+      '/control-plane',
+      '/dispatch',
+      '/tasks',
+      '/claims',
+      '/kanban'
+    ];
+
+    for (const pathAndSearch of guardedReadPaths) {
+      expect(isAllowedExactApiReadGet(makeApiRequest('GET', pathAndSearch), allowedApiGets), pathAndSearch).toBe(
+        true
+      );
+      for (const method of ['POST', 'PUT', 'PATCH', 'DELETE']) {
+        expect(
+          isAllowedExactApiReadGet(makeApiRequest(method, pathAndSearch), allowedApiGets),
+          `${method} ${pathAndSearch}`
+        ).toBe(false);
+      }
+    }
+
+    for (const pathAndSearch of rejectedReadPaths) {
+      expect(isAllowedExactApiReadGet(makeApiRequest('GET', pathAndSearch), allowedApiGets), pathAndSearch).toBe(
+        false
+      );
+    }
+  });
+
   test('@journey @evidence-live prepares exact source-context read guard for the L04 UI path', async ({ page }) => {
     const apiRequestViolations: string[] = [];
     const sourceContextRequests: string[] = [];
     const allowedApiGets = new Set([replaySourceContextGet]);
-    const makeRequest = (method: string, pathAndSearch: string): Pick<Request, 'method' | 'url'> => ({
-      method: () => method,
-      url: () => `http://source-context.test${pathAndSearch}`
-    });
     const handleRequest = (request: Request) => {
       const url = new URL(request.url());
       if (!isApiPath(url.pathname)) {
@@ -411,26 +480,26 @@ test.describe('operator shell live evidence journey smoke', () => {
       if (isExactSourceContextReadGet(request)) {
         sourceContextRequests.push(key);
       }
-      if (request.method() !== 'GET' || !allowedApiGets.has(key)) {
+      if (!isAllowedExactApiReadGet(request, allowedApiGets)) {
         apiRequestViolations.push(key);
       }
     };
 
     expect(
-      isExactSourceContextReadGet(makeRequest('GET', `/evidence-records/${replayEvidenceId}/source-context`))
+      isExactSourceContextReadGet(makeApiRequest('GET', `/evidence-records/${replayEvidenceId}/source-context`))
     ).toBe(true);
     expect(
-      isExactSourceContextReadGet(makeRequest('POST', `/evidence-records/${replayEvidenceId}/source-context`))
+      isExactSourceContextReadGet(makeApiRequest('POST', `/evidence-records/${replayEvidenceId}/source-context`))
     ).toBe(false);
     expect(
-      isExactSourceContextReadGet(makeRequest('GET', `/evidence-records/${replayEvidenceId}/source-context?raw=true`))
+      isExactSourceContextReadGet(makeApiRequest('GET', `/evidence-records/${replayEvidenceId}/source-context?raw=true`))
     ).toBe(false);
-    expect(isExactSourceContextReadGet(makeRequest('GET', `/evidence-records/${replayEvidenceId}`))).toBe(false);
+    expect(isExactSourceContextReadGet(makeApiRequest('GET', `/evidence-records/${replayEvidenceId}`))).toBe(false);
     expect(
-      isExactSourceContextReadGet(makeRequest('GET', `/evidence-records/${replayEvidenceId}/source-context/extra`))
+      isExactSourceContextReadGet(makeApiRequest('GET', `/evidence-records/${replayEvidenceId}/source-context/extra`))
     ).toBe(false);
     expect(
-      isExactSourceContextReadGet(makeRequest('GET', `/evidence-records/${replayEvidenceId}/provenance-bundle`))
+      isExactSourceContextReadGet(makeApiRequest('GET', `/evidence-records/${replayEvidenceId}/provenance-bundle`))
     ).toBe(false);
     expect(JSON.stringify(replaySourceContextFixture)).not.toMatch(visibleProofRawRefPattern);
 
@@ -472,7 +541,7 @@ test.describe('operator shell live evidence journey smoke', () => {
       }
 
       const key = apiRequestKey(request);
-      if (request.method() !== 'GET' || !expectedApiGets.has(key)) {
+      if (!isAllowedExactApiReadGet(request, expectedApiGets)) {
         apiRequestViolations.push(key);
       }
       if (url.pathname.startsWith('/evidence-records') || url.pathname.startsWith('/accountability/')) {
@@ -551,7 +620,7 @@ test.describe('operator shell live evidence journey smoke', () => {
       }
 
       const key = apiRequestKey(request);
-      if (request.method() !== 'GET' || !allowedApiGets.has(key)) {
+      if (!isAllowedExactApiReadGet(request, allowedApiGets)) {
         apiRequestViolations.push(key);
       }
       if (url.pathname.startsWith('/evidence-records')) {
@@ -640,7 +709,7 @@ test.describe('operator shell live evidence journey smoke', () => {
       }
 
       const key = apiRequestKey(request);
-      if (request.method() !== 'GET' || !expectedApiGets.has(key)) {
+      if (!isAllowedExactApiReadGet(request, expectedApiGets)) {
         apiRequestViolations.push(key);
       }
     };
@@ -707,7 +776,7 @@ test.describe('operator shell live evidence journey smoke', () => {
       }
 
       const key = apiRequestKey(request);
-      if (request.method() !== 'GET' || !allowedApiGets.has(key)) {
+      if (!isAllowedExactApiReadGet(request, allowedApiGets)) {
         apiRequestViolations.push(key);
       }
       if (url.pathname.startsWith('/evidence-records')) {

@@ -7353,7 +7353,13 @@ test('GET evidence source-context is bounded, sanitized, and 404s unknown eviden
   assert.equal(unknown.response.status, 404);
   assert.deepEqual(unknown.body, {
     error: 'not_found',
-    details: 'unknown evidence record'
+    details: 'unknown evidence record',
+    disclosure: {
+      decision: 'deny',
+      reason_code: 'unknown_evidence',
+      mapping: 'unknown',
+      freshness: 'unknown'
+    }
   });
 
   const sourceContext = await requestJson(
@@ -7361,6 +7367,12 @@ test('GET evidence source-context is bounded, sanitized, and 404s unknown eviden
   );
   assert.equal(sourceContext.response.status, 200);
   assert.equal(sourceContext.body.item.evidence_id, evidenceRecord.evidence_id);
+  assert.deepEqual(sourceContext.body.item.disclosure, {
+    decision: 'allow',
+    reason_code: 'mapped_stale',
+    mapping: 'mapped',
+    freshness: 'stale'
+  });
   assert.equal(sourceContext.body.item.source_summary.kind, 'workspace_file');
   assert.equal(sourceContext.body.item.source_gaps.items.length, 1);
   assert.equal(sourceContext.body.item.source_health.agent_items.length, 1);

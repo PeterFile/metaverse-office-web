@@ -2300,6 +2300,12 @@ test('prototype store projects bounded evidence source context for one evidence 
   const serializedContext = JSON.stringify(context);
 
   assert.equal(context.evidence_id, outboxRecord.evidence_id);
+  assert.deepEqual(context.disclosure, {
+    decision: 'allow',
+    reason_code: 'mapped_stale',
+    mapping: 'mapped',
+    freshness: 'stale'
+  });
   assert.deepEqual(context.source_summary, {
     kind: 'workspace_file',
     status: 'degraded',
@@ -2390,6 +2396,12 @@ test('prototype store keeps unmapped runtime source context unmapped', async () 
   );
   assert.equal(JSON.stringify(context).includes('tmux://unmapped-source-context'), false);
   assert.equal(JSON.stringify(context).includes('token=unmapped-source-context'), false);
+  assert.deepEqual(context.disclosure, {
+    decision: 'allow',
+    reason_code: 'unmapped_current',
+    mapping: 'unmapped',
+    freshness: 'current'
+  });
 });
 
 test('prototype store projects sanitized Hermes input proof in provenance bundles', async () => {

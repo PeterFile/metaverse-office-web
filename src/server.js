@@ -606,7 +606,13 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
     if (!sourceContext) {
       sendJson(res, 404, {
         error: 'not_found',
-        details: 'unknown evidence record'
+        details: 'unknown evidence record',
+        disclosure: {
+          decision: 'deny',
+          reason_code: 'unknown_evidence',
+          mapping: 'unknown',
+          freshness: 'unknown'
+        }
       });
       return;
     }

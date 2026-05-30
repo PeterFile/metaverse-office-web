@@ -4130,6 +4130,7 @@ function projectEvidenceSourceContext({ record, sourceHealth, sourceGapsSummary,
 
   return {
     evidence_id: record.evidence_id,
+    disclosure: projectEvidenceSourceContextDisclosure(record, sourceFields),
     source_summary: projectEvidenceSourceSummary(record, sourceFields, timeFields),
     record: {
       observed_at: timeFields.observed_at,
@@ -4147,6 +4148,31 @@ function projectEvidenceSourceContext({ record, sourceHealth, sourceGapsSummary,
       items: sourceGapItems.map(projectEvidenceSourceContextGapItem)
     }
   };
+}
+
+function projectEvidenceSourceContextDisclosure(record, sourceFields) {
+  const mapped = typeof record.agent_id === 'string' && record.agent_id.length > 0;
+  const mapping = mapped ? 'mapped' : 'unmapped';
+  const freshness = projectEvidenceSourceContextFreshness(sourceFields.status);
+
+  return {
+    decision: 'allow',
+    reason_code: `${mapping}_${freshness}`,
+    mapping,
+    freshness
+  };
+}
+
+function projectEvidenceSourceContextFreshness(status) {
+  if (status === 'observed') {
+    return 'current';
+  }
+
+  if (RUNTIME_SOURCE_GAP_STATUSES.includes(status)) {
+    return 'stale';
+  }
+
+  return 'unknown';
 }
 
 function projectEvidenceSourceContextGapsSummary(summary = {}) {

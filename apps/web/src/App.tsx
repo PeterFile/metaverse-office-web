@@ -3370,6 +3370,15 @@ function AppInner() {
                 <span className="aitown-selected-agent-peek__eyebrow">Selected agent</span>
                 <strong>{selectedAgent.display_name}</strong>
                 <span>{`State · ${selectedAgentPeekStatus}`}</span>
+                <details className="aitown-selected-agent-peek__facts">
+                  <summary>Inspect facts</summary>
+                  {selectedAgentPeekZone ? <span>{`Zone · ${selectedAgentPeekZone}`}</span> : null}
+                  {selectedAgentPeekOperation ? <span>{`Operation · ${selectedAgentPeekOperation}`}</span> : null}
+                  {selectedAgentPeekCorrelationId ? (
+                    <span>Correlation · available</span>
+                  ) : null}
+                  {selectedAgentPeekEvidenceRef ? <span>Evidence · attached</span> : null}
+                </details>
                 {selectedAgentEvidenceGlance ? (
                   <span className="aitown-selected-agent-peek__proof" role="group" aria-label="Selected agent proof glance">
                     {selectedAgentEvidenceGlance.map((line) => (
@@ -3453,15 +3462,6 @@ function AppInner() {
                   Evidence Ledger
                 </button>
               </div>
-              <details className="aitown-selected-agent-peek__facts">
-                <summary>Inspect facts</summary>
-                {selectedAgentPeekZone ? <span>{`Zone · ${selectedAgentPeekZone}`}</span> : null}
-                {selectedAgentPeekOperation ? <span>{`Operation · ${selectedAgentPeekOperation}`}</span> : null}
-                {selectedAgentPeekCorrelationId ? (
-                  <span>{`Correlation · ${selectedAgentPeekCorrelationId}`}</span>
-                ) : null}
-                {selectedAgentPeekEvidenceRef ? <span>{`Evidence · ${selectedAgentPeekEvidenceRef}`}</span> : null}
-              </details>
             </aside>
           ) : null}
 

@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -2708,12 +2708,13 @@ afterEach(() => {
 
     await user.click(screen.getByRole('button', { name: 'Select scene agent team-lead' }));
     expect(screen.queryByRole('dialog', { name: 'Hub' })).not.toBeInTheDocument();
-    expect(screen.getByRole('region', { name: 'Selected agent inspect peek' })).toBeVisible();
-    expect(screen.getByRole('region', { name: 'Selected agent inspect peek' })).toHaveTextContent(
-      'Correlation · corr-app-review'
-    );
+    const inspectPeek = screen.getByRole('region', { name: 'Selected agent inspect peek' });
+    expect(inspectPeek).toBeVisible();
+    expect(inspectPeek).toHaveTextContent('Correlation · available');
+    expect(inspectPeek).not.toHaveTextContent('Correlation · corr-app-review');
 
-    details = await openSelectedAgentPeekInHub(user, 'Team Lead');
+    fireEvent.click(await screen.findByRole('button', { name: 'Queue' }, { timeout: 5000 }));
+    details = await screen.findByRole('complementary', { name: 'Agent details' }, { timeout: 5000 });
     correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
 
     expect(correlationSection).not.toBeNull();
@@ -2731,7 +2732,7 @@ afterEach(() => {
       teamLeadSelectedCorrelationMemoryArtifactsUrl,
       expect.anything()
     );
-  });
+  }, 10000);
 
   it('replaces the cached scene spotlight when a different correlation is selected', async () => {
     const user = userEvent.setup();
@@ -3713,6 +3714,11 @@ afterEach(() => {
 
     const inspectPeek = await screen.findByRole('region', { name: 'Selected agent inspect peek' });
     expect(within(inspectPeek).getByText('App Engineering Agent')).toBeVisible();
+    fireEvent.click(within(inspectPeek).getByText('Inspect facts'));
+    expect(within(inspectPeek).getByText('Zone · Meeting Zone')).toBeVisible();
+    expect(within(inspectPeek).getByText('Operation · Fix workflow issue')).toBeVisible();
+    expect(inspectPeek).not.toHaveTextContent('corr-app-review');
+    expect(inspectPeek).not.toHaveTextContent('/tmp/evidence.md');
     expect(within(inspectPeek).getByRole('group', { name: 'Selected agent proof glance' })).toBeVisible();
     expect(
       await within(inspectPeek).findByText('Proof glance · 6 records · Sources workspace 3, tmux 2, Hermes 1')

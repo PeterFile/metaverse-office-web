@@ -983,7 +983,7 @@ button {
   z-index: 7;
   display: flex;
   width: min(332px, calc(100% - 36px));
-  max-height: min(300px, calc(100% - 258px));
+  max-height: min(240px, calc(100% - 258px));
   flex-direction: column;
   gap: 6px;
   padding: 7px 10px 8px;
@@ -1074,10 +1074,15 @@ button {
   display: grid;
   gap: 3px;
   min-width: 0;
+  max-height: 76px;
   margin-top: 2px;
   padding: 6px 7px;
   border-left: 2px solid rgba(245, 217, 141, 0.58);
   background: rgba(7, 12, 15, 0.22);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
 }
 
 .aitown-selected-agent-peek__runtime-facts strong,
@@ -3005,7 +3010,7 @@ button {
     top: 288px;
     right: 14px;
     width: min(300px, calc(100% - 28px));
-    max-height: min(300px, calc(100% - 316px));
+    max-height: min(240px, calc(100% - 316px));
   }
 
   .aitown-watch-overlay {

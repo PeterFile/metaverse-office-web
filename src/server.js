@@ -110,6 +110,15 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
     return;
   }
 
+  if (method === 'GET' && pathname === '/agents/evidence-spine/source-matrix') {
+    sendJson(res, 200, {
+      item: store.getAgentEvidenceSourceStatusMatrix(
+        getSourceEvidenceQuery(url.searchParams, { sourceStatusAlias: true })
+      )
+    });
+    return;
+  }
+
   const agentEventsMatch = pathname.match(/^\/agents\/([^/]+)\/events$/);
   if (method === 'GET' && agentEventsMatch) {
     const agentId = decodeURIComponent(agentEventsMatch[1]);

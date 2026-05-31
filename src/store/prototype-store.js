@@ -1332,6 +1332,56 @@ class PrototypeStore {
     };
   }
 
+  getAgentEvidenceSourceStatusMatrix(filters = {}) {
+    const recordFilters = { ...filters };
+    delete recordFilters.mapped;
+    const { records, limit, newestFirst } = this.#filterEvidenceRecords(recordFilters);
+    const mapped = normalizeOptionalBoolean(filters.mapped);
+    const agentIds = new Set(SEED_AGENTS.map((agent) => agent.agent_id));
+    const sourceKinds = resolveEvidenceSourceMatrixKinds(filters.source_kind);
+    const agents = SEED_AGENTS.map((agent) =>
+      createAgentEvidenceSourceMatrixAgent(agent, sourceKinds)
+    );
+    const agentsById = new Map(agents.map((agent) => [agent.agent_id, agent]));
+    const unmappedEvidenceSummary = createUnmappedEvidenceSourceMatrixSummary();
+    let mappedCount = 0;
+    let totalCount = 0;
+
+    for (const record of records) {
+      const agentMatrix = agentsById.get(record.agent_id);
+      if ((mapped === true && !agentMatrix) || (mapped === false && agentMatrix)) {
+        continue;
+      }
+
+      totalCount += 1;
+      if (agentMatrix) {
+        mappedCount += 1;
+        addEvidenceRecordToAgentEvidenceSourceMatrix(agentMatrix, record);
+        continue;
+      }
+
+      if (record.agent_id === null || !agentIds.has(record.agent_id)) {
+        addEvidenceRecordToUnmappedEvidenceSourceMatrix(unmappedEvidenceSummary, record);
+      }
+    }
+
+    return {
+      agent_count: agents.length,
+      returned_limit: limit,
+      total_count: totalCount,
+      mapped_count: mappedCount,
+      unmapped_count: unmappedEvidenceSummary.total_count,
+      agents: agents.map((agent) => projectAgentEvidenceSourceMatrixAgent(agent, {
+        limit,
+        newestFirst
+      })),
+      unmapped_evidence_summary: projectUnmappedEvidenceSourceMatrixSummary(
+        unmappedEvidenceSummary,
+        { limit, newestFirst }
+      )
+    };
+  }
+
   getAgentWorkflow(agentId, filters = {}) {
     const limit = filters.limit === undefined ? null : filters.limit;
     const window = filters.window || '60m';
@@ -2391,6 +2441,143 @@ function addEvidenceRecordToUnmappedAgentEvidenceSummary(summary, record) {
     summary.latest_collected_at,
     record.collected_at
   );
+}
+
+function resolveEvidenceSourceMatrixKinds(sourceKindFilter) {
+  const sourceKind = normalizeFilterValue(sourceKindFilter);
+  if (!sourceKind) {
+    return EVIDENCE_RECORD_SOURCE_KINDS;
+  }
+
+  return EVIDENCE_RECORD_SOURCE_KINDS.includes(sourceKind) ? [sourceKind] : [];
+}
+
+function createAgentEvidenceSourceMatrixAgent(agent, sourceKinds) {
+  return {
+    agent_id: agent.agent_id,
+    sources: sourceKinds.map(createEvidenceSourceMatrixRow)
+  };
+}
+
+function createUnmappedEvidenceSourceMatrixSummary() {
+  return {
+    total_count: 0,
+    sources: []
+  };
+}
+
+function createEvidenceSourceMatrixRow(sourceKind) {
+  return {
+    source_kind: sourceKind,
+    evidence_count: 0,
+    source_status_buckets: createZeroBuckets(EVIDENCE_RECORD_SOURCE_STATUSES),
+    evidence_role_buckets: createZeroBuckets(EVIDENCE_RECORD_ROLES),
+    output_candidate_buckets: {
+      true: 0,
+      false: 0
+    },
+    latest_observed_at: null,
+    latest_collected_at: null
+  };
+}
+
+function addEvidenceRecordToAgentEvidenceSourceMatrix(agentMatrix, record) {
+  const sourceRow = agentMatrix.sources.find((source) => source.source_kind === record.source_kind);
+  if (!sourceRow) {
+    return;
+  }
+
+  addEvidenceRecordToSourceMatrixRow(sourceRow, record);
+}
+
+function addEvidenceRecordToUnmappedEvidenceSourceMatrix(summary, record) {
+  summary.total_count += 1;
+  if (!EVIDENCE_RECORD_SOURCE_KINDS.includes(record.source_kind)) {
+    return;
+  }
+
+  let sourceRow = summary.sources.find((source) => source.source_kind === record.source_kind);
+  if (!sourceRow) {
+    sourceRow = createEvidenceSourceMatrixRow(record.source_kind);
+    summary.sources.push(sourceRow);
+  }
+
+  addEvidenceRecordToSourceMatrixRow(sourceRow, record);
+}
+
+function addEvidenceRecordToSourceMatrixRow(sourceRow, record) {
+  sourceRow.evidence_count += 1;
+  sourceRow.output_candidate_buckets[String(record.output_candidate === true)] += 1;
+  incrementKnownBucket(sourceRow.source_status_buckets, record.source_status);
+  incrementKnownBucket(sourceRow.evidence_role_buckets, record.evidence_role);
+  sourceRow.latest_observed_at = getLatestEvidenceRecordIsoValue(
+    sourceRow.latest_observed_at,
+    record.observed_at
+  );
+  sourceRow.latest_collected_at = getLatestEvidenceRecordIsoValue(
+    sourceRow.latest_collected_at,
+    record.collected_at
+  );
+}
+
+function projectAgentEvidenceSourceMatrixAgent(agentMatrix, { limit, newestFirst }) {
+  return {
+    agent_id: agentMatrix.agent_id,
+    sources: orderEvidenceSourceMatrixRows(agentMatrix.sources, newestFirst).slice(0, limit)
+  };
+}
+
+function projectUnmappedEvidenceSourceMatrixSummary(summary, { limit, newestFirst }) {
+  return {
+    total_count: summary.total_count,
+    sources: orderEvidenceSourceMatrixRows(summary.sources, newestFirst).slice(0, limit)
+  };
+}
+
+function orderEvidenceSourceMatrixRows(sourceRows, newestFirst) {
+  const rows = sourceRows.map(cloneEvidenceSourceMatrixRow);
+  if (!newestFirst) {
+    return rows.sort(compareEvidenceSourceMatrixRowsBySourceKind);
+  }
+
+  return rows.sort(compareEvidenceSourceMatrixRowsByRecency);
+}
+
+function cloneEvidenceSourceMatrixRow(sourceRow) {
+  return {
+    source_kind: sourceRow.source_kind,
+    evidence_count: sourceRow.evidence_count,
+    source_status_buckets: { ...sourceRow.source_status_buckets },
+    evidence_role_buckets: { ...sourceRow.evidence_role_buckets },
+    output_candidate_buckets: { ...sourceRow.output_candidate_buckets },
+    latest_observed_at: sourceRow.latest_observed_at,
+    latest_collected_at: sourceRow.latest_collected_at
+  };
+}
+
+function compareEvidenceSourceMatrixRowsBySourceKind(left, right) {
+  return (
+    EVIDENCE_RECORD_SOURCE_KINDS.indexOf(left.source_kind) -
+    EVIDENCE_RECORD_SOURCE_KINDS.indexOf(right.source_kind)
+  );
+}
+
+function compareEvidenceSourceMatrixRowsByRecency(left, right) {
+  const collectedComparison =
+    getEvidenceRecordTimestamp(right.latest_collected_at) -
+    getEvidenceRecordTimestamp(left.latest_collected_at);
+  if (collectedComparison !== 0) {
+    return collectedComparison;
+  }
+
+  const observedComparison =
+    getEvidenceRecordTimestamp(right.latest_observed_at) -
+    getEvidenceRecordTimestamp(left.latest_observed_at);
+  if (observedComparison !== 0) {
+    return observedComparison;
+  }
+
+  return compareEvidenceSourceMatrixRowsBySourceKind(left, right);
 }
 
 function sortEvidenceRefRollupBuckets(group) {

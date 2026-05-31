@@ -1887,6 +1887,72 @@ test('JSONL prototype store filters evidence records by mapped agent presence', 
   assert.equal(store.listEvidenceRecords({ mapped: 'maybe', limit: 2 }).length, 2);
 });
 
+test('evidence-records schema exposes only static safe contract metadata', async () => {
+  const storeFile = await createStoreFile();
+  const store = await createPrototypeStore({ filePath: storeFile });
+
+  await store.appendCollectorReport(createCollectorReport());
+
+  const schema = store.getEvidenceRecordsSchema();
+  assert.deepEqual(schema.limit, {
+    default: 50,
+    max: 200
+  });
+  assert.deepEqual(schema.boolean_filters, ['output_candidate', 'mapped', 'newest_first']);
+  assert.deepEqual(schema.supported_filters, [
+    'evidence_id',
+    'agent_id',
+    'source_kind',
+    'evidence_role',
+    'output_candidate',
+    'evidence_ref',
+    'source_status',
+    'collector_snapshot_id',
+    'correlation_id',
+    'mapped',
+    'observed_since',
+    'observed_until',
+    'collected_since',
+    'collected_until',
+    'newest_first',
+    'limit'
+  ]);
+  assert.deepEqual(schema.source_kinds, [
+    'workspace_root',
+    'workspace_file',
+    'tmux_observation',
+    'hermes_profile',
+    'hermes_session',
+    'kanban_fixture',
+    'linear_fixture',
+    'slack_fixture',
+    'task_fixture'
+  ]);
+  assert.deepEqual(schema.evidence_roles, [
+    'workspace_presence',
+    'inbound_task',
+    'agent_output',
+    'agent_plan',
+    'runtime_activity',
+    'runtime_presence',
+    'runtime_unmapped',
+    'task_reference'
+  ]);
+  assert.deepEqual(schema.source_statuses, ['observed', 'degraded', 'missing', 'error']);
+  assert.equal(
+    schema.route_write_boundary,
+    'read-only schema catalog; does not collect, read runtime sources, append records, or expose control-plane actions'
+  );
+
+  const evidenceId = store.listEvidenceRecords()[0].evidence_id;
+  const serialized = JSON.stringify(schema);
+  assert.equal(serialized.includes('/tmp/store-contract'), false);
+  assert.equal(serialized.includes('tmux://'), false);
+  assert.equal(serialized.includes('collector-snapshot:'), false);
+  assert.equal(serialized.includes(evidenceId), false);
+  assert.equal(serialized.includes('metadata'), false);
+});
+
 test('prototype store summarizes evidence records with list filter semantics before limit', async () => {
   const storeFile = await createStoreFile();
   const store = await createPrototypeStore({ filePath: storeFile });

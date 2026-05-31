@@ -67,6 +67,31 @@ const EVIDENCE_RECORD_ROLES = Object.freeze([
   'task_reference'
 ]);
 const EVIDENCE_RECORD_SOURCE_STATUSES = Object.freeze(['observed', 'degraded', 'missing', 'error']);
+const EVIDENCE_RECORD_SUPPORTED_FILTERS = Object.freeze([
+  'evidence_id',
+  'agent_id',
+  'source_kind',
+  'evidence_role',
+  'output_candidate',
+  'evidence_ref',
+  'source_status',
+  'collector_snapshot_id',
+  'correlation_id',
+  'mapped',
+  'observed_since',
+  'observed_until',
+  'collected_since',
+  'collected_until',
+  'newest_first',
+  'limit'
+]);
+const EVIDENCE_RECORD_BOOLEAN_FILTERS = Object.freeze([
+  'output_candidate',
+  'mapped',
+  'newest_first'
+]);
+const EVIDENCE_RECORD_SCHEMA_WRITE_BOUNDARY =
+  'read-only schema catalog; does not collect, read runtime sources, append records, or expose control-plane actions';
 const RUNTIME_SOURCE_GAP_STATUSES = Object.freeze(['degraded', 'missing', 'error']);
 const execFileAsync = promisify(execFile);
 const SEVERITY_RANK = Object.freeze({
@@ -668,6 +693,21 @@ class PrototypeStore {
     return (newestFirst ? records.slice().sort(compareEvidenceRecordRecency) : records)
       .slice(0, limit)
       .map(cloneEvidenceRecord);
+  }
+
+  getEvidenceRecordsSchema() {
+    return {
+      source_kinds: [...EVIDENCE_RECORD_SOURCE_KINDS],
+      evidence_roles: [...EVIDENCE_RECORD_ROLES],
+      source_statuses: [...EVIDENCE_RECORD_SOURCE_STATUSES],
+      supported_filters: [...EVIDENCE_RECORD_SUPPORTED_FILTERS],
+      boolean_filters: [...EVIDENCE_RECORD_BOOLEAN_FILTERS],
+      limit: {
+        default: 50,
+        max: 200
+      },
+      route_write_boundary: EVIDENCE_RECORD_SCHEMA_WRITE_BOUNDARY
+    };
   }
 
   getEvidenceRecord(evidenceId) {

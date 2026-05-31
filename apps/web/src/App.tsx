@@ -87,6 +87,8 @@ import type {
   OfficeOperation,
   OfficeOperations,
   PeerWatchAlertsResponse,
+  RuntimeSourceGap,
+  RuntimeSourceGapsSummary,
   Severity,
   TimelineReplayResponse,
   WorkflowDetail
@@ -142,6 +144,18 @@ type ReplayCheckpointFocus = {
 
 type EvidenceCoverageReadState = {
   data: CollectorEvidenceCoverage | null;
+  error: string | null;
+  state: LoadState;
+};
+
+type SourceGapReadState = {
+  data: RuntimeSourceGap[] | null;
+  error: string | null;
+  state: LoadState;
+};
+
+type SourceGapSummaryReadState = {
+  data: RuntimeSourceGapsSummary | null;
   error: string | null;
   state: LoadState;
 };
@@ -607,6 +621,51 @@ function resolveSourceHealthReadModelStatus(
       label: 'Source health',
       summary: 'No snapshot',
       detail: 'Read model has no source health snapshot yet.',
+      tone: 'unavailable'
+    };
+  }
+
+  return null;
+}
+
+function resolveSourceGapReadModelStatus(
+  sourceGapResource: SourceGapReadState,
+  sourceGapSummaryResource: SourceGapSummaryReadState,
+  sourceGapChipCount: number
+): HudReadModelStatus | null {
+  if (sourceGapChipCount > 0) {
+    return null;
+  }
+
+  const sourceGapDataReady = sourceGapResource.data !== null;
+  const sourceGapSummaryReady = sourceGapSummaryResource.data !== null;
+
+  if (
+    (sourceGapResource.error && !sourceGapDataReady) ||
+    (sourceGapSummaryResource.error && !sourceGapSummaryReady)
+  ) {
+    return {
+      label: 'Source gaps',
+      summary: 'Unavailable',
+      detail: 'Read model unavailable',
+      tone: 'unavailable'
+    };
+  }
+
+  if (sourceGapResource.state === 'loading' || sourceGapSummaryResource.state === 'loading') {
+    return null;
+  }
+
+  if (
+    sourceGapResource.state === 'ready' &&
+    sourceGapResource.data?.length === 0 &&
+    sourceGapSummaryResource.state === 'ready' &&
+    (!sourceGapSummaryResource.data || sourceGapSummaryResource.data.total_count === 0)
+  ) {
+    return {
+      label: 'Source gaps',
+      summary: 'No rows',
+      detail: 'Runtime source-gap read model has no rows in the current slice.',
       tone: 'unavailable'
     };
   }
@@ -1592,6 +1651,13 @@ function AppInner() {
     : null;
   const sourceHealthReadModelStatus = hudReadModelsVisible
     ? resolveSourceHealthReadModelStatus(sourceHealthResource, latestSourceHealth)
+    : null;
+  const sourceGapReadModelStatus = hudReadModelsVisible
+    ? resolveSourceGapReadModelStatus(
+        runtimeSourceGapsResource,
+        runtimeSourceGapsSummaryResource,
+        sourceGapChips.length
+      )
     : null;
 
   const selectedAgent = resolveSelectedAgent(
@@ -3310,6 +3376,19 @@ function AppInner() {
                           )
                         )}
                       </span>
+                    </section>
+                  ) : null}
+                  {sourceGapReadModelStatus ? (
+                    <section
+                      className={`aitown-panel__signal-panel aitown-panel__read-model-status aitown-panel__read-model-status--${sourceGapReadModelStatus.tone}`}
+                      role="region"
+                      aria-label="Source gap read model status"
+                    >
+                      <div className="aitown-panel__evidence-focus__head">
+                        <strong className="aitown-panel__topline-title">{sourceGapReadModelStatus.label}</strong>
+                        <span className="aitown-panel__topline-copy">{sourceGapReadModelStatus.summary}</span>
+                      </div>
+                      <span className="aitown-panel__topline-copy">{sourceGapReadModelStatus.detail}</span>
                     </section>
                   ) : null}
                   {hotZones.length > 0 ? (

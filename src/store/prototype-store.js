@@ -1146,7 +1146,7 @@ class PrototypeStore {
       total_count: records.length,
       total_groups: sortedGroups.length,
       returned_limit: limit,
-      groups: sortedGroups.slice(0, limit)
+      groups: sortedGroups.slice(0, limit).map(projectSafeEvidenceRefRollupGroup)
     };
   }
 
@@ -2620,6 +2620,43 @@ function sortEvidenceRefRollupBuckets(group) {
     source_kind_buckets: sortBucketKeys(group.source_kind_buckets),
     source_status_buckets: sortBucketKeys(group.source_status_buckets)
   };
+}
+
+function projectSafeEvidenceRefRollupGroup(group, index) {
+  const sourceKindBuckets = projectKnownPositiveBuckets(
+    group.source_kind_buckets,
+    EVIDENCE_RECORD_SOURCE_KINDS
+  );
+  const sourceStatusBuckets = projectKnownPositiveBuckets(
+    group.source_status_buckets,
+    EVIDENCE_RECORD_SOURCE_STATUSES
+  );
+  const sourceKind = firstBucketKey(sourceKindBuckets) || 'unknown_source';
+  const sourceStatus = firstBucketKey(sourceStatusBuckets) || 'unknown_status';
+
+  return {
+    evidence_ref: null,
+    evidence_ref_key: `ref_group_${String(index + 1).padStart(3, '0')}`,
+    evidence_ref_label: `${sourceKind} ${sourceStatus} evidence`,
+    record_count: group.record_count,
+    mapped_count: group.mapped_count,
+    unmapped_count: group.unmapped_count,
+    agent_id_buckets: group.agent_id_buckets,
+    source_kind_buckets: sourceKindBuckets,
+    source_status_buckets: sourceStatusBuckets
+  };
+}
+
+function projectKnownPositiveBuckets(buckets, allowedKeys) {
+  return Object.fromEntries(
+    allowedKeys
+      .filter((key) => Number.isSafeInteger(buckets[key]) && buckets[key] > 0)
+      .map((key) => [key, buckets[key]])
+  );
+}
+
+function firstBucketKey(buckets) {
+  return Object.keys(buckets)[0] || null;
 }
 
 function sortBucketKeys(buckets) {

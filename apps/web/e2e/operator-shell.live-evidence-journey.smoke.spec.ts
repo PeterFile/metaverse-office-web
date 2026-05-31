@@ -750,6 +750,14 @@ test.describe('operator shell live evidence journey smoke', () => {
 
       await expect(hub).toBeVisible();
       await expect(detailsPanel.getByText('App Engineering Agent · supervision and collector observation.')).toBeVisible();
+      const sourceGapContext = detailsPanel.getByRole('region', { name: 'Source gap context' });
+      await expect(sourceGapContext).toContainText('Source gap');
+      await expect(sourceGapContext).toContainText('App Engineering Agent');
+      await expect(sourceGapContext).toContainText('Hermes session · degraded');
+      await expect(
+        sourceGapContext,
+        'source-gap context should not expose raw refs, profile ids, session refs, or degraded reasons'
+      ).not.toContainText(visibleProofRawRefPattern);
       await expect(hermesDrilldown).toHaveAttribute('data-source-gap-focus', 'true');
       await expect(hermesDrilldown).toContainText('Hermes session status · degraded');
       await expect(
@@ -831,9 +839,25 @@ test.describe('operator shell live evidence journey smoke', () => {
       ).not.toContainText(visibleProofRawRefPattern);
 
       await sourceGapInspectPeek.getByRole('button', { name: 'Open Evidence drilldown' }).click();
+      const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
       const evidencePanel = page.getByRole('tabpanel', { name: 'Evidence' });
-      await expect(evidencePanel.getByRole('heading', { name: 'Evidence Ledger' })).toBeVisible();
-      await expect.poll(() => evidenceRecordRequests.slice()).toEqual([replayEvidenceRecordGets[0]]);
+      await expect(evidencePanel).toBeVisible();
+      const sourceGapContext = detailsPanel.getByRole('region', { name: 'Source gap context' });
+      await expect(sourceGapContext).toContainText('Source gap');
+      await expect(sourceGapContext).toContainText('App Engineering Agent');
+      await expect(sourceGapContext).toContainText('Workspace files · degraded');
+      await expect(
+        sourceGapContext,
+        'source-gap world pin context should not expose raw refs, runtime payloads, or reasons'
+      ).not.toContainText(visibleProofRawRefPattern);
+      const workspaceDrilldown = detailsPanel.locator('#aitown-selected-agent-source-drilldown-workspace');
+      await expect(workspaceDrilldown).toHaveAttribute('data-source-gap-focus', 'true');
+      await expect(workspaceDrilldown).toContainText('Workspace files status · degraded');
+      await expect(
+        workspaceDrilldown,
+        'source-gap world pin drilldown should not expose raw refs, runtime payloads, or reasons'
+      ).not.toContainText(visibleProofRawRefPattern);
+      expect(evidenceRecordRequests, 'source-gap world pin drilldown should not prefetch evidence records').toEqual([]);
       expect(replayRequests, 'source-gap world pin drilldown should not prefetch replay records').toEqual([]);
 
       await page.getByRole('button', { name: 'Close panel' }).click();

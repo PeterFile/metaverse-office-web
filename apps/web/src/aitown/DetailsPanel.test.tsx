@@ -9322,6 +9322,9 @@ describe('DetailsPanel accountability signals', () => {
           selectedAgentDrilldownTab: 'evidence',
           sourceGapFocusIntent: {
             agentId: 'app-engineering',
+            agentLabel: 'App Engineering Agent',
+            sourceLabel: 'Workspace files',
+            status: 'degraded',
             sourceDrilldownGroupKey: 'workspace',
             requestId: 1
           }
@@ -9340,6 +9343,13 @@ describe('DetailsPanel accountability signals', () => {
     expect(workspaceGroup).toHaveAttribute('data-source-gap-focus', 'true');
     expect(tmuxGroup).not.toHaveAttribute('data-source-gap-focus');
     expect(document.activeElement).toBe(workspaceGroup);
+
+    const context = screen.getByRole('region', { name: 'Source gap context' });
+    expect(context).toHaveTextContent('Source gap');
+    expect(context).toHaveTextContent('App Engineering Agent');
+    expect(context).toHaveTextContent('Workspace files · degraded');
+    expect(context).not.toHaveTextContent('sess-1');
+    expect(context).not.toHaveTextContent('/workspace/app-engineering');
   });
 
   it('marks the exact tmux source gap group without marking workspace', async () => {
@@ -9376,6 +9386,9 @@ describe('DetailsPanel accountability signals', () => {
           selectedAgentDrilldownTab: 'evidence',
           sourceGapFocusIntent: {
             agentId: 'app-engineering',
+            agentLabel: 'App Engineering Agent',
+            sourceLabel: 'Tmux session',
+            status: 'missing',
             sourceDrilldownGroupKey: 'tmux',
             requestId: 2
           }
@@ -9439,6 +9452,9 @@ describe('DetailsPanel accountability signals', () => {
           selectedAgentDrilldownTab: 'evidence',
           sourceGapFocusIntent: {
             agentId: 'app-engineering',
+            agentLabel: 'App Engineering Agent',
+            sourceLabel: 'Hermes session',
+            status: 'degraded',
             sourceDrilldownGroupKey: 'hermes',
             requestId: 4
           }
@@ -9469,6 +9485,9 @@ describe('DetailsPanel accountability signals', () => {
           },
           sourceGapFocusIntent: {
             agentId: 'app-engineering',
+            agentLabel: 'App Engineering Agent',
+            sourceLabel: 'Workspace files',
+            status: 'degraded',
             sourceDrilldownGroupKey: 'workspace',
             requestId: 3
           }

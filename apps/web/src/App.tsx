@@ -2820,6 +2820,9 @@ function AppInner() {
       setSelectedAgentDrilldownTab('evidence');
       setSourceGapFocusIntent({
         agentId: chip.agentId,
+        agentLabel: chip.displayName,
+        sourceLabel: chip.sourceLabel,
+        status: chip.status,
         sourceDrilldownGroupKey: chip.sourceDrilldownGroupKey,
         requestId: sourceGapFocusRequestIdRef.current
       });
@@ -2843,6 +2846,9 @@ function AppInner() {
       setSelectedAgentDrilldownTab('evidence');
       setSourceGapFocusIntent({
         agentId: pin.agentId,
+        agentLabel: pin.displayName,
+        sourceLabel: pin.sourceLabel,
+        status: pin.status,
         sourceDrilldownGroupKey: pin.sourceDrilldownGroupKey,
         requestId: sourceGapFocusRequestIdRef.current
       });
@@ -3089,11 +3095,14 @@ function AppInner() {
     setSelectedAgentDrilldownTab('evidence');
     setSourceGapFocusIntent({
       agentId: selectedAgentSourceGapFact.agentId,
+      agentLabel: selectedAgent?.display_name ?? selectedAgentSourceGapFact.agentId,
+      sourceLabel: selectedAgentSourceGapFact.sourceLabel,
+      status: selectedAgentSourceGapFact.status,
       sourceDrilldownGroupKey: selectedAgentSourceGapFact.sourceDrilldownGroupKey,
       requestId: sourceGapFocusRequestIdRef.current
     });
     setHubOpen(true);
-  }, [handleSelectAgentForInspection, selectedAgentSourceGapFact]);
+  }, [handleSelectAgentForInspection, selectedAgent?.display_name, selectedAgentSourceGapFact]);
   const handleSelectedAgentEvidenceLedgerOpen = useCallback(() => {
     if (selectedAgentId === null) {
       return;
@@ -3101,11 +3110,20 @@ function AppInner() {
 
     requestedSelectedAgentDrilldownTabRef.current = 'evidence';
     activeHubCategoryFromSelectedAgentTabRef.current = false;
-    setSourceGapFocusIntent(null);
-    setActiveHubCategory('evidence');
+    if (sourceGapFocusIntent?.agentId === selectedAgentId) {
+      sourceGapFocusRequestIdRef.current += 1;
+      setSourceGapFocusIntent({
+        ...sourceGapFocusIntent,
+        requestId: sourceGapFocusRequestIdRef.current
+      });
+      setActiveHubCategory('supervision');
+    } else {
+      setSourceGapFocusIntent(null);
+      setActiveHubCategory('evidence');
+    }
     setSelectedAgentDrilldownTab('evidence');
     setHubOpen(true);
-  }, [selectedAgentId]);
+  }, [selectedAgentId, sourceGapFocusIntent]);
   const handleSelectedAgentNowOpen = useCallback(() => {
     if (selectedAgentId === null) {
       return;

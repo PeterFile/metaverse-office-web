@@ -2210,6 +2210,28 @@ button {
   outline-offset: 2px;
 }
 
+.aitown-source-gap-context {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px 9px;
+  padding: 6px 8px;
+  border-left: 2px solid rgba(247, 213, 123, 0.58);
+  background: rgba(47, 38, 32, 0.56);
+  color: #f7e8bd;
+}
+
+.aitown-source-gap-context span,
+.aitown-source-gap-context strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.aitown-source-gap-context span {
+  color: rgba(247, 232, 189, 0.78);
+}
+
 .aitown-hub-focus-ribbon__facts .aitown-hub-focus-ribbon__facts-label {
   grid-column: 1 / -1;
   border-left-color: rgba(245, 217, 141, 0.48);

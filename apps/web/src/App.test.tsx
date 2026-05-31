@@ -4345,6 +4345,7 @@ afterEach(() => {
     expect(within(sourceGapFocus).getByText('1 provenance gap')).toBeVisible();
     await waitFor(() => expect(screen.getByTestId('mock-scene-source-health')).toHaveTextContent('growth-revenue:degraded'));
     expect(within(sourceGapFocus).queryByText(/idle|offline|not working|productivity/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Source gap read model status' })).not.toBeInTheDocument();
 
     const gapChip = within(sourceGapFocus).getByRole('button', {
       name: 'Open source gap supervision for Growth Revenue Agent workspace files degraded'
@@ -4500,6 +4501,101 @@ afterEach(() => {
     expect(within(sourceHealthStatus).getByText('Read model unavailable · source health read failed')).toBeVisible();
     expect(screen.queryByRole('region', { name: 'Source gap focus' })).not.toBeInTheDocument();
     expect(within(sourceHealthStatus).queryByText(/offline|dead|live|healthy|degraded|loading|0 provenance gaps/i)).not.toBeInTheDocument();
+  });
+
+  it('shows unavailable source-gap read-model status without raw error canaries', async () => {
+    const user = userEvent.setup();
+    const rawCanaries = [
+      'collector-snapshot:source-gap-raw',
+      'corr-source-gap-raw',
+      '/Users/cwp/private/source-gap.md',
+      'tmux://source-gap-pane',
+      'hermes://source-gap-profile',
+      'token=source-gap-secret',
+      'https://example.invalid/source-gap'
+    ];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString();
+
+      if (url === runtimeSourceGapsUrl || url === runtimeSourceGapsSummaryUrl) {
+        return new Response(
+          JSON.stringify({
+            error: 'internal_error',
+            details: `read failed ${rawCanaries.join(' ')} degraded dispatch`
+          }),
+          {
+            status: 500,
+            headers: { 'content-type': 'application/json' }
+          }
+        );
+      }
+
+      return resolveTestFetchResponse(url);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<App />);
+
+    await waitFor(() => expect(fetchMock.mock.calls.map(([request]) => String(request))).toContain(runtimeSourceGapsUrl));
+    const signals = await openHudSignals(user);
+    const sourceGapStatus = await within(signals).findByRole('region', { name: 'Source gap read model status' });
+    expect(within(sourceGapStatus).getByText('Source gaps')).toBeVisible();
+    expect(within(sourceGapStatus).getByText('Unavailable')).toBeVisible();
+    expect(within(sourceGapStatus).getByText('Read model unavailable')).toBeVisible();
+    expect(screen.queryByRole('region', { name: 'Source gap focus' })).not.toBeInTheDocument();
+    expect(within(sourceGapStatus).queryByText(/healthy|degraded|loading|offline|productivity|dispatch/i)).not.toBeInTheDocument();
+    for (const canary of rawCanaries) {
+      expect(document.body).not.toHaveTextContent(canary);
+    }
+  });
+
+  it('shows empty source-gap read-model status when the current slice has no rows', async () => {
+    const user = userEvent.setup();
+    const rawCanaries = [
+      'collector-snapshot:empty-source-gap',
+      'corr-empty-source-gap',
+      '/tmp/empty-source-gap.md',
+      'tmux://empty-source-gap',
+      'hermes://empty-source-gap',
+      'token=empty-source-gap-secret'
+    ];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString();
+
+      if (url === runtimeSourceGapsUrl) {
+        return jsonResponse({ items: [] });
+      }
+
+      if (url === runtimeSourceGapsSummaryUrl) {
+        return jsonResponse({
+          item: {
+            ...emptyRuntimeSourceGapsSummaryFixture,
+            collector_snapshot_id_buckets: {
+              [rawCanaries[0]]: 1
+            }
+          }
+        });
+      }
+
+      return resolveTestFetchResponse(url);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<App />);
+
+    await waitFor(() => expect(fetchMock.mock.calls.map(([request]) => String(request))).toContain(runtimeSourceGapsSummaryUrl));
+    const signals = await openHudSignals(user);
+    const sourceGapStatus = await within(signals).findByRole('region', { name: 'Source gap read model status' });
+    expect(within(sourceGapStatus).getByText('Source gaps')).toBeVisible();
+    expect(within(sourceGapStatus).getByText('No rows')).toBeVisible();
+    expect(
+      within(sourceGapStatus).getByText('Runtime source-gap read model has no rows in the current slice.')
+    ).toBeVisible();
+    expect(screen.queryByRole('region', { name: 'Source gap focus' })).not.toBeInTheDocument();
+    expect(within(sourceGapStatus).queryByText(/healthy|degraded|loading|offline|productivity|dispatch/i)).not.toBeInTheDocument();
+    for (const canary of rawCanaries) {
+      expect(document.body).not.toHaveTextContent(canary);
+    }
   });
 
   it('renders selected-agent runtime facts evidence card from safe source read models only', async () => {

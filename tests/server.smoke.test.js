@@ -6832,15 +6832,18 @@ test('GET evidence and source read routes keep JSONL and SQLite parity', async (
         },
         evidence_role_buckets: {
           workspace_presence: 2,
-          agent_output: 2,
-          runtime_activity: 2
+          inbound_task: 1,
+          agent_output: 1,
+          runtime_activity: 1,
+          runtime_unmapped: 1
         },
         source_status_buckets: {
-          observed: 4,
-          degraded: 2
+          observed: 3,
+          degraded: 2,
+          missing: 1
         },
-        output_candidate_count: 4,
-        unmapped_count: 0,
+        output_candidate_count: 2,
+        unmapped_count: 1,
         latest_observed_at: '<timestamp>',
         latest_collected_at: '<timestamp>'
       },

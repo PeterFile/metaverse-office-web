@@ -334,6 +334,34 @@ test('JSONL and SQLite stores replay evidence read models with parity', async (t
         evidence_record: 12,
         collector_snapshot: 2
       },
+      evidence_summary: {
+        evidence_record_count: 12,
+        source_kind_buckets: {
+          workspace_root: 4,
+          workspace_file: 4,
+          tmux_observation: 4
+        },
+        source_category_buckets: {
+          workspace: 8,
+          runtime: 4
+        },
+        evidence_role_buckets: {
+          workspace_presence: 4,
+          inbound_task: 2,
+          agent_output: 2,
+          runtime_activity: 2,
+          runtime_unmapped: 2
+        },
+        source_status_buckets: {
+          observed: 6,
+          degraded: 4,
+          missing: 2
+        },
+        output_candidate_count: 4,
+        unmapped_count: 2,
+        latest_observed_at: '2026-03-09T18:05:50.000Z',
+        latest_collected_at: '2026-03-09T18:07:00.000Z'
+      },
       canonical_record_hash: '<sha256>'
     }
   );

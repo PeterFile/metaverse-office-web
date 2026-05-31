@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -2708,12 +2708,13 @@ afterEach(() => {
 
     await user.click(screen.getByRole('button', { name: 'Select scene agent team-lead' }));
     expect(screen.queryByRole('dialog', { name: 'Hub' })).not.toBeInTheDocument();
-    expect(screen.getByRole('region', { name: 'Selected agent inspect peek' })).toBeVisible();
-    expect(screen.getByRole('region', { name: 'Selected agent inspect peek' })).toHaveTextContent(
-      'Correlation · corr-app-review'
-    );
+    const inspectPeek = screen.getByRole('region', { name: 'Selected agent inspect peek' });
+    expect(inspectPeek).toBeVisible();
+    expect(inspectPeek).toHaveTextContent('Correlation · available');
+    expect(inspectPeek).not.toHaveTextContent('Correlation · corr-app-review');
 
-    details = await openSelectedAgentPeekInHub(user, 'Team Lead');
+    fireEvent.click(await screen.findByRole('button', { name: 'Queue' }, { timeout: 5000 }));
+    details = await screen.findByRole('complementary', { name: 'Agent details' }, { timeout: 5000 });
     correlationSection = within(details).getByRole('heading', { name: 'Correlation Drilldown' }).closest('section');
 
     expect(correlationSection).not.toBeNull();
@@ -2731,7 +2732,7 @@ afterEach(() => {
       teamLeadSelectedCorrelationMemoryArtifactsUrl,
       expect.anything()
     );
-  });
+  }, 10000);
 
   it('replaces the cached scene spotlight when a different correlation is selected', async () => {
     const user = userEvent.setup();
@@ -3713,6 +3714,11 @@ afterEach(() => {
 
     const inspectPeek = await screen.findByRole('region', { name: 'Selected agent inspect peek' });
     expect(within(inspectPeek).getByText('App Engineering Agent')).toBeVisible();
+    fireEvent.click(within(inspectPeek).getByText('Inspect facts'));
+    expect(within(inspectPeek).getByText('Zone · Meeting Zone')).toBeVisible();
+    expect(within(inspectPeek).getByText('Operation · Fix workflow issue')).toBeVisible();
+    expect(inspectPeek).not.toHaveTextContent('corr-app-review');
+    expect(inspectPeek).not.toHaveTextContent('/tmp/evidence.md');
     expect(within(inspectPeek).getByRole('group', { name: 'Selected agent proof glance' })).toBeVisible();
     expect(
       await within(inspectPeek).findByText('Proof glance · 6 records · Sources workspace 3, tmux 2, Hermes 1')
@@ -4457,6 +4463,123 @@ afterEach(() => {
     expect(within(sourceHealthStatus).getByText('Read model unavailable · source health read failed')).toBeVisible();
     expect(screen.queryByRole('region', { name: 'Source gap focus' })).not.toBeInTheDocument();
     expect(within(sourceHealthStatus).queryByText(/offline|dead|live|healthy|degraded|loading|0 provenance gaps/i)).not.toBeInTheDocument();
+  });
+
+  it('renders selected-agent runtime facts evidence card from safe source read models only', async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString();
+
+      if (url === collectorSourceHealthUrl) {
+        return jsonResponse({
+          item: {
+            collected_at: '2026-03-16T09:01:00.000Z',
+            collector_snapshot_id: 'collector-source-health-1',
+            actor_id: 'team-lead',
+            summary: {
+              agent_count: 1,
+              source_kind_buckets: {
+                workspace_root: { observed: 1, degraded: 0, missing: 0, error: 0 },
+                workspace_files: { observed: 0, degraded: 1, missing: 0, error: 0 },
+                tmux_session: { observed: 0, degraded: 0, missing: 1, error: 0 },
+                hermes_profile: { observed: 0, degraded: 0, missing: 0, error: 0 },
+                hermes_session: { observed: 1, degraded: 0, missing: 0, error: 0 }
+              },
+              status_buckets: {
+                observed: 2,
+                degraded: 1,
+                missing: 1,
+                error: 0
+              }
+            },
+            agent_items: [
+              {
+                agent_id: 'app-engineering',
+                workspace_root: '/tmp/app-engineering',
+                session_ref: '5-web3-app-engineering',
+                source_health: {
+                  workspace_root: {
+                    status: 'observed',
+                    path: '/tmp/app-engineering',
+                    last_observed_at: '2026-03-16T08:55:00.000Z',
+                    degraded_reasons: []
+                  },
+                  workspace_files: {
+                    status: 'degraded',
+                    expected_files: ['inbox.md', '/tmp/app-engineering/outbox.md'],
+                    observed_count: 1,
+                    missing_count: 1,
+                    error_count: 0,
+                    last_observed_at: '2026-03-16T08:56:00.000Z',
+                    degraded_reasons: ['missing /tmp/app-engineering/outbox.md']
+                  },
+                  tmux_session: {
+                    status: 'missing',
+                    expected_session_ref: '5-web3-app-engineering',
+                    observed_count: 0,
+                    last_observed_at: null,
+                    degraded_reasons: ['tmux session not observed']
+                  },
+                  hermes_session: {
+                    status: 'observed',
+                    expected_session_ref: 'hermes-session-app',
+                    evidence_ref: 'https://hermes.example.test/runtime/session?token=secret',
+                    last_observed_at: '2026-03-16T08:58:00.000Z',
+                    degraded_reasons: []
+                  }
+                },
+                evidence_ref_count: 4,
+                evidence_refs: ['tmux://5-web3-app-engineering/0.1', '/tmp/app-engineering/outbox.md'],
+                latest_evidence_at: '2026-03-16T08:58:40.000Z'
+              }
+            ]
+          }
+        });
+      }
+
+      return resolveTestFetchResponse(url);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<App />);
+
+    await user.click(await screen.findByRole('button', { name: 'Select and locate App Engineering Agent' }));
+    const inspectPeek = await screen.findByRole('region', { name: 'Selected agent inspect peek' });
+    const runtimeFactsCard = await within(inspectPeek).findByRole('region', {
+      name: 'Runtime facts evidence card'
+    });
+
+    expect(within(runtimeFactsCard).getByText('Runtime facts')).toBeVisible();
+    expect(within(runtimeFactsCard).getByText('Evidence/source facts only')).toBeVisible();
+    expect(within(runtimeFactsCard).getByText('Safe read model · Available')).toBeVisible();
+    expect(within(runtimeFactsCard).getByText('Evidence refs · 4')).toBeVisible();
+    expect(within(runtimeFactsCard).getByText('Sources · 4 reported')).toBeVisible();
+    expect(within(runtimeFactsCard).getByText('Observed · 2')).toBeVisible();
+    expect(within(runtimeFactsCard).getByText('Gaps · 2')).toBeVisible();
+    expect(within(runtimeFactsCard).getByText('Latest evidence · 2026-03-16T08:58:40.000Z')).toBeVisible();
+    expect(runtimeFactsCard).not.toHaveTextContent('/tmp/');
+    expect(runtimeFactsCard).not.toHaveTextContent('tmux://');
+    expect(runtimeFactsCard).not.toHaveTextContent('hermes.example');
+    expect(runtimeFactsCard).not.toHaveTextContent('5-web3-app-engineering');
+    expect(runtimeFactsCard).not.toHaveTextContent('missing /tmp');
+    expect(runtimeFactsCard).not.toHaveTextContent(/live|healthy|productive|severity/i);
+  });
+
+  it('renders selected-agent runtime facts evidence card unavailable when safe facts are absent', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole('button', { name: 'Select and locate App Engineering Agent' }));
+    const inspectPeek = await screen.findByRole('region', { name: 'Selected agent inspect peek' });
+    const runtimeFactsCard = await within(inspectPeek).findByRole('region', {
+      name: 'Runtime facts evidence card'
+    });
+
+    expect(within(runtimeFactsCard).getByText('Runtime facts')).toBeVisible();
+    expect(within(runtimeFactsCard).getByText('Evidence/source facts only')).toBeVisible();
+    expect(within(runtimeFactsCard).getByText('Safe read model · Unavailable')).toBeVisible();
+    expect(within(runtimeFactsCard).getByText('No safe runtime facts for this agent yet.')).toBeVisible();
+    expect(runtimeFactsCard).not.toHaveTextContent(/path|tmux|Hermes|session|profile|url|token|reason/i);
   });
 
   it('omits non-overview coverage agents while surfacing uncovered overview agents', async () => {

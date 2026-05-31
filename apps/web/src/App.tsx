@@ -58,7 +58,10 @@ import {
   deriveSelectedAgentSourceGapFact,
   type RuntimeSourceGapLifecycleStrip
 } from './aitown/sourceGapSignals';
-import { deriveSelectedAgentSourceHealthInspectPeek } from './aitown/sourceHealth';
+import {
+  deriveSelectedAgentRuntimeFactsEvidenceCard,
+  deriveSelectedAgentSourceHealthInspectPeek
+} from './aitown/sourceHealth';
 import { deriveSelectedAgentEvidenceGlance } from './aitown/selectedAgentEvidenceGlance';
 import { WorldProvider, useWorld } from './context/WorldContext';
 import { usePolledResource, type LoadState } from './hooks/usePolledResource';
@@ -2972,6 +2975,10 @@ function AppInner() {
     () => deriveSelectedAgentSourceHealthInspectPeek(latestSourceHealth, selectedAgentId, previousSourceHealth),
     [latestSourceHealth, previousSourceHealth, selectedAgentId]
   );
+  const selectedAgentRuntimeFactsEvidenceCard = useMemo(
+    () => deriveSelectedAgentRuntimeFactsEvidenceCard(latestSourceHealth, selectedAgentId),
+    [latestSourceHealth, selectedAgentId]
+  );
   const selectedAgentSourceGapInspectPeek = useMemo(
     () =>
       deriveRuntimeSourceGapInspectPeek(
@@ -3363,6 +3370,15 @@ function AppInner() {
                 <span className="aitown-selected-agent-peek__eyebrow">Selected agent</span>
                 <strong>{selectedAgent.display_name}</strong>
                 <span>{`State · ${selectedAgentPeekStatus}`}</span>
+                <details className="aitown-selected-agent-peek__facts">
+                  <summary>Inspect facts</summary>
+                  {selectedAgentPeekZone ? <span>{`Zone · ${selectedAgentPeekZone}`}</span> : null}
+                  {selectedAgentPeekOperation ? <span>{`Operation · ${selectedAgentPeekOperation}`}</span> : null}
+                  {selectedAgentPeekCorrelationId ? (
+                    <span>Correlation · available</span>
+                  ) : null}
+                  {selectedAgentPeekEvidenceRef ? <span>Evidence · attached</span> : null}
+                </details>
                 {selectedAgentEvidenceGlance ? (
                   <span className="aitown-selected-agent-peek__proof" role="group" aria-label="Selected agent proof glance">
                     {selectedAgentEvidenceGlance.map((line) => (
@@ -3370,6 +3386,20 @@ function AppInner() {
                     ))}
                   </span>
                 ) : null}
+                <section
+                  className="aitown-selected-agent-peek__runtime-facts"
+                  role="region"
+                  aria-label="Runtime facts evidence card"
+                >
+                  <span className="aitown-selected-agent-peek__runtime-facts-label">
+                    {selectedAgentRuntimeFactsEvidenceCard.scopeLabel}
+                  </span>
+                  <strong>{selectedAgentRuntimeFactsEvidenceCard.title}</strong>
+                  <span>{selectedAgentRuntimeFactsEvidenceCard.availabilityLabel}</span>
+                  {selectedAgentRuntimeFactsEvidenceCard.detailLines.map((line) => (
+                    <span key={line}>{line}</span>
+                  ))}
+                </section>
                 {selectedAgentSourceHealthInspectPeek && selectedAgentSourceGapFact ? (
                   <section
                     className="aitown-selected-agent-peek__source-health-inspect"
@@ -3432,15 +3462,6 @@ function AppInner() {
                   Evidence Ledger
                 </button>
               </div>
-              <details className="aitown-selected-agent-peek__facts">
-                <summary>Inspect facts</summary>
-                {selectedAgentPeekZone ? <span>{`Zone · ${selectedAgentPeekZone}`}</span> : null}
-                {selectedAgentPeekOperation ? <span>{`Operation · ${selectedAgentPeekOperation}`}</span> : null}
-                {selectedAgentPeekCorrelationId ? (
-                  <span>{`Correlation · ${selectedAgentPeekCorrelationId}`}</span>
-                ) : null}
-                {selectedAgentPeekEvidenceRef ? <span>{`Evidence · ${selectedAgentPeekEvidenceRef}`}</span> : null}
-              </details>
             </aside>
           ) : null}
 

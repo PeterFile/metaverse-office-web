@@ -40,6 +40,13 @@ export interface SelectedAgentSourceHealthInspectPeek {
   diffLineLabel: string;
 }
 
+export interface SelectedAgentRuntimeFactsEvidenceCard {
+  title: 'Runtime facts';
+  scopeLabel: 'Evidence/source facts only';
+  availabilityLabel: 'Safe read model · Available' | 'Safe read model · Unavailable';
+  detailLines: string[];
+}
+
 const BOUNDED_DETAIL_LIMIT = 3;
 const BOUNDED_REASON_LIMIT = 2;
 const BOUNDED_RUNTIME_SOURCE_LIMIT = 3;
@@ -101,6 +108,50 @@ export function deriveSelectedAgentSourceHealthInspectPeek(
     sourceKindLabel: SELECTED_SOURCE_HEALTH_KIND_LABELS[currentGap.sourceKind],
     statusLabel: currentGap.status,
     diffLineLabel: renderSelectedSourceHealthDiffLine(previousGap, currentGap)
+  };
+}
+
+export function deriveSelectedAgentRuntimeFactsEvidenceCard(
+  sourceHealth: CollectorSourceHealthProjection | null | undefined,
+  selectedAgentId: string | null | undefined
+): SelectedAgentRuntimeFactsEvidenceCard {
+  const unavailable: SelectedAgentRuntimeFactsEvidenceCard = {
+    title: 'Runtime facts',
+    scopeLabel: 'Evidence/source facts only',
+    availabilityLabel: 'Safe read model · Unavailable',
+    detailLines: ['No safe runtime facts for this agent yet.']
+  };
+
+  if (!sourceHealth?.agent_items.length || !selectedAgentId) {
+    return unavailable;
+  }
+
+  const item = sourceHealth.agent_items.find((agentItem) => agentItem.agent_id === selectedAgentId);
+  const sourceStatuses = item
+    ? SELECTED_SOURCE_HEALTH_KIND_ORDER.flatMap((sourceKind) => {
+        const status = getSourceHealthStatus(item.source_health, sourceKind);
+        return status ? [status] : [];
+      })
+    : [];
+
+  if (!item || sourceStatuses.length === 0) {
+    return unavailable;
+  }
+
+  const observedCount = sourceStatuses.filter((status) => status === 'observed').length;
+  const gapCount = sourceStatuses.length - observedCount;
+
+  return {
+    title: 'Runtime facts',
+    scopeLabel: 'Evidence/source facts only',
+    availabilityLabel: 'Safe read model · Available',
+    detailLines: [
+      `Evidence refs · ${item.evidence_ref_count}`,
+      `Sources · ${sourceStatuses.length} reported`,
+      `Observed · ${observedCount}`,
+      `Gaps · ${gapCount}`,
+      `Latest evidence · ${renderNullable(item.latest_evidence_at)}`
+    ]
   };
 }
 

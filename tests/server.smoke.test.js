@@ -7244,6 +7244,194 @@ test('GET provenance bundle and checkpoint-log redact unsafe historical evidence
   }
 });
 
+test('runtime provenance public projections redact Hermes task and source canary matrix', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'runtime-provenance-redaction-'));
+  const store = await createPrototypeStore({ filePath: path.join(root, 'prototype-store.jsonl') });
+  const unsafeFragments = [
+    '/tmp/runtime-provenance-redaction/profile.json',
+    '/Users/cwp/private/runtime-provenance-redaction/session.json',
+    'file:///tmp/runtime-provenance-redaction/profile.json',
+    'https://example.invalid/runtime-provenance-redaction',
+    'http://example.invalid/runtime-provenance-redaction',
+    'https://hooks.slack.com/services/runtime-provenance-redaction',
+    'ghp_runtimeProvenanceRedaction1234567890',
+    'token=runtime-provenance-redaction',
+    'tmux://runtime-provenance-redaction/0.1',
+    'hermes://profile/runtime-provenance-redaction',
+    'hermes://session/runtime-provenance-redaction',
+    'profile-runtime-provenance-redaction',
+    'session-runtime-provenance-redaction',
+    'payload_dump',
+    'metadata_dump',
+    'degraded_reason_dump'
+  ];
+
+  await store.appendCollectorReport({
+    collected_at: '2026-03-09T18:06:00.000Z',
+    actor_id: 'team-lead',
+    summary: {
+      agent_count: 1,
+      heartbeat_count: 0,
+      tmux_observed_count: 0,
+      workspace_observed_count: 0,
+      reboot_recommended_count: 0
+    },
+    evidence_coverage: {
+      evidence_ref_count: 2,
+      covered_agent_count: 1,
+      low_confidence_agent_ids: [],
+      source_kind_buckets: {
+        hermes_profile: 1,
+        kanban_fixture: 1
+      },
+      agent_items: [
+        {
+          agent_id: 'app-engineering',
+          evidence_ref_count: 2,
+          source_kinds: ['hermes_profile', 'kanban_fixture'],
+          latest_evidence_at: '2026-03-09T18:05:40.000Z',
+          confidence_level: 'high'
+        }
+      ]
+    },
+    items: [
+      {
+        agent_id: 'app-engineering',
+        evidence_refs: unsafeFragments,
+        hermes_runtime_observations: [
+          {
+            source_kind: 'hermes_profile',
+            evidence_ref: 'hermes://profile/runtime-public-safe',
+            profile_id: 'profile-runtime-provenance-redaction',
+            session_ref: 'session-runtime-provenance-redaction',
+            status: 'observed',
+            observed_at: '2026-03-09T18:05:30.000Z',
+            degraded_reasons: [`degraded_reason_dump ${unsafeFragments[5]}`],
+            source_provenance: {
+              payload: unsafeFragments[0],
+              url: unsafeFragments[3]
+            },
+            metadata: {
+              payload_dump: unsafeFragments,
+              webhook: unsafeFragments[5],
+              token: unsafeFragments[7]
+            }
+          }
+        ],
+        task_evidence_observations: [
+          {
+            status: 'degraded',
+            task_ref: 'SAFE-TASK-101',
+            source_kind: 'kanban_fixture',
+            observed_at: '2026-03-09T18:05:40.000Z',
+            correlation_id: 'runtime-provenance-redaction-task',
+            warnings: ['agent_id suppressed'],
+            source_provenance: {
+              payload: unsafeFragments[1],
+              webhook: unsafeFragments[5]
+            },
+            metadata: {
+              metadata_dump: unsafeFragments
+            }
+          }
+        ],
+        source_health: {
+          hermes_profile: {
+            status: 'observed',
+            profile_id: 'profile-runtime-provenance-redaction',
+            expected_session_ref: 'session-runtime-provenance-redaction',
+            observed_count: 1,
+            last_observed_at: '2026-03-09T18:05:30.000Z',
+            degraded_reasons: [`metadata_dump ${unsafeFragments[6]}`]
+          }
+        }
+      }
+    ]
+  });
+
+  assert.deepEqual(store.getCounts(), {
+    agent_count: 7,
+    event_count: 0,
+    heartbeat_count: 0
+  });
+
+  const hermesRecord = store.listEvidenceRecords({
+    source_kind: 'hermes_profile',
+    evidence_role: 'runtime_presence',
+    limit: '1'
+  })[0];
+  assert.ok(hermesRecord);
+
+  const sourceContext = store.getEvidenceSourceContext(hermesRecord.evidence_id);
+  const summary = store.getAgentEvidenceSpineSummary({ newest_first: 'true', limit: '5' });
+  const spine = store.getAgentEvidenceSpine('app-engineering', {
+    newest_first: 'true',
+    limit: '5'
+  });
+
+  assert.deepEqual(sourceContext.source_summary, {
+    kind: 'hermes_profile',
+    status: 'observed',
+    role: 'runtime_presence',
+    output_candidate: false,
+    mapped: true,
+    time: {
+      observed_at: '2026-03-09T18:05:30.000Z',
+      collected_at: '2026-03-09T18:06:00.000Z'
+    }
+  });
+  assert.equal(sourceContext.source_health.summary.agent_count, 1);
+  assert.equal(sourceContext.source_health.summary.source_kind_buckets.hermes_profile.observed, 1);
+  assert.deepEqual(sourceContext.record, {
+    observed_at: '2026-03-09T18:05:30.000Z',
+    collected_at: '2026-03-09T18:06:00.000Z',
+    agent_id: 'app-engineering',
+    source_kind: 'hermes_profile',
+    evidence_role: 'runtime_presence',
+    source_status: 'observed',
+    output_candidate: false,
+    unmapped: false
+  });
+
+  const appSummary = summary.agents.find((agent) => agent.agent_id === 'app-engineering');
+  assert.equal(appSummary.evidence_count, 2);
+  assert.equal(appSummary.source_kind_buckets.hermes_profile, 1);
+  assert.equal(appSummary.source_kind_buckets.kanban_fixture, 1);
+  assert.equal(appSummary.output_candidate_buckets.false, 2);
+  assert.equal(appSummary.latest_observed_at, '2026-03-09T18:05:40.000Z');
+
+  assert.equal(spine.evidence_summary.total_count, 2);
+  assert.equal(spine.evidence_summary.evidence_role_buckets.runtime_presence, 1);
+  assert.equal(spine.evidence_summary.evidence_role_buckets.task_reference, 1);
+  assert.equal(spine.source_health.summary.source_kind_buckets.hermes_profile.observed, 1);
+  assert.equal(spine.source_health.agent_items[0].evidence_count, 2);
+
+  for (const body of [sourceContext, summary, spine]) {
+    const serialized = JSON.stringify(body);
+    for (const unsafeFragment of unsafeFragments) {
+      assert.equal(serialized.includes(unsafeFragment), false, unsafeFragment);
+    }
+    for (const unsafePattern of ['http://', 'https://', 'file://', '/tmp/', '/Users/', 'tmux://', 'hermes://']) {
+      assert.equal(serialized.includes(unsafePattern), false, unsafePattern);
+    }
+    for (const field of [
+      'evidence_ref',
+      'source_provenance',
+      'metadata',
+      'degraded_reasons',
+      'payload',
+      'webhook',
+      '"token"',
+      'current_state',
+      'active_task',
+      'last_meaningful_output_at',
+      'last_heartbeat_at'
+    ]) {
+      assert.equal(serialized.includes(field), false, field);
+    }
+  }
+});
+
 test('GET read route purity matrix leaves replay records and checkpoints unchanged', async (t) => {
   let collectCount = 0;
   const controllerSnapshotCollector = {

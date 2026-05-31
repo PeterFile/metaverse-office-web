@@ -1051,6 +1051,79 @@ test('prototype store filters replay checkpoint log by exact evidence provenance
   );
 });
 
+test('prototype store exposes bounded replay window around selected evidence', async () => {
+  const storeFile = await createStoreFile();
+  const store = await createPrototypeStore({ filePath: storeFile });
+  const leakCanaries = [
+    '/tmp/store-contract',
+    'tmux://5-web3-app-engineering/0.1',
+    'collector-snapshot:2026-03-09T18:06:00.000Z',
+    'corr-store-contract',
+    'metadata',
+    'payload',
+    'token=replay-window',
+    'https://hooks.slack.com/services/replay-window'
+  ];
+  const report = createCollectorReport();
+  report.items[0].evidence_refs.push(
+    'token=replay-window',
+    'https://hooks.slack.com/services/replay-window'
+  );
+
+  await store.appendEvent(createEvent());
+  await store.appendHeartbeat(createHeartbeat());
+  await store.appendCollectorReport(report);
+
+  const evidenceRecord = store.listEvidenceRecords({
+    evidence_ref: '/tmp/store-contract/outbox.md'
+  })[0];
+  const replayWindow = store.getEvidenceReplayWindow(evidenceRecord.evidence_id);
+
+  assert.equal(store.getEvidenceReplayWindow('missing-evidence-id'), null);
+  assert.equal(replayWindow.center.evidence_id, evidenceRecord.evidence_id);
+  assert.deepEqual(replayWindow.window, { before: 2, after: 2 });
+  assert.deepEqual(
+    replayWindow.before.map((item) => item.append_index),
+    [replayWindow.center.append_index - 2, replayWindow.center.append_index - 1]
+  );
+  assert.deepEqual(
+    replayWindow.after.map((item) => item.append_index),
+    [replayWindow.center.append_index + 1, replayWindow.center.append_index + 2]
+  );
+  assert.deepEqual(replayWindow.center.source_summary, {
+    kind: 'workspace_file',
+    status: 'degraded',
+    role: 'agent_output',
+    output_candidate: true,
+    mapped: true,
+    time: {
+      observed_at: '2026-03-09T18:05:20.000Z',
+      collected_at: '2026-03-09T18:06:00.000Z'
+    }
+  });
+
+  const capped = store.getEvidenceReplayWindow(evidenceRecord.evidence_id, {
+    before: '99',
+    after: '99'
+  });
+  assert.equal(capped.window.before, 10);
+  assert.equal(capped.window.after, 10);
+  assert.equal(capped.before.length <= 10, true);
+  assert.equal(capped.after.length <= 10, true);
+
+  const serialized = JSON.stringify(replayWindow);
+  assert.equal(serialized.includes('evidence_ref'), false);
+  assert.equal(serialized.includes('collector_snapshot_id'), false);
+  assert.equal(serialized.includes('correlation_id'), false);
+  assert.equal(serialized.includes('evt_store_contract_review_started'), false);
+  assert.equal(serialized.includes('review_started'), false);
+  assert.equal(serialized.includes('controller_event'), false);
+  assert.equal(serialized.includes('degraded_reasons'), false);
+  for (const canary of leakCanaries) {
+    assert.equal(serialized.includes(canary), false, canary);
+  }
+});
+
 test('JSONL prototype store appends and replays collector evidence records without changing counts', async () => {
   const storeFile = await createStoreFile();
   const store = await createPrototypeStore({ filePath: storeFile });

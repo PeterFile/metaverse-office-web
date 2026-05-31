@@ -628,6 +628,27 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
     return;
   }
 
+  const evidenceReplayWindowMatch = pathname.match(
+    /^\/evidence-records\/([^/]+)\/replay-window$/
+  );
+  if (method === 'GET' && evidenceReplayWindowMatch) {
+    const evidenceId = decodeURIComponent(evidenceReplayWindowMatch[1]);
+    const replayWindow = store.getEvidenceReplayWindow(evidenceId, {
+      before: url.searchParams.get('before'),
+      after: url.searchParams.get('after')
+    });
+    if (!replayWindow) {
+      sendJson(res, 404, {
+        error: 'not_found',
+        details: 'unknown evidence record'
+      });
+      return;
+    }
+
+    sendJson(res, 200, { item: replayWindow });
+    return;
+  }
+
   const evidenceRecordMatch = pathname.match(/^\/evidence-records\/([^/]+)$/);
   if (method === 'GET' && evidenceRecordMatch) {
     const evidenceId = decodeURIComponent(evidenceRecordMatch[1]);

@@ -773,6 +773,62 @@ class PrototypeStore {
     });
   }
 
+  getEvidenceReplayWindow(evidenceId, filters = {}) {
+    const record = this.getEvidenceRecord(evidenceId);
+    if (!record) {
+      return null;
+    }
+
+    const appendIndex = this.records.findIndex(
+      (candidate) =>
+        candidate.kind === EVIDENCE_RECORD_KIND &&
+        candidate.payload?.evidence_id === record.evidence_id
+    );
+    if (appendIndex === -1) {
+      return null;
+    }
+
+    const beforeLimit = parseReplayWindowBound(filters.before);
+    const afterLimit = parseReplayWindowBound(filters.after);
+    const beforeStart = Math.max(0, appendIndex - beforeLimit);
+    const before = this.records
+      .slice(beforeStart, appendIndex)
+      .map((candidate, index) =>
+        projectEvidenceReplayWindowCheckpoint(candidate, beforeStart + index + 1)
+      );
+    const after = this.records
+      .slice(appendIndex + 1, appendIndex + 1 + afterLimit)
+      .map((candidate, index) =>
+        projectEvidenceReplayWindowCheckpoint(candidate, appendIndex + index + 2)
+      );
+    const sourceFields = projectEvidenceSourceFields(record);
+    const timeFields = projectEvidenceTimeFields(record);
+
+    return {
+      center: {
+        append_index: appendIndex + 1,
+        evidence_id: record.evidence_id,
+        source_summary: projectEvidenceSourceSummary(record, sourceFields, timeFields),
+        record: {
+          observed_at: timeFields.observed_at,
+          collected_at: timeFields.collected_at,
+          agent_id: record.agent_id,
+          source_kind: sourceFields.kind,
+          evidence_role: sourceFields.role,
+          source_status: sourceFields.status,
+          output_candidate: record.output_candidate === true,
+          unmapped: record.agent_id === null
+        }
+      },
+      window: {
+        before: beforeLimit,
+        after: afterLimit
+      },
+      before,
+      after
+    };
+  }
+
   listRuntimeSourceGaps(filters = {}) {
     const { records, limit, newestFirst } = this.#filterEvidenceRecords(filters);
     const gapRecords = records.filter(isRuntimeSourceGapRecord);
@@ -4130,6 +4186,33 @@ function projectReplayCheckpointRecord(record) {
   return null;
 }
 
+function projectEvidenceReplayWindowCheckpoint(record, appendIndex) {
+  const recordKind = projectReplayCheckpointRecordKind(record);
+
+  return {
+    append_index: appendIndex,
+    record_kind: recordKind,
+    checkpoint: stripReplayWindowUnsafeCheckpointFields(
+      projectReplayCheckpointRecord(record),
+      recordKind
+    )
+  };
+}
+
+function stripReplayWindowUnsafeCheckpointFields(checkpoint, recordKind) {
+  if (!checkpoint || typeof checkpoint !== 'object') {
+    return checkpoint;
+  }
+
+  const { collector_snapshot_id, correlation_id, ...safeCheckpoint } = checkpoint;
+  if (recordKind === 'event') {
+    const { event_id, event_type, source_kind, ...safeEventCheckpoint } = safeCheckpoint;
+    return safeEventCheckpoint;
+  }
+
+  return safeCheckpoint;
+}
+
 function createRecordKindBuckets(records) {
   const buckets = {};
   for (const record of records) {
@@ -6992,6 +7075,15 @@ function parseLimit(value) {
   }
 
   return Math.min(parsed, 200);
+}
+
+function parseReplayWindowBound(value) {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return 2;
+  }
+
+  return Math.min(parsed, 10);
 }
 
 function parseOptionalLimit(value) {

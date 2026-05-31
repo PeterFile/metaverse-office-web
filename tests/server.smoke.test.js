@@ -13,7 +13,7 @@ const {
   createHermesRuntimeSourcesFileReader
 } = require('../src/collectors/controller-snapshot');
 const { SEED_AGENTS } = require('../src/domain');
-const { createAppServer, formatPublicError } = require('../src/server');
+const { createAppServer, formatPublicError, handleRequest } = require('../src/server');
 const { createPrototypeStore } = require('../src/store/prototype-store');
 const { taskEvidenceFileReaderFrom } = require('../src/collectors/task-evidence-source');
 
@@ -73,6 +73,38 @@ async function requestJson(url, init) {
   const response = await fetch(url, init);
   const body = await response.json();
   return { response, body };
+}
+
+async function requestJsonDirect({ url, store, controllerSnapshotCollector }) {
+  let statusCode = null;
+  let bodyText = '';
+  const res = {
+    setHeader() {},
+    writeHead(code) {
+      statusCode = code;
+    },
+    end(chunk = '') {
+      bodyText = chunk;
+    }
+  };
+
+  await handleRequest({
+    req: {
+      url,
+      method: 'GET',
+      headers: {}
+    },
+    res,
+    store,
+    now: () => '2026-03-09T18:05:00.000Z',
+    controllerSnapshotCollector,
+    allowedOrigins: []
+  });
+
+  return {
+    response: { status: statusCode },
+    body: JSON.parse(bodyText)
+  };
 }
 
 test('server error redaction bounds unexpected internal details while preserving safe public errors', () => {
@@ -6107,6 +6139,45 @@ test('GET /collectors/controller-snapshot/history returns bounded read-only summ
   assert.equal(Object.hasOwn(response.body.item.items[0], 'runtime_source_evidence'), false);
   assert.equal(collectCount, 0);
   assert.equal(store.getLatestCollectorReport(), latestBeforeRead);
+  assert.equal(await readFile(storeFile, 'utf8'), fileBeforeRead);
+});
+
+test('GET /evidence-records/schema read route purity does not inspect evidence records', async () => {
+  let collectCount = 0;
+  const controllerSnapshotCollector = {
+    async collectSnapshot() {
+      collectCount += 1;
+      throw new Error('GET /evidence-records/schema must not collect');
+    }
+  };
+  const root = await mkdtemp(path.join(os.tmpdir(), 'metaverse-office-schema-'));
+  const storeFile = path.join(root, 'prototype-store.jsonl');
+  const store = await createPrototypeStore({ filePath: storeFile });
+
+  await store.appendCollectorReport(createRouteParityCollectorReport());
+  const fileBeforeRead = await readFile(storeFile, 'utf8');
+  store.listEvidenceRecords = () => {
+    throw new Error('schema route must not list evidence records');
+  };
+  store.getEvidenceRecord = () => {
+    throw new Error('schema route must not resolve schema as an evidence id');
+  };
+
+  const response = await requestJsonDirect({
+    url: '/evidence-records/schema?limit=1&mapped=true',
+    store,
+    controllerSnapshotCollector
+  });
+  assert.equal(response.response.status, 200);
+  assert.deepEqual(response.body.item.limit, {
+    default: 50,
+    max: 200
+  });
+  assert.equal(response.body.item.source_kinds.includes('workspace_file'), true);
+  assert.equal(response.body.item.evidence_roles.includes('runtime_unmapped'), true);
+  assert.equal(JSON.stringify(response.body).includes('tmux://'), false);
+  assert.equal(JSON.stringify(response.body).includes('/tmp/'), false);
+  assert.equal(collectCount, 0);
   assert.equal(await readFile(storeFile, 'utf8'), fileBeforeRead);
 });
 

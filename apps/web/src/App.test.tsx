@@ -4377,6 +4377,12 @@ afterEach(() => {
     await waitFor(() =>
       expect(details).toHaveAttribute('data-selected-agent-supervision-panel', 'collector')
     );
+    const sourceGapContext = within(details).getByRole('region', { name: 'Source gap context' });
+    expect(sourceGapContext).toHaveTextContent('Source gap');
+    expect(sourceGapContext).toHaveTextContent('Growth Revenue Agent');
+    expect(sourceGapContext).toHaveTextContent('Workspace files · degraded');
+    expect(sourceGapContext).not.toHaveTextContent('/tmp/growth-revenue');
+    expect(sourceGapContext).not.toHaveTextContent('6-web3-growth-revenue');
     const inspectPeek = await screen.findByRole('region', { name: 'Source gap inspect peek' });
     expect(inspectPeek).toHaveTextContent('Evidence only');
     expect(inspectPeek).toHaveTextContent('Workspace files · degraded');
@@ -4446,8 +4452,23 @@ afterEach(() => {
     expect(inspectPeek).not.toHaveTextContent('collector-snapshot:');
     expect(inspectPeek).not.toHaveTextContent(/assign|claim|complete|dispatch|kanban|route/i);
 
-    const requestedUrls = fetchMock.mock.calls.map(([request]) => String(request));
-    expect(requestedUrls.some((url) => url.startsWith('/evidence-records'))).toBe(false);
+    const requestedUrlsBeforeDrilldown = fetchMock.mock.calls.map(([request]) => String(request));
+    expect(requestedUrlsBeforeDrilldown.some((url) => url.startsWith('/evidence-records'))).toBe(false);
+
+    await user.click(within(inspectPeek).getByRole('button', { name: 'Open Evidence drilldown' }));
+
+    const details = await screen.findByRole('complementary', { name: 'Agent details' });
+    expect(screen.getByRole('dialog', { name: 'Hub' })).toBeVisible();
+    expect(screen.getByRole('tab', { name: 'Evidence' })).toHaveAttribute('aria-selected', 'true');
+    await waitFor(() =>
+      expect(details).toHaveAttribute('data-selected-agent-supervision-panel', 'collector')
+    );
+    const sourceGapContext = within(details).getByRole('region', { name: 'Source gap context' });
+    expect(sourceGapContext).toHaveTextContent('Source gap');
+    expect(sourceGapContext).toHaveTextContent('Growth Revenue Agent');
+    expect(sourceGapContext).toHaveTextContent('Workspace files · degraded');
+    expect(sourceGapContext).not.toHaveTextContent('/tmp/growth-revenue');
+    expect(sourceGapContext).not.toHaveTextContent('6-web3-growth-revenue');
   });
 
   it('shows no-snapshot evidence coverage read-model status when collector coverage is absent', async () => {

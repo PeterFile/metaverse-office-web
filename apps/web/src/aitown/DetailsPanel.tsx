@@ -6,6 +6,7 @@ import type {
   AgentWorkflow,
   CollectorEvidenceCoverageAgentItem,
   CollectorItem,
+  CollectorSourceHealthStatus,
   CollectorSharedArtifact,
   CollectorSnapshot,
   CollectorTmuxObservation,
@@ -195,6 +196,9 @@ type DetailsPanelProps = {
 
 export type SourceGapFocusIntent = {
   agentId: string;
+  agentLabel: string;
+  sourceLabel: string;
+  status: CollectorSourceHealthStatus;
   sourceDrilldownGroupKey: SourceGapDrilldownGroupKey;
   requestId: number;
 };
@@ -4388,6 +4392,16 @@ function renderSourceDrilldownGroups(
   ));
 }
 
+function renderSourceGapContextBreadcrumb(intent: SourceGapFocusIntent) {
+  return (
+    <section className="aitown-source-gap-context" role="region" aria-label="Source gap context">
+      <span>Source gap</span>
+      <strong>{intent.agentLabel}</strong>
+      <span>{`${intent.sourceLabel} · ${intent.status}`}</span>
+    </section>
+  );
+}
+
 function hasSourceHealthGap(facts: SourceHealthFact[]) {
   return facts.some((fact) => fact.status !== 'observed');
 }
@@ -5990,6 +6004,8 @@ export function DetailsPanel({
       </div>
 
       {renderHubCategoryOrientation({ activeHubCategory, selectedAgent })}
+
+      {activeSourceGapFocusIntent ? renderSourceGapContextBreadcrumb(activeSourceGapFocusIntent) : null}
 
       <div className="aitown-details__grid">
         <div className="aitown-stat-card">

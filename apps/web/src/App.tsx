@@ -3040,6 +3040,30 @@ function AppInner() {
     setSelectedAgentDrilldownTab('evidence');
     setHubOpen(true);
   }, [selectedAgentId]);
+  const handleSelectedAgentNowOpen = useCallback(() => {
+    if (selectedAgentId === null) {
+      return;
+    }
+
+    requestedSelectedAgentDrilldownTabRef.current = 'now';
+    activeHubCategoryFromSelectedAgentTabRef.current = false;
+    setSourceGapFocusIntent(null);
+    setActiveHubCategory('crew');
+    setSelectedAgentDrilldownTab('now');
+    setHubOpen(true);
+  }, [selectedAgentId]);
+  const handleSelectedAgentReplayOpen = useCallback(() => {
+    if (selectedAgentId === null) {
+      return;
+    }
+
+    requestedSelectedAgentDrilldownTabRef.current = 'replay';
+    activeHubCategoryFromSelectedAgentTabRef.current = false;
+    setSourceGapFocusIntent(null);
+    setActiveHubCategory('replay');
+    setSelectedAgentDrilldownTab('replay');
+    setHubOpen(true);
+  }, [selectedAgentId]);
   const handleReplaySelectedAgentEvidenceRecord = useCallback((evidenceId: string) => {
     const replayEvidenceId = evidenceId.trim();
     if (!replayEvidenceId) {
@@ -3456,10 +3480,26 @@ function AppInner() {
                 <button
                   type="button"
                   className="aitown-button aitown-selected-agent-peek__action"
+                  aria-label={`Open ${selectedAgent.display_name} Now drilldown`}
+                  onClick={handleSelectedAgentNowOpen}
+                >
+                  Now
+                </button>
+                <button
+                  type="button"
+                  className="aitown-button aitown-selected-agent-peek__action"
                   aria-label={`Open ${selectedAgent.display_name} Evidence Ledger`}
                   onClick={handleSelectedAgentEvidenceLedgerOpen}
                 >
-                  Evidence Ledger
+                  Evidence
+                </button>
+                <button
+                  type="button"
+                  className="aitown-button aitown-selected-agent-peek__action"
+                  aria-label={`Open ${selectedAgent.display_name} Replay drilldown`}
+                  onClick={handleSelectedAgentReplayOpen}
+                >
+                  Replay
                 </button>
               </div>
             </aside>

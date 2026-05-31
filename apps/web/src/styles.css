@@ -978,28 +978,25 @@ button {
 
 .aitown-selected-agent-peek {
   position: absolute;
-  top: 222px;
-  right: 18px;
+  top: 210px;
+  right: 16px;
   z-index: 7;
   display: flex;
-  width: min(332px, calc(100% - 36px));
+  width: min(286px, calc(100% - 32px));
   max-height: min(240px, calc(100% - 258px));
   flex-direction: column;
-  gap: 6px;
-  padding: 7px 10px 8px;
-  border-style: solid;
-  border-width: var(--aitown-token-border);
-  border-image-source: url('/ai-town/assets/ui/box.svg');
-  border-image-repeat: stretch;
-  border-image-slice: 12.5%;
-  background: rgba(35, 45, 46, 0.91);
+  gap: 5px;
+  padding: 8px 9px;
+  border: 1px solid rgba(139, 233, 213, 0.34);
+  border-radius: 4px;
+  background: rgba(19, 28, 30, 0.88);
   color: #edf7ed;
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
   pointer-events: auto;
   backdrop-filter: blur(8px);
-  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.34);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.08);
   scrollbar-width: thin;
 }
 
@@ -1007,8 +1004,8 @@ button {
 .aitown-selected-agent-peek__facts {
   display: flex;
   min-width: 0;
-  flex-direction: column;
-  gap: 2px;
+  flex-wrap: wrap;
+  gap: 4px;
 }
 
 .aitown-selected-agent-peek__facts {
@@ -1036,6 +1033,7 @@ button {
 }
 
 .aitown-selected-agent-peek__eyebrow {
+  flex-basis: 100%;
   color: #8be9d5;
   font-size: 0.74rem;
   letter-spacing: 0.08em;
@@ -1044,6 +1042,7 @@ button {
 
 .aitown-selected-agent-peek__head strong {
   display: -webkit-box;
+  flex: 1 1 100%;
   overflow: hidden;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
@@ -1063,6 +1062,7 @@ button {
 
 .aitown-selected-agent-peek__proof {
   display: grid;
+  flex-basis: 100%;
   gap: 2px;
   margin-top: 2px;
   padding: 5px 7px;
@@ -1100,6 +1100,7 @@ button {
 
 .aitown-selected-agent-peek__source-health-inspect {
   display: grid;
+  flex-basis: 100%;
   gap: 3px;
   min-width: 0;
   margin-top: 2px;
@@ -1139,6 +1140,7 @@ button {
 
 .aitown-selected-agent-peek__source-gap-inspect {
   display: grid;
+  flex-basis: 100%;
   gap: 3px;
   margin-top: 2px;
   padding: 5px 7px;
@@ -1225,9 +1227,9 @@ button {
 }
 
 .aitown-selected-agent-peek__action {
-  align-self: flex-start;
+  flex: 1 1 76px;
   min-width: 0;
-  padding: 5px 10px 6px;
+  padding: 5px 8px 6px;
   font-size: 0.74rem;
 }
 
@@ -3007,9 +3009,10 @@ button {
   }
 
   .aitown-selected-agent-peek {
-    top: 288px;
+    top: auto;
     right: 14px;
-    width: min(300px, calc(100% - 28px));
+    bottom: 118px;
+    width: min(286px, calc(100% - 28px));
     max-height: min(240px, calc(100% - 316px));
   }
 
@@ -3306,7 +3309,11 @@ button {
   }
 
   .aitown-selected-agent-peek {
-    display: none;
+    left: 10px;
+    right: 10px;
+    bottom: 132px;
+    width: auto;
+    max-height: min(34dvh, 230px);
   }
 
   .aitown-watch-overlay {

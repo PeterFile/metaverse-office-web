@@ -3298,7 +3298,9 @@ test('prototype store groups evidence refs with evidence-record filters before g
       returned_limit: 2,
       groups: [
         {
-          evidence_ref: '/tmp/store-contract',
+          evidence_ref: null,
+          evidence_ref_key: 'ref_group_001',
+          evidence_ref_label: 'workspace_root observed evidence',
           record_count: 2,
           mapped_count: 2,
           unmapped_count: 0,
@@ -3313,7 +3315,9 @@ test('prototype store groups evidence refs with evidence-record filters before g
           }
         },
         {
-          evidence_ref: '/tmp/store-contract/outbox.md',
+          evidence_ref: null,
+          evidence_ref_key: 'ref_group_002',
+          evidence_ref_label: 'workspace_file degraded evidence',
           record_count: 2,
           mapped_count: 2,
           unmapped_count: 0,
@@ -3342,7 +3346,9 @@ test('prototype store groups evidence refs with evidence-record filters before g
       returned_limit: 10,
       groups: [
         {
-          evidence_ref: 'tmux://unmapped-session/0.0',
+          evidence_ref: null,
+          evidence_ref_key: 'ref_group_001',
+          evidence_ref_label: 'tmux_observation observed evidence',
           record_count: 1,
           mapped_count: 0,
           unmapped_count: 1,
@@ -3359,6 +3365,136 @@ test('prototype store groups evidence refs with evidence-record filters before g
       ]
     }
   );
+  const serializedRollup = JSON.stringify(
+    store.getEvidenceRefRollup({
+      evidence_ref: '/tmp/store-contract/outbox.md',
+      limit: 10
+    })
+  );
+  assert.equal(serializedRollup.includes('/tmp/store-contract/outbox.md'), false);
+  assert.equal(serializedRollup.includes('tmux://unmapped-session/0.0'), false);
+  assert.equal(serializedRollup.includes('ref_group_001'), true);
+});
+
+test('prototype store ref rollup redacts unsafe source bucket keys and labels', async () => {
+  const storeFile = await createStoreFile();
+  const unsafeRef = '/tmp/ref-rollup-secret.md?token=ref-rollup-token';
+  const unsafeOnlyRef = 'tmux://secret-session/0.1';
+  const unsafeSourceKind = '/tmp/ref-rollup-kind-token';
+  const unsafeSourceStatus = 'https://hooks.slack.com/services/T000/B000/ref-rollup-webhook';
+  await writeFile(
+    storeFile,
+    [
+      {
+        kind: 'evidence_record',
+        payload: {
+          evidence_id: 'ev_ref_rollup_safe_bucket_1',
+          agent_id: 'app-engineering',
+          source_kind: 'workspace_file',
+          evidence_role: 'agent_output',
+          evidence_ref: unsafeRef,
+          source_status: 'observed',
+          output_candidate: true,
+          observed_at: '2026-03-09T18:06:40.000Z',
+          collected_at: '2026-03-09T18:07:00.000Z',
+          collector_snapshot_id: 'collector-snapshot:2026-03-09T18:07:00.000Z',
+          correlation_id: 'collector-snapshot:2026-03-09T18:07:00.000Z',
+          degraded_reasons: [],
+          metadata: {}
+        }
+      },
+      {
+        kind: 'evidence_record',
+        payload: {
+          evidence_id: 'ev_ref_rollup_unsafe_bucket_1',
+          agent_id: 'app-engineering',
+          source_kind: unsafeSourceKind,
+          evidence_role: 'runtime_unmapped',
+          evidence_ref: unsafeRef,
+          source_status: unsafeSourceStatus,
+          output_candidate: false,
+          observed_at: '2026-03-09T18:06:45.000Z',
+          collected_at: '2026-03-09T18:07:00.000Z',
+          collector_snapshot_id: 'collector-snapshot:2026-03-09T18:07:00.000Z',
+          correlation_id: 'collector-snapshot:2026-03-09T18:07:00.000Z',
+          degraded_reasons: [],
+          metadata: {}
+        }
+      },
+      {
+        kind: 'evidence_record',
+        payload: {
+          evidence_id: 'ev_ref_rollup_unsafe_bucket_2',
+          agent_id: null,
+          source_kind: unsafeSourceKind,
+          evidence_role: 'runtime_unmapped',
+          evidence_ref: unsafeOnlyRef,
+          source_status: unsafeSourceStatus,
+          output_candidate: false,
+          observed_at: '2026-03-09T18:06:50.000Z',
+          collected_at: '2026-03-09T18:07:00.000Z',
+          collector_snapshot_id: 'collector-snapshot:2026-03-09T18:07:00.000Z',
+          correlation_id: 'collector-snapshot:2026-03-09T18:07:00.000Z',
+          degraded_reasons: [],
+          metadata: {}
+        }
+      }
+    ].map((record) => JSON.stringify(record)).join('\n') + '\n'
+  );
+
+  const store = await createPrototypeStore({ filePath: storeFile });
+  const rollup = store.getEvidenceRefRollup({ limit: 10 });
+
+  assert.deepEqual(rollup, {
+    total_count: 3,
+    total_groups: 2,
+    returned_limit: 10,
+    groups: [
+      {
+        evidence_ref: null,
+        evidence_ref_key: 'ref_group_001',
+        evidence_ref_label: 'workspace_file observed evidence',
+        record_count: 2,
+        mapped_count: 2,
+        unmapped_count: 0,
+        agent_id_buckets: {
+          'app-engineering': 2
+        },
+        source_kind_buckets: {
+          workspace_file: 1
+        },
+        source_status_buckets: {
+          observed: 1
+        }
+      },
+      {
+        evidence_ref: null,
+        evidence_ref_key: 'ref_group_002',
+        evidence_ref_label: 'unknown_source unknown_status evidence',
+        record_count: 1,
+        mapped_count: 0,
+        unmapped_count: 1,
+        agent_id_buckets: {
+          unmapped: 1
+        },
+        source_kind_buckets: {},
+        source_status_buckets: {}
+      }
+    ]
+  });
+
+  const serializedRollup = JSON.stringify(rollup);
+  for (const canary of [
+    unsafeRef,
+    unsafeOnlyRef,
+    unsafeSourceKind,
+    unsafeSourceStatus,
+    'ref-rollup-token',
+    'ref-rollup-webhook',
+    'secret-session'
+  ]) {
+    assert.equal(serializedRollup.includes(canary), false, `leaked canary: ${canary}`);
+  }
 });
 
 test('JSONL prototype store filters evidence records by observed and collected windows before limit', async () => {

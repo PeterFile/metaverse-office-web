@@ -6846,7 +6846,9 @@ test('GET /evidence-records lists stored evidence records read-only with exact f
       returned_limit: 2,
       groups: [
         {
-          evidence_ref: '/tmp/evidence-query/app',
+          evidence_ref: null,
+          evidence_ref_key: 'ref_group_001',
+          evidence_ref_label: 'workspace_root observed evidence',
           record_count: 1,
           mapped_count: 1,
           unmapped_count: 0,
@@ -6861,7 +6863,9 @@ test('GET /evidence-records lists stored evidence records read-only with exact f
           }
         },
         {
-          evidence_ref: '/tmp/evidence-query/app/inbox.md',
+          evidence_ref: null,
+          evidence_ref_key: 'ref_group_002',
+          evidence_ref_label: 'workspace_file observed evidence',
           record_count: 1,
           mapped_count: 1,
           unmapped_count: 0,
@@ -6880,6 +6884,7 @@ test('GET /evidence-records lists stored evidence records read-only with exact f
   });
   assert.equal(refRollup.body.item.groups[0].metadata, undefined);
   assert.equal(refRollup.body.item.groups[0].degraded_reasons, undefined);
+  assert.equal(JSON.stringify(refRollup.body).includes('/tmp/evidence-query/app'), false);
 
   assert.equal(store.getLatestCollectorReport(), latestBeforeRead);
   assert.deepEqual(store.getCounts(), countsBeforeRead);
@@ -7182,9 +7187,11 @@ test('GET evidence and source read routes keep JSONL and SQLite parity', async (
   );
   assert.deepEqual(sqliteRefRollup, jsonlRefRollup);
   assert.deepEqual(
-    jsonlRefRollup.item.groups.map((group) => group.evidence_ref),
-    ['/tmp/route-parity/app/outbox.md', 'tmux://5-web3-app-engineering/0.1']
+    jsonlRefRollup.item.groups.map((group) => group.evidence_ref_key),
+    ['ref_group_001', 'ref_group_002']
   );
+  assert.equal(JSON.stringify(jsonlRefRollup).includes('/tmp/route-parity'), false);
+  assert.equal(JSON.stringify(jsonlRefRollup).includes('tmux://'), false);
 
   const jsonlSourceContextRecord = jsonl.store.listEvidenceRecords({
     agent_id: 'app-engineering',

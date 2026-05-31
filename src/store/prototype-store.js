@@ -201,6 +201,10 @@ class JsonlRecordLog {
       'utf8'
     );
   }
+
+  async getStorageIndexCounts() {
+    return null;
+  }
 }
 
 class SqliteRecordLog {
@@ -248,6 +252,28 @@ class SqliteRecordLog {
     statements.push('COMMIT;');
 
     await this.#exec([this.filePath, statements.join(' ')]);
+  }
+
+  async getStorageIndexCounts() {
+    const { stdout } = await this.#exec([
+      '-readonly',
+      this.filePath,
+      '-json',
+      [
+        'SELECT',
+        '(SELECT COUNT(*) FROM record_index) AS record_index_count,',
+        '(SELECT COUNT(*) FROM record_evidence_refs) AS record_evidence_ref_count;'
+      ].join(' ')
+    ]);
+    const rows = stdout.trim() ? JSON.parse(stdout) : [];
+    return {
+      record_index_count: Number.isSafeInteger(rows[0]?.record_index_count)
+        ? rows[0].record_index_count
+        : 0,
+      record_evidence_ref_count: Number.isSafeInteger(rows[0]?.record_evidence_ref_count)
+        ? rows[0].record_evidence_ref_count
+        : 0
+    };
   }
 
   async #ensureReady() {
@@ -677,6 +703,13 @@ class PrototypeStore {
 
   getStorageReplayManifest() {
     return projectStorageReplayManifest(this.records);
+  }
+
+  async getStorageIndexHealth() {
+    return projectStorageIndexHealth({
+      records: this.records,
+      recordLog: this.recordLog
+    });
   }
 
   listReplayCheckpointLog(filters = {}) {
@@ -4282,6 +4315,65 @@ function latestEvidenceTimestamp(currentValue, nextValue) {
     return currentValue;
   }
   return nextTimestamp;
+}
+
+async function projectStorageIndexHealth({ records, recordLog }) {
+  const base = {
+    backend: recordLog instanceof SqliteRecordLog ? 'sqlite' : 'jsonl',
+    status: 'ok',
+    record_count: records.length,
+    record_index_count: null,
+    record_evidence_ref_count: null,
+    sidecar_status: 'not_applicable',
+    record_kind_buckets: createRecordKindBuckets(records),
+    latest_record_ts: getLatestPublicRecordTimestamp(records)
+  };
+
+  if (!(recordLog instanceof SqliteRecordLog)) {
+    return base;
+  }
+
+  try {
+    const counts = await recordLog.getStorageIndexCounts();
+    const expectedEvidenceRefCount = records.reduce(
+      (sum, record) => sum + createSqliteRecordIndex(record).evidence_refs.length,
+      0
+    );
+    const complete =
+      counts.record_index_count === records.length &&
+      counts.record_evidence_ref_count === expectedEvidenceRefCount;
+
+    return {
+      ...base,
+      record_index_count: counts.record_index_count,
+      record_evidence_ref_count: counts.record_evidence_ref_count,
+      sidecar_status: complete ? 'complete' : 'stale',
+      status: complete ? 'ok' : 'degraded'
+    };
+  } catch {
+    return {
+      ...base,
+      status: 'degraded',
+      sidecar_status: 'stale'
+    };
+  }
+}
+
+function getLatestPublicRecordTimestamp(records) {
+  for (let index = records.length - 1; index >= 0; index -= 1) {
+    const checkpoint = projectReplayCheckpointRecord(records[index]);
+    const timestamp = [
+      checkpoint?.collected_at,
+      checkpoint?.observed_at,
+      checkpoint?.received_at,
+      checkpoint?.ts
+    ].find((value) => typeof value === 'string' && !Number.isNaN(Date.parse(value)));
+    if (timestamp) {
+      return timestamp;
+    }
+  }
+
+  return null;
 }
 
 function projectReplayCheckpointLog({ records, limit, filters = {} }) {

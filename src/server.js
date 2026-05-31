@@ -366,6 +366,13 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
     return;
   }
 
+  if (method === 'GET' && pathname === '/storage/index-health') {
+    sendJson(res, 200, {
+      item: await store.getStorageIndexHealth()
+    });
+    return;
+  }
+
   if (method === 'GET' && pathname === '/peer-watch/alerts') {
     sendJson(res, 200, {
       items: store.listPeerWatchAlerts({

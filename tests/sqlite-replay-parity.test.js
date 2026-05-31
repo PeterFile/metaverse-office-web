@@ -285,6 +285,7 @@ function projectParityReadModels(store, root) {
         source_kind: 'workspace_file',
         limit: '1'
       }),
+      replayWindow: store.getEvidenceReplayWindow(outputRecord.evidence_id),
       provenanceBundle: store.getEvidenceProvenanceBundle(outputRecord.evidence_id)
     },
     root
@@ -426,6 +427,18 @@ test('JSONL and SQLite stores replay evidence read models with parity', async (t
       collected_at: '2026-03-09T18:07:00.000Z'
     }
   });
+  assert.deepEqual(jsonlProjection.replayWindow.window, { before: 2, after: 2 });
+  assert.equal(jsonlProjection.replayWindow.before.length, 2);
+  assert.equal(jsonlProjection.replayWindow.after.length, 2);
+  for (const projection of [jsonlProjection.replayWindow, sqliteProjection.replayWindow]) {
+    const serialized = JSON.stringify(projection);
+    assert.equal(serialized.includes(root), false);
+    assert.equal(serialized.includes('tmux://'), false);
+    assert.equal(serialized.includes('collector_snapshot_id'), false);
+    assert.equal(serialized.includes('correlation_id'), false);
+    assert.equal(serialized.includes('metadata'), false);
+    assert.equal(serialized.includes('degraded_reasons'), false);
+  }
   assert.deepEqual(sqliteProjection.provenanceBundle.source_summary, {
     kind: 'workspace_file',
     status: 'degraded',

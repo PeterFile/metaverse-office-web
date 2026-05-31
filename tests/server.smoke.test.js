@@ -7100,6 +7100,29 @@ test('GET evidence and source read routes keep JSONL and SQLite parity', async (
     assert.equal(serializedSourceContext.includes(unsafeFragment), false, unsafeFragment);
   }
 
+  const [jsonlReplayWindow, sqliteReplayWindow] = await parityRequest(
+    `/evidence-records/${encodeURIComponent(jsonlSourceContextRecord.evidence_id)}/replay-window?before=2&after=2`
+  );
+  assert.deepEqual(sqliteReplayWindow, jsonlReplayWindow);
+  assert.deepEqual(jsonlReplayWindow.item.window, { before: 2, after: 2 });
+  assert.equal(jsonlReplayWindow.item.before.length <= 2, true);
+  assert.equal(jsonlReplayWindow.item.after.length <= 2, true);
+  const serializedReplayWindow = JSON.stringify(jsonlReplayWindow);
+  for (const unsafeFragment of [
+    '/tmp/route-parity',
+    'tmux://',
+    'collector_snapshot_id',
+    'collector-snapshot:',
+    'correlation_id',
+    'metadata',
+    'degraded_reasons',
+    'payload',
+    'token',
+    'webhook'
+  ]) {
+    assert.equal(serializedReplayWindow.includes(unsafeFragment), false, unsafeFragment);
+  }
+
   const [jsonlSpine, sqliteSpine] = await parityRequest(
     '/agents/app-engineering/evidence-spine?source_kind=workspace_file&output_candidate=true&newest_first=true&limit=1'
   );
@@ -7539,6 +7562,7 @@ test('GET read route purity matrix leaves replay records and checkpoints unchang
     '/evidence-records/ref-rollup?mapped=true&output_candidate=true&limit=2',
     `/evidence-records/${encodeURIComponent(evidenceRecord.evidence_id)}/provenance-bundle`,
     `/evidence-records/${encodeURIComponent(evidenceRecord.evidence_id)}/source-context`,
+    `/evidence-records/${encodeURIComponent(evidenceRecord.evidence_id)}/replay-window?before=1&after=1`,
     `/accountability/replay?evidence_id=${encodeURIComponent(evidenceRecord.evidence_id)}&limit=5&window=60m`,
     '/accountability/replay/checkpoint-summary',
     '/accountability/replay/checkpoint-log?limit=3',
@@ -7680,6 +7704,120 @@ test('GET evidence source-context is bounded, sanitized, and 404s unknown eviden
   assert.equal(serialized.includes('payload'), false);
   assert.equal(serialized.includes('webhook'), false);
   assert.equal(serialized.includes('token'), false);
+  for (const unsafeFragment of unsafeFragments) {
+    assert.equal(serialized.includes(unsafeFragment), false, unsafeFragment);
+  }
+});
+
+test('GET evidence replay-window is bounded, sanitized, capped, and 404s unknown evidence', async (t) => {
+  const { baseUrl, store } = await createHarness(t);
+  const unsafeFragments = [
+    '/tmp/source-context-route',
+    '/Users/cwp/private/source-context-route.md',
+    'tmux://source-context-route/0.1',
+    'hermes://profile/source-context-route',
+    'hermes://session/source-context-route',
+    'session-source-context-route',
+    'profile-source-context-route',
+    'payload_dump',
+    'metadata_dump',
+    'collector-snapshot:2026-03-09T18:06:00.000Z',
+    'token=source-context-route',
+    'https://hooks.slack.com/services/source-context-route'
+  ];
+
+  await store.appendEvent({
+    event_id: 'evt_replay_window_canary',
+    ts: '2026-03-09T18:04:00.000Z',
+    agent_id: 'app-engineering',
+    actor_id: 'team-lead',
+    agent_role: 'app-engineering',
+    event_type: 'review_started',
+    current_state: 'reviewing',
+    summary: 'Replay window route canary',
+    correlation_id: 'corr-replay-window-canary',
+    evidence_refs: unsafeFragments,
+    source_kind: 'controller_event',
+    metadata: {
+      token: 'token=source-context-route'
+    }
+  });
+  await store.appendCollectorReport({
+    collected_at: '2026-03-09T18:06:00.000Z',
+    actor_id: 'team-lead',
+    summary: {
+      agent_count: 1,
+      heartbeat_count: 0,
+      tmux_observed_count: 0,
+      workspace_observed_count: 1,
+      reboot_recommended_count: 0
+    },
+    items: [
+      {
+        agent_id: 'app-engineering',
+        evidence_refs: unsafeFragments,
+        workspace_observations: [
+          {
+            path: '/tmp/source-context-route/outbox.md',
+            file_name: 'outbox.md',
+            kind: 'workspace_file',
+            evidence_role: 'agent_output',
+            last_modified_at: '2026-03-09T18:05:20.000Z'
+          }
+        ],
+        source_health: {
+          workspace_files: {
+            status: 'degraded',
+            observed_count: 1,
+            last_observed_at: '2026-03-09T18:05:20.000Z',
+            degraded_reasons: unsafeFragments
+          }
+        }
+      }
+    ]
+  });
+
+  const evidenceRecord = store.listEvidenceRecords({
+    source_kind: 'workspace_file',
+    evidence_role: 'agent_output',
+    limit: '1'
+  })[0];
+  assert.ok(evidenceRecord);
+  const beforeCount = store.records.length;
+
+  const unknown = await requestJson(
+    `${baseUrl}/evidence-records/missing-evidence-id/replay-window`
+  );
+  assert.equal(unknown.response.status, 404);
+  assert.deepEqual(unknown.body, {
+    error: 'not_found',
+    details: 'unknown evidence record'
+  });
+  assert.equal(JSON.stringify(unknown.body).includes('missing-evidence-id'), false);
+
+  const replayWindow = await requestJson(
+    `${baseUrl}/evidence-records/${encodeURIComponent(evidenceRecord.evidence_id)}/replay-window?before=99&after=99`
+  );
+  assert.equal(replayWindow.response.status, 200);
+  assert.equal(replayWindow.body.item.center.evidence_id, evidenceRecord.evidence_id);
+  assert.deepEqual(replayWindow.body.item.window, { before: 10, after: 10 });
+  assert.equal(replayWindow.body.item.before.length <= 10, true);
+  assert.equal(replayWindow.body.item.after.length <= 10, true);
+  assert.equal(replayWindow.body.item.center.source_summary.kind, 'workspace_file');
+  assert.equal(store.records.length, beforeCount);
+
+  const serialized = JSON.stringify(replayWindow.body);
+  assert.equal(serialized.includes('evidence_ref'), false);
+  assert.equal(serialized.includes('collector_snapshot_id'), false);
+  assert.equal(serialized.includes('correlation_id'), false);
+  assert.equal(serialized.includes('metadata'), false);
+  assert.equal(serialized.includes('degraded_reasons'), false);
+  assert.equal(serialized.includes('payload'), false);
+  assert.equal(serialized.includes('webhook'), false);
+  assert.equal(serialized.includes('token'), false);
+  assert.equal(serialized.includes('evt_replay_window_canary'), false);
+  assert.equal(serialized.includes('review_started'), false);
+  assert.equal(serialized.includes('controller_event'), false);
   for (const unsafeFragment of unsafeFragments) {
     assert.equal(serialized.includes(unsafeFragment), false, unsafeFragment);
   }

@@ -6798,11 +6798,17 @@ test('GET evidence and source read routes keep JSONL and SQLite parity', async (
   assert.deepEqual(Object.keys(jsonlStorageManifest.item), [
     'record_count',
     'record_kind_buckets',
+    'evidence_summary',
     'canonical_record_hash'
   ]);
   assert.deepEqual(
     {
       ...jsonlStorageManifest.item,
+      evidence_summary: {
+        ...jsonlStorageManifest.item.evidence_summary,
+        latest_observed_at: '<timestamp>',
+        latest_collected_at: '<timestamp>'
+      },
       canonical_record_hash: '<sha256>'
     },
     {
@@ -6812,6 +6818,34 @@ test('GET evidence and source read routes keep JSONL and SQLite parity', async (
         heartbeat: 1,
         evidence_record: 6,
         collector_snapshot: 1
+      },
+      evidence_summary: {
+        evidence_record_count: 6,
+        source_kind_buckets: {
+          workspace_root: 2,
+          workspace_file: 2,
+          tmux_observation: 2
+        },
+        source_category_buckets: {
+          workspace: 4,
+          runtime: 2
+        },
+        evidence_role_buckets: {
+          workspace_presence: 2,
+          inbound_task: 1,
+          agent_output: 1,
+          runtime_activity: 1,
+          runtime_unmapped: 1
+        },
+        source_status_buckets: {
+          observed: 3,
+          degraded: 2,
+          missing: 1
+        },
+        output_candidate_count: 2,
+        unmapped_count: 1,
+        latest_observed_at: '<timestamp>',
+        latest_collected_at: '<timestamp>'
       },
       canonical_record_hash: '<sha256>'
     }

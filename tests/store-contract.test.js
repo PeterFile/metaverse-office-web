@@ -714,6 +714,31 @@ test('prototype store exposes deterministic sanitized storage replay manifest', 
       evidence_record: 3,
       collector_snapshot: 1
     },
+    evidence_summary: {
+      evidence_record_count: 3,
+      source_kind_buckets: {
+        workspace_root: 1,
+        workspace_file: 1,
+        tmux_observation: 1
+      },
+      source_category_buckets: {
+        workspace: 2,
+        runtime: 1
+      },
+      evidence_role_buckets: {
+        workspace_presence: 1,
+        agent_output: 1,
+        runtime_activity: 1
+      },
+      source_status_buckets: {
+        observed: 2,
+        degraded: 1
+      },
+      output_candidate_count: 2,
+      unmapped_count: 0,
+      latest_observed_at: '2026-03-09T18:05:30.000Z',
+      latest_collected_at: '2026-03-09T18:06:00.000Z'
+    },
     canonical_record_hash:
       'fa36a558fa37a6ac5e6b02f86374f65d7723af1baca8066348cac08d1367aad7'
   });
@@ -721,6 +746,10 @@ test('prototype store exposes deterministic sanitized storage replay manifest', 
   assert.equal(JSON.stringify(manifest).includes('/tmp/store-contract'), false);
   assert.equal(JSON.stringify(manifest).includes('store-contract'), false);
   assert.equal(JSON.stringify(manifest).includes('tmux://'), false);
+  assert.equal(JSON.stringify(manifest).includes('Hermes'), false);
+  assert.equal(JSON.stringify(manifest).includes('profile'), false);
+  assert.equal(JSON.stringify(manifest).includes('session'), false);
+  assert.equal(JSON.stringify(manifest).includes('ev_collector'), false);
   assert.equal(JSON.stringify(manifest).includes('metadata'), false);
   assert.equal(JSON.stringify(manifest).includes('degraded_reasons'), false);
 
@@ -828,12 +857,35 @@ test('prototype store exposes deterministic sanitized storage replay manifest', 
     collector_snapshot: 1,
     unknown: 1
   });
+  assert.deepEqual(unsafeManifestA.evidence_summary, {
+    evidence_record_count: 1,
+    source_kind_buckets: {
+      workspace_file: 1
+    },
+    source_category_buckets: {
+      workspace: 1
+    },
+    evidence_role_buckets: {
+      agent_output: 1
+    },
+    source_status_buckets: {
+      degraded: 1
+    },
+    output_candidate_count: 1,
+    unmapped_count: 0,
+    latest_observed_at: '2026-03-09T18:07:10.000Z',
+    latest_collected_at: '2026-03-09T18:07:20.000Z'
+  });
   assert.equal(unsafeB.getStorageReplayManifest().canonical_record_hash, unsafeManifestA.canonical_record_hash);
   const unsafeSerialized = JSON.stringify(unsafeManifestA);
   assert.equal(unsafeSerialized.includes('/tmp/manifest'), false);
   assert.equal(unsafeSerialized.includes('/Users/'), false);
   assert.equal(unsafeSerialized.includes('/Volumes/'), false);
+  assert.equal(unsafeSerialized.includes('tmux'), false);
   assert.equal(unsafeSerialized.includes('tmux://manifest'), false);
+  assert.equal(unsafeSerialized.includes('Hermes'), false);
+  assert.equal(unsafeSerialized.includes('profile'), false);
+  assert.equal(unsafeSerialized.includes('session'), false);
   assert.equal(unsafeSerialized.includes('metadata-a'), false);
   assert.equal(unsafeSerialized.includes('token='), false);
   assert.equal(unsafeSerialized.includes('webhook'), false);

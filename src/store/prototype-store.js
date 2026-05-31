@@ -3915,10 +3915,86 @@ function projectStorageReplayManifest(records) {
   return {
     record_count: canonicalRecords.length,
     record_kind_buckets: createRecordKindBuckets(canonicalRecords),
+    evidence_summary: projectStorageReplayManifestEvidenceSummary(records),
     canonical_record_hash: createHash('sha256')
       .update(stableStringify(canonicalRecords))
       .digest('hex')
   };
+}
+
+function projectStorageReplayManifestEvidenceSummary(records) {
+  const evidenceRecords = records
+    .filter((record) => record.kind === EVIDENCE_RECORD_KIND)
+    .map((record) => record.payload || {});
+  const summary = {
+    evidence_record_count: evidenceRecords.length,
+    source_kind_buckets: {},
+    source_category_buckets: {},
+    evidence_role_buckets: {},
+    source_status_buckets: {},
+    output_candidate_count: 0,
+    unmapped_count: 0,
+    latest_observed_at: null,
+    latest_collected_at: null
+  };
+
+  for (const record of evidenceRecords) {
+    const sourceKind = projectKnownEvidenceValue(record.source_kind, EVIDENCE_RECORD_SOURCE_KINDS) || 'unknown';
+    incrementBucket(
+      summary.source_kind_buckets,
+      sourceKind
+    );
+    incrementBucket(
+      summary.source_category_buckets,
+      projectStorageReplayManifestSourceCategory(sourceKind)
+    );
+    incrementBucket(
+      summary.evidence_role_buckets,
+      projectKnownEvidenceValue(record.evidence_role, EVIDENCE_RECORD_ROLES) || 'unknown'
+    );
+    incrementBucket(
+      summary.source_status_buckets,
+      projectKnownEvidenceValue(record.source_status, EVIDENCE_RECORD_SOURCE_STATUSES) || 'unknown'
+    );
+    if (record.output_candidate === true) {
+      summary.output_candidate_count += 1;
+    }
+    if (record.agent_id === null) {
+      summary.unmapped_count += 1;
+    }
+    summary.latest_observed_at = latestEvidenceTimestamp(
+      summary.latest_observed_at,
+      record.observed_at
+    );
+    summary.latest_collected_at = latestEvidenceTimestamp(
+      summary.latest_collected_at,
+      record.collected_at
+    );
+  }
+
+  return summary;
+}
+
+function projectStorageReplayManifestSourceCategory(sourceKind) {
+  const knownSourceKind = projectKnownEvidenceValue(sourceKind, EVIDENCE_RECORD_SOURCE_KINDS);
+  if (!knownSourceKind) {
+    return 'unknown';
+  }
+  if (knownSourceKind.startsWith('workspace_')) {
+    return 'workspace';
+  }
+  if (TASK_EVIDENCE_SOURCE_KINDS.has(knownSourceKind)) {
+    return 'fixture';
+  }
+  return 'runtime';
+}
+
+function latestEvidenceTimestamp(currentValue, nextValue) {
+  const nextTimestamp = projectEvidenceTimestampValue(nextValue);
+  if (!nextTimestamp || (currentValue && currentValue >= nextTimestamp)) {
+    return currentValue;
+  }
+  return nextTimestamp;
 }
 
 function projectReplayCheckpointLog({ records, limit, filters = {} }) {

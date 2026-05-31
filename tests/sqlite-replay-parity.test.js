@@ -319,9 +319,33 @@ test('JSONL and SQLite stores replay evidence read models with parity', async (t
   const sqliteProjection = projectParityReadModels(sqliteReloaded, root);
   const jsonlManifest = jsonlReloaded.getStorageReplayManifest();
   const sqliteManifest = sqliteReloaded.getStorageReplayManifest();
+  const jsonlIndexHealth = await jsonlReloaded.getStorageIndexHealth();
+  const sqliteIndexHealth = await sqliteReloaded.getStorageIndexHealth();
 
   assert.deepEqual(sqliteProjection, jsonlProjection);
   assert.deepEqual(sqliteManifest, jsonlManifest);
+  assert.deepEqual(
+    {
+      ...jsonlIndexHealth,
+      backend: '<backend>',
+      record_index_count: '<sidecar>',
+      record_evidence_ref_count: '<sidecar>',
+      sidecar_status: '<sidecar>'
+    },
+    {
+      ...sqliteIndexHealth,
+      backend: '<backend>',
+      record_index_count: '<sidecar>',
+      record_evidence_ref_count: '<sidecar>',
+      sidecar_status: '<sidecar>'
+    }
+  );
+  assert.equal(jsonlIndexHealth.backend, 'jsonl');
+  assert.equal(jsonlIndexHealth.sidecar_status, 'not_applicable');
+  assert.equal(sqliteIndexHealth.backend, 'sqlite');
+  assert.equal(sqliteIndexHealth.sidecar_status, 'complete');
+  assert.equal(sqliteIndexHealth.record_index_count, sqliteIndexHealth.record_count);
+  assert.equal(sqliteIndexHealth.record_evidence_ref_count > 0, true);
   assert.deepEqual(
     {
       ...jsonlManifest,

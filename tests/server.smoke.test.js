@@ -7004,8 +7004,8 @@ test('GET evidence and source read routes keep JSONL and SQLite parity', async (
     '/Users',
     '/Volumes',
     'route-parity',
-    'tmux://',
-    'evidence_ref',
+    'tmux://agent-007/1',
+    'evidence_ref:raw',
     'payload',
     'metadata',
     'token',
@@ -7013,6 +7013,56 @@ test('GET evidence and source read routes keep JSONL and SQLite parity', async (
     'degraded_reasons'
   ]) {
     assert.equal(serializedStorageManifest.includes(unsafeFragment), false, unsafeFragment);
+  }
+
+  const [jsonlIndexHealth, sqliteIndexHealth] = await parityRequest('/storage/index-health');
+  assert.deepEqual(jsonlIndexHealth, {
+    item: {
+      backend: 'jsonl',
+      status: 'ok',
+      record_count: before.jsonl,
+      record_index_count: null,
+      record_evidence_ref_count: null,
+      sidecar_status: 'not_applicable',
+      record_kind_buckets: {
+        event: 2,
+        heartbeat: 1,
+        evidence_record: 6,
+        collector_snapshot: 1
+      },
+      latest_record_ts: '2026-03-09T18:06:00.000Z'
+    }
+  });
+  assert.deepEqual(sqliteIndexHealth, {
+    item: {
+      backend: 'sqlite',
+      status: 'ok',
+      record_count: before.sqlite,
+      record_index_count: before.sqlite,
+      record_evidence_ref_count: 10,
+      sidecar_status: 'complete',
+      record_kind_buckets: {
+        event: 2,
+        heartbeat: 1,
+        evidence_record: 6,
+        collector_snapshot: 1
+      },
+      latest_record_ts: '2026-03-09T18:06:00.000Z'
+    }
+  });
+  const serializedIndexHealth = JSON.stringify([jsonlIndexHealth, sqliteIndexHealth]);
+  for (const unsafeFragment of [
+    '/tmp',
+    '/Users',
+    '/Volumes',
+    'route-parity',
+    'tmux://agent-007/1',
+    'evidence_ref:raw',
+    'payload',
+    'metadata',
+    'stderr'
+  ]) {
+    assert.equal(serializedIndexHealth.includes(unsafeFragment), false, unsafeFragment);
   }
 
   const [jsonlReplayCheckpointLog, sqliteReplayCheckpointLog] = await parityRequest(
@@ -7212,6 +7262,56 @@ test('GET evidence and source read routes keep JSONL and SQLite parity', async (
 
   assert.equal(jsonl.store.records.length, before.jsonl);
   assert.equal(sqlite.store.records.length, before.sqlite);
+});
+
+test('GET /storage/index-health is sanitized and read-only', async (t) => {
+  const { baseUrl, store, storeFile } = await createHarness(t);
+
+  await store.appendCollectorReport(createRouteParityCollectorReport());
+  const before = {
+    recordCount: store.records.length,
+    counts: store.getCounts(),
+    checkpoint: store.getReplayCheckpointSummary(),
+    file: await readFile(storeFile, 'utf8')
+  };
+
+  const response = await requestJson(`${baseUrl}/storage/index-health`);
+  assert.equal(response.response.status, 200);
+  assert.deepEqual(response.body, {
+    item: {
+      backend: 'jsonl',
+      status: 'ok',
+      record_count: before.recordCount,
+      record_index_count: null,
+      record_evidence_ref_count: null,
+      sidecar_status: 'not_applicable',
+      record_kind_buckets: {
+        event: 2,
+        heartbeat: 1,
+        evidence_record: 6,
+        collector_snapshot: 1
+      },
+      latest_record_ts: '2026-03-09T18:06:00.000Z'
+    }
+  });
+  const serialized = JSON.stringify(response.body);
+  for (const unsafeFragment of [
+    '/tmp',
+    '/Users',
+    '/Volumes',
+    'route-parity',
+    'tmux://agent-007/1',
+    'evidence_ref:raw',
+    'payload',
+    'metadata',
+    'stderr'
+  ]) {
+    assert.equal(serialized.includes(unsafeFragment), false, unsafeFragment);
+  }
+  assert.equal(store.records.length, before.recordCount);
+  assert.deepEqual(store.getCounts(), before.counts);
+  assert.deepEqual(store.getReplayCheckpointSummary(), before.checkpoint);
+  assert.equal(await readFile(storeFile, 'utf8'), before.file);
 });
 
 test('GET replay checkpoint-log filters record_kind before limit without leaking raw fields', async (t) => {
@@ -7643,6 +7743,7 @@ test('GET read route purity matrix leaves replay records and checkpoints unchang
     '/accountability/replay/checkpoint-summary',
     '/accountability/replay/checkpoint-log?limit=3',
     '/storage/replay-manifest',
+    '/storage/index-health',
     '/runtime/source-gaps?newest_first=true&limit=10',
     '/runtime/source-gaps/summary?newest_first=true&limit=1',
     '/runtime/source-gaps/agent-summary?newest_first=true&limit=1',

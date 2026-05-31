@@ -21,7 +21,7 @@ The next product milestone is `Live Evidence Spine`: connect the current read mo
 ## Current implementation snapshot
 - backend exposes evidence-first read models for office overview, operations, agent workflow/detail, incidents, timeline replay, accountability replay, correlation drill-down, shared memory artifacts, peer-watch alerts, handoffs, reboots, and collector evidence coverage
 - controlled writes remain limited to `POST /events`, `POST /heartbeats`, and `POST /collectors/controller-snapshot`
-- storage defaults to the local append-only JSONL prototype at `data/prototype-store.jsonl`, replayed into memory; an opt-in SQLite append-only backend can store the same canonical record stream at `data/prototype-store.sqlite` with idempotently backfilled derived sidecar indexes for evidence lookup
+- storage defaults to the local append-only JSONL prototype at `data/prototype-store.jsonl`, replayed into memory; an opt-in SQLite append-only backend can store the same canonical record stream at `data/prototype-store.sqlite` with idempotently backfilled derived sidecar indexes for evidence lookup and sanitized read-only index health
 - domain still uses the canonical seven-actor office model: six employee agents plus `team-lead`
 - frontend is a React + TypeScript + PixiJS AI Town operator world with roster, category Hub, selected-agent drilldowns, supervision/evidence/replay/memory surfaces, mapped source-gap world-pin inspect peeks, selected evidence replay scope/back affordances, a compact selected-agent evidence-spine proof glance, and real browser smoke coverage
 
@@ -162,6 +162,7 @@ Optional env:
 - `GET /accountability/replay/checkpoint-summary`
 - `GET /accountability/replay/checkpoint-log?limit=&record_kind=&evidence_id=&collector_snapshot_id=&correlation_id=&source_kind=`
 - `GET /storage/replay-manifest`
+- `GET /storage/index-health`
 - `GET /peer-watch/alerts?status=&target_agent_id=&agent_id=&watcher_agent_id=&observer_agent_id=&correlation_id=&severity=&limit=`
 - `GET /incidents?kind=&agent_id=&severity=&status=&correlation_id=&limit=&window=`
 - `GET /correlations/:correlation_id?limit=&window=`
@@ -251,6 +252,7 @@ Optional env:
 - the route does not add a write path, storage table, command dispatch path, or collector filesystem/tmux read
 - `GET /accountability/replay/checkpoint-summary` returns a sanitized append-order checkpoint over replayed records, with record/count buckets and latest bounded anchors for events, heartbeats, evidence records, and collector snapshots; it does not return evidence record ids derived from raw refs, raw evidence refs, paths, summaries, metadata, payloads, degraded reasons, or trigger collection, tmux/filesystem reads, append-only writes, or control-plane actions
 - `GET /accountability/replay/checkpoint-log?limit=&record_kind=&evidence_id=&collector_snapshot_id=&correlation_id=&source_kind=` returns newest append-order checkpoint rows as `{ "items": [{ "append_index": number, "record_kind": string, "checkpoint": object|null }] }`; optional non-blank `record_kind`, `evidence_id`, `collector_snapshot_id`, `correlation_id`, and `source_kind` exact-match replayed records before limit, unknown values return empty `items`, and rows use the same sanitized event, heartbeat, evidence-record, and collector-snapshot checkpoint shapes as the summary and omit raw evidence ids, refs, paths, payloads, metadata, degraded reasons, collector reads, writes, and control-plane actions
+- `GET /storage/index-health` returns sanitized backend, canonical record counts, sidecar counts, sidecar status, record-kind buckets, and latest safe record timestamp; JSONL reports `not_applicable`, while SQLite stale or unreadable sidecars report `degraded/stale` without exposing local paths, stderr, payloads, metadata, or running writes/migrations
 
 ### Peer-watch alert query notes
 - `GET /peer-watch/alerts` stays read-only and derives its evidence view from canonical peer-watch events

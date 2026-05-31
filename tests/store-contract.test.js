@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict');
 const { execFile } = require('node:child_process');
-const { mkdtemp, readFile, writeFile } = require('node:fs/promises');
+const { mkdtemp, readFile, unlink, writeFile } = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const { promisify } = require('node:util');
@@ -1087,6 +1087,37 @@ test('prototype store exposes deterministic sanitized storage replay manifest', 
   assert.equal(unsafeSerialized.includes('evidence_ref'), false);
   assert.equal(unsafeSerialized.includes('payload'), false);
   assert.equal(unsafeSerialized.includes('degraded_reasons'), false);
+});
+
+test('JSONL prototype store reports storage index health as not applicable', async () => {
+  const storeFile = await createStoreFile();
+  const store = await createPrototypeStore({ filePath: storeFile });
+
+  await store.appendEvent(createEvent());
+  await store.appendHeartbeat(createHeartbeat());
+  await store.appendCollectorReport(createCollectorReport());
+
+  const health = await store.getStorageIndexHealth();
+  assert.deepEqual(health, {
+    backend: 'jsonl',
+    status: 'ok',
+    record_count: 9,
+    record_index_count: null,
+    record_evidence_ref_count: null,
+    sidecar_status: 'not_applicable',
+    record_kind_buckets: {
+      event: 3,
+      heartbeat: 2,
+      evidence_record: 3,
+      collector_snapshot: 1
+    },
+    latest_record_ts: '2026-03-09T18:06:00.000Z'
+  });
+  assert.equal(JSON.stringify(health).includes('/tmp/store-contract'), false);
+  assert.equal(JSON.stringify(health).includes('store-contract'), false);
+  assert.equal(JSON.stringify(health).includes('tmux://'), false);
+  assert.equal(JSON.stringify(health).includes('payload'), false);
+  assert.equal(JSON.stringify(health).includes('metadata'), false);
 });
 
 test('prototype store exposes bounded sanitized replay checkpoint log that survives reload', async () => {
@@ -3699,6 +3730,56 @@ test('SQLite prototype store creates derived sidecar indexes and backfills exist
     'SELECT (SELECT COUNT(*) FROM record_index), (SELECT COUNT(*) FROM record_evidence_refs);'
   );
   assert.equal(backfillCountStdout.trim(), '2|1');
+});
+
+test('SQLite prototype store reports sanitized storage index health without side effects', async () => {
+  const sqliteStoreFile = await createSqliteStoreFile();
+  const store = await createPrototypeStore({ sqliteFilePath: sqliteStoreFile });
+
+  await store.appendEvent(createEvent());
+  await store.appendHeartbeat(createHeartbeat());
+  await store.appendCollectorReport(createCollectorReport());
+
+  const before = store.getStorageReplayManifest();
+  const health = await store.getStorageIndexHealth();
+  assert.deepEqual(health, {
+    backend: 'sqlite',
+    status: 'ok',
+    record_count: 9,
+    record_index_count: 9,
+    record_evidence_ref_count: 6,
+    sidecar_status: 'complete',
+    record_kind_buckets: {
+      event: 3,
+      heartbeat: 2,
+      evidence_record: 3,
+      collector_snapshot: 1
+    },
+    latest_record_ts: '2026-03-09T18:06:00.000Z'
+  });
+  assert.deepEqual(store.getStorageReplayManifest(), before);
+  assert.equal(JSON.stringify(health).includes(sqliteStoreFile), false);
+  assert.equal(JSON.stringify(health).includes('/tmp/store-contract'), false);
+  assert.equal(JSON.stringify(health).includes('store-contract'), false);
+  assert.equal(JSON.stringify(health).includes('tmux://'), false);
+  assert.equal(JSON.stringify(health).includes('payload'), false);
+
+  await execSqlite(sqliteStoreFile, 'DELETE FROM record_evidence_refs;');
+  assert.deepEqual(await store.getStorageIndexHealth(), {
+    ...health,
+    status: 'degraded',
+    record_evidence_ref_count: 0,
+    sidecar_status: 'stale'
+  });
+
+  await unlink(sqliteStoreFile);
+  assert.deepEqual(await store.getStorageIndexHealth(), {
+    ...health,
+    status: 'degraded',
+    record_index_count: null,
+    record_evidence_ref_count: null,
+    sidecar_status: 'stale'
+  });
 });
 
 test('SQLite prototype store populates sidecars when appending collector evidence records', async () => {

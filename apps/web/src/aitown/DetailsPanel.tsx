@@ -275,7 +275,10 @@ type SharedMemoryBacklinkSummary = {
   overflowCount: number;
 };
 
+type SelectedAgentEvidenceLedgerBucketKey = 'output' | 'non-output' | 'degraded' | 'unmapped';
+
 type SelectedAgentEvidenceLedgerBucket = {
+  key: SelectedAgentEvidenceLedgerBucketKey;
   label: string;
   totalCount: number;
 };
@@ -1290,18 +1293,22 @@ function renderSelectedAgentEvidenceProofCompass(model: SelectedAgentEvidenceLed
 
   const buckets: SelectedAgentEvidenceLedgerBucket[] = [
     {
+      key: 'output',
       label: 'Output',
       totalCount: model.outputEvidence.totalCount
     },
     {
+      key: 'non-output',
       label: 'Non-output',
       totalCount: model.nonOutputEvidence.totalCount
     },
     {
+      key: 'degraded',
       label: 'Degraded',
       totalCount: model.degradedEvidence.totalCount
     },
     {
+      key: 'unmapped',
       label: 'Unmapped',
       totalCount: model.unmappedEvidence.totalCount
     }
@@ -1317,11 +1324,44 @@ function renderSelectedAgentEvidenceProofCompass(model: SelectedAgentEvidenceLed
     <li className="aitown-record">
       <strong>Proof Compass</strong>
       {visibleBuckets.length > 0 ? (
-        <span>{`Buckets · ${visibleBuckets.map((bucket) => `${bucket.label} ${bucket.totalCount}`).join(' · ')}`}</span>
+        <span>
+          Buckets ·{' '}
+          {visibleBuckets.map((bucket, index) => (
+            <Fragment key={bucket.key}>
+              {index > 0 ? ' · ' : null}
+              <button
+                type="button"
+                className="aitown-link-button"
+                aria-label={`Show ${bucket.label.toLowerCase()} evidence ${bucket.totalCount}`}
+                onClick={() => focusSelectedAgentEvidenceLedgerGroup(bucket.key)}
+              >
+                {`${bucket.label} ${bucket.totalCount}`}
+              </button>
+            </Fragment>
+          ))}
+        </span>
       ) : null}
       {sourceContextGroups.map((group) => renderSelectedAgentEvidenceSourceContextGroup(group))}
     </li>
   );
+}
+
+function getSelectedAgentEvidenceLedgerGroupId(key: SelectedAgentEvidenceLedgerBucketKey) {
+  return `selected-agent-evidence-ledger-${key}`;
+}
+
+function focusSelectedAgentEvidenceLedgerGroup(key: SelectedAgentEvidenceLedgerBucketKey) {
+  if (typeof document === 'undefined') {
+    return;
+  }
+
+  const target = document.getElementById(getSelectedAgentEvidenceLedgerGroupId(key));
+  if (!(target instanceof HTMLElement)) {
+    return;
+  }
+
+  target.scrollIntoView({ block: 'nearest' });
+  target.focus({ preventScroll: true });
 }
 
 function renderSelectedAgentEvidenceSourceContextGroup(group: SelectedAgentEvidenceLedgerSourceContextGroup) {
@@ -1335,6 +1375,7 @@ function renderSelectedAgentEvidenceSourceContextGroup(group: SelectedAgentEvide
 }
 
 function renderSelectedAgentEvidenceLedgerGroup(
+  key: SelectedAgentEvidenceLedgerBucketKey,
   label: string,
   group: SelectedAgentEvidenceLedgerGroup,
   onInspectRecord: (evidenceId: string) => void
@@ -1344,7 +1385,7 @@ function renderSelectedAgentEvidenceLedgerGroup(
   }
 
   return (
-    <li className="aitown-record">
+    <li className="aitown-record" id={getSelectedAgentEvidenceLedgerGroupId(key)} tabIndex={-1}>
       <strong>{`${label} · ${group.totalCount}`}</strong>
       {group.items.map((item) => renderSelectedAgentEvidenceLedgerItem(item, onInspectRecord))}
       {group.overflowCount > 0 ? <span>{`More · ${group.overflowCount} hidden by card limit`}</span> : null}
@@ -6377,21 +6418,25 @@ export function DetailsPanel({
             <>
               {renderSelectedAgentEvidenceProofCompass(selectedAgentEvidenceLedger)}
               {renderSelectedAgentEvidenceLedgerGroup(
+                'output',
                 'Output evidence',
                 selectedAgentEvidenceLedger.outputEvidence,
                 onInspectSelectedAgentEvidenceRecord
               )}
               {renderSelectedAgentEvidenceLedgerGroup(
+                'non-output',
                 'Non-output evidence',
                 selectedAgentEvidenceLedger.nonOutputEvidence,
                 onInspectSelectedAgentEvidenceRecord
               )}
               {renderSelectedAgentEvidenceLedgerGroup(
+                'degraded',
                 'Degraded evidence',
                 selectedAgentEvidenceLedger.degradedEvidence,
                 onInspectSelectedAgentEvidenceRecord
               )}
               {renderSelectedAgentEvidenceLedgerGroup(
+                'unmapped',
                 'Unmapped evidence',
                 selectedAgentEvidenceLedger.unmappedEvidence,
                 onInspectSelectedAgentEvidenceRecord

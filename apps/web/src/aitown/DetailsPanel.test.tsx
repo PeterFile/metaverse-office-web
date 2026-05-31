@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { DetailsPanel, type HubCategory } from './DetailsPanel';
@@ -1900,6 +1900,9 @@ describe('DetailsPanel selected-agent workflow lifecycle', () => {
 
   it('renders selected-agent Evidence Ledger source context using only safe summary fields', () => {
     const onInspectSelectedAgentEvidenceRecord = vi.fn();
+    const previousScrollIntoView = HTMLElement.prototype.scrollIntoView;
+    const scrollIntoView = vi.fn();
+    HTMLElement.prototype.scrollIntoView = scrollIntoView;
     const selectedAgentEvidenceLedger = buildSelectedAgentEvidenceLedger();
     selectedAgentEvidenceLedger.sourceRefGroups = [
       ...selectedAgentEvidenceLedger.sourceRefGroups,
@@ -1912,57 +1915,72 @@ describe('DetailsPanel selected-agent workflow lifecycle', () => {
       }
     ];
 
-    render(
-      <DetailsPanel
-        {...buildProps({
-          activeHubCategory: 'evidence',
-          selectedAgentDrilldownTab: 'evidence',
-          selectedAgentEvidenceLedger,
-          selectedAgentEvidenceLedgerState: 'ready',
-          onInspectSelectedAgentEvidenceRecord
-        })}
-      />
-    );
+    try {
+      render(
+        <DetailsPanel
+          {...buildProps({
+            activeHubCategory: 'evidence',
+            selectedAgentDrilldownTab: 'evidence',
+            selectedAgentEvidenceLedger,
+            selectedAgentEvidenceLedgerState: 'ready',
+            onInspectSelectedAgentEvidenceRecord
+          })}
+        />
+      );
 
-    const section = screen.getByRole('heading', { name: 'Evidence Ledger' }).closest('section');
-    expect(section).not.toBeNull();
-    expect(within(section!).getByText('Scope · Selected-agent evidence records')).toBeVisible();
-    expect(within(section!).getByText('Proof Compass')).toBeVisible();
-    expect(within(section!).getByText('Buckets · Output 1 · Non-output 1 · Degraded 1 · Unmapped 1')).toBeVisible();
-    expect(within(section!).getByText('Output evidence · 1')).toBeVisible();
-    expect(within(section!).getByText('Non-output evidence · 1')).toBeVisible();
-    expect(within(section!).getByText('Degraded evidence · 1')).toBeVisible();
-    expect(within(section!).getByText('Unmapped evidence · 1')).toBeVisible();
-    expect(
-      within(section!).getByText(
-        'Source context · workspace_file · agent_output · observed · mapped · 1 · Observed 2026-03-16T08:58:00.000Z · Collected 2026-03-16T08:59:00.000Z'
-      )
-    ).toBeVisible();
-    expect(
-      within(section!).getByText(
-        'Source context · tmux_observation · runtime_unmapped · observed · unmapped · 1 · Observed 2026-03-16T08:56:00.000Z · Collected 2026-03-16T08:59:00.000Z'
-      )
-    ).toBeVisible();
-    expect(
-      within(section!).getByText(
-        'Source · workspace_file · Role · agent_output · Status · observed · mapped · Observed · 2026-03-16T08:58:00.000Z · Collected · 2026-03-16T08:59:00.000Z'
-      )
-    ).toBeVisible();
-    expect(section!).not.toHaveTextContent('/tmp/app/outbox.md');
-    expect(section!).not.toHaveTextContent('Ref ·');
-    expect(section!).not.toHaveTextContent('Evidence id ·');
-    expect(section!).not.toHaveTextContent('Snapshot ·');
-    expect(section!).not.toHaveTextContent('Correlation ·');
-    expect(section!).not.toHaveTextContent('Degraded ·');
-    expect(section!).not.toHaveTextContent('metadata');
-    expect(section!).not.toHaveTextContent('idle');
-    expect(section!).not.toHaveTextContent('offline');
-    expect(section!).not.toHaveTextContent('No work');
-    expect(section!).not.toHaveTextContent('productivity');
-    expect(section!).not.toHaveTextContent('tmux://');
-    expect(section!).not.toHaveTextContent('hermes://');
-    expect(section!).not.toHaveTextContent('hermes-session-app-engineering');
-    expect(onInspectSelectedAgentEvidenceRecord).not.toHaveBeenCalled();
+      const section = screen.getByRole('heading', { name: 'Evidence Ledger' }).closest('section');
+      expect(section).not.toBeNull();
+      expect(within(section!).getByText('Scope · Selected-agent evidence records')).toBeVisible();
+      expect(within(section!).getByText('Proof Compass')).toBeVisible();
+      expect(within(section!).getByRole('button', { name: 'Show output evidence 1' })).toBeVisible();
+      expect(within(section!).getByRole('button', { name: 'Show non-output evidence 1' })).toBeVisible();
+      expect(within(section!).getByRole('button', { name: 'Show degraded evidence 1' })).toBeVisible();
+      expect(within(section!).getByRole('button', { name: 'Show unmapped evidence 1' })).toBeVisible();
+      expect(within(section!).getByText('Output evidence · 1')).toBeVisible();
+      expect(within(section!).getByText('Non-output evidence · 1')).toBeVisible();
+      expect(within(section!).getByText('Degraded evidence · 1')).toBeVisible();
+      expect(within(section!).getByText('Unmapped evidence · 1')).toBeVisible();
+      expect(
+        within(section!).getByText(
+          'Source context · workspace_file · agent_output · observed · mapped · 1 · Observed 2026-03-16T08:58:00.000Z · Collected 2026-03-16T08:59:00.000Z'
+        )
+      ).toBeVisible();
+      expect(
+        within(section!).getByText(
+          'Source context · tmux_observation · runtime_unmapped · observed · unmapped · 1 · Observed 2026-03-16T08:56:00.000Z · Collected 2026-03-16T08:59:00.000Z'
+        )
+      ).toBeVisible();
+      expect(
+        within(section!).getByText(
+          'Source · workspace_file · Role · agent_output · Status · observed · mapped · Observed · 2026-03-16T08:58:00.000Z · Collected · 2026-03-16T08:59:00.000Z'
+        )
+      ).toBeVisible();
+
+      const degradedGroup = within(section!).getByText('Degraded evidence · 1').closest('li');
+      expect(degradedGroup).not.toBeNull();
+
+      fireEvent.click(within(section!).getByRole('button', { name: 'Show degraded evidence 1' }));
+
+      expect(scrollIntoView).toHaveBeenCalled();
+      expect(document.activeElement).toBe(degradedGroup);
+      expect(section!).not.toHaveTextContent('/tmp/app/outbox.md');
+      expect(section!).not.toHaveTextContent('Ref ·');
+      expect(section!).not.toHaveTextContent('Evidence id ·');
+      expect(section!).not.toHaveTextContent('Snapshot ·');
+      expect(section!).not.toHaveTextContent('Correlation ·');
+      expect(section!).not.toHaveTextContent('Degraded ·');
+      expect(section!).not.toHaveTextContent('metadata');
+      expect(section!).not.toHaveTextContent('idle');
+      expect(section!).not.toHaveTextContent('offline');
+      expect(section!).not.toHaveTextContent('No work');
+      expect(section!).not.toHaveTextContent('productivity');
+      expect(section!).not.toHaveTextContent('tmux://');
+      expect(section!).not.toHaveTextContent('hermes://');
+      expect(section!).not.toHaveTextContent('hermes-session-app-engineering');
+      expect(onInspectSelectedAgentEvidenceRecord).not.toHaveBeenCalled();
+    } finally {
+      HTMLElement.prototype.scrollIntoView = previousScrollIntoView;
+    }
   });
 
   it('hides zero-count selected-agent evidence bucket chips without misleading empty copy', () => {
@@ -1982,7 +2000,10 @@ describe('DetailsPanel selected-agent workflow lifecycle', () => {
 
     const section = screen.getByRole('heading', { name: 'Evidence Ledger' }).closest('section');
     expect(section).not.toBeNull();
-    expect(within(section!).getByText('Buckets · Output 1 · Unmapped 1')).toBeVisible();
+    expect(within(section!).getByRole('button', { name: 'Show output evidence 1' })).toBeVisible();
+    expect(within(section!).getByRole('button', { name: 'Show unmapped evidence 1' })).toBeVisible();
+    expect(within(section!).queryByRole('button', { name: 'Show non-output evidence 0' })).not.toBeInTheDocument();
+    expect(within(section!).queryByRole('button', { name: 'Show degraded evidence 0' })).not.toBeInTheDocument();
     expect(section!).not.toHaveTextContent('Non-output 0');
     expect(section!).not.toHaveTextContent('Degraded 0');
   });

@@ -2046,6 +2046,82 @@ test('GET /agents/evidence-spine/summary stays compact under runtime canaries an
   assertNoEvidenceSpineRuntimeLeak(response.body);
 });
 
+test('GET /agents/evidence-spine/source-matrix returns source-matrix read route purity', async (t) => {
+  let collectCount = 0;
+  const controllerSnapshotCollector = {
+    async collectSnapshot() {
+      collectCount += 1;
+      throw new Error('GET source matrix must not collect');
+    }
+  };
+  const { baseUrl, store, storeFile } = await createHarness(t, { controllerSnapshotCollector });
+
+  await store.appendCollectorReport(createRouteParityCollectorReport());
+  const fileBeforeRead = await readFile(storeFile, 'utf8');
+  const recordCountBeforeRead = store.records.length;
+
+  const response = await requestJson(
+    `${baseUrl}/agents/evidence-spine/source-matrix?source_kind=workspace_file&output_candidate=true&newest_first=true&limit=1`
+  );
+
+  assert.equal(response.response.status, 200);
+  assert.deepEqual(
+    response.body.item.agents.map((agent) => agent.agent_id),
+    [
+      'team-lead',
+      'market-intel',
+      'product-pmf',
+      'tokenomics',
+      'protocol-engineering',
+      'app-engineering',
+      'growth-revenue'
+    ]
+  );
+  assert.equal(response.body.item.agent_count, 7);
+  assert.equal(response.body.item.returned_limit, 1);
+  assert.equal(response.body.item.total_count, 1);
+  assert.equal(response.body.item.mapped_count, 1);
+  assert.equal(response.body.item.unmapped_count, 0);
+
+  const appMatrix = response.body.item.agents.find(
+    (agent) => agent.agent_id === 'app-engineering'
+  );
+  assert.deepEqual(appMatrix.sources, [
+    {
+      source_kind: 'workspace_file',
+      evidence_count: 1,
+      source_status_buckets: {
+        observed: 0,
+        degraded: 1,
+        missing: 0,
+        error: 0
+      },
+      evidence_role_buckets: {
+        workspace_presence: 0,
+        inbound_task: 0,
+        agent_output: 1,
+        agent_plan: 0,
+        runtime_activity: 0,
+        runtime_presence: 0,
+        runtime_unmapped: 0,
+        task_reference: 0
+      },
+      output_candidate_buckets: {
+        true: 1,
+        false: 0
+      },
+      latest_observed_at: '2026-03-09T18:05:00.000Z',
+      latest_collected_at: '2026-03-09T18:06:00.000Z'
+    }
+  ]);
+  assert.equal(response.body.item.unmapped_evidence_summary.total_count, 0);
+  assert.equal(collectCount, 0);
+  assert.equal(store.records.length, recordCountBeforeRead);
+  assert.equal(await readFile(storeFile, 'utf8'), fileBeforeRead);
+
+  assertNoEvidenceSpineRuntimeLeak(response.body);
+});
+
 test('GET /agents/:id/evidence-spine returns 404 for unknown agents', async (t) => {
   const { baseUrl } = await createHarness(t);
 

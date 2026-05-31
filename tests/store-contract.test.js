@@ -503,6 +503,200 @@ test('prototype store keeps non-seeded evidence out of canonical agent evidence 
   assert.equal(mappedOnlySummary.unmapped_count, 0);
 });
 
+test('agent evidence source matrix keeps canonical agents stable and unmapped evidence separate', async () => {
+  const store = new PrototypeStore({ filePath: await createStoreFile() });
+  await store.load();
+  await store.appendCollectorReport(createCollectorReport());
+  await store.appendCollectorReport(createHermesRuntimeCollectorReport());
+
+  const matrix = store.getAgentEvidenceSourceStatusMatrix({
+    source_kind: 'hermes_profile',
+    newest_first: 'true',
+    limit: '1'
+  });
+
+  assert.deepEqual(
+    matrix.agents.map((agent) => agent.agent_id),
+    [
+      'team-lead',
+      'market-intel',
+      'product-pmf',
+      'tokenomics',
+      'protocol-engineering',
+      'app-engineering',
+      'growth-revenue'
+    ]
+  );
+  assert.equal(matrix.agent_count, 7);
+  assert.equal(matrix.returned_limit, 1);
+  assert.equal(matrix.total_count, 2);
+  assert.equal(matrix.mapped_count, 1);
+  assert.equal(matrix.unmapped_count, 1);
+
+  const appMatrix = matrix.agents.find((agent) => agent.agent_id === 'app-engineering');
+  assert.deepEqual(appMatrix.sources, [
+    {
+      source_kind: 'hermes_profile',
+      evidence_count: 1,
+      source_status_buckets: {
+        observed: 1,
+        degraded: 0,
+        missing: 0,
+        error: 0
+      },
+      evidence_role_buckets: {
+        workspace_presence: 0,
+        inbound_task: 0,
+        agent_output: 0,
+        agent_plan: 0,
+        runtime_activity: 0,
+        runtime_presence: 1,
+        runtime_unmapped: 0,
+        task_reference: 0
+      },
+      output_candidate_buckets: {
+        true: 0,
+        false: 1
+      },
+      latest_observed_at: '2026-03-09T18:06:30.000Z',
+      latest_collected_at: '2026-03-09T18:07:00.000Z'
+    }
+  ]);
+  assert.deepEqual(matrix.unmapped_evidence_summary.sources, [
+    {
+      source_kind: 'hermes_profile',
+      evidence_count: 1,
+      source_status_buckets: {
+        observed: 1,
+        degraded: 0,
+        missing: 0,
+        error: 0
+      },
+      evidence_role_buckets: {
+        workspace_presence: 0,
+        inbound_task: 0,
+        agent_output: 0,
+        agent_plan: 0,
+        runtime_activity: 0,
+        runtime_presence: 0,
+        runtime_unmapped: 1,
+        task_reference: 0
+      },
+      output_candidate_buckets: {
+        true: 0,
+        false: 1
+      },
+      latest_observed_at: '2026-03-09T18:06:40.000Z',
+      latest_collected_at: '2026-03-09T18:07:00.000Z'
+    }
+  ]);
+
+  assert.ok(
+    matrix.agents.every((agent) =>
+      agent.sources.every((source) => source.source_kind === 'hermes_profile')
+    )
+  );
+
+  const serialized = JSON.stringify(matrix);
+  assert.equal(serialized.includes('evidence_id'), false);
+  assert.equal(serialized.includes('evidence_ref'), false);
+  assert.equal(serialized.includes('collector_snapshot_id'), false);
+  assert.equal(serialized.includes('correlation_id'), false);
+  assert.equal(serialized.includes('/tmp/store-contract'), false);
+  assert.equal(serialized.includes('tmux://'), false);
+  assert.equal(serialized.includes('hermes://'), false);
+  assert.equal(serialized.includes('metadata'), false);
+  assert.equal(serialized.includes('degraded_reasons'), false);
+});
+
+test('agent evidence source matrix does not promote non-seeded agent evidence', async () => {
+  const store = new PrototypeStore({ filePath: await createStoreFile() });
+  await store.load();
+  const report = createCollectorReport();
+  report.items[0].agent_id = 'unmapped';
+  report.items[0].heartbeat.agent_id = 'unmapped';
+  await store.appendCollectorReport(report);
+
+  const matrix = store.getAgentEvidenceSourceStatusMatrix({ mapped: 'false' });
+
+  assert.equal(matrix.agent_count, 7);
+  assert.equal(matrix.mapped_count, 0);
+  assert.equal(matrix.unmapped_count, 3);
+  assert.equal(
+    matrix.agents.reduce(
+      (total, agent) =>
+        total + agent.sources.reduce((sourceTotal, source) => sourceTotal + source.evidence_count, 0),
+      0
+    ),
+    0
+  );
+  assert.equal(matrix.unmapped_evidence_summary.total_count, 3);
+});
+
+test('agent evidence source matrix counts unknown unmapped source kinds without rendering them', async () => {
+  const storeFile = await createStoreFile();
+  const unknownSourceKind = 'tmux://secret/path';
+  await writeFile(
+    storeFile,
+    [
+      {
+        kind: 'evidence_record',
+        payload: {
+          evidence_id: 'ev_unmapped_hermes_profile_1',
+          agent_id: null,
+          source_kind: 'hermes_profile',
+          evidence_role: 'runtime_unmapped',
+          evidence_ref: 'hermes://profile/unmapped',
+          source_status: 'observed',
+          output_candidate: false,
+          observed_at: '2026-03-09T18:06:40.000Z',
+          collected_at: '2026-03-09T18:07:00.000Z',
+          collector_snapshot_id: 'collector-snapshot:2026-03-09T18:07:00.000Z',
+          correlation_id: 'collector-snapshot:2026-03-09T18:07:00.000Z',
+          degraded_reasons: [],
+          metadata: {}
+        }
+      },
+      {
+        kind: 'evidence_record',
+        payload: {
+          evidence_id: 'ev_unmapped_unknown_source_kind_1',
+          agent_id: null,
+          source_kind: unknownSourceKind,
+          evidence_role: 'runtime_unmapped',
+          evidence_ref: '/tmp/source-matrix-secret.md',
+          source_status: 'observed',
+          output_candidate: false,
+          observed_at: '2026-03-09T18:06:45.000Z',
+          collected_at: '2026-03-09T18:07:00.000Z',
+          collector_snapshot_id: 'collector-snapshot:2026-03-09T18:07:00.000Z',
+          correlation_id: 'collector-snapshot:2026-03-09T18:07:00.000Z',
+          degraded_reasons: [],
+          metadata: {}
+        }
+      }
+    ].map((record) => JSON.stringify(record)).join('\n') + '\n'
+  );
+
+  const store = await createPrototypeStore({ filePath: storeFile });
+  const matrix = store.getAgentEvidenceSourceStatusMatrix({ mapped: 'false' });
+
+  assert.equal(matrix.total_count, 2);
+  assert.equal(matrix.mapped_count, 0);
+  assert.equal(matrix.unmapped_count, 2);
+  assert.equal(matrix.unmapped_evidence_summary.total_count, 2);
+  assert.deepEqual(
+    matrix.unmapped_evidence_summary.sources.map((source) => source.source_kind),
+    ['hermes_profile']
+  );
+  assert.ok(
+    matrix.agents.every((agent) =>
+      agent.sources.every((source) => source.source_kind !== unknownSourceKind)
+    )
+  );
+  assert.equal(JSON.stringify(matrix).includes(unknownSourceKind), false);
+});
+
 test('agent evidence spine returns null for unknown agents', async () => {
   const store = new PrototypeStore({ filePath: await createStoreFile() });
   await store.load();

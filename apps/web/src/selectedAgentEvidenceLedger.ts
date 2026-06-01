@@ -25,7 +25,6 @@ export interface SelectedAgentEvidenceLedgerSourceRefGroup {
   sourceKind: string;
   evidenceRole: string | null;
   sourceStatus: string | null;
-  evidenceRef: string;
   totalCount: number;
 }
 
@@ -257,20 +256,29 @@ function toSourceRefGroups(
 ): SelectedAgentEvidenceLedgerSourceRefGroup[] {
   const groupsByKey = new Map<
     string,
-    SelectedAgentEvidenceLedgerSourceRefGroup & { firstSourceOrder: number; latestTime: number }
+    SelectedAgentEvidenceLedgerSourceRefGroup & {
+      firstSourceOrder: number;
+      latestTime: number;
+      evidenceRefs: Set<string>;
+    }
   >();
 
   records.forEach((record, sourceOrder) => {
+    const evidenceRef = record.evidence_ref.trim();
+    if (evidenceRef.length === 0) {
+      return;
+    }
+
     const sourceKind = record.source_kind;
     const evidenceRole = record.evidence_role;
     const sourceStatus = record.source_status;
-    const evidenceRef = record.evidence_ref;
-    const key = JSON.stringify([sourceKind, evidenceRole, sourceStatus, evidenceRef]);
+    const key = JSON.stringify([sourceKind, evidenceRole, sourceStatus]);
     const existing = groupsByKey.get(key);
     const latestTime = getLedgerItemTime(toLedgerItem(record));
 
     if (existing) {
-      existing.totalCount += 1;
+      existing.evidenceRefs.add(evidenceRef);
+      existing.totalCount = existing.evidenceRefs.size;
       existing.latestTime = Math.max(existing.latestTime, latestTime);
       return;
     }
@@ -279,10 +287,10 @@ function toSourceRefGroups(
       sourceKind,
       evidenceRole,
       sourceStatus,
-      evidenceRef,
       totalCount: 1,
       firstSourceOrder: sourceOrder,
-      latestTime
+      latestTime,
+      evidenceRefs: new Set([evidenceRef])
     });
   });
 
@@ -297,11 +305,12 @@ function toSourceRefGroups(
       return recency !== 0 ? recency : left.firstSourceOrder - right.firstSourceOrder;
     })
     .slice(0, maxGroups)
-    .map((group) => ({
-      sourceKind: group.sourceKind,
-      evidenceRole: group.evidenceRole,
-      sourceStatus: group.sourceStatus,
-      evidenceRef: group.evidenceRef,
-      totalCount: group.totalCount
-    }));
+    .map(
+      ({
+        firstSourceOrder: _firstSourceOrder,
+        latestTime: _latestTime,
+        evidenceRefs: _evidenceRefs,
+        ...group
+      }) => group
+    );
 }

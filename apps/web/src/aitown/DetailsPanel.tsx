@@ -55,7 +55,8 @@ import type {
   SelectedAgentEvidenceLedgerGroup,
   SelectedAgentEvidenceLedgerItem,
   SelectedAgentEvidenceLedgerModel,
-  SelectedAgentEvidenceLedgerSourceContextGroup
+  SelectedAgentEvidenceLedgerSourceContextGroup,
+  SelectedAgentEvidenceLedgerSourceRefGroup
 } from '../selectedAgentEvidenceLedger';
 import type { SourceGapDrilldownGroupKey } from './sourceGapSignals';
 
@@ -1319,8 +1320,9 @@ function renderSelectedAgentEvidenceProofCompass(model: SelectedAgentEvidenceLed
   ];
   const visibleBuckets = buckets.filter((bucket) => bucket.totalCount > 0);
   const sourceContextGroups = model.sourceContextGroups;
+  const sourceRefGroups = model.sourceRefGroups;
 
-  if (visibleBuckets.length === 0 && sourceContextGroups.length === 0) {
+  if (visibleBuckets.length === 0 && sourceContextGroups.length === 0 && sourceRefGroups.length === 0) {
     return null;
   }
 
@@ -1346,6 +1348,7 @@ function renderSelectedAgentEvidenceProofCompass(model: SelectedAgentEvidenceLed
         </span>
       ) : null}
       {sourceContextGroups.map((group) => renderSelectedAgentEvidenceSourceContextGroup(group))}
+      {sourceRefGroups.map((group) => renderSelectedAgentEvidenceSourceRefGroup(group))}
     </li>
   );
 }
@@ -1374,6 +1377,14 @@ function renderSelectedAgentEvidenceSourceContextGroup(group: SelectedAgentEvide
       key={`${group.sourceKind}:${group.evidenceRole ?? 'none'}:${group.sourceStatus ?? 'none'}:${group.mapped ? 'mapped' : 'unmapped'}`}
     >
       {`Source context · ${group.sourceKind} · ${group.evidenceRole ?? 'unclassified'} · ${group.sourceStatus ?? 'unknown'} · ${group.mapped ? 'mapped' : 'unmapped'} · ${group.totalCount} · Observed ${renderTimestamp(group.observedAt, 'No observed timestamp')} · Collected ${renderTimestamp(group.collectedAt, 'No collected timestamp')}`}
+    </span>
+  );
+}
+
+function renderSelectedAgentEvidenceSourceRefGroup(group: SelectedAgentEvidenceLedgerSourceRefGroup) {
+  return (
+    <span key={`${group.sourceKind}:${group.evidenceRole ?? 'none'}:${group.sourceStatus ?? 'none'}`}>
+      {`Ref rollup · ${group.sourceKind} · ${group.evidenceRole ?? 'unclassified'} · ${group.sourceStatus ?? 'unknown'} · refs available · ${group.totalCount}`}
     </span>
   );
 }

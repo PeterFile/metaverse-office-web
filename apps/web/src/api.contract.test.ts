@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type {
   AccountabilityReplayBundle,
   AgentDetail,
+  AgentEvidenceSourceMatrix,
   AgentEvidenceSpine,
   AgentEvidenceSpineSummary,
   AgentEventsResponse,
@@ -610,6 +611,7 @@ describe('read-only frontend/backend contract smoke', () => {
       limit: 5
     } as const;
     const summary = await api.fetchAgentEvidenceSpineSummary(evidenceSpineFilters);
+    const sourceMatrix = await api.fetchAgentEvidenceSourceMatrix(evidenceSpineFilters);
     const spine = await api.fetchAgentEvidenceSpine('app-engineering', evidenceSpineFilters);
 
     const expectedQuery = [
@@ -637,11 +639,18 @@ describe('read-only frontend/backend contract smoke', () => {
       {
         method: 'GET',
         origin: harness.baseUrl,
+        pathname: '/agents/evidence-spine/source-matrix',
+        query: expectedQuery
+      },
+      {
+        method: 'GET',
+        origin: harness.baseUrl,
         pathname: '/agents/app-engineering/evidence-spine',
         query: expectedQuery
       }
     ]);
     expectAgentEvidenceSpineSummaryContract(summary);
+    expectAgentEvidenceSourceMatrixContract(sourceMatrix);
     expectAgentEvidenceSpineContract(spine);
   });
 
@@ -2876,6 +2885,52 @@ function expectAgentEvidenceSpineSummaryContract(summary: AgentEvidenceSpineSumm
   );
   expectSafeEvidenceSpinePayload(summary);
   const serialized = JSON.stringify(summary);
+  expect(serialized).not.toContain('collector_snapshot_id');
+  expect(serialized).not.toContain('correlation_id');
+}
+
+function expectAgentEvidenceSourceMatrixContract(matrix: AgentEvidenceSourceMatrix) {
+  expect(matrix).toMatchObject({
+    agent_count: 7,
+    returned_limit: 5,
+    total_count: 1,
+    mapped_count: 1,
+    unmapped_count: 0,
+    unmapped_evidence_summary: {
+      total_count: 0,
+      sources: []
+    }
+  });
+  expect(matrix.agents).toHaveLength(7);
+  expect(matrix.agents).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        agent_id: 'app-engineering',
+        sources: [
+          expect.objectContaining({
+            source_kind: 'workspace_file',
+            evidence_count: 1,
+            source_status_buckets: expect.objectContaining({
+              degraded: 1
+            }),
+            evidence_role_buckets: expect.objectContaining({
+              agent_plan: 1
+            }),
+            output_candidate_buckets: {
+              true: 1,
+              false: 0
+            },
+            latest_observed_at: '2026-03-09T18:58:30.000Z',
+            latest_collected_at: '2026-03-09T18:59:00.000Z'
+          })
+        ]
+      })
+    ])
+  );
+  expectSafeEvidenceSpinePayload(matrix);
+  const serialized = JSON.stringify(matrix);
+  expect(serialized).not.toContain('evidence_id');
+  expect(serialized).not.toContain('evidence_ref');
   expect(serialized).not.toContain('collector_snapshot_id');
   expect(serialized).not.toContain('correlation_id');
 }

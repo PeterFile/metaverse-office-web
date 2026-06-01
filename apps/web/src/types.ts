@@ -348,6 +348,29 @@ export interface EvidenceRecordsResponse {
   items: EvidenceRecord[];
 }
 
+export interface EvidenceRefRollupGroup {
+  evidence_ref: null;
+  evidence_ref_key: string;
+  evidence_ref_label: string;
+  record_count: number;
+  mapped_count: number;
+  unmapped_count: number;
+  agent_id_buckets: Record<string, number>;
+  source_kind_buckets: Record<string, number>;
+  source_status_buckets: Record<string, number>;
+}
+
+export interface EvidenceRefRollup {
+  total_count: number;
+  total_groups: number;
+  returned_limit: number;
+  groups: EvidenceRefRollupGroup[];
+}
+
+export interface EvidenceRefRollupResponse {
+  item: EvidenceRefRollup;
+}
+
 export interface EvidenceProvenanceRecord {
   observed_at: string | null;
   collected_at: string | null;

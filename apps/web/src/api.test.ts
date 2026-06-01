@@ -19,6 +19,7 @@ import {
   fetchEvidenceSourceContext,
   fetchEvidenceProvenanceBundle,
   fetchEvidenceRecord,
+  fetchEvidenceRefRollup,
   fetchEvidenceRecords,
   fetchRuntimeSourceGapAgentSummary,
   fetchRuntimeSourceGapLifecycle,
@@ -1361,6 +1362,78 @@ describe('fetchEvidenceRecords', () => {
       '/evidence-records?newest_first=false&limit=3',
       expect.objectContaining({ signal: undefined })
     );
+  });
+});
+
+describe('fetchEvidenceRefRollup', () => {
+  it('passes exact filters through and unwraps safe ref groups without raw refs', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            item: {
+              total_count: 2,
+              total_groups: 1,
+              returned_limit: 7,
+              groups: [
+                {
+                  evidence_ref: null,
+                  evidence_ref_key: 'ref_group_001',
+                  evidence_ref_label: 'workspace_file degraded evidence',
+                  record_count: 2,
+                  mapped_count: 1,
+                  unmapped_count: 1,
+                  agent_id_buckets: {
+                    'app-engineering': 1,
+                    unmapped: 1
+                  },
+                  source_kind_buckets: {
+                    workspace_file: 2
+                  },
+                  source_status_buckets: {
+                    degraded: 2
+                  }
+                }
+              ]
+            }
+          }),
+          {
+            headers: JSON_HEADERS
+          }
+        )
+      )
+    );
+
+    const rollup = await fetchEvidenceRefRollup({
+      evidenceId: 'evidence:app/review#1',
+      agentId: 'app engineering',
+      sourceKind: 'workspace_file',
+      evidenceRole: 'agent plan',
+      evidenceRef: '/tmp/evidence ref#1.md',
+      sourceStatus: 'degraded',
+      collectorSnapshotId: 'snapshot 2026/03/09',
+      correlationId: 'corr app/review#1',
+      outputCandidate: true,
+      mapped: false,
+      observedSince: '2026-03-09T18:58:30.000Z',
+      observedUntil: '2026-03-09T18:59:00.000Z',
+      collectedSince: '2026-03-09T18:59:00.000Z',
+      collectedUntil: '2026-03-09T19:00:00.000Z',
+      newestFirst: false,
+      limit: 7
+    });
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/evidence-records/ref-rollup?evidence_id=evidence%3Aapp%2Freview%231&agent_id=app+engineering&source_kind=workspace_file&evidence_role=agent+plan&evidence_ref=%2Ftmp%2Fevidence+ref%231.md&source_status=degraded&collector_snapshot_id=snapshot+2026%2F03%2F09&correlation_id=corr+app%2Freview%231&output_candidate=true&mapped=false&observed_since=2026-03-09T18%3A58%3A30.000Z&observed_until=2026-03-09T18%3A59%3A00.000Z&collected_since=2026-03-09T18%3A59%3A00.000Z&collected_until=2026-03-09T19%3A00%3A00.000Z&newest_first=false&limit=7',
+      expect.objectContaining({ signal: undefined })
+    );
+    expect(rollup.groups[0]).toMatchObject({
+      evidence_ref: null,
+      evidence_ref_key: 'ref_group_001',
+      evidence_ref_label: 'workspace_file degraded evidence'
+    });
+    expect(JSON.stringify(rollup)).not.toContain('/tmp/evidence ref#1.md');
   });
 });
 

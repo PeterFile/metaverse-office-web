@@ -636,6 +636,31 @@ export interface StorageIndexHealthResponse {
   item: StorageIndexHealth;
 }
 
+export type StorageReplayManifestSourceCategory = 'workspace' | 'runtime' | 'fixture' | 'unknown';
+
+export interface StorageReplayManifestEvidenceSummary {
+  evidence_record_count: number;
+  source_kind_buckets: Record<string, number>;
+  source_category_buckets: Partial<Record<StorageReplayManifestSourceCategory, number>>;
+  evidence_role_buckets: Record<string, number>;
+  source_status_buckets: Record<string, number>;
+  output_candidate_count: number;
+  unmapped_count: number;
+  latest_observed_at: string | null;
+  latest_collected_at: string | null;
+}
+
+export interface StorageReplayManifest {
+  record_count: number;
+  record_kind_buckets: Record<string, number>;
+  evidence_summary: StorageReplayManifestEvidenceSummary;
+  canonical_record_hash: string;
+}
+
+export interface StorageReplayManifestResponse {
+  item: StorageReplayManifest;
+}
+
 export interface AgentEvidenceSpineRecord {
   observed_at: string | null;
   collected_at: string | null;

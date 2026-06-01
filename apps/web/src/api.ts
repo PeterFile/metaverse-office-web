@@ -41,6 +41,8 @@ import type {
   RuntimeSourceGapsResponse,
   StorageIndexHealth,
   StorageIndexHealthResponse,
+  StorageReplayManifest,
+  StorageReplayManifestResponse,
   TimelineReplayResponse
 } from './types';
 
@@ -333,6 +335,16 @@ export async function fetchStorageIndexHealth(
     signal: options.signal
   });
   const body = await parseJson<StorageIndexHealthResponse>(response);
+  return body.item;
+}
+
+export async function fetchStorageReplayManifest(
+  options: { signal?: AbortSignal } = {}
+): Promise<StorageReplayManifest> {
+  const response = await fetch(resolveApiUrl('/storage/replay-manifest'), {
+    signal: options.signal
+  });
+  const body = await parseJson<StorageReplayManifestResponse>(response);
   return body.item;
 }
 

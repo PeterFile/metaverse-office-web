@@ -26,6 +26,7 @@ import {
   fetchRuntimeSourceGapTrend,
   fetchRuntimeSourceGaps,
   fetchStorageIndexHealth,
+  fetchStorageReplayManifest,
   fetchMemoryArtifacts,
   fetchOfficeOperations,
   fetchOfficeOverview,
@@ -771,6 +772,124 @@ describe('fetchStorageIndexHealth', () => {
       '/storage/index-health',
       expect.objectContaining({ signal: undefined })
     );
+  });
+});
+
+describe('fetchStorageReplayManifest', () => {
+  it('fetches the sanitized storage replay manifest without filters', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            item: {
+              record_count: 9,
+              record_kind_buckets: {
+                event: 3,
+                heartbeat: 2,
+                evidence_record: 3,
+                collector_snapshot: 1
+              },
+              evidence_summary: {
+                evidence_record_count: 3,
+                source_kind_buckets: {
+                  workspace_root: 1,
+                  workspace_file: 1,
+                  tmux_observation: 1
+                },
+                source_category_buckets: {
+                  workspace: 2,
+                  runtime: 1
+                },
+                evidence_role_buckets: {
+                  workspace_presence: 1,
+                  agent_output: 1,
+                  runtime_activity: 1
+                },
+                source_status_buckets: {
+                  observed: 2,
+                  degraded: 1
+                },
+                output_candidate_count: 2,
+                unmapped_count: 0,
+                latest_observed_at: '2026-03-09T18:05:30.000Z',
+                latest_collected_at: '2026-03-09T18:06:00.000Z'
+              },
+              canonical_record_hash:
+                'fa36a558fa37a6ac5e6b02f86374f65d7723af1baca8066348cac08d1367aad7'
+            }
+          }),
+          {
+            headers: JSON_HEADERS
+          }
+        )
+      )
+    );
+
+    await expect(fetchStorageReplayManifest()).resolves.toEqual({
+      record_count: 9,
+      record_kind_buckets: {
+        event: 3,
+        heartbeat: 2,
+        evidence_record: 3,
+        collector_snapshot: 1
+      },
+      evidence_summary: {
+        evidence_record_count: 3,
+        source_kind_buckets: {
+          workspace_root: 1,
+          workspace_file: 1,
+          tmux_observation: 1
+        },
+        source_category_buckets: {
+          workspace: 2,
+          runtime: 1
+        },
+        evidence_role_buckets: {
+          workspace_presence: 1,
+          agent_output: 1,
+          runtime_activity: 1
+        },
+        source_status_buckets: {
+          observed: 2,
+          degraded: 1
+        },
+        output_candidate_count: 2,
+        unmapped_count: 0,
+        latest_observed_at: '2026-03-09T18:05:30.000Z',
+        latest_collected_at: '2026-03-09T18:06:00.000Z'
+      },
+      canonical_record_hash: 'fa36a558fa37a6ac5e6b02f86374f65d7723af1baca8066348cac08d1367aad7'
+    });
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/storage/replay-manifest',
+      expect.objectContaining({ signal: undefined })
+    );
+  });
+
+  it('throws a RequestError when the backend returns a replay manifest problem response', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            error: 'validation_failed',
+            details: 'invalid replay manifest filter'
+          }),
+          {
+            status: 400,
+            headers: JSON_HEADERS
+          }
+        )
+      )
+    );
+
+    await expect(fetchStorageReplayManifest()).rejects.toMatchObject({
+      name: 'RequestError',
+      status: 400,
+      code: 'validation_failed',
+      message: 'invalid replay manifest filter'
+    });
   });
 });
 

@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  buildSelectedAgentEvidenceProofCompassRows,
   buildSelectedAgentEvidenceLedger,
   selectSelectedAgentEvidenceLedgerSourceContextGroups
 } from './selectedAgentEvidenceLedger';
-import type { EvidenceRecord } from './types';
+import type { EvidenceRecord, EvidenceRefRollup } from './types';
 
 function evidenceRecord(overrides: Partial<EvidenceRecord>): EvidenceRecord {
   return {
@@ -21,6 +22,28 @@ function evidenceRecord(overrides: Partial<EvidenceRecord>): EvidenceRecord {
     correlation_id: overrides.correlation_id ?? 'collector-20260309',
     degraded_reasons: overrides.degraded_reasons ?? [],
     metadata: overrides.metadata ?? {}
+  };
+}
+
+function proofCompassRollupGroup(
+  overrides: Partial<EvidenceRefRollup['groups'][number]> = {}
+): EvidenceRefRollup['groups'][number] {
+  return {
+    evidence_ref: null,
+    evidence_ref_key: overrides.evidence_ref_key ?? 'ref_group_001',
+    evidence_ref_label: overrides.evidence_ref_label ?? 'workspace_file evidence',
+    record_count: overrides.record_count ?? 1,
+    mapped_count: overrides.mapped_count ?? 1,
+    unmapped_count: overrides.unmapped_count ?? 0,
+    agent_id_buckets: overrides.agent_id_buckets ?? {
+      'app-engineering': 1
+    },
+    source_kind_buckets: overrides.source_kind_buckets ?? {
+      workspace_file: 1
+    },
+    source_status_buckets: overrides.source_status_buckets ?? {
+      observed: 1
+    }
   };
 }
 
@@ -380,6 +403,177 @@ describe('buildSelectedAgentEvidenceLedger', () => {
       }
     ]);
     expect(JSON.stringify(model.sourceRefGroups)).not.toContain('/tmp/');
+  });
+});
+
+describe('buildSelectedAgentEvidenceProofCompassRows', () => {
+  it('projects bounded Proof Compass rows from safe endpoint rollup fields only', () => {
+    const rows = buildSelectedAgentEvidenceProofCompassRows(
+      {
+        total_count: 12,
+        total_groups: 3,
+        returned_limit: 3,
+        groups: [
+          proofCompassRollupGroup({
+            evidence_ref_key: 'ref_group_002',
+            evidence_ref_label: 'workspace_file degraded evidence',
+            record_count: 7,
+            mapped_count: 5,
+            unmapped_count: 2,
+            source_kind_buckets: {
+              workspace_file: 5,
+              tmux_observation: 2,
+              '/tmp/not-a-kind': 99
+            },
+            source_status_buckets: {
+              degraded: 4,
+              observed: 3,
+              'token-status': 99
+            }
+          }),
+          proofCompassRollupGroup({
+            evidence_ref_key: 'ref_group_001',
+            evidence_ref_label: 'runtime evidence',
+            record_count: 5,
+            mapped_count: 0,
+            unmapped_count: 5,
+            source_kind_buckets: {
+              hermes_session: 3,
+              tmux_observation: 2
+            },
+            source_status_buckets: {
+              observed: 5
+            }
+          }),
+          proofCompassRollupGroup({ evidence_ref_key: 'ref_group_003' })
+        ]
+      },
+      { maxRows: 2, maxBucketsPerRow: 2 }
+    );
+
+    expect(rows).toEqual([
+      {
+        groupKey: 'ref_group_002',
+        label: 'workspace_file degraded evidence',
+        recordCount: 7,
+        mappedCount: 5,
+        unmappedCount: 2,
+        sourceKindBuckets: [
+          { key: 'workspace_file', count: 5 },
+          { key: 'tmux_observation', count: 2 }
+        ],
+        sourceStatusBuckets: [
+          { key: 'degraded', count: 4 },
+          { key: 'observed', count: 3 }
+        ]
+      },
+      {
+        groupKey: 'ref_group_001',
+        label: 'runtime evidence',
+        recordCount: 5,
+        mappedCount: 0,
+        unmappedCount: 5,
+        sourceKindBuckets: [
+          { key: 'hermes_session', count: 3 },
+          { key: 'tmux_observation', count: 2 }
+        ],
+        sourceStatusBuckets: [{ key: 'observed', count: 5 }]
+      }
+    ]);
+    expect(JSON.stringify(rows)).not.toContain('/tmp/');
+    expect(JSON.stringify(rows)).not.toContain('token-status');
+  });
+
+  it('does not render raw refs, paths, protocols, tokens, or webhook canaries from unsafe rollup text', () => {
+    const rows = buildSelectedAgentEvidenceProofCompassRows({
+      total_count: 6,
+      total_groups: 2,
+      returned_limit: 2,
+      groups: [
+        proofCompassRollupGroup({
+          evidence_ref_key: '/tmp/ref-group-token-secret-payload-control-plane',
+          evidence_ref_label:
+            '/tmp/output.md /Users/peter/outbox.md ~/secrets.md file:///tmp/raw http://localhost https://example.invalid tmux://pane hermes://profile session://abc profile://abc token webhook secret payload control-plane',
+          record_count: 6,
+          mapped_count: 4,
+          unmapped_count: 2,
+          source_kind_buckets: {
+            workspace_file: 2,
+            'tmux://pane': 2,
+            'hermes://profile': 2,
+            '/Users/peter/source': 2,
+            webhook: 2,
+            'file:///tmp/raw': 2,
+            'https://example.invalid': 2,
+            payload: 2,
+            'control-plane': 2
+          },
+          source_status_buckets: {
+            observed: 3,
+            error: 1,
+            'session://secret': 2,
+            'profile://secret': 2,
+            token: 2,
+            payload: 2,
+            'control-plane': 2
+          }
+        }),
+        proofCompassRollupGroup({
+          evidence_ref_key: 'control-plane',
+          evidence_ref_label: 'path=C:\\Builds\\alice\\notes.txt path=/var/log/app.txt',
+          source_kind_buckets: {
+            task_fixture: 1
+          },
+          source_status_buckets: {
+            missing: 1
+          }
+        })
+      ]
+    });
+
+    expect(rows).toEqual([
+      {
+        groupKey: 'ref_group_1',
+        label: 'Evidence ref group',
+        recordCount: 6,
+        mappedCount: 4,
+        unmappedCount: 2,
+        sourceKindBuckets: [{ key: 'workspace_file', count: 2 }],
+        sourceStatusBuckets: [
+          { key: 'observed', count: 3 },
+          { key: 'error', count: 1 }
+        ]
+      },
+      {
+        groupKey: 'ref_group_2',
+        label: 'Evidence ref group',
+        recordCount: 1,
+        mappedCount: 1,
+        unmappedCount: 0,
+        sourceKindBuckets: [{ key: 'task_fixture', count: 1 }],
+        sourceStatusBuckets: [{ key: 'missing', count: 1 }]
+      }
+    ]);
+
+    const rendered = JSON.stringify(rows);
+    expect(rendered).not.toContain('/tmp');
+    expect(rendered).not.toContain('/Users');
+    expect(rendered).not.toContain('tmux://');
+    expect(rendered).not.toContain('hermes://');
+    expect(rendered).not.toContain('session://');
+    expect(rendered).not.toContain('profile://');
+    expect(rendered).not.toContain('~/');
+    expect(rendered).not.toContain('file://');
+    expect(rendered).not.toContain('http://');
+    expect(rendered).not.toContain('https://');
+    expect(rendered).not.toContain('token');
+    expect(rendered).not.toContain('webhook');
+    expect(rendered).not.toContain('secret');
+    expect(rendered).not.toContain('payload');
+    expect(rendered).not.toContain('control-plane');
+    expect(rendered).not.toContain('C:\\\\Builds');
+    expect(rendered).not.toContain('/var/log');
+    expect(rendered).not.toContain('alice');
   });
 });
 

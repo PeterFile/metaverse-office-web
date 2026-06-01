@@ -103,7 +103,8 @@ async function requestJsonDirect({ url, store, controllerSnapshotCollector }) {
 
   return {
     response: { status: statusCode },
-    body: JSON.parse(bodyText)
+    body: JSON.parse(bodyText),
+    text: bodyText
   };
 }
 
@@ -6257,6 +6258,45 @@ test('GET /evidence-records/schema read route purity does not inspect evidence r
   assert.equal(await readFile(storeFile, 'utf8'), fileBeforeRead);
 });
 
+test('GET evidence-record detail and provenance unknown ids do not echo unsafe ids', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'metaverse-office-evidence-404-'));
+  const store = await createPrototypeStore({ filePath: path.join(root, 'prototype-store.jsonl') });
+  const unsafeUnknownIds = [
+    '/tmp/evidence-404-no-echo/outbox.md',
+    '/Users/cwp/private/evidence-404-no-echo.md',
+    'tmux://evidence-404-no-echo/0.1',
+    'hermes://session/evidence-404-no-echo',
+    'hermes://profile/evidence-404-no-echo',
+    'session-evidence-404-no-echo',
+    'profile-evidence-404-no-echo',
+    'token=evidence-404-no-echo',
+    'https://hooks.slack.com/services/evidence-404-no-echo',
+    'https://example.test/webhook/evidence-404-no-echo'
+  ];
+
+  for (const unsafeUnknownId of unsafeUnknownIds) {
+    const routes = [
+      `/evidence-records/${encodeURIComponent(unsafeUnknownId)}`,
+      `/evidence-records/${encodeURIComponent(unsafeUnknownId)}/provenance-bundle`
+    ];
+    for (const route of routes) {
+      const response = await requestJsonDirect({ url: route, store });
+
+      assert.equal(response.response.status, 404);
+      assert.deepEqual(response.body, {
+        error: 'not_found',
+        details: 'unknown evidence record'
+      });
+      assert.equal(
+        response.text.includes(unsafeUnknownId),
+        false,
+        `${route} echoed ${unsafeUnknownId}`
+      );
+      assert.equal(JSON.stringify(response.body).includes(unsafeUnknownId), false);
+    }
+  }
+});
+
 test('GET /evidence-records lists stored evidence records read-only with exact filters', async (t) => {
   let collectCount = 0;
   const controllerSnapshotCollector = {
@@ -6482,12 +6522,12 @@ test('GET /evidence-records lists stored evidence records read-only with exact f
   );
   assert.equal(unknownBundle.response.status, 404);
   assert.equal(unknownBundle.body.error, 'not_found');
-  assert.equal(unknownBundle.body.details, 'unknown evidence record missing-evidence-id');
+  assert.equal(unknownBundle.body.details, 'unknown evidence record');
 
   const unknownDetail = await requestJson(`${baseUrl}/evidence-records/missing-evidence-id`);
   assert.equal(unknownDetail.response.status, 404);
   assert.equal(unknownDetail.body.error, 'not_found');
-  assert.equal(unknownDetail.body.details, 'unknown evidence record missing-evidence-id');
+  assert.equal(unknownDetail.body.details, 'unknown evidence record');
 
   const substringEvidenceId = await requestJson(
     `${baseUrl}/evidence-records?evidence_id=${encodeURIComponent(evidenceId.slice(0, -2))}&limit=10`

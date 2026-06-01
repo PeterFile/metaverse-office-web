@@ -4,6 +4,7 @@ import {
   RequestError,
   fetchAccountabilityReplay,
   fetchReplayCheckpointLog,
+  fetchAgentEvidenceSourceMatrix,
   fetchAgentDetail,
   fetchAgentEvidenceSpine,
   fetchAgentEvidenceSpineSummary,
@@ -1911,6 +1912,103 @@ describe('fetchAgentEvidenceSpineSummary', () => {
     );
 
     await expect(fetchAgentEvidenceSpineSummary({ limit: 1 })).rejects.toMatchObject({
+      name: 'RequestError',
+      status: 400,
+      code: 'bad_request',
+      message: 'invalid limit'
+    });
+  });
+});
+
+describe('fetchAgentEvidenceSourceMatrix', () => {
+  it('requests a bounded newest-first source matrix by default', async () => {
+    const item = {
+      agent_count: 7,
+      returned_limit: 200,
+      total_count: 0,
+      mapped_count: 0,
+      unmapped_count: 0,
+      agents: [],
+      unmapped_evidence_summary: {
+        total_count: 0,
+        sources: []
+      }
+    };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ item }), {
+          headers: JSON_HEADERS
+        })
+      )
+    );
+
+    await expect(fetchAgentEvidenceSourceMatrix()).resolves.toEqual(item);
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/agents/evidence-spine/source-matrix?newest_first=true&limit=200',
+      expect.objectContaining({ signal: undefined })
+    );
+  });
+
+  it('passes supported source-matrix filters through with backend query names', async () => {
+    const item = {
+      agent_count: 7,
+      returned_limit: 7,
+      total_count: 0,
+      mapped_count: 0,
+      unmapped_count: 0,
+      agents: [],
+      unmapped_evidence_summary: {
+        total_count: 0,
+        sources: []
+      }
+    };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ item }), {
+          headers: JSON_HEADERS
+        })
+      )
+    );
+
+    await expect(
+      fetchAgentEvidenceSourceMatrix({
+        sourceKind: 'workspace_file',
+        evidenceRole: 'agent output',
+        sourceStatus: 'degraded',
+        collectorSnapshotId: 'snapshot 2026/03/09',
+        correlationId: 'corr app/review#1',
+        outputCandidate: false,
+        mapped: true,
+        observedSince: '2026-03-09T18:58:30.000Z',
+        observedUntil: '2026-03-09T18:59:00.000Z',
+        collectedSince: '2026-03-09T18:59:00.000Z',
+        collectedUntil: '2026-03-09T19:00:00.000Z',
+        newestFirst: false,
+        limit: 7
+      })
+    ).resolves.toEqual(item);
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/agents/evidence-spine/source-matrix?source_kind=workspace_file&evidence_role=agent+output&source_status=degraded&collector_snapshot_id=snapshot+2026%2F03%2F09&correlation_id=corr+app%2Freview%231&output_candidate=false&mapped=true&observed_since=2026-03-09T18%3A58%3A30.000Z&observed_until=2026-03-09T18%3A59%3A00.000Z&collected_since=2026-03-09T18%3A59%3A00.000Z&collected_until=2026-03-09T19%3A00%3A00.000Z&newest_first=false&limit=7',
+      expect.objectContaining({ signal: undefined })
+    );
+  });
+
+  it('throws RequestError for source-matrix problem responses', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ error: 'bad_request', details: 'invalid limit' }), {
+          status: 400,
+          headers: JSON_HEADERS
+        })
+      )
+    );
+
+    await expect(fetchAgentEvidenceSourceMatrix({ limit: 1 })).rejects.toMatchObject({
       name: 'RequestError',
       status: 400,
       code: 'bad_request',

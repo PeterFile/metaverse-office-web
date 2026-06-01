@@ -662,6 +662,36 @@ export interface AgentEvidenceSpineUnmappedSummary {
   latest_collected_at: string | null;
 }
 
+export interface AgentEvidenceSourceMatrixRow {
+  source_kind: string;
+  evidence_count: number;
+  source_status_buckets: Record<string, number>;
+  evidence_role_buckets: Record<string, number>;
+  output_candidate_buckets: Record<'true' | 'false', number>;
+  latest_observed_at: string | null;
+  latest_collected_at: string | null;
+}
+
+export interface AgentEvidenceSourceMatrixAgent {
+  agent_id: string;
+  sources: AgentEvidenceSourceMatrixRow[];
+}
+
+export interface AgentEvidenceSourceMatrixUnmappedSummary {
+  total_count: number;
+  sources: AgentEvidenceSourceMatrixRow[];
+}
+
+export interface AgentEvidenceSourceMatrix {
+  agent_count: number;
+  returned_limit: number;
+  total_count: number;
+  mapped_count: number;
+  unmapped_count: number;
+  agents: AgentEvidenceSourceMatrixAgent[];
+  unmapped_evidence_summary: AgentEvidenceSourceMatrixUnmappedSummary;
+}
+
 export interface AgentEvidenceSpineSummary {
   agent_count: number;
   returned_limit: number;
@@ -686,6 +716,10 @@ export interface AgentEvidenceSpine {
 
 export interface AgentEvidenceSpineSummaryResponse {
   item: AgentEvidenceSpineSummary;
+}
+
+export interface AgentEvidenceSourceMatrixResponse {
+  item: AgentEvidenceSourceMatrix;
 }
 
 export interface AgentEvidenceSpineResponse {

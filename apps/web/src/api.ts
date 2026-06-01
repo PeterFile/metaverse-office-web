@@ -2,6 +2,8 @@ import type {
   AccountabilityReplayBundle,
   AgentDetail,
   AgentDetailResponse,
+  AgentEvidenceSourceMatrix,
+  AgentEvidenceSourceMatrixResponse,
   AgentEvidenceSpine,
   AgentEvidenceSpineResponse,
   AgentEvidenceSpineSummary,
@@ -483,6 +485,18 @@ export async function fetchAgentEvidenceSpineSummary(
     signal: options.signal
   });
   const body = await parseJson<AgentEvidenceSpineSummaryResponse>(response);
+  return body.item;
+}
+
+export async function fetchAgentEvidenceSourceMatrix(
+  options: AgentEvidenceSpineFilterOptions = {}
+): Promise<AgentEvidenceSourceMatrix> {
+  const params = buildAgentEvidenceSpineParams(options);
+  const suffix = params.size > 0 ? `?${params.toString()}` : '';
+  const response = await fetch(resolveApiUrl(`/agents/evidence-spine/source-matrix${suffix}`), {
+    signal: options.signal
+  });
+  const body = await parseJson<AgentEvidenceSourceMatrixResponse>(response);
   return body.item;
 }
 

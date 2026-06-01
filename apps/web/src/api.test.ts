@@ -25,6 +25,7 @@ import {
   fetchRuntimeSourceGapLifecycle,
   fetchRuntimeSourceGapTrend,
   fetchRuntimeSourceGaps,
+  fetchStorageIndexHealth,
   fetchMemoryArtifacts,
   fetchOfficeOperations,
   fetchOfficeOverview,
@@ -718,6 +719,58 @@ describe('fetchCollectorSourceHealth', () => {
     );
 
     await expect(fetchCollectorSourceHealth({ limit: 7 })).resolves.toBeNull();
+  });
+});
+
+describe('fetchStorageIndexHealth', () => {
+  it('unwraps sanitized append-only storage index health', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            item: {
+              backend: 'sqlite',
+              status: 'degraded',
+              record_count: 9,
+              record_index_count: 9,
+              record_evidence_ref_count: 0,
+              sidecar_status: 'stale',
+              record_kind_buckets: {
+                event: 3,
+                heartbeat: 2,
+                evidence_record: 3,
+                collector_snapshot: 1
+              },
+              latest_record_ts: '2026-03-09T18:06:00.000Z'
+            }
+          }),
+          {
+            headers: JSON_HEADERS
+          }
+        )
+      )
+    );
+
+    await expect(fetchStorageIndexHealth()).resolves.toEqual({
+      backend: 'sqlite',
+      status: 'degraded',
+      record_count: 9,
+      record_index_count: 9,
+      record_evidence_ref_count: 0,
+      sidecar_status: 'stale',
+      record_kind_buckets: {
+        event: 3,
+        heartbeat: 2,
+        evidence_record: 3,
+        collector_snapshot: 1
+      },
+      latest_record_ts: '2026-03-09T18:06:00.000Z'
+    });
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/storage/index-health',
+      expect.objectContaining({ signal: undefined })
+    );
   });
 });
 

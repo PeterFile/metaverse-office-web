@@ -39,6 +39,8 @@ import type {
   RuntimeSourceGapLifecycleResponse,
   RuntimeSourceGapsSummaryResponse,
   RuntimeSourceGapsResponse,
+  StorageIndexHealth,
+  StorageIndexHealthResponse,
   TimelineReplayResponse
 } from './types';
 
@@ -321,6 +323,16 @@ export async function fetchCollectorSnapshotDiff(
     signal: options.signal
   });
   const body = await parseJson<{ item: CollectorSnapshotDiff | null }>(response);
+  return body.item;
+}
+
+export async function fetchStorageIndexHealth(
+  options: { signal?: AbortSignal } = {}
+): Promise<StorageIndexHealth> {
+  const response = await fetch(resolveApiUrl('/storage/index-health'), {
+    signal: options.signal
+  });
+  const body = await parseJson<StorageIndexHealthResponse>(response);
   return body.item;
 }
 

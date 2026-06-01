@@ -32,6 +32,7 @@ import type {
   ReplayCheckpointLogResponse,
   EvidenceRefRollup,
   RuntimeSourceGapLifecycle,
+  StorageIndexHealth,
   TimelineReplayResponse
 } from './types';
 
@@ -126,7 +127,7 @@ describe('read-only frontend/backend contract smoke', () => {
     expect(path.basename(harness.root)).toMatch(/^web-contract-/);
   });
 
-  it('loads /office/overview, /office/operations, /agents/:id/workflow, /incidents, /timeline, /collectors/controller-snapshot, collector source projections, /memory/artifacts, and /correlations/:id from the real backend', async () => {
+  it('loads /office/overview, /office/operations, /agents/:id/workflow, /incidents, /timeline, /collectors/controller-snapshot, collector source projections, /storage/index-health, /memory/artifacts, and /correlations/:id from the real backend', async () => {
     harness = await createHarness(() => '2026-03-09T19:00:00.000Z');
     await seedContractSlice(harness.store);
 
@@ -151,6 +152,7 @@ describe('read-only frontend/backend contract smoke', () => {
       collectorEvidenceCoverage,
       collectorSourceHealth,
       collectorSnapshotHistory,
+      storageIndexHealth,
       memoryArtifacts,
       correlation
     ] = await Promise.all([
@@ -168,6 +170,7 @@ describe('read-only frontend/backend contract smoke', () => {
         status: 'degraded',
         limit: 7
       }),
+      api.fetchStorageIndexHealth(),
       api.fetchMemoryArtifacts({
         agentId: 'app-engineering',
         correlationId: 'corr-contract'
@@ -247,6 +250,12 @@ describe('read-only frontend/backend contract smoke', () => {
       {
         method: 'GET',
         origin: harness.baseUrl,
+        pathname: '/storage/index-health',
+        query: []
+      },
+      {
+        method: 'GET',
+        origin: harness.baseUrl,
         pathname: '/memory/artifacts',
         query: [
           ['agent_id', 'app-engineering'],
@@ -274,6 +283,7 @@ describe('read-only frontend/backend contract smoke', () => {
     expectCollectorEvidenceCoverageContract(collectorEvidenceCoverage);
     expectCollectorSourceHealthContract(collectorSourceHealth);
     expectCollectorSnapshotHistoryContract(collectorSnapshotHistory);
+    expectStorageIndexHealthContract(storageIndexHealth);
     expectMemoryArtifactContract(memoryArtifacts);
     expectCorrelationContract(correlation);
   });
@@ -3196,6 +3206,35 @@ function expectCollectorSnapshotDiffContract(diff: CollectorSnapshotDiff | null)
   expect(serializedDiff).not.toContain('session_ref');
   expect(serializedDiff).not.toContain('current_blocker');
   expect(serializedDiff).not.toContain('degraded_reasons');
+}
+
+function expectStorageIndexHealthContract(health: StorageIndexHealth) {
+  expect(health).toMatchObject({
+    backend: 'jsonl',
+    status: 'ok',
+    record_index_count: null,
+    record_evidence_ref_count: null,
+    sidecar_status: 'not_applicable',
+    latest_record_ts: '2026-03-09T18:59:00.000Z'
+  });
+  expect(health.record_count).toBeGreaterThan(0);
+  expect(health.record_kind_buckets.event).toBeGreaterThan(0);
+  expect(health.record_kind_buckets.heartbeat).toBeGreaterThan(0);
+  expect(health.record_kind_buckets.evidence_record).toBeGreaterThan(0);
+  expect(health.record_kind_buckets.collector_snapshot).toBe(1);
+  expect(Object.values(health.record_kind_buckets).reduce((total, count) => total + count, 0)).toBe(
+    health.record_count
+  );
+
+  const serializedHealth = JSON.stringify(health);
+  expect(serializedHealth).not.toContain('/tmp');
+  expect(serializedHealth).not.toContain('/Users');
+  expect(serializedHealth).not.toContain('/Volumes');
+  expect(serializedHealth).not.toContain('tmux://');
+  expect(serializedHealth).not.toContain('payload');
+  expect(serializedHealth).not.toContain('metadata');
+  expect(serializedHealth).not.toContain('stderr');
+  expect(serializedHealth).not.toContain('degraded_reasons');
 }
 
 function expectMemoryArtifactContract(memoryArtifacts: MemoryArtifactIndex) {

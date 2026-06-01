@@ -20,6 +20,8 @@ import type {
   EvidenceSourceContext,
   EvidenceProvenanceBundle,
   EvidenceRecord,
+  EvidenceRefRollup,
+  EvidenceRefRollupResponse,
   EvidenceRecordsResponse,
   IncidentFeedResponse,
   MemoryArtifactIndex,
@@ -80,6 +82,29 @@ type AgentEvidenceSpineFilterOptions = {
   newestFirst?: boolean;
   limit?: number;
   signal?: AbortSignal;
+};
+
+type EvidenceRecordFilterOptions = {
+  agentId?: string | null;
+  sourceKind?: string | null;
+  evidenceRole?: string | null;
+  evidenceRef?: string | null;
+  sourceStatus?: string | null;
+  collectorSnapshotId?: string | null;
+  correlationId?: string | null;
+  outputCandidate?: boolean | null;
+  mapped?: boolean | null;
+  observedSince?: string | null;
+  observedUntil?: string | null;
+  collectedSince?: string | null;
+  collectedUntil?: string | null;
+  newestFirst?: boolean;
+  limit?: number;
+  signal?: AbortSignal;
+};
+
+type EvidenceRefRollupFilterOptions = EvidenceRecordFilterOptions & {
+  evidenceId?: string | null;
 };
 
 export class RequestError extends Error {
@@ -300,26 +325,34 @@ export async function fetchCollectorSnapshotDiff(
 }
 
 export async function fetchEvidenceRecords(
-  options: {
-    agentId?: string | null;
-    sourceKind?: string | null;
-    evidenceRole?: string | null;
-    evidenceRef?: string | null;
-    sourceStatus?: string | null;
-    collectorSnapshotId?: string | null;
-    correlationId?: string | null;
-    outputCandidate?: boolean | null;
-    mapped?: boolean | null;
-    observedSince?: string | null;
-    observedUntil?: string | null;
-    collectedSince?: string | null;
-    collectedUntil?: string | null;
-    newestFirst?: boolean;
-    limit?: number;
-    signal?: AbortSignal;
-  } = {}
+  options: EvidenceRecordFilterOptions = {}
 ): Promise<EvidenceRecord[]> {
+  const params = buildEvidenceRecordParams(options);
+  const suffix = params.size > 0 ? `?${params.toString()}` : '';
+  const response = await fetch(resolveApiUrl(`/evidence-records${suffix}`), {
+    signal: options.signal
+  });
+  const body = await parseJson<EvidenceRecordsResponse>(response);
+  return body.items;
+}
+
+export async function fetchEvidenceRefRollup(
+  options: EvidenceRefRollupFilterOptions = {}
+): Promise<EvidenceRefRollup> {
+  const params = buildEvidenceRecordParams(options);
+  const suffix = params.size > 0 ? `?${params.toString()}` : '';
+  const response = await fetch(resolveApiUrl(`/evidence-records/ref-rollup${suffix}`), {
+    signal: options.signal
+  });
+  const body = await parseJson<EvidenceRefRollupResponse>(response);
+  return body.item;
+}
+
+function buildEvidenceRecordParams(options: EvidenceRefRollupFilterOptions) {
   const params = new URLSearchParams();
+  if (options.evidenceId) {
+    params.set('evidence_id', options.evidenceId);
+  }
   if (options.agentId) {
     params.set('agent_id', options.agentId);
   }
@@ -361,13 +394,7 @@ export async function fetchEvidenceRecords(
   }
   params.set('newest_first', String(options.newestFirst ?? true));
   params.set('limit', String(options.limit ?? DEFAULT_EVIDENCE_RECORD_LIMIT));
-
-  const suffix = params.size > 0 ? `?${params.toString()}` : '';
-  const response = await fetch(resolveApiUrl(`/evidence-records${suffix}`), {
-    signal: options.signal
-  });
-  const body = await parseJson<EvidenceRecordsResponse>(response);
-  return body.items;
+  return params;
 }
 
 export async function fetchEvidenceRecord(

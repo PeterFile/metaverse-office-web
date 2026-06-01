@@ -33,6 +33,7 @@ import type {
   EvidenceRefRollup,
   RuntimeSourceGapLifecycle,
   StorageIndexHealth,
+  StorageReplayManifest,
   TimelineReplayResponse
 } from './types';
 
@@ -127,7 +128,7 @@ describe('read-only frontend/backend contract smoke', () => {
     expect(path.basename(harness.root)).toMatch(/^web-contract-/);
   });
 
-  it('loads /office/overview, /office/operations, /agents/:id/workflow, /incidents, /timeline, /collectors/controller-snapshot, collector source projections, /storage/index-health, /memory/artifacts, and /correlations/:id from the real backend', async () => {
+  it('loads /office/overview, /office/operations, /agents/:id/workflow, /incidents, /timeline, /collectors/controller-snapshot, collector source projections, /storage/index-health, /storage/replay-manifest, /memory/artifacts, and /correlations/:id from the real backend', async () => {
     harness = await createHarness(() => '2026-03-09T19:00:00.000Z');
     await seedContractSlice(harness.store);
 
@@ -153,6 +154,7 @@ describe('read-only frontend/backend contract smoke', () => {
       collectorSourceHealth,
       collectorSnapshotHistory,
       storageIndexHealth,
+      storageReplayManifest,
       memoryArtifacts,
       correlation
     ] = await Promise.all([
@@ -171,6 +173,7 @@ describe('read-only frontend/backend contract smoke', () => {
         limit: 7
       }),
       api.fetchStorageIndexHealth(),
+      api.fetchStorageReplayManifest(),
       api.fetchMemoryArtifacts({
         agentId: 'app-engineering',
         correlationId: 'corr-contract'
@@ -256,6 +259,12 @@ describe('read-only frontend/backend contract smoke', () => {
       {
         method: 'GET',
         origin: harness.baseUrl,
+        pathname: '/storage/replay-manifest',
+        query: []
+      },
+      {
+        method: 'GET',
+        origin: harness.baseUrl,
         pathname: '/memory/artifacts',
         query: [
           ['agent_id', 'app-engineering'],
@@ -284,6 +293,7 @@ describe('read-only frontend/backend contract smoke', () => {
     expectCollectorSourceHealthContract(collectorSourceHealth);
     expectCollectorSnapshotHistoryContract(collectorSnapshotHistory);
     expectStorageIndexHealthContract(storageIndexHealth);
+    expectStorageReplayManifestContract(storageReplayManifest);
     expectMemoryArtifactContract(memoryArtifacts);
     expectCorrelationContract(correlation);
   });
@@ -3235,6 +3245,34 @@ function expectStorageIndexHealthContract(health: StorageIndexHealth) {
   expect(serializedHealth).not.toContain('metadata');
   expect(serializedHealth).not.toContain('stderr');
   expect(serializedHealth).not.toContain('degraded_reasons');
+}
+
+function expectStorageReplayManifestContract(manifest: StorageReplayManifest) {
+  expect(manifest.record_count).toBeGreaterThan(0);
+  expect(manifest.record_kind_buckets.event).toBeGreaterThan(0);
+  expect(manifest.record_kind_buckets.heartbeat).toBeGreaterThan(0);
+  expect(manifest.record_kind_buckets.evidence_record).toBeGreaterThan(0);
+  expect(manifest.record_kind_buckets.collector_snapshot).toBe(1);
+  expect(manifest.evidence_summary.evidence_record_count).toBeGreaterThan(0);
+  expect(manifest.evidence_summary.source_kind_buckets.workspace_file).toBeGreaterThan(0);
+  expect(manifest.evidence_summary.source_category_buckets.workspace).toBeGreaterThan(0);
+  expect(manifest.evidence_summary.evidence_role_buckets.agent_plan).toBeGreaterThan(0);
+  expect(manifest.evidence_summary.source_status_buckets.degraded).toBeGreaterThan(0);
+  expect(manifest.evidence_summary.output_candidate_count).toBeGreaterThan(0);
+  expect(manifest.evidence_summary.latest_observed_at).toBe('2026-03-09T18:58:45.000Z');
+  expect(manifest.evidence_summary.latest_collected_at).toBe('2026-03-09T18:59:00.000Z');
+  expect(manifest.canonical_record_hash).toMatch(/^[a-f0-9]{64}$/);
+
+  const serializedManifest = JSON.stringify(manifest);
+  expect(serializedManifest).not.toContain('/tmp');
+  expect(serializedManifest).not.toContain('/Users');
+  expect(serializedManifest).not.toContain('/Volumes');
+  expect(serializedManifest).not.toContain('tmux://');
+  expect(serializedManifest).not.toContain('payload');
+  expect(serializedManifest).not.toContain('metadata');
+  expect(serializedManifest).not.toContain('token');
+  expect(serializedManifest).not.toContain('webhook');
+  expect(serializedManifest).not.toContain('degraded_reasons');
 }
 
 function expectMemoryArtifactContract(memoryArtifacts: MemoryArtifactIndex) {

@@ -187,28 +187,24 @@ describe('buildSelectedAgentEvidenceLedger', () => {
       sourceRefGroups: [
         {
           sourceKind: 'workspace_file',
-          evidenceRef: '/tmp/app/missing.md',
           evidenceRole: 'workspace_file',
           sourceStatus: 'missing',
           totalCount: 1
         },
         {
           sourceKind: 'workspace_file',
-          evidenceRef: '/tmp/app/outbox.md',
           evidenceRole: 'agent_output',
           sourceStatus: 'degraded',
           totalCount: 1
         },
         {
           sourceKind: 'workspace_file',
-          evidenceRef: '/tmp/app/result.md',
           evidenceRole: 'agent_output',
           sourceStatus: 'observed',
           totalCount: 1
         },
         {
           sourceKind: 'workspace_root',
-          evidenceRef: '/tmp/app',
           evidenceRole: 'workspace_presence',
           sourceStatus: 'observed',
           totalCount: 1
@@ -286,7 +282,14 @@ describe('buildSelectedAgentEvidenceLedger', () => {
     expect(model.outputEvidence.totalCount).toBe(3);
     expect(model.outputEvidence.overflowCount).toBe(1);
     expect(model.outputEvidence.items.map((item) => item.evidenceId)).toEqual(['c', 'b']);
-    expect(model.sourceRefGroups).toHaveLength(3);
+    expect(model.sourceRefGroups).toEqual([
+      {
+        sourceKind: 'workspace_file',
+        evidenceRole: 'agent_output',
+        sourceStatus: 'observed',
+        totalCount: 3
+      }
+    ]);
     expect(model.outputEvidence.items[0]).not.toHaveProperty('metadata');
   });
 
@@ -349,19 +352,20 @@ describe('buildSelectedAgentEvidenceLedger', () => {
     ]);
   });
 
-  it('bounds top source/ref groups by count then recency without carrying metadata', () => {
+  it('computes source/ref rollups before group bounding and counts unique refs only', () => {
     const model = buildSelectedAgentEvidenceLedger(
       [
         evidenceRecord({ evidence_id: 'a', evidence_ref: '/tmp/a.md' }),
+        evidenceRecord({ evidence_id: 'b', evidence_ref: '/tmp/b.md' }),
+        evidenceRecord({ evidence_id: 'c', evidence_ref: '/tmp/c.md' }),
+        evidenceRecord({ evidence_id: 'd', evidence_ref: '/tmp/d.md' }),
+        evidenceRecord({ evidence_id: 'e', evidence_ref: '/tmp/e.md' }),
+        evidenceRecord({ evidence_id: 'duplicate-e', evidence_ref: '/tmp/e.md' }),
         evidenceRecord({
-          evidence_id: 'b',
-          observed_at: '2026-03-09T18:06:00.000Z',
-          evidence_ref: '/tmp/b.md'
-        }),
-        evidenceRecord({
-          evidence_id: 'c',
-          observed_at: '2026-03-09T18:07:00.000Z',
-          evidence_ref: '/tmp/b.md'
+          evidence_id: 'presence',
+          evidence_ref: '/tmp/app',
+          source_kind: 'workspace_root',
+          evidence_role: 'workspace_presence'
         })
       ],
       { maxSourceRefGroups: 1 }
@@ -370,13 +374,12 @@ describe('buildSelectedAgentEvidenceLedger', () => {
     expect(model.sourceRefGroups).toEqual([
       {
         sourceKind: 'workspace_file',
-        evidenceRef: '/tmp/b.md',
         evidenceRole: 'agent_output',
         sourceStatus: 'observed',
-        totalCount: 2
+        totalCount: 5
       }
     ]);
-    expect(model.sourceRefGroups[0]).not.toHaveProperty('metadata');
+    expect(JSON.stringify(model.sourceRefGroups)).not.toContain('/tmp/');
   });
 });
 

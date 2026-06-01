@@ -868,38 +868,27 @@ function buildSelectedAgentEvidenceLedger(
     sourceRefGroups: [
       {
         sourceKind: 'workspace_file',
-        evidenceRef: '/tmp/app/outbox.md',
         evidenceRole: 'agent_output',
         sourceStatus: 'observed',
         totalCount: 1
       },
       {
         sourceKind: 'workspace_root',
-        evidenceRef: '/tmp/app',
         evidenceRole: 'workspace_presence',
         sourceStatus: 'observed',
         totalCount: 1
       },
       {
         sourceKind: 'workspace_file',
-        evidenceRef: '/tmp/app/missing.md',
         evidenceRole: 'workspace_file',
         sourceStatus: 'missing',
         totalCount: 1
       },
       {
         sourceKind: 'tmux_observation',
-        evidenceRef: 'tmux://unmapped/0.1',
         evidenceRole: 'runtime_unmapped',
         sourceStatus: 'observed',
-        totalCount: 1
-      },
-      {
-        sourceKind: 'tmux_observation',
-        evidenceRef: 'tmux://session/window/pane',
-        evidenceRole: 'runtime_unmapped',
-        sourceStatus: 'observed',
-        totalCount: 1
+        totalCount: 2
       }
     ],
     ...overrides
@@ -1908,7 +1897,6 @@ describe('DetailsPanel selected-agent workflow lifecycle', () => {
       ...selectedAgentEvidenceLedger.sourceRefGroups,
       {
         sourceKind: 'hermes_runtime',
-        evidenceRef: 'hermes://session/hermes-session-app-engineering',
         evidenceRole: 'runtime_profile',
         sourceStatus: 'degraded',
         totalCount: 1
@@ -1944,6 +1932,12 @@ describe('DetailsPanel selected-agent workflow lifecycle', () => {
         within(section!).getByText(
           'Source context · workspace_file · agent_output · observed · mapped · 1 · Observed 2026-03-16T08:58:00.000Z · Collected 2026-03-16T08:59:00.000Z'
         )
+      ).toBeVisible();
+      expect(
+        within(section!).getByText('Ref rollup · workspace_file · agent_output · observed · refs available · 1')
+      ).toBeVisible();
+      expect(
+        within(section!).getByText('Ref rollup · tmux_observation · runtime_unmapped · observed · refs available · 2')
       ).toBeVisible();
       expect(
         within(section!).getByText(

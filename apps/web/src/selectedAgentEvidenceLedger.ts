@@ -1,4 +1,4 @@
-import type { EvidenceRecord } from './types';
+import type { EvidenceRecord, EvidenceRefRollup } from './types';
 
 export interface SelectedAgentEvidenceLedgerItem {
   evidenceId: string;
@@ -38,6 +38,21 @@ export interface SelectedAgentEvidenceLedgerSourceContextGroup {
   totalCount: number;
 }
 
+export interface SelectedAgentEvidenceProofCompassBucket {
+  key: string;
+  count: number;
+}
+
+export interface SelectedAgentEvidenceProofCompassRow {
+  groupKey: string;
+  label: string;
+  recordCount: number;
+  mappedCount: number;
+  unmappedCount: number;
+  sourceKindBuckets: SelectedAgentEvidenceProofCompassBucket[];
+  sourceStatusBuckets: SelectedAgentEvidenceProofCompassBucket[];
+}
+
 export interface SelectedAgentEvidenceLedgerModel {
   isEmpty: boolean;
   requestScopeLabel: string;
@@ -51,6 +66,22 @@ export interface SelectedAgentEvidenceLedgerModel {
 
 const DEGRADED_SOURCE_STATUSES = new Set(['degraded', 'missing', 'error']);
 const DEFAULT_REQUEST_SCOPE_LABEL = 'Selected-agent evidence records';
+const DEFAULT_PROOF_COMPASS_GROUP_LABEL = 'Evidence ref group';
+const SAFE_PROOF_COMPASS_KEY_PATTERN = /^[A-Za-z0-9_.:-]{1,64}$/;
+const UNSAFE_PROOF_COMPASS_TEXT_PATTERN =
+  /(?:^|[^A-Za-z0-9])(?:\/[^\s"'`]+|~\/|[A-Za-z]:[\\/])|(?:tmux|hermes|session|profile|file|https?):\/\/|(?:token|webhook|secret|payload|control-plane)/i;
+const PROOF_COMPASS_SOURCE_KINDS = new Set([
+  'workspace_root',
+  'workspace_file',
+  'tmux_observation',
+  'hermes_profile',
+  'hermes_session',
+  'kanban_fixture',
+  'linear_fixture',
+  'slack_fixture',
+  'task_fixture'
+]);
+const PROOF_COMPASS_SOURCE_STATUSES = new Set(['observed', 'degraded', 'missing', 'error']);
 
 type IndexedLedgerItem = {
   item: SelectedAgentEvidenceLedgerItem;
@@ -100,6 +131,32 @@ export function buildSelectedAgentEvidenceLedger(
   };
 }
 
+export function buildSelectedAgentEvidenceProofCompassRows(
+  rollup: EvidenceRefRollup | null | undefined,
+  options: { maxRows?: number; maxBucketsPerRow?: number } = {}
+): SelectedAgentEvidenceProofCompassRow[] {
+  const maxRows = Math.max(0, options.maxRows ?? 4);
+  const maxBucketsPerRow = Math.max(0, options.maxBucketsPerRow ?? 3);
+
+  return (rollup?.groups ?? []).slice(0, maxRows).map((group, index) => ({
+    groupKey: toSafeProofCompassGroupKey(group.evidence_ref_key, index),
+    label: toSafeProofCompassGroupLabel(group.evidence_ref_label),
+    recordCount: toSafeProofCompassCount(group.record_count),
+    mappedCount: toSafeProofCompassCount(group.mapped_count),
+    unmappedCount: toSafeProofCompassCount(group.unmapped_count),
+    sourceKindBuckets: toSafeProofCompassBuckets(
+      group.source_kind_buckets,
+      PROOF_COMPASS_SOURCE_KINDS,
+      maxBucketsPerRow
+    ),
+    sourceStatusBuckets: toSafeProofCompassBuckets(
+      group.source_status_buckets,
+      PROOF_COMPASS_SOURCE_STATUSES,
+      maxBucketsPerRow
+    )
+  }));
+}
+
 function toLedgerItem(record: EvidenceRecord): SelectedAgentEvidenceLedgerItem {
   return {
     evidenceId: record.evidence_id,
@@ -115,6 +172,50 @@ function toLedgerItem(record: EvidenceRecord): SelectedAgentEvidenceLedgerItem {
     correlationId: record.correlation_id,
     degradedReasons: record.degraded_reasons
   };
+}
+
+function toSafeProofCompassGroupKey(value: string, index: number): string {
+  const normalized = value.trim();
+  if (
+    normalized.length > 0 &&
+    SAFE_PROOF_COMPASS_KEY_PATTERN.test(normalized) &&
+    !UNSAFE_PROOF_COMPASS_TEXT_PATTERN.test(normalized)
+  ) {
+    return normalized;
+  }
+
+  return `ref_group_${index + 1}`;
+}
+
+function toSafeProofCompassGroupLabel(value: string): string {
+  const normalized = value.trim().replace(/\s+/g, ' ');
+  if (normalized.length === 0 || UNSAFE_PROOF_COMPASS_TEXT_PATTERN.test(normalized)) {
+    return DEFAULT_PROOF_COMPASS_GROUP_LABEL;
+  }
+
+  return normalized.length <= 80 ? normalized : `${normalized.slice(0, 77)}...`;
+}
+
+function toSafeProofCompassBuckets(
+  buckets: Record<string, number>,
+  allowedKeys: Set<string>,
+  maxBuckets: number
+): SelectedAgentEvidenceProofCompassBucket[] {
+  return Object.entries(buckets)
+    .filter(([key, count]) => allowedKeys.has(key) && toSafeProofCompassCount(count) > 0)
+    .sort(([leftKey, leftCount], [rightKey, rightCount]) => {
+      const count = toSafeProofCompassCount(rightCount) - toSafeProofCompassCount(leftCount);
+      return count !== 0 ? count : leftKey.localeCompare(rightKey);
+    })
+    .slice(0, maxBuckets)
+    .map(([key, count]) => ({
+      key,
+      count: toSafeProofCompassCount(count)
+    }));
+}
+
+function toSafeProofCompassCount(value: number): number {
+  return Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
 }
 
 function isClassifiableEvidence(record: EvidenceRecord): boolean {

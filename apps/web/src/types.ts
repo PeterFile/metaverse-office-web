@@ -615,6 +615,27 @@ export interface RuntimeSourceGapLifecycleResponse {
   item: RuntimeSourceGapLifecycle;
 }
 
+export type StorageIndexHealthBackend = 'jsonl' | 'sqlite';
+
+export type StorageIndexHealthStatus = 'ok' | 'degraded';
+
+export type StorageIndexHealthSidecarStatus = 'complete' | 'stale' | 'not_applicable';
+
+export interface StorageIndexHealth {
+  backend: StorageIndexHealthBackend;
+  status: StorageIndexHealthStatus;
+  record_count: number;
+  record_index_count: number | null;
+  record_evidence_ref_count: number | null;
+  sidecar_status: StorageIndexHealthSidecarStatus;
+  record_kind_buckets: Record<string, number>;
+  latest_record_ts: string | null;
+}
+
+export interface StorageIndexHealthResponse {
+  item: StorageIndexHealth;
+}
+
 export interface AgentEvidenceSpineRecord {
   observed_at: string | null;
   collected_at: string | null;

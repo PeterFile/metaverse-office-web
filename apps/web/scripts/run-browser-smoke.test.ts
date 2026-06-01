@@ -278,6 +278,19 @@ describe('run-browser-smoke helpers', () => {
     ]);
   });
 
+  it('forwards package-script grep tags to the focused Live Evidence lane without requiring a second delimiter', () => {
+    expect(resolvePlaywrightArgs(['--smoke-lane=live-evidence', '--grep', '@journey @evidence-live'])).toEqual([
+      'exec',
+      'playwright',
+      'test',
+      'e2e/operator-shell.live-evidence-journey.smoke.spec.ts',
+      '--config',
+      'playwright.config.ts',
+      '--grep',
+      '@journey @evidence-live'
+    ]);
+  });
+
   it('rejects unknown browser smoke lanes instead of falling back to the broad smoke bundle', () => {
     expect(() => resolvePlaywrightArgs(['--smoke-lane=live-evidence-nextwave'])).toThrow(
       /Unknown browser smoke lane "live-evidence-nextwave"/

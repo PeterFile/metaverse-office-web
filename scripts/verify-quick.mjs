@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 
@@ -10,12 +10,15 @@ function usage() {
   console.error("Usage:");
   console.error("  pnpm verify:quick -- --lane=<docs|backend|web-api|ui|smoke>");
   console.error("  pnpm verify:quick -- --focused-files <web-package-relative-test> [...]");
+  console.error("  pnpm verify:quick -- --changed");
+  console.error("  pnpm verify:quick -- --since=<ref>");
   console.error("  docs: git diff --check");
   console.error("  backend: docs + pnpm backend:test");
   console.error("  web-api: docs + focused API Vitest + pnpm web:typecheck");
   console.error("  ui: docs + focused UI Vitest when present + pnpm web:typecheck");
   console.error("  smoke: docs + pnpm web:test:browser-smoke:live-evidence");
   console.error("  focused-files: docs + pnpm --filter @metaverse-office/web exec vitest run <files>");
+  console.error("  changed/since: conservative changed-file routing; unknown or cross-layer changes fail");
 }
 
 export const webTestCandidates = [
@@ -43,14 +46,49 @@ function runStep(command, args) {
   });
 }
 
+function normalizeRepoPath(filePath) {
+  return filePath.replaceAll("\\", "/").replace(/^\.\//, "");
+}
+
+function uniqueSorted(values) {
+  return [...new Set(values)].sort();
+}
+
+function gitNameOnly(args, { cwd }) {
+  const output = execFileSync("git", args, { cwd, encoding: "utf8" });
+  return output
+    .split(/\r?\n/)
+    .map((line) => normalizeRepoPath(line.trim()))
+    .filter(Boolean);
+}
+
+export function listChangedFiles({ cwd = process.cwd(), since = null } = {}) {
+  if (since) {
+    return uniqueSorted(gitNameOnly(["diff", "--name-only", "--diff-filter=ACDMRTUXB", since, "--"], { cwd }));
+  }
+
+  return uniqueSorted([
+    ...gitNameOnly(["diff", "--name-only", "--diff-filter=ACDMRTUXB", "HEAD", "--"], { cwd }),
+    ...gitNameOnly(["ls-files", "--others", "--exclude-standard"], { cwd }),
+  ]);
+}
+
 export function parseVerifyQuickArgs(args = []) {
   const forwardedArgs = args[0] === "--" ? args.slice(1) : [...args];
   const laneArgs = forwardedArgs.filter((arg) => arg.startsWith("--lane="));
+  const changedArgs = forwardedArgs.filter((arg) => arg === "--changed");
+  const sinceArgs = forwardedArgs.filter((arg) => arg.startsWith("--since="));
   const focusedFiles = [];
   let hasFocusedFilesFlag = false;
 
   if (laneArgs.length > 1) {
     throw new Error("Expected at most one --lane value");
+  }
+  if (changedArgs.length > 1) {
+    throw new Error("Expected at most one --changed flag");
+  }
+  if (sinceArgs.length > 1) {
+    throw new Error("Expected at most one --since value");
   }
 
   for (let index = 0; index < forwardedArgs.length; index += 1) {
@@ -77,13 +115,31 @@ export function parseVerifyQuickArgs(args = []) {
   }
 
   const lane = laneArgs[0]?.slice("--lane=".length) ?? null;
+  const since = sinceArgs[0]?.slice("--since=".length) ?? null;
+
+  if (since === "") {
+    throw new Error("--since requires a non-empty ref");
+  }
 
   if (lane && hasFocusedFilesFlag) {
     throw new Error("Use either --lane or --focused-files, not both");
   }
 
+  const selectedModes = [lane ? "lane" : null, hasFocusedFilesFlag ? "focused-files" : null, changedArgs.length > 0 ? "changed" : null, since ? "since" : null].filter(Boolean);
+  if (selectedModes.length > 1) {
+    throw new Error("Use only one of --lane, --focused-files, --changed, or --since");
+  }
+
   if (hasFocusedFilesFlag) {
     return { mode: "focused-files", focusedFiles };
+  }
+
+  if (changedArgs.length > 0) {
+    return { mode: "changed", since: null };
+  }
+
+  if (since) {
+    return { mode: "changed", since };
   }
 
   if (!lanes.has(lane)) {
@@ -95,6 +151,109 @@ export function parseVerifyQuickArgs(args = []) {
 
 function isWebTestPath(testPath) {
   return /\.(test|spec)\.[cm]?[jt]sx?$/.test(testPath);
+}
+
+function isDocsPath(filePath) {
+  return filePath === "README.md"
+    || filePath.startsWith("docs/")
+    || filePath.startsWith("specs/")
+    || filePath.startsWith("notes/")
+    || /^[^/]+\.md$/.test(filePath);
+}
+
+function isBackendPath(filePath) {
+  return filePath.startsWith("src/") || filePath.startsWith("tests/");
+}
+
+function isSmokePath(filePath) {
+  return filePath.startsWith("apps/web/e2e/")
+    || filePath === "apps/web/playwright.config.ts"
+    || filePath === "apps/web/playwright.config.test.ts"
+    || filePath.startsWith("apps/web/scripts/browser-smoke-")
+    || filePath === "apps/web/scripts/run-browser-smoke.mjs"
+    || filePath === "apps/web/scripts/run-browser-smoke.test.ts";
+}
+
+function isWebApiPath(filePath) {
+  return filePath === "apps/web/src/api.ts"
+    || filePath === "apps/web/src/api.test.ts"
+    || filePath === "apps/web/src/api.contract.test.ts"
+    || filePath === "apps/web/src/hooks/usePolledResource.ts"
+    || filePath === "apps/web/src/hooks/usePolledResource.test.tsx";
+}
+
+function isWebVitestPath(filePath) {
+  return filePath.startsWith(`${webRootPath}/`)
+    && !filePath.startsWith("apps/web/e2e/")
+    && isWebTestPath(filePath);
+}
+
+function toWebPackagePath(filePath) {
+  return filePath.slice(`${webRootPath}/`.length);
+}
+
+export function classifyChangedFiles(changedFiles = []) {
+  const normalizedFiles = uniqueSorted(
+    changedFiles.map((filePath) => normalizeRepoPath(filePath).trim()).filter(Boolean),
+  );
+
+  if (normalizedFiles.length === 0) {
+    throw new Error("No changed files found for verify:quick routing");
+  }
+
+  const nonDocsFiles = normalizedFiles.filter((filePath) => !isDocsPath(filePath));
+  if (nonDocsFiles.length === 0) {
+    return { mode: "lane", lane: "docs" };
+  }
+
+  const categories = new Map();
+  const unknownFiles = [];
+
+  for (const filePath of nonDocsFiles) {
+    if (isBackendPath(filePath)) {
+      categories.set("backend", (categories.get("backend") ?? []).concat(filePath));
+    } else if (isSmokePath(filePath)) {
+      categories.set("smoke", (categories.get("smoke") ?? []).concat(filePath));
+    } else if (isWebApiPath(filePath)) {
+      categories.set("web-api", (categories.get("web-api") ?? []).concat(filePath));
+    } else if (isWebVitestPath(filePath)) {
+      categories.set("focused-files", (categories.get("focused-files") ?? []).concat(filePath));
+    } else if (filePath.startsWith("apps/web/src/")) {
+      categories.set("ui", (categories.get("ui") ?? []).concat(filePath));
+    } else {
+      unknownFiles.push(filePath);
+    }
+  }
+
+  if (unknownFiles.length > 0) {
+    throw new Error(`Cannot safely route changed files: ${unknownFiles.join(", ")}`);
+  }
+
+  if (categories.size !== 1) {
+    throw new Error(`Cannot safely route cross-layer changed files: ${nonDocsFiles.join(", ")}`);
+  }
+
+  const [category, files] = categories.entries().next().value;
+  if (category === "focused-files") {
+    return {
+      mode: "focused-files",
+      focusedFiles: files.map(toWebPackagePath),
+    };
+  }
+
+  return { mode: "lane", lane: category };
+}
+
+function diffCheckArgsFor(parsedArgs) {
+  if (parsedArgs.mode !== "changed") {
+    return ["diff", "--check"];
+  }
+
+  if (parsedArgs.since) {
+    return ["diff", "--check", parsedArgs.since, "--"];
+  }
+
+  return ["diff", "--check", "HEAD", "--"];
 }
 
 export function normalizeFocusedWebTestPaths(focusedFiles, { cwd = process.cwd() } = {}) {
@@ -135,7 +294,12 @@ export function normalizeFocusedWebTestPaths(focusedFiles, { cwd = process.cwd()
   return normalizedFiles;
 }
 
-export function resolveVerifyQuickSteps(parsedArgs, { cwd = process.cwd() } = {}) {
+/**
+ * @param {object} parsedArgs
+ * @param {{ cwd?: string, changedFiles?: string[] | null }} [options]
+ */
+export function resolveVerifyQuickSteps(parsedArgs, options = {}) {
+  const { cwd = process.cwd(), changedFiles = null } = options;
   const existingWebTests = webTestCandidates.filter((testPath) =>
     existsSync(resolve(cwd, webRootPath, testPath)),
   );
@@ -167,24 +331,36 @@ export function resolveVerifyQuickSteps(parsedArgs, { cwd = process.cwd() } = {}
     smoke: [["pnpm", ["web:test:browser-smoke:live-evidence"]]],
   };
 
-  if (parsedArgs.mode === "focused-files") {
-    const focusedFiles = normalizeFocusedWebTestPaths(parsedArgs.focusedFiles, { cwd });
+  const routedArgs = parsedArgs.mode === "changed"
+    ? classifyChangedFiles(changedFiles ?? listChangedFiles({ cwd, since: parsedArgs.since }))
+    : parsedArgs;
+  const diffCheckStep = ["git", diffCheckArgsFor(parsedArgs)];
+
+  if (routedArgs.mode === "focused-files") {
+    const focusedFiles = normalizeFocusedWebTestPaths(routedArgs.focusedFiles, { cwd });
     return {
       mode: "focused-files",
       focusedFiles,
       steps: [
-        ["git", ["diff", "--check"]],
+        diffCheckStep,
         ["pnpm", ["--filter", "@metaverse-office/web", "exec", "vitest", "run", ...focusedFiles]],
       ],
     };
   }
 
-  return {
+  const plan = {
     mode: "lane",
-    lane: parsedArgs.lane,
+    lane: routedArgs.lane,
     existingWebTests,
-    steps: [["git", ["diff", "--check"]], ...stepsByLane[parsedArgs.lane]],
+    steps: [diffCheckStep, ...stepsByLane[routedArgs.lane]],
   };
+
+  if (parsedArgs.mode === "changed") {
+    plan.changed = true;
+    plan.since = parsedArgs.since;
+  }
+
+  return plan;
 }
 
 export async function main(cliArgs = process.argv.slice(2)) {

@@ -278,6 +278,27 @@ function projectParityReadModels(store, root) {
         newest_first: 'true',
         limit: '1'
       }),
+      sourceMatrix: store.getAgentEvidenceSourceStatusMatrix({
+        newest_first: 'true',
+        limit: '3'
+      }),
+      filteredSourceMatrix: store.getAgentEvidenceSourceStatusMatrix({
+        mapped: 'true',
+        source_kind: 'workspace_file',
+        evidence_role: 'agent_output',
+        output_candidate: 'true',
+        source_status: 'degraded',
+        newest_first: 'true',
+        limit: '1'
+      }),
+      unmappedSourceMatrix: store.getAgentEvidenceSourceStatusMatrix({
+        mapped: 'false',
+        source_kind: 'tmux_observation',
+        evidence_role: 'runtime_unmapped',
+        source_status: 'observed',
+        newest_first: 'true',
+        limit: '1'
+      }),
       filteredCheckpointLog: store.listReplayCheckpointLog({
         record_kind: 'evidence_record',
         collector_snapshot_id: 'collector-snapshot:2026-03-09T18:07:00.000Z',
@@ -451,6 +472,134 @@ test('JSONL and SQLite stores replay evidence read models with parity', async (t
       collected_at: '2026-03-09T18:07:00.000Z'
     }
   });
+  assert.deepEqual(
+    jsonlProjection.filteredSourceMatrix.agents.map((agent) => agent.agent_id),
+    [
+      'team-lead',
+      'market-intel',
+      'product-pmf',
+      'tokenomics',
+      'protocol-engineering',
+      'app-engineering',
+      'growth-revenue'
+    ]
+  );
+  assert.equal(jsonlProjection.filteredSourceMatrix.agent_count, 7);
+  assert.equal(jsonlProjection.filteredSourceMatrix.returned_limit, 1);
+  assert.equal(jsonlProjection.filteredSourceMatrix.total_count, 2);
+  assert.equal(jsonlProjection.filteredSourceMatrix.mapped_count, 2);
+  assert.equal(jsonlProjection.filteredSourceMatrix.unmapped_count, 0);
+  assert.deepEqual(
+    jsonlProjection.filteredSourceMatrix.agents.find(
+      (agent) => agent.agent_id === 'app-engineering'
+    ).sources,
+    [
+      {
+        source_kind: 'workspace_file',
+        evidence_count: 2,
+        source_status_buckets: {
+          observed: 0,
+          degraded: 2,
+          missing: 0,
+          error: 0
+        },
+        evidence_role_buckets: {
+          workspace_presence: 0,
+          inbound_task: 0,
+          agent_output: 2,
+          agent_plan: 0,
+          runtime_activity: 0,
+          runtime_presence: 0,
+          runtime_unmapped: 0,
+          task_reference: 0
+        },
+        output_candidate_buckets: {
+          true: 2,
+          false: 0
+        },
+        latest_observed_at: '2026-03-09T18:05:00.000Z',
+        latest_collected_at: '2026-03-09T18:07:00.000Z'
+      }
+    ]
+  );
+  assert.deepEqual(
+    jsonlProjection.filteredSourceMatrix.agents.find(
+      (agent) => agent.agent_id === 'protocol-engineering'
+    ).sources,
+    [
+      {
+        source_kind: 'workspace_file',
+        evidence_count: 0,
+        source_status_buckets: {
+          observed: 0,
+          degraded: 0,
+          missing: 0,
+          error: 0
+        },
+        evidence_role_buckets: {
+          workspace_presence: 0,
+          inbound_task: 0,
+          agent_output: 0,
+          agent_plan: 0,
+          runtime_activity: 0,
+          runtime_presence: 0,
+          runtime_unmapped: 0,
+          task_reference: 0
+        },
+        output_candidate_buckets: {
+          true: 0,
+          false: 0
+        },
+        latest_observed_at: null,
+        latest_collected_at: null
+      }
+    ]
+  );
+  assert.deepEqual(jsonlProjection.unmappedSourceMatrix.unmapped_evidence_summary, {
+    total_count: 2,
+    sources: [
+      {
+        source_kind: 'tmux_observation',
+        evidence_count: 2,
+        source_status_buckets: {
+          observed: 2,
+          degraded: 0,
+          missing: 0,
+          error: 0
+        },
+        evidence_role_buckets: {
+          workspace_presence: 0,
+          inbound_task: 0,
+          agent_output: 0,
+          agent_plan: 0,
+          runtime_activity: 0,
+          runtime_presence: 0,
+          runtime_unmapped: 2,
+          task_reference: 0
+        },
+        output_candidate_buckets: {
+          true: 0,
+          false: 2
+        },
+        latest_observed_at: '2026-03-09T18:05:50.000Z',
+        latest_collected_at: '2026-03-09T18:07:00.000Z'
+      }
+    ]
+  });
+  for (const projection of [
+    jsonlProjection.sourceMatrix,
+    jsonlProjection.filteredSourceMatrix,
+    jsonlProjection.unmappedSourceMatrix,
+    sqliteProjection.sourceMatrix,
+    sqliteProjection.filteredSourceMatrix,
+    sqliteProjection.unmappedSourceMatrix
+  ]) {
+    const serialized = JSON.stringify(projection);
+    assert.equal(serialized.includes(root), false);
+    assert.equal(serialized.includes('tmux://'), false);
+    assert.equal(serialized.includes('metadata'), false);
+    assert.equal(serialized.includes('degraded_reasons'), false);
+  }
   assert.deepEqual(jsonlProjection.replayWindow.window, { before: 2, after: 2 });
   assert.equal(jsonlProjection.replayWindow.before.length, 2);
   assert.equal(jsonlProjection.replayWindow.after.length, 2);

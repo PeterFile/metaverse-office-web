@@ -95,6 +95,11 @@ pnpm backend:start
 
 `pnpm web:test:browser-smoke:live-evidence` runs only the short Live Evidence journey smoke through the same hermetic wrapper. Use it for focused validation when the changed surface is limited to the live evidence journey; it does not replace the full smoke bundle for broad shell changes.
 
+To target a Live Evidence subtest faster, forward Playwright grep args through the same wrapper:
+```bash
+pnpm web:test:browser-smoke:live-evidence -- --grep '@journey @evidence-live'
+```
+
 `pnpm web:test:browser-smoke:dev` runs the same Playwright smoke bundle through the wrapper with `BROWSER_SMOKE_FRONTEND_MODE=dev`, so CI also proves the non-preview Vite path end-to-end instead of only covering that branch in helper tests.
 
 For local UI development, run the backend in one shell and the web shell in another:

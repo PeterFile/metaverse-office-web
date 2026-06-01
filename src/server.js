@@ -611,7 +611,7 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
     if (!provenanceBundle) {
       sendJson(res, 404, {
         error: 'not_found',
-        details: `unknown evidence record ${evidenceId}`
+        details: 'unknown evidence record'
       });
       return;
     }
@@ -672,7 +672,7 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
     if (!evidenceRecord) {
       sendJson(res, 404, {
         error: 'not_found',
-        details: `unknown evidence record ${evidenceId}`
+        details: 'unknown evidence record'
       });
       return;
     }

@@ -1967,10 +1967,18 @@ describe('DetailsPanel selected-agent workflow lifecycle', () => {
       expect(section!).not.toHaveTextContent('idle');
       expect(section!).not.toHaveTextContent('offline');
       expect(section!).not.toHaveTextContent('No work');
+      expect(section!).not.toHaveTextContent('healthy');
+      expect(section!).not.toHaveTextContent('repaired');
       expect(section!).not.toHaveTextContent('productivity');
+      expect(section!).not.toHaveTextContent('liveness');
+      expect(section!).not.toHaveTextContent('severity');
+      expect(section!).not.toHaveTextContent('control-plane');
       expect(section!).not.toHaveTextContent('tmux://');
       expect(section!).not.toHaveTextContent('hermes://');
       expect(section!).not.toHaveTextContent('hermes-session-app-engineering');
+      expect(section!).not.toHaveTextContent('session_ref');
+      expect(section!).not.toHaveTextContent('secret_token');
+      expect(section!).not.toHaveTextContent('webhook');
       expect(onInspectSelectedAgentEvidenceRecord).not.toHaveBeenCalled();
     } finally {
       HTMLElement.prototype.scrollIntoView = previousScrollIntoView;

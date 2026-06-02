@@ -57,6 +57,206 @@ describe('RequestError', () => {
     expect(error.status).toBe(404);
     expect(error.code).toBe('not_found');
   });
+
+  it.each([
+    'incident refresh failed',
+    'detail refresh failed',
+    'queue snapshot failed',
+    'team lead replay refresh failed',
+    'timeline refresh failed',
+    'scoped replay refresh failed',
+    'state bucket refresh failed',
+    'shared memory exact fetch failed',
+    'blocked queue refresh failed',
+    'correlation refresh failed',
+    'collector snapshot refresh failed',
+    'shared memory refresh failed',
+    'overview unavailable'
+  ])('preserves bounded public-safe backend problem detail %s', async (details) => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            error: 'internal_error',
+            details
+          }),
+          {
+            status: 500,
+            headers: JSON_HEADERS
+          }
+        )
+      )
+    );
+
+    await expect(fetchOfficeOverview()).rejects.toMatchObject({
+      name: 'RequestError',
+      status: 500,
+      code: 'internal_error',
+      message: details
+    });
+  });
+
+  it('redacts unsafe backend problem details from public error messages', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            error: 'not_found',
+            details: 'unknown agent ../../hostile<script>'
+          }),
+          {
+            status: 404,
+            headers: JSON_HEADERS
+          }
+        )
+      )
+    );
+
+    await expect(fetchOfficeOverview()).rejects.toMatchObject({
+      name: 'RequestError',
+      status: 404,
+      code: 'not_found',
+      message: 'request_failed: not_found'
+    });
+  });
+
+  it('drops hostile backend problem codes from RequestError metadata and messages', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            error: 'not_found ../../hostile<script>',
+            details: 'unknown agent /tmp/hostile'
+          }),
+          {
+            status: 404,
+            headers: JSON_HEADERS
+          }
+        )
+      )
+    );
+
+    await expect(fetchOfficeOverview()).rejects.toMatchObject({
+      name: 'RequestError',
+      status: 404,
+      code: null,
+      message: 'request_failed'
+    });
+  });
+
+  it.each([
+    'token',
+    'api_key',
+    'webhook',
+    'session',
+    'profile',
+    'path',
+    'url',
+    'credential',
+    'secret',
+    'access_key',
+    'control_plane',
+    'payload',
+    'tmux',
+    'hermes',
+    'password',
+    'bearer',
+    'jwt',
+    'profile_not_found',
+    'source_url_error'
+  ])('drops unsafe backend problem code %s from RequestError metadata and messages', async (error) => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ error }), {
+          status: 500,
+          headers: JSON_HEADERS
+        })
+      )
+    );
+
+    await expect(fetchOfficeOverview()).rejects.toMatchObject({
+      name: 'RequestError',
+      status: 500,
+      code: null,
+      message: 'request_failed'
+    });
+  });
+
+  it.each([
+    'read failed for https://example.test/hook',
+    'read failed for javascript:alert(1)',
+    'read failed for javascript: alert(1)',
+    'read failed for mailto:user@example.test',
+    'read failed for mailto: user@example.test',
+    'read failed for ../secret',
+    'read failed for ./local',
+    'read failed for /tmp/secret',
+    'read failed for token abc123',
+    'read failed for token: abc123',
+    'read failed for tokens: abc123',
+    'read failed for webhook callback',
+    'read failed for webhook: callback',
+    'read failed for webhooks: callback',
+    'read failed for payload body',
+    'read failed for payload: body',
+    'read failed for control-plane',
+    'read failed for control plane',
+    'read failed for control_plane',
+    'read failed for session data',
+    'read failed for session: data',
+    'read failed for secret abc123',
+    'read failed for secrets: abc123',
+    'read failed for password abc123',
+    'read failed for passwd abc123',
+    'read failed for api key abc123',
+    'read failed for api_key abc123',
+    'read failed for authorization bearer abc123',
+    'read failed for bearer abc123',
+    'read failed for credential abc123',
+    'read failed for credentials: abc123',
+    'read failed for access key abc123',
+    'read failed for private key abc123',
+    'read failed for ssh key abc123',
+    'read failed for oauth abc123',
+    'read failed for jwt abc123',
+    'read failed for cookie abc123',
+    'read failed for profile path',
+    'read failed for path: /tmp/secret',
+    'read failed for url: https://example.test',
+    'read failed for protocol: x:secret',
+    'read failed for x:secret',
+    'read failed for C:UsersAliceSecret',
+    'read failed for tmux pane',
+    'read failed for Hermes trace',
+    'read failed for <script>'
+  ])('redacts unsafe backend problem detail %s', async (details) => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            error: 'internal_error',
+            details
+          }),
+          {
+            status: 500,
+            headers: JSON_HEADERS
+          }
+        )
+      )
+    );
+
+    await expect(fetchOfficeOverview()).rejects.toMatchObject({
+      name: 'RequestError',
+      status: 500,
+      code: 'internal_error',
+      message: 'request_failed: internal_error'
+    });
+  });
 });
 
 describe('fetchOfficeOverview', () => {

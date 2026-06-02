@@ -51,6 +51,14 @@ const DEFAULT_WORKFLOW_WINDOW = '60m';
 const DEFAULT_EVIDENCE_RECORD_LIMIT = 200;
 const DEFAULT_RUNTIME_SOURCE_GAP_LIMIT = 200;
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL?.trim();
+const SAFE_PROBLEM_CODE_PATTERN = /^[a-z][a-z0-9_]{0,63}$/;
+const UNSAFE_PROBLEM_CODE_PATTERN =
+  /(?:^|_)(?:access_?keys?|api_?keys?|authorization|bearer|cookies?|credentials?|javascript|jwt|oauth|passwords?|passwds?|private_?keys?|secrets?|ssh_?keys?|script|tokens?|webhooks?|payloads?|control_?plane|sessions?|profiles?|tmux|hermes|protocols?|paths?|urls?)(?:_|$)/;
+const MAX_SAFE_PROBLEM_DETAIL_LENGTH = 160;
+const SAFE_PROBLEM_DETAIL_PATTERN =
+  /^(?:limit must be positive|invalid [A-Za-z][A-Za-z0-9 _-]{0,80}|unknown (?:agent|correlation|evidence record|collector snapshot)(?: [A-Za-z][A-Za-z0-9-]{0,63})?|[A-Za-z][A-Za-z0-9 -]{0,100} (?:failed|unavailable)|workflow failed for [A-Za-z][A-Za-z0-9-]{0,63})$/;
+const UNSAFE_PROBLEM_DETAIL_PATTERN =
+  /(?:\b(?:[a-z][a-z0-9+.-]*:\/\/|[a-z][a-z0-9+.-]{0,31}:\s*\S|www\.)|(?:^|[\s([{'"`])(?:\/|~\/|\.{1,2}\/|\.{2}(?:$|[\\/])|[A-Za-z]:[^\s]*)|[<>\\]|(?:^|[^A-Za-z0-9])(?:access[-_ ]?keys?|api[-_ ]?keys?|authorization|bearer|cookies?|credentials?|javascript|jwt|oauth|passwords?|passwds?|private[-_ ]?keys?|secrets?|ssh[-_ ]?keys?|script|tokens?|webhooks?|payloads?|control[-_ ]plane|sessions?|profiles?|tmux|hermes|protocols?|paths?|urls?)(?:$|[^A-Za-z0-9]))/i;
 
 type RuntimeSourceGapFilterOptions = {
   agentId?: string | null;
@@ -156,14 +164,45 @@ async function parseJson<T>(response: Response): Promise<T> {
 
   if (!response.ok) {
     const problem = body as ProblemResponse;
+    const code = getProblemCode(problem.error);
+    const detail = getProblemDetail(problem.details);
     throw new RequestError({
-      message: problem.details || problem.error || 'request_failed',
+      message: detail ?? getFallbackProblemMessage(code),
       status: response.status,
-      code: problem.error || null
+      code
     });
   }
 
   return body as T;
+}
+
+function getProblemCode(error: unknown): string | null {
+  if (typeof error !== 'string') {
+    return null;
+  }
+
+  return SAFE_PROBLEM_CODE_PATTERN.test(error) && !UNSAFE_PROBLEM_CODE_PATTERN.test(error) ? error : null;
+}
+
+function getProblemDetail(details: unknown): string | null {
+  if (typeof details !== 'string') {
+    return null;
+  }
+
+  const detail = details.trim();
+  if (detail.length === 0 || detail.length > MAX_SAFE_PROBLEM_DETAIL_LENGTH) {
+    return null;
+  }
+
+  if (!SAFE_PROBLEM_DETAIL_PATTERN.test(detail)) {
+    return null;
+  }
+
+  return UNSAFE_PROBLEM_DETAIL_PATTERN.test(detail) ? null : detail;
+}
+
+function getFallbackProblemMessage(code: string | null): string {
+  return code ? `request_failed: ${code}` : 'request_failed';
 }
 
 export function resolveApiUrl(path: string, apiBaseUrl = API_BASE_URL): string {

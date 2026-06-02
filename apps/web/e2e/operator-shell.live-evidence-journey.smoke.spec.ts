@@ -137,6 +137,64 @@ const runtimeSourceGapsSummary = {
   }
 };
 
+const evidenceSourceMatrix = {
+  item: {
+    agent_count: 2,
+    returned_limit: 200,
+    total_count: 11,
+    mapped_count: 9,
+    unmapped_count: 2,
+    agents: [
+      {
+        agent_id: 'app-engineering',
+        sources: [
+          {
+            source_kind: 'workspace_file',
+            evidence_count: 4,
+            source_status_buckets: { observed: 4 },
+            evidence_role_buckets: { agent_output: 3, agent_plan: 1 },
+            output_candidate_buckets: { true: 3, false: 1 },
+            latest_observed_at: '2026-03-16T08:59:10.000Z',
+            latest_collected_at: '2026-03-16T09:01:00.000Z'
+          },
+          {
+            source_kind: 'tmux_observation',
+            evidence_count: 3,
+            source_status_buckets: { degraded: 2, observed: 1 },
+            evidence_role_buckets: { runtime_activity: 3 },
+            output_candidate_buckets: { true: 0, false: 3 },
+            latest_observed_at: '2026-03-16T08:58:30.000Z',
+            latest_collected_at: '2026-03-16T09:01:00.000Z'
+          },
+          {
+            source_kind: '/tmp/app/secret-token.md',
+            evidence_count: 2,
+            source_status_buckets: { 'tmux://raw-session': 2 },
+            evidence_role_buckets: { webhook: 2 },
+            output_candidate_buckets: { true: 0, false: 2 },
+            latest_observed_at: '2026-03-16T08:57:30.000Z',
+            latest_collected_at: '2026-03-16T09:01:00.000Z'
+          }
+        ]
+      }
+    ],
+    unmapped_evidence_summary: {
+      total_count: 2,
+      sources: [
+        {
+          source_kind: 'hermes_profile',
+          evidence_count: 2,
+          source_status_buckets: { observed: 2 },
+          evidence_role_buckets: { runtime_unmapped: 2 },
+          output_candidate_buckets: { true: 0, false: 2 },
+          latest_observed_at: '2026-03-16T08:56:00.000Z',
+          latest_collected_at: '2026-03-16T09:01:00.000Z'
+        }
+      ]
+    }
+  }
+};
+
 const runtimeSourceGapsWithUnmappedWorldPin = {
   items: [
     runtimeSourceGaps.items[0],
@@ -199,6 +257,7 @@ const replayByEvidenceIdGet =
 const checkpointLogByEvidenceIdGet =
   `GET /accountability/replay/checkpoint-log?limit=3&evidence_id=${replayEvidenceId}`;
 const evidenceSpineSummaryGet = 'GET /agents/evidence-spine/summary?newest_first=true&limit=200';
+const evidenceSourceMatrixGet = 'GET /agents/evidence-spine/source-matrix?newest_first=true&limit=200';
 const expectedApiGets = new Set([
   'GET /office/overview',
   'GET /incidents?limit=200&window=8760h',
@@ -208,6 +267,7 @@ const expectedApiGets = new Set([
   'GET /runtime/source-gaps?newest_first=true&limit=3',
   'GET /runtime/source-gaps/summary?newest_first=true&limit=3',
   evidenceSpineSummaryGet,
+  evidenceSourceMatrixGet,
   'GET /agents/app-engineering/workflow?limit=10&window=60m',
   'GET /office/operations?agent_id=app-engineering',
   'GET /timeline?limit=10&window=60m&agent_id=app-engineering',
@@ -342,6 +402,10 @@ async function installLiveEvidenceFixtures(
     await route.fulfill({ json: { item: sourceGapsSummary } });
   });
 
+  await routeExpectedApiGet(page, evidenceSourceMatrixGet, async (route) => {
+    await route.fulfill({ json: evidenceSourceMatrix });
+  });
+
   await routeExpectedApiGet(page, 'GET /collectors/controller-snapshot/source-health?limit=7', async (route) => {
     await route.fulfill({ json: { item: sourceHealth } });
   });
@@ -416,6 +480,7 @@ test.describe('operator shell live evidence journey smoke', () => {
     ]);
     const guardedReadPaths = [
       '/agents/evidence-spine/summary?newest_first=true&limit=200',
+      '/agents/evidence-spine/source-matrix?newest_first=true&limit=200',
       '/evidence-records?agent_id=app-engineering&newest_first=true&limit=12',
       `/evidence-records/${replayEvidenceId}`,
       `/evidence-records/${replayEvidenceId}/provenance-bundle`,
@@ -428,6 +493,9 @@ test.describe('operator shell live evidence journey smoke', () => {
       '/agents/evidence-spine',
       '/agents/evidence-spine/summary',
       '/agents/evidence-spine/summary?newest_first=true&limit=200&raw=true',
+      '/agents/evidence-spine/source-matrix',
+      '/agents/evidence-spine/source-matrix?limit=200&newest_first=true',
+      '/agents/evidence-spine/source-matrix?newest_first=true&limit=200&raw=true',
       '/agents/app-engineering/evidence-spine?newest_first=true&limit=200',
       '/evidence-records',
       '/evidence-records?agent_id=app-engineering&limit=12&newest_first=true',
@@ -529,7 +597,7 @@ test.describe('operator shell live evidence journey smoke', () => {
     }
   });
 
-  test('@journey @evidence-live keeps selected-agent source-health inspect peek compact and read-only', async ({
+  test('@journey @evidence-live keeps selected-agent source peeks compact and read-only', async ({
     page
   }) => {
     const apiRequestViolations: string[] = [];
@@ -564,11 +632,13 @@ test.describe('operator shell live evidence journey smoke', () => {
       const hub = page.getByRole('dialog', { name: 'Hub' });
       const inspectPeek = page.getByRole('region', { name: 'Selected agent inspect peek' });
       const sourceHealthPeek = page.getByRole('region', { name: 'Selected agent source-health inspect peek' });
+      const sourceMatrixPeek = page.getByRole('region', { name: 'Selected agent source matrix peek' });
 
       await expect(hub).toHaveCount(0);
       await expect(page.getByRole('complementary', { name: 'Agent details' })).toHaveCount(0);
       await expect(inspectPeek).toBeVisible();
       await expect(sourceHealthPeek).toBeVisible();
+      await expect(sourceMatrixPeek).toBeVisible();
       await expect(sourceHealthPeek).toContainText('Evidence only');
       await expect(sourceHealthPeek).toContainText('Hermes profile · missing');
       await expect(sourceHealthPeek).toContainText('Mapped source');
@@ -579,9 +649,18 @@ test.describe('operator shell live evidence journey smoke', () => {
         sourceHealthPeek,
         'selected-agent source-health peek should not expose raw refs, sessions, profiles, payloads, or reasons'
       ).not.toContainText(visibleProofRawRefPattern);
-      expect(eagerDrilldownRequests, 'source-health inspect peek should not prefetch evidence or replay records').toEqual(
-        []
-      );
+      await expect(sourceMatrixPeek).toContainText('Source matrix');
+      await expect(sourceMatrixPeek).toContainText('Workspace file · Observed');
+      await expect(sourceMatrixPeek).toContainText('Agent output · Output candidate · 4');
+      await expect(sourceMatrixPeek).toContainText('Tmux observation · Degraded');
+      await expect(sourceMatrixPeek).toContainText('Runtime activity · Supporting evidence · 3');
+      await expect(sourceMatrixPeek).toContainText('Unknown · Unknown');
+      await expect(sourceMatrixPeek).toContainText('Unmapped evidence · 2 separate');
+      await expect(
+        sourceMatrixPeek,
+        'selected-agent source matrix peek should not expose raw refs, enum keys, sessions, payloads, or reasons'
+      ).not.toContainText(visibleProofRawRefPattern);
+      expect(eagerDrilldownRequests, 'source peeks should not prefetch evidence or replay records').toEqual([]);
 
       const peekRect = await readRect(inspectPeek);
       expect(peekRect.width, 'source-health inspect peek should stay compact').toBeLessThanOrEqual(420);

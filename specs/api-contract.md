@@ -220,6 +220,7 @@ This is the current API/read-model contract for Metaverse Office Web. It grew ou
 
 ## Agent detail query semantics
 - `GET /agents/:id` returns the current agent projection plus evidence-first detail slices
+- unknown agent ids on public agent detail/subresource routes return `404` with stable `error: "not_found"` details and do not echo the requested id
 - optional `limit` applies to `open_peer_watch_alerts`, `recent_events`, `recent_interactions`, `recent_incidents`, `recent_handoffs`, and `recent_reboots`; default is `5`
 - `latest_heartbeat` returns the most recent append-only heartbeat for the agent or `null`
 - `open_peer_watch_alerts` is derived from unresolved peer-watch alerts, not from raw historical `peer_watch_alert_raised` events
@@ -265,7 +266,7 @@ This is the current API/read-model contract for Metaverse Office Web. It grew ou
 - supported `kind` values are `peer_watch_alert`, `handoff`, and `reboot`
 - `status=open` follows the same active-status alias semantics as `GET /incidents`
 - `window` reuses the same normalized incident `ts` filtering semantics as `GET /incidents`
-- the route returns `404` when the agent id is unknown
+- the route returns `404` when the agent id is unknown without echoing the requested id
 
 ## Agent incident response shape
 ```json
@@ -292,7 +293,7 @@ This is the current API/read-model contract for Metaverse Office Web. It grew ou
 
 ## Agent workflow query semantics
 - `GET /agents/:id/workflow` is read-only and aggregates the existing agent detail, incident, interaction, and timeline read models into one evidence-first response
-- the route path `:id` is required and returns `404` when the agent id is unknown
+- the route path `:id` is required and returns `404` when the agent id is unknown without echoing the requested id
 - supported query params are `limit` and `window`
 - `detail` reuses the existing `GET /agents/:id` item semantics, including the current detail-slice default `limit=5`
 - `window` defaults to `60m` and filters only the top-level `incidents`, `interactions`, and `timeline` slices
@@ -428,7 +429,7 @@ This is the current API/read-model contract for Metaverse Office Web. It grew ou
 - `participant_agent_ids` and `evidence_refs` are deduped across the full filtered correlation slice
 - `first_ts` and `last_ts` expose the temporal bounds of the full filtered correlation slice
 - `closure_ledger` is additive and derived only from existing reads: current `status=open` incident semantics produce `open`, unended interactions produce `active`, and resolved/completed incident evidence produces `closed`
-- the route returns `404` when the `correlation_id` matches no incidents, interactions, or events
+- the route returns `404` when the `correlation_id` matches no incidents, interactions, or events without echoing the requested id
 
 ## Shared memory artifact query semantics
 - `GET /memory/artifacts` is read-only and derives a shared engineering-memory surface from existing event `evidence_refs` plus the latest collector workspace/tmux observations when available

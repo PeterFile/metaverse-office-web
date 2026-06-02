@@ -126,7 +126,7 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
     if (!agent) {
       sendJson(res, 404, {
         error: 'not_found',
-        details: `unknown agent ${agentId}`
+        details: 'unknown agent'
       });
       return;
     }
@@ -152,7 +152,7 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
     if (!agent) {
       sendJson(res, 404, {
         error: 'not_found',
-        details: `unknown agent ${agentId}`
+        details: 'unknown agent'
       });
       return;
     }
@@ -181,7 +181,7 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
     if (!agent) {
       sendJson(res, 404, {
         error: 'not_found',
-        details: `unknown agent ${agentId}`
+        details: 'unknown agent'
       });
       return;
     }
@@ -214,7 +214,7 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
     if (!item) {
       sendJson(res, 404, {
         error: 'not_found',
-        details: `unknown agent ${agentId}`
+        details: 'unknown agent'
       });
       return;
     }
@@ -254,7 +254,7 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
     if (!agent) {
       sendJson(res, 404, {
         error: 'not_found',
-        details: `unknown agent ${agentId}`
+        details: 'unknown agent'
       });
       return;
     }
@@ -417,7 +417,7 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
     if (!item) {
       sendJson(res, 404, {
         error: 'not_found',
-        details: `unknown correlation ${correlationId}`
+        details: 'unknown correlation'
       });
       return;
     }
@@ -793,7 +793,7 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
 
   sendJson(res, 404, {
     error: 'not_found',
-    details: `${method} ${pathname} is not implemented`
+    details: 'route not found'
   });
 }
 

@@ -6191,6 +6191,7 @@ test('GET /runtime/source-gaps returns compact gap and unmapped evidence read-on
         agent_id: null,
         source_kind: 'tmux_observation',
         evidence_role: 'runtime_unmapped',
+        record_count: 1,
         current_status: 'observed',
         lifecycle_state: 'observed_unmapped',
         first_observed_at: '2026-03-09T18:05:50.000Z',

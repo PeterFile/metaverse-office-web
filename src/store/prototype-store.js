@@ -1007,7 +1007,7 @@ class PrototypeStore {
       total_count: lifecycleGroups.reduce((total, group) => total + group.record_count, 0),
       total_groups: lifecycleGroups.length,
       returned_limit: limit,
-      groups: lifecycleGroups.map(omitRuntimeSourceGapLifecycleRecordCount).slice(0, limit)
+      groups: lifecycleGroups.slice(0, limit)
     };
   }
 
@@ -2827,11 +2827,6 @@ function projectRuntimeSourceGapLifecycleGroup(group) {
     snapshot_count: group.snapshot_ids.size,
     source_status_buckets: sortBucketKeys(group.source_status_buckets)
   };
-}
-
-function omitRuntimeSourceGapLifecycleRecordCount(group) {
-  const { record_count, ...publicGroup } = group;
-  return publicGroup;
 }
 
 function deriveRuntimeSourceGapLifecycleState(recordsByRecency) {

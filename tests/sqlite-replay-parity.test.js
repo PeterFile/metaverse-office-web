@@ -19,6 +19,10 @@ async function hasSqlite3() {
   }
 }
 
+async function execSqlite(sqliteFilePath, sql) {
+  return execFileAsync('sqlite3', [sqliteFilePath, sql]);
+}
+
 async function createHarnessRoot() {
   const root = await mkdtemp(path.join(os.tmpdir(), 'metaverse-office-sqlite-parity-'));
   await mkdir(path.join(root, 'app'), { recursive: true });
@@ -623,4 +627,60 @@ test('JSONL and SQLite stores replay evidence read models with parity', async (t
       collected_at: '2026-03-09T18:07:00.000Z'
     }
   });
+});
+
+test('SQLite sidecar evidence coverage matches read filters without public raw refs', async (t) => {
+  if (!(await hasSqlite3())) {
+    t.skip('sqlite3 binary not found; SQLite sidecar coverage skipped explicitly');
+    return;
+  }
+
+  const root = await createHarnessRoot();
+  const sqliteFilePath = path.join(root, 'prototype-store.sqlite');
+  const store = await createPrototypeStore({ sqliteFilePath });
+
+  await appendCanonicalRecords(store, root);
+
+  const filters = {
+    mapped: 'true',
+    source_kind: 'workspace_file',
+    evidence_role: 'agent_output',
+    source_status: 'degraded',
+    output_candidate: 'true',
+    collector_snapshot_id: 'collector-snapshot:2026-03-09T18:07:00.000Z',
+    newest_first: 'true',
+    limit: 10
+  };
+  const filteredEvidence = store.listEvidenceRecords(filters);
+  assert.equal(filteredEvidence.length, 1);
+
+  const { stdout } = await execSqlite(
+    sqliteFilePath,
+    [
+      'SELECT',
+      'COUNT(*) AS evidence_records,',
+      'COUNT(record_evidence_refs.evidence_ref) AS evidence_refs',
+      'FROM record_index',
+      'LEFT JOIN record_evidence_refs ON record_evidence_refs.seq = record_index.seq',
+      "WHERE record_index.kind = 'evidence_record'",
+      'AND record_index.agent_id IS NOT NULL',
+      "AND record_index.source_kind = 'workspace_file'",
+      "AND record_index.evidence_role = 'agent_output'",
+      "AND record_index.source_status = 'degraded'",
+      'AND record_index.output_candidate = 1',
+      "AND record_index.collector_snapshot_id = 'collector-snapshot:2026-03-09T18:07:00.000Z';"
+    ].join(' ')
+  );
+
+  assert.equal(stdout.trim(), '1|1');
+
+  const health = await store.getStorageIndexHealth();
+  const sourceMatrix = store.getAgentEvidenceSourceStatusMatrix(filters);
+  const serializedPublicReadiness = JSON.stringify({ health, sourceMatrix });
+
+  assert.equal(health.record_index_count, store.getStorageReplayManifest().record_count);
+  assert.equal(health.record_evidence_ref_count, 20);
+  assert.equal(serializedPublicReadiness.includes(root), false);
+  assert.equal(serializedPublicReadiness.includes('/app/outbox.md'), false);
+  assert.equal(serializedPublicReadiness.includes('tmux://'), false);
 });

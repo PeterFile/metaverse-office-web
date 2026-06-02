@@ -1855,15 +1855,16 @@ describe('read-only frontend/backend contract smoke', () => {
       name: 'RequestError',
       status: 404,
       code: 'not_found',
-      message: 'unknown agent unknown-agent'
+      message: 'unknown agent'
     });
     expect(responses).toHaveLength(1);
     expect(responses[0].status).toBe(404);
     expect(responses[0].contentType).toContain('application/json');
     expect(responses[0].body).toMatchObject({
       error: 'not_found',
-      details: 'unknown agent unknown-agent'
+      details: 'unknown agent'
     });
+    expect(JSON.stringify(responses[0].body)).not.toContain('unknown-agent');
   });
 
   it('surfaces unknown-agent event 404s through the frontend request parser against the real backend', async () => {
@@ -1901,15 +1902,16 @@ describe('read-only frontend/backend contract smoke', () => {
       name: 'RequestError',
       status: 404,
       code: 'not_found',
-      message: 'unknown agent unknown-agent'
+      message: 'unknown agent'
     });
     expect(responses).toHaveLength(1);
     expect(responses[0].status).toBe(404);
     expect(responses[0].contentType).toContain('application/json');
     expect(responses[0].body).toMatchObject({
       error: 'not_found',
-      details: 'unknown agent unknown-agent'
+      details: 'unknown agent'
     });
+    expect(JSON.stringify(responses[0].body)).not.toContain('unknown-agent');
   });
 
   it('surfaces unknown-agent interaction 404s through the frontend request parser against the real backend', async () => {
@@ -1947,15 +1949,16 @@ describe('read-only frontend/backend contract smoke', () => {
       name: 'RequestError',
       status: 404,
       code: 'not_found',
-      message: 'unknown agent unknown-agent'
+      message: 'unknown agent'
     });
     expect(responses).toHaveLength(1);
     expect(responses[0].status).toBe(404);
     expect(responses[0].contentType).toContain('application/json');
     expect(responses[0].body).toMatchObject({
       error: 'not_found',
-      details: 'unknown agent unknown-agent'
+      details: 'unknown agent'
     });
+    expect(JSON.stringify(responses[0].body)).not.toContain('unknown-agent');
   });
 
   it('surfaces unknown-agent incident 404s through the frontend request parser against the real backend', async () => {
@@ -1993,15 +1996,16 @@ describe('read-only frontend/backend contract smoke', () => {
       name: 'RequestError',
       status: 404,
       code: 'not_found',
-      message: 'unknown agent unknown-agent'
+      message: 'unknown agent'
     });
     expect(responses).toHaveLength(1);
     expect(responses[0].status).toBe(404);
     expect(responses[0].contentType).toContain('application/json');
     expect(responses[0].body).toMatchObject({
       error: 'not_found',
-      details: 'unknown agent unknown-agent'
+      details: 'unknown agent'
     });
+    expect(JSON.stringify(responses[0].body)).not.toContain('unknown-agent');
   });
 
   it('surfaces unknown-correlation drilldown 404s through the frontend request parser against the real backend', async () => {
@@ -2039,15 +2043,16 @@ describe('read-only frontend/backend contract smoke', () => {
       name: 'RequestError',
       status: 404,
       code: 'not_found',
-      message: 'unknown correlation unknown-correlation'
+      message: 'unknown correlation'
     });
     expect(responses).toHaveLength(1);
     expect(responses[0].status).toBe(404);
     expect(responses[0].contentType).toContain('application/json');
     expect(responses[0].body).toMatchObject({
       error: 'not_found',
-      details: 'unknown correlation unknown-correlation'
+      details: 'unknown correlation'
     });
+    expect(JSON.stringify(responses[0].body)).not.toContain('unknown-correlation');
   });
 });
 

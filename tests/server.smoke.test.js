@@ -113,6 +113,38 @@ async function requestJsonDirect({ url, store, controllerSnapshotCollector }) {
   };
 }
 
+const PUBLIC_404_FORBIDDEN_FRAGMENTS = [
+  '/tmp',
+  '/Users',
+  '/Volumes',
+  'tmux://',
+  'hermes://',
+  'profile://',
+  'session://',
+  'file://',
+  'https://hooks',
+  'http://hooks',
+  'token',
+  'webhook',
+  'secret',
+  'control-plane'
+];
+
+function assertPublic404DoesNotExposeCanary(response, canary) {
+  assert.equal(response.response.status, 404);
+  assert.equal(response.body.error, 'not_found');
+
+  const serialized = JSON.stringify(response.body);
+  assert.equal(serialized.includes(canary), false, `404 echoed ${canary}`);
+  for (const fragment of PUBLIC_404_FORBIDDEN_FRAGMENTS) {
+    assert.equal(
+      serialized.toLowerCase().includes(fragment.toLowerCase()),
+      false,
+      `404 exposed forbidden fragment ${fragment}: ${serialized}`
+    );
+  }
+}
+
 test('server error redaction bounds unexpected internal details while preserving safe public errors', () => {
   const unexpected = formatPublicError(
     new Error(
@@ -1222,7 +1254,7 @@ test('GET replay event endpoints support exact source_kind filters', async (t) =
 
   const unknownAgent = await requestJson(`${baseUrl}/agents/unknown-agent/events?source_kind=workspace_file`);
   assert.equal(unknownAgent.response.status, 404);
-  assert.equal(unknownAgent.body.details, 'unknown agent unknown-agent');
+  assert.equal(unknownAgent.body.details, 'unknown agent');
 });
 
 test('GET replay event endpoints support exact evidence_ref filters', async (t) => {
@@ -1336,7 +1368,7 @@ test('GET replay event endpoints support exact evidence_ref filters', async (t) 
 
   const unknownAgent = await requestJson(`${baseUrl}/agents/unknown-agent/events?evidence_ref=${encodedExactRef}`);
   assert.equal(unknownAgent.response.status, 404);
-  assert.equal(unknownAgent.body.details, 'unknown agent unknown-agent');
+  assert.equal(unknownAgent.body.details, 'unknown agent');
 
   const timeline = await requestJson(
     `${baseUrl}/timeline?window=30m&evidence_ref=${encodedExactRef}&agent_id=app-engineering&event_type=agent_wrote_file&severity=yellow&source_kind=workspace_file&correlation_id=corr-evidence-ref&limit=2`
@@ -2162,6 +2194,42 @@ test('GET /agents/:id/evidence-spine returns 404 for unknown agents', async (t) 
   assert.equal(response.body.error, 'not_found');
   assert.equal(response.body.details, 'unknown_agent');
   assert.equal(JSON.stringify(response.body).includes('tmux://secret-session'), false);
+});
+
+test('GET public unknown agent, correlation, and fallback 404s do not echo unsafe params', async () => {
+  const store = await createDirectStore();
+  const unsafeUnknownIds = [
+    '/tmp/public-404-no-echo/outbox.md',
+    '/Users/cwp/private/public-404-no-echo.md',
+    '/Volumes/HDD/private/public-404-no-echo.md',
+    'tmux://public-404-no-echo/0.1',
+    'hermes://profile/public-404-no-echo',
+    'profile://public-404-no-echo',
+    'session://public-404-no-echo',
+    'file:///tmp/public-404-no-echo.md',
+    'token=public-404-no-echo',
+    'https://hooks.slack.com/services/public-404-no-echo',
+    'webhook-public-404-no-echo',
+    'secret-public-404-no-echo',
+    'control-plane-public-404-no-echo'
+  ];
+
+  for (const unsafeUnknownId of unsafeUnknownIds) {
+    const routes = [
+      `/agents/${encodeURIComponent(unsafeUnknownId)}`,
+      `/agents/${encodeURIComponent(unsafeUnknownId)}/events`,
+      `/agents/${encodeURIComponent(unsafeUnknownId)}/interactions`,
+      `/agents/${encodeURIComponent(unsafeUnknownId)}/incidents`,
+      `/agents/${encodeURIComponent(unsafeUnknownId)}/workflow`,
+      `/correlations/${encodeURIComponent(unsafeUnknownId)}`,
+      `/${encodeURIComponent(unsafeUnknownId)}`
+    ];
+
+    for (const route of routes) {
+      const response = await requestJsonDirect({ url: route, store });
+      assertPublic404DoesNotExposeCanary(response, unsafeUnknownId);
+    }
+  }
 });
 
 test('GET /peer-watch/alerts supports evidence-oriented filters and fields', async (t) => {

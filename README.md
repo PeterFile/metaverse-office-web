@@ -209,13 +209,13 @@ Optional env:
 ### Event query notes
 - `GET /events` and `GET /agents/:id/events` are read-only event-log slices
 - `evidence_ref` exact-matches membership in `event.evidence_refs`; blank or missing values keep existing behavior
-- `GET /agents/:id/events` keeps returning `404` for unknown agent ids
+- `GET /agents/:id/events` keeps returning `404` for unknown agent ids without echoing the requested id
 
 ### Agent incident query notes
 - `GET /agents/:id/incidents` stays read-only and applies the requested agent id as an implicit incident filter
 - supported filters are `kind`, `severity`, `status`, `correlation_id`, `limit`, and `window`
 - `status=open` follows the same active-status alias semantics as `GET /incidents`
-- the route returns `404` for unknown agent ids instead of an empty feed
+- the route returns `404` for unknown agent ids instead of an empty feed and does not echo the requested id
 
 ### Agent workflow query notes
 - `GET /agents/:id/workflow` is a read-only aggregate over `getAgentDetail`, agent-scoped incidents, agent-scoped interactions, and agent-scoped timeline replay
@@ -229,7 +229,7 @@ Optional env:
 ### Agent evidence spine query notes
 - `GET /agents/evidence-spine/summary` is a global compact read-only summary for the canonical seven-agent roster; it returns stable per-agent counts/buckets/latest safe timestamps plus a separate unmapped evidence summary, and never promotes unmapped or non-seeded evidence into agent facts
 - `GET /agents/evidence-spine/source-matrix` is a compact read-only source/status matrix for the canonical seven-agent roster; it returns per-agent source rows with safe counts, status/role/output buckets, latest safe timestamps, and a separate unmapped source summary
-- `GET /agents/:id/evidence-spine` is a read-only aggregate over existing replayed evidence-record summaries, runtime source-gap projections, and collector source-health projections for one known agent; unknown agents return `404`
+- `GET /agents/:id/evidence-spine` is a read-only aggregate over existing replayed evidence-record summaries, runtime source-gap projections, and collector source-health projections for one known agent; unknown agents return `404` without echoing the requested id
 - filters are exact and additive: `source_kind`, `evidence_role`, `output_candidate`, `source_status` (or `status` for source-health aliasing), `collector_snapshot_id`, `correlation_id`, `mapped`, inclusive observed/collected windows, `newest_first`, and post-filter `limit`
 - `evidence_summary` and `source_gaps.summary` compute counts, buckets, and extrema before `limit`; `recent_evidence`, `source_gaps.items`, and `source_health.agent_items` are bounded after filters by `returned_limit`
 - the route returns bounded source/status/role/count/time fields only; `source_health.agent_items` use `evidence_count` rather than evidence-ref field names and do not expose raw evidence refs, local paths, tmux/Hermes/session/profile refs, payloads, metadata, degraded reasons, liveness/productivity/severity inference, collection, filesystem/tmux reads, writes, or control-plane actions
@@ -288,7 +288,7 @@ Optional env:
 - when `limit` is present, it caps `incidents`, `interactions`, `timeline`, and the additive `closure_ledger.entries` slice using their existing newest-first/reader ordering semantics; `incident_count`, `interaction_count`, `event_count`, and closure ledger counts remain the full filtered totals
 - the response also exposes deduped `participant_agent_ids`, deduped `evidence_refs`, `first_ts` / `last_ts` bounds, and an additive `closure_ledger` for the full filtered correlation slice
 - `closure_ledger.state` is derived from current `status=open` incident semantics first, then active interactions, then closed resolved/completed incidents; it does not treat completed handoff/reboot start rows as open
-- the route returns `404` when the `correlation_id` matches no incidents, interactions, or events
+- the route returns `404` when the `correlation_id` matches no incidents, interactions, or events without echoing the requested id
 
 ### Shared memory artifact notes
 - `GET /memory/artifacts` is a read-only engineering memory surface derived from existing event `evidence_refs` plus the latest collector workspace/tmux observations when available

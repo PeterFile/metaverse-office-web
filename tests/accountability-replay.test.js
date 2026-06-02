@@ -281,6 +281,13 @@ async function countStoreLines(storeFile) {
   return content.split('\n').filter((line) => line.trim()).length;
 }
 
+function assertBodyDoesNotContain(body, fragments) {
+  const serialized = JSON.stringify(body);
+  for (const fragment of fragments) {
+    assert.equal(serialized.includes(fragment), false, fragment);
+  }
+}
+
 test('GET /accountability/replay rejects requests without an anchor', async (t) => {
   const { baseUrl } = await createHarness(t);
 
@@ -325,40 +332,53 @@ test('GET /accountability/replay returns an evidence_ref-anchored replay bundle'
   );
 });
 
-test('GET /accountability/replay returns an empty bundle for unknown evidence_id', async (t) => {
+test('GET /accountability/replay returns an empty no-echo bundle for unknown hostile anchors', async (t) => {
   const { baseUrl, store, storeFile } = await createHarness(t);
   await seedReplaySlice(store);
   const beforeLineCount = await countStoreLines(storeFile);
+  const unknownEvidenceId = 'unknown-evidence-/tmp/replay-secret-token';
+  const unknownAgentId = 'unknown-agent-tmux://private-session/0.0';
+  const unknownCorrelationId = 'unknown-correlation-hermes://session/private';
 
-  const { response, body } = await requestJson(
-    `${baseUrl}/accountability/replay?evidence_id=evidence_unknown&limit=5&window=15m`
-  );
+  for (const params of [
+    new URLSearchParams({ evidence_id: unknownEvidenceId, limit: '5', window: '15m' }),
+    new URLSearchParams({ agent_id: unknownAgentId, limit: '5', window: '15m' }),
+    new URLSearchParams({ correlation_id: unknownCorrelationId, limit: '5', window: '15m' })
+  ]) {
+    const { response, body } = await requestJson(`${baseUrl}/accountability/replay?${params}`);
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(body.events, []);
+    assert.deepEqual(body.interactions, []);
+    assert.deepEqual(body.memory_artifacts, []);
+    assert.deepEqual(body.ledger, []);
+    assert.equal(body.accountability.event_count, 0);
+    assert.equal(body.accountability.interaction_count, 0);
+    assert.equal(body.accountability.artifact_count, 0);
+    assert.deepEqual(body.accountability.evidence_refs, []);
+    if (params.has('evidence_id')) {
+      assert.deepEqual(body.replay_audit, {
+        evidence_id_status: 'unknown_evidence_id',
+        event_count: 0,
+        interaction_count: 0,
+        artifact_count: 0,
+        ledger_entry_count: 0,
+        anchor_event_count: 0,
+        anchor_event_ids: []
+      });
+    }
+    assertBodyDoesNotContain(body, [
+      unknownEvidenceId,
+      unknownAgentId,
+      unknownCorrelationId,
+      '/tmp/replay-secret-token',
+      'tmux://private-session/0.0',
+      'hermes://session/private'
+    ]);
+  }
+
   const afterLineCount = await countStoreLines(storeFile);
-
-  assert.equal(response.status, 200);
   assert.equal(afterLineCount, beforeLineCount);
-  assert.deepEqual(body.query, {
-    evidence_id: 'evidence_unknown',
-    limit: 5,
-    window: '15m'
-  });
-  assert.deepEqual(body.events, []);
-  assert.deepEqual(body.interactions, []);
-  assert.deepEqual(body.memory_artifacts, []);
-  assert.deepEqual(body.ledger, []);
-  assert.deepEqual(body.replay_audit, {
-    evidence_id_status: 'unknown_evidence_id',
-    event_count: 0,
-    interaction_count: 0,
-    artifact_count: 0,
-    ledger_entry_count: 0,
-    anchor_event_count: 0,
-    anchor_event_ids: []
-  });
-  assert.equal(body.accountability.event_count, 0);
-  assert.equal(body.accountability.interaction_count, 0);
-  assert.equal(body.accountability.artifact_count, 0);
-  assert.deepEqual(body.accountability.evidence_refs, []);
 });
 
 test('GET /accountability/replay audits collector-only evidence_id anchors without event ids', async (t) => {

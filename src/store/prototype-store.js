@@ -1547,7 +1547,12 @@ class PrototypeStore {
 
     return {
       generated_at: normalizedFilters.now || new Date().toISOString(),
-      query: createAccountabilityReplayQuery(normalizedFilters),
+      query: createAccountabilityReplayQuery(normalizedFilters, {
+        evidenceRecord,
+        events,
+        interactions,
+        memoryArtifacts
+      }),
       accountability: createAccountabilityReplaySummary({
         filters: normalizedFilters,
         events,
@@ -2104,22 +2109,22 @@ function normalizeOptionalString(value) {
   return trimmedValue.length > 0 ? trimmedValue : null;
 }
 
-function createAccountabilityReplayQuery(filters) {
+function createAccountabilityReplayQuery(filters, context = {}) {
   const query = {};
 
   if (filters.event_id) {
     query.event_id = filters.event_id;
   }
-  if (filters.evidence_id) {
+  if (filters.evidence_id && context.evidenceRecord) {
     query.evidence_id = filters.evidence_id;
   }
   if (filters.evidence_ref) {
     query.evidence_ref = filters.evidence_ref;
   }
-  if (filters.correlation_id) {
+  if (filters.correlation_id && replayContextHasCorrelationId(context, filters.correlation_id)) {
     query.correlation_id = filters.correlation_id;
   }
-  if (filters.agent_id) {
+  if (filters.agent_id && replayContextHasAgentId(context, filters.agent_id)) {
     query.agent_id = filters.agent_id;
   }
   if (filters.source_kind) {
@@ -2132,6 +2137,41 @@ function createAccountabilityReplayQuery(filters) {
   query.limit = filters.limit;
   query.window = filters.window;
   return query;
+}
+
+function replayContextHasCorrelationId(
+  { evidenceRecord, events = [], interactions = [], memoryArtifacts = [] },
+  correlationId
+) {
+  if (evidenceRecord?.correlation_id === correlationId) {
+    return true;
+  }
+
+  return (
+    events.some((event) => event.correlation_id === correlationId) ||
+    interactions.some((interaction) => interaction.correlation_id === correlationId) ||
+    memoryArtifacts.some((artifact) => (artifact.correlation_ids || []).includes(correlationId))
+  );
+}
+
+function replayContextHasAgentId(
+  { evidenceRecord, events = [], interactions = [], memoryArtifacts = [] },
+  agentId
+) {
+  if (evidenceRecord?.agent_id === agentId) {
+    return true;
+  }
+
+  return (
+    events.some(
+      (event) =>
+        event.agent_id === agentId ||
+        event.actor_id === agentId ||
+        (event.counterparty_agent_ids || []).includes(agentId)
+    ) ||
+    interactions.some((interaction) => (interaction.participant_agent_ids || []).includes(agentId)) ||
+    memoryArtifacts.some((artifact) => (artifact.agent_ids || []).includes(agentId))
+  );
 }
 
 function listAccountabilityReplayArtifacts({ store, filters, events = [], interactions = [] }) {

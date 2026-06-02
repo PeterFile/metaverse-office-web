@@ -7847,10 +7847,10 @@ test('GET read route purity matrix leaves replay records and checkpoints unchang
   );
   assert.equal(unknownReplay.response.status, 200);
   assert.deepEqual(unknownReplay.body.query, {
-    evidence_id: 'missing-evidence-id',
     limit: 5,
     window: '60m'
   });
+  assert.equal(JSON.stringify(unknownReplay.body).includes('missing-evidence-id'), false);
   assert.deepEqual(unknownReplay.body.events, []);
   assert.deepEqual(unknownReplay.body.interactions, []);
   assert.deepEqual(unknownReplay.body.memory_artifacts, []);

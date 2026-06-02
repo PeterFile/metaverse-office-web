@@ -60,6 +60,11 @@ async function createHarness(t, options = {}) {
   };
 }
 
+async function createDirectStore() {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'metaverse-office-direct-'));
+  return createPrototypeStore({ filePath: path.join(root, 'prototype-store.jsonl') });
+}
+
 async function hasSqlite3() {
   try {
     await execFileAsync('sqlite3', ['--version']);
@@ -1964,6 +1969,29 @@ test('GET /agents/:id/evidence-spine redacts runtime source details and filters 
   assertNoEvidenceSpineRuntimeLeak(response.body, { allowCollectorAnchors: true });
 });
 
+test('GET /agents/:id/evidence-spine supports status alias without leaking unknown filters', async (t) => {
+  const store = await createDirectStore();
+
+  await store.appendCollectorReport(createEvidenceSpineRedactionCollectorReport());
+
+  const response = await requestJsonDirect({
+    url: '/agents/app-engineering/evidence-spine?status=degraded&source_kind=workspace_file&evidence_role=agent_output&newest_first=true&limit=1&metadata=token=redaction-filter',
+    store
+  });
+  assert.equal(response.response.status, 200);
+  assert.equal(response.body.item.returned_limit, 1);
+  assert.equal(response.body.item.evidence_summary.total_count, 1);
+  assert.deepEqual(
+    response.body.item.recent_evidence.map((record) => record.source_status),
+    ['degraded']
+  );
+  assert.equal(response.body.item.source_gaps.summary.total_count, 1);
+
+  const serialized = JSON.stringify(response.body);
+  assert.equal(serialized.includes('token=redaction-filter'), false);
+  assertNoEvidenceSpineRuntimeLeak(response.body, { allowCollectorAnchors: true });
+});
+
 test('GET /agents/evidence-spine/summary returns compact seven-agent evidence summary read-only', async (t) => {
   let collectCount = 0;
   const controllerSnapshotCollector = {
@@ -2124,12 +2152,16 @@ test('GET /agents/evidence-spine/source-matrix returns source-matrix read route 
 });
 
 test('GET /agents/:id/evidence-spine returns 404 for unknown agents', async (t) => {
-  const { baseUrl } = await createHarness(t);
+  const store = await createDirectStore();
 
-  const response = await requestJson(`${baseUrl}/agents/missing-agent/evidence-spine`);
+  const response = await requestJsonDirect({
+    url: `/agents/${encodeURIComponent('tmux://secret-session')}/evidence-spine`,
+    store
+  });
   assert.equal(response.response.status, 404);
   assert.equal(response.body.error, 'not_found');
-  assert.equal(response.body.details, 'unknown agent missing-agent');
+  assert.equal(response.body.details, 'unknown_agent');
+  assert.equal(JSON.stringify(response.body).includes('tmux://secret-session'), false);
 });
 
 test('GET /peer-watch/alerts supports evidence-oriented filters and fields', async (t) => {

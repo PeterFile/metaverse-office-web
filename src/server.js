@@ -234,7 +234,7 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
     if (!item) {
       sendJson(res, 404, {
         error: 'not_found',
-        details: `unknown agent ${agentId}`
+        details: 'unknown_agent'
       });
       return;
     }

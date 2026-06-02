@@ -14,6 +14,7 @@ import {
   DEFAULT_WORKFLOW_WINDOW,
   RequestError,
   fetchAgentEvidenceSpineSummary,
+  fetchAgentEvidenceSourceMatrix,
   fetchAgentWorkflow,
   fetchAccountabilityReplay,
   fetchCollectorEvidenceCoverage,
@@ -63,6 +64,7 @@ import {
   deriveSelectedAgentSourceHealthInspectPeek
 } from './aitown/sourceHealth';
 import { deriveSelectedAgentEvidenceGlance } from './aitown/selectedAgentEvidenceGlance';
+import { deriveSelectedAgentSourceMatrixViewModel } from './aitown/selectedAgentSourceMatrix';
 import { WorldProvider, useWorld } from './context/WorldContext';
 import { usePolledResource, type LoadState } from './hooks/usePolledResource';
 import { getHubFocusableElements, isHubElementVisible } from './hubFocus';
@@ -72,6 +74,7 @@ import {
 } from './selectedAgentEvidenceLedger';
 import type {
   AccountabilityReplayBundle,
+  AgentEvidenceSourceMatrix,
   AgentEvidenceSpineSummary,
   CollectorEvidenceCoverage,
   CollectorSnapshot,
@@ -1315,6 +1318,11 @@ function AppInner() {
     enabled: selectedAgentId !== null && overviewResource.data !== null,
     load: (signal) => fetchAgentEvidenceSpineSummary({ signal }),
     resourceKey: selectedAgentId ? `selected-agent-evidence-spine-summary:${selectedAgentId}` : null
+  });
+  const selectedAgentEvidenceSourceMatrixResource = usePolledResource<AgentEvidenceSourceMatrix>({
+    enabled: selectedAgentId !== null && overviewResource.data !== null,
+    load: (signal) => fetchAgentEvidenceSourceMatrix({ signal }),
+    resourceKey: selectedAgentId ? `selected-agent-evidence-source-matrix:${selectedAgentId}` : null
   });
   const defaultEvidenceCoverageReady = overviewResource.data !== null;
 
@@ -3042,6 +3050,14 @@ function AppInner() {
       }),
     [latestSourceHealth, selectedAgentEvidenceSpineSummaryResource.data, selectedAgentId, visibleEvidenceCoverage]
   );
+  const selectedAgentSourceMatrix = useMemo(
+    () =>
+      deriveSelectedAgentSourceMatrixViewModel(selectedAgentEvidenceSourceMatrixResource.data, selectedAgentId, {
+        maxRows: 3,
+        maxUnmappedRows: 1
+      }),
+    [selectedAgentEvidenceSourceMatrixResource.data, selectedAgentId]
+  );
   const selectedAgentSourceGapFact = deriveSelectedAgentSourceGapFact(latestSourceHealth, selectedAgentId);
   const selectedAgentSourceHealthInspectPeek = useMemo(
     () => deriveSelectedAgentSourceHealthInspectPeek(latestSourceHealth, selectedAgentId, previousSourceHealth),
@@ -3506,6 +3522,28 @@ function AppInner() {
                       <span key={line}>{line}</span>
                     ))}
                   </span>
+                ) : null}
+                {selectedAgentSourceMatrix.status === 'ready' ? (
+                  <section
+                    className="aitown-selected-agent-peek__source-matrix"
+                    role="region"
+                    aria-label="Selected agent source matrix peek"
+                  >
+                    <span className="aitown-selected-agent-peek__source-matrix-label">Source matrix</span>
+                    {selectedAgentSourceMatrix.rows.map((row) => (
+                      <span
+                        key={`${row.source}:${row.status}:${row.role}:${row.output}:${row.count}:${row.latest_at ?? 'unknown'}`}
+                        className="aitown-selected-agent-peek__source-matrix-row"
+                      >
+                        <strong>{`${row.source} · ${row.status}`}</strong>
+                        <span>{`${row.role} · ${row.output} · ${row.count}`}</span>
+                        <span>{`Latest · ${row.latest_at ?? 'unknown'}`}</span>
+                      </span>
+                    ))}
+                    {selectedAgentSourceMatrix.unmappedSummary.totalCount > 0 ? (
+                      <span>{`Unmapped evidence · ${selectedAgentSourceMatrix.unmappedSummary.totalCount} separate`}</span>
+                    ) : null}
+                  </section>
                 ) : null}
                 <section
                   className="aitown-selected-agent-peek__runtime-facts"

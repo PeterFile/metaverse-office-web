@@ -1095,6 +1095,7 @@ test.describe('operator shell layout visual smoke', () => {
       '/runtime/source-gaps?newest_first=true&limit=3',
       '/runtime/source-gaps/summary?newest_first=true&limit=3',
       '/agents/evidence-spine/summary?newest_first=true&limit=200',
+      '/agents/evidence-spine/source-matrix?newest_first=true&limit=200',
       '/agents/app-engineering/workflow?limit=10&window=60m',
       '/office/operations?agent_id=app-engineering',
       '/collectors/controller-snapshot',

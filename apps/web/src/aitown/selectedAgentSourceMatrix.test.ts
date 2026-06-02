@@ -94,18 +94,18 @@ describe('deriveSelectedAgentSourceMatrixViewModel', () => {
       selectedAgentId: 'app-engineering',
       rows: [
         {
-          source: 'tmux_observation',
-          status: 'observed',
-          role: 'agent_output',
-          output: 'output_candidate',
+          source: 'Tmux observation',
+          status: 'Observed',
+          role: 'Agent output',
+          output: 'Output candidate',
           count: 3,
           latest_at: '2026-03-09T18:04:50.000Z'
         },
         {
-          source: 'workspace_file',
-          status: 'observed',
-          role: 'agent_plan',
-          output: 'supporting_evidence',
+          source: 'Workspace file',
+          status: 'Observed',
+          role: 'Agent plan',
+          output: 'Supporting evidence',
           count: 3,
           latest_at: '2026-03-09T18:04:45.000Z'
         }
@@ -114,10 +114,10 @@ describe('deriveSelectedAgentSourceMatrixViewModel', () => {
         totalCount: 3,
         rows: [
           {
-            source: 'hermes_profile',
-            status: 'observed',
-            role: 'unknown',
-            output: 'supporting_evidence',
+            source: 'Hermes profile',
+            status: 'Observed',
+            role: 'Unknown',
+            output: 'Supporting evidence',
             count: 2,
             latest_at: '2026-03-09T18:03:00.000Z'
           }
@@ -132,16 +132,16 @@ describe('deriveSelectedAgentSourceMatrixViewModel', () => {
     expect(model.status).toBe('ready');
     expect(model.rows).toEqual([
       {
-        source: 'workspace_file',
-        status: 'observed',
-        role: 'unknown',
-        output: 'supporting_evidence',
+        source: 'Workspace file',
+        status: 'Observed',
+        role: 'Unknown',
+        output: 'Supporting evidence',
         count: 2,
         latest_at: '2026-03-09T18:02:00.000Z'
       }
     ]);
     expect(model.unmappedSummary.totalCount).toBe(3);
-    expect(model.unmappedSummary.rows.map((row) => row.source)).toEqual(['hermes_profile', 'workspace_root']);
+    expect(model.unmappedSummary.rows.map((row) => row.source)).toEqual(['Hermes profile', 'Workspace root']);
   });
 
   it('returns an empty selected-agent state for missing or unknown selected agents', () => {
@@ -164,10 +164,10 @@ describe('deriveSelectedAgentSourceMatrixViewModel', () => {
     });
 
     expect(model.rows.at(-1)).toEqual({
-      source: 'hermes_session',
-      status: 'unknown',
-      role: 'unknown',
-      output: 'unknown',
+      source: 'Hermes session',
+      status: 'Unknown',
+      role: 'Unknown',
+      output: 'Unknown',
       count: 1,
       latest_at: '2026-03-09T18:01:00.000Z'
     });
@@ -255,11 +255,11 @@ describe('deriveSelectedAgentSourceMatrixViewModel', () => {
       /\/Users\/cwp|C:\\\\Users|~\/|file:\/\/|http:\/\/|tmux:\/\/|hermes:\/\/|session:\/\/|profile:\/\/|https:\/\/|token|payload|webhook|secret|control-plane/
     );
     expect(JSON.parse(serialized).rows).toEqual([
-      expect.objectContaining({ source: 'unknown', status: 'unknown', role: 'unknown' }),
-      expect.objectContaining({ source: 'unknown', status: 'unknown', role: 'unknown' }),
-      expect.objectContaining({ source: 'unknown', status: 'unknown', role: 'unknown' }),
-      expect.objectContaining({ source: 'unknown', status: 'unknown', role: 'unknown' }),
-      expect.objectContaining({ source: 'unknown', status: 'unknown', role: 'unknown' })
+      expect.objectContaining({ source: 'Unknown', status: 'Unknown', role: 'Unknown' }),
+      expect.objectContaining({ source: 'Unknown', status: 'Unknown', role: 'Unknown' }),
+      expect.objectContaining({ source: 'Unknown', status: 'Unknown', role: 'Unknown' }),
+      expect.objectContaining({ source: 'Unknown', status: 'Unknown', role: 'Unknown' }),
+      expect.objectContaining({ source: 'Unknown', status: 'Unknown', role: 'Unknown' })
     ]);
   });
 });

@@ -239,6 +239,7 @@ const collectorSnapshotUrl = '/collectors/controller-snapshot';
 const collectorEvidenceCoverageUrl = '/collectors/controller-snapshot/evidence-coverage';
 const collectorSourceHealthUrl = '/collectors/controller-snapshot/source-health?limit=7';
 const evidenceSpineSummaryUrl = '/agents/evidence-spine/summary?newest_first=true&limit=200';
+const evidenceSourceMatrixUrl = '/agents/evidence-spine/source-matrix?newest_first=true&limit=200';
 const runtimeSourceGapsUrl = '/runtime/source-gaps?newest_first=true&limit=3';
 const runtimeSourceGapsSummaryUrl = '/runtime/source-gaps/summary?newest_first=true&limit=3';
 const appEngineeringEvidenceRecordsUrl =
@@ -1323,6 +1324,62 @@ const evidenceSpineSummaryFixture = {
   }
 };
 
+const evidenceSourceMatrixFixture = {
+  agent_count: 2,
+  returned_limit: 200,
+  total_count: 11,
+  mapped_count: 9,
+  unmapped_count: 2,
+  agents: [
+    {
+      agent_id: 'app-engineering',
+      sources: [
+        {
+          source_kind: 'workspace_file',
+          evidence_count: 4,
+          source_status_buckets: { observed: 4 },
+          evidence_role_buckets: { agent_output: 3, agent_plan: 1 },
+          output_candidate_buckets: { true: 3, false: 1 },
+          latest_observed_at: '2026-03-16T08:59:10.000Z',
+          latest_collected_at: '2026-03-16T09:01:00.000Z'
+        },
+        {
+          source_kind: 'tmux_observation',
+          evidence_count: 3,
+          source_status_buckets: { degraded: 2, observed: 1 },
+          evidence_role_buckets: { runtime_activity: 3 },
+          output_candidate_buckets: { true: 0, false: 3 },
+          latest_observed_at: '2026-03-16T08:58:30.000Z',
+          latest_collected_at: '2026-03-16T09:01:00.000Z'
+        },
+        {
+          source_kind: '/tmp/app/secret-token.md',
+          evidence_count: 2,
+          source_status_buckets: { 'tmux://raw-session': 2 },
+          evidence_role_buckets: { webhook: 2 },
+          output_candidate_buckets: { true: 0, false: 2 },
+          latest_observed_at: '2026-03-16T08:57:30.000Z',
+          latest_collected_at: '2026-03-16T09:01:00.000Z'
+        }
+      ]
+    }
+  ],
+  unmapped_evidence_summary: {
+    total_count: 2,
+    sources: [
+      {
+        source_kind: 'hermes_profile',
+        evidence_count: 2,
+        source_status_buckets: { observed: 2 },
+        evidence_role_buckets: { runtime_unmapped: 2 },
+        output_candidate_buckets: { true: 0, false: 2 },
+        latest_observed_at: '2026-03-16T08:56:00.000Z',
+        latest_collected_at: '2026-03-16T09:01:00.000Z'
+      }
+    ]
+  }
+};
+
 const evidenceRecordsFixture = {
   items: [
     {
@@ -1998,6 +2055,10 @@ function resolveDefaultFetchResponse(url: string) {
 
   if (url === evidenceSpineSummaryUrl) {
     return jsonResponse({ item: evidenceSpineSummaryFixture });
+  }
+
+  if (url === evidenceSourceMatrixUrl) {
+    return jsonResponse({ item: evidenceSourceMatrixFixture });
   }
 
   if (url === collectorSourceHealthUrl) {
@@ -3767,6 +3828,51 @@ afterEach(() => {
     const evidenceRecordRequests = requestedUrls.filter((url) => url.startsWith('/evidence-records'));
     expect(evidenceRecordRequests).toEqual([appEngineeringEvidenceRecordsUrl]);
     expect(await findHubSection(details, 'Evidence Ledger')).toBeVisible();
+  });
+
+  it('shows selected-agent source matrix facts in the compact inspect peek without prefetching ledger reads', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const roster = await screen.findByRole('navigation', { name: 'Agent roster' });
+    await user.click(
+      within(roster).getByRole('button', {
+        name: 'Select and locate App Engineering Agent'
+      })
+    );
+
+    const inspectPeek = await screen.findByRole('region', { name: 'Selected agent inspect peek' });
+    const sourceMatrix = await within(inspectPeek).findByRole('region', {
+      name: 'Selected agent source matrix peek'
+    });
+
+    expect(within(sourceMatrix).getByText('Source matrix')).toBeVisible();
+    expect(within(sourceMatrix).getByText('Workspace file · Observed')).toBeVisible();
+    expect(within(sourceMatrix).getByText('Agent output · Output candidate · 4')).toBeVisible();
+    expect(within(sourceMatrix).getByText('Latest · 2026-03-16T08:59:10.000Z')).toBeVisible();
+    expect(within(sourceMatrix).getByText('Tmux observation · Degraded')).toBeVisible();
+    expect(within(sourceMatrix).getByText('Runtime activity · Supporting evidence · 3')).toBeVisible();
+    expect(within(sourceMatrix).getByText('Unknown · Unknown')).toBeVisible();
+    expect(within(sourceMatrix).getByText('Unknown · Supporting evidence · 2')).toBeVisible();
+    expect(within(sourceMatrix).getByText('Unmapped evidence · 2 separate')).toBeVisible();
+    expect(sourceMatrix).not.toHaveTextContent(
+      /workspace_file|tmux_observation|agent_output|output_candidate|runtime_activity|source_kind|source_status|evidence_role/i
+    );
+    expect(sourceMatrix).not.toHaveTextContent('hermes_profile');
+    expect(inspectPeek).not.toHaveTextContent('/tmp/app/secret-token.md');
+    expect(inspectPeek).not.toHaveTextContent('tmux://raw-session');
+    expect(inspectPeek).not.toHaveTextContent('webhook');
+    expect(inspectPeek).not.toHaveTextContent('secret-token');
+
+    await act(async () => {});
+    const requestedUrls = vi.mocked(globalThis.fetch).mock.calls.map(([request]) => String(request));
+    expect(requestedUrls).toContain(evidenceSourceMatrixUrl);
+    expect(requestedUrls).not.toContain(workflowUrl);
+    expect(requestedUrls).not.toContain(appEngineeringEvidenceRecordsUrl);
+    expect(requestedUrls).not.toContain(appEngineeringEvidenceRecordDetailUrl);
+    expect(requestedUrls).not.toContain(appEngineeringEvidenceProvenanceBundleUrl);
+    expect(requestedUrls).not.toContain(appEngineeringEvidenceSourceContextUrl);
+    expect(requestedUrls.some((url) => url.includes('ref-rollup'))).toBe(false);
   });
 
   it('opens selected-agent replay from the compact inspect peek without using an automatic Hub dump', async () => {

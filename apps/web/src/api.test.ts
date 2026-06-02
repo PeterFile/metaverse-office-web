@@ -2150,6 +2150,7 @@ describe('fetchRuntimeSourceGapLifecycle', () => {
           last_observed_at: '2026-03-09T18:58:30.000Z',
           first_collected_at: '2026-03-09T18:59:00.000Z',
           last_collected_at: '2026-03-09T18:59:00.000Z',
+          record_count: 1,
           snapshot_count: 1,
           source_status_buckets: { degraded: 1 }
         }
@@ -2165,6 +2166,7 @@ describe('fetchRuntimeSourceGapLifecycle', () => {
     );
 
     await expect(fetchRuntimeSourceGapLifecycle({ limit: 1 })).resolves.toEqual(item);
+    expect(Number.isSafeInteger(item.groups[0].record_count)).toBe(true);
     expect(Object.hasOwn(item.groups[0], 'evidence_id')).toBe(false);
     expect(Object.hasOwn(item.groups[0], 'evidence_ref')).toBe(false);
     expect(Object.hasOwn(item.groups[0], 'metadata')).toBe(false);

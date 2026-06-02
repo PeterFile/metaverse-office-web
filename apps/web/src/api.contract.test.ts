@@ -950,6 +950,7 @@ describe('read-only frontend/backend contract smoke', () => {
           evidence_role: 'agent_plan',
           current_status: 'degraded',
           lifecycle_state: 'opened',
+          record_count: 1,
           snapshot_count: 1,
           source_status_buckets: { degraded: 1 }
         }
@@ -3480,6 +3481,11 @@ function expectRuntimeSourceGapLifecycleContract(lifecycle: RuntimeSourceGapLife
   expect(serialized).not.toContain('Need review evidence');
   expect(serialized).not.toContain('payload');
   expect(serialized).not.toContain('metadata');
+  expect(
+    lifecycle.groups.every(
+      (group) => Number.isSafeInteger(group.record_count) && group.record_count >= 0
+    )
+  ).toBe(true);
   expect(lifecycle.groups.every((group) => !Object.hasOwn(group, 'evidence_id'))).toBe(true);
   expect(lifecycle.groups.every((group) => !Object.hasOwn(group, 'evidence_ref'))).toBe(true);
 }

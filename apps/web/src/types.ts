@@ -600,6 +600,7 @@ export interface RuntimeSourceGapLifecycleGroup {
   last_observed_at: string | null;
   first_collected_at: string | null;
   last_collected_at: string | null;
+  record_count: number;
   snapshot_count: number;
   source_status_buckets: Record<string, number>;
 }

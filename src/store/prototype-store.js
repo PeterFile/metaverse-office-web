@@ -4532,7 +4532,7 @@ function stripReplayWindowUnsafeCheckpointFields(checkpoint, recordKind) {
 function createRecordKindBuckets(records) {
   const buckets = {};
   for (const record of records) {
-    incrementBucket(buckets, record.kind);
+    incrementBucket(buckets, projectReplayCheckpointRecordKind(record));
   }
   return buckets;
 }

@@ -1120,6 +1120,61 @@ test('JSONL prototype store reports storage index health as not applicable', asy
   assert.equal(JSON.stringify(health).includes('metadata'), false);
 });
 
+test('JSONL storage index health buckets unknown record kinds without leaking raw semantics', async () => {
+  const storeFile = await createStoreFile();
+  const records = [
+    {
+      kind: 'event',
+      payload: createEvent()
+    },
+    {
+      kind: 'agent_productivity:/tmp/index-health-kind',
+      payload: {
+        ts: '2026-03-09T18:07:00.000Z',
+        evidence_ref: 'tmux://index-health/0.1',
+        metadata: {
+          token: 'index-health-secret',
+          webhook: 'https://hooks.example.test/index-health',
+          liveness: 'observed',
+          productivity: 'active',
+          severity: 'green'
+        }
+      }
+    }
+  ];
+  await writeFile(storeFile, records.map((record) => JSON.stringify(record)).join('\n') + '\n');
+  const store = await createPrototypeStore({ filePath: storeFile });
+
+  const health = await store.getStorageIndexHealth();
+  assert.deepEqual(health, {
+    backend: 'jsonl',
+    status: 'ok',
+    record_count: 2,
+    record_index_count: null,
+    record_evidence_ref_count: null,
+    sidecar_status: 'not_applicable',
+    record_kind_buckets: {
+      event: 1,
+      unknown: 1
+    },
+    latest_record_ts: '2026-03-09T18:04:00.000Z'
+  });
+  const serialized = JSON.stringify(health);
+  for (const unsafeFragment of [
+    '/tmp',
+    'tmux://',
+    'payload',
+    'metadata',
+    'token',
+    'webhook',
+    'liveness',
+    'productivity',
+    'severity'
+  ]) {
+    assert.equal(serialized.includes(unsafeFragment), false, unsafeFragment);
+  }
+});
+
 test('prototype store exposes bounded sanitized replay checkpoint log that survives reload', async () => {
   const storeFile = await createStoreFile();
   const store = await createPrototypeStore({ filePath: storeFile });

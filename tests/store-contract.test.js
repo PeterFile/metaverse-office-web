@@ -3277,6 +3277,7 @@ test('prototype store derives compact runtime source gap lifecycle across snapsh
         agent_id: null,
         source_kind: 'tmux_observation',
         evidence_role: 'runtime_unmapped',
+        record_count: 1,
         current_status: 'observed',
         lifecycle_state: 'observed_unmapped',
         first_observed_at: '2026-03-09T18:06:50.000Z',
@@ -3290,6 +3291,7 @@ test('prototype store derives compact runtime source gap lifecycle across snapsh
         agent_id: 'app-engineering',
         source_kind: 'workspace_file',
         evidence_role: 'agent_output',
+        record_count: 2,
         current_status: 'observed',
         lifecycle_state: 'resolved',
         first_observed_at: '2026-03-09T18:05:20.000Z',
@@ -3310,6 +3312,7 @@ test('prototype store derives compact runtime source gap lifecycle across snapsh
   assert.equal(tmuxLifecycle.groups[0].current_status, 'missing');
 
   const serializedLifecycle = JSON.stringify(lifecycle);
+  assert.equal(lifecycle.groups.every((group) => Number.isSafeInteger(group.record_count)), true);
   for (const canary of ['/tmp/lifecycle', 'token=lifecycle-secret', 'tmux://unmapped-session']) {
     assert.equal(serializedLifecycle.includes(canary), false, `leaked canary: ${canary}`);
   }

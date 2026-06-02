@@ -11776,10 +11776,17 @@ afterEach(() => {
         }
 
         if (url === operationsUrl || url === selectedOperationUrl) {
-          return new Response(JSON.stringify({ error: 'internal_error', details: 'operations refresh failed' }), {
-            status: 500,
-            headers: { 'content-type': 'application/json' }
-          });
+          return new Response(
+            JSON.stringify({
+              error: 'internal_error',
+              details:
+                'operations refresh failed /tmp/app/outbox.md tmux://raw Hermes profile session token webhook control-plane healthy repaired productivity liveness severity'
+            }),
+            {
+              status: 500,
+              headers: { 'content-type': 'application/json' }
+            }
+          );
         }
 
         if (url === incidentsUrl) {
@@ -11802,7 +11809,21 @@ afterEach(() => {
     render(<App />);
 
     const details = await openHub(user, 'Queue');
-    expect(await within(details).findByText('Unable to load active queue. operations refresh failed')).toBeVisible();
+    const errorState = await within(details).findByText('Unable to load active queue. request_failed: internal_error');
+    expect(errorState).toBeVisible();
+    expect(details).not.toHaveTextContent('/tmp/app/outbox.md');
+    expect(details).not.toHaveTextContent('tmux://');
+    expect(details).not.toHaveTextContent('Hermes');
+    expect(details).not.toHaveTextContent('profile');
+    expect(details).not.toHaveTextContent('session');
+    expect(details).not.toHaveTextContent('token');
+    expect(details).not.toHaveTextContent('webhook');
+    expect(details).not.toHaveTextContent('control-plane');
+    expect(details).not.toHaveTextContent('healthy');
+    expect(details).not.toHaveTextContent('repaired');
+    expect(details).not.toHaveTextContent('productivity');
+    expect(details).not.toHaveTextContent('liveness');
+    expect(details).not.toHaveTextContent('severity');
     expect(within(details).queryByText('No active operations queue.')).not.toBeInTheDocument();
   });
 

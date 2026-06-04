@@ -497,6 +497,40 @@ export interface EvidenceSourceContext {
   };
 }
 
+export interface EvidenceReplayWindowCenter {
+  append_index: number;
+  evidence_id: string;
+  source_summary: EvidenceProvenanceSourceSummary;
+  record: EvidenceSourceContextRecord;
+}
+
+export type EvidenceReplayWindowCheckpoint = Partial<EvidenceSourceContextRecord> & {
+  ts?: string;
+  received_at?: string;
+  actor_id?: string | null;
+  item_count?: number;
+};
+
+export interface EvidenceReplayWindowRow {
+  append_index: number;
+  record_kind: string;
+  checkpoint: EvidenceReplayWindowCheckpoint | null;
+}
+
+export interface EvidenceReplayWindow {
+  center: EvidenceReplayWindowCenter;
+  window: {
+    before: number;
+    after: number;
+  };
+  before: EvidenceReplayWindowRow[];
+  after: EvidenceReplayWindowRow[];
+}
+
+export interface EvidenceReplayWindowResponse {
+  item: EvidenceReplayWindow | null;
+}
+
 export interface RuntimeSourceGap {
   observed_at: string | null;
   collected_at: string | null;

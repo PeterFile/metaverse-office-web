@@ -354,6 +354,7 @@ const replaySourceContextUiFixture = {
 };
 const replayByEvidenceIdGet =
   `GET /accountability/replay?limit=10&window=60m&evidence_id=${replayEvidenceId}&agent_id=app-engineering`;
+const replayWindowByEvidenceIdGet = `GET /evidence-records/${replayEvidenceId}/replay-window?before=2&after=2`;
 const checkpointLogByEvidenceIdGet =
   `GET /accountability/replay/checkpoint-log?limit=3&evidence_id=${replayEvidenceId}`;
 const evidenceSpineSummaryGet = 'GET /agents/evidence-spine/summary?newest_first=true&limit=200';
@@ -797,12 +798,14 @@ test.describe('operator shell live evidence journey smoke', () => {
       ...replayEvidenceRecordGets,
       replaySourceContextGet,
       checkpointLogByEvidenceIdGet,
-      replayByEvidenceIdGet
+      replayByEvidenceIdGet,
+      replayWindowByEvidenceIdGet
     ]);
     const evidenceRecordRequests: string[] = [];
     const sourceContextRequests: string[] = [];
     const checkpointLogRequests: string[] = [];
     const replayRequests: string[] = [];
+    const replayWindowRequests: string[] = [];
     const apiRequestViolations: string[] = [];
     const handleRequest = (request: Request) => {
       const url = new URL(request.url());
@@ -825,6 +828,9 @@ test.describe('operator shell live evidence journey smoke', () => {
       }
       if (url.pathname === '/accountability/replay') {
         replayRequests.push(key);
+      }
+      if (url.pathname.endsWith('/replay-window')) {
+        replayWindowRequests.push(key);
       }
     };
 
@@ -851,6 +857,7 @@ test.describe('operator shell live evidence journey smoke', () => {
       expect(evidenceRecordRequests, 'selecting an agent should not prefetch evidence records').toEqual([]);
       expect(checkpointLogRequests, 'selecting an agent should not prefetch checkpoint proof').toEqual([]);
       expect(replayRequests, 'selecting an agent should not prefetch replay records').toEqual([]);
+      expect(replayWindowRequests, 'selecting an agent should not prefetch replay window').toEqual([]);
 
       await ledgerCta.click();
 
@@ -860,6 +867,7 @@ test.describe('operator shell live evidence journey smoke', () => {
       await expect.poll(() => evidenceRecordRequests.slice()).toEqual([replayEvidenceRecordGets[0]]);
       expect(checkpointLogRequests, 'opening Evidence Ledger should not prefetch checkpoint proof').toEqual([]);
       expect(replayRequests, 'opening Evidence Ledger should not prefetch replay records').toEqual([]);
+      expect(replayWindowRequests, 'opening Evidence Ledger should not prefetch replay window').toEqual([]);
 
       await evidencePanel
         .getByRole('button', { name: `Inspect evidence record ${boundedReplayEvidenceId}` })
@@ -878,6 +886,7 @@ test.describe('operator shell live evidence journey smoke', () => {
       await expect(detailSection).not.toContainText('/evidence-records/');
       await expect(detailSection).not.toContainText('/tmp/revenue-handoff.md');
       expect(replayRequests, 'inspecting evidence detail should not prefetch replay records').toEqual([]);
+      expect(replayWindowRequests, 'inspecting evidence detail should not prefetch replay window').toEqual([]);
       expect(sourceContextRequests, 'inspecting evidence detail should not prefetch source context').toEqual([]);
 
       await detailSection
@@ -905,6 +914,14 @@ test.describe('operator shell live evidence journey smoke', () => {
       await expect(replayPanel).toBeVisible();
       await expect(replayPanel.getByRole('heading', { name: 'Replay Bundle' })).toBeVisible();
       await expect.poll(() => replayRequests.slice()).toEqual([replayByEvidenceIdGet]);
+      await expect.poll(() => replayWindowRequests.slice()).toEqual([replayWindowByEvidenceIdGet]);
+      const replayWindowCard = replayPanel.getByRole('region', { name: 'Selected evidence replay window' });
+      await expect(replayWindowCard.getByRole('heading', { name: 'Selected Evidence Replay Window' })).toBeVisible();
+      await expect(replayWindowCard).toContainText('Bounds · before 2 · after 2');
+      await expect(
+        replayWindowCard,
+        'replay-window card should not expose raw refs, paths, sessions, payloads, or unsafe metadata'
+      ).not.toContainText(visibleProofRawRefPattern);
       expect(apiRequestViolations).toEqual([]);
     } finally {
       page.off('request', handleRequest);

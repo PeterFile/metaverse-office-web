@@ -23,6 +23,7 @@ import {
   fetchCorrelationDrilldown,
   fetchEvidenceRecord,
   fetchEvidenceProvenanceBundle,
+  fetchEvidenceReplayWindow,
   fetchEvidenceSourceContext,
   fetchEvidenceRecords,
   fetchReplayCheckpointLog,
@@ -83,6 +84,7 @@ import type {
   CorrelationDrilldown,
   EvidenceProvenanceBundle,
   EvidenceRecord,
+  EvidenceReplayWindow,
   EvidenceSourceContext,
   ReplayCheckpointLogResponse,
   MemoryArtifact,
@@ -1176,6 +1178,12 @@ function AppInner() {
     useState<LoadState>('idle');
   const [selectedAgentEvidenceSourceContextError, setSelectedAgentEvidenceSourceContextError] =
     useState<string | null>(null);
+  const [selectedAgentEvidenceReplayWindow, setSelectedAgentEvidenceReplayWindow] =
+    useState<EvidenceReplayWindow | null>(null);
+  const [selectedAgentEvidenceReplayWindowState, setSelectedAgentEvidenceReplayWindowState] =
+    useState<LoadState>('idle');
+  const [selectedAgentEvidenceReplayWindowError, setSelectedAgentEvidenceReplayWindowError] =
+    useState<string | null>(null);
   const [defaultEvidenceCoverage, setDefaultEvidenceCoverage] =
     useState<CollectorEvidenceCoverage | null>(null);
   const [defaultEvidenceCoverageState, setDefaultEvidenceCoverageState] =
@@ -1205,6 +1213,8 @@ function AppInner() {
   const evidenceRecordDetailAbortControllerRef = useRef<AbortController | null>(null);
   const evidenceSourceContextRequestIdRef = useRef(0);
   const evidenceSourceContextAbortControllerRef = useRef<AbortController | null>(null);
+  const evidenceReplayWindowRequestIdRef = useRef(0);
+  const evidenceReplayWindowAbortControllerRef = useRef<AbortController | null>(null);
   const zoneFocusRequestIdRef = useRef(0);
   const sourceGapFocusRequestIdRef = useRef(0);
   const wasHubOpenRef = useRef(false);
@@ -1216,6 +1226,9 @@ function AppInner() {
     evidenceSourceContextRequestIdRef.current += 1;
     evidenceSourceContextAbortControllerRef.current?.abort();
     evidenceSourceContextAbortControllerRef.current = null;
+    evidenceReplayWindowRequestIdRef.current += 1;
+    evidenceReplayWindowAbortControllerRef.current?.abort();
+    evidenceReplayWindowAbortControllerRef.current = null;
     setSelectedAgentEvidenceRecord(null);
     setSelectedAgentEvidenceRecordId(null);
     setSelectedAgentEvidenceRecordError(null);
@@ -1229,6 +1242,9 @@ function AppInner() {
     setSelectedAgentEvidenceSourceContext(null);
     setSelectedAgentEvidenceSourceContextError(null);
     setSelectedAgentEvidenceSourceContextState('idle');
+    setSelectedAgentEvidenceReplayWindow(null);
+    setSelectedAgentEvidenceReplayWindowError(null);
+    setSelectedAgentEvidenceReplayWindowState('idle');
   }, []);
 
   const overviewResource = usePolledResource({
@@ -1977,6 +1993,76 @@ function AppInner() {
     previousSelectedAgentAccountabilityReplayResourceKeyRef.current =
       selectedAgentAccountabilityReplayResourceKey;
   }, [selectedAgentAccountabilityReplayResourceKey]);
+  const selectedAgentEvidenceReplayWindowResourceKey =
+    selectedAgentId && activeSelectedAgentReplayEvidenceId
+      ? `selected-agent-evidence-replay-window:${selectedAgentId}:evidence=${activeSelectedAgentReplayEvidenceId}`
+      : null;
+  const selectedAgentEvidenceReplayWindowEnabled =
+    hubOpen &&
+    selectedAgentId !== null &&
+    selectedAgentDrilldownTab === 'replay' &&
+    activeSelectedAgentReplayEvidenceId !== null;
+  useEffect(() => {
+    evidenceReplayWindowRequestIdRef.current += 1;
+    evidenceReplayWindowAbortControllerRef.current?.abort();
+    evidenceReplayWindowAbortControllerRef.current = null;
+
+    if (
+      !selectedAgentEvidenceReplayWindowEnabled ||
+      selectedAgentId === null ||
+      activeSelectedAgentReplayEvidenceId === null ||
+      selectedAgentEvidenceReplayWindowResourceKey === null
+    ) {
+      setSelectedAgentEvidenceReplayWindow(null);
+      setSelectedAgentEvidenceReplayWindowError(null);
+      setSelectedAgentEvidenceReplayWindowState('idle');
+      return undefined;
+    }
+
+    const requestId = evidenceReplayWindowRequestIdRef.current;
+    const controller = new AbortController();
+    evidenceReplayWindowAbortControllerRef.current = controller;
+    setSelectedAgentEvidenceReplayWindow(null);
+    setSelectedAgentEvidenceReplayWindowError(null);
+    setSelectedAgentEvidenceReplayWindowState('loading');
+
+    fetchEvidenceReplayWindow(activeSelectedAgentReplayEvidenceId, { signal: controller.signal })
+      .then((replayWindow) => {
+        if (controller.signal.aborted || requestId !== evidenceReplayWindowRequestIdRef.current) {
+          return;
+        }
+
+        setSelectedAgentEvidenceReplayWindow(replayWindow);
+        setSelectedAgentEvidenceReplayWindowError(null);
+        setSelectedAgentEvidenceReplayWindowState('ready');
+      })
+      .catch((error) => {
+        if (controller.signal.aborted || requestId !== evidenceReplayWindowRequestIdRef.current) {
+          return;
+        }
+
+        setSelectedAgentEvidenceReplayWindow(null);
+        setSelectedAgentEvidenceReplayWindowError(error instanceof Error ? error.message : 'unknown_error');
+        setSelectedAgentEvidenceReplayWindowState('error');
+      })
+      .finally(() => {
+        if (evidenceReplayWindowAbortControllerRef.current === controller) {
+          evidenceReplayWindowAbortControllerRef.current = null;
+        }
+      });
+
+    return () => {
+      controller.abort();
+      if (evidenceReplayWindowAbortControllerRef.current === controller) {
+        evidenceReplayWindowAbortControllerRef.current = null;
+      }
+    };
+  }, [
+    activeSelectedAgentReplayEvidenceId,
+    selectedAgentEvidenceReplayWindowEnabled,
+    selectedAgentEvidenceReplayWindowResourceKey,
+    selectedAgentId
+  ]);
   const selectedAgentSupervisionHistoryResourceKey = selectedAgentId
     ? `selected-agent-supervision-history:${selectedAgentId}:correlation=${selectedAgentScopedCorrelationId ?? '__all__'}:severity=${selectedAgentSupervisionHistorySeverity ?? '__all__'}`
     : null;
@@ -3861,6 +3947,9 @@ function AppInner() {
               selectedAgentAccountabilityReplay={selectedAgentAccountabilityReplay}
               selectedAgentAccountabilityReplayError={selectedAgentAccountabilityReplayError}
               selectedAgentAccountabilityReplayState={selectedAgentAccountabilityReplayState}
+              selectedAgentEvidenceReplayWindow={selectedAgentEvidenceReplayWindow}
+              selectedAgentEvidenceReplayWindowError={selectedAgentEvidenceReplayWindowError}
+              selectedAgentEvidenceReplayWindowState={selectedAgentEvidenceReplayWindowState}
               selectedAgentEvidenceLedger={selectedAgentEvidenceLedger}
               selectedAgentEvidenceLedgerError={selectedAgentEvidenceLedgerError}
               selectedAgentEvidenceLedgerState={selectedAgentEvidenceLedgerState}

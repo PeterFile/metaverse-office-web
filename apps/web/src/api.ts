@@ -18,6 +18,8 @@ import type {
   CollectorSnapshot,
   CorrelationDrilldown,
   EvidenceSourceContext,
+  EvidenceReplayWindow,
+  EvidenceReplayWindowResponse,
   EvidenceProvenanceBundle,
   EvidenceRecord,
   EvidenceRefRollup,
@@ -49,6 +51,8 @@ import type {
 const DEFAULT_WORKFLOW_LIMIT = 10;
 const DEFAULT_WORKFLOW_WINDOW = '60m';
 const DEFAULT_EVIDENCE_RECORD_LIMIT = 200;
+const DEFAULT_EVIDENCE_REPLAY_WINDOW_BOUND = 2;
+const MAX_EVIDENCE_REPLAY_WINDOW_BOUND = 10;
 const DEFAULT_RUNTIME_SOURCE_GAP_LIMIT = 200;
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL?.trim();
 const SAFE_PROBLEM_CODE_PATTERN = /^[a-z][a-z0-9_]{0,63}$/;
@@ -500,6 +504,32 @@ export async function fetchEvidenceSourceContext(
   );
   const body = await parseJson<{ item: EvidenceSourceContext | null }>(response);
   return body.item;
+}
+
+export async function fetchEvidenceReplayWindow(
+  evidenceId: string,
+  options: { before?: number; after?: number; signal?: AbortSignal } = {}
+): Promise<EvidenceReplayWindow | null> {
+  const params = new URLSearchParams({
+    before: String(clampEvidenceReplayWindowBound(options.before)),
+    after: String(clampEvidenceReplayWindowBound(options.after))
+  });
+  const response = await fetch(
+    resolveApiUrl(`/evidence-records/${encodeURIComponent(evidenceId)}/replay-window?${params.toString()}`),
+    {
+      signal: options.signal
+    }
+  );
+  const body = await parseJson<EvidenceReplayWindowResponse>(response);
+  return body.item;
+}
+
+function clampEvidenceReplayWindowBound(value: number | undefined) {
+  if (value === undefined || !Number.isFinite(value) || value < 0) {
+    return DEFAULT_EVIDENCE_REPLAY_WINDOW_BOUND;
+  }
+
+  return Math.min(Math.trunc(value), MAX_EVIDENCE_REPLAY_WINDOW_BOUND);
 }
 
 export async function fetchRuntimeSourceGaps(

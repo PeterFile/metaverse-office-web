@@ -37,6 +37,7 @@ This project is not a flashy dashboard, not a manual task-dispatch UI, and not a
 - The UI consumes read models. It must not infer productivity, liveness, severity, or provenance that is absent from the API.
 - Selected-agent workflow and supervision surfaces may keep raw artifact refs only as internal jump targets; visible labels and ARIA names must use bounded public evidence classes such as `Local evidence`, `External evidence`, `Runtime evidence`, or `Linked evidence` instead of leaking local paths, URLs, tmux/Hermes/session/profile refs, tokens, webhooks, or control-plane strings.
 - Explicit selected-evidence source-context disclosure must project stored source kind/role/status values through frontend allowlists or a stable `Unknown` fallback before rendering visible text or ARIA; raw enum keys, refs, paths, metadata, payloads, and control-plane-shaped strings remain internal.
+- Explicit selected-evidence replay-window UI must be loaded only after the `Replay this evidence` CTA, not prefetched or polled, and must project record kinds plus source kind/role/status values through safe labels before rendering center/bounds/adjacent-row copy.
 
 ## Next milestone
 

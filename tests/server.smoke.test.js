@@ -6183,6 +6183,109 @@ test('GET /collectors/controller-snapshot/summary returns latest safe summary re
   assert.equal(collectCount, 0);
 });
 
+test('GET /collectors/controller-snapshot/summary projects requested snapshot id safely', async (t) => {
+  let collectCount = 0;
+  const controllerSnapshotCollector = {
+    async collectSnapshot() {
+      collectCount += 1;
+      throw new Error('GET summary must not collect');
+    }
+  };
+  const root = await mkdtemp(path.join(os.tmpdir(), 'metaverse-office-summary-id-'));
+  const storeFile = path.join(root, 'prototype-store.jsonl');
+  const store = await createPrototypeStore({ filePath: storeFile });
+  const firstReport = createRouteParityCollectorReport();
+  const secondReport = createRouteParityCollectorReport();
+  secondReport.collected_at = '2026-03-09T18:07:00.000Z';
+  secondReport.summary.workspace_observed_count = 0;
+  secondReport.evidence_coverage.evidence_ref_count = 1;
+  secondReport.evidence_coverage.low_confidence_agent_ids = [];
+  secondReport.items[0].workspace_observations = [];
+  secondReport.items[0].source_health.workspace_files.status = 'observed';
+  secondReport.items[0].source_health.workspace_files.degraded_reasons = [];
+
+  await store.appendCollectorReport(firstReport);
+  await store.appendCollectorReport(secondReport);
+  const fileBeforeRead = await readFile(storeFile, 'utf8');
+  const countsBeforeRead = store.getCounts();
+
+  const historical = await requestJsonDirect({
+    url:
+      '/collectors/controller-snapshot/summary?collector_snapshot_id=' +
+      encodeURIComponent('collector-snapshot:2026-03-09T18:06:00.000Z'),
+    store,
+    controllerSnapshotCollector
+  });
+  assert.equal(historical.response.status, 200);
+  assert.equal(historical.body.item.has_snapshot, true);
+  assert.equal(historical.body.item.collected_at, '2026-03-09T18:06:00.000Z');
+  assert.equal(historical.body.item.workspace_observed_count, 2);
+  assert.equal(historical.body.item.evidence_ref_count, 3);
+  assert.equal(JSON.stringify(historical.body).includes('collector_snapshot_id'), false);
+
+  const latest = await requestJsonDirect({
+    url: '/collectors/controller-snapshot/summary',
+    store,
+    controllerSnapshotCollector
+  });
+  assert.equal(latest.response.status, 200);
+  assert.equal(latest.body.item.collected_at, '2026-03-09T18:07:00.000Z');
+  assert.equal(latest.body.item.workspace_observed_count, 0);
+  assert.equal(latest.body.item.evidence_ref_count, 1);
+
+  const unknown = await requestJsonDirect({
+    url: '/collectors/controller-snapshot/summary?collector_snapshot_id=collector-snapshot%3Aunknown',
+    store,
+    controllerSnapshotCollector
+  });
+  assert.equal(unknown.response.status, 200);
+  assert.deepEqual(unknown.body.item, {
+    has_snapshot: false,
+    collected_at: null,
+    agent_count: 0,
+    heartbeat_count: 0,
+    tmux_observed_count: 0,
+    workspace_observed_count: 0,
+    reboot_recommended_count: 0,
+    evidence_ref_count: 0,
+    covered_agent_count: 0,
+    low_confidence_agent_count: 0,
+    source_kind_buckets: {
+      workspace_file: 0,
+      workspace_root: 0,
+      tmux_observation: 0,
+      hermes_profile: 0,
+      hermes_session: 0,
+      task_evidence: 0
+    },
+    source_health_buckets: {
+      source_kind_buckets: {
+        workspace_root: 0,
+        workspace_files: 0,
+        tmux_session: 0,
+        hermes_profile: 0,
+        hermes_session: 0
+      },
+      status_buckets: {
+        observed: 0,
+        degraded: 0,
+        missing: 0,
+        error: 0
+      }
+    },
+    runtime_source_evidence: {
+      unmapped_tmux_session_count: 0,
+      unmapped_hermes_source_count: 0,
+      unmapped_task_evidence_count: 0,
+      latest_observed_at: null
+    }
+  });
+  assert.equal(unknown.text.includes('collector-snapshot:unknown'), false);
+  assert.equal(collectCount, 0);
+  assert.deepEqual(store.getCounts(), countsBeforeRead);
+  assert.equal(await readFile(storeFile, 'utf8'), fileBeforeRead);
+});
+
 test('GET /collectors/controller-snapshot/diff projects compact read-only snapshot deltas', async (t) => {
   const { baseUrl, store, storeFile } = await createHarness(t);
   const firstReport = createRouteParityCollectorReport();

@@ -4065,6 +4065,83 @@ test('prototype store projects collector source health for requested snapshot id
   );
 });
 
+test('prototype store projects collector snapshot summary for requested snapshot id', async () => {
+  const storeFile = await createStoreFile();
+  const store = await createPrototypeStore({ filePath: storeFile });
+  const firstReport = createCollectorReport();
+  const secondReport = createCollectorReport();
+  secondReport.collected_at = '2026-03-09T18:07:00.000Z';
+  secondReport.summary.workspace_observed_count = 0;
+  secondReport.evidence_coverage.evidence_ref_count = 1;
+  secondReport.items[0].workspace_observations = [];
+  secondReport.items[0].source_health.workspace_files.status = 'observed';
+  secondReport.items[0].source_health.workspace_files.degraded_reasons = [];
+
+  await store.appendCollectorReport(firstReport);
+  await store.appendCollectorReport(secondReport);
+
+  const historical = store.getLatestCollectorSnapshotSummary({
+    collector_snapshot_id: 'collector-snapshot:2026-03-09T18:06:00.000Z'
+  });
+  assert.equal(historical.has_snapshot, true);
+  assert.equal(historical.collected_at, '2026-03-09T18:06:00.000Z');
+  assert.equal(historical.workspace_observed_count, 1);
+  assert.equal(historical.evidence_ref_count, 2);
+  assert.equal(JSON.stringify(historical).includes('collector_snapshot_id'), false);
+
+  const latest = store.getLatestCollectorSnapshotSummary();
+  assert.equal(latest.collected_at, '2026-03-09T18:07:00.000Z');
+  assert.equal(latest.workspace_observed_count, 0);
+  assert.equal(latest.evidence_ref_count, 1);
+
+  assert.deepEqual(
+    store.getLatestCollectorSnapshotSummary({
+      collector_snapshot_id: 'collector-snapshot:unknown'
+    }),
+    {
+      has_snapshot: false,
+      collected_at: null,
+      agent_count: 0,
+      heartbeat_count: 0,
+      tmux_observed_count: 0,
+      workspace_observed_count: 0,
+      reboot_recommended_count: 0,
+      evidence_ref_count: 0,
+      covered_agent_count: 0,
+      low_confidence_agent_count: 0,
+      source_kind_buckets: {
+        workspace_file: 0,
+        workspace_root: 0,
+        tmux_observation: 0,
+        hermes_profile: 0,
+        hermes_session: 0,
+        task_evidence: 0
+      },
+      source_health_buckets: {
+        source_kind_buckets: {
+          workspace_root: 0,
+          workspace_files: 0,
+          tmux_session: 0,
+          hermes_profile: 0,
+          hermes_session: 0
+        },
+        status_buckets: {
+          observed: 0,
+          degraded: 0,
+          missing: 0,
+          error: 0
+        }
+      },
+      runtime_source_evidence: {
+        unmapped_tmux_session_count: 0,
+        unmapped_hermes_source_count: 0,
+        unmapped_task_evidence_count: 0,
+        latest_observed_at: null
+      }
+    }
+  );
+});
+
 test('SQLite prototype store replays the same contract as JSONL and survives reload', async () => {
   const jsonlStoreFile = await createStoreFile();
   const sqliteStoreFile = await createSqliteStoreFile();

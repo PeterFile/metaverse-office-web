@@ -93,6 +93,12 @@ const EVIDENCE_RECORD_BOOLEAN_FILTERS = Object.freeze([
 const EVIDENCE_RECORD_SCHEMA_WRITE_BOUNDARY =
   'read-only schema catalog; does not collect, read runtime sources, append records, or expose control-plane actions';
 const RUNTIME_SOURCE_GAP_STATUSES = Object.freeze(['degraded', 'missing', 'error']);
+const RUNTIME_SOURCE_GAP_LIFECYCLE_STATES = Object.freeze([
+  'opened',
+  'continuing',
+  'resolved',
+  'observed_unmapped'
+]);
 const execFileAsync = promisify(execFile);
 const SEVERITY_RANK = Object.freeze({
   normal: 0,
@@ -1041,6 +1047,7 @@ class PrototypeStore {
 
   getRuntimeSourceGapLifecycle(filters = {}) {
     const { records, limit, newestFirst } = this.#filterEvidenceRecords(filters);
+    const lifecycleState = normalizeFilterValue(filters.lifecycle_state);
     const groups = new Map();
 
     for (const record of records.filter(isRuntimeSourceLifecycleRecord)) {
@@ -1059,6 +1066,12 @@ class PrototypeStore {
     const lifecycleGroups = Array.from(groups.values())
       .filter((group) => group.has_lifecycle_signal)
       .map(projectRuntimeSourceGapLifecycleGroup)
+      .filter(
+        (group) =>
+          !lifecycleState ||
+          (RUNTIME_SOURCE_GAP_LIFECYCLE_STATES.includes(lifecycleState) &&
+            group.lifecycle_state === lifecycleState)
+      )
       .sort((left, right) =>
         newestFirst
           ? compareRuntimeSourceGapLifecycleGroupsByRecency(left, right)

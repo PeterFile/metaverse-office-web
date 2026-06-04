@@ -3417,6 +3417,37 @@ test('prototype store derives compact runtime source gap lifecycle across snapsh
   assert.equal(tmuxLifecycle.groups[0].lifecycle_state, 'opened');
   assert.equal(tmuxLifecycle.groups[0].current_status, 'missing');
 
+  const resolvedLifecycle = store.getRuntimeSourceGapLifecycle({
+    lifecycle_state: 'resolved',
+    newest_first: 'true',
+    limit: '1'
+  });
+  assert.equal(resolvedLifecycle.total_count, 2);
+  assert.equal(resolvedLifecycle.total_groups, 1);
+  assert.equal(resolvedLifecycle.returned_limit, 1);
+  assert.deepEqual(
+    resolvedLifecycle.groups.map((group) => group.lifecycle_state),
+    ['resolved']
+  );
+
+  const openedLifecycle = store.getRuntimeSourceGapLifecycle({
+    lifecycle_state: 'opened',
+    source_kind: 'tmux_observation',
+    mapped: 'true'
+  });
+  assert.equal(openedLifecycle.total_groups, 1);
+  assert.equal(openedLifecycle.groups[0].current_status, 'missing');
+
+  const unknownLifecycle = store.getRuntimeSourceGapLifecycle({
+    lifecycle_state: 'token=lifecycle-secret'
+  });
+  assert.deepEqual(unknownLifecycle, {
+    total_count: 0,
+    total_groups: 0,
+    returned_limit: 50,
+    groups: []
+  });
+
   const serializedLifecycle = JSON.stringify(lifecycle);
   assert.equal(lifecycle.groups.every((group) => Number.isSafeInteger(group.record_count)), true);
   for (const canary of ['/tmp/lifecycle', 'token=lifecycle-secret', 'tmux://unmapped-session']) {

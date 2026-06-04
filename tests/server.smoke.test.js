@@ -6496,6 +6496,12 @@ test('GET /runtime/source-gaps returns compact gap and unmapped evidence read-on
   const lifecycle = await requestJson(
     `${baseUrl}/runtime/source-gaps/lifecycle?newest_first=true&limit=1`
   );
+  const observedLifecycle = await requestJson(
+    `${baseUrl}/runtime/source-gaps/lifecycle?lifecycle_state=observed_unmapped&newest_first=true&limit=1`
+  );
+  const unknownLifecycle = await requestJson(
+    `${baseUrl}/runtime/source-gaps/lifecycle?lifecycle_state=token%3Dsource-gap-secret&newest_first=true&limit=1`
+  );
 
   assert.equal(response.response.status, 200);
   assert.deepEqual(
@@ -6633,6 +6639,21 @@ test('GET /runtime/source-gaps returns compact gap and unmapped evidence read-on
   assert.equal(JSON.stringify(lifecycle.body).includes('collector_snapshot_id'), false);
   assert.equal(JSON.stringify(lifecycle.body).includes('metadata'), false);
   assert.equal(JSON.stringify(lifecycle.body).includes('degraded_reasons'), false);
+  assert.equal(observedLifecycle.response.status, 200);
+  assert.deepEqual(observedLifecycle.body.item, {
+    total_count: 1,
+    total_groups: 1,
+    returned_limit: 1,
+    groups: lifecycle.body.item.groups
+  });
+  assert.equal(unknownLifecycle.response.status, 200);
+  assert.deepEqual(unknownLifecycle.body.item, {
+    total_count: 0,
+    total_groups: 0,
+    returned_limit: 1,
+    groups: []
+  });
+  assert.equal(JSON.stringify(unknownLifecycle.body).includes('source-gap-secret'), false);
   assert.equal(collectCount, 0);
   assert.equal(store.getLatestCollectorReport(), latestBeforeRead);
   assert.equal(await readFile(storeFile, 'utf8'), fileBeforeRead);
@@ -6712,6 +6733,37 @@ test('GET /evidence-records/schema read route purity does not inspect evidence r
   assert.equal(JSON.stringify(response.body).includes('/tmp/'), false);
   assert.equal(collectCount, 0);
   assert.equal(await readFile(storeFile, 'utf8'), fileBeforeRead);
+});
+
+test('GET /runtime/source-gaps/lifecycle passes lifecycle_state as a read-only filter', async () => {
+  let receivedFilters = null;
+  const store = {
+    getRuntimeSourceGapLifecycle(filters) {
+      receivedFilters = filters;
+      return {
+        total_count: 0,
+        total_groups: 0,
+        returned_limit: 1,
+        groups: []
+      };
+    }
+  };
+
+  const response = await requestJsonDirect({
+    url: '/runtime/source-gaps/lifecycle?lifecycle_state=resolved&newest_first=true&limit=1',
+    store
+  });
+
+  assert.equal(response.response.status, 200);
+  assert.equal(receivedFilters.lifecycle_state, 'resolved');
+  assert.equal(receivedFilters.newest_first, 'true');
+  assert.equal(receivedFilters.limit, '1');
+  assert.deepEqual(response.body.item, {
+    total_count: 0,
+    total_groups: 0,
+    returned_limit: 1,
+    groups: []
+  });
 });
 
 test('GET evidence-record detail and provenance unknown ids do not echo unsafe ids', async () => {

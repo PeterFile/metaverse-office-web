@@ -727,6 +727,10 @@ class PrototypeStore {
     return this.latestCollectorReport;
   }
 
+  getLatestCollectorSnapshotSummary() {
+    return projectLatestCollectorSnapshotSummary(this.getLatestCollectorReport());
+  }
+
   getLatestCollectorEvidenceCoverage(filters = {}) {
     return projectCollectorEvidenceCoverage(this.getLatestCollectorReport(), filters);
   }
@@ -5402,6 +5406,92 @@ function projectCollectorEvidenceCoverage(report, filters = {}) {
   };
 }
 
+function projectLatestCollectorSnapshotSummary(report) {
+  if (!report || !Array.isArray(report.items)) {
+    return createEmptyCollectorSnapshotSummary();
+  }
+
+  const coverage = report.evidence_coverage || {};
+  const sourceHealthAggregate = createCollectorSnapshotHistoryAggregateFromReportItems(report.items, {
+    sourceHealthKeys: SOURCE_HEALTH_KEYS,
+    status: null
+  });
+  const summary = report.summary || {};
+
+  return {
+    has_snapshot: true,
+    collected_at: normalizeCollectorTimestamp(report.collected_at),
+    agent_count: normalizeCount(summary.agent_count),
+    heartbeat_count: normalizeCount(summary.heartbeat_count),
+    tmux_observed_count: normalizeCount(summary.tmux_observed_count),
+    workspace_observed_count: normalizeCount(summary.workspace_observed_count),
+    reboot_recommended_count: normalizeCount(summary.reboot_recommended_count),
+    evidence_ref_count: normalizeCount(coverage.evidence_ref_count),
+    covered_agent_count: normalizeCount(coverage.covered_agent_count),
+    low_confidence_agent_count: normalizeStringValues(coverage.low_confidence_agent_ids).length,
+    source_kind_buckets: createCollectorSnapshotCoverageBuckets(coverage.source_kind_buckets),
+    source_health_buckets: sourceHealthAggregate,
+    runtime_source_evidence: summarizeRuntimeSourceEvidenceCounts(report.runtime_source_evidence)
+  };
+}
+
+function createEmptyCollectorSnapshotSummary() {
+  return {
+    has_snapshot: false,
+    collected_at: null,
+    agent_count: 0,
+    heartbeat_count: 0,
+    tmux_observed_count: 0,
+    workspace_observed_count: 0,
+    reboot_recommended_count: 0,
+    evidence_ref_count: 0,
+    covered_agent_count: 0,
+    low_confidence_agent_count: 0,
+    source_kind_buckets: createCollectorSnapshotCoverageBuckets(),
+    source_health_buckets: createEmptyCollectorSnapshotHistoryAggregate(),
+    runtime_source_evidence: {
+      unmapped_tmux_session_count: 0,
+      unmapped_hermes_source_count: 0,
+      unmapped_task_evidence_count: 0,
+      latest_observed_at: null
+    }
+  };
+}
+
+function createCollectorSnapshotCoverageBuckets(sourceKindBuckets = {}) {
+  return {
+    workspace_file: normalizeCount(sourceKindBuckets.workspace_file),
+    workspace_root: normalizeCount(sourceKindBuckets.workspace_root),
+    tmux_observation: normalizeCount(sourceKindBuckets.tmux_observation),
+    hermes_profile: normalizeCount(sourceKindBuckets.hermes_profile),
+    hermes_session: normalizeCount(sourceKindBuckets.hermes_session),
+    task_evidence: normalizeCount(sourceKindBuckets.task_evidence)
+  };
+}
+
+function summarizeRuntimeSourceEvidenceCounts(runtimeSourceEvidence = {}) {
+  const unmappedTmuxSessions = Array.isArray(runtimeSourceEvidence?.unmapped_tmux_sessions)
+    ? runtimeSourceEvidence.unmapped_tmux_sessions
+    : [];
+  const unmappedHermesSources = Array.isArray(runtimeSourceEvidence?.unmapped_hermes_sources)
+    ? runtimeSourceEvidence.unmapped_hermes_sources
+    : [];
+  const unmappedTaskEvidence = Array.isArray(runtimeSourceEvidence?.unmapped_task_evidence)
+    ? runtimeSourceEvidence.unmapped_task_evidence
+    : [];
+
+  return {
+    unmapped_tmux_session_count: unmappedTmuxSessions.length,
+    unmapped_hermes_source_count: unmappedHermesSources.length,
+    unmapped_task_evidence_count: unmappedTaskEvidence.length,
+    latest_observed_at: maxCollectorIsoTimestamp([
+      ...unmappedTmuxSessions.map((session) => session.last_observed_at || session.observed_at),
+      ...unmappedHermesSources.map((source) => source.last_observed_at || source.observed_at),
+      ...unmappedTaskEvidence.map((source) => source.latest_observed_at || source.observed_at)
+    ])
+  };
+}
+
 function projectCollectorSourceHealth(report, filters = {}) {
   if (!report || !Array.isArray(report.items)) {
     return null;
@@ -5951,7 +6041,8 @@ function deriveLatestCollectorEvidenceAt(item = {}) {
 function maxCollectorIsoTimestamp(values = []) {
   const timestamps = values
     .filter((value) => typeof value === 'string' && value.length > 0)
-    .filter((value) => !Number.isNaN(Date.parse(value)));
+    .map((value) => normalizeCollectorTimestamp(value))
+    .filter(Boolean);
 
   if (timestamps.length === 0) {
     return null;

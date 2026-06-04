@@ -6006,6 +6006,183 @@ test('GET /collectors/controller-snapshot/source-health projects latest source h
   assert.equal(records[records.length - 1].kind, 'collector_snapshot');
 });
 
+test('GET /collectors/controller-snapshot/summary returns latest safe summary read-only', async (t) => {
+  let collectCount = 0;
+  const controllerSnapshotCollector = {
+    async collectSnapshot() {
+      collectCount += 1;
+      throw new Error('GET summary must not collect');
+    }
+  };
+  const root = await mkdtemp(path.join(os.tmpdir(), 'metaverse-office-summary-'));
+  const storeFile = path.join(root, 'prototype-store.jsonl');
+  const store = await createPrototypeStore({ filePath: storeFile });
+
+  const missing = await requestJsonDirect({
+    url: '/collectors/controller-snapshot/summary',
+    store,
+    controllerSnapshotCollector
+  });
+  assert.equal(missing.response.status, 200);
+  assert.deepEqual(missing.body.item, {
+    has_snapshot: false,
+    collected_at: null,
+    agent_count: 0,
+    heartbeat_count: 0,
+    tmux_observed_count: 0,
+    workspace_observed_count: 0,
+    reboot_recommended_count: 0,
+    evidence_ref_count: 0,
+    covered_agent_count: 0,
+    low_confidence_agent_count: 0,
+    source_kind_buckets: {
+      workspace_file: 0,
+      workspace_root: 0,
+      tmux_observation: 0,
+      hermes_profile: 0,
+      hermes_session: 0,
+      task_evidence: 0
+    },
+    source_health_buckets: {
+      source_kind_buckets: {
+        workspace_root: 0,
+        workspace_files: 0,
+        tmux_session: 0,
+        hermes_profile: 0,
+        hermes_session: 0
+      },
+      status_buckets: {
+        observed: 0,
+        degraded: 0,
+        missing: 0,
+        error: 0
+      }
+    },
+    runtime_source_evidence: {
+      unmapped_tmux_session_count: 0,
+      unmapped_hermes_source_count: 0,
+      unmapped_task_evidence_count: 0,
+      latest_observed_at: null
+    }
+  });
+  assert.equal(collectCount, 0);
+
+  const report = createRouteParityCollectorReport();
+  report.evidence_coverage.source_kind_buckets.hermes_profile = 1;
+  report.evidence_coverage.source_kind_buckets.hermes_session = 1;
+  report.evidence_coverage.source_kind_buckets.task_evidence = 1;
+  await store.appendCollectorReport(report);
+  const fileBeforeRead = await readFile(storeFile, 'utf8');
+  const countsBeforeRead = store.getCounts();
+  const latestBeforeRead = store.getLatestCollectorReport();
+
+  const summary = await requestJsonDirect({
+    url: '/collectors/controller-snapshot/summary',
+    store,
+    controllerSnapshotCollector
+  });
+  assert.equal(summary.response.status, 200);
+  assert.deepEqual(summary.body.item, {
+    has_snapshot: true,
+    collected_at: '2026-03-09T18:06:00.000Z',
+    agent_count: 2,
+    heartbeat_count: 1,
+    tmux_observed_count: 1,
+    workspace_observed_count: 2,
+    reboot_recommended_count: 0,
+    evidence_ref_count: 3,
+    covered_agent_count: 1,
+    low_confidence_agent_count: 1,
+    source_kind_buckets: {
+      workspace_file: 2,
+      workspace_root: 0,
+      tmux_observation: 1,
+      hermes_profile: 1,
+      hermes_session: 1,
+      task_evidence: 1
+    },
+    source_health_buckets: {
+      source_kind_buckets: {
+        workspace_root: 2,
+        workspace_files: 2,
+        tmux_session: 1,
+        hermes_profile: 0,
+        hermes_session: 0
+      },
+      status_buckets: {
+        observed: 2,
+        degraded: 1,
+        missing: 2,
+        error: 0
+      }
+    },
+    runtime_source_evidence: {
+      unmapped_tmux_session_count: 1,
+      unmapped_hermes_source_count: 0,
+      unmapped_task_evidence_count: 0,
+      latest_observed_at: '2026-03-09T18:05:50.000Z'
+    }
+  });
+  const serialized = JSON.stringify(summary.body);
+  assert.equal(serialized.includes('/tmp/route-parity'), false);
+  assert.equal(serialized.includes('tmux://'), false);
+  assert.equal(serialized.includes('5-web3-app-engineering'), false);
+  assert.equal(serialized.includes('unmapped-route-parity'), false);
+  assert.equal(serialized.includes('degraded_reasons'), false);
+  assert.equal(serialized.includes('collector_snapshot_id'), false);
+  assert.equal(Object.hasOwn(summary.body.item, 'items'), false);
+  assert.equal(Object.hasOwn(summary.body.item, 'actor_id'), false);
+  assert.equal(collectCount, 0);
+  assert.equal(store.getLatestCollectorReport(), latestBeforeRead);
+  assert.deepEqual(store.getCounts(), countsBeforeRead);
+  assert.equal(await readFile(storeFile, 'utf8'), fileBeforeRead);
+
+  const unsafeCollectedAt = '/tmp/route-parity/malformed-collected-at-token-sk-live';
+  const unsafeObservedAt = 'tmux://unsafe-route-parity/0.0?token=secret-token-like';
+  const unsafeReport = createRouteParityCollectorReport();
+  unsafeReport.collected_at = unsafeCollectedAt;
+  unsafeReport.runtime_source_evidence = {
+    unmapped_tmux_sessions: [
+      {
+        session_name: 'unsafe-route-parity-token-like',
+        pane_refs: [unsafeObservedAt],
+        observed_count: 1,
+        status: 'observed',
+        last_observed_at: 'March 9, 2026 18:05:50 UTC',
+        observed_at: unsafeObservedAt,
+        degraded_reasons: []
+      }
+    ],
+    unmapped_hermes_sources: [
+      {
+        source_kind: 'hermes_profile',
+        evidence_ref: '/tmp/route-parity/profile-secret-token-like.json',
+        observed_at: '/tmp/route-parity/not-a-timestamp-secret-token-like',
+        status: 'observed'
+      }
+    ],
+    unmapped_task_evidence: []
+  };
+  await store.appendCollectorReport(unsafeReport);
+
+  const unsafeSummary = await requestJsonDirect({
+    url: '/collectors/controller-snapshot/summary',
+    store,
+    controllerSnapshotCollector
+  });
+  assert.equal(unsafeSummary.response.status, 200);
+  assert.equal(unsafeSummary.body.item.collected_at, null);
+  assert.equal(
+    unsafeSummary.body.item.runtime_source_evidence.latest_observed_at,
+    '2026-03-09T18:05:50.000Z'
+  );
+  assert.equal(unsafeSummary.text.includes(unsafeCollectedAt), false);
+  assert.equal(unsafeSummary.text.includes(unsafeObservedAt), false);
+  assert.equal(unsafeSummary.text.includes('secret-token-like'), false);
+  assert.equal(unsafeSummary.text.includes('/tmp/route-parity'), false);
+  assert.equal(collectCount, 0);
+});
+
 test('GET /collectors/controller-snapshot/diff projects compact read-only snapshot deltas', async (t) => {
   const { baseUrl, store, storeFile } = await createHarness(t);
   const firstReport = createRouteParityCollectorReport();

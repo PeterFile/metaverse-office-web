@@ -149,6 +149,7 @@ Optional env:
 - `GET /events?event_id=&agent_id=&event_type=&severity=&source_kind=&evidence_ref=&correlation_id=&limit=`
 - `GET /interactions?event_id=&evidence_ref=&interaction_type=&counterparty_agent_id=&severity=&correlation_id=&limit=&window=`
 - `GET /collectors/controller-snapshot`
+- `GET /collectors/controller-snapshot/summary`
 - `GET /collectors/controller-snapshot/evidence-coverage?agent_id=&source_kind=&confidence_level=&limit=`
 - `GET /collectors/controller-snapshot/source-health?collector_snapshot_id=&agent_id=&source_kind=&status=&limit=`
 - `GET /collectors/controller-snapshot/history?collector_snapshot_id=&agent_id=&source_kind=&status=&collected_since=&collected_until=&limit=`
@@ -312,7 +313,8 @@ This keeps employee writes self-scoped and reserves cross-agent task dispatch pl
 
 ### Collector snapshot notes
 - `POST /collectors/controller-snapshot` is lead-only and requires `x-actor-id: team-lead`
-- `GET /collectors/controller-snapshot` is read-only and returns the latest replayed collector report
+- `GET /collectors/controller-snapshot` is read-only and returns the latest replayed collector report; it is the raw snapshot surface and may include stored report internals
+- `GET /collectors/controller-snapshot/summary` is the safe latest snapshot summary boundary available for future UI polling; it returns explicit no-snapshot state plus counts, stable buckets, and latest safe timestamps only, and never returns raw snapshot `items`, collector ids, actor ids, paths, tmux/Hermes/session/profile refs, evidence refs, metadata, degraded reason arrays, payloads, or triggers collection, filesystem/tmux reads, writes, or control-plane actions
 - `GET /collectors/controller-snapshot/evidence-coverage` is read-only and returns `{ "item": null }` until the latest replayed collector report includes `evidence_coverage`
 - `GET /collectors/controller-snapshot/source-health` is read-only and returns `{ "item": null }` until a latest collector report exists; with `collector_snapshot_id`, it projects that exact replayed snapshot and returns `{ "item": null }` for unknown ids instead of falling back to latest
 - `GET /collectors/controller-snapshot/history` is a bounded read-only summary over replayed collector snapshots; it supports exact `collector_snapshot_id`, `agent_id`, source-health `source_kind`, source-health `status`, inclusive valid-ISO `collected_since`/`collected_until`, and post-filter `limit`, and returns compact per-snapshot counts without raw snapshot `items`, runtime payloads, paths, refs, or heartbeat payloads
@@ -358,6 +360,7 @@ This keeps employee writes self-scoped and reserves cross-agent task dispatch pl
 ### React operator shell notes
 - `apps/web` is the current living office surface and stays strictly evidence-first; do not describe it as a Phase 1-only shell
 - the shell consumes `GET /office/overview`, `GET /office/operations?limit=&state=&agent_id=&severity=`, `GET /agents/:id/workflow?limit=&window=`, `GET /agents/evidence-spine/summary?newest_first=&limit=`, `GET /agents/evidence-spine/source-matrix?newest_first=&limit=`, `GET /incidents?limit=&window=`, `GET /timeline?limit=&window=`, `GET /collectors/controller-snapshot`, `GET /collectors/controller-snapshot/evidence-coverage`, `GET /collectors/controller-snapshot/source-health`, `GET /runtime/source-gaps?newest_first=&limit=`, `GET /runtime/source-gaps/summary?newest_first=&limit=`, `GET /evidence-records?agent_id=&newest_first=&limit=`, `GET /evidence-records/:evidence_id/source-context`, `GET /accountability/replay`, `GET /memory/artifacts`, `GET /peer-watch/alerts`, and `GET /correlations/:correlation_id?limit=&window=`
+- `GET /collectors/controller-snapshot/summary` is available as a safe summary boundary for future UI consumption; the current React shell has not been moved to it in this lane
 - the React API client also exposes `GET /runtime/source-gaps/agent-summary`, `GET /runtime/source-gaps/trend`, and `GET /runtime/source-gaps/lifecycle`; lifecycle is available as a bounded client helper but is not currently wired into the operator shell UI
 - API calls are same-origin by default; cross-origin `VITE_API_BASE_URL` deployment requires the backend to allow that frontend origin via `CORS_ALLOWED_ORIGINS`, and local development may still proxy consumed read-route prefixes through Vite via `VITE_DEV_PROXY_TARGET`
 - workflow and incident surfaces can open correlation drill-down without introducing a new backend contract or write path

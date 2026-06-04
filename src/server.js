@@ -438,6 +438,13 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
     return;
   }
 
+  if (method === 'GET' && pathname === '/collectors/controller-snapshot/summary') {
+    sendJson(res, 200, {
+      item: store.getLatestCollectorSnapshotSummary()
+    });
+    return;
+  }
+
   if (method === 'GET' && pathname === '/collectors/controller-snapshot/evidence-coverage') {
     sendJson(res, 200, {
       item: store.getLatestCollectorEvidenceCoverage({

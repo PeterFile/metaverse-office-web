@@ -3871,6 +3871,151 @@ test('prototype store summarizes bounded collector snapshot history with exact f
   );
 });
 
+test('prototype store projects latest collector snapshot summary without raw snapshot fields', async () => {
+  const storeFile = await createStoreFile();
+  const store = await createPrototypeStore({ filePath: storeFile });
+  assert.deepEqual(store.getLatestCollectorSnapshotSummary(), {
+    has_snapshot: false,
+    collected_at: null,
+    agent_count: 0,
+    heartbeat_count: 0,
+    tmux_observed_count: 0,
+    workspace_observed_count: 0,
+    reboot_recommended_count: 0,
+    evidence_ref_count: 0,
+    covered_agent_count: 0,
+    low_confidence_agent_count: 0,
+    source_kind_buckets: {
+      workspace_file: 0,
+      workspace_root: 0,
+      tmux_observation: 0,
+      hermes_profile: 0,
+      hermes_session: 0,
+      task_evidence: 0
+    },
+    source_health_buckets: {
+      source_kind_buckets: {
+        workspace_root: 0,
+        workspace_files: 0,
+        tmux_session: 0,
+        hermes_profile: 0,
+        hermes_session: 0
+      },
+      status_buckets: {
+        observed: 0,
+        degraded: 0,
+        missing: 0,
+        error: 0
+      }
+    },
+    runtime_source_evidence: {
+      unmapped_tmux_session_count: 0,
+      unmapped_hermes_source_count: 0,
+      unmapped_task_evidence_count: 0,
+      latest_observed_at: null
+    }
+  });
+
+  const report = createCollectorReport();
+  report.evidence_coverage.source_kind_buckets.hermes_profile = 1;
+  report.evidence_coverage.source_kind_buckets.hermes_session = 1;
+  report.evidence_coverage.source_kind_buckets.task_evidence = 1;
+  await store.appendCollectorReport(report);
+
+  const summary = store.getLatestCollectorSnapshotSummary();
+  assert.deepEqual(summary, {
+    has_snapshot: true,
+    collected_at: '2026-03-09T18:06:00.000Z',
+    agent_count: 1,
+    heartbeat_count: 1,
+    tmux_observed_count: 1,
+    workspace_observed_count: 1,
+    reboot_recommended_count: 0,
+    evidence_ref_count: 2,
+    covered_agent_count: 1,
+    low_confidence_agent_count: 0,
+    source_kind_buckets: {
+      workspace_file: 1,
+      workspace_root: 0,
+      tmux_observation: 1,
+      hermes_profile: 1,
+      hermes_session: 1,
+      task_evidence: 1
+    },
+    source_health_buckets: {
+      source_kind_buckets: {
+        workspace_root: 1,
+        workspace_files: 1,
+        tmux_session: 1,
+        hermes_profile: 0,
+        hermes_session: 0
+      },
+      status_buckets: {
+        observed: 2,
+        degraded: 1,
+        missing: 0,
+        error: 0
+      }
+    },
+    runtime_source_evidence: {
+      unmapped_tmux_session_count: 0,
+      unmapped_hermes_source_count: 0,
+      unmapped_task_evidence_count: 0,
+      latest_observed_at: null
+    }
+  });
+  const serialized = JSON.stringify(summary);
+  assert.equal(serialized.includes('/tmp/store-contract'), false);
+  assert.equal(serialized.includes('tmux://'), false);
+  assert.equal(serialized.includes('5-web3-app-engineering'), false);
+  assert.equal(serialized.includes('degraded_reasons'), false);
+  assert.equal(serialized.includes('collector_snapshot_id'), false);
+  assert.equal(Object.hasOwn(summary, 'items'), false);
+
+  const reloadedStore = await createPrototypeStore({ filePath: storeFile });
+  assert.deepEqual(reloadedStore.getLatestCollectorSnapshotSummary(), summary);
+
+  const unsafeCollectedAt = '/tmp/store-contract/malformed-collected-at-token-sk-live';
+  const unsafeObservedAt = 'tmux://unsafe-session/0.0?token=secret-token-like';
+  const unsafeReport = createCollectorReport();
+  unsafeReport.collected_at = unsafeCollectedAt;
+  unsafeReport.runtime_source_evidence = {
+    unmapped_tmux_sessions: [
+      {
+        session_name: 'unsafe-session-token-like',
+        pane_refs: [unsafeObservedAt],
+        observed_count: 1,
+        status: 'observed',
+        last_observed_at: 'March 9, 2026 18:05:50 UTC',
+        observed_at: unsafeObservedAt,
+        degraded_reasons: []
+      }
+    ],
+    unmapped_hermes_sources: [
+      {
+        source_kind: 'hermes_profile',
+        evidence_ref: '/tmp/store-contract/profile-secret-token-like.json',
+        observed_at: '/tmp/store-contract/not-a-timestamp-secret-token-like',
+        status: 'observed'
+      }
+    ],
+    unmapped_task_evidence: []
+  };
+  await store.appendCollectorReport(unsafeReport);
+
+  const unsafeSummary = store.getLatestCollectorSnapshotSummary();
+  assert.equal(unsafeSummary.collected_at, null);
+  assert.equal(
+    unsafeSummary.runtime_source_evidence.latest_observed_at,
+    '2026-03-09T18:05:50.000Z'
+  );
+  const unsafeSerialized = JSON.stringify(unsafeSummary);
+  assert.equal(unsafeSerialized.includes(unsafeCollectedAt), false);
+  assert.equal(unsafeSerialized.includes(unsafeObservedAt), false);
+  assert.equal(unsafeSerialized.includes('secret-token-like'), false);
+  assert.equal(unsafeSerialized.includes('/tmp/store-contract'), false);
+});
+
 test('prototype store projects collector source health for requested snapshot id', async () => {
   const storeFile = await createStoreFile();
   const store = await createPrototypeStore({ filePath: storeFile });

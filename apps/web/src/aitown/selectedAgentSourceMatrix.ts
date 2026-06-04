@@ -1,6 +1,7 @@
 import type { AgentEvidenceSourceMatrix, AgentEvidenceSourceMatrixRow } from '../types';
 
-export type SelectedAgentSourceMatrixStatus = 'empty' | 'ready';
+export type SelectedAgentSourceMatrixLoadState = 'idle' | 'loading' | 'ready' | 'error';
+export type SelectedAgentSourceMatrixStatus = 'loading' | 'error' | 'empty' | 'ready' | 'last-good';
 
 export type SelectedAgentSourceMatrixDisplayRow = {
   source: string;
@@ -18,12 +19,16 @@ export type SelectedAgentSourceMatrixUnmappedSummary = {
 
 export type SelectedAgentSourceMatrixViewModel = {
   status: SelectedAgentSourceMatrixStatus;
+  statusLabel: string;
+  detailLabel: string;
   selectedAgentId: string | null;
   rows: SelectedAgentSourceMatrixDisplayRow[];
   unmappedSummary: SelectedAgentSourceMatrixUnmappedSummary;
 };
 
 export type SelectedAgentSourceMatrixOptions = {
+  loadState?: SelectedAgentSourceMatrixLoadState;
+  error?: string | null;
   maxRows?: number;
   maxUnmappedRows?: number;
 };
@@ -86,13 +91,39 @@ export function deriveSelectedAgentSourceMatrixViewModel(
   options: SelectedAgentSourceMatrixOptions = {}
 ): SelectedAgentSourceMatrixViewModel {
   const agentId = normalizeString(selectedAgentId);
+  const loadState = options.loadState ?? 'ready';
+  const hasError = normalizeString(options.error) !== null;
   const maxRows = normalizeLimit(options.maxRows, DEFAULT_MAX_ROWS);
   const maxUnmappedRows = normalizeLimit(options.maxUnmappedRows, DEFAULT_MAX_UNMAPPED_ROWS);
   const unmappedSummary = deriveUnmappedSummary(matrix, maxUnmappedRows);
 
-  if (!matrix || !agentId) {
+  if (!agentId) {
     return {
       status: 'empty',
+      statusLabel: 'No selected agent',
+      detailLabel: 'Select an agent to inspect source matrix rows.',
+      selectedAgentId: agentId,
+      rows: [],
+      unmappedSummary
+    };
+  }
+
+  if (!matrix) {
+    if (loadState === 'loading' || loadState === 'idle') {
+      return {
+        status: 'loading',
+        statusLabel: 'Source matrix · Loading',
+        detailLabel: 'Waiting for selected-agent source matrix rows.',
+        selectedAgentId: agentId,
+        rows: [],
+        unmappedSummary
+      };
+    }
+
+    return {
+      status: 'error',
+      statusLabel: 'Source matrix unavailable',
+      detailLabel: 'Selected-agent source matrix could not be loaded.',
       selectedAgentId: agentId,
       rows: [],
       unmappedSummary
@@ -100,23 +131,62 @@ export function deriveSelectedAgentSourceMatrixViewModel(
   }
 
   const agent = matrix.agents.find((candidate) => candidate.agent_id === agentId);
-  if (!agent) {
+  const rows = agent ? normalizeRows(agent.sources, maxRows) : [];
+  const status = resolveSourceMatrixStatus(rows.length, hasError);
+
+  if (status === 'last-good') {
     return {
-      status: 'empty',
+      status,
+      statusLabel: 'Source matrix · Last loaded rows',
+      detailLabel: 'Refresh failed; showing the last loaded selected-agent source rows.',
       selectedAgentId: agentId,
-      rows: [],
+      rows,
       unmappedSummary
     };
   }
 
-  const rows = normalizeRows(agent.sources, maxRows);
+  if (status === 'error') {
+    return {
+      status,
+      statusLabel: 'Source matrix unavailable',
+      detailLabel: 'Selected-agent source matrix could not be loaded.',
+      selectedAgentId: agentId,
+      rows,
+      unmappedSummary
+    };
+  }
+
+  if (status === 'empty') {
+    return {
+      status,
+      statusLabel: 'No source matrix rows',
+      detailLabel: 'No source rows are mapped to the selected agent in this slice.',
+      selectedAgentId: agentId,
+      rows,
+      unmappedSummary
+    };
+  }
 
   return {
-    status: rows.length > 0 ? 'ready' : 'empty',
+    status,
+    statusLabel: 'Source matrix',
+    detailLabel: 'Selected-agent source rows loaded.',
     selectedAgentId: agentId,
     rows,
     unmappedSummary
   };
+}
+
+function resolveSourceMatrixStatus(rowCount: number, hasError: boolean): SelectedAgentSourceMatrixStatus {
+  if (rowCount > 0) {
+    return hasError ? 'last-good' : 'ready';
+  }
+
+  if (hasError) {
+    return 'error';
+  }
+
+  return 'empty';
 }
 
 function deriveUnmappedSummary(

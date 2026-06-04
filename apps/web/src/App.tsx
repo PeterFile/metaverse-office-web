@@ -3053,10 +3053,17 @@ function AppInner() {
   const selectedAgentSourceMatrix = useMemo(
     () =>
       deriveSelectedAgentSourceMatrixViewModel(selectedAgentEvidenceSourceMatrixResource.data, selectedAgentId, {
+        loadState: selectedAgentEvidenceSourceMatrixResource.state,
+        error: selectedAgentEvidenceSourceMatrixResource.error,
         maxRows: 3,
         maxUnmappedRows: 1
       }),
-    [selectedAgentEvidenceSourceMatrixResource.data, selectedAgentId]
+    [
+      selectedAgentEvidenceSourceMatrixResource.data,
+      selectedAgentEvidenceSourceMatrixResource.error,
+      selectedAgentEvidenceSourceMatrixResource.state,
+      selectedAgentId
+    ]
   );
   const selectedAgentSourceGapFact = deriveSelectedAgentSourceGapFact(latestSourceHealth, selectedAgentId);
   const selectedAgentSourceHealthInspectPeek = useMemo(
@@ -3523,13 +3530,18 @@ function AppInner() {
                     ))}
                   </span>
                 ) : null}
-                {selectedAgentSourceMatrix.status === 'ready' ? (
+                {selectedAgentSourceMatrix.status !== 'empty' || selectedAgentSourceMatrix.selectedAgentId ? (
                   <section
                     className="aitown-selected-agent-peek__source-matrix"
                     role="region"
                     aria-label="Selected agent source matrix peek"
                   >
-                    <span className="aitown-selected-agent-peek__source-matrix-label">Source matrix</span>
+                    <span className="aitown-selected-agent-peek__source-matrix-label">
+                      {selectedAgentSourceMatrix.statusLabel}
+                    </span>
+                    {selectedAgentSourceMatrix.status === 'ready' ? null : (
+                      <span>{selectedAgentSourceMatrix.detailLabel}</span>
+                    )}
                     {selectedAgentSourceMatrix.rows.map((row) => (
                       <span
                         key={`${row.source}:${row.status}:${row.role}:${row.output}:${row.count}:${row.latest_at ?? 'unknown'}`}

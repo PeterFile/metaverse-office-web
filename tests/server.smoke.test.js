@@ -15,7 +15,10 @@ const {
 const { SEED_AGENTS } = require('../src/domain');
 const { createAppServer, formatPublicError, handleRequest } = require('../src/server');
 const { createPrototypeStore } = require('../src/store/prototype-store');
-const { taskEvidenceFileReaderFrom } = require('../src/collectors/task-evidence-source');
+const {
+  taskEvidenceFileReaderFrom,
+  taskEvidencePathsReaderFrom
+} = require('../src/collectors/task-evidence-source');
 
 const execFileAsync = promisify(execFile);
 
@@ -80,7 +83,14 @@ async function requestJson(url, init) {
   return { response, body };
 }
 
-async function requestJsonDirect({ url, store, controllerSnapshotCollector }) {
+async function requestJsonDirect({
+  url,
+  store,
+  controllerSnapshotCollector,
+  method = 'GET',
+  headers = {},
+  body = ''
+}) {
   let statusCode = null;
   let bodyText = '';
   const res = {
@@ -92,12 +102,16 @@ async function requestJsonDirect({ url, store, controllerSnapshotCollector }) {
       bodyText = chunk;
     }
   };
+  const chunks = body ? [Buffer.from(body)] : [];
 
   await handleRequest({
     req: {
       url,
-      method: 'GET',
-      headers: {}
+      method,
+      headers,
+      async *[Symbol.asyncIterator]() {
+        yield* chunks;
+      }
     },
     res,
     store,
@@ -5335,6 +5349,67 @@ test('collector snapshot persists opt-in task evidence without heartbeat advance
     returned_limit: 50,
     groups: []
   });
+});
+
+test('collector snapshot persists task evidence PATHS directory input with abstract provenance only', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'metaverse-office-task-evidence-paths-'));
+  const sourcesDir = path.join(root, 'task-source-dir-canary');
+  const sourceFile = path.join(sourcesDir, 'expanded-source-path-canary.jsonl');
+  const storeFile = path.join(root, 'prototype-store.jsonl');
+  await mkdir(sourcesDir);
+  await writeFile(
+    sourceFile,
+    `${JSON.stringify({
+      task_ref: 'TASK.402',
+      source_kind: 'kanban_fixture',
+      observed_at: '2026-05-20T01:02:00.000Z',
+      correlation_id: 'corr.task.402',
+      agent_id: 'app-engineering'
+    })}\n`
+  );
+
+  const taskEvidenceReader = taskEvidencePathsReaderFrom({ inputPaths: [sourcesDir] });
+  const controllerSnapshotCollector = createControllerSnapshotCollector({
+    agents: [SEED_AGENTS.find((agent) => agent.agent_id === 'app-engineering')],
+    readPathStat: async () => null,
+    listTmuxPanes: async () => [],
+    readTaskEvidenceCandidates: () => taskEvidenceReader.readEvidenceCandidates()
+  });
+  const store = await createPrototypeStore({ filePath: storeFile });
+
+  const collected = await requestJsonDirect({
+    url: '/collectors/controller-snapshot',
+    store,
+    controllerSnapshotCollector,
+    method: 'POST',
+    headers: {
+      'x-actor-id': 'team-lead'
+    }
+  });
+  assert.equal(collected.response.status, 201);
+
+  const evidence = await requestJsonDirect({
+    url: '/evidence-records?source_kind=kanban_fixture',
+    store,
+    controllerSnapshotCollector
+  });
+  assert.equal(evidence.response.status, 200);
+  assert.deepEqual(evidence.body.items.map((item) => item.metadata.source_provenance), [
+    {
+      source_format: 'jsonl',
+      source_index: 0,
+      line: 1,
+      source_input_ordinal: 1,
+      source_file_ordinal: 1
+    }
+  ]);
+
+  const responseText = JSON.stringify([collected.body, evidence.body]);
+  const storeText = await readFile(storeFile, 'utf8');
+  for (const leakedPath of [root, sourcesDir, sourceFile, path.basename(sourceFile)]) {
+    assert.equal(responseText.includes(leakedPath), false, `response leaked ${leakedPath}`);
+    assert.equal(storeText.includes(leakedPath), false, `store leaked ${leakedPath}`);
+  }
 });
 
 test('collector snapshot rejects unsafe task evidence file paths before append', async (t) => {

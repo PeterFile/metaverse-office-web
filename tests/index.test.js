@@ -81,3 +81,31 @@ test('task evidence file env is opt-in and returns normalized candidates only wh
     }
   ]);
 });
+
+test('task evidence PATHS take precedence over legacy FILE', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'metaverse-office-task-evidence-index-'));
+  const pathsFile = path.join(root, 'task-evidence-from-paths.jsonl');
+  const legacyFile = path.join(root, 'missing-legacy-task-evidence.jsonl');
+
+  await writeFile(
+    pathsFile,
+    `${JSON.stringify({
+      task_ref: 'TASK-301',
+      source_kind: 'linear_fixture',
+      observed_at: '2026-05-20T01:01:00.000Z',
+      correlation_id: 'corr-task-301'
+    })}\n`
+  );
+
+  const options = createTaskEvidenceOptions({
+    taskEvidenceFile: legacyFile,
+    taskEvidencePaths: [pathsFile]
+  });
+  const result = await options.readTaskEvidenceCandidates();
+
+  assert.deepEqual(result.rejected, []);
+  assert.deepEqual(
+    result.candidates.map((candidate) => candidate.task_ref),
+    ['TASK-301']
+  );
+});

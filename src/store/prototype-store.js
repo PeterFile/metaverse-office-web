@@ -254,7 +254,7 @@ class SqliteRecordLog {
     await this.#exec([this.filePath, statements.join(' ')]);
   }
 
-  async getStorageIndexCounts() {
+  async getStorageIndexCounts(expectedIndexes = []) {
     const { stdout } = await this.#exec([
       '-readonly',
       this.filePath,
@@ -272,8 +272,35 @@ class SqliteRecordLog {
         : 0,
       record_evidence_ref_count: Number.isSafeInteger(rows[0]?.record_evidence_ref_count)
         ? rows[0].record_evidence_ref_count
-        : 0
+        : 0,
+      record_index_drift_count: await this.#countRecordIndexDrift(expectedIndexes)
     };
+  }
+
+  async #countRecordIndexDrift(expectedIndexes) {
+    const { stdout } = await this.#exec([
+      '-readonly',
+      this.filePath,
+      '-json',
+      [
+        'SELECT seq,kind,event_id,evidence_id,agent_id,correlation_id,source_kind,',
+        'ts,collected_at,observed_at,output_candidate,evidence_role,source_status,collector_snapshot_id',
+        'FROM record_index ORDER BY seq;'
+      ].join(' ')
+    ]);
+    const rows = stdout.trim() ? JSON.parse(stdout) : [];
+    const rowsBySeq = new Map(rows.map((row) => [row.seq, row]));
+    let driftCount = 0;
+
+    for (let index = 0; index < expectedIndexes.length; index += 1) {
+      const expected = expectedIndexes[index];
+      const row = rowsBySeq.get(index + 1);
+      if (!row || !sqliteRecordIndexFieldsMatch(row, expected)) {
+        driftCount += 1;
+      }
+    }
+
+    return driftCount;
   }
 
   async #ensureReady() {
@@ -494,6 +521,35 @@ function createSqliteRecordIndex(record) {
     collector_snapshot_id: payload.collector_snapshot_id || null,
     evidence_refs: evidenceRefs
   };
+}
+
+function sqliteRecordIndexFieldsMatch(row, expected) {
+  const fields = [
+    'kind',
+    'event_id',
+    'evidence_id',
+    'agent_id',
+    'correlation_id',
+    'source_kind',
+    'ts',
+    'collected_at',
+    'observed_at',
+    'evidence_role',
+    'source_status',
+    'collector_snapshot_id'
+  ];
+
+  for (const field of fields) {
+    if ((row[field] ?? null) !== (expected[field] ?? null)) {
+      return false;
+    }
+  }
+
+  const expectedOutputCandidate =
+    expected.output_candidate === null || expected.output_candidate === undefined
+      ? null
+      : expected.output_candidate ? 1 : 0;
+  return (row.output_candidate ?? null) === expectedOutputCandidate;
 }
 
 function sqlText(value) {
@@ -4406,14 +4462,16 @@ async function projectStorageIndexHealth({ records, recordLog }) {
   }
 
   try {
-    const counts = await recordLog.getStorageIndexCounts();
-    const expectedEvidenceRefCount = records.reduce(
-      (sum, record) => sum + createSqliteRecordIndex(record).evidence_refs.length,
+    const expectedIndexes = records.map(createSqliteRecordIndex);
+    const counts = await recordLog.getStorageIndexCounts(expectedIndexes);
+    const expectedEvidenceRefCount = expectedIndexes.reduce(
+      (sum, indexRecord) => sum + indexRecord.evidence_refs.length,
       0
     );
     const complete =
       counts.record_index_count === records.length &&
-      counts.record_evidence_ref_count === expectedEvidenceRefCount;
+      counts.record_evidence_ref_count === expectedEvidenceRefCount &&
+      counts.record_index_drift_count === 0;
 
     return {
       ...base,

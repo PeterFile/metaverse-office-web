@@ -463,6 +463,179 @@ function assertNoEvidenceSpineRuntimeLeak(payload, { allowCollectorAnchors = fal
   }
 }
 
+const SAFE_ROUTE_HOSTILE_CANARIES = [
+  '/Users/safe-route-canary/private.json',
+  '/Volumes/safe-route-canary/runtime.json',
+  '/tmp/safe-route-canary/runtime.json',
+  'file:///tmp/safe-route-canary/runtime.json',
+  'tmux://safe-route-canary/0.1',
+  'hermes://profile/safe-route-canary',
+  'hermes://session/safe-route-canary',
+  'profile://safe-route-canary',
+  'session://safe-route-canary',
+  'token=safe-route-canary',
+  'webhook-safe-route-canary',
+  'https://hooks.slack.com/services/safe-route-canary',
+  'https://example.test/callback/safe-route-canary',
+  'control-plane://safe-route-canary'
+];
+
+function assertNoSafeRouteCanaries(payload, route) {
+  const serialized = JSON.stringify(payload);
+  for (const canary of SAFE_ROUTE_HOSTILE_CANARIES) {
+    assert.equal(serialized.includes(canary), false, `${route} leaked ${canary}`);
+  }
+}
+
+function createSafeRouteCanaryCollectorReport() {
+  return {
+    collected_at: '2026-03-09T18:06:00.000Z',
+    actor_id: 'team-lead',
+    summary: {
+      agent_count: 1,
+      heartbeat_count: 0,
+      tmux_observed_count: 1,
+      workspace_observed_count: 1,
+      reboot_recommended_count: 0
+    },
+    evidence_coverage: {
+      evidence_ref_count: 4,
+      covered_agent_count: 1,
+      low_confidence_agent_ids: [],
+      source_kind_buckets: {
+        workspace_file: 1,
+        tmux_observation: 1,
+        hermes_profile: 1,
+        task_evidence: 1
+      },
+      agent_items: [
+        {
+          agent_id: 'app-engineering',
+          evidence_ref_count: 4,
+          source_kinds: ['workspace_file', 'tmux_observation', 'hermes_profile', 'kanban_fixture'],
+          latest_evidence_at: '2026-03-09T18:05:40.000Z',
+          confidence_level: 'high'
+        }
+      ]
+    },
+    runtime_source_evidence: {
+      unmapped_tmux_sessions: [
+        {
+          session_name: 'safe-route-canary-tmux-session',
+          pane_refs: ['tmux://safe-route-canary/0.1'],
+          observed_count: 1,
+          status: 'observed',
+          last_observed_at: '2026-03-09T18:05:50.000Z',
+          degraded_reasons: SAFE_ROUTE_HOSTILE_CANARIES
+        }
+      ],
+      unmapped_hermes_sources: [
+        {
+          source_kind: 'hermes_session',
+          evidence_ref: 'hermes://session/safe-route-canary',
+          profile_id: 'profile-safe-route-canary',
+          session_ref: 'session-safe-route-canary',
+          observed_at: '2026-03-09T18:05:45.000Z',
+          status: 'observed',
+          degraded_reasons: SAFE_ROUTE_HOSTILE_CANARIES,
+          metadata: {
+            token: 'token=safe-route-canary',
+            webhook: 'webhook-safe-route-canary'
+          }
+        }
+      ]
+    },
+    items: [
+      {
+        agent_id: 'app-engineering',
+        evidence_refs: SAFE_ROUTE_HOSTILE_CANARIES,
+        workspace_observations: [
+          {
+            path: '/tmp/safe-route-canary/runtime.json',
+            file_name: 'runtime.json',
+            kind: 'workspace_file',
+            evidence_role: 'agent_output',
+            last_modified_at: '2026-03-09T18:05:20.000Z'
+          }
+        ],
+        tmux_observations: [
+          {
+            session_name: 'safe-route-canary-tmux-session',
+            window_index: '0',
+            pane_index: '1',
+            pane_id: '%91',
+            pane_current_command: 'nvim',
+            pane_activity_at: '2026-03-09T18:05:30.000Z'
+          }
+        ],
+        hermes_runtime_observations: [
+          {
+            source_kind: 'hermes_profile',
+            evidence_ref: 'hermes://profile/safe-route-canary',
+            profile_id: 'profile-safe-route-canary',
+            session_ref: 'session-safe-route-canary',
+            status: 'observed',
+            observed_at: '2026-03-09T18:05:35.000Z',
+            degraded_reasons: SAFE_ROUTE_HOSTILE_CANARIES,
+            source_provenance: {
+              source_format: 'json_array',
+              source_index: 0,
+              source_input_ordinal: 1,
+              source_file_ordinal: 1,
+              payload: 'token=safe-route-canary',
+              webhook: 'webhook-safe-route-canary'
+            },
+            metadata: {
+              local_path: '/Users/safe-route-canary/private.json',
+              callback_url: 'https://example.test/callback/safe-route-canary'
+            }
+          }
+        ],
+        task_evidence_observations: [
+          {
+            status: 'observed',
+            task_ref: 'SAFE-ROUTE-101',
+            source_kind: 'kanban_fixture',
+            observed_at: '2026-03-09T18:05:40.000Z',
+            correlation_id: 'safe-route-canary-task',
+            source_provenance: {
+              source_format: 'jsonl',
+              source_index: 2,
+              line: 7,
+              source_input_ordinal: 3,
+              source_file_ordinal: 4,
+              webhook: 'webhook-safe-route-canary'
+            }
+          }
+        ],
+        source_health: {
+          workspace_files: {
+            status: 'degraded',
+            observed_count: 1,
+            last_observed_at: '2026-03-09T18:05:20.000Z',
+            degraded_reasons: SAFE_ROUTE_HOSTILE_CANARIES
+          },
+          tmux_session: {
+            status: 'observed',
+            expected_session_ref: 'safe-route-canary-tmux-session',
+            observed_count: 1,
+            last_observed_at: '2026-03-09T18:05:30.000Z',
+            degraded_reasons: SAFE_ROUTE_HOSTILE_CANARIES
+          },
+          hermes_profile: {
+            status: 'observed',
+            profile_id: 'profile-safe-route-canary',
+            expected_session_ref: 'session-safe-route-canary',
+            observed_count: 1,
+            last_observed_at: '2026-03-09T18:05:35.000Z',
+            degraded_reasons: SAFE_ROUTE_HOSTILE_CANARIES
+          }
+        }
+      }
+    ]
+  };
+}
+
 test('GET endpoints expose the seeded canonical scaffold', async (t) => {
   const { baseUrl } = await createHarness(t);
 
@@ -8584,6 +8757,93 @@ test('GET read route purity matrix leaves replay records and checkpoints unchang
   assert.deepEqual(store.getReplayCheckpointSummary(), before.checkpoint);
   assert.deepEqual(store.listReplayCheckpointLog({ limit: '3' }), before.checkpointLog);
   assert.equal(await readFile(storeFile, 'utf8'), before.file);
+  assert.equal(collectCount, 0);
+});
+
+test('GET safe-route leak regression matrix stays redacted and read-pure under hostile canaries', async (t) => {
+  let collectCount = 0;
+  const controllerSnapshotCollector = {
+    async collectSnapshot() {
+      collectCount += 1;
+      throw new Error('GET safe-route leak regression matrix must not collect');
+    }
+  };
+  const root = await mkdtemp(path.join(os.tmpdir(), 'metaverse-office-safe-route-matrix-'));
+  const storeFile = path.join(root, 'prototype-store.jsonl');
+  const store = await createPrototypeStore({ filePath: storeFile });
+
+  await store.appendEvent({
+    event_id: 'evt_safe_route_canary',
+    ts: '2026-03-09T18:04:00.000Z',
+    agent_id: 'app-engineering',
+    actor_id: 'team-lead',
+    agent_role: 'app-engineering',
+    event_type: 'review_started',
+    current_state: 'reviewing',
+    summary: 'Safe route canary event',
+    correlation_id: 'corr-safe-route-canary',
+    evidence_refs: SAFE_ROUTE_HOSTILE_CANARIES,
+    source_kind: 'controller_event',
+    metadata: {
+      local_path: '/Volumes/safe-route-canary/runtime.json',
+      token: 'token=safe-route-canary',
+      webhook: 'webhook-safe-route-canary'
+    }
+  });
+  await store.appendCollectorReport(createSafeRouteCanaryCollectorReport());
+
+  const evidenceRecord = store.listEvidenceRecords({
+    agent_id: 'app-engineering',
+    source_kind: 'workspace_file',
+    evidence_role: 'agent_output',
+    output_candidate: 'true',
+    limit: '1'
+  })[0];
+  assert.ok(evidenceRecord);
+
+  const ignoredCanaryQuery = `ignored_canary=${encodeURIComponent(SAFE_ROUTE_HOSTILE_CANARIES.join(' '))}`;
+  const routes = [
+    `/collectors/controller-snapshot/summary?${ignoredCanaryQuery}`,
+    `/collectors/controller-snapshot/history?agent_id=app-engineering&limit=2&${ignoredCanaryQuery}`,
+    `/collectors/controller-snapshot/diff?limit=2&${ignoredCanaryQuery}`,
+    `/runtime/source-gaps/summary?newest_first=true&limit=2&${ignoredCanaryQuery}`,
+    `/runtime/source-gaps/agent-summary?newest_first=true&limit=2&${ignoredCanaryQuery}`,
+    `/runtime/source-gaps/lifecycle?newest_first=true&limit=2&${ignoredCanaryQuery}`,
+    `/runtime/source-gaps/trend?newest_first=true&limit=2&${ignoredCanaryQuery}`,
+    `/agents/evidence-spine/summary?newest_first=true&limit=2&${ignoredCanaryQuery}`,
+    `/agents/evidence-spine/source-matrix?newest_first=true&limit=2&${ignoredCanaryQuery}`,
+    `/storage/replay-manifest?${ignoredCanaryQuery}`,
+    `/storage/index-health?${ignoredCanaryQuery}`,
+    `/evidence-records/schema?${ignoredCanaryQuery}`,
+    `/evidence-records/input-proof-summary?agent_id=app-engineering&source_kind=hermes_profile&limit=2&${ignoredCanaryQuery}`,
+    `/evidence-records/ref-rollup?agent_id=app-engineering&limit=5&${ignoredCanaryQuery}`,
+    `/evidence-records/${encodeURIComponent(evidenceRecord.evidence_id)}/source-context?${ignoredCanaryQuery}`,
+    `/evidence-records/${encodeURIComponent(evidenceRecord.evidence_id)}/replay-window?before=1&after=1&${ignoredCanaryQuery}`
+  ];
+
+  const before = {
+    recordCount: store.records.length,
+    counts: store.getCounts(),
+    checkpoint: store.getReplayCheckpointSummary(),
+    checkpointLog: store.listReplayCheckpointLog({ limit: '5' }),
+    file: await readFile(storeFile, 'utf8')
+  };
+
+  for (const route of routes) {
+    const response = await requestJsonDirect({
+      url: route,
+      store,
+      controllerSnapshotCollector
+    });
+    assert.equal(response.response.status, 200, route);
+    assertNoSafeRouteCanaries(response.body, route);
+    assert.equal(store.records.length, before.recordCount, route);
+    assert.deepEqual(store.getCounts(), before.counts, route);
+    assert.deepEqual(store.getReplayCheckpointSummary(), before.checkpoint, route);
+    assert.deepEqual(store.listReplayCheckpointLog({ limit: '5' }), before.checkpointLog, route);
+    assert.equal(await readFile(storeFile, 'utf8'), before.file, route);
+  }
+
   assert.equal(collectCount, 0);
 });
 

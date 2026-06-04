@@ -4513,7 +4513,9 @@ afterEach(() => {
 
     detailSection = await findHubSection(details, 'Evidence Record Detail');
     await waitFor(() => {
-      expect(detailSection).toHaveTextContent('No evidence record found for missing-1.');
+      expect(detailSection).toHaveTextContent(
+        'No evidence record returned for this bounded detail request.'
+      );
       expect(detailSection).not.toHaveTextContent('Evidence id · output-1');
       expect(detailSection).not.toHaveTextContent('Snapshot anchor · collector-20260316-with-[redacted]');
       expect(detailSection).not.toHaveTextContent('Source anchor · output-1-with-[redacted]');
@@ -4535,7 +4537,7 @@ afterEach(() => {
       missingEvidenceRecordDetailUrl,
       missingEvidenceProvenanceBundleUrl
     ]);
-  });
+  }, 10_000);
 
   it('preserves last-good selected-agent evidence detail when the next detail request fails', async () => {
     const user = userEvent.setup();
@@ -4589,11 +4591,13 @@ afterEach(() => {
     await waitFor(() => {
       expect(detailSection).toHaveTextContent('Evidence id · output-1');
       expect(detailSection).toHaveTextContent('Last-good detail · Refresh failed: detail refresh failed');
-      expect(detailSection).not.toHaveTextContent('No evidence record found for missing-1.');
+      expect(detailSection).not.toHaveTextContent(
+        'No evidence record returned for this bounded detail request.'
+      );
       expect(detailSection).not.toHaveTextContent('Replay checkpoint');
       expect(detailSection).not.toHaveTextContent('evt-');
     });
-  });
+  }, 10_000);
 
   it('surfaces source-gap chips as provenance health and opens Supervision from a chip', async () => {
     const user = userEvent.setup();

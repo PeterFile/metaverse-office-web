@@ -2190,7 +2190,7 @@ describe('DetailsPanel selected-agent workflow lifecycle', () => {
     expect(section).not.toBeNull();
     expect(within(section!).getByText('Evidence id · output-1')).toBeVisible();
     expect(within(section!).getByText('Refreshing evidence record detail...')).toBeVisible();
-    expect(within(section!).getByText('Waiting for evidence record output-2...')).toBeVisible();
+    expect(within(section!).getByText('Waiting for requested evidence record...')).toBeVisible();
     expect(within(section!).getByText('Source context · waiting for requested evidence record')).toBeVisible();
     expect(within(section!).queryByRole('button', { name: /Inspect source context/ })).toBeNull();
     expect(onInspectSelectedAgentEvidenceSourceContext).not.toHaveBeenCalled();
@@ -2541,7 +2541,7 @@ describe('DetailsPanel selected-agent workflow lifecycle', () => {
       />
     );
 
-    expect(screen.getByText('Loading evidence record detail for missing-1...')).toBeVisible();
+    expect(screen.getByText('Loading evidence record detail...')).toBeVisible();
 
     rerender(
       <DetailsPanel
@@ -2560,10 +2560,48 @@ describe('DetailsPanel selected-agent workflow lifecycle', () => {
 
     const section = screen.getByRole('heading', { name: 'Evidence Record Detail' }).closest('section');
     expect(section).not.toBeNull();
-    expect(within(section!).getByText('Unable to load evidence record missing-1. not_found')).toBeVisible();
+    expect(within(section!).getByText('Unable to load selected evidence record. not_found')).toBeVisible();
     expect(section!).not.toHaveTextContent('live');
     expect(section!).not.toHaveTextContent('severity');
     expect(section!).not.toHaveTextContent('output confirmed');
+  });
+
+  it('redacts raw refs from selected-agent evidence read-model errors', () => {
+    const sensitiveError =
+      'request req-123 evidence_id output-1 token sk-liveabcdef path /Users/cwp/private/evidence.md tmux://session/window standalone req-456 output-2 collector-20260316 corr-abc /control-plane/dispatch';
+    render(
+      <DetailsPanel
+        {...buildProps({
+          activeHubCategory: 'evidence',
+          selectedAgentDrilldownTab: 'evidence',
+          selectedAgentEvidenceLedger: buildSelectedAgentEvidenceLedger({
+            requestScopeLabel: 'Source-gap scope · workspace source records for app-engineering'
+          }),
+          selectedAgentEvidenceLedgerError: sensitiveError,
+          selectedAgentEvidenceLedgerState: 'ready',
+          selectedAgentEvidenceRecord: null,
+          selectedAgentEvidenceRecordError: sensitiveError,
+          selectedAgentEvidenceRecordId: 'output-1',
+          selectedAgentEvidenceRecordState: 'error',
+          selectedAgentEvidenceProvenanceBundleError: sensitiveError,
+          selectedAgentEvidenceProvenanceBundleState: 'error',
+          selectedAgentEvidenceSourceContextError: sensitiveError,
+          selectedAgentEvidenceSourceContextState: 'error',
+          selectedAgentEvidenceCheckpointLogError: sensitiveError,
+          selectedAgentEvidenceCheckpointLogState: 'error'
+        })}
+      />
+    );
+
+    const ledgerSection = screen.getByRole('heading', { name: 'Evidence Ledger' }).closest('section');
+    const detailSection = screen.getByRole('heading', { name: 'Evidence Record Detail' }).closest('section');
+    expect(ledgerSection).not.toBeNull();
+    expect(detailSection).not.toBeNull();
+    expect(within(ledgerSection!).getByText(/Last-good view · Refresh failed:/)).toBeVisible();
+    expect(within(detailSection!).getByText(/Unable to load selected evidence record\./)).toBeVisible();
+    expect(`${ledgerSection!.textContent} ${detailSection!.textContent}`).not.toMatch(
+      /req-123|req-456|output-1|output-2|collector-20260316|corr-abc|sk-live|\/Users\/cwp|evidence\.md|tmux:\/\/|control-plane|dispatch|evidence_id/
+    );
   });
 
   it('renders an empty selected-agent evidence detail response without implying stale output', () => {
@@ -2584,7 +2622,9 @@ describe('DetailsPanel selected-agent workflow lifecycle', () => {
 
     const section = screen.getByRole('heading', { name: 'Evidence Record Detail' }).closest('section');
     expect(section).not.toBeNull();
-    expect(within(section!).getByText('No evidence record found for missing-1.')).toBeVisible();
+    expect(
+      within(section!).getByText('No evidence record returned for this bounded detail request.')
+    ).toBeVisible();
     expect(section!).not.toHaveTextContent('Evidence id · output-1');
     expect(section!).not.toHaveTextContent('live');
     expect(section!).not.toHaveTextContent('offline');

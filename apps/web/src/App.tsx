@@ -31,6 +31,7 @@ import {
   fetchOfficeOperations,
   fetchOfficeOverview,
   fetchPeerWatchAlerts,
+  fetchRuntimeSourceGapLifecycle,
   fetchRuntimeSourceGaps,
   fetchRuntimeSourceGapsSummary,
   fetchTimeline
@@ -91,6 +92,7 @@ import type {
   OfficeOperations,
   PeerWatchAlertsResponse,
   RuntimeSourceGap,
+  RuntimeSourceGapLifecycle,
   RuntimeSourceGapsSummary,
   Severity,
   TimelineReplayResponse,
@@ -1313,6 +1315,21 @@ function AppInner() {
         signal
       }),
     resourceKey: `runtime-source-gaps-summary:limit=${SOURCE_GAP_QUEUE_LIMIT}`
+  });
+  const selectedSourceGapLifecycleAgentId =
+    selectedAgentId !== null && sourceGapFocusIntent?.agentId === selectedAgentId ? selectedAgentId : null;
+  const selectedAgentRuntimeSourceGapLifecycleResource = usePolledResource<RuntimeSourceGapLifecycle>({
+    enabled: selectedSourceGapLifecycleAgentId !== null && overviewResource.data !== null,
+    load: (signal) =>
+      fetchRuntimeSourceGapLifecycle({
+        agentId: selectedSourceGapLifecycleAgentId!,
+        newestFirst: true,
+        limit: SOURCE_GAP_QUEUE_LIMIT,
+        signal
+      }),
+    resourceKey: selectedSourceGapLifecycleAgentId
+      ? `runtime-source-gaps-lifecycle:agent_id=${selectedSourceGapLifecycleAgentId}:newest_first=true:limit=${SOURCE_GAP_QUEUE_LIMIT}`
+      : null
   });
   const selectedAgentEvidenceSpineSummaryResource = usePolledResource<AgentEvidenceSpineSummary>({
     enabled: selectedAgentId !== null && overviewResource.data !== null,
@@ -3091,16 +3108,19 @@ function AppInner() {
       }
 
       return deriveRuntimeSourceGapLifecycleStrip({
-        runtimeSourceGaps: runtimeSourceGapsResource.data,
+        runtimeSourceGapLifecycle: selectedAgentRuntimeSourceGapLifecycleResource.data,
         selectedAgentId,
-        state: runtimeSourceGapsResource.state,
-        error: runtimeSourceGapsResource.error
+        state:
+          selectedAgentRuntimeSourceGapLifecycleResource.state === 'idle'
+            ? 'loading'
+            : selectedAgentRuntimeSourceGapLifecycleResource.state,
+        error: selectedAgentRuntimeSourceGapLifecycleResource.error
       });
     },
     [
-      runtimeSourceGapsResource.data,
-      runtimeSourceGapsResource.error,
-      runtimeSourceGapsResource.state,
+      selectedAgentRuntimeSourceGapLifecycleResource.data,
+      selectedAgentRuntimeSourceGapLifecycleResource.error,
+      selectedAgentRuntimeSourceGapLifecycleResource.state,
       selectedAgentId,
       sourceGapFocusIntent
     ]

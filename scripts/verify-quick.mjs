@@ -3,12 +3,12 @@ import { execFileSync, spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 
-const lanes = new Set(["docs", "backend", "web-api", "ui", "smoke"]);
+const lanes = new Set(["docs", "backend", "web-api", "ui", "ui-source-gap", "smoke"]);
 const webRootPath = "apps/web";
 
 function usage() {
   console.error("Usage:");
-  console.error("  pnpm verify:quick -- --lane=<docs|backend|web-api|ui|smoke>");
+  console.error("  pnpm verify:quick -- --lane=<docs|backend|web-api|ui|ui-source-gap|smoke>");
   console.error("  pnpm verify:quick -- --focused-files <web-package-relative-test> [...]");
   console.error("  pnpm verify:quick -- --changed");
   console.error("  pnpm verify:quick -- --since=<ref>");
@@ -16,6 +16,7 @@ function usage() {
   console.error("  backend: docs + pnpm backend:test");
   console.error("  web-api: docs + focused API Vitest + pnpm web:typecheck");
   console.error("  ui: docs + focused UI Vitest when present + pnpm web:typecheck");
+  console.error("  ui-source-gap: docs + bounded source-gap/source-health Vitest + pnpm web:typecheck");
   console.error("  smoke: docs + pnpm web:test:browser-smoke:live-evidence");
   console.error("  focused-files: docs + pnpm --filter @metaverse-office/web exec vitest run <files>");
   console.error("  changed/since: conservative changed-file routing; unknown or cross-layer changes fail");
@@ -29,6 +30,21 @@ export const webTestCandidates = [
   "src/aitown/sourceHealth.test.ts",
   "src/sourceHealthWorldBadges.test.ts",
 ];
+
+export const sourceGapUiTestCandidates = [
+  "src/aitown/sourceGapSignals.test.ts",
+  "src/aitown/sourceHealth.test.ts",
+  "src/sourceHealthWorldBadges.test.ts",
+];
+
+const sourceGapUiChangedPaths = new Set([
+  "apps/web/src/aitown/sourceGapSignals.ts",
+  "apps/web/src/aitown/sourceGapSignals.test.ts",
+  "apps/web/src/aitown/sourceHealth.ts",
+  "apps/web/src/aitown/sourceHealth.test.ts",
+  "apps/web/src/sourceHealthWorldBadges.ts",
+  "apps/web/src/sourceHealthWorldBadges.test.ts",
+]);
 
 function formatCommand(command, args) {
   return [command, ...args].join(" ");
@@ -206,6 +222,10 @@ export function classifyChangedFiles(changedFiles = []) {
     return { mode: "lane", lane: "docs" };
   }
 
+  if (nonDocsFiles.every((filePath) => sourceGapUiChangedPaths.has(filePath))) {
+    return { mode: "lane", lane: "ui-source-gap" };
+  }
+
   const categories = new Map();
   const unknownFiles = [];
 
@@ -326,6 +346,10 @@ export function resolveVerifyQuickSteps(parsedArgs, options = {}) {
       ...(existingWebTests.length > 0
         ? [["pnpm", ["--filter", "@metaverse-office/web", "exec", "vitest", "run", ...existingWebTests]]]
         : []),
+      ["pnpm", ["web:typecheck"]],
+    ],
+    "ui-source-gap": [
+      ["pnpm", ["--filter", "@metaverse-office/web", "exec", "vitest", "run", ...sourceGapUiTestCandidates]],
       ["pnpm", ["web:typecheck"]],
     ],
     smoke: [["pnpm", ["web:test:browser-smoke:live-evidence"]]],

@@ -4635,7 +4635,9 @@ afterEach(() => {
     await user.click(gapChip);
 
     const details = await screen.findByRole('complementary', { name: 'Agent details' });
-    expect(screen.getByRole('dialog', { name: 'Hub' })).toBeVisible();
+    const hubDialog = screen.getByRole('dialog', { name: 'Hub' });
+    expect(hubDialog).toBeVisible();
+    expect(within(hubDialog).queryByRole('region', { name: 'Source gap inspect peek' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Supervision' })).toHaveAttribute('aria-expanded', 'true');
     expect(within(details).getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
 
@@ -4649,27 +4651,13 @@ afterEach(() => {
     expect(sourceGapContext).toHaveTextContent('Workspace files · degraded');
     expect(sourceGapContext).not.toHaveTextContent('/tmp/growth-revenue');
     expect(sourceGapContext).not.toHaveTextContent('6-web3-growth-revenue');
-    const inspectPeek = await screen.findByRole('region', { name: 'Source gap inspect peek' });
-    expect(inspectPeek).toHaveTextContent('Evidence only');
-    expect(inspectPeek).toHaveTextContent('Workspace files · degraded');
-    expect(inspectPeek).toHaveTextContent('Mapped source');
-    expect(inspectPeek).toHaveTextContent('Observed 2026-03-16T08:57:45.000Z');
-    expect(inspectPeek).toHaveTextContent('Collected 2026-03-16T09:01:00.000Z');
     await waitFor(() =>
       expect(fetchMock.mock.calls.map(([request]) => String(request))).toContain(growthRevenueRuntimeSourceGapLifecycleUrl)
     );
-    await waitFor(() => expect(inspectPeek).toHaveTextContent('Lifecycle · 1 mapped · 0 unmapped'));
-    expect(inspectPeek).toHaveTextContent('Mapped lifecycle');
-    expect(inspectPeek).toHaveTextContent('Workspace source · degraded · Opened gap');
-    expect(inspectPeek).toHaveTextContent('1 row · Observed 2026-03-16T08:57:45.000Z');
     expect(fetchMock.mock.calls.map(([request]) => String(request))).not.toContain(
       '/runtime/source-gaps/lifecycle?newest_first=true&limit=3'
     );
-    expect(within(inspectPeek).getByRole('button', { name: 'Open Evidence drilldown' })).toBeVisible();
-    expect(inspectPeek).not.toHaveTextContent('/tmp/growth-revenue');
-    expect(inspectPeek).not.toHaveTextContent('6-web3-growth-revenue');
-    expect(inspectPeek).not.toHaveTextContent('collector-snapshot:');
-    expect(inspectPeek).not.toHaveTextContent(/assign|claim|complete|dispatch|kanban|route/i);
+    expect(screen.queryByRole('region', { name: 'Source gap inspect peek' })).not.toBeInTheDocument();
     const workspaceGroup = document.getElementById('aitown-selected-agent-source-drilldown-workspace');
     const tmuxGroup = document.getElementById('aitown-selected-agent-source-drilldown-tmux');
     expect(workspaceGroup).not.toBeNull();
@@ -4728,7 +4716,7 @@ afterEach(() => {
     );
     await waitFor(() => expect(inspectPeek).toHaveTextContent('Lifecycle · 1 mapped · 0 unmapped'));
     expect(inspectPeek).toHaveTextContent('Mapped lifecycle');
-    expect(inspectPeek).toHaveTextContent('Workspace source · degraded · Opened gap');
+    expect(inspectPeek).toHaveTextContent('Workspace source · degraded · opened');
     expect(inspectPeek).not.toHaveTextContent('Lifecycle · no runtime source-gap snapshot');
     expect(fetchMock.mock.calls.map(([request]) => String(request))).not.toContain(
       '/runtime/source-gaps/lifecycle?newest_first=true&limit=3'
@@ -4741,7 +4729,7 @@ afterEach(() => {
     const requestedUrlsBeforeDrilldown = fetchMock.mock.calls.map(([request]) => String(request));
     expect(requestedUrlsBeforeDrilldown.some((url) => url.startsWith('/evidence-records'))).toBe(false);
 
-    await user.click(within(inspectPeek).getByRole('button', { name: 'Open Evidence drilldown' }));
+    await user.click(within(inspectPeek).getByRole('button', { name: 'Open source-gap drilldown' }));
 
     const details = await screen.findByRole('complementary', { name: 'Agent details' });
     expect(screen.getByRole('dialog', { name: 'Hub' })).toBeVisible();

@@ -765,7 +765,7 @@ describe('deriveRuntimeSourceGapLifecycleStrip', () => {
           key: 'scope:mapped|source:workspace|state:opened|status:degraded|index:0',
           sourceLabel: 'Workspace source',
           statusLabel: 'degraded',
-          lifecycleLabel: 'Opened gap',
+          lifecycleLabel: 'opened',
           countLabel: '1 row',
           observedAtLabel: 'Observed 2026-03-16T08:59:30.000Z'
         }
@@ -775,7 +775,7 @@ describe('deriveRuntimeSourceGapLifecycleStrip', () => {
           key: 'scope:unmapped|source:runtime|state:observed_unmapped|status:observed|index:0',
           sourceLabel: 'Runtime source',
           statusLabel: 'observed',
-          lifecycleLabel: 'Unmapped observed',
+          lifecycleLabel: 'observed unmapped',
           countLabel: '1 row',
           observedAtLabel: 'Observed 2026-03-16T08:59:30.000Z'
         }
@@ -917,7 +917,7 @@ describe('deriveRuntimeSourceGapLifecycleStrip', () => {
     expect(strip?.mappedRows[0]).toMatchObject({
       sourceLabel: 'Workspace source',
       statusLabel: 'degraded',
-      lifecycleLabel: 'Continuing gap',
+      lifecycleLabel: 'continuing',
       countLabel: '2 rows'
     });
     const serializedStrip = JSON.stringify(strip);
@@ -963,7 +963,7 @@ describe('deriveRuntimeSourceGapLifecycleStrip', () => {
         key: 'scope:mapped|source:workspace|state:resolved|status:resolved|index:0',
         sourceLabel: 'Workspace source',
         statusLabel: 'resolved',
-        lifecycleLabel: 'Resolved evidence',
+        lifecycleLabel: 'resolved',
         countLabel: '1 row',
         observedAtLabel: 'Observed 2026-03-16T08:59:30.000Z'
       }

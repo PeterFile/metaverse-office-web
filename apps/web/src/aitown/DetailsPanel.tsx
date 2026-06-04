@@ -1231,6 +1231,10 @@ function renderTimestamp(value: string | null | undefined, fallback: string) {
 }
 
 const SENSITIVE_EVIDENCE_LEDGER_TOKEN_PATTERN = /(?:access[_-]?token|api[_-]?key|secret|password|credential|bearer|token)(?:[-_=:.][A-Za-z0-9][A-Za-z0-9._:-]*)?/gi;
+const SENSITIVE_EVIDENCE_LEDGER_TOKEN_VALUE_PATTERN = /\b(?:(?:sk|xox[baprs]|gh[pousr])-[A-Za-z0-9._-]{8,}|(?:token|secret)[=:][^\s,;)]+)\b/gi;
+const EVIDENCE_READ_MODEL_ERROR_REF_PATTERN = /\b(request(?:[_ -]?id)?|evidence(?:[_ -]?(?:id|ref))?|correlation(?:[_ -]?id)?|collector(?:[_ -]?snapshot(?:[_ -]?id)?)?)\s*[:=]?\s*[A-Za-z0-9][A-Za-z0-9._:/-]*/gi;
+const EVIDENCE_READ_MODEL_STANDALONE_REF_PATTERN = /\b(?:req|request|evidence|output|collector|snapshot|corr|correlation|session|profile)[-_:/][A-Za-z0-9][A-Za-z0-9._:/-]*\b/gi;
+const EVIDENCE_READ_MODEL_CONTROL_PLANE_PATTERN = /\b(?:control[-_ ]?plane|dispatch|route|assign(?:ment)?|writeback|mutat(?:e|ion)|payload|webhook|secret|token)\b/gi;
 const FILE_EVIDENCE_LEDGER_REF_PATTERN = /file:\/\/\/?[^\s,;:)]+/g;
 const SENSITIVE_EVIDENCE_LEDGER_URI_REF_PATTERN = /(?:tmux|hermes|session|profile):\/\/[^\s,;)]+/gi;
 const NON_FILE_URI_EVIDENCE_LEDGER_REF_PATTERN = /[A-Za-z][A-Za-z0-9+.-]*:\/\/[^\s,;)]+/g;
@@ -1312,6 +1316,21 @@ function formatBoundedEvidenceLedgerToken(value: string, options: EvidenceLedger
   }
 
   return `${redacted.slice(0, EVIDENCE_LEDGER_TOKEN_LIMIT - 3)}...`;
+}
+
+function formatEvidenceReadModelError(value: string) {
+  const sanitized = redactLocalEvidenceLedgerRefs(value.trim(), { includeBasename: false })
+    .replace(NON_FILE_URI_EVIDENCE_LEDGER_REF_PATTERN, '[uri ref]')
+    .replace(SENSITIVE_EVIDENCE_LEDGER_TOKEN_VALUE_PATTERN, '[redacted]')
+    .replace(EVIDENCE_READ_MODEL_ERROR_REF_PATTERN, 'read_model_ref [redacted]')
+    .replace(EVIDENCE_READ_MODEL_STANDALONE_REF_PATTERN, '[read model ref]')
+    .replace(EVIDENCE_READ_MODEL_CONTROL_PLANE_PATTERN, '[redacted]');
+
+  if (sanitized.length <= EVIDENCE_LEDGER_TOKEN_LIMIT) {
+    return sanitized;
+  }
+
+  return `${sanitized.slice(0, EVIDENCE_LEDGER_TOKEN_LIMIT - 3)}...`;
 }
 
 function formatEvidenceLedgerRef(value: string) {
@@ -1509,20 +1528,20 @@ function renderSelectedAgentEvidenceRecordDetail(
       <h3>Evidence Record Detail</h3>
       <ul className="aitown-records">
         {state === 'loading' && !record ? (
-          <li className="aitown-record">{`Loading evidence record detail for ${boundedEvidenceId}...`}</li>
+          <li className="aitown-record">Loading evidence record detail...</li>
         ) : null}
         {error && !record ? (
-          <li className="aitown-record">{`Unable to load evidence record ${boundedEvidenceId}. ${error}`}</li>
+          <li className="aitown-record">{`Unable to load selected evidence record. ${formatEvidenceReadModelError(error)}`}</li>
         ) : null}
         {state === 'ready' && !error && !record ? (
-          <li className="aitown-record">{`No evidence record found for ${boundedEvidenceId}.`}</li>
+          <li className="aitown-record">No evidence record returned for this bounded detail request.</li>
         ) : null}
         {record ? (
           <li className="aitown-record">
             <strong>{`Evidence id · ${recordBoundedEvidenceId}`}</strong>
             {state === 'loading' ? <span>Refreshing evidence record detail...</span> : null}
-            {!recordMatchesRequestedEvidence ? <span>{`Waiting for evidence record ${boundedEvidenceId}...`}</span> : null}
-            {error ? <span>{`Last-good detail · Refresh failed: ${error}`}</span> : null}
+            {!recordMatchesRequestedEvidence ? <span>Waiting for requested evidence record...</span> : null}
+            {error ? <span>{`Last-good detail · Refresh failed: ${formatEvidenceReadModelError(error)}`}</span> : null}
             <span>{`Observed · ${renderTimestamp(record.observed_at, 'No observed timestamp')}`}</span>
             <span>{`Collected · ${renderTimestamp(record.collected_at, 'No collected timestamp')}`}</span>
             <span>{`Source · ${record.source_kind}`}</span>
@@ -1614,7 +1633,7 @@ function renderSelectedAgentEvidenceSourceContext(
   }
 
   if (error && !sourceContext) {
-    return <span>{`Source context · unavailable · ${error}`}</span>;
+    return <span>{`Source context · unavailable · ${formatEvidenceReadModelError(error)}`}</span>;
   }
 
   if (!sourceContext) {
@@ -1678,7 +1697,7 @@ function renderSelectedAgentEvidenceCheckpointProofStrip(
   }
 
   if (error && !log) {
-    return <span>{`Checkpoint proof · unavailable · ${error}`}</span>;
+    return <span>{`Checkpoint proof · unavailable · ${formatEvidenceReadModelError(error)}`}</span>;
   }
 
   if (!log) {
@@ -1788,7 +1807,7 @@ function renderSelectedAgentEvidenceProvenanceAnchors(
   }
 
   if (error && !bundle) {
-    return <span>{`Provenance anchors unavailable · ${error}`}</span>;
+    return <span>{`Provenance anchors unavailable · ${formatEvidenceReadModelError(error)}`}</span>;
   }
 
   if (!bundle) {
@@ -6679,14 +6698,14 @@ export function DetailsPanel({
               <span>Refreshing evidence ledger...</span>
             ) : null}
             {selectedAgentEvidenceLedgerError && selectedAgentEvidenceLedger ? (
-              <span>{`Last-good view · Refresh failed: ${selectedAgentEvidenceLedgerError}`}</span>
+              <span>{`Last-good view · Refresh failed: ${formatEvidenceReadModelError(selectedAgentEvidenceLedgerError)}`}</span>
             ) : null}
           </li>
           {selectedAgentEvidenceLedgerState === 'loading' && !selectedAgentEvidenceLedger ? (
             <li className="aitown-record">Loading evidence ledger...</li>
           ) : null}
           {selectedAgentEvidenceLedgerError && !selectedAgentEvidenceLedger ? (
-            <li className="aitown-record">{`Unable to load evidence ledger. ${selectedAgentEvidenceLedgerError}`}</li>
+            <li className="aitown-record">{`Unable to load evidence ledger. ${formatEvidenceReadModelError(selectedAgentEvidenceLedgerError)}`}</li>
           ) : null}
           {selectedAgentEvidenceLedger ? (
             <>

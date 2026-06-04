@@ -14,6 +14,7 @@ import {
   fetchCollectorEvidenceCoverage,
   fetchCollectorSnapshotDiff,
   fetchCollectorSnapshot,
+  fetchCollectorSnapshotSummary,
   fetchCollectorSnapshotHistory,
   fetchCollectorSourceHealth,
   fetchEvidenceSourceContext,
@@ -715,6 +716,77 @@ describe('fetchCollectorSnapshot', () => {
     );
 
     await expect(fetchCollectorSnapshot()).resolves.toBeNull();
+  });
+});
+
+describe('fetchCollectorSnapshotSummary', () => {
+  it('unwraps the safe latest collector snapshot summary without raw snapshot fields', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            item: {
+              has_snapshot: true,
+              collected_at: '2026-03-09T18:06:00.000Z',
+              agent_count: 2,
+              heartbeat_count: 1,
+              evidence_ref_count: 3,
+              covered_agent_count: 1,
+              low_confidence_agent_count: 1,
+              source_kind_buckets: {
+                task_evidence: 1
+              },
+              source_health_buckets: {
+                status_buckets: {
+                  observed: 2,
+                  degraded: 1,
+                  missing: 2,
+                  error: 0
+                }
+              },
+              runtime_source_evidence: {
+                unmapped_tmux_session_count: 1,
+                latest_observed_at: '2026-03-09T18:05:50.000Z'
+              }
+            }
+          }),
+          {
+            headers: JSON_HEADERS
+          }
+        )
+      )
+    );
+
+    await expect(fetchCollectorSnapshotSummary()).resolves.toMatchObject({
+      has_snapshot: true,
+      collected_at: '2026-03-09T18:06:00.000Z',
+      agent_count: 2,
+      heartbeat_count: 1,
+      evidence_ref_count: 3,
+      covered_agent_count: 1,
+      low_confidence_agent_count: 1,
+      source_kind_buckets: {
+        task_evidence: 1
+      },
+      source_health_buckets: {
+        status_buckets: {
+          observed: 2,
+          degraded: 1,
+          missing: 2,
+          error: 0
+        }
+      },
+      runtime_source_evidence: {
+        unmapped_tmux_session_count: 1,
+        latest_observed_at: '2026-03-09T18:05:50.000Z'
+      }
+    });
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/collectors/controller-snapshot/summary',
+      expect.objectContaining({ signal: undefined })
+    );
   });
 });
 

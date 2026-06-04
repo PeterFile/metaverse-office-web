@@ -328,6 +328,38 @@ export interface CollectorSnapshotDiff {
   agent_changes: CollectorSnapshotDiffAgentChange[];
 }
 
+export type CollectorEvidenceSummarySourceKind =
+  | CollectorEvidenceCoverageSourceKind
+  | 'task_evidence';
+
+export interface CollectorSnapshotSafeSummary {
+  has_snapshot: boolean;
+  collected_at: string | null;
+  agent_count: number;
+  heartbeat_count: number;
+  tmux_observed_count: number;
+  workspace_observed_count: number;
+  reboot_recommended_count: number;
+  evidence_ref_count: number;
+  covered_agent_count: number;
+  low_confidence_agent_count: number;
+  source_kind_buckets: Record<CollectorEvidenceSummarySourceKind, number>;
+  source_health_buckets: {
+    source_kind_buckets: Record<CollectorSourceHealthKind, number>;
+    status_buckets: Record<CollectorSourceHealthStatus, number>;
+  };
+  runtime_source_evidence: {
+    unmapped_tmux_session_count: number;
+    unmapped_hermes_source_count: number;
+    unmapped_task_evidence_count: number;
+    latest_observed_at: string | null;
+  };
+}
+
+export interface CollectorSnapshotSafeSummaryResponse {
+  item: CollectorSnapshotSafeSummary;
+}
+
 export interface EvidenceRecord {
   evidence_id: string;
   observed_at: string | null;

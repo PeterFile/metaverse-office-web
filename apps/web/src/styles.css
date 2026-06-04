@@ -607,6 +607,61 @@ button {
   max-width: min(42ch, 46%);
 }
 
+.aitown-collector-summary-chip {
+  pointer-events: auto;
+  display: grid;
+  flex: 0 1 214px;
+  align-self: flex-start;
+  min-width: 172px;
+  max-width: min(214px, 28vw);
+  gap: 2px;
+  padding: 6px 9px 8px;
+  border-style: solid;
+  border-width: var(--aitown-token-border);
+  border-image-source: url('/ai-town/assets/ui/box.svg');
+  border-image-repeat: stretch;
+  border-image-slice: 12.5%;
+  background: rgba(28, 48, 47, 0.86);
+  color: #e6faf4;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  backdrop-filter: blur(8px);
+}
+
+.aitown-collector-summary-chip:hover,
+.aitown-collector-summary-chip:focus-visible {
+  border-color: rgba(139, 233, 213, 0.8);
+  filter: brightness(1.08);
+  outline: none;
+}
+
+.aitown-collector-summary-chip strong,
+.aitown-collector-summary-chip span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.aitown-collector-summary-chip strong {
+  color: #fff7df;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.aitown-collector-summary-chip span:not(.aitown-panel__topline-title) {
+  color: #d8eadf;
+  font-size: 0.72rem;
+  line-height: 1.25;
+}
+
+.aitown-collector-summary-chip--empty,
+.aitown-collector-summary-chip--loading,
+.aitown-collector-summary-chip--unavailable {
+  background: rgba(39, 24, 33, 0.82);
+}
+
 .aitown-panel__topline-copy {
   color: #f0e3c1;
   font-size: 0.8rem;

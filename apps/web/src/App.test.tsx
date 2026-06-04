@@ -236,6 +236,7 @@ const selectedCorrelationMissingArtifactExactUrl =
 const selectedCorrelationTmuxArtifactExactUrl =
   '/memory/artifacts?limit=4&window=60m&agent_id=app-engineering&correlation_id=corr-app-review&artifact_ref=tmux%3A%2F%2F5-web3-app-engineering%2F0.1';
 const collectorSnapshotUrl = '/collectors/controller-snapshot';
+const collectorSnapshotSummaryUrl = '/collectors/controller-snapshot/summary';
 const collectorEvidenceCoverageUrl = '/collectors/controller-snapshot/evidence-coverage';
 const collectorSourceHealthUrl = '/collectors/controller-snapshot/source-health?limit=7';
 const evidenceSpineSummaryUrl = '/agents/evidence-spine/summary?newest_first=true&limit=200';
@@ -1385,6 +1386,48 @@ const evidenceSourceMatrixFixture = {
   }
 };
 
+const collectorSnapshotSummaryFixture = {
+  has_snapshot: true,
+  collected_at: '2026-03-16T09:01:00.000Z',
+  agent_count: 2,
+  heartbeat_count: 2,
+  tmux_observed_count: 2,
+  workspace_observed_count: 2,
+  reboot_recommended_count: 1,
+  evidence_ref_count: 3,
+  covered_agent_count: 2,
+  low_confidence_agent_count: 1,
+  source_kind_buckets: {
+    workspace_file: 2,
+    workspace_root: 0,
+    tmux_observation: 1,
+    hermes_profile: 0,
+    hermes_session: 0,
+    task_evidence: 0
+  },
+  source_health_buckets: {
+    source_kind_buckets: {
+      workspace_root: 2,
+      workspace_files: 2,
+      tmux_session: 2,
+      hermes_profile: 0,
+      hermes_session: 0
+    },
+    status_buckets: {
+      observed: 4,
+      degraded: 1,
+      missing: 1,
+      error: 0
+    }
+  },
+  runtime_source_evidence: {
+    unmapped_tmux_session_count: 1,
+    unmapped_hermes_source_count: 0,
+    unmapped_task_evidence_count: 0,
+    latest_observed_at: '2026-03-16T08:59:10.000Z'
+  }
+};
+
 const evidenceRecordsFixture = {
   items: [
     {
@@ -2138,6 +2181,10 @@ function resolveDefaultFetchResponse(url: string) {
 
   if (url === collectorSnapshotUrl) {
     return jsonResponse({ item: collectorSnapshotFixture });
+  }
+
+  if (url === collectorSnapshotSummaryUrl) {
+    return jsonResponse({ item: collectorSnapshotSummaryFixture });
   }
 
   if (url === collectorEvidenceCoverageUrl) {
@@ -3065,6 +3112,80 @@ afterEach(() => {
     expect(screen.queryByRole('complementary', { name: 'Agent details' })).not.toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: 'Office category menu' })).toBeVisible();
     expect(screen.queryByRole('button', { name: 'Open Hub' })).not.toBeInTheDocument();
+  });
+
+  it('renders a compact collector snapshot summary chip from the safe summary route', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const chip = await screen.findByRole(
+      'button',
+      {
+        name: 'Open collector snapshot supervision summary: Snapshot available'
+      },
+      { timeout: 5_000 }
+    );
+
+    expect(chip).toBeVisible();
+    expect(chip).toHaveTextContent('Snapshot available');
+    expect(chip).toHaveTextContent('2 agents · 2 heartbeats');
+    expect(chip).toHaveTextContent('4 observed · 2 source gaps');
+    expect(chip).toHaveTextContent('Collected · 2026-03-16T09:01:00.000Z');
+    expect(chip).not.toHaveTextContent('/tmp');
+    expect(chip).not.toHaveTextContent('tmux://');
+    expect(chip).not.toHaveTextContent('5-web3-app-engineering');
+    expect(chip).not.toHaveTextContent('team-lead');
+
+    const requestedUrls = vi.mocked(globalThis.fetch).mock.calls.map(([request]) => String(request));
+    expect(requestedUrls).toContain(collectorSnapshotSummaryUrl);
+
+    await user.click(chip);
+
+    expect(await screen.findByRole('dialog', { name: 'Hub' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Supervision' })).toHaveAttribute('aria-expanded', 'true');
+    const details = await screen.findByRole('complementary', { name: 'Agent details' });
+    expect(within(details).getByRole('heading', { name: 'Collector Supervision' })).toBeVisible();
+  });
+
+  it('shows no-snapshot state in the collector summary chip without opening the Hub by default', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString();
+
+      if (url === collectorSnapshotSummaryUrl) {
+        return jsonResponse({
+          item: {
+            ...collectorSnapshotSummaryFixture,
+            has_snapshot: false,
+            collected_at: null,
+            agent_count: 0,
+            heartbeat_count: 0,
+            evidence_ref_count: 0,
+            source_health_buckets: {
+              ...collectorSnapshotSummaryFixture.source_health_buckets,
+              status_buckets: {
+                observed: 0,
+                degraded: 0,
+                missing: 0,
+                error: 0
+              }
+            }
+          }
+        });
+      }
+
+      return resolveTestFetchResponse(url);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<App />);
+
+    const chip = await screen.findByRole('button', {
+      name: 'Open collector snapshot supervision summary: No snapshot'
+    });
+    expect(chip).toHaveTextContent('No snapshot');
+    expect(chip).toHaveTextContent('0 agents · 0 heartbeats');
+    expect(chip).toHaveTextContent('Collected · none');
+    expect(screen.queryByRole('dialog', { name: 'Hub' })).not.toBeInTheDocument();
   });
 
   it('opens only the selected office category from the bottom category menu', async () => {

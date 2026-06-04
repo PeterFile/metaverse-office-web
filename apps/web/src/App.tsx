@@ -19,6 +19,7 @@ import {
   fetchAccountabilityReplay,
   fetchCollectorEvidenceCoverage,
   fetchCollectorSnapshot,
+  fetchCollectorSnapshotSummary,
   fetchCollectorSourceHealth,
   fetchCorrelationDrilldown,
   fetchEvidenceRecord,
@@ -80,6 +81,7 @@ import type {
   AgentEvidenceSpineSummary,
   CollectorEvidenceCoverage,
   CollectorSnapshot,
+  CollectorSnapshotSafeSummary,
   CollectorSourceHealthProjection,
   CorrelationDrilldown,
   EvidenceProvenanceBundle,
@@ -165,6 +167,14 @@ type SourceGapSummaryReadState = {
   data: RuntimeSourceGapsSummary | null;
   error: string | null;
   state: LoadState;
+};
+
+type CollectorSnapshotSummaryChipModel = {
+  statusLabel: string;
+  countLabel: string;
+  healthLabel: string;
+  timeLabel: string;
+  tone: 'loading' | 'empty' | 'ready' | 'unavailable';
 };
 
 type HudReadModelStatus = {
@@ -564,6 +574,64 @@ function renderRuntimeSourceGapLifecycleStrip(strip: RuntimeSourceGapLifecycleSt
       ) : null}
     </section>
   );
+}
+
+function resolveCollectorSnapshotSummaryChip(
+  summary: CollectorSnapshotSafeSummary | null,
+  state: LoadState,
+  error: string | null
+): CollectorSnapshotSummaryChipModel {
+  if (summary?.has_snapshot) {
+    const healthBuckets = summary.source_health_buckets.status_buckets;
+    const unstableHealthCount =
+      (healthBuckets.degraded ?? 0) + (healthBuckets.missing ?? 0) + (healthBuckets.error ?? 0);
+
+    return {
+      statusLabel: 'Snapshot available',
+      countLabel: `${summary.agent_count} agents · ${summary.heartbeat_count} heartbeats`,
+      healthLabel: `${healthBuckets.observed ?? 0} observed · ${unstableHealthCount} source gaps`,
+      timeLabel: `Collected · ${summary.collected_at ?? 'unknown'}`,
+      tone: 'ready'
+    };
+  }
+
+  if (summary && !summary.has_snapshot) {
+    return {
+      statusLabel: 'No snapshot',
+      countLabel: '0 agents · 0 heartbeats',
+      healthLabel: '0 observed · 0 source gaps',
+      timeLabel: 'Collected · none',
+      tone: 'empty'
+    };
+  }
+
+  if (error) {
+    return {
+      statusLabel: 'Snapshot summary unavailable',
+      countLabel: 'Safe summary read failed',
+      healthLabel: 'Safe aggregate unavailable',
+      timeLabel: 'Collected · unknown',
+      tone: 'unavailable'
+    };
+  }
+
+  if (state === 'loading' || state === 'idle') {
+    return {
+      statusLabel: 'Snapshot summary loading',
+      countLabel: 'Safe summary boundary',
+      healthLabel: 'Waiting for aggregate state',
+      timeLabel: 'Collected · unknown',
+      tone: 'loading'
+    };
+  }
+
+  return {
+    statusLabel: 'No snapshot',
+    countLabel: '0 agents · 0 heartbeats',
+    healthLabel: '0 observed · 0 source gaps',
+    timeLabel: 'Collected · none',
+    tone: 'empty'
+  };
 }
 
 function formatUnknownError(error: unknown) {
@@ -1302,6 +1370,11 @@ function AppInner() {
     enabled: hubOpen,
     load: (signal) => fetchCollectorSnapshot(signal),
     resourceKey: 'collector-controller-snapshot'
+  });
+  const collectorSnapshotSummaryResource = usePolledResource({
+    enabled: overviewResource.data !== null,
+    load: (signal) => fetchCollectorSnapshotSummary(signal),
+    resourceKey: 'collector-controller-snapshot-summary'
   });
   const sourceHealthResource = usePolledResource({
     enabled: overviewResource.data !== null,
@@ -2916,6 +2989,16 @@ function AppInner() {
     },
     [handleSelectAgentForInspection]
   );
+  const handleCollectorSnapshotSummaryOpen = useCallback(() => {
+    requestedSelectedAgentDrilldownTabRef.current = selectedAgentId === null ? null : 'evidence';
+    activeHubCategoryFromSelectedAgentTabRef.current = false;
+    setSourceGapFocusIntent(null);
+    setActiveHubCategory('supervision');
+    if (selectedAgentId !== null) {
+      setSelectedAgentDrilldownTab('evidence');
+    }
+    setHubOpen(true);
+  }, [selectedAgentId]);
 
   const handleSourceGapFocusAgent = useCallback(
     (chip: (typeof sourceGapChips)[number]) => {
@@ -3211,6 +3294,19 @@ function AppInner() {
       sourceGapFocusIntent
     ]
   );
+  const collectorSnapshotSummaryChip = useMemo(
+    () =>
+      resolveCollectorSnapshotSummaryChip(
+        collectorSnapshotSummaryResource.data,
+        collectorSnapshotSummaryResource.state,
+        collectorSnapshotSummaryResource.error
+      ),
+    [
+      collectorSnapshotSummaryResource.data,
+      collectorSnapshotSummaryResource.error,
+      collectorSnapshotSummaryResource.state
+    ]
+  );
   const handleSelectedAgentSourceGapFactOpen = useCallback(() => {
     if (!selectedAgentSourceGapFact) {
       return;
@@ -3310,6 +3406,7 @@ function AppInner() {
     evidenceCoverageReadModelStatus
       ? `${evidenceCoverageReadModelStatus.label} · ${evidenceCoverageReadModelStatus.summary}`
       : null,
+    `Snapshot · ${collectorSnapshotSummaryChip.statusLabel}`,
     sourceGapChips.length > 0 ? `Source gaps · ${sourceGapChips.length}` : null,
     sourceHealthReadModelStatus
       ? `${sourceHealthReadModelStatus.label} · ${sourceHealthReadModelStatus.summary}`
@@ -3399,6 +3496,19 @@ function AppInner() {
                   <span className="aitown-panel__topline-copy">Drag to pan. Wheel to zoom. Tap or click an agent to inspect.</span>
                 )}
               </span>
+              <button
+                type="button"
+                className={`aitown-collector-summary-chip aitown-collector-summary-chip--${collectorSnapshotSummaryChip.tone}`}
+                aria-label={`Open collector snapshot supervision summary: ${collectorSnapshotSummaryChip.statusLabel}`}
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={handleCollectorSnapshotSummaryOpen}
+              >
+                <span className="aitown-panel__topline-title">Collector snapshot</span>
+                <strong>{collectorSnapshotSummaryChip.statusLabel}</strong>
+                <span>{collectorSnapshotSummaryChip.countLabel}</span>
+                <span>{collectorSnapshotSummaryChip.healthLabel}</span>
+                <span>{collectorSnapshotSummaryChip.timeLabel}</span>
+              </button>
               <details className="aitown-panel__signal-cluster" role="region" aria-label="Office HUD signals">
                 <summary className="aitown-panel__hud-popover-summary">
                   <strong className="aitown-panel__topline-title">Signals</strong>

@@ -75,6 +75,37 @@ const sourceHealth = {
   runtime_source_evidence: { unmapped_tmux_sessions: [] }
 };
 
+const collectorSnapshotSummary = {
+  has_snapshot: true,
+  collected_at: '2026-03-16T09:01:00.000Z',
+  agent_count: 1,
+  heartbeat_count: 1,
+  tmux_observed_count: 1,
+  workspace_observed_count: 1,
+  reboot_recommended_count: 0,
+  evidence_ref_count: 1,
+  covered_agent_count: 1,
+  low_confidence_agent_count: 1,
+  source_kind_buckets: {
+    workspace_file: 1,
+    workspace_root: 0,
+    tmux_observation: 0,
+    hermes_profile: 0,
+    hermes_session: 0,
+    task_evidence: 0
+  },
+  source_health_buckets: {
+    source_kind_buckets: sourceHealth.summary.source_kind_buckets,
+    status_buckets: sourceHealth.summary.status_buckets
+  },
+  runtime_source_evidence: {
+    unmapped_tmux_session_count: 0,
+    unmapped_hermes_source_count: 0,
+    unmapped_task_evidence_count: 0,
+    latest_observed_at: '2026-03-16T08:58:40.000Z'
+  }
+};
+
 const runtimeSourceGaps = {
   items: [
     {
@@ -364,6 +395,7 @@ const expectedApiGets = new Set([
   'GET /office/overview',
   'GET /incidents?limit=200&window=8760h',
   'GET /collectors/controller-snapshot',
+  'GET /collectors/controller-snapshot/summary',
   'GET /collectors/controller-snapshot/evidence-coverage',
   'GET /collectors/controller-snapshot/source-health?limit=7',
   'GET /runtime/source-gaps?newest_first=true&limit=3',
@@ -495,6 +527,10 @@ async function installLiveEvidenceFixtures(
 ) {
   await routeExpectedApiGet(page, 'GET /collectors/controller-snapshot/evidence-coverage', async (route) => {
     await route.fulfill({ json: { item: evidenceCoverage } });
+  });
+
+  await routeExpectedApiGet(page, 'GET /collectors/controller-snapshot/summary', async (route) => {
+    await route.fulfill({ json: { item: collectorSnapshotSummary } });
   });
 
   await routeExpectedApiGet(page, 'GET /runtime/source-gaps?newest_first=true&limit=3', async (route) => {

@@ -149,7 +149,7 @@ Optional env:
 - `GET /events?event_id=&agent_id=&event_type=&severity=&source_kind=&evidence_ref=&correlation_id=&limit=`
 - `GET /interactions?event_id=&evidence_ref=&interaction_type=&counterparty_agent_id=&severity=&correlation_id=&limit=&window=`
 - `GET /collectors/controller-snapshot`
-- `GET /collectors/controller-snapshot/summary`
+- `GET /collectors/controller-snapshot/summary?collector_snapshot_id=`
 - `GET /collectors/controller-snapshot/evidence-coverage?agent_id=&source_kind=&confidence_level=&limit=`
 - `GET /collectors/controller-snapshot/source-health?collector_snapshot_id=&agent_id=&source_kind=&status=&limit=`
 - `GET /collectors/controller-snapshot/history?collector_snapshot_id=&agent_id=&source_kind=&status=&collected_since=&collected_until=&limit=`
@@ -314,7 +314,7 @@ This keeps employee writes self-scoped and reserves cross-agent task dispatch pl
 ### Collector snapshot notes
 - `POST /collectors/controller-snapshot` is lead-only and requires `x-actor-id: team-lead`
 - `GET /collectors/controller-snapshot` is read-only and returns the latest replayed collector report; it is the raw snapshot surface and may include stored report internals
-- `GET /collectors/controller-snapshot/summary` is the safe latest snapshot summary boundary available for future UI polling; it returns explicit no-snapshot state plus counts, stable buckets, and latest safe timestamps only, and never returns raw snapshot `items`, collector ids, actor ids, paths, tmux/Hermes/session/profile refs, evidence refs, metadata, degraded reason arrays, payloads, or triggers collection, filesystem/tmux reads, writes, or control-plane actions
+- `GET /collectors/controller-snapshot/summary` is the safe snapshot summary boundary available for future UI polling; by default it returns the latest replayed snapshot summary, with `collector_snapshot_id` it projects that exact replayed snapshot, unknown ids return the explicit no-snapshot state without echoing the requested id, and it returns counts, stable buckets, and latest safe timestamps only, never raw snapshot `items`, collector ids, actor ids, paths, tmux/Hermes/session/profile refs, evidence refs, metadata, degraded reason arrays, payloads, or collection, filesystem/tmux reads, writes, or control-plane actions
 - `GET /collectors/controller-snapshot/evidence-coverage` is read-only and returns `{ "item": null }` until the latest replayed collector report includes `evidence_coverage`
 - `GET /collectors/controller-snapshot/source-health` is read-only and returns `{ "item": null }` until a latest collector report exists; with `collector_snapshot_id`, it projects that exact replayed snapshot and returns `{ "item": null }` for unknown ids instead of falling back to latest
 - `GET /collectors/controller-snapshot/history` is a bounded read-only summary over replayed collector snapshots; it supports exact `collector_snapshot_id`, `agent_id`, source-health `source_kind`, source-health `status`, inclusive valid-ISO `collected_since`/`collected_until`, and post-filter `limit`, and returns compact per-snapshot counts without raw snapshot `items`, runtime payloads, paths, refs, or heartbeat payloads

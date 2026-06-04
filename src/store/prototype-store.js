@@ -727,8 +727,10 @@ class PrototypeStore {
     return this.latestCollectorReport;
   }
 
-  getLatestCollectorSnapshotSummary() {
-    return projectLatestCollectorSnapshotSummary(this.getLatestCollectorReport());
+  getLatestCollectorSnapshotSummary(filters = {}) {
+    return projectLatestCollectorSnapshotSummary(
+      findCollectorReportByIdOrLatest(this.collectorReports, this.getLatestCollectorReport(), filters)
+    );
   }
 
   getLatestCollectorEvidenceCoverage(filters = {}) {

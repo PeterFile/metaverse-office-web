@@ -440,7 +440,9 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
 
   if (method === 'GET' && pathname === '/collectors/controller-snapshot/summary') {
     sendJson(res, 200, {
-      item: store.getLatestCollectorSnapshotSummary()
+      item: store.getLatestCollectorSnapshotSummary({
+        collector_snapshot_id: url.searchParams.get('collector_snapshot_id')
+      })
     });
     return;
   }

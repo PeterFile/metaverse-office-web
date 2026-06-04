@@ -1534,6 +1534,112 @@ test('JSONL prototype store replays canonical task evidence records as read-only
   });
 });
 
+test('input-proof summary only exposes bounded proof counts and ordinal buckets', async () => {
+  const storeFile = await createStoreFile();
+  const unsafeRecord = {
+    evidence_id: 'ev_input_proof_unsafe',
+    observed_at: '2026-05-20T01:02:03.000Z',
+    collected_at: '2026-05-20T01:04:00.000Z',
+    agent_id: 'app-engineering',
+    source_kind: 'hermes_session',
+    evidence_ref: 'hermes://session/raw-secret-session',
+    evidence_role: 'runtime_presence',
+    source_status: 'observed',
+    output_candidate: false,
+    collector_snapshot_id: 'collector-snapshot:2026-05-20T01:04:00.000Z',
+    correlation_id: 'collector-snapshot:2026-05-20T01:04:00.000Z',
+    degraded_reasons: ['raw degraded reason'],
+    metadata: {
+      session_ref: 'raw-secret-session',
+      local_path: '/tmp/input-proof-secret',
+      token: 'token=input-proof-secret',
+      source_provenance: {
+        source_format: 'jsonl',
+        source_index: 2,
+        line: 7,
+        source_input_ordinal: 3,
+        source_file_ordinal: 4,
+        raw_path: '/tmp/input-proof-secret.jsonl'
+      }
+    }
+  };
+  const noProofRecord = {
+    ...unsafeRecord,
+    evidence_id: 'ev_input_proof_missing',
+    evidence_ref: '/tmp/input-proof-secret/no-proof.md',
+    source_kind: 'workspace_file',
+    evidence_role: 'agent_output',
+    metadata: {
+      local_path: '/tmp/input-proof-secret/no-proof.md'
+    }
+  };
+
+  await writeFile(
+    storeFile,
+    [
+      { kind: 'evidence_record', payload: unsafeRecord },
+      { kind: 'evidence_record', payload: noProofRecord }
+    ]
+      .map((record) => JSON.stringify(record))
+      .join('\n') + '\n'
+  );
+
+  const store = await createPrototypeStore({ filePath: storeFile });
+  const summary = store.getEvidenceInputProofSummary({ evidence_ref: unsafeRecord.evidence_ref });
+
+  assert.deepEqual(summary, {
+    total_count: 1,
+    returned_limit: 50,
+    proof_count: 1,
+    missing_proof_count: 0,
+    source_format_buckets: {
+      json_array: 0,
+      jsonl: 1
+    },
+    source_index_buckets: {
+      '2': 1
+    },
+    line_buckets: {
+      '7': 1
+    },
+    source_input_ordinal_buckets: {
+      '3': 1
+    },
+    source_file_ordinal_buckets: {
+      '4': 1
+    }
+  });
+
+  const serialized = JSON.stringify(summary);
+  for (const unsafeFragment of [
+    'evidence_id',
+    'evidence_ref',
+    'metadata',
+    'degraded_reasons',
+    '/tmp/input-proof-secret',
+    'hermes://',
+    'raw-secret-session',
+    'token=input-proof-secret'
+  ]) {
+    assert.equal(serialized.includes(unsafeFragment), false, unsafeFragment);
+  }
+
+  assert.deepEqual(store.getEvidenceInputProofSummary({ evidence_id: 'missing', limit: 2 }), {
+    total_count: 0,
+    returned_limit: 2,
+    proof_count: 0,
+    missing_proof_count: 0,
+    source_format_buckets: {
+      json_array: 0,
+      jsonl: 0
+    },
+    source_index_buckets: {},
+    line_buckets: {},
+    source_input_ordinal_buckets: {},
+    source_file_ordinal_buckets: {}
+  });
+});
+
 test('prototype store does not expose half collector snapshots when a derived append fails', async () => {
   const recordLog = new FailingCollectorBatchRecordLog({ failOnKind: 'evidence_record' });
   const store = new PrototypeStore({

@@ -1157,6 +1157,41 @@ class PrototypeStore {
     return summary;
   }
 
+  getEvidenceInputProofSummary(filters = {}) {
+    const { records, limit } = this.#filterEvidenceRecords(filters);
+    const summary = createEmptyEvidenceInputProofSummary(records.length, limit);
+
+    for (const record of records) {
+      const inputProof = projectEvidenceInputProof(record);
+      if (!inputProof) {
+        summary.missing_proof_count += 1;
+        continue;
+      }
+
+      summary.proof_count += 1;
+      incrementKnownBucket(summary.source_format_buckets, inputProof.source_format);
+      incrementBucket(summary.source_index_buckets, String(inputProof.source_index));
+
+      if (Number.isSafeInteger(inputProof.line)) {
+        incrementBucket(summary.line_buckets, String(inputProof.line));
+      }
+      if (Number.isSafeInteger(inputProof.source_input_ordinal)) {
+        incrementBucket(
+          summary.source_input_ordinal_buckets,
+          String(inputProof.source_input_ordinal)
+        );
+      }
+      if (Number.isSafeInteger(inputProof.source_file_ordinal)) {
+        incrementBucket(
+          summary.source_file_ordinal_buckets,
+          String(inputProof.source_file_ordinal)
+        );
+      }
+    }
+
+    return boundEvidenceInputProofSummary(summary, limit);
+  }
+
   getEvidenceRefRollup(filters = {}) {
     const { records, limit } = this.#filterEvidenceRecords(filters);
     const groups = new Map();
@@ -2510,6 +2545,47 @@ function createEmptyEvidenceRecordFacets(limit) {
       unmapped: 0
     }
   };
+}
+
+function createEmptyEvidenceInputProofSummary(totalCount, limit) {
+  return {
+    total_count: totalCount,
+    returned_limit: limit,
+    proof_count: 0,
+    missing_proof_count: 0,
+    source_format_buckets: {
+      json_array: 0,
+      jsonl: 0
+    },
+    source_index_buckets: {},
+    line_buckets: {},
+    source_input_ordinal_buckets: {},
+    source_file_ordinal_buckets: {}
+  };
+}
+
+function boundEvidenceInputProofSummary(summary, limit) {
+  return {
+    ...summary,
+    source_index_buckets: sortNumericBucketKeys(summary.source_index_buckets, limit),
+    line_buckets: sortNumericBucketKeys(summary.line_buckets, limit),
+    source_input_ordinal_buckets: sortNumericBucketKeys(
+      summary.source_input_ordinal_buckets,
+      limit
+    ),
+    source_file_ordinal_buckets: sortNumericBucketKeys(
+      summary.source_file_ordinal_buckets,
+      limit
+    )
+  };
+}
+
+function sortNumericBucketKeys(buckets, limit) {
+  return Object.fromEntries(
+    Object.entries(buckets)
+      .sort(([left], [right]) => Number(left) - Number(right))
+      .slice(0, limit)
+  );
 }
 
 function createAgentEvidenceSpineSummaryAgent(agent) {

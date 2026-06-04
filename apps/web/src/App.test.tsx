@@ -251,6 +251,7 @@ const appEngineeringEvidenceRecordsUrl =
 const appEngineeringEvidenceRecordDetailUrl = '/evidence-records/output-1';
 const appEngineeringEvidenceProvenanceBundleUrl = '/evidence-records/output-1/provenance-bundle';
 const appEngineeringEvidenceSourceContextUrl = '/evidence-records/output-1/source-context';
+const appEngineeringEvidenceReplayWindowUrl = '/evidence-records/output-1/replay-window?before=2&after=2';
 const appEngineeringEvidenceCheckpointLogUrl = '/accountability/replay/checkpoint-log?limit=3&evidence_id=output-1';
 const missingEvidenceRecordDetailUrl = '/evidence-records/missing-1';
 const missingEvidenceProvenanceBundleUrl = '/evidence-records/missing-1/provenance-bundle';
@@ -1572,6 +1573,65 @@ const evidenceCheckpointLogFixture = {
   ]
 };
 
+const evidenceReplayWindowFixture = {
+  item: {
+    center: {
+      append_index: 21,
+      evidence_id: 'output-1',
+      source_summary: {
+        kind: 'workspace_file',
+        status: 'observed',
+        role: 'agent_output',
+        output_candidate: true,
+        mapped: true,
+        time: {
+          observed_at: '2026-03-16T08:58:00.000Z',
+          collected_at: '2026-03-16T08:59:00.000Z'
+        }
+      },
+      record: {
+        observed_at: '2026-03-16T08:58:00.000Z',
+        collected_at: '2026-03-16T08:59:00.000Z',
+        agent_id: 'app-engineering',
+        source_kind: 'workspace_file',
+        evidence_role: 'agent_output',
+        source_status: 'observed',
+        output_candidate: true,
+        unmapped: false
+      }
+    },
+    window: { before: 2, after: 2 },
+    before: [
+      {
+        append_index: 19,
+        record_kind: 'event',
+        checkpoint: {
+          ts: '2026-03-16T08:56:00.000Z',
+          agent_id: 'app-engineering',
+          evidence_refs: ['/tmp/replay-window-secret.md'],
+          metadata: { webhook: 'https://hooks.example.test/replay-window-token' }
+        }
+      }
+    ],
+    after: [
+      {
+        append_index: 22,
+        record_kind: 'collector_snapshot',
+        checkpoint: {
+          collected_at: '2026-03-16T08:59:00.000Z',
+          actor_id: 'team-lead',
+          item_count: 1
+        }
+      },
+      {
+        append_index: 23,
+        record_kind: 'dispatch',
+        checkpoint: null
+      }
+    ]
+  }
+};
+
 const emptyRuntimeSourceGapsSummaryFixture = {
   total_count: 0,
   returned_limit: 3,
@@ -2122,6 +2182,10 @@ function resolveDefaultFetchResponse(url: string) {
 
   if (url === appEngineeringEvidenceSourceContextUrl) {
     return jsonResponse(evidenceSourceContextFixture);
+  }
+
+  if (url === appEngineeringEvidenceReplayWindowUrl) {
+    return jsonResponse(evidenceReplayWindowFixture);
   }
 
   if (url.startsWith('/accountability/replay/checkpoint-log?')) {
@@ -4280,10 +4344,14 @@ afterEach(() => {
     );
 
     const detailSection = await findHubSection(details, 'Evidence Record Detail');
+    expect(vi.mocked(globalThis.fetch).mock.calls.map(([request]) => String(request))).not.toContain(
+      appEngineeringEvidenceReplayWindowUrl
+    );
     const replayButton = await within(detailSection).findByRole('button', {
       name: 'Replay this evidence output-1'
     });
     const callsBeforeReplay = vi.mocked(globalThis.fetch).mock.calls.length;
+    (window as typeof window & { __AITOWN_POLL_INTERVAL_MS__?: number }).__AITOWN_POLL_INTERVAL_MS__ = 10;
 
     await user.click(replayButton);
 
@@ -4301,6 +4369,22 @@ afterEach(() => {
         within(replayBundleSection!).getByText('Query anchor · agent_id app-engineering, evidence_id output-1')
       ).toBeVisible();
     });
+    const replayWindowCard = await within(replayPanel).findByRole('region', {
+      name: 'Selected evidence replay window'
+    });
+    expect(within(replayWindowCard).getByText('Selected Evidence Replay Window')).toBeVisible();
+    expect(within(replayWindowCard).getByText('Bounds · before 2 · after 2')).toBeVisible();
+    expect(within(replayWindowCard).getByText('Center · Workspace file · Agent output · Observed')).toBeVisible();
+    expect(
+      within(replayWindowCard).getByText(
+        'Before · #19 · event · App Engineering Agent · 2026-03-16T08:56:00.000Z'
+      )
+    ).toBeVisible();
+    expect(within(replayWindowCard).getByText('After · #22 · collector snapshot · Team Lead · 1 items')).toBeVisible();
+    expect(within(replayWindowCard).getByText('After · #23 · record · No checkpoint')).toBeVisible();
+    expect(replayWindowCard).not.toHaveTextContent(
+      /output-1|\/tmp\/replay-window-secret|webhook|https:\/\/hooks|token|metadata|evidence_refs|collector-20260316|corr-app-review|tmux|Hermes|session|profile|dispatch|route|assign|complete/i
+    );
 
     const replayRequests = vi
       .mocked(globalThis.fetch)
@@ -4315,6 +4399,22 @@ afterEach(() => {
     expect(replayUrls).not.toContain(appEngineeringReviewAccountabilityReplayUrl);
     expect(replayUrls.some((url) => url.includes('evidence_ref='))).toBe(false);
     expect(replayRequests.every(([, init]) => !init || !('method' in init) || init.method === 'GET')).toBe(true);
+    const replayWindowUrls = vi
+      .mocked(globalThis.fetch)
+      .mock.calls.slice(callsBeforeReplay)
+      .map(([request]) => String(request))
+      .filter((url) => url === appEngineeringEvidenceReplayWindowUrl);
+    expect(replayWindowUrls).toEqual([appEngineeringEvidenceReplayWindowUrl]);
+    await act(async () => {
+      await new Promise<void>((resolve) => window.setTimeout(resolve, 35));
+    });
+    const replayWindowUrlsAfterPollWindow = vi
+      .mocked(globalThis.fetch)
+      .mock.calls.slice(callsBeforeReplay)
+      .map(([request]) => String(request))
+      .filter((url) => url === appEngineeringEvidenceReplayWindowUrl);
+    expect(replayWindowUrlsAfterPollWindow).toEqual([appEngineeringEvidenceReplayWindowUrl]);
+    delete (window as typeof window & { __AITOWN_POLL_INTERVAL_MS__?: number }).__AITOWN_POLL_INTERVAL_MS__;
     expectEvidenceJourneyReadOnly(replayPanel);
     expectNoUnprovenLivenessLabels(replayPanel);
 
@@ -4332,7 +4432,7 @@ afterEach(() => {
     expect(postBackUrls).not.toContain(appEngineeringEvidenceRecordDetailUrl);
     expect(postBackUrls).not.toContain(appEngineeringEvidenceProvenanceBundleUrl);
     expect(postBackUrls).not.toContain(appEngineeringEvidenceCheckpointLogUrl);
-  });
+  }, 10_000);
 
   it('clears stale selected-agent evidence detail when the next detail response is empty', async () => {
     const user = userEvent.setup();

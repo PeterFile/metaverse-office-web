@@ -17,6 +17,7 @@ import {
   fetchCollectorSnapshotHistory,
   fetchCollectorSourceHealth,
   fetchEvidenceSourceContext,
+  fetchEvidenceReplayWindow,
   fetchEvidenceProvenanceBundle,
   fetchEvidenceRecord,
   fetchEvidenceRefRollup,
@@ -1353,6 +1354,117 @@ describe('fetchEvidenceSourceContext', () => {
       code: 'not_found',
       message: 'unknown evidence record'
     });
+  });
+});
+
+describe('fetchEvidenceReplayWindow', () => {
+  it('fetches the default bounded replay window by URL-encoded evidence_id', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            item: {
+              center: {
+                append_index: 21,
+                evidence_id: 'evidence:app/review#1',
+                source_summary: {
+                  kind: 'workspace_file',
+                  status: 'observed',
+                  role: 'agent_output',
+                  output_candidate: true,
+                  mapped: true,
+                  time: {
+                    observed_at: '2026-03-16T08:58:00.000Z',
+                    collected_at: '2026-03-16T08:59:00.000Z'
+                  }
+                },
+                record: {
+                  observed_at: '2026-03-16T08:58:00.000Z',
+                  collected_at: '2026-03-16T08:59:00.000Z',
+                  agent_id: 'app-engineering',
+                  source_kind: 'workspace_file',
+                  evidence_role: 'agent_output',
+                  source_status: 'observed',
+                  output_candidate: true,
+                  unmapped: false
+                }
+              },
+              window: { before: 2, after: 2 },
+              before: [],
+              after: []
+            }
+          }),
+          { headers: JSON_HEADERS }
+        )
+      )
+    );
+
+    await expect(fetchEvidenceReplayWindow('evidence:app/review#1')).resolves.toMatchObject({
+      center: {
+        evidence_id: 'evidence:app/review#1',
+        append_index: 21
+      },
+      window: { before: 2, after: 2 }
+    });
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/evidence-records/evidence%3Aapp%2Freview%231/replay-window?before=2&after=2',
+      expect.objectContaining({ signal: undefined })
+    );
+  });
+
+  it('caps explicit replay-window bounds to the backend contract maximum', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            item: {
+              center: {
+                append_index: 21,
+                evidence_id: 'output-1',
+                source_summary: {
+                  kind: 'workspace_file',
+                  status: 'observed',
+                  role: 'agent_output',
+                  output_candidate: true,
+                  mapped: true,
+                  time: {
+                    observed_at: '2026-03-16T08:58:00.000Z',
+                    collected_at: '2026-03-16T08:59:00.000Z'
+                  }
+                },
+                record: {
+                  observed_at: '2026-03-16T08:58:00.000Z',
+                  collected_at: '2026-03-16T08:59:00.000Z',
+                  agent_id: 'app-engineering',
+                  source_kind: 'workspace_file',
+                  evidence_role: 'agent_output',
+                  source_status: 'observed',
+                  output_candidate: true,
+                  unmapped: false
+                }
+              },
+              window: { before: 10, after: 10 },
+              before: [],
+              after: []
+            }
+          }),
+          { headers: JSON_HEADERS }
+        )
+      )
+    );
+
+    const signal = new AbortController().signal;
+    await expect(fetchEvidenceReplayWindow('output-1', { before: 99, after: 12, signal })).resolves.toMatchObject({
+      window: { before: 10, after: 10 }
+    });
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/evidence-records/output-1/replay-window?before=10&after=10',
+      expect.objectContaining({ signal })
+    );
   });
 });
 

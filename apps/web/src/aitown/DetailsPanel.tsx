@@ -14,6 +14,9 @@ import type {
   CorrelationDrilldown,
   EvidenceProvenanceBundle,
   EvidenceRecord,
+  EvidenceReplayWindow,
+  EvidenceReplayWindowCheckpoint,
+  EvidenceReplayWindowRow,
   EvidenceSourceContext,
   IncidentFeedResponse,
   MemoryArtifact,
@@ -155,6 +158,9 @@ type DetailsPanelProps = {
   selectedAgentAccountabilityReplay: AccountabilityReplayBundle | null;
   selectedAgentAccountabilityReplayError: string | null;
   selectedAgentAccountabilityReplayState: LoadState;
+  selectedAgentEvidenceReplayWindow: EvidenceReplayWindow | null;
+  selectedAgentEvidenceReplayWindowError: string | null;
+  selectedAgentEvidenceReplayWindowState: LoadState;
   selectedAgentEvidenceLedger: SelectedAgentEvidenceLedgerModel | null;
   selectedAgentEvidenceLedgerError: string | null;
   selectedAgentEvidenceLedgerState: LoadState;
@@ -1576,9 +1582,24 @@ const SELECTED_EVIDENCE_SOURCE_CONTEXT_ROLE_LABELS: Record<string, string> = {
   task_reference: 'Task reference'
 };
 
+const SELECTED_EVIDENCE_REPLAY_WINDOW_RECORD_KIND_LABELS: Record<string, string> = {
+  event: 'event',
+  heartbeat: 'heartbeat',
+  evidence_record: 'evidence record',
+  collector_snapshot: 'collector snapshot',
+  unknown: 'record'
+};
+
 function formatSelectedEvidenceSourceContextLabel(value: unknown, labels: Readonly<Record<string, string>>) {
   const normalized = typeof value === 'string' ? value.trim() : '';
   return normalized && Object.prototype.hasOwnProperty.call(labels, normalized) ? labels[normalized] : 'Unknown';
+}
+
+function formatSelectedEvidenceReplayWindowRecordKind(value: unknown) {
+  const normalized = typeof value === 'string' ? value.trim() : '';
+  return normalized && Object.prototype.hasOwnProperty.call(SELECTED_EVIDENCE_REPLAY_WINDOW_RECORD_KIND_LABELS, normalized)
+    ? SELECTED_EVIDENCE_REPLAY_WINDOW_RECORD_KIND_LABELS[normalized]
+    : 'record';
 }
 
 function renderSelectedAgentEvidenceSourceContext(
@@ -3238,6 +3259,121 @@ function renderSelectedEvidenceReplayScope(
   );
 }
 
+function renderReplayWindowAgentLabel(agentId: string | null | undefined, agentNameById: ReadonlyMap<string, string>) {
+  if (!agentId) {
+    return 'Unmapped';
+  }
+
+  return agentNameById.get(agentId) ?? 'Known agent';
+}
+
+function renderSelectedEvidenceReplayWindowCheckpoint(
+  checkpoint: EvidenceReplayWindowCheckpoint | null,
+  agentNameById: ReadonlyMap<string, string>
+) {
+  if (!checkpoint) {
+    return 'No checkpoint';
+  }
+
+  if ('received_at' in checkpoint) {
+    return `${renderReplayWindowAgentLabel(checkpoint.agent_id, agentNameById)} · ${renderTimestamp(checkpoint.received_at, 'No timestamp')}`;
+  }
+
+  if ('item_count' in checkpoint) {
+    return `${renderReplayWindowAgentLabel(checkpoint.actor_id, agentNameById)} · ${checkpoint.item_count} items`;
+  }
+
+  if ('ts' in checkpoint) {
+    return `${renderReplayWindowAgentLabel(checkpoint.agent_id, agentNameById)} · ${renderTimestamp(checkpoint.ts, 'No timestamp')}`;
+  }
+
+  const sourceKind = formatSelectedEvidenceSourceContextLabel(
+    checkpoint.source_kind,
+    SELECTED_EVIDENCE_SOURCE_CONTEXT_KIND_LABELS
+  );
+  const role = formatSelectedEvidenceSourceContextLabel(
+    checkpoint.evidence_role,
+    SELECTED_EVIDENCE_SOURCE_CONTEXT_ROLE_LABELS
+  );
+  const status = formatSelectedEvidenceSourceContextLabel(
+    checkpoint.source_status,
+    SELECTED_EVIDENCE_SOURCE_CONTEXT_STATUS_LABELS
+  );
+  return `${sourceKind} · ${role} · ${status}`;
+}
+
+function renderSelectedEvidenceReplayWindowRow(
+  label: 'Before' | 'After',
+  row: EvidenceReplayWindowRow,
+  agentNameById: ReadonlyMap<string, string>
+) {
+  const recordKindLabel = formatSelectedEvidenceReplayWindowRecordKind(row.record_kind);
+  return (
+    <span key={`${label}:${row.append_index}:${row.record_kind}`} className="aitown-evidence-proof-strip__row">
+      {`${label} · #${row.append_index} · ${recordKindLabel} · ${renderSelectedEvidenceReplayWindowCheckpoint(
+        row.checkpoint,
+        agentNameById
+      )}`}
+    </span>
+  );
+}
+
+function renderSelectedEvidenceReplayWindowCard({
+  replayWindow,
+  replayWindowError,
+  replayWindowState,
+  agentNameById
+}: {
+  replayWindow: EvidenceReplayWindow | null;
+  replayWindowError: string | null;
+  replayWindowState: LoadState;
+  agentNameById: ReadonlyMap<string, string>;
+}) {
+  if (replayWindowError && !replayWindow) {
+    return (
+      <section className="aitown-details__section aitown-details__section--selected-replay aitown-details__section--hub-replay">
+        <h3>Selected Evidence Replay Window</h3>
+        <div className="aitown-record">Selected evidence replay window unavailable.</div>
+      </section>
+    );
+  }
+
+  if (!replayWindow) {
+    return null;
+  }
+
+  const sourceKind = formatSelectedEvidenceSourceContextLabel(
+    replayWindow.center.source_summary.kind,
+    SELECTED_EVIDENCE_SOURCE_CONTEXT_KIND_LABELS
+  );
+  const role = formatSelectedEvidenceSourceContextLabel(
+    replayWindow.center.source_summary.role,
+    SELECTED_EVIDENCE_SOURCE_CONTEXT_ROLE_LABELS
+  );
+  const status = formatSelectedEvidenceSourceContextLabel(
+    replayWindow.center.source_summary.status,
+    SELECTED_EVIDENCE_SOURCE_CONTEXT_STATUS_LABELS
+  );
+  const rows = [
+    ...replayWindow.before.map((row) => renderSelectedEvidenceReplayWindowRow('Before', row, agentNameById)),
+    ...replayWindow.after.map((row) => renderSelectedEvidenceReplayWindowRow('After', row, agentNameById))
+  ];
+
+  return (
+    <section
+      className="aitown-details__section aitown-details__section--selected-replay aitown-details__section--hub-replay"
+      aria-label="Selected evidence replay window"
+    >
+      <h3>Selected Evidence Replay Window</h3>
+      <div className="aitown-record">
+        <strong>{`Center · ${sourceKind} · ${role} · ${status}`}</strong>
+        <span>{`Bounds · before ${replayWindow.window.before} · after ${replayWindow.window.after}`}</span>
+        {rows.length > 0 ? rows : <span>No adjacent replay rows.</span>}
+      </div>
+    </section>
+  );
+}
+
 function renderReplayBundleLedgerSourceKinds(entry: AccountabilityReplayLedgerEntry) {
   const sourceKinds = dedupeNonEmptyStrings([
     entry.source_kind,
@@ -4720,6 +4856,9 @@ export function DetailsPanel({
   selectedAgentAccountabilityReplay,
   selectedAgentAccountabilityReplayError,
   selectedAgentAccountabilityReplayState,
+  selectedAgentEvidenceReplayWindow,
+  selectedAgentEvidenceReplayWindowError,
+  selectedAgentEvidenceReplayWindowState,
   selectedAgentEvidenceLedger,
   selectedAgentEvidenceLedgerError,
   selectedAgentEvidenceLedgerState,
@@ -6926,6 +7065,13 @@ export function DetailsPanel({
         onFocusWorldZone,
         onSelectAgent,
         onSelectCorrelation
+      })}
+
+      {renderSelectedEvidenceReplayWindowCard({
+        replayWindow: selectedAgentEvidenceReplayWindow,
+        replayWindowError: selectedAgentEvidenceReplayWindowError,
+        replayWindowState: selectedAgentEvidenceReplayWindowState,
+        agentNameById
       })}
 
       {renderSelectedAgentReplayBundleSection({

@@ -590,6 +590,18 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
     return;
   }
 
+  if (method === 'GET' && pathname === '/evidence-records/input-proof-summary') {
+    sendJson(res, 200, {
+      item: store.getEvidenceInputProofSummary({
+        evidence_id: url.searchParams.get('evidence_id'),
+        agent_id: url.searchParams.get('agent_id'),
+        evidence_ref: url.searchParams.get('evidence_ref'),
+        ...getSourceEvidenceQuery(url.searchParams)
+      })
+    });
+    return;
+  }
+
   if (method === 'GET' && pathname === '/evidence-records/ref-rollup') {
     sendJson(res, 200, {
       item: store.getEvidenceRefRollup({

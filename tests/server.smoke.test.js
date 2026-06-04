@@ -6885,6 +6885,60 @@ test('GET /evidence-records lists stored evidence records read-only with exact f
   });
   assert.equal(await readFile(storeFile, 'utf8'), fileBeforeRead);
 
+  const inputProofSummary = await requestJson(
+    `${baseUrl}/evidence-records/input-proof-summary?evidence_ref=${encodeURIComponent('/tmp/evidence-query/app/outbox.md')}&limit=1`
+  );
+  assert.equal(inputProofSummary.response.status, 200);
+  assert.deepEqual(inputProofSummary.body, {
+    item: {
+      total_count: 1,
+      returned_limit: 1,
+      proof_count: 0,
+      missing_proof_count: 1,
+      source_format_buckets: {
+        json_array: 0,
+        jsonl: 0
+      },
+      source_index_buckets: {},
+      line_buckets: {},
+      source_input_ordinal_buckets: {},
+      source_file_ordinal_buckets: {}
+    }
+  });
+  assert.equal(await readFile(storeFile, 'utf8'), fileBeforeRead);
+  for (const unsafeFragment of [
+    'evidence_id',
+    'evidence_ref',
+    '/tmp/evidence-query',
+    'tmux://',
+    'metadata',
+    'degraded_reasons',
+    'payload',
+    'token',
+    'webhook'
+  ]) {
+    assert.equal(JSON.stringify(inputProofSummary.body).includes(unsafeFragment), false);
+  }
+
+  const emptyInputProofSummary = await requestJson(
+    `${baseUrl}/evidence-records/input-proof-summary?evidence_id=missing-evidence-id&limit=10`
+  );
+  assert.equal(emptyInputProofSummary.response.status, 200);
+  assert.deepEqual(emptyInputProofSummary.body.item, {
+    total_count: 0,
+    returned_limit: 10,
+    proof_count: 0,
+    missing_proof_count: 0,
+    source_format_buckets: {
+      json_array: 0,
+      jsonl: 0
+    },
+    source_index_buckets: {},
+    line_buckets: {},
+    source_input_ordinal_buckets: {},
+    source_file_ordinal_buckets: {}
+  });
+
   const emptySummary = await requestJson(
     `${baseUrl}/evidence-records/summary?mapped=false&agent_id=app-engineering&limit=10`
   );
@@ -7922,6 +7976,137 @@ test('runtime provenance public projections redact Hermes task and source canary
     ]) {
       assert.equal(serialized.includes(field), false, field);
     }
+  }
+});
+
+test('GET input-proof summary is read-only and exposes only proof count buckets', async (t) => {
+  const store = await createDirectStore();
+  await store.appendCollectorReport({
+    collected_at: '2026-03-09T18:06:00.000Z',
+    actor_id: 'team-lead',
+    summary: {
+      agent_count: 1,
+      heartbeat_count: 0,
+      tmux_observed_count: 0,
+      workspace_observed_count: 0,
+      reboot_recommended_count: 0
+    },
+    evidence_coverage: {
+      evidence_ref_count: 1,
+      covered_agent_count: 1,
+      low_confidence_agent_ids: [],
+      source_kind_buckets: {
+        hermes_profile: 1
+      },
+      agent_items: [
+        {
+          agent_id: 'app-engineering',
+          evidence_ref_count: 1,
+          source_kinds: ['hermes_profile'],
+          latest_evidence_at: '2026-03-09T18:05:30.000Z',
+          confidence_level: 'high'
+        }
+      ]
+    },
+    items: [
+      {
+        agent_id: 'app-engineering',
+        evidence_refs: ['hermes://profile/input-proof-secret'],
+        hermes_runtime_observations: [
+          {
+            source_kind: 'hermes_profile',
+            evidence_ref: 'hermes://profile/input-proof-secret',
+            profile_id: 'input-proof-profile-secret',
+            session_ref: 'input-proof-session-secret',
+            status: 'observed',
+            observed_at: '2026-03-09T18:05:30.000Z',
+            source_provenance: {
+              source_format: 'json_array',
+              source_index: 0,
+              source_input_ordinal: 2,
+              source_file_ordinal: 3,
+              payload: 'token=input-proof-secret'
+            }
+          }
+        ],
+        source_health: {}
+      }
+    ]
+  });
+  const before = {
+    recordCount: store.records.length,
+    counts: store.getCounts(),
+    checkpoint: store.getReplayCheckpointSummary()
+  };
+
+  const result = await requestJsonDirect({
+    url: '/evidence-records/input-proof-summary?agent_id=app-engineering&source_kind=hermes_profile&limit=1',
+    store
+  });
+  assert.equal(result.response.status, 200);
+  assert.deepEqual(result.body, {
+    item: {
+      total_count: 1,
+      returned_limit: 1,
+      proof_count: 1,
+      missing_proof_count: 0,
+      source_format_buckets: {
+        json_array: 1,
+        jsonl: 0
+      },
+      source_index_buckets: {
+        '0': 1
+      },
+      line_buckets: {},
+      source_input_ordinal_buckets: {
+        '2': 1
+      },
+      source_file_ordinal_buckets: {
+        '3': 1
+      }
+    }
+  });
+  assert.deepEqual(
+    {
+      recordCount: store.records.length,
+      counts: store.getCounts(),
+      checkpoint: store.getReplayCheckpointSummary()
+    },
+    before
+  );
+
+  const empty = await requestJsonDirect({
+    url: '/evidence-records/input-proof-summary?evidence_id=missing-evidence-id&limit=10',
+    store
+  });
+  assert.equal(empty.response.status, 200);
+  assert.deepEqual(empty.body.item, {
+    total_count: 0,
+    returned_limit: 10,
+    proof_count: 0,
+    missing_proof_count: 0,
+    source_format_buckets: {
+      json_array: 0,
+      jsonl: 0
+    },
+    source_index_buckets: {},
+    line_buckets: {},
+    source_input_ordinal_buckets: {},
+    source_file_ordinal_buckets: {}
+  });
+
+  const serialized = JSON.stringify(result.body);
+  for (const unsafeFragment of [
+    'evidence_id',
+    'evidence_ref',
+    'metadata',
+    'degraded_reasons',
+    'hermes://',
+    'input-proof-profile-secret',
+    'input-proof-session-secret',
+    'token=input-proof-secret'
+  ]) {
+    assert.equal(serialized.includes(unsafeFragment), false, unsafeFragment);
   }
 });
 

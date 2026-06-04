@@ -703,13 +703,13 @@ function renderRuntimeSourceGapReadModelSourceLabel(sourceKind: DisplayedSourceG
 function renderRuntimeSourceGapLifecycleGroupLabel(state: RuntimeSourceGapLifecycleGroup['lifecycle_state']) {
   switch (state) {
     case 'opened':
-      return 'Opened gap';
+      return 'opened';
     case 'continuing':
-      return 'Continuing gap';
+      return 'continuing';
     case 'resolved':
-      return 'Resolved evidence';
+      return 'resolved';
     case 'observed_unmapped':
-      return 'Unmapped observed';
+      return 'observed unmapped';
   }
 }
 

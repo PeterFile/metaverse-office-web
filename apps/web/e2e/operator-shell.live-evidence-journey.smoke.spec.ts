@@ -1051,14 +1051,14 @@ test.describe('operator shell live evidence journey smoke', () => {
       await expect(sourceGapInspectPeek).toContainText('Workspace files · degraded');
       await expect(sourceGapInspectPeek).toContainText('Mapped source');
       await expect(sourceGapInspectPeek).toContainText('Lifecycle · 1 mapped · 0 unmapped');
-      await expect(sourceGapInspectPeek).toContainText('Workspace source · degraded · Opened gap');
+      await expect(sourceGapInspectPeek).toContainText('Workspace source · degraded · opened');
       await expect(sourceGapInspectPeek).not.toContainText('Lifecycle · no runtime source-gap snapshot');
       await expect(
         sourceGapInspectPeek,
         'source-gap world pin inspect peek should not expose raw refs, runtime payloads, or reasons'
       ).not.toContainText(visibleProofRawRefPattern);
 
-      await sourceGapInspectPeek.getByRole('button', { name: 'Open Evidence drilldown' }).click();
+      await sourceGapInspectPeek.getByRole('button', { name: 'Open source-gap drilldown' }).click();
       const detailsPanel = page.getByRole('complementary', { name: 'Agent details' });
       const evidencePanel = page.getByRole('tabpanel', { name: 'Evidence' });
       await expect(evidencePanel).toBeVisible();

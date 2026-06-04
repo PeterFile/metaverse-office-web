@@ -3640,7 +3640,7 @@ function AppInner() {
                       className="aitown-selected-agent-peek__source-gap-inspect-link"
                       onClick={handleSelectedAgentEvidenceLedgerOpen}
                     >
-                      Open Evidence drilldown
+                      Open source-gap drilldown
                     </button>
                   </section>
                 ) : null}
@@ -3765,35 +3765,6 @@ function AppInner() {
                           selectedAgentSourceHealthInspectPeek.diffLineLabel
                         ].join(' · ')}
                       </button>
-                    ) : null}
-                    {selectedAgentSourceGapInspectPeek || selectedAgentSourceGapLifecycleStrip ? (
-                      <section
-                        className="aitown-hub-focus-ribbon__source-gap-inspect"
-                        role="region"
-                        aria-label="Source gap inspect peek"
-                      >
-                        {selectedAgentSourceGapInspectPeek ? (
-                          <>
-                            <span className="aitown-hub-focus-ribbon__source-gap-inspect-label">
-                              {selectedAgentSourceGapInspectPeek.evidenceOnlyLabel}
-                            </span>
-                            <strong>
-                              {`${selectedAgentSourceGapInspectPeek.sourceKindLabel} · ${selectedAgentSourceGapInspectPeek.statusLabel}`}
-                            </strong>
-                            <span>{selectedAgentSourceGapInspectPeek.mappingLabel}</span>
-                            <span>{selectedAgentSourceGapInspectPeek.observedAtLabel}</span>
-                            <span>{selectedAgentSourceGapInspectPeek.collectedAtLabel}</span>
-                          </>
-                        ) : null}
-                        {renderRuntimeSourceGapLifecycleStrip(selectedAgentSourceGapLifecycleStrip)}
-                        <button
-                          type="button"
-                          className="aitown-hub-focus-ribbon__source-gap-inspect-link"
-                          onClick={handleSelectedAgentEvidenceLedgerOpen}
-                        >
-                          Open Evidence drilldown
-                        </button>
-                      </section>
                     ) : null}
                   </div>
                 </section>

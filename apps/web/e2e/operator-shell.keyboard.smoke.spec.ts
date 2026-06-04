@@ -6633,21 +6633,21 @@ test.describe('operator shell smoke', () => {
       .getByText('Workflow interaction evidence jump stays in shared memory')
       .locator('xpath=ancestor::li[contains(@class,"aitown-record")][1]');
     const evidenceJumpButton = workflowInteractionRecord.getByRole('button', {
-      name: 'Jump to shared memory artifact /tmp/revenue-handoff.md'
+      name: 'Jump to shared memory artifact local evidence'
     });
     const focusedSharedMemoryRecord = detailsPanel.locator('li[data-shared-memory-target]:focus');
 
     await expect(detailsPanel.getByRole('heading', { name: 'Growth Revenue Agent' })).toBeVisible();
     await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
     await expect(workflowInteractionRecord.getByText('Workflow interaction evidence jump stays in shared memory')).toBeVisible();
-    await expect(workflowInteractionRecord.getByText('Evidence · /tmp/revenue-handoff.md')).toBeVisible();
+    await expect(workflowInteractionRecord.getByText('Evidence · Local evidence')).toBeVisible();
     await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toHaveCount(0);
     await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
     await expect(evidenceJumpButton).toBeVisible();
     await expect(focusedSharedMemoryRecord).toHaveCount(0);
-    await focusHubControlWithTab(page, evidenceJumpButton, 'Jump to shared memory artifact /tmp/revenue-handoff.md', {
+    await focusHubControlWithTab(page, evidenceJumpButton, 'Jump to shared memory artifact local evidence', {
       detailsPanel,
       selectedAgentDrilldownTab: 'Evidence'
     });
@@ -7374,7 +7374,7 @@ test.describe('operator shell smoke', () => {
     });
     const handoffRecord = workflowStatusActorButton.locator('xpath=ancestor::li[contains(@class,"aitown-record")][1]');
     const evidenceJumpButton = handoffRecord.getByRole('button', {
-      name: 'Jump to shared memory artifact /tmp/revenue-handoff.md'
+      name: 'Jump to shared memory artifact local evidence'
     });
     const focusedSharedMemoryRecord = detailsPanel.locator('li[data-shared-memory-target]:focus');
 
@@ -7382,13 +7382,13 @@ test.describe('operator shell smoke', () => {
     await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
     await expect(detailsPanel.getByRole('heading', { name: 'Workflow' })).toBeVisible();
     await expect(handoffRecord.getByText('Lead completed the revenue handoff', { exact: true })).toBeVisible();
-    await expect(handoffRecord.getByText('Evidence · /tmp/revenue-handoff.md')).toBeVisible();
+    await expect(handoffRecord.getByText('Evidence · Local evidence')).toBeVisible();
     await expect(evidenceJumpButton).toBeVisible();
     await expect(focusedSharedMemoryRecord).toHaveCount(0);
     await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toHaveCount(0);
-    await focusHubControlWithTab(page, evidenceJumpButton, 'Jump to shared memory artifact /tmp/revenue-handoff.md', {
+    await focusHubControlWithTab(page, evidenceJumpButton, 'Jump to shared memory artifact local evidence', {
       detailsPanel,
       selectedAgentDrilldownTab: 'Evidence'
     });
@@ -8641,7 +8641,7 @@ test.describe('operator shell smoke', () => {
     });
     const recentEventRecord = recentEventActorButton.locator('xpath=ancestor::li[contains(@class,"aitown-record")][1]');
     const evidenceJumpButton = recentEventRecord.getByRole('button', {
-      name: 'Jump to shared memory artifact /tmp/revenue-handoff.md'
+      name: 'Jump to shared memory artifact local evidence'
     });
     const focusedSharedMemoryRecord = detailsPanel.locator('li[data-shared-memory-target]:focus');
 
@@ -8649,14 +8649,14 @@ test.describe('operator shell smoke', () => {
     await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
     await expect(detailsPanel.getByRole('heading', { name: 'Workflow' })).toBeVisible();
     await expect(recentEventRecord.getByText('Lead completed the revenue handoff', { exact: true })).toBeVisible();
-    await expect(recentEventRecord.getByText('Evidence · /tmp/revenue-handoff.md')).toBeVisible();
+    await expect(recentEventRecord.getByText('Evidence · Local evidence')).toBeVisible();
     await expect(evidenceJumpButton).toBeVisible();
     await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toBeVisible();
     await expect(correlationSection.getByText('corr-growth-lead-review', { exact: true })).toHaveCount(0);
     await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
     await expect(focusedSharedMemoryRecord).toHaveCount(0);
-    await focusHubControlWithTab(page, evidenceJumpButton, 'Jump to shared memory artifact /tmp/revenue-handoff.md', {
+    await focusHubControlWithTab(page, evidenceJumpButton, 'Jump to shared memory artifact local evidence', {
       detailsPanel,
       selectedAgentDrilldownTab: 'Evidence'
     });
@@ -9077,9 +9077,10 @@ test.describe('operator shell smoke', () => {
     const alertRecord = workflowSection
       .getByText('Workflow peer-watch evidence jump stays in shared memory')
       .locator('xpath=ancestor::li[contains(@class,"aitown-record")][1]');
-    const evidenceJumpButton = alertRecord.getByRole('button', {
-      name: 'Jump to shared memory artifact /tmp/revenue-handoff.md'
+    const evidenceJumpButtons = alertRecord.getByRole('button', {
+      name: 'Jump to shared memory artifact local evidence'
     });
+    const evidenceJumpButton = evidenceJumpButtons.first();
     const focusedSharedMemoryRecord = detailsPanel.locator('li[data-shared-memory-target]:focus');
 
     await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
@@ -9096,17 +9097,14 @@ test.describe('operator shell smoke', () => {
 
     await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
     await expect(alertRecord.getByText('Workflow peer-watch evidence jump stays in shared memory')).toBeVisible();
-    await expect(alertRecord.getByText('Evidence · /tmp/revenue-handoff.md, /tmp/missing.md')).toBeVisible();
+    await expect(alertRecord.getByText('Evidence · Local evidence, Local evidence')).toBeVisible();
     await expect(alertRecord.getByText('Watchers · growth-revenue')).toBeVisible();
-    await expect(
-      alertRecord.getByRole('button', {
-        name: 'Jump to shared memory artifact /tmp/missing.md'
-      })
-    ).toBeVisible();
+    await expect(evidenceJumpButtons).toHaveCount(2);
+    await expect(evidenceJumpButtons.nth(1)).toBeVisible();
     await expect(memorySection.getByText('Collector observed workspace write to revenue-handoff.md')).toBeVisible();
     await expect(detailsPanel.getByRole('button', { name: 'Return to current scope' })).toHaveCount(0);
     await expect(focusedSharedMemoryRecord).toHaveCount(0);
-    await focusHubControlWithTab(page, evidenceJumpButton, 'Jump to shared memory artifact /tmp/revenue-handoff.md');
+    await focusHubControlWithTab(page, evidenceJumpButton, 'Jump to shared memory artifact local evidence');
     await expect(evidenceJumpButton).toBeFocused();
 
     const requestCountBeforeJump = requestedUrls.length;
@@ -9496,7 +9494,7 @@ test.describe('operator shell smoke', () => {
       });
       const returnToCurrentScopeButton = detailsPanel.getByRole('button', { name: 'Return to current scope' });
       const evidenceJumpButton = supervisionSection.getByRole('button', {
-        name: 'Jump to shared memory artifact /tmp/revenue-handoff.md'
+        name: 'Jump to shared memory artifact local evidence'
       });
       const sharedMemoryRecord = detailsPanel
         .locator('li[data-shared-memory-target]')
@@ -9553,7 +9551,7 @@ test.describe('operator shell smoke', () => {
       await expect(correlationSection.getByText(accountabilityCorrelationId, { exact: true })).toBeVisible();
       await expect(correlationSection.getByText('corr-revenue-handoff', { exact: true })).toHaveCount(0);
 
-      await focusHubControlWithTab(page, evidenceJumpButton, 'Jump to shared memory artifact /tmp/revenue-handoff.md', {
+      await focusHubControlWithTab(page, evidenceJumpButton, 'Jump to shared memory artifact local evidence', {
         detailsPanel,
         selectedAgentDrilldownTab: 'Evidence'
       });
@@ -9664,7 +9662,7 @@ test.describe('operator shell smoke', () => {
       name: `Open shared memory correlation ${accountabilityCorrelationId}, currently selected`
     });
     const evidenceJumpButton = supervisionSection.getByRole('button', {
-      name: 'Jump to shared memory artifact /tmp/revenue-handoff.md'
+      name: 'Jump to shared memory artifact local evidence'
     });
     const sharedMemoryRecord = detailsPanel
       .locator('li[data-shared-memory-target]')
@@ -9682,7 +9680,7 @@ test.describe('operator shell smoke', () => {
     await expect(focusedSharedMemoryRecord).toHaveCount(0);
     await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Replay / Correlation');
     await expect(correlationSection.getByText(accountabilityCorrelationId, { exact: true })).toBeVisible();
-    await focusHubControlWithTab(page, evidenceJumpButton, 'Jump to shared memory artifact /tmp/revenue-handoff.md', {
+    await focusHubControlWithTab(page, evidenceJumpButton, 'Jump to shared memory artifact local evidence', {
       detailsPanel,
       selectedAgentDrilldownTab: 'Evidence'
     });

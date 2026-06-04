@@ -965,18 +965,49 @@ function renderEvidenceRefs(evidenceRefs: string[]) {
   return evidenceRefs.length > 0 ? evidenceRefs.join(', ') : 'No evidence refs';
 }
 
+function formatPublicEvidenceRefLabel(evidenceRef: string) {
+  const normalized = evidenceRef.trim();
+  const sensitiveUriToken = formatSensitiveEvidenceLedgerUriToken(normalized);
+  if (sensitiveUriToken) {
+    return 'Runtime evidence';
+  }
+
+  if (
+    normalized.startsWith('/') ||
+    normalized.startsWith('~/') ||
+    normalized.startsWith('file://') ||
+    /^[A-Za-z]:[\\/]/.test(normalized)
+  ) {
+    return 'Local evidence';
+  }
+
+  if (/^https?:\/\//i.test(normalized)) {
+    return 'External evidence';
+  }
+
+  return 'Linked evidence';
+}
+
+function formatPublicEvidenceRefAriaLabel(evidenceRef: string) {
+  return formatPublicEvidenceRefLabel(evidenceRef).toLowerCase();
+}
+
 function renderSharedMemoryEvidenceRefs({
   evidenceRefs,
   sharedMemoryArtifactRefs,
   onJump,
   jumpAriaLabelPrefix = 'Jump to shared memory artifact',
-  allowExactFallback = false
+  allowExactFallback = false,
+  formatLabel = (evidenceRef: string) => evidenceRef,
+  formatAriaLabel = (evidenceRef: string) => evidenceRef
 }: {
   evidenceRefs: string[];
   sharedMemoryArtifactRefs: ReadonlySet<string>;
   onJump: (artifactRef: string) => void;
   jumpAriaLabelPrefix?: string;
   allowExactFallback?: boolean;
+  formatLabel?: (evidenceRef: string) => string;
+  formatAriaLabel?: (evidenceRef: string) => string;
 }) {
   if (evidenceRefs.length === 0) {
     return 'No evidence refs';
@@ -987,7 +1018,8 @@ function renderSharedMemoryEvidenceRefs({
       {index > 0 ? ', ' : null}
       {renderSharedMemoryArtifactJump({
         artifactRef: evidenceRef,
-        label: evidenceRef,
+        label: formatLabel(evidenceRef),
+        ariaLabelRef: formatAriaLabel(evidenceRef),
         sharedMemoryArtifactRefs,
         onJump,
         jumpAriaLabelPrefix,
@@ -1064,6 +1096,7 @@ function resolveSharedMemoryEvidenceJumpBehavior(
 function renderSharedMemoryArtifactJump({
   artifactRef,
   label,
+  ariaLabelRef,
   sharedMemoryArtifactRefs,
   onJump,
   jumpAriaLabelPrefix = 'Jump to shared memory artifact',
@@ -1072,6 +1105,7 @@ function renderSharedMemoryArtifactJump({
 }: {
   artifactRef: string;
   label: string;
+  ariaLabelRef?: string;
   sharedMemoryArtifactRefs: ReadonlySet<string>;
   onJump: (artifactRef: string) => void;
   jumpAriaLabelPrefix?: string;
@@ -1083,8 +1117,8 @@ function renderSharedMemoryArtifactJump({
   }
 
   const ariaLabel = ariaLabelSuffix
-    ? `${jumpAriaLabelPrefix} ${artifactRef} ${ariaLabelSuffix}`
-    : `${jumpAriaLabelPrefix} ${artifactRef}`;
+    ? `${jumpAriaLabelPrefix} ${ariaLabelRef ?? artifactRef} ${ariaLabelSuffix}`
+    : `${jumpAriaLabelPrefix} ${ariaLabelRef ?? artifactRef}`;
 
   return (
     <button
@@ -1110,8 +1144,12 @@ function renderNamedList(values: string[], emptyLabel: string) {
   return values.length > 0 ? values.join(', ') : emptyLabel;
 }
 
-function renderCompactFacetList(values: readonly string[], emptyLabel: string) {
-  const visibleValues = values.slice(0, STRUCTURED_EVIDENCE_FACET_TOKEN_LIMIT);
+function renderCompactFacetList(
+  values: readonly string[],
+  emptyLabel: string,
+  formatValue: (value: string) => string = (value) => value
+) {
+  const visibleValues = values.slice(0, STRUCTURED_EVIDENCE_FACET_TOKEN_LIMIT).map(formatValue);
 
   if (visibleValues.length === 0) {
     return emptyLabel;
@@ -2546,7 +2584,8 @@ function renderCorrelationInteraction({
   sharedMemoryArtifactRefs,
   enableSharedMemoryEvidenceJump = false,
   onFocusSharedMemoryArtifact,
-  participantAriaLabelPrefix = 'Select correlation interaction participant agent'
+  participantAriaLabelPrefix = 'Select correlation interaction participant agent',
+  publicEvidenceLabels = false
 }: {
   interaction: WorkflowInteraction;
   activeCorrelationId?: string | null;
@@ -2558,10 +2597,17 @@ function renderCorrelationInteraction({
   enableSharedMemoryEvidenceJump?: boolean;
   onFocusSharedMemoryArtifact?: (artifactRef: string, scope?: SharedMemoryJumpScope) => void;
   participantAriaLabelPrefix?: string;
+  publicEvidenceLabels?: boolean;
 }) {
   const canRenderParticipantPivots = Boolean(navigableAgentIds && onSelectAgent);
   const interactionCorrelationId = findFirstNonEmptyString([interaction.correlation_id]);
   const { onJump, allowExactFallback } = resolveSharedMemoryEvidenceJumpBehavior(onFocusSharedMemoryArtifact);
+  const evidenceLabelFormatters = publicEvidenceLabels
+    ? {
+        formatLabel: formatPublicEvidenceRefLabel,
+        formatAriaLabel: formatPublicEvidenceRefAriaLabel
+      }
+    : {};
   const stateTransition =
     interaction.before_state && interaction.after_state
       ? `${interaction.before_state} -> ${interaction.after_state}`
@@ -2616,7 +2662,8 @@ function renderCorrelationInteraction({
             evidenceRefs: interaction.evidence_refs,
             sharedMemoryArtifactRefs,
             onJump,
-            allowExactFallback
+            allowExactFallback,
+            ...evidenceLabelFormatters
           })}
         </span>
       ) : (
@@ -2641,6 +2688,7 @@ function renderCorrelationTimelineEvent(
         subjectPivotAriaLabelPrefix?: string;
         actorPivotAriaLabelPrefix?: string;
         counterpartyPivotAriaLabelPrefix?: string;
+        publicEvidenceLabels?: boolean;
       }
 ) {
   const event = 'event' in input ? input.event : input;
@@ -2668,6 +2716,13 @@ function renderCorrelationTimelineEvent(
     navigableAgentIds && onSelectAgent && event.actor_id !== currentAgentId && navigableAgentIds.has(event.actor_id)
   );
   const { onJump, allowExactFallback } = resolveSharedMemoryEvidenceJumpBehavior(onFocusSharedMemoryArtifact);
+  const publicEvidenceLabels = 'event' in input ? (input.publicEvidenceLabels ?? false) : false;
+  const evidenceLabelFormatters = publicEvidenceLabels
+    ? {
+        formatLabel: formatPublicEvidenceRefLabel,
+        formatAriaLabel: formatPublicEvidenceRefAriaLabel
+      }
+    : {};
 
   return (
     <li key={event.event_id} className={`aitown-record severity-${event.severity}`}>
@@ -2720,7 +2775,8 @@ function renderCorrelationTimelineEvent(
             evidenceRefs: event.evidence_refs,
             sharedMemoryArtifactRefs,
             onJump,
-            allowExactFallback
+            allowExactFallback,
+            ...evidenceLabelFormatters
           })}
         </span>
       ) : (
@@ -3515,7 +3571,9 @@ function renderWorkflowStatusRecord({
           evidenceRefs,
           sharedMemoryArtifactRefs,
           onJump,
-          allowExactFallback
+          allowExactFallback,
+          formatLabel: formatPublicEvidenceRefLabel,
+          formatAriaLabel: formatPublicEvidenceRefAriaLabel
         })}
       </span>
       <span>
@@ -3614,7 +3672,9 @@ function renderWorkflowPeerWatchAlert({
           evidenceRefs: alert.evidence_refs,
           sharedMemoryArtifactRefs,
           onJump,
-          allowExactFallback
+          allowExactFallback,
+          formatLabel: formatPublicEvidenceRefLabel,
+          formatAriaLabel: formatPublicEvidenceRefAriaLabel
         })}
       </span>
       <span>{`Evidence count · ${alert.evidence_count}`}</span>
@@ -3713,7 +3773,9 @@ function renderSelectedAgentSupervisionAlert({
             evidenceRefs: alert.evidence_refs,
             sharedMemoryArtifactRefs,
             onJump,
-            allowExactFallback
+            allowExactFallback,
+            formatLabel: formatPublicEvidenceRefLabel,
+            formatAriaLabel: formatPublicEvidenceRefAriaLabel
           })}
         </span>
         <span className="aitown-evidence-card__fact">{`Evidence count · ${alert.evidence_count}`}</span>
@@ -6573,7 +6635,7 @@ export function DetailsPanel({
                 ].join(' · ')}`}
               </span>
               <span>{`Structured rows · ${renderStructuredEvidenceFacetCount(selectedAgentDetailEvidenceFacets.rows.length, 'loaded detail row')}`}</span>
-              <span>{`Evidence refs · ${renderCompactFacetList(selectedAgentDetailEvidenceFacets.evidence_refs, 'No evidence refs')}`}</span>
+              <span>{`Evidence refs · ${renderCompactFacetList(selectedAgentDetailEvidenceFacets.evidence_refs, 'No evidence refs', formatPublicEvidenceRefLabel)}`}</span>
               <span>{`Source kinds · ${renderCompactFacetList(selectedAgentDetailEvidenceFacets.source_kinds, 'No source kinds')}`}</span>
               <span>{`Correlations · ${renderCompactFacetList(selectedAgentDetailEvidenceFacets.correlation_ids, 'No correlations')}`}</span>
               <span>{`Events · ${renderCompactFacetList(selectedAgentDetailEvidenceFacets.event_ids, 'No event ids')}`}</span>
@@ -6647,7 +6709,8 @@ export function DetailsPanel({
               participantAriaLabelPrefix: `Select workflow interaction participant from interaction ${interaction.interaction_id}`,
               sharedMemoryArtifactRefs,
               enableSharedMemoryEvidenceJump: true,
-              onFocusSharedMemoryArtifact
+              onFocusSharedMemoryArtifact,
+              publicEvidenceLabels: true
             })
           )}
           {(workflow?.detail.recent_events ?? []).slice(0, 2).map((event) =>
@@ -6662,7 +6725,8 @@ export function DetailsPanel({
               counterpartyPivotAriaLabelPrefix: `Select workflow recent event counterparty from event ${event.event_id}`,
               sharedMemoryArtifactRefs,
               enableSharedMemoryEvidenceJump: true,
-              onFocusSharedMemoryArtifact
+              onFocusSharedMemoryArtifact,
+              publicEvidenceLabels: true
             })
           )}
           {(workflow?.detail.recent_handoffs ?? []).slice(0, 2).map((handoff) =>

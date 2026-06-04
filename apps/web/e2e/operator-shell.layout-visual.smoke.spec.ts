@@ -1436,7 +1436,7 @@ test.describe('operator shell layout visual smoke', () => {
     await expect(evidenceWorkflowSection.getByRole('heading', { name: 'Workflow' })).toBeVisible();
     await expect(
       evidenceWorkflowSection
-        .getByRole('button', { name: 'Jump to shared memory artifact /tmp/revenue-handoff.md' })
+        .getByRole('button', { name: 'Jump to shared memory artifact local evidence' })
         .first()
     ).toBeVisible();
 

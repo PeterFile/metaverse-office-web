@@ -1878,7 +1878,7 @@ describe('DetailsPanel selected-agent workflow lifecycle', () => {
       )
     ).toBeVisible();
     expect(
-      within(facetsRecord!).getByText('Evidence refs · /evidence/incident.md, /evidence/log.md, /evidence/review.md, +1 more')
+      within(facetsRecord!).getByText('Evidence refs · Local evidence, Local evidence, Local evidence, +1 more')
     ).toBeVisible();
     expect(within(facetsRecord!).getByText('Source kinds · incident_reader, peer_watch, workflow_event, +1 more')).toBeVisible();
     expect(within(facetsRecord!).getByText('Correlations · corr-app-review, corr-peer-watch')).toBeVisible();
@@ -12689,14 +12689,16 @@ describe('DetailsPanel workflow peer-watch alerts', () => {
         name: 'Select workflow interaction participant from interaction interaction-workflow-1 team-lead'
       })
     ).toBeVisible();
-    expect(
-      within(interactionRecord!).getByRole('button', {
-        name: 'Jump to shared memory artifact /evidence/workflow-interaction.md'
-      })
-    ).toHaveTextContent('/evidence/workflow-interaction.md');
-    expect(interactionRecord).toHaveTextContent(
-      'Evidence · /evidence/workflow-interaction.md, /evidence/missing.md'
-    );
+    const localEvidenceButtons = within(interactionRecord!).getAllByRole('button', {
+      name: 'Jump to shared memory artifact local evidence'
+    });
+    const firstLocalEvidenceButton = localEvidenceButtons[0];
+    expect(localEvidenceButtons).toHaveLength(1);
+    expect(firstLocalEvidenceButton).toBeDefined();
+    expect(firstLocalEvidenceButton!).toHaveTextContent('Local evidence');
+    expect(interactionRecord).toHaveTextContent('Evidence · Local evidence, Local evidence');
+    expect(interactionRecord).not.toHaveTextContent('/evidence/workflow-interaction.md');
+    expect(interactionRecord).not.toHaveTextContent('/evidence/missing.md');
     expect(
       within(interactionRecord!).queryByRole('button', {
         name: 'Jump to shared memory artifact /evidence/missing.md'
@@ -12704,14 +12706,107 @@ describe('DetailsPanel workflow peer-watch alerts', () => {
     ).not.toBeInTheDocument();
 
     await user.click(
-      within(interactionRecord!).getByRole('button', {
-        name: 'Jump to shared memory artifact /evidence/workflow-interaction.md'
-      })
+      firstLocalEvidenceButton!
     );
 
     expect(document.activeElement).toBe(artifactRecord);
     expect(onSelectAgent).not.toHaveBeenCalled();
     expect(onSelectCorrelation).not.toHaveBeenCalled();
+  });
+
+  it('redacts selected-agent workflow evidence refs from visible labels and aria labels', async () => {
+    const user = userEvent.setup();
+    const onFocusSharedMemoryArtifact = vi.fn();
+    const interactionRefs = ['/tmp/app/secrets.md', 'file:///tmp/app/profile-token.txt', 'tmux://5-web3-app-engineering/0.1'];
+    const eventRefs = [
+      'https://redaction.example/webhook-token=abc',
+      'http://redaction.example/control-plane',
+      'hermes://runner/session-token',
+      'session://selected-agent/session-token',
+      'profile://local/operator',
+      'token=plain-canary',
+      'webhook-secret-canary',
+      'control-plane-canary'
+    ];
+    const workflow: AgentWorkflow = {
+      ...buildWorkflow(),
+      detail: {
+        ...buildWorkflow().detail,
+        recent_interactions: [
+          {
+            interaction_id: 'interaction-redaction-1',
+            interaction_type: 'peer_watch',
+            correlation_id: 'corr-app-review',
+            started_at: '2026-03-16T08:49:00.000Z',
+            participant_agent_ids: ['app-engineering', 'team-lead'],
+            trigger_event_id: 'evt-redaction-1',
+            severity: 'orange',
+            evidence_refs: interactionRefs,
+            summary: 'Lead reviewed selected-agent workflow redaction evidence'
+          }
+        ],
+        recent_events: [
+          {
+            ...buildWorkflow().detail.recent_events[0],
+            event_id: 'evt-redaction-1',
+            evidence_refs: eventRefs,
+            summary: 'Agent attached selected-agent workflow event refs requiring redaction'
+          }
+        ]
+      }
+    };
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          workflow,
+          memoryArtifacts: { generated_at: '2026-03-16T09:00:00.000Z', items: [] },
+          onFocusSharedMemoryArtifact
+        })}
+      />
+    );
+
+    const workflowSection = screen.getByRole('heading', { name: 'Workflow' }).closest('section');
+    expect(workflowSection).not.toBeNull();
+    const interactionRecord = within(workflowSection!)
+      .getByText('Lead reviewed selected-agent workflow redaction evidence')
+      .closest('li');
+    const eventRecord = within(workflowSection!)
+      .getByText('Agent attached selected-agent workflow event refs requiring redaction')
+      .closest('li');
+    expect(interactionRecord).not.toBeNull();
+    expect(eventRecord).not.toBeNull();
+
+    expect(interactionRecord!).toHaveTextContent('Evidence · Local evidence, Local evidence, Runtime evidence');
+    expect(eventRecord!).toHaveTextContent(
+      'Evidence · External evidence, External evidence, Runtime evidence, Runtime evidence, Runtime evidence, Linked evidence, Linked evidence, Linked evidence'
+    );
+    const visibleText = workflowSection!.textContent ?? '';
+    const ariaLabels = Array.from(workflowSection!.querySelectorAll('[aria-label]'))
+      .map((element) => element.getAttribute('aria-label') ?? '')
+      .join('\n');
+    for (const rawRef of [...interactionRefs, ...eventRefs]) {
+      expect(visibleText).not.toContain(rawRef);
+      expect(ariaLabels).not.toContain(rawRef);
+    }
+    const redactedLocalEvidenceButtons = within(interactionRecord!).getAllByRole('button', {
+      name: 'Jump to shared memory artifact local evidence'
+    });
+    const firstRedactedLocalEvidenceButton = redactedLocalEvidenceButtons[0];
+    expect(redactedLocalEvidenceButtons).toHaveLength(2);
+    expect(firstRedactedLocalEvidenceButton).toBeDefined();
+    expect(firstRedactedLocalEvidenceButton!).toHaveTextContent('Local evidence');
+    expect(
+      within(interactionRecord!).getByRole('button', {
+        name: 'Jump to shared memory artifact runtime evidence'
+      })
+    ).toHaveTextContent('Runtime evidence');
+
+    await user.click(
+      firstRedactedLocalEvidenceButton!
+    );
+
+    expect(onFocusSharedMemoryArtifact).toHaveBeenCalledWith('/tmp/app/secrets.md');
   });
 
   it('jumps from matching selected-agent workflow recent-event evidence refs to shared memory while leaving non-matching refs as plain text', async () => {
@@ -12774,10 +12869,12 @@ describe('DetailsPanel workflow peer-watch alerts', () => {
     ).toBeVisible();
     expect(
       within(eventRecord!).getByRole('button', {
-        name: 'Jump to shared memory artifact /evidence/workflow-event.md'
+        name: 'Jump to shared memory artifact local evidence'
       })
-    ).toHaveTextContent('/evidence/workflow-event.md');
-    expect(eventRecord).toHaveTextContent('Evidence · /evidence/workflow-event.md, /evidence/missing.md');
+    ).toHaveTextContent('Local evidence');
+    expect(eventRecord).toHaveTextContent('Evidence · Local evidence, Local evidence');
+    expect(eventRecord).not.toHaveTextContent('/evidence/workflow-event.md');
+    expect(eventRecord).not.toHaveTextContent('/evidence/missing.md');
     expect(
       within(eventRecord!).queryByRole('button', {
         name: 'Jump to shared memory artifact /evidence/missing.md'
@@ -12786,7 +12883,7 @@ describe('DetailsPanel workflow peer-watch alerts', () => {
 
     await user.click(
       within(eventRecord!).getByRole('button', {
-        name: 'Jump to shared memory artifact /evidence/workflow-event.md'
+        name: 'Jump to shared memory artifact local evidence'
       })
     );
 
@@ -12910,12 +13007,14 @@ describe('DetailsPanel workflow peer-watch alerts', () => {
         name: 'Select workflow status counterparty from handoff handoff-1 ghost-agent'
       })
     ).not.toBeInTheDocument();
-    expect(handoffRecord).toHaveTextContent('Evidence · /evidence/secondary-handoff.md, /evidence/missing-handoff.md');
+    expect(handoffRecord).toHaveTextContent('Evidence · Local evidence, Local evidence');
+    expect(handoffRecord).not.toHaveTextContent('/evidence/secondary-handoff.md');
+    expect(handoffRecord).not.toHaveTextContent('/evidence/missing-handoff.md');
     expect(
       within(handoffRecord!).getByRole('button', {
-        name: 'Jump to shared memory artifact /evidence/secondary-handoff.md'
+        name: 'Jump to shared memory artifact local evidence'
       })
-    ).toHaveTextContent('/evidence/secondary-handoff.md');
+    ).toHaveTextContent('Local evidence');
     expect(
       within(handoffRecord!).queryByRole('button', {
         name: 'Jump to shared memory artifact /evidence/missing-handoff.md'
@@ -12948,12 +13047,14 @@ describe('DetailsPanel workflow peer-watch alerts', () => {
         name: 'Select workflow status counterparty from reboot reboot-1 ghost-agent'
       })
     ).not.toBeInTheDocument();
-    expect(rebootRecord).toHaveTextContent('Evidence · /evidence/reboot-note.md, /evidence/missing-reboot.md');
+    expect(rebootRecord).toHaveTextContent('Evidence · Local evidence, Local evidence');
+    expect(rebootRecord).not.toHaveTextContent('/evidence/reboot-note.md');
+    expect(rebootRecord).not.toHaveTextContent('/evidence/missing-reboot.md');
     expect(
       within(rebootRecord!).getByRole('button', {
-        name: 'Jump to shared memory artifact /evidence/reboot-note.md'
+        name: 'Jump to shared memory artifact local evidence'
       })
-    ).toHaveTextContent('/evidence/reboot-note.md');
+    ).toHaveTextContent('Local evidence');
     expect(
       within(rebootRecord!).queryByRole('button', {
         name: 'Jump to shared memory artifact /evidence/missing-reboot.md'
@@ -12967,14 +13068,14 @@ describe('DetailsPanel workflow peer-watch alerts', () => {
 
     await user.click(
       within(handoffRecord!).getByRole('button', {
-        name: 'Jump to shared memory artifact /evidence/secondary-handoff.md'
+        name: 'Jump to shared memory artifact local evidence'
       })
     );
     expect(document.activeElement).toBe(handoffArtifactRecord);
 
     await user.click(
       within(rebootRecord!).getByRole('button', {
-        name: 'Jump to shared memory artifact /evidence/reboot-note.md'
+        name: 'Jump to shared memory artifact local evidence'
       })
     );
     expect(document.activeElement).toBe(rebootArtifactRecord);
@@ -13276,12 +13377,19 @@ describe('DetailsPanel workflow peer-watch alerts', () => {
     expect(within(alertRecord!).getByText('Status · open')).toBeVisible();
     expect(within(alertRecord!).getByText('Workflow status · blocked')).toBeVisible();
     expect(within(alertRecord!).getByText('Task · Fix workflow issue')).toBeVisible();
+    const localEvidenceButtons = within(alertRecord!).getAllByRole('button', {
+      name: 'Jump to shared memory artifact local evidence'
+    });
+    expect(localEvidenceButtons).toHaveLength(1);
+    expect(localEvidenceButtons[0]).toHaveTextContent('Local evidence');
+    expect(alertRecord).toHaveTextContent('Evidence · Local evidence, Local evidence');
+    expect(alertRecord).not.toHaveTextContent('/evidence/review.md');
+    expect(alertRecord).not.toHaveTextContent('/evidence/missing.md');
     expect(
-      within(alertRecord!).getByRole('button', {
+      within(alertRecord!).queryByRole('button', {
         name: 'Jump to shared memory artifact /evidence/review.md'
       })
-    ).toHaveTextContent('/evidence/review.md');
-    expect(alertRecord).toHaveTextContent('Evidence · /evidence/review.md, /evidence/missing.md');
+    ).not.toBeInTheDocument();
     expect(
       within(alertRecord!).queryByRole('button', {
         name: 'Jump to shared memory artifact /evidence/missing.md'
@@ -13291,9 +13399,7 @@ describe('DetailsPanel workflow peer-watch alerts', () => {
     expect(within(alertRecord!).getByText('Source · controller_event')).toBeVisible();
 
     await user.click(
-      within(alertRecord!).getByRole('button', {
-        name: 'Jump to shared memory artifact /evidence/review.md'
-      })
+      localEvidenceButtons[0]
     );
 
     expect(document.activeElement).toBe(artifactRecord);
@@ -13397,12 +13503,19 @@ describe('DetailsPanel workflow peer-watch alerts', () => {
         name: 'Select supervision history watcher from alert alert-history-1 team-lead'
       })
     ).toBeVisible();
+    const localEvidenceButtons = within(alertRecord!).getAllByRole('button', {
+      name: 'Jump to shared memory artifact local evidence'
+    });
+    expect(localEvidenceButtons).toHaveLength(1);
+    expect(localEvidenceButtons[0]).toHaveTextContent('Local evidence');
+    expect(alertRecord).toHaveTextContent('Evidence · Local evidence, Local evidence');
+    expect(alertRecord).not.toHaveTextContent('/evidence/review.md');
+    expect(alertRecord).not.toHaveTextContent('/evidence/missing.md');
     expect(
-      within(alertRecord!).getByRole('button', {
+      within(alertRecord!).queryByRole('button', {
         name: 'Jump to shared memory artifact /evidence/review.md'
       })
-    ).toHaveTextContent('/evidence/review.md');
-    expect(alertRecord).toHaveTextContent('Evidence · /evidence/review.md, /evidence/missing.md');
+    ).not.toBeInTheDocument();
     expect(
       within(alertRecord!).queryByRole('button', {
         name: 'Jump to shared memory artifact /evidence/missing.md'
@@ -13412,9 +13525,7 @@ describe('DetailsPanel workflow peer-watch alerts', () => {
     expect(within(alertRecord!).getByText('Source · controller_event')).toBeVisible();
 
     await user.click(
-      within(alertRecord!).getByRole('button', {
-        name: 'Jump to shared memory artifact /evidence/review.md'
-      })
+      localEvidenceButtons[0]
     );
 
     expect(document.activeElement).toBe(artifactRecord);

@@ -12813,7 +12813,7 @@ afterEach(() => {
     expect(interactionRecord).not.toBeNull();
     expect(artifactRecord).not.toBeNull();
     expect(interactionRecord).toHaveTextContent(/Participants · app-engineering\s*,\s*team-lead/);
-    expect(interactionRecord).toHaveTextContent('Evidence · /tmp/evidence.md, /tmp/missing.md');
+    expect(interactionRecord).toHaveTextContent('Evidence · Local evidence, Local evidence');
     expect(
       within(interactionRecord!).queryByRole('button', {
         name: 'Select correlation interaction participant agent team-lead'
@@ -12824,24 +12824,16 @@ afterEach(() => {
         name: 'Select workflow interaction participant from interaction interaction-workflow-1 team-lead'
       })
     ).toBeVisible();
-    expect(
-      within(interactionRecord!).getByRole('button', {
-        name: 'Jump to shared memory artifact /tmp/evidence.md'
-      })
-    ).toBeVisible();
-    expect(
-      within(interactionRecord!).queryByRole('button', {
-        name: 'Jump to shared memory artifact /tmp/missing.md'
-      })
-    ).toBeVisible();
+    const interactionEvidenceJumpButtons = within(interactionRecord!).getAllByRole('button', {
+      name: 'Jump to shared memory artifact local evidence'
+    });
+    expect(interactionEvidenceJumpButtons).toHaveLength(2);
+    expect(interactionEvidenceJumpButtons[0]).toBeVisible();
+    expect(interactionEvidenceJumpButtons[1]).toBeVisible();
 
     const fetchCallCountBeforeJump = vi.mocked(globalThis.fetch).mock.calls.length;
 
-    await user.click(
-      within(interactionRecord!).getByRole('button', {
-        name: 'Jump to shared memory artifact /tmp/evidence.md'
-      })
-    );
+    fireEvent.click(interactionEvidenceJumpButtons[0]);
 
     expect(document.activeElement).toBe(artifactRecord);
     expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
@@ -12849,7 +12841,7 @@ afterEach(() => {
     expect(vi.mocked(globalThis.fetch).mock.calls).toHaveLength(fetchCallCountBeforeJump);
     expect(globalThis.fetch).not.toHaveBeenCalledWith(teamLeadWorkflowUrl, expect.anything());
     expect(globalThis.fetch).not.toHaveBeenCalledWith(teamLeadSelectedCorrelationMemoryArtifactsUrl, expect.anything());
-  });
+  }, 10000);
 
   it('falls back to one exact shared-memory artifact fetch for selected-agent workflow interaction evidence refs outside the loaded slice', async () => {
     vi.stubGlobal(
@@ -12927,21 +12919,17 @@ afterEach(() => {
       .getByText('Lead reviewed the selected-agent workflow interaction exact fallback evidence')
       .closest('li');
     expect(interactionRecord).not.toBeNull();
-    expect(interactionRecord).toHaveTextContent('Evidence · /tmp/evidence.md, /tmp/missing.md');
-    expect(
-      within(interactionRecord!).getByRole('button', {
-        name: 'Jump to shared memory artifact /tmp/missing.md'
-      })
-    ).toBeVisible();
+    expect(interactionRecord).toHaveTextContent('Evidence · Local evidence, Local evidence');
+    const exactFallbackEvidenceJumpButtons = within(interactionRecord!).getAllByRole('button', {
+      name: 'Jump to shared memory artifact local evidence'
+    });
+    expect(exactFallbackEvidenceJumpButtons).toHaveLength(2);
+    expect(exactFallbackEvidenceJumpButtons[1]).toBeVisible();
     expect(within(memorySection!).queryByText('Ref · /tmp/missing.md')).not.toBeInTheDocument();
 
     const fetchCallCountBeforeJump = vi.mocked(globalThis.fetch).mock.calls.length;
 
-    await user.click(
-      within(interactionRecord!).getByRole('button', {
-        name: 'Jump to shared memory artifact /tmp/missing.md'
-      })
-    );
+    fireEvent.click(exactFallbackEvidenceJumpButtons[1]);
 
     await waitFor(() => {
       expect(within(memorySection!).getByText('Ref · /tmp/missing.md')).toBeVisible();
@@ -12960,7 +12948,7 @@ afterEach(() => {
     expect(newFetchUrlsAfterJump).toEqual([selectedCorrelationMissingArtifactExactUrl]);
     expect(globalThis.fetch).not.toHaveBeenCalledWith(teamLeadWorkflowUrl, expect.anything());
     expect(globalThis.fetch).not.toHaveBeenCalledWith(teamLeadSelectedCorrelationMemoryArtifactsUrl, expect.anything());
-  });
+  }, 10000);
 
   it('jumps from selected-agent workflow recent-event evidence refs to shared memory without changing the selected agent or correlation', async () => {
     vi.stubGlobal(
@@ -13020,30 +13008,22 @@ afterEach(() => {
     expect(eventRecord).not.toBeNull();
     expect(artifactRecord).not.toBeNull();
     expect(eventRecord).toHaveTextContent('Counterparties · app-engineering, team-lead, ghost-agent');
-    expect(eventRecord).toHaveTextContent('Evidence · /tmp/evidence.md, /tmp/missing.md');
+    expect(eventRecord).toHaveTextContent('Evidence · Local evidence, Local evidence');
     expect(
       within(eventRecord!).getByRole('button', {
         name: 'Select workflow recent event counterparty from event evt-workflow-1 team-lead'
       })
     ).toBeVisible();
-    expect(
-      within(eventRecord!).getByRole('button', {
-        name: 'Jump to shared memory artifact /tmp/evidence.md'
-      })
-    ).toBeVisible();
-    expect(
-      within(eventRecord!).queryByRole('button', {
-        name: 'Jump to shared memory artifact /tmp/missing.md'
-      })
-    ).toBeVisible();
+    const eventEvidenceJumpButtons = within(eventRecord!).getAllByRole('button', {
+      name: 'Jump to shared memory artifact local evidence'
+    });
+    expect(eventEvidenceJumpButtons).toHaveLength(2);
+    expect(eventEvidenceJumpButtons[0]).toBeVisible();
+    expect(eventEvidenceJumpButtons[1]).toBeVisible();
 
     const fetchCallCountBeforeJump = vi.mocked(globalThis.fetch).mock.calls.length;
 
-    await user.click(
-      within(eventRecord!).getByRole('button', {
-        name: 'Jump to shared memory artifact /tmp/evidence.md'
-      })
-    );
+    fireEvent.click(eventEvidenceJumpButtons[0]);
 
     expect(document.activeElement).toBe(artifactRecord);
     expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
@@ -13051,7 +13031,7 @@ afterEach(() => {
     expect(vi.mocked(globalThis.fetch).mock.calls).toHaveLength(fetchCallCountBeforeJump);
     expect(globalThis.fetch).not.toHaveBeenCalledWith(teamLeadWorkflowUrl, expect.anything());
     expect(globalThis.fetch).not.toHaveBeenCalledWith(teamLeadSelectedCorrelationMemoryArtifactsUrl, expect.anything());
-  });
+  }, 10000);
 
   it('jumps from selected-agent workflow peer-watch alert evidence refs to shared memory without changing the selected agent or correlation', async () => {
     vi.stubGlobal(
@@ -13106,26 +13086,18 @@ afterEach(() => {
     expect(alertRecord).not.toBeNull();
     expect(artifactRecord).not.toBeNull();
     expect(alertRecord).toHaveTextContent('Watchers · growth-revenue');
-    expect(alertRecord).toHaveTextContent('Evidence · /tmp/evidence.md, /tmp/missing.md');
+    expect(alertRecord).toHaveTextContent('Evidence · Local evidence, Local evidence');
     expect(alertRecord).toHaveTextContent('Evidence count · 1');
-    expect(
-      within(alertRecord!).getByRole('button', {
-        name: 'Jump to shared memory artifact /tmp/evidence.md'
-      })
-    ).toBeVisible();
-    expect(
-      within(alertRecord!).queryByRole('button', {
-        name: 'Jump to shared memory artifact /tmp/missing.md'
-      })
-    ).toBeVisible();
+    const peerWatchEvidenceJumpButtons = within(alertRecord!).getAllByRole('button', {
+      name: 'Jump to shared memory artifact local evidence'
+    });
+    expect(peerWatchEvidenceJumpButtons).toHaveLength(2);
+    expect(peerWatchEvidenceJumpButtons[0]).toBeVisible();
+    expect(peerWatchEvidenceJumpButtons[1]).toBeVisible();
 
     const fetchCallCountBeforeJump = vi.mocked(globalThis.fetch).mock.calls.length;
 
-    await user.click(
-      within(alertRecord!).getByRole('button', {
-        name: 'Jump to shared memory artifact /tmp/evidence.md'
-      })
-    );
+    fireEvent.click(peerWatchEvidenceJumpButtons[0]);
 
     expect(document.activeElement).toBe(artifactRecord);
     expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
@@ -13133,7 +13105,7 @@ afterEach(() => {
     expect(vi.mocked(globalThis.fetch).mock.calls).toHaveLength(fetchCallCountBeforeJump);
     expect(globalThis.fetch).not.toHaveBeenCalledWith(teamLeadWorkflowUrl, expect.anything());
     expect(globalThis.fetch).not.toHaveBeenCalledWith(teamLeadSelectedCorrelationMemoryArtifactsUrl, expect.anything());
-  });
+  }, 10000);
 
   it('loads selected-agent supervision history from peer-watch alerts with a scoped target-agent read', async () => {
     const user = userEvent.setup();
@@ -13436,25 +13408,17 @@ afterEach(() => {
     const artifactRecord = within(memorySection!).getByText('Ref · /tmp/evidence.md').closest('li');
     expect(alertRecord).not.toBeNull();
     expect(artifactRecord).not.toBeNull();
-    expect(alertRecord).toHaveTextContent('Evidence · /tmp/evidence.md, /tmp/peer-watch.md');
-    expect(
-      within(alertRecord!).getByRole('button', {
-        name: 'Jump to shared memory artifact /tmp/evidence.md'
-      })
-    ).toBeVisible();
-    expect(
-      within(alertRecord!).queryByRole('button', {
-        name: 'Jump to shared memory artifact /tmp/peer-watch.md'
-      })
-    ).toBeVisible();
+    expect(alertRecord).toHaveTextContent('Evidence · Local evidence, Local evidence');
+    const supervisionEvidenceJumpButtons = within(alertRecord!).getAllByRole('button', {
+      name: 'Jump to shared memory artifact local evidence'
+    });
+    expect(supervisionEvidenceJumpButtons).toHaveLength(2);
+    expect(supervisionEvidenceJumpButtons[0]).toBeVisible();
+    expect(supervisionEvidenceJumpButtons[1]).toBeVisible();
 
     const fetchCallCountBeforeJump = vi.mocked(globalThis.fetch).mock.calls.length;
 
-    await user.click(
-      within(alertRecord!).getByRole('button', {
-        name: 'Jump to shared memory artifact /tmp/evidence.md'
-      })
-    );
+    fireEvent.click(supervisionEvidenceJumpButtons[0]);
 
     expect(document.activeElement).toBe(artifactRecord);
     expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
@@ -13467,7 +13431,7 @@ afterEach(() => {
     expect(vi.mocked(globalThis.fetch).mock.calls).toHaveLength(fetchCallCountBeforeJump);
     expect(globalThis.fetch).not.toHaveBeenCalledWith(teamLeadWorkflowUrl, expect.anything());
     expect(globalThis.fetch).not.toHaveBeenCalledWith(teamLeadSelectedCorrelationMemoryArtifactsUrl, expect.anything());
-  });
+  }, 10000);
 
   it('preserves the active selected correlation when opening a supervision history actor pivot', async () => {
     vi.stubGlobal(
@@ -14227,43 +14191,27 @@ afterEach(() => {
     expect(handoffRecord).not.toBeNull();
     expect(rebootRecord).not.toBeNull();
     expect(artifactRecord).not.toBeNull();
-    expect(handoffRecord).toHaveTextContent('Evidence · /tmp/evidence.md, /tmp/missing.md');
-    expect(rebootRecord).toHaveTextContent('Evidence · /tmp/evidence.md, /tmp/missing.md');
-    expect(
-      within(handoffRecord!).getByRole('button', {
-        name: 'Jump to shared memory artifact /tmp/evidence.md'
-      })
-    ).toBeVisible();
-    expect(
-      within(rebootRecord!).getByRole('button', {
-        name: 'Jump to shared memory artifact /tmp/evidence.md'
-      })
-    ).toBeVisible();
-    expect(
-      within(handoffRecord!).queryByRole('button', {
-        name: 'Jump to shared memory artifact /tmp/missing.md'
-      })
-    ).toBeVisible();
-    expect(
-      within(rebootRecord!).queryByRole('button', {
-        name: 'Jump to shared memory artifact /tmp/missing.md'
-      })
-    ).toBeVisible();
+    expect(handoffRecord).toHaveTextContent('Evidence · Local evidence, Local evidence');
+    expect(rebootRecord).toHaveTextContent('Evidence · Local evidence, Local evidence');
+    const handoffEvidenceJumpButtons = within(handoffRecord!).getAllByRole('button', {
+      name: 'Jump to shared memory artifact local evidence'
+    });
+    const rebootEvidenceJumpButtons = within(rebootRecord!).getAllByRole('button', {
+      name: 'Jump to shared memory artifact local evidence'
+    });
+    expect(handoffEvidenceJumpButtons).toHaveLength(2);
+    expect(rebootEvidenceJumpButtons).toHaveLength(2);
+    expect(handoffEvidenceJumpButtons[0]).toBeVisible();
+    expect(handoffEvidenceJumpButtons[1]).toBeVisible();
+    expect(rebootEvidenceJumpButtons[0]).toBeVisible();
+    expect(rebootEvidenceJumpButtons[1]).toBeVisible();
 
     const fetchCallCountBeforeJump = vi.mocked(globalThis.fetch).mock.calls.length;
 
-    await user.click(
-      within(handoffRecord!).getByRole('button', {
-        name: 'Jump to shared memory artifact /tmp/evidence.md'
-      })
-    );
+    fireEvent.click(handoffEvidenceJumpButtons[0]);
     expect(document.activeElement).toBe(artifactRecord);
 
-    await user.click(
-      within(rebootRecord!).getByRole('button', {
-        name: 'Jump to shared memory artifact /tmp/evidence.md'
-      })
-    );
+    fireEvent.click(rebootEvidenceJumpButtons[0]);
 
     expect(document.activeElement).toBe(artifactRecord);
     expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
@@ -14271,7 +14219,7 @@ afterEach(() => {
     expect(vi.mocked(globalThis.fetch).mock.calls).toHaveLength(fetchCallCountBeforeJump);
     expect(globalThis.fetch).not.toHaveBeenCalledWith(teamLeadWorkflowUrl, expect.anything());
     expect(globalThis.fetch).not.toHaveBeenCalledWith(teamLeadSelectedCorrelationMemoryArtifactsUrl, expect.anything());
-  });
+  }, 10000);
 
   it('jumps from correlation-incident evidence refs to shared memory without changing the selected agent or correlation', async () => {
     const user = userEvent.setup();

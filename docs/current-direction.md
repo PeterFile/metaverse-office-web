@@ -1,6 +1,6 @@
 # Current Direction: Live Evidence Spine
 
-Updated: 2026-05-31T01:13:16+08:00
+Updated: 2026-06-04T13:15:54+08:00
 
 ## Product vision
 
@@ -32,6 +32,7 @@ This project is not a flashy dashboard, not a manual task-dispatch UI, and not a
 - Collector snapshots expose source health for workspace roots, watched workspace files, expected tmux sessions, and injected Hermes profile/session runtime facts; missing/degraded sources are explicit evidence state, and inbound `inbox.md`/workspace-root/Hermes presence does not imply agent output.
 - The frontend is React + TypeScript + Vite under `apps/web`, with PixiJS AI Town rendering, world projection, roster, category Hub, a compact Hub-closed selected-agent inspect popover with explicit Now/Evidence/Replay drilldown actions, selected-agent drilldowns, supervision/evidence/replay/memory surfaces, collector source-health/evidence-coverage surfacing, a bounded runtime source-gap HUD queue, safe source-gap context breadcrumbs for HUD/pin/inspect drilldowns, selected-agent evidence ledger helper models, a compact evidence Proof Compass/basis summary, selected-agent proof glance from the global evidence-spine summary, selected-agent source-matrix peek from the global evidence-spine source matrix, selected-agent runtime facts evidence card from safe source-health read models, selected-agent replay proof ladder, evidence-id scoped replay first-fold context with a safe Back to Evidence path, selected-agent evidence record detail inspection, explicit source-context disclosure from an inspected evidence record, and browser smoke coverage.
 - The UI consumes read models. It must not infer productivity, liveness, severity, or provenance that is absent from the API.
+- Selected-agent workflow and supervision surfaces may keep raw artifact refs only as internal jump targets; visible labels and ARIA names must use bounded public evidence classes such as `Local evidence`, `External evidence`, `Runtime evidence`, or `Linked evidence` instead of leaking local paths, URLs, tmux/Hermes/session/profile refs, tokens, webhooks, or control-plane strings.
 
 ## Next milestone
 

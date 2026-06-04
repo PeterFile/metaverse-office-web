@@ -557,7 +557,8 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
       item: store.getRuntimeSourceGapLifecycle({
         evidence_id: url.searchParams.get('evidence_id'),
         agent_id: url.searchParams.get('agent_id'),
-        ...getSourceEvidenceQuery(url.searchParams)
+        ...getSourceEvidenceQuery(url.searchParams),
+        lifecycle_state: url.searchParams.get('lifecycle_state')
       })
     });
     return;

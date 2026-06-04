@@ -4,7 +4,9 @@ import type {
   CollectorSourceHealthProjection,
   CollectorSourceHealthProjectionAgentItem,
   CollectorSourceHealthStatus,
-  RuntimeSourceGap
+  RuntimeSourceGap,
+  RuntimeSourceGapLifecycle,
+  RuntimeSourceGapLifecycleGroup
 } from '../types';
 
 export type { SourceHealthWorldBadge } from '../sourceHealthWorldBadges';
@@ -74,7 +76,7 @@ export type RuntimeSourceGapLifecycleOptions = {
 export type RuntimeSourceGapLifecycleStripRow = {
   key: string;
   sourceLabel: string;
-  statusLabel: CollectorSourceHealthStatus;
+  statusLabel: CollectorSourceHealthStatus | 'resolved';
   lifecycleLabel: string;
   countLabel: string;
   observedAtLabel: string;
@@ -88,7 +90,8 @@ export type RuntimeSourceGapLifecycleStrip = {
 };
 
 export type RuntimeSourceGapLifecycleStripOptions = {
-  runtimeSourceGaps: RuntimeSourceGap[] | null | undefined;
+  runtimeSourceGapLifecycle?: RuntimeSourceGapLifecycle | null | undefined;
+  runtimeSourceGaps?: RuntimeSourceGap[] | null | undefined;
   selectedAgentId: string | null | undefined;
   state: 'idle' | 'loading' | 'ready' | 'error';
   error: string | null | undefined;
@@ -389,6 +392,7 @@ export function deriveRuntimeSourceGapLifecycle(
 }
 
 export function deriveRuntimeSourceGapLifecycleStrip({
+  runtimeSourceGapLifecycle,
   runtimeSourceGaps,
   selectedAgentId,
   state,
@@ -398,7 +402,15 @@ export function deriveRuntimeSourceGapLifecycleStrip({
     return null;
   }
 
-  if (state === 'loading' && !runtimeSourceGaps) {
+  const readModelRows = runtimeSourceGapLifecycle
+    ? deriveRuntimeSourceGapLifecycleRowsFromReadModel(runtimeSourceGapLifecycle, selectedAgentId, null)
+    : null;
+  const legacyRows = !readModelRows && runtimeSourceGaps
+    ? deriveRuntimeSourceGapLifecycleRowsFromRawRows(runtimeSourceGaps, selectedAgentId)
+    : null;
+  const rows = readModelRows ?? legacyRows;
+
+  if (state === 'loading' && !rows) {
     return {
       status: 'loading',
       summaryLabel: 'Lifecycle · loading runtime source-gap rows',
@@ -407,7 +419,7 @@ export function deriveRuntimeSourceGapLifecycleStrip({
     };
   }
 
-  if (!runtimeSourceGaps) {
+  if (!rows) {
     return {
       status: state === 'error' ? 'error' : 'no_snapshot',
       summaryLabel:
@@ -419,13 +431,7 @@ export function deriveRuntimeSourceGapLifecycleStrip({
     };
   }
 
-  const lifecycle = deriveRuntimeSourceGapLifecycle(runtimeSourceGaps);
-  const mappedRows = lifecycle
-    .filter((item) => item.agentId === selectedAgentId)
-    .map(renderRuntimeSourceGapLifecycleStripRow);
-  const unmappedRows = lifecycle
-    .filter((item) => item.agentId === null)
-    .map(renderRuntimeSourceGapLifecycleStripRow);
+  const { mappedRows, unmappedRows } = rows;
 
   if (state === 'loading') {
     return {
@@ -606,6 +612,105 @@ function renderRuntimeSourceGapLifecycleStripRow(
     countLabel: `${item.count} row${item.count === 1 ? '' : 's'}`,
     observedAtLabel: renderObservedAtLabel(item.lastObservedAt)
   };
+}
+
+function deriveRuntimeSourceGapLifecycleRowsFromRawRows(
+  runtimeSourceGaps: RuntimeSourceGap[],
+  selectedAgentId: string
+) {
+  const lifecycle = deriveRuntimeSourceGapLifecycle(runtimeSourceGaps);
+  return {
+    mappedRows: lifecycle
+      .filter((item) => item.agentId === selectedAgentId)
+      .map(renderRuntimeSourceGapLifecycleStripRow),
+    unmappedRows: lifecycle
+      .filter((item) => item.agentId === null)
+      .map(renderRuntimeSourceGapLifecycleStripRow)
+  };
+}
+
+function deriveRuntimeSourceGapLifecycleRowsFromReadModel(
+  lifecycle: RuntimeSourceGapLifecycle,
+  selectedAgentId: string,
+  unmappedAgentId: null
+) {
+  return {
+    mappedRows: lifecycle.groups
+      .filter((group) => group.agent_id === selectedAgentId)
+      .map(renderRuntimeSourceGapLifecycleGroupStripRow)
+      .filter((row): row is RuntimeSourceGapLifecycleStripRow => row !== null),
+    unmappedRows: lifecycle.groups
+      .filter((group) => group.agent_id === unmappedAgentId)
+      .map(renderRuntimeSourceGapLifecycleGroupStripRow)
+      .filter((row): row is RuntimeSourceGapLifecycleStripRow => row !== null)
+  };
+}
+
+function renderRuntimeSourceGapLifecycleGroupStripRow(
+  group: RuntimeSourceGapLifecycleGroup,
+  index: number
+): RuntimeSourceGapLifecycleStripRow | null {
+  if (!group.source_kind) {
+    return null;
+  }
+
+  const sourceKind = RUNTIME_SOURCE_KIND_MAP[group.source_kind];
+  if (!sourceKind) {
+    return null;
+  }
+
+  const statusLabel = group.current_status ?? 'resolved';
+  return {
+    key: [
+      `scope:${group.agent_id === null ? 'unmapped' : 'mapped'}`,
+      `source:${renderRuntimeSourceGapReadModelSourceKey(sourceKind)}`,
+      `state:${group.lifecycle_state}`,
+      `status:${statusLabel}`,
+      `index:${index}`
+    ].join('|'),
+    sourceLabel: group.agent_id === null ? 'Runtime source' : renderRuntimeSourceGapReadModelSourceLabel(sourceKind),
+    statusLabel,
+    lifecycleLabel: renderRuntimeSourceGapLifecycleGroupLabel(group.lifecycle_state),
+    countLabel: `${group.record_count} row${group.record_count === 1 ? '' : 's'}`,
+    observedAtLabel: renderObservedAtLabel(group.last_observed_at)
+  };
+}
+
+function renderRuntimeSourceGapReadModelSourceKey(sourceKind: DisplayedSourceGapKind) {
+  switch (sourceKind) {
+    case 'workspace_root':
+    case 'workspace_files':
+      return 'workspace';
+    case 'tmux_session':
+    case 'hermes_profile':
+    case 'hermes_session':
+      return 'runtime';
+  }
+}
+
+function renderRuntimeSourceGapReadModelSourceLabel(sourceKind: DisplayedSourceGapKind) {
+  switch (sourceKind) {
+    case 'workspace_root':
+    case 'workspace_files':
+      return 'Workspace source';
+    case 'tmux_session':
+    case 'hermes_profile':
+    case 'hermes_session':
+      return 'Runtime source';
+  }
+}
+
+function renderRuntimeSourceGapLifecycleGroupLabel(state: RuntimeSourceGapLifecycleGroup['lifecycle_state']) {
+  switch (state) {
+    case 'opened':
+      return 'Opened gap';
+    case 'continuing':
+      return 'Continuing gap';
+    case 'resolved':
+      return 'Resolved evidence';
+    case 'observed_unmapped':
+      return 'Unmapped observed';
+  }
 }
 
 function compareRuntimeSourceGapLifecycleItems(

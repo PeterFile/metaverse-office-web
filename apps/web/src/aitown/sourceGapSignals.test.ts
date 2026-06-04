@@ -10,7 +10,7 @@ import {
   deriveSourceGapChips,
   deriveSourceHealthWorldBadges
 } from './sourceGapSignals';
-import type { CollectorSourceHealthProjection, RuntimeSourceGap } from '../types';
+import type { CollectorSourceHealthProjection, RuntimeSourceGap, RuntimeSourceGapLifecycle } from '../types';
 
 const sourceHealth: CollectorSourceHealthProjection = {
   collected_at: '2026-03-16T09:01:00.000Z',
@@ -658,34 +658,100 @@ describe('deriveRuntimeSourceGapLifecycle', () => {
 });
 
 describe('deriveRuntimeSourceGapLifecycleStrip', () => {
-  const baseGap: RuntimeSourceGap = {
-    observed_at: '2026-03-16T08:59:30.000Z',
-    collected_at: '2026-03-16T09:01:00.000Z',
-    agent_id: 'app-engineering',
-    source_kind: 'workspace_file',
-    evidence_role: 'agent_output',
-    source_status: 'degraded',
-    output_candidate: true,
-    collector_snapshot_id: 'collector-snapshot:current',
-    correlation_id: 'collector-snapshot:current',
-    degraded_reasons: ['raw path /tmp/app-engineering/outbox.md must not render'],
-    unmapped: false
+  const baseLifecycle: RuntimeSourceGapLifecycle = {
+    total_count: 3,
+    total_groups: 3,
+    returned_limit: 25,
+    groups: [
+      {
+        agent_id: 'app-engineering',
+        source_kind: 'workspace_file',
+        evidence_role: 'agent_output',
+        current_status: 'degraded',
+        lifecycle_state: 'opened',
+        first_observed_at: '2026-03-16T08:58:30.000Z',
+        last_observed_at: '2026-03-16T08:59:30.000Z',
+        first_collected_at: '2026-03-16T09:00:00.000Z',
+        last_collected_at: '2026-03-16T09:01:00.000Z',
+        record_count: 1,
+        snapshot_count: 1,
+        source_status_buckets: { degraded: 1 }
+      },
+      {
+        agent_id: null,
+        source_kind: 'tmux_observation',
+        evidence_role: 'runtime_unmapped',
+        current_status: 'observed',
+        lifecycle_state: 'observed_unmapped',
+        first_observed_at: '2026-03-16T08:59:30.000Z',
+        last_observed_at: '2026-03-16T08:59:30.000Z',
+        first_collected_at: '2026-03-16T09:01:00.000Z',
+        last_collected_at: '2026-03-16T09:01:00.000Z',
+        record_count: 1,
+        snapshot_count: 1,
+        source_status_buckets: { observed: 1 }
+      },
+      {
+        agent_id: 'other-agent',
+        source_kind: 'workspace_root',
+        evidence_role: 'agent_workspace',
+        current_status: 'missing',
+        lifecycle_state: 'continuing',
+        first_observed_at: null,
+        last_observed_at: null,
+        first_collected_at: '2026-03-16T09:01:00.000Z',
+        last_collected_at: '2026-03-16T09:01:00.000Z',
+        record_count: 1,
+        snapshot_count: 1,
+        source_status_buckets: { missing: 1 }
+      }
+    ]
   };
+
+  it('preserves the legacy raw-row fallback until App wiring moves to the lifecycle read model', () => {
+    const strip = deriveRuntimeSourceGapLifecycleStrip({
+      runtimeSourceGaps: [
+        {
+          observed_at: '2026-03-16T08:59:30.000Z',
+          collected_at: '2026-03-16T09:01:00.000Z',
+          agent_id: 'app-engineering',
+          source_kind: 'workspace_file',
+          evidence_role: 'agent_output',
+          source_status: 'degraded',
+          output_candidate: true,
+          collector_snapshot_id: 'collector-snapshot:current',
+          correlation_id: 'collector-snapshot:current',
+          degraded_reasons: ['raw path /tmp/app-engineering/outbox.md must not render'],
+          unmapped: false
+        }
+      ],
+      selectedAgentId: 'app-engineering',
+      state: 'ready',
+      error: null
+    });
+
+    expect(strip).toMatchObject({
+      status: 'ready',
+      summaryLabel: 'Lifecycle · 1 mapped · 0 unmapped',
+      mappedRows: [
+        {
+          sourceLabel: 'Workspace files',
+          statusLabel: 'degraded',
+          lifecycleLabel: 'Current gap',
+          countLabel: '1 row',
+          observedAtLabel: 'Observed 2026-03-16T08:59:30.000Z'
+        }
+      ],
+      unmappedRows: []
+    });
+    expect(JSON.stringify(strip)).not.toContain('/tmp/app-engineering');
+    expect(JSON.stringify(strip)).not.toContain('collector-snapshot:');
+    expect(JSON.stringify(strip)).not.toContain('raw path');
+  });
 
   it('keeps selected mapped lifecycle rows separate from unmapped runtime evidence', () => {
     const strip = deriveRuntimeSourceGapLifecycleStrip({
-      runtimeSourceGaps: [
-        baseGap,
-        {
-          ...baseGap,
-          agent_id: null,
-          source_kind: 'tmux_observation',
-          evidence_role: 'runtime_unmapped',
-          source_status: 'observed',
-          output_candidate: false,
-          unmapped: true
-        }
-      ],
+      runtimeSourceGapLifecycle: baseLifecycle,
       selectedAgentId: 'app-engineering',
       state: 'ready',
       error: null
@@ -696,17 +762,17 @@ describe('deriveRuntimeSourceGapLifecycleStrip', () => {
       summaryLabel: 'Lifecycle · 1 mapped · 1 unmapped',
       mappedRows: [
         {
-          key: 'agent:app-engineering|source:workspace_files|role:agent_output|status:degraded',
-          sourceLabel: 'Workspace files',
+          key: 'scope:mapped|source:workspace|state:opened|status:degraded|index:0',
+          sourceLabel: 'Workspace source',
           statusLabel: 'degraded',
-          lifecycleLabel: 'Current gap',
+          lifecycleLabel: 'Opened gap',
           countLabel: '1 row',
           observedAtLabel: 'Observed 2026-03-16T08:59:30.000Z'
         }
       ],
       unmappedRows: [
         {
-          key: 'agent:unmapped|source:tmux_session|role:runtime_unmapped|status:observed',
+          key: 'scope:unmapped|source:runtime|state:observed_unmapped|status:observed|index:0',
           sourceLabel: 'Runtime source',
           statusLabel: 'observed',
           lifecycleLabel: 'Unmapped observed',
@@ -715,15 +781,20 @@ describe('deriveRuntimeSourceGapLifecycleStrip', () => {
         }
       ]
     });
-    expect(JSON.stringify(strip)).not.toContain('/tmp/app-engineering');
-    expect(JSON.stringify(strip)).not.toContain('collector-snapshot:');
-    expect(JSON.stringify(strip)).not.toContain('raw path');
+    const serializedStrip = JSON.stringify(strip).toLowerCase();
+    expect(serializedStrip).not.toContain('app-engineering');
+    expect(serializedStrip).not.toContain('agent_output');
+    expect(serializedStrip).not.toContain('runtime_unmapped');
+    expect(serializedStrip).not.toContain('tmux');
+    expect(serializedStrip).not.toContain('hermes');
+    expect(serializedStrip).not.toContain('session');
+    expect(serializedStrip).not.toContain('profile');
   });
 
   it('renders explicit empty, error, and no-snapshot states without implying health', () => {
     expect(
       deriveRuntimeSourceGapLifecycleStrip({
-        runtimeSourceGaps: [],
+        runtimeSourceGapLifecycle: { ...baseLifecycle, groups: [] },
         selectedAgentId: 'app-engineering',
         state: 'ready',
         error: null
@@ -734,7 +805,7 @@ describe('deriveRuntimeSourceGapLifecycleStrip', () => {
     });
     expect(
       deriveRuntimeSourceGapLifecycleStrip({
-        runtimeSourceGaps: null,
+        runtimeSourceGapLifecycle: null,
         selectedAgentId: 'app-engineering',
         state: 'error',
         error: 'access_token=secret backend failed'
@@ -745,7 +816,7 @@ describe('deriveRuntimeSourceGapLifecycleStrip', () => {
     });
 
     const staleErrorStrip = deriveRuntimeSourceGapLifecycleStrip({
-      runtimeSourceGaps: [baseGap],
+      runtimeSourceGapLifecycle: baseLifecycle,
       selectedAgentId: 'app-engineering',
       state: 'error',
       error: 'access_token=secret backend failed'
@@ -754,14 +825,14 @@ describe('deriveRuntimeSourceGapLifecycleStrip', () => {
     expect(staleErrorStrip).toMatchObject({
       status: 'error',
       summaryLabel: 'Lifecycle · refresh error; showing last runtime source-gap rows',
-      mappedRows: [{ sourceLabel: 'Workspace files' }],
-      unmappedRows: []
+      mappedRows: [{ sourceLabel: 'Workspace source' }],
+      unmappedRows: [{ sourceLabel: 'Runtime source' }]
     });
     expect(staleErrorStrip?.summaryLabel.toLowerCase()).not.toContain('healthy');
     expect(staleErrorStrip?.summaryLabel.toLowerCase()).not.toContain('observed');
 
     const staleLoadingStrip = deriveRuntimeSourceGapLifecycleStrip({
-      runtimeSourceGaps: [baseGap],
+      runtimeSourceGapLifecycle: baseLifecycle,
       selectedAgentId: 'app-engineering',
       state: 'loading',
       error: null
@@ -770,14 +841,14 @@ describe('deriveRuntimeSourceGapLifecycleStrip', () => {
     expect(staleLoadingStrip).toMatchObject({
       status: 'loading',
       summaryLabel: 'Lifecycle · refreshing runtime source-gap rows',
-      mappedRows: [{ sourceLabel: 'Workspace files' }],
-      unmappedRows: []
+      mappedRows: [{ sourceLabel: 'Workspace source' }],
+      unmappedRows: [{ sourceLabel: 'Runtime source' }]
     });
     expect(staleLoadingStrip?.summaryLabel.toLowerCase()).not.toContain('ready');
     expect(staleLoadingStrip?.summaryLabel.toLowerCase()).not.toContain('healthy');
     expect(
       deriveRuntimeSourceGapLifecycleStrip({
-        runtimeSourceGaps: null,
+        runtimeSourceGapLifecycle: null,
         selectedAgentId: 'app-engineering',
         state: 'ready',
         error: null
@@ -786,6 +857,117 @@ describe('deriveRuntimeSourceGapLifecycleStrip', () => {
       status: 'no_snapshot',
       summaryLabel: 'Lifecycle · no runtime source-gap snapshot'
     });
+  });
+
+  it('skips unknown source kinds and does not serialize hostile lifecycle group fields', () => {
+    const strip = deriveRuntimeSourceGapLifecycleStrip({
+      runtimeSourceGapLifecycle: {
+        ...baseLifecycle,
+        groups: [
+          {
+            agent_id: 'app-engineering',
+            source_kind: 'workspace_file',
+            evidence_role: 'agent_output protocol://token-control-plane',
+            current_status: 'degraded',
+            lifecycle_state: 'continuing',
+            first_observed_at: '2026-03-16T08:58:30.000Z',
+            last_observed_at: '2026-03-16T08:59:30.000Z',
+            first_collected_at: '2026-03-16T09:00:00.000Z',
+            last_collected_at: '2026-03-16T09:01:00.000Z',
+            record_count: 2,
+            snapshot_count: 2,
+            source_status_buckets: { degraded: 2 }
+          },
+          {
+            agent_id: 'app-engineering',
+            source_kind: '/tmp/app-engineering?token=secret-control-plane',
+            evidence_role: 'webhook_url=https://example.invalid/hook',
+            current_status: 'error',
+            lifecycle_state: 'opened',
+            first_observed_at: '2026-03-16T08:58:30.000Z',
+            last_observed_at: '2026-03-16T08:59:30.000Z',
+            first_collected_at: '2026-03-16T09:00:00.000Z',
+            last_collected_at: '2026-03-16T09:01:00.000Z',
+            record_count: 99,
+            snapshot_count: 99,
+            source_status_buckets: { error: 99 }
+          },
+          {
+            agent_id: 'app-engineering',
+            source_kind: null,
+            evidence_role: 'collector_snapshot_id:secret',
+            current_status: 'missing',
+            lifecycle_state: 'opened',
+            first_observed_at: '2026-03-16T08:58:30.000Z',
+            last_observed_at: '2026-03-16T08:59:30.000Z',
+            first_collected_at: '2026-03-16T09:00:00.000Z',
+            last_collected_at: '2026-03-16T09:01:00.000Z',
+            record_count: 98,
+            snapshot_count: 98,
+            source_status_buckets: { missing: 98 }
+          }
+        ]
+      },
+      selectedAgentId: 'app-engineering',
+      state: 'ready',
+      error: null
+    });
+
+    expect(strip?.mappedRows).toHaveLength(1);
+    expect(strip?.mappedRows[0]).toMatchObject({
+      sourceLabel: 'Workspace source',
+      statusLabel: 'degraded',
+      lifecycleLabel: 'Continuing gap',
+      countLabel: '2 rows'
+    });
+    const serializedStrip = JSON.stringify(strip);
+    expect(serializedStrip).not.toContain('/tmp/app-engineering');
+    expect(serializedStrip).not.toContain('protocol://');
+    expect(serializedStrip).not.toContain('token');
+    expect(serializedStrip).not.toContain('control-plane');
+    expect(serializedStrip).not.toContain('webhook');
+    expect(serializedStrip).not.toContain('agent_output');
+    expect(serializedStrip).not.toContain('99');
+    expect(serializedStrip).not.toContain('98');
+    expect(serializedStrip).not.toContain('collector_snapshot_id');
+  });
+
+  it('renders resolved lifecycle groups without echoing a missing current status', () => {
+    const strip = deriveRuntimeSourceGapLifecycleStrip({
+      runtimeSourceGapLifecycle: {
+        ...baseLifecycle,
+        groups: [
+          {
+            agent_id: 'app-engineering',
+            source_kind: 'workspace_root',
+            evidence_role: null,
+            current_status: null,
+            lifecycle_state: 'resolved',
+            first_observed_at: '2026-03-16T08:58:30.000Z',
+            last_observed_at: '2026-03-16T08:59:30.000Z',
+            first_collected_at: '2026-03-16T09:00:00.000Z',
+            last_collected_at: '2026-03-16T09:01:00.000Z',
+            record_count: 1,
+            snapshot_count: 1,
+            source_status_buckets: {}
+          }
+        ]
+      },
+      selectedAgentId: 'app-engineering',
+      state: 'ready',
+      error: null
+    });
+
+    expect(strip?.mappedRows).toEqual([
+      {
+        key: 'scope:mapped|source:workspace|state:resolved|status:resolved|index:0',
+        sourceLabel: 'Workspace source',
+        statusLabel: 'resolved',
+        lifecycleLabel: 'Resolved evidence',
+        countLabel: '1 row',
+        observedAtLabel: 'Observed 2026-03-16T08:59:30.000Z'
+      }
+    ]);
   });
 });
 

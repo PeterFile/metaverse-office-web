@@ -355,6 +355,8 @@ test('JSONL and SQLite stores replay evidence read models with parity', async (t
       backend: '<backend>',
       record_index_count: '<sidecar>',
       record_evidence_ref_count: '<sidecar>',
+      record_index_drift_count: '<sidecar>',
+      record_evidence_ref_drift_count: '<sidecar>',
       sidecar_status: '<sidecar>'
     },
     {
@@ -362,6 +364,8 @@ test('JSONL and SQLite stores replay evidence read models with parity', async (t
       backend: '<backend>',
       record_index_count: '<sidecar>',
       record_evidence_ref_count: '<sidecar>',
+      record_index_drift_count: '<sidecar>',
+      record_evidence_ref_drift_count: '<sidecar>',
       sidecar_status: '<sidecar>'
     }
   );
@@ -371,6 +375,8 @@ test('JSONL and SQLite stores replay evidence read models with parity', async (t
   assert.equal(sqliteIndexHealth.sidecar_status, 'complete');
   assert.equal(sqliteIndexHealth.record_index_count, sqliteIndexHealth.record_count);
   assert.equal(sqliteIndexHealth.record_evidence_ref_count > 0, true);
+  assert.equal(sqliteIndexHealth.record_index_drift_count, 0);
+  assert.equal(sqliteIndexHealth.record_evidence_ref_drift_count, 0);
   assert.deepEqual(
     {
       ...jsonlManifest,

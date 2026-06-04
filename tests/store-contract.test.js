@@ -1104,6 +1104,8 @@ test('JSONL prototype store reports storage index-health as not applicable', asy
     record_count: 9,
     record_index_count: null,
     record_evidence_ref_count: null,
+    record_index_drift_count: null,
+    record_evidence_ref_drift_count: null,
     sidecar_status: 'not_applicable',
     record_kind_buckets: {
       event: 3,
@@ -1152,6 +1154,8 @@ test('JSONL storage index-health buckets unknown record kinds without leaking ra
     record_count: 2,
     record_index_count: null,
     record_evidence_ref_count: null,
+    record_index_drift_count: null,
+    record_evidence_ref_drift_count: null,
     sidecar_status: 'not_applicable',
     record_kind_buckets: {
       event: 1,
@@ -4301,6 +4305,8 @@ test('SQLite prototype store reports sanitized storage index-health without side
     record_count: 9,
     record_index_count: 9,
     record_evidence_ref_count: 6,
+    record_index_drift_count: 0,
+    record_evidence_ref_drift_count: 0,
     sidecar_status: 'complete',
     record_kind_buckets: {
       event: 3,
@@ -4322,6 +4328,7 @@ test('SQLite prototype store reports sanitized storage index-health without side
     ...health,
     status: 'degraded',
     record_evidence_ref_count: 0,
+    record_evidence_ref_drift_count: 6,
     sidecar_status: 'stale'
   });
 
@@ -4338,9 +4345,11 @@ test('SQLite prototype store reports sanitized storage index-health without side
       "UPDATE record_index SET evidence_role = NULL WHERE kind = 'evidence_record';"
     ].join(' ')
   );
-  assert.deepEqual(await store.getStorageIndexHealth(), {
+  const staleRecordIndexHealth = await store.getStorageIndexHealth();
+  assert.deepEqual(staleRecordIndexHealth, {
     ...health,
     status: 'degraded',
+    record_index_drift_count: 3,
     sidecar_status: 'stale'
   });
 
@@ -4350,6 +4359,8 @@ test('SQLite prototype store reports sanitized storage index-health without side
     status: 'degraded',
     record_index_count: null,
     record_evidence_ref_count: null,
+    record_index_drift_count: null,
+    record_evidence_ref_drift_count: null,
     sidecar_status: 'stale'
   });
 });

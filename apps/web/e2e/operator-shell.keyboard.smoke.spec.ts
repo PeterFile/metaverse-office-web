@@ -1560,6 +1560,7 @@ test.describe('operator shell smoke', () => {
       '/office/overview',
       '/incidents',
       '/collectors/controller-snapshot/source-health',
+      '/collectors/controller-snapshot/summary',
       '/runtime/source-gaps',
       '/runtime/source-gaps/summary',
       '/agents/evidence-spine/summary',
@@ -1577,6 +1578,7 @@ test.describe('operator shell smoke', () => {
     const expectedOverviewSearch = '';
     const expectedIncidentsSearch = '?limit=200&window=8760h';
     const expectedSourceHealthSearch = '?limit=7';
+    const expectedCollectorSnapshotSummarySearch = '';
     const expectedRuntimeSourceGapsSearch = '?newest_first=true&limit=3';
     const expectedRuntimeSourceGapsSummarySearch = '?newest_first=true&limit=3';
     const expectedEvidenceSpineSummarySearch = '?newest_first=true&limit=200';
@@ -1725,6 +1727,13 @@ test.describe('operator shell smoke', () => {
       expect(
         readPostCloseGetRequests().filter(
           (request) =>
+            request.pathname === '/collectors/controller-snapshot/summary' &&
+            request.search !== expectedCollectorSnapshotSummarySearch
+        )
+      ).toEqual([]);
+      expect(
+        readPostCloseGetRequests().filter(
+          (request) =>
             request.pathname === '/runtime/source-gaps' && request.search !== expectedRuntimeSourceGapsSearch
         )
       ).toEqual([]);
@@ -1776,6 +1785,7 @@ test.describe('operator shell smoke', () => {
       '/office/overview',
       '/incidents',
       '/collectors/controller-snapshot/source-health',
+      '/collectors/controller-snapshot/summary',
       '/runtime/source-gaps',
       '/runtime/source-gaps/summary',
       '/agents/evidence-spine/summary',
@@ -1793,6 +1803,7 @@ test.describe('operator shell smoke', () => {
     const expectedOverviewSearch = '';
     const expectedIncidentsSearch = '?limit=200&window=8760h';
     const expectedSourceHealthSearch = '?limit=7';
+    const expectedCollectorSnapshotSummarySearch = '';
     const expectedRuntimeSourceGapsSearch = '?newest_first=true&limit=3';
     const expectedRuntimeSourceGapsSummarySearch = '?newest_first=true&limit=3';
     const expectedEvidenceSpineSummarySearch = '?newest_first=true&limit=200';
@@ -1915,6 +1926,13 @@ test.describe('operator shell smoke', () => {
           (request) =>
             request.pathname === '/collectors/controller-snapshot/source-health' &&
             request.search !== expectedSourceHealthSearch
+        )
+      ).toEqual([]);
+      expect(
+        readPostCloseGetRequests().filter(
+          (request) =>
+            request.pathname === '/collectors/controller-snapshot/summary' &&
+            request.search !== expectedCollectorSnapshotSummarySearch
         )
       ).toEqual([]);
       expect(
@@ -2070,6 +2088,7 @@ test.describe('operator shell smoke', () => {
       '/office/overview',
       '/incidents',
       '/collectors/controller-snapshot/source-health',
+      '/collectors/controller-snapshot/summary',
       '/runtime/source-gaps',
       '/runtime/source-gaps/summary',
       '/agents/evidence-spine/summary',
@@ -2087,6 +2106,7 @@ test.describe('operator shell smoke', () => {
     const expectedOverviewSearch = '';
     const expectedIncidentsSearch = '?limit=200&window=8760h';
     const expectedSourceHealthSearch = '?limit=7';
+    const expectedCollectorSnapshotSummarySearch = '';
     const expectedRuntimeSourceGapsSearch = '?newest_first=true&limit=3';
     const expectedRuntimeSourceGapsSummarySearch = '?newest_first=true&limit=3';
     const expectedEvidenceSpineSummarySearch = '?newest_first=true&limit=200';
@@ -2256,6 +2276,13 @@ test.describe('operator shell smoke', () => {
       expect(
         readPostCloseGetRequests().filter(
           (request) =>
+            request.pathname === '/collectors/controller-snapshot/summary' &&
+            request.search !== expectedCollectorSnapshotSummarySearch
+        )
+      ).toEqual([]);
+      expect(
+        readPostCloseGetRequests().filter(
+          (request) =>
             request.pathname === '/runtime/source-gaps' && request.search !== expectedRuntimeSourceGapsSearch
         )
       ).toEqual([]);
@@ -2316,6 +2343,7 @@ test.describe('operator shell smoke', () => {
       '/office/overview',
       '/incidents',
       '/collectors/controller-snapshot/source-health',
+      '/collectors/controller-snapshot/summary',
       '/runtime/source-gaps',
       '/runtime/source-gaps/summary',
       '/agents/evidence-spine/summary',
@@ -2333,6 +2361,7 @@ test.describe('operator shell smoke', () => {
     const expectedOverviewSearch = '';
     const expectedIncidentsSearch = '?limit=200&window=8760h';
     const expectedSourceHealthSearch = '?limit=7';
+    const expectedCollectorSnapshotSummarySearch = '';
     const expectedRuntimeSourceGapsSearch = '?newest_first=true&limit=3';
     const expectedRuntimeSourceGapsSummarySearch = '?newest_first=true&limit=3';
     const expectedEvidenceSpineSummarySearch = '?newest_first=true&limit=200';
@@ -2495,6 +2524,13 @@ test.describe('operator shell smoke', () => {
           (request) =>
             request.pathname === '/collectors/controller-snapshot/source-health' &&
             request.search !== expectedSourceHealthSearch
+        )
+      ).toEqual([]);
+      expect(
+        readPostCloseGetRequests().filter(
+          (request) =>
+            request.pathname === '/collectors/controller-snapshot/summary' &&
+            request.search !== expectedCollectorSnapshotSummarySearch
         )
       ).toEqual([]);
       expect(

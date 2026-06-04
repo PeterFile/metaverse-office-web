@@ -529,9 +529,42 @@ test.describe('operator shell layout visual smoke', () => {
         'collector-snapshot:2026-03-16T09:01:00.000Z': 3
       }
     };
+    const collectorSnapshotSummary = {
+      has_snapshot: true,
+      collected_at: '2026-03-16T09:01:00.000Z',
+      agent_count: 1,
+      heartbeat_count: 1,
+      tmux_observed_count: 1,
+      workspace_observed_count: 1,
+      reboot_recommended_count: 0,
+      evidence_ref_count: 1,
+      covered_agent_count: 1,
+      low_confidence_agent_count: 1,
+      source_kind_buckets: {
+        workspace_file: 1,
+        workspace_root: 0,
+        tmux_observation: 0,
+        hermes_profile: 0,
+        hermes_session: 0,
+        task_evidence: 0
+      },
+      source_health_buckets: {
+        source_kind_buckets: sourceHealth.summary.source_kind_buckets,
+        status_buckets: sourceHealth.summary.status_buckets
+      },
+      runtime_source_evidence: {
+        unmapped_tmux_session_count: 0,
+        unmapped_hermes_source_count: 0,
+        unmapped_task_evidence_count: 0,
+        latest_observed_at: '2026-03-16T08:58:40.000Z'
+      }
+    };
 
     await page.route('**/collectors/controller-snapshot/evidence-coverage', async (route) => {
       await route.fulfill({ json: { item: evidenceCoverage } });
+    });
+    await page.route('**/collectors/controller-snapshot/summary', async (route) => {
+      await route.fulfill({ json: { item: collectorSnapshotSummary } });
     });
     await page.route('**/runtime/source-gaps?*', async (route) => {
       await route.fulfill({ json: runtimeSourceGaps });
@@ -580,6 +613,9 @@ test.describe('operator shell layout visual smoke', () => {
     const signalsSummary = signals.locator('summary');
     const evidenceFocus = page.getByRole('region', { name: 'Evidence coverage focus' });
     const sourceGapFocus = page.getByRole('region', { name: 'Source gap focus' });
+    const collectorSnapshotChip = page.getByRole('button', {
+      name: 'Open collector snapshot supervision summary: Snapshot available'
+    });
     const evidenceFocusHead = evidenceFocus.locator('.aitown-panel__evidence-focus__head');
     const evidenceFocusChip = evidenceFocus.getByRole('button', {
       name: 'Inspect evidence coverage focus agent Growth Revenue Agent'
@@ -596,7 +632,15 @@ test.describe('operator shell layout visual smoke', () => {
     await expect(worldHost).toBeVisible();
     await page.waitForFunction(() => Boolean(window.__AITOWN_VIEWPORT__));
     await expect(signals).toBeVisible();
+    await expect(collectorSnapshotChip).toBeVisible();
+    await expect(collectorSnapshotChip).toContainText('1 agents · 1 heartbeats');
+    await expect(collectorSnapshotChip).toContainText('1 observed · 3 source gaps');
+    await expect(collectorSnapshotChip).toContainText('Collected · 2026-03-16T09:01:00.000Z');
+    await expect(collectorSnapshotChip).not.toContainText('/tmp/app-engineering');
+    await expect(collectorSnapshotChip).not.toContainText('5-web3-app-engineering');
+    await expect(collectorSnapshotChip).not.toContainText('hermes://');
     await expect(signalsSummary.getByText('Signals', { exact: true })).toBeVisible();
+    await expect(signalsSummary.locator('.aitown-panel__topline-copy')).toContainText('Snapshot · Snapshot available');
     await expect(signalsSummary.locator('.aitown-panel__topline-copy')).toContainText('Evidence · 3');
     await expect(signalsSummary.getByText(/Source gaps · 3/)).toBeVisible();
     await expect(evidenceFocus).toBeHidden();
@@ -1092,6 +1136,7 @@ test.describe('operator shell layout visual smoke', () => {
       '/incidents?limit=200&window=8760h',
       '/collectors/controller-snapshot/source-health?limit=7',
       '/collectors/controller-snapshot/evidence-coverage',
+      '/collectors/controller-snapshot/summary',
       '/runtime/source-gaps?newest_first=true&limit=3',
       '/runtime/source-gaps/summary?newest_first=true&limit=3',
       '/agents/evidence-spine/summary?newest_first=true&limit=200',

@@ -21,6 +21,8 @@ import type {
   EvidenceReplayWindow,
   EvidenceReplayWindowResponse,
   EvidenceProvenanceBundle,
+  CollectorSnapshotSafeSummary,
+  CollectorSnapshotSafeSummaryResponse,
   EvidenceRecord,
   EvidenceRefRollup,
   EvidenceRefRollupResponse,
@@ -227,6 +229,14 @@ export async function fetchOfficeOverview(signal?: AbortSignal): Promise<OfficeO
 export async function fetchCollectorSnapshot(signal?: AbortSignal): Promise<CollectorSnapshot | null> {
   const response = await fetch(resolveApiUrl('/collectors/controller-snapshot'), { signal });
   const body = await parseJson<{ item: CollectorSnapshot | null }>(response);
+  return body.item;
+}
+
+export async function fetchCollectorSnapshotSummary(
+  signal?: AbortSignal
+): Promise<CollectorSnapshotSafeSummary> {
+  const response = await fetch(resolveApiUrl('/collectors/controller-snapshot/summary'), { signal });
+  const body = await parseJson<CollectorSnapshotSafeSummaryResponse>(response);
   return body.item;
 }
 

@@ -76,7 +76,7 @@ export type RuntimeSourceGapLifecycleOptions = {
 export type RuntimeSourceGapLifecycleStripRow = {
   key: string;
   sourceLabel: string;
-  statusLabel: CollectorSourceHealthStatus | 'resolved';
+  statusLabel: CollectorSourceHealthStatus | 'resolved' | 'unknown';
   lifecycleLabel: string;
   countLabel: string;
   observedAtLabel: string;
@@ -659,7 +659,11 @@ function renderRuntimeSourceGapLifecycleGroupStripRow(
     return null;
   }
 
-  const statusLabel = group.current_status ?? 'resolved';
+  const statusLabel = normalizeRuntimeSourceGapLifecycleGroupStatus(
+    group.current_status,
+    group.lifecycle_state
+  );
+
   return {
     key: [
       `scope:${group.agent_id === null ? 'unmapped' : 'mapped'}`,
@@ -674,6 +678,30 @@ function renderRuntimeSourceGapLifecycleGroupStripRow(
     countLabel: `${group.record_count} row${group.record_count === 1 ? '' : 's'}`,
     observedAtLabel: renderObservedAtLabel(group.last_observed_at)
   };
+}
+
+function normalizeRuntimeSourceGapLifecycleGroupStatus(
+  currentStatus: RuntimeSourceGapLifecycleGroup['current_status'],
+  lifecycleState: RuntimeSourceGapLifecycleGroup['lifecycle_state']
+): RuntimeSourceGapLifecycleStripRow['statusLabel'] {
+  if (lifecycleState === 'resolved') {
+    return 'resolved';
+  }
+
+  if (lifecycleState === 'observed_unmapped') {
+    return 'observed';
+  }
+
+  switch (currentStatus) {
+    case 'error':
+    case 'missing':
+    case 'degraded':
+    case 'observed':
+      return currentStatus;
+    case null:
+    default:
+      return 'unknown';
+  }
 }
 
 function renderRuntimeSourceGapReadModelSourceKey(sourceKind: DisplayedSourceGapKind) {

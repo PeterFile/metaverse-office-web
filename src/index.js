@@ -6,7 +6,10 @@ const {
   createHermesRuntimeSourcesReader,
   createHermesRuntimeSourcesFileReader
 } = require('./collectors/controller-snapshot');
-const { taskEvidenceFileReaderFrom } = require('./collectors/task-evidence-source');
+const {
+  taskEvidenceFileReaderFrom,
+  taskEvidencePathsReaderFrom
+} = require('./collectors/task-evidence-source');
 const { createPrototypeStore } = require('./store/prototype-store');
 
 async function main() {
@@ -42,9 +45,12 @@ async function main() {
     process.env.METAVERSE_OFFICE_HERMES_RUNTIME_SOURCES_PATHS
   );
   const taskEvidenceFile = process.env.METAVERSE_OFFICE_TASK_EVIDENCE_FILE;
+  const taskEvidencePaths = parseDelimitedEnvPaths(
+    process.env.METAVERSE_OFFICE_TASK_EVIDENCE_PATHS
+  );
   const controllerSnapshotCollector = createControllerSnapshotCollector({
     ...createHermesRuntimeSourcesOptions({ hermesRuntimeSourcesFile, hermesRuntimeSourcesPaths }),
-    ...createTaskEvidenceOptions({ taskEvidenceFile })
+    ...createTaskEvidenceOptions({ taskEvidenceFile, taskEvidencePaths })
   });
   const server = createAppServer({ store, controllerSnapshotCollector, allowedOrigins });
 
@@ -79,7 +85,14 @@ function createHermesRuntimeSourcesOptions({ hermesRuntimeSourcesFile, hermesRun
   return {};
 }
 
-function createTaskEvidenceOptions({ taskEvidenceFile }) {
+function createTaskEvidenceOptions({ taskEvidenceFile, taskEvidencePaths = [] }) {
+  if (taskEvidencePaths.length > 0) {
+    const reader = taskEvidencePathsReaderFrom({ inputPaths: taskEvidencePaths });
+    return {
+      readTaskEvidenceCandidates: () => reader.readEvidenceCandidates()
+    };
+  }
+
   if (!taskEvidenceFile) {
     return {};
   }

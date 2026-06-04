@@ -1,4 +1,5 @@
-const { readFile } = require('node:fs/promises');
+const { readdir, readFile, stat } = require('node:fs/promises');
+const path = require('node:path');
 
 const SUPPORTED_SOURCE_KINDS = new Set([
   'kanban_fixture',
@@ -84,20 +85,97 @@ function taskEvidenceFileReaderFrom(options = {}) {
   };
 }
 
-function parseTaskEvidenceFileContent(content) {
+function taskEvidencePathsReaderFrom(options = {}) {
+  const inputPaths = Array.isArray(options.inputPaths)
+    ? options.inputPaths
+        .map((inputPath) => (typeof inputPath === 'string' ? inputPath.trim() : ''))
+        .filter(Boolean)
+    : [];
+
+  return {
+    async readEvidenceCandidates() {
+      if (inputPaths.length === 0) {
+        return fileFailure('task evidence input path is required');
+      }
+
+      const facts = [];
+      let sourceFileIndex = 0;
+
+      for (const [sourcePathIndex, inputPath] of inputPaths.entries()) {
+        const filePaths = await listTaskEvidenceFiles(inputPath);
+        if (!filePaths) {
+          return fileFailure('task evidence input could not be read');
+        }
+
+        for (const filePath of filePaths) {
+          let content;
+          try {
+            content = await readFile(filePath, 'utf8');
+          } catch {
+            return fileFailure('task evidence input could not be read');
+          }
+
+          const parsed = parseTaskEvidenceFileContent(content, {
+            source_input_ordinal: sourcePathIndex + 1,
+            source_file_ordinal: sourceFileIndex + 1
+          });
+          if (parsed.rejected.length > 0) {
+            return parsed;
+          }
+
+          sourceFileIndex += 1;
+          facts.push(...parsed.facts);
+        }
+      }
+
+      return normalizeTaskEvidenceFileFacts(facts);
+    }
+  };
+}
+
+async function listTaskEvidenceFiles(inputPath) {
+  let inputStat;
+  try {
+    inputStat = await stat(inputPath);
+  } catch {
+    return null;
+  }
+
+  if (!inputStat.isDirectory()) {
+    return [inputPath];
+  }
+
+  let entries;
+  try {
+    entries = await readdir(inputPath, { withFileTypes: true });
+  } catch {
+    return null;
+  }
+
+  return entries
+    .filter((entry) => entry.isFile() && isTaskEvidenceFileName(entry.name))
+    .map((entry) => path.join(inputPath, entry.name))
+    .sort((left, right) => left.localeCompare(right));
+}
+
+function isTaskEvidenceFileName(fileName) {
+  return fileName.endsWith('.json') || fileName.endsWith('.jsonl');
+}
+
+function parseTaskEvidenceFileContent(content, sourceProvenance = {}) {
   const trimmed = content.trim();
   if (!trimmed) {
     return { facts: [], rejected: [] };
   }
 
   if (trimmed.startsWith('[')) {
-    return parseTaskEvidenceJsonArray(trimmed);
+    return parseTaskEvidenceJsonArray(trimmed, sourceProvenance);
   }
 
-  return parseTaskEvidenceJsonLines(content);
+  return parseTaskEvidenceJsonLines(content, sourceProvenance);
 }
 
-function parseTaskEvidenceJsonArray(content) {
+function parseTaskEvidenceJsonArray(content, sourceProvenance) {
   try {
     const parsed = JSON.parse(content);
     if (!Array.isArray(parsed)) {
@@ -110,8 +188,8 @@ function parseTaskEvidenceJsonArray(content) {
         source_provenance: {
           source_format: 'json_array',
           source_index: index,
-          source_input_ordinal: 1,
-          source_file_ordinal: 1
+          source_input_ordinal: sourceProvenance.source_input_ordinal || 1,
+          source_file_ordinal: sourceProvenance.source_file_ordinal || 1
         }
       })),
       rejected: []
@@ -121,7 +199,7 @@ function parseTaskEvidenceJsonArray(content) {
   }
 }
 
-function parseTaskEvidenceJsonLines(content) {
+function parseTaskEvidenceJsonLines(content, sourceProvenance) {
   const facts = [];
   const lines = content.split(/\r?\n/);
 
@@ -138,8 +216,8 @@ function parseTaskEvidenceJsonLines(content) {
           source_format: 'jsonl',
           source_index: lineIndex,
           line: lineIndex + 1,
-          source_input_ordinal: 1,
-          source_file_ordinal: 1
+          source_input_ordinal: sourceProvenance.source_input_ordinal || 1,
+          source_file_ordinal: sourceProvenance.source_file_ordinal || 1
         }
       });
     } catch {
@@ -535,5 +613,6 @@ module.exports = {
   normalizeTaskEvidenceFacts,
   projectTaskEvidenceRecords,
   taskEvidenceFileReaderFrom,
+  taskEvidencePathsReaderFrom,
   taskEvidenceSourceFrom
 };

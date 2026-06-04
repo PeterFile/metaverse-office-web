@@ -1,5 +1,5 @@
 const assert = require('node:assert/strict');
-const { mkdtemp, writeFile } = require('node:fs/promises');
+const { mkdir, mkdtemp, writeFile } = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
@@ -367,6 +367,66 @@ test('reads opt-in task evidence facts from a JSONL file', async () => {
     ]
   );
   assert.deepEqual(result.rejected, []);
+  assert.equal(JSON.stringify(result).includes(root), false);
+  assertNoLeaks(result);
+});
+
+test('reads opt-in task evidence facts from paths and expands directories lexically', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'task-evidence-source-'));
+  const sourcesDir = path.join(root, 'sources');
+  const extraFile = path.join(root, 'z-extra.jsonl');
+  await mkdir(sourcesDir);
+  await writeFile(path.join(sourcesDir, 'ignore.txt'), 'not json');
+  await writeFile(
+    path.join(sourcesDir, 'b-task.jsonl'),
+    `${JSON.stringify({
+      task_ref: 'TASK-302',
+      source_kind: 'linear_fixture',
+      observed_at: '2026-05-20T01:02:00.000Z',
+      correlation_id: 'corr-task-302'
+    })}\n`
+  );
+  await writeFile(
+    path.join(sourcesDir, 'a-task.json'),
+    JSON.stringify([
+      {
+        task_ref: 'TASK-301',
+        source_kind: 'kanban_fixture',
+        observed_at: '2026-05-20T01:01:00.000Z',
+        correlation_id: 'corr-task-301'
+      }
+    ])
+  );
+  await writeFile(
+    extraFile,
+    `${JSON.stringify({
+      task_ref: 'TASK-303',
+      source_kind: 'slack_fixture',
+      observed_at: '2026-05-20T01:03:00.000Z',
+      correlation_id: 'corr-task-303'
+    })}\n`
+  );
+
+  const reader = taskEvidenceSource.taskEvidencePathsReaderFrom({
+    inputPaths: [sourcesDir, extraFile]
+  });
+  const result = await reader.readEvidenceCandidates();
+
+  assert.deepEqual(result.rejected, []);
+  assert.deepEqual(
+    result.candidates.map((candidate) => [
+      candidate.task_ref,
+      candidate.source_provenance.source_format,
+      candidate.source_provenance.line || null,
+      candidate.source_provenance.source_input_ordinal,
+      candidate.source_provenance.source_file_ordinal
+    ]),
+    [
+      ['TASK-301', 'json_array', null, 1, 1],
+      ['TASK-302', 'jsonl', 1, 1, 2],
+      ['TASK-303', 'jsonl', 1, 2, 3]
+    ]
+  );
   assert.equal(JSON.stringify(result).includes(root), false);
   assertNoLeaks(result);
 });

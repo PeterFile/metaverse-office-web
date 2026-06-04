@@ -18,9 +18,36 @@ const verifyQuickScript = resolve(repoRoot, 'scripts/verify-quick.mjs');
 describe('verify-quick helpers', () => {
   it('keeps lane mode separate from explicit focused file runs', () => {
     expect(parseVerifyQuickArgs(['--lane=ui'])).toEqual({ mode: 'lane', lane: 'ui' });
+    expect(parseVerifyQuickArgs(['--lane=ui-source-gap'])).toEqual({ mode: 'lane', lane: 'ui-source-gap' });
     expect(() =>
       parseVerifyQuickArgs(['--lane=ui', '--focused-files', 'src/App.test.tsx'])
     ).toThrow(/Use either --lane or --focused-files/);
+  });
+
+  it('plans ui-source-gap without broad App, DetailsPanel, or WorldScene tests', () => {
+    const plan = resolveVerifyQuickSteps(parseVerifyQuickArgs(['--lane=ui-source-gap']), {
+      cwd: repoRoot
+    });
+
+    expect(plan).toMatchObject({ mode: 'lane', lane: 'ui-source-gap' });
+    expect(plan.steps).toEqual([
+      ['git', ['diff', '--check']],
+      [
+        'pnpm',
+        [
+          '--filter',
+          '@metaverse-office/web',
+          'exec',
+          'vitest',
+          'run',
+          'src/aitown/sourceGapSignals.test.ts',
+          'src/aitown/sourceHealth.test.ts',
+          'src/sourceHealthWorldBadges.test.ts'
+        ]
+      ],
+      ['pnpm', ['web:typecheck']]
+    ]);
+    expect(JSON.stringify(plan.steps)).not.toMatch(/src\/App\.test\.tsx|DetailsPanel\.test\.tsx|WorldScene\.test\.tsx/);
   });
 
   it('runs explicit web package test files through focused Vitest without broad validation', () => {
@@ -182,6 +209,33 @@ describe('verify-quick helpers', () => {
     expect(plan).toMatchObject({ mode: 'lane', lane: 'web-api' });
     expect(JSON.stringify(plan.steps)).toMatch(/api\.contract\.test\.ts/);
     expect(JSON.stringify(plan.steps)).toMatch(/web:typecheck/);
+  });
+
+  it('routes source-gap UI source and tests to the bounded ui-source-gap lane', () => {
+    const plan = resolveVerifyQuickSteps(parseVerifyQuickArgs(['--changed']), {
+      cwd: repoRoot,
+      changedFiles: [
+        'apps/web/src/aitown/sourceGapSignals.ts',
+        'apps/web/src/aitown/sourceGapSignals.test.ts',
+        'apps/web/src/aitown/sourceHealth.ts',
+        'apps/web/src/sourceHealthWorldBadges.test.ts'
+      ]
+    });
+
+    expect(plan).toMatchObject({ mode: 'lane', lane: 'ui-source-gap', changed: true });
+    expect(JSON.stringify(plan.steps)).toMatch(/sourceGapSignals\.test\.ts/);
+    expect(JSON.stringify(plan.steps)).toMatch(/sourceHealth\.test\.ts/);
+    expect(JSON.stringify(plan.steps)).toMatch(/sourceHealthWorldBadges\.test\.ts/);
+    expect(JSON.stringify(plan.steps)).not.toMatch(/src\/App\.test\.tsx|DetailsPanel\.test\.tsx|WorldScene\.test\.tsx/);
+  });
+
+  it('keeps non-source-gap web source changes on the broad ui lane', () => {
+    const plan = resolveVerifyQuickSteps(parseVerifyQuickArgs(['--changed']), {
+      cwd: repoRoot,
+      changedFiles: ['apps/web/src/App.tsx']
+    });
+
+    expect(plan).toMatchObject({ mode: 'lane', lane: 'ui', changed: true });
   });
 
   it('routes known changed web unit tests to focused-files', () => {

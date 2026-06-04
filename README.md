@@ -85,18 +85,18 @@ pnpm web:build
 pnpm web:test:browser-smoke
 pnpm web:test:browser-smoke:live-evidence
 pnpm web:test:browser-smoke:dev
-pnpm verify:quick -- --lane=<docs|backend|web-api|ui|smoke>
+pnpm verify:quick -- --lane=<docs|backend|web-api|ui|ui-source-gap|smoke>
 pnpm verify:quick -- --focused-files src/App.test.tsx
 pnpm verify:quick -- --changed
 pnpm verify:quick -- --since=origin/master
 pnpm backend:start
 ```
 
-`pnpm verify:quick -- --lane=<lane>` runs `git diff --check` plus a narrow existing validation path: `docs` checks only whitespace/conflict markers, `backend` adds backend tests, `web-api` adds focused API contract Vitest and web typecheck, `ui` adds focused App/DetailsPanel/WorldScene/source-gap/source-health Vitest when those tests exist plus web typecheck, and `smoke` adds the live-evidence browser smoke.
+`pnpm verify:quick -- --lane=<lane>` runs `git diff --check` plus a narrow existing validation path: `docs` checks only whitespace/conflict markers, `backend` adds backend tests, `web-api` adds focused API contract Vitest and web typecheck, `ui` adds focused App/DetailsPanel/WorldScene/source-gap/source-health Vitest when those tests exist plus web typecheck, `ui-source-gap` adds bounded source-gap/source-health Vitest plus web typecheck for fast Live Evidence UI scoring, and `smoke` adds the live-evidence browser smoke.
 
 `pnpm verify:quick -- --focused-files <web-package-relative-test> [...]` runs `git diff --check` plus `pnpm --filter @metaverse-office/web exec vitest run <files>` for explicit Vitest test/spec files under `apps/web`. It is for dense local iteration and does not route to `test:all`, build, or lane defaults.
 
-`pnpm verify:quick -- --changed` routes staged, unstaged, and untracked files to the narrowest safe quick lane. `pnpm verify:quick -- --since=<ref>` routes files changed since a ref. The classifier is conservative: docs-only changes use `docs`, backend-only changes use `backend`, known web API/client changes use `web-api`, changed web Vitest files use `focused-files`, and smoke/e2e changes use `smoke`. Unknown or cross-layer changes fail instead of pretending to replace full CI.
+`pnpm verify:quick -- --changed` routes staged, unstaged, and untracked files to the narrowest safe quick lane. `pnpm verify:quick -- --since=<ref>` routes files changed since a ref. The classifier is conservative: docs-only changes use `docs`, backend-only changes use `backend`, known web API/client changes use `web-api`, source-gap/source-health UI source+test changes use `ui-source-gap`, changed web Vitest files use `focused-files`, and smoke/e2e changes use `smoke`. Unknown or cross-layer changes fail instead of pretending to replace full CI.
 
 `pnpm web:test:browser-smoke` runs the Playwright smoke bundle from the repository root (currently the keyboard, active-queue, and layout-visual smokes), starts its own hermetic read-only backend seeded under `./.tmp/browser-smoke`, starts its own Vite shell on ephemeral localhost ports, and passes the resolved base URL into Playwright so stale orphaned processes do not block startup.
 

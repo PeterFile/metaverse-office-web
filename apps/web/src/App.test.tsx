@@ -3875,6 +3875,127 @@ afterEach(() => {
     expect(requestedUrls.some((url) => url.includes('ref-rollup'))).toBe(false);
   });
 
+  it('shows selected-agent source matrix loading and first-failure states without raw error canaries', async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === evidenceSourceMatrixUrl) {
+          return new Promise<Response>(() => {});
+        }
+
+        return resolveTestFetchResponse(url);
+      })
+    );
+
+    const { unmount } = render(<App />);
+
+    let roster = await screen.findByRole('navigation', { name: 'Agent roster' });
+    await user.click(
+      within(roster).getByRole('button', {
+        name: 'Select and locate App Engineering Agent'
+      })
+    );
+
+    let inspectPeek = await screen.findByRole('region', { name: 'Selected agent inspect peek' });
+    let sourceMatrix = await within(inspectPeek).findByRole('region', {
+      name: 'Selected agent source matrix peek'
+    });
+    expect(within(sourceMatrix).getByText('Source matrix · Loading')).toBeVisible();
+    expect(within(sourceMatrix).getByText('Waiting for selected-agent source matrix rows.')).toBeVisible();
+    expect(sourceMatrix).not.toHaveTextContent(/healthy|productive|live/i);
+
+    unmount();
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === evidenceSourceMatrixUrl) {
+          return new Response(
+            JSON.stringify({
+              error: 'internal_error',
+              details: 'matrix failed /Users/cwp/private token=secret tmux://raw hermes://profile degraded dispatch'
+            }),
+            {
+              status: 500,
+              headers: { 'content-type': 'application/json' }
+            }
+          );
+        }
+
+        return resolveTestFetchResponse(url);
+      })
+    );
+
+    render(<App />);
+
+    roster = await screen.findByRole('navigation', { name: 'Agent roster' });
+    await user.click(
+      within(roster).getByRole('button', {
+        name: 'Select and locate App Engineering Agent'
+      })
+    );
+
+    inspectPeek = await screen.findByRole('region', { name: 'Selected agent inspect peek' });
+    sourceMatrix = await within(inspectPeek).findByRole('region', {
+      name: 'Selected agent source matrix peek'
+    });
+    expect(await within(sourceMatrix).findByText('Source matrix unavailable')).toBeVisible();
+    expect(within(sourceMatrix).getByText('Selected-agent source matrix could not be loaded.')).toBeVisible();
+    expect(sourceMatrix).not.toHaveTextContent(
+      /\/Users\/cwp|token=secret|tmux:\/\/raw|hermes:\/\/profile|degraded|dispatch|healthy|productive|live/i
+    );
+  });
+
+  it('keeps last-good selected-agent source matrix rows visible when refresh fails', async () => {
+    const user = userEvent.setup();
+    (window as typeof window & { __AITOWN_POLL_INTERVAL_MS__?: number }).__AITOWN_POLL_INTERVAL_MS__ = 10;
+    let sourceMatrixRequests = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === evidenceSourceMatrixUrl) {
+          sourceMatrixRequests += 1;
+          if (sourceMatrixRequests > 1) {
+            return new Response(JSON.stringify({ error: 'internal_error', details: 'matrix refresh failed' }), {
+              status: 500,
+              headers: { 'content-type': 'application/json' }
+            });
+          }
+        }
+
+        return resolveTestFetchResponse(url);
+      })
+    );
+
+    render(<App />);
+
+    const roster = await screen.findByRole('navigation', { name: 'Agent roster' });
+    await user.click(
+      within(roster).getByRole('button', {
+        name: 'Select and locate App Engineering Agent'
+      })
+    );
+
+    const inspectPeek = await screen.findByRole('region', { name: 'Selected agent inspect peek' });
+    const sourceMatrix = await within(inspectPeek).findByRole('region', {
+      name: 'Selected agent source matrix peek'
+    });
+
+    expect(await within(sourceMatrix).findByText('Workspace file · Observed')).toBeVisible();
+    await waitFor(() => expect(sourceMatrixRequests).toBeGreaterThan(1));
+    expect(await within(sourceMatrix).findByText('Source matrix · Last loaded rows')).toBeVisible();
+    expect(within(sourceMatrix).getByText('Refresh failed; showing the last loaded selected-agent source rows.')).toBeVisible();
+    expect(within(sourceMatrix).getByText('Workspace file · Observed')).toBeVisible();
+    expect(sourceMatrix).not.toHaveTextContent(/matrix refresh failed|healthy|productive|live/i);
+  });
+
   it('opens selected-agent replay from the compact inspect peek without using an automatic Hub dump', async () => {
     const user = userEvent.setup();
 

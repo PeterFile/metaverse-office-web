@@ -83,6 +83,62 @@ const sourceMatrix: AgentEvidenceSourceMatrix = {
 };
 
 describe('deriveSelectedAgentSourceMatrixViewModel', () => {
+  it('returns explicit loading, error, empty, and last-good states without echoing raw errors', () => {
+    expect(
+      deriveSelectedAgentSourceMatrixViewModel(null, 'app-engineering', {
+        loadState: 'loading',
+        error: null
+      })
+    ).toMatchObject({
+      status: 'loading',
+      statusLabel: 'Source matrix · Loading',
+      detailLabel: 'Waiting for selected-agent source matrix rows.',
+      rows: []
+    });
+
+    expect(
+      deriveSelectedAgentSourceMatrixViewModel(null, 'app-engineering', {
+        loadState: 'error',
+        error: 'read failed /Users/cwp/private token=secret tmux://raw'
+      })
+    ).toMatchObject({
+      status: 'error',
+      statusLabel: 'Source matrix unavailable',
+      detailLabel: 'Selected-agent source matrix could not be loaded.',
+      rows: []
+    });
+
+    expect(
+      deriveSelectedAgentSourceMatrixViewModel(sourceMatrix, 'unknown-agent', {
+        loadState: 'ready',
+        error: null
+      })
+    ).toMatchObject({
+      status: 'empty',
+      statusLabel: 'No source matrix rows',
+      detailLabel: 'No source rows are mapped to the selected agent in this slice.',
+      rows: []
+    });
+
+    expect(
+      deriveSelectedAgentSourceMatrixViewModel(sourceMatrix, 'app-engineering', {
+        loadState: 'ready',
+        error: 'read failed /Users/cwp/private token=secret tmux://raw',
+        maxRows: 1
+      })
+    ).toMatchObject({
+      status: 'last-good',
+      statusLabel: 'Source matrix · Last loaded rows',
+      detailLabel: 'Refresh failed; showing the last loaded selected-agent source rows.',
+      rows: [
+        expect.objectContaining({
+          source: 'Tmux observation',
+          status: 'Observed'
+        })
+      ]
+    });
+  });
+
   it('returns bounded safe rows for the selected agent with stable ordering', () => {
     expect(
       deriveSelectedAgentSourceMatrixViewModel(sourceMatrix, 'app-engineering', {
@@ -91,6 +147,8 @@ describe('deriveSelectedAgentSourceMatrixViewModel', () => {
       })
     ).toEqual({
       status: 'ready',
+      statusLabel: 'Source matrix',
+      detailLabel: 'Selected-agent source rows loaded.',
       selectedAgentId: 'app-engineering',
       rows: [
         {
@@ -147,12 +205,16 @@ describe('deriveSelectedAgentSourceMatrixViewModel', () => {
   it('returns an empty selected-agent state for missing or unknown selected agents', () => {
     expect(deriveSelectedAgentSourceMatrixViewModel(sourceMatrix, null)).toMatchObject({
       status: 'empty',
+      statusLabel: 'No selected agent',
+      detailLabel: 'Select an agent to inspect source matrix rows.',
       selectedAgentId: null,
       rows: []
     });
 
     expect(deriveSelectedAgentSourceMatrixViewModel(sourceMatrix, 'unknown-agent')).toMatchObject({
       status: 'empty',
+      statusLabel: 'No source matrix rows',
+      detailLabel: 'No source rows are mapped to the selected agent in this slice.',
       selectedAgentId: 'unknown-agent',
       rows: []
     });

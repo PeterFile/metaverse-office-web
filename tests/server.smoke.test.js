@@ -6766,6 +6766,68 @@ test('GET /runtime/source-gaps/lifecycle passes lifecycle_state as a read-only f
   });
 });
 
+test('GET /runtime/source-gaps/schema exposes static catalog without reading source-gap rows', async () => {
+  let collectCount = 0;
+  const controllerSnapshotCollector = {
+    async collectSnapshot() {
+      collectCount += 1;
+      throw new Error('GET /runtime/source-gaps/schema must not collect');
+    }
+  };
+  const root = await mkdtemp(path.join(os.tmpdir(), 'metaverse-office-source-gap-schema-'));
+  const storeFile = path.join(root, 'prototype-store.jsonl');
+  const store = await createPrototypeStore({ filePath: storeFile });
+
+  await store.appendCollectorReport(createRouteParityCollectorReport());
+  const fileBeforeRead = await readFile(storeFile, 'utf8');
+  store.listRuntimeSourceGaps = () => {
+    throw new Error('schema route must not list source-gap rows');
+  };
+  store.getRuntimeSourceGapsSummary = () => {
+    throw new Error('schema route must not summarize source-gap rows');
+  };
+  store.getRuntimeSourceGapAgentSummary = () => {
+    throw new Error('schema route must not group source-gap rows');
+  };
+  store.getRuntimeSourceGapLifecycle = () => {
+    throw new Error('schema route must not read source-gap lifecycle rows');
+  };
+  store.getRuntimeSourceGapTrend = () => {
+    throw new Error('schema route must not read source-gap trend rows');
+  };
+  store.getEvidenceRecord = () => {
+    throw new Error('schema route must not resolve schema as an evidence id');
+  };
+
+  const response = await requestJsonDirect({
+    url: '/runtime/source-gaps/schema?limit=1&bucket=<script>&token=/tmp/source-gap-secret',
+    store,
+    controllerSnapshotCollector
+  });
+  assert.equal(response.response.status, 200);
+  assert.deepEqual(response.body.item.limit, {
+    default: 50,
+    max: 200
+  });
+  assert.deepEqual(response.body.item.trend_buckets, ['hour', 'day']);
+  assert.deepEqual(response.body.item.lifecycle_states, [
+    'opened',
+    'continuing',
+    'resolved',
+    'observed_unmapped'
+  ]);
+  assert.equal(response.body.item.source_kinds.includes('workspace_file'), true);
+  assert.equal(response.body.item.evidence_roles.includes('runtime_unmapped'), true);
+  assert.equal(response.body.item.source_statuses.includes('observed'), true);
+  assert.equal(response.body.item.source_gap_statuses.includes('missing'), true);
+  assert.equal(JSON.stringify(response.body).includes('/tmp/'), false);
+  assert.equal(JSON.stringify(response.body).includes('<script>'), false);
+  assert.equal(JSON.stringify(response.body).includes('tmux://'), false);
+  assert.equal(JSON.stringify(response.body).includes('collector-snapshot:'), false);
+  assert.equal(collectCount, 0);
+  assert.equal(await readFile(storeFile, 'utf8'), fileBeforeRead);
+});
+
 test('GET evidence-record detail and provenance unknown ids do not echo unsafe ids', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'metaverse-office-evidence-404-'));
   const store = await createPrototypeStore({ filePath: path.join(root, 'prototype-store.jsonl') });
@@ -8485,6 +8547,7 @@ test('GET read route purity matrix leaves replay records and checkpoints unchang
     '/storage/replay-manifest',
     '/storage/index-health',
     '/runtime/source-gaps?newest_first=true&limit=10',
+    '/runtime/source-gaps/schema',
     '/runtime/source-gaps/summary?newest_first=true&limit=1',
     '/runtime/source-gaps/agent-summary?newest_first=true&limit=1',
     '/runtime/source-gaps/lifecycle?newest_first=true&limit=1',

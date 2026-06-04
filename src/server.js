@@ -519,6 +519,13 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
     return;
   }
 
+  if (method === 'GET' && pathname === '/runtime/source-gaps/schema') {
+    sendJson(res, 200, {
+      item: store.getRuntimeSourceGapsSchema()
+    });
+    return;
+  }
+
   if (method === 'GET' && pathname === '/runtime/source-gaps') {
     sendJson(res, 200, {
       items: store.listRuntimeSourceGaps({

@@ -1089,7 +1089,7 @@ test('prototype store exposes deterministic sanitized storage replay manifest', 
   assert.equal(unsafeSerialized.includes('degraded_reasons'), false);
 });
 
-test('JSONL prototype store reports storage index health as not applicable', async () => {
+test('JSONL prototype store reports storage index-health as not applicable', async () => {
   const storeFile = await createStoreFile();
   const store = await createPrototypeStore({ filePath: storeFile });
 
@@ -1120,7 +1120,7 @@ test('JSONL prototype store reports storage index health as not applicable', asy
   assert.equal(JSON.stringify(health).includes('metadata'), false);
 });
 
-test('JSONL storage index health buckets unknown record kinds without leaking raw semantics', async () => {
+test('JSONL storage index-health buckets unknown record kinds without leaking raw semantics', async () => {
   const storeFile = await createStoreFile();
   const records = [
     {
@@ -3926,7 +3926,7 @@ test('SQLite prototype store creates derived sidecar indexes and backfills exist
   assert.equal(backfillCountStdout.trim(), '2|1');
 });
 
-test('SQLite prototype store reports sanitized storage index health without side effects', async () => {
+test('SQLite prototype store reports sanitized storage index-health without side effects', async () => {
   const sqliteStoreFile = await createSqliteStoreFile();
   const store = await createPrototypeStore({ sqliteFilePath: sqliteStoreFile });
 
@@ -3963,6 +3963,25 @@ test('SQLite prototype store reports sanitized storage index health without side
     ...health,
     status: 'degraded',
     record_evidence_ref_count: 0,
+    sidecar_status: 'stale'
+  });
+
+  await execSqlite(
+    sqliteStoreFile,
+    [
+      'DELETE FROM record_evidence_refs;',
+      'INSERT INTO record_evidence_refs(seq, evidence_ref)',
+      'SELECT records.seq, json_each.value FROM records, json_each(',
+      "CASE WHEN json_type(payload_json, '$.evidence_refs') = 'array'",
+      "THEN json_extract(payload_json, '$.evidence_refs')",
+      "ELSE json_array(json_extract(payload_json, '$.evidence_ref')) END",
+      ') WHERE json_each.value IS NOT NULL;',
+      "UPDATE record_index SET evidence_role = NULL WHERE kind = 'evidence_record';"
+    ].join(' ')
+  );
+  assert.deepEqual(await store.getStorageIndexHealth(), {
+    ...health,
+    status: 'degraded',
     sidecar_status: 'stale'
   });
 

@@ -1548,6 +1548,39 @@ function renderSelectedAgentEvidenceRecordDetail(
   );
 }
 
+const SELECTED_EVIDENCE_SOURCE_CONTEXT_KIND_LABELS: Record<string, string> = {
+  workspace_root: 'Workspace root',
+  workspace_file: 'Workspace file',
+  tmux_observation: 'Runtime observation',
+  hermes_profile: 'Runtime source',
+  hermes_session: 'Runtime source',
+  kanban_fixture: 'Tool fixture',
+  linear_fixture: 'Tool fixture',
+  slack_fixture: 'Tool fixture',
+  task_fixture: 'Task fixture'
+};
+const SELECTED_EVIDENCE_SOURCE_CONTEXT_STATUS_LABELS: Record<string, string> = {
+  observed: 'Observed',
+  degraded: 'Degraded',
+  missing: 'Missing',
+  error: 'Error'
+};
+const SELECTED_EVIDENCE_SOURCE_CONTEXT_ROLE_LABELS: Record<string, string> = {
+  workspace_presence: 'Workspace presence',
+  inbound_task: 'Inbound task',
+  agent_output: 'Agent output',
+  agent_plan: 'Agent plan',
+  runtime_activity: 'Runtime activity',
+  runtime_presence: 'Runtime presence',
+  runtime_unmapped: 'Runtime unmapped',
+  task_reference: 'Task reference'
+};
+
+function formatSelectedEvidenceSourceContextLabel(value: unknown, labels: Readonly<Record<string, string>>) {
+  const normalized = typeof value === 'string' ? value.trim() : '';
+  return normalized && Object.prototype.hasOwnProperty.call(labels, normalized) ? labels[normalized] : 'Unknown';
+}
+
 function renderSelectedAgentEvidenceSourceContext(
   evidenceId: string,
   sourceContext: EvidenceSourceContext | null,
@@ -1585,12 +1618,25 @@ function renderSelectedAgentEvidenceSourceContext(
     sourceContext.source_health.agent_items[0] ??
     null;
 
+  const sourceKindLabel = formatSelectedEvidenceSourceContextLabel(
+    summary.kind,
+    SELECTED_EVIDENCE_SOURCE_CONTEXT_KIND_LABELS
+  );
+  const roleLabel = formatSelectedEvidenceSourceContextLabel(
+    summary.role,
+    SELECTED_EVIDENCE_SOURCE_CONTEXT_ROLE_LABELS
+  );
+  const statusLabel = formatSelectedEvidenceSourceContextLabel(
+    summary.status,
+    SELECTED_EVIDENCE_SOURCE_CONTEXT_STATUS_LABELS
+  );
+  const mappingLabel = summary.mapped ? 'Mapped' : 'Unmapped';
+  const outputLabel = summary.output_candidate ? 'Output candidate' : 'Supporting evidence';
+
   return (
     <span className="aitown-evidence-source-context" aria-label="Selected evidence source context">
       <strong>Evidence Source Context</strong>
-      <span>
-        {`Source context · ${summary.kind} · ${summary.role ?? 'unclassified'} · ${summary.status ?? 'unknown'} · ${summary.mapped ? 'mapped' : 'unmapped'} · ${summary.output_candidate ? 'output candidate' : 'non-output'}`}
-      </span>
+      <span>{`Source context · ${sourceKindLabel} · ${roleLabel} · ${statusLabel} · ${mappingLabel} · ${outputLabel}`}</span>
       <span>{`Observed · ${renderTimestamp(summary.time.observed_at, 'No observed timestamp')}`}</span>
       <span>{`Collected · ${renderTimestamp(summary.time.collected_at, 'No collected timestamp')}`}</span>
       <span>{`Source gaps · ${sourceContext.source_gaps.summary.total_count} total · ${sourceContext.source_gaps.summary.mapped_count} mapped · ${sourceContext.source_gaps.summary.unmapped_count} unmapped`}</span>

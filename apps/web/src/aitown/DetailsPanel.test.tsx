@@ -2251,7 +2251,7 @@ describe('DetailsPanel selected-agent workflow lifecycle', () => {
     expect(refreshedSection).not.toBeNull();
     expect(within(refreshedSection!).getByText('Evidence Source Context')).toBeVisible();
     expect(refreshedSection!).toHaveTextContent(
-      'Source context · workspace_file · agent_output · observed · mapped · output candidate'
+      'Source context · Workspace file · Agent output · Observed · Mapped · Output candidate'
     );
     expect(refreshedSection!).toHaveTextContent('Observed · 2026-03-16T08:58:00.000Z');
     expect(refreshedSection!).toHaveTextContent('Collected · 2026-03-16T08:59:00.000Z');
@@ -2265,8 +2265,49 @@ describe('DetailsPanel selected-agent workflow lifecycle', () => {
     expect(refreshedSection!).not.toHaveTextContent('metadata');
     expect(refreshedSection!).not.toHaveTextContent('raw_tmux_capture');
     expect(refreshedSection!).not.toHaveTextContent('degraded_reasons');
-    expectEvidenceJourneyReadOnly(refreshedSection!);
-    expectNoUnprovenLivenessLabels(refreshedSection!);
+
+    rerender(
+      <DetailsPanel
+        {...buildProps({
+          activeHubCategory: 'evidence',
+          selectedAgentDrilldownTab: 'evidence',
+          selectedAgentEvidenceLedger: buildSelectedAgentEvidenceLedger(),
+          selectedAgentEvidenceLedgerState: 'ready',
+          selectedAgentEvidenceRecord: buildEvidenceRecord(),
+          selectedAgentEvidenceRecordId: 'output-1',
+          selectedAgentEvidenceRecordState: 'ready',
+          selectedAgentEvidenceSourceContext: buildEvidenceSourceContext({
+            source_summary: {
+              kind: 'hermes_session',
+              status: 'degraded',
+              role: 'runtime_presence',
+              output_candidate: false,
+              mapped: false,
+              time: {
+                observed_at: '2026-03-16T08:58:00.000Z',
+                collected_at: '2026-03-16T08:59:00.000Z'
+              }
+            }
+          }),
+          selectedAgentEvidenceSourceContextState: 'ready',
+          onInspectSelectedAgentEvidenceSourceContext
+        })}
+      />
+    );
+
+    const runtimeSection = screen.getByRole('heading', { name: 'Evidence Record Detail' }).closest('section');
+    expect(runtimeSection).not.toBeNull();
+    expect(runtimeSection!).toHaveTextContent(
+      'Source context · Runtime source · Runtime presence · Degraded · Unmapped · Supporting evidence'
+    );
+    expect(runtimeSection!).not.toHaveTextContent('hermes_session');
+    expect(runtimeSection!).not.toHaveTextContent('Hermes');
+    expect(runtimeSection!).not.toHaveTextContent('session');
+    expect(runtimeSection!).not.toHaveTextContent('profile');
+    expect(runtimeSection!).not.toHaveTextContent('tmux');
+
+    expectEvidenceJourneyReadOnly(runtimeSection!);
+    expectNoUnprovenLivenessLabels(runtimeSection!);
   });
 
   it('renders a bounded sanitized selected-evidence checkpoint proof strip', () => {

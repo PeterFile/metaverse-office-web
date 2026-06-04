@@ -93,12 +93,18 @@ const EVIDENCE_RECORD_BOOLEAN_FILTERS = Object.freeze([
 const EVIDENCE_RECORD_SCHEMA_WRITE_BOUNDARY =
   'read-only schema catalog; does not collect, read runtime sources, append records, or expose control-plane actions';
 const RUNTIME_SOURCE_GAP_STATUSES = Object.freeze(['degraded', 'missing', 'error']);
+const RUNTIME_SOURCE_GAP_SUPPORTED_FILTERS = Object.freeze(
+  EVIDENCE_RECORD_SUPPORTED_FILTERS.filter((filter) => filter !== 'evidence_ref')
+);
+const RUNTIME_SOURCE_GAP_TREND_BUCKETS = Object.freeze(['hour', 'day']);
 const RUNTIME_SOURCE_GAP_LIFECYCLE_STATES = Object.freeze([
   'opened',
   'continuing',
   'resolved',
   'observed_unmapped'
 ]);
+const RUNTIME_SOURCE_GAP_SCHEMA_WRITE_BOUNDARY =
+  'read-only runtime source-gap schema catalog; does not collect, read runtime sources, append records, or expose control-plane actions';
 const execFileAsync = promisify(execFile);
 const SEVERITY_RANK = Object.freeze({
   normal: 0,
@@ -808,6 +814,24 @@ class PrototypeStore {
         max: 200
       },
       route_write_boundary: EVIDENCE_RECORD_SCHEMA_WRITE_BOUNDARY
+    };
+  }
+
+  getRuntimeSourceGapsSchema() {
+    return {
+      source_kinds: [...EVIDENCE_RECORD_SOURCE_KINDS],
+      evidence_roles: [...EVIDENCE_RECORD_ROLES],
+      source_statuses: [...EVIDENCE_RECORD_SOURCE_STATUSES],
+      source_gap_statuses: [...RUNTIME_SOURCE_GAP_STATUSES],
+      supported_filters: [...RUNTIME_SOURCE_GAP_SUPPORTED_FILTERS],
+      boolean_filters: [...EVIDENCE_RECORD_BOOLEAN_FILTERS],
+      lifecycle_states: [...RUNTIME_SOURCE_GAP_LIFECYCLE_STATES],
+      trend_buckets: [...RUNTIME_SOURCE_GAP_TREND_BUCKETS],
+      limit: {
+        default: 50,
+        max: 200
+      },
+      route_write_boundary: RUNTIME_SOURCE_GAP_SCHEMA_WRITE_BOUNDARY
     };
   }
 

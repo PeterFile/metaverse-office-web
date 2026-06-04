@@ -252,6 +252,86 @@ const replaySourceContextFixture = {
     redacted: true
   }
 };
+const replaySourceContextUiFixture = {
+  item: {
+    evidence_id: replayEvidenceId,
+    source_summary: {
+      kind: 'workspace_file',
+      status: 'observed',
+      role: 'agent_output',
+      output_candidate: true,
+      mapped: true,
+      time: {
+        observed_at: '2026-03-16T08:58:00.000Z',
+        collected_at: '2026-03-16T08:59:00.000Z'
+      }
+    },
+    record: {
+      observed_at: '2026-03-16T08:58:00.000Z',
+      collected_at: '2026-03-16T08:59:00.000Z',
+      agent_id: 'app-engineering',
+      source_kind: 'workspace_file',
+      evidence_role: 'agent_output',
+      source_status: 'observed',
+      output_candidate: true,
+      unmapped: false
+    },
+    source_health: {
+      collected_at: '2026-03-16T08:59:00.000Z',
+      summary: {
+        agent_count: 1,
+        source_kind_buckets: {
+          workspace_files: { observed: 1, degraded: 0, missing: 0, error: 0 }
+        },
+        status_buckets: { observed: 1, degraded: 0, missing: 0, error: 0 }
+      },
+      agent_items: [
+        {
+          agent_id: 'app-engineering',
+          source_health: {
+            workspace_files: {
+              status: 'observed',
+              observed_count: 1,
+              missing_count: 0,
+              error_count: 0,
+              last_observed_at: '2026-03-16T08:58:00.000Z'
+            }
+          },
+          evidence_count: 1,
+          latest_evidence_at: '2026-03-16T08:58:00.000Z'
+        }
+      ]
+    },
+    source_gaps: {
+      summary: {
+        total_count: 1,
+        returned_limit: 1,
+        mapped_count: 1,
+        unmapped_count: 0,
+        output_candidate_buckets: { true: 1, false: 0 },
+        source_kind_buckets: { workspace_file: 1 },
+        evidence_role_buckets: { agent_output: 1 },
+        source_status_buckets: { observed: 1 },
+        first_observed_at: '2026-03-16T08:58:00.000Z',
+        last_observed_at: '2026-03-16T08:58:00.000Z',
+        first_collected_at: '2026-03-16T08:59:00.000Z',
+        last_collected_at: '2026-03-16T08:59:00.000Z'
+      },
+      items: [
+        {
+          observed_at: '2026-03-16T08:58:00.000Z',
+          collected_at: '2026-03-16T08:59:00.000Z',
+          agent_id: 'app-engineering',
+          source_kind: 'workspace_file',
+          evidence_role: 'agent_output',
+          source_status: 'observed',
+          output_candidate: true,
+          unmapped: false
+        }
+      ]
+    }
+  }
+};
 const replayByEvidenceIdGet =
   `GET /accountability/replay?limit=10&window=60m&evidence_id=${replayEvidenceId}&agent_id=app-engineering`;
 const checkpointLogByEvidenceIdGet =
@@ -685,10 +765,12 @@ test.describe('operator shell live evidence journey smoke', () => {
     const allowedApiGets = new Set([
       ...expectedApiGets,
       ...replayEvidenceRecordGets,
+      replaySourceContextGet,
       checkpointLogByEvidenceIdGet,
       replayByEvidenceIdGet
     ]);
     const evidenceRecordRequests: string[] = [];
+    const sourceContextRequests: string[] = [];
     const checkpointLogRequests: string[] = [];
     const replayRequests: string[] = [];
     const apiRequestViolations: string[] = [];
@@ -705,6 +787,9 @@ test.describe('operator shell live evidence journey smoke', () => {
       if (url.pathname.startsWith('/evidence-records')) {
         evidenceRecordRequests.push(key);
       }
+      if (isExactSourceContextReadGet(request)) {
+        sourceContextRequests.push(key);
+      }
       if (url.pathname === '/accountability/replay/checkpoint-log') {
         checkpointLogRequests.push(key);
       }
@@ -714,6 +799,9 @@ test.describe('operator shell live evidence journey smoke', () => {
     };
 
     await installLiveEvidenceFixtures(page);
+    await routeExpectedSourceContextReadGet(page, async (route) => {
+      await route.fulfill({ json: replaySourceContextUiFixture });
+    });
     page.on('request', handleRequest);
 
     try {
@@ -760,6 +848,26 @@ test.describe('operator shell live evidence journey smoke', () => {
       await expect(detailSection).not.toContainText('/evidence-records/');
       await expect(detailSection).not.toContainText('/tmp/revenue-handoff.md');
       expect(replayRequests, 'inspecting evidence detail should not prefetch replay records').toEqual([]);
+      expect(sourceContextRequests, 'inspecting evidence detail should not prefetch source context').toEqual([]);
+
+      await detailSection
+        .getByRole('button', { name: `Inspect source context for evidence ${boundedReplayEvidenceId}` })
+        .click();
+
+      await expect.poll(() => sourceContextRequests.slice()).toEqual([replaySourceContextGet]);
+      const sourceContextDisclosure = detailSection.getByLabel('Selected evidence source context');
+      await expect(sourceContextDisclosure.getByText('Evidence Source Context')).toBeVisible();
+      await expect(sourceContextDisclosure).toContainText(
+        'Source context · Workspace file · Agent output · Observed · Mapped · Output candidate'
+      );
+      await expect(sourceContextDisclosure).toContainText('Source gaps · 1 total · 1 mapped · 0 unmapped');
+      await expect(sourceContextDisclosure).toContainText(
+        'Source health · 1 evidence · Latest 2026-03-16T08:58:00.000Z'
+      );
+      await expect(
+        sourceContextDisclosure,
+        'source-context disclosure should not expose raw refs, paths, sessions, payloads, or unsafe metadata'
+      ).not.toContainText(visibleProofRawRefPattern);
 
       await detailSection.getByRole('button', { name: `Replay this evidence ${boundedReplayEvidenceId}` }).click();
 

@@ -4062,7 +4062,7 @@ afterEach(() => {
       expect(sourceContextRequests).toEqual([{ method: 'GET', url: appEngineeringEvidenceSourceContextUrl }]);
       expect(await within(detailSection).findByText('Evidence Source Context')).toBeVisible();
       expect(detailSection).toHaveTextContent(
-        'Source context · workspace_file · agent_output · observed · mapped · output candidate'
+        'Source context · Workspace file · Agent output · Observed · Mapped · Output candidate'
       );
       expect(detailSection).toHaveTextContent('Source gaps · 1 total · 1 mapped · 0 unmapped');
       expect(detailSection).toHaveTextContent('Source health · 1 evidence · Latest 2026-03-16T08:58:00.000Z');

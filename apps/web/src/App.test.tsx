@@ -242,6 +242,10 @@ const evidenceSpineSummaryUrl = '/agents/evidence-spine/summary?newest_first=tru
 const evidenceSourceMatrixUrl = '/agents/evidence-spine/source-matrix?newest_first=true&limit=200';
 const runtimeSourceGapsUrl = '/runtime/source-gaps?newest_first=true&limit=3';
 const runtimeSourceGapsSummaryUrl = '/runtime/source-gaps/summary?newest_first=true&limit=3';
+const growthRevenueRuntimeSourceGapLifecycleUrl =
+  '/runtime/source-gaps/lifecycle?agent_id=growth-revenue&newest_first=true&limit=3';
+const appEngineeringRuntimeSourceGapLifecycleUrl =
+  '/runtime/source-gaps/lifecycle?agent_id=app-engineering&newest_first=true&limit=3';
 const appEngineeringEvidenceRecordsUrl =
   '/evidence-records?agent_id=app-engineering&newest_first=true&limit=12';
 const appEngineeringEvidenceRecordDetailUrl = '/evidence-records/output-1';
@@ -1583,6 +1587,13 @@ const emptyRuntimeSourceGapsSummaryFixture = {
   collector_snapshot_id_buckets: {}
 };
 
+const emptyRuntimeSourceGapLifecycleFixture = {
+  total_count: 0,
+  total_groups: 0,
+  returned_limit: 3,
+  groups: []
+};
+
 const growthRevenueRuntimeSourceGapsFixture = {
   items: [
     {
@@ -1622,6 +1633,26 @@ const growthRevenueRuntimeSourceGapsSummaryFixture = {
   collector_snapshot_id_buckets: {
     'collector-snapshot:2026-03-16T09:01:00.000Z': 1
   }
+};
+
+const growthRevenueRuntimeSourceGapLifecycleFixture = {
+  total_count: 1,
+  total_groups: 1,
+  returned_limit: 3,
+  groups: [
+    {
+      agent_id: 'growth-revenue',
+      source_kind: 'workspace_file',
+      evidence_role: 'agent_output',
+      current_status: 'degraded',
+      lifecycle_state: 'opened',
+      first_observed_at: '2026-03-16T08:57:45.000Z',
+      last_observed_at: '2026-03-16T08:57:45.000Z',
+      first_collected_at: '2026-03-16T09:01:00.000Z',
+      last_collected_at: '2026-03-16T09:01:00.000Z',
+      record_count: 1
+    }
+  ]
 };
 
 const teamLeadMemoryArtifactsFixture = {
@@ -2071,6 +2102,10 @@ function resolveDefaultFetchResponse(url: string) {
 
   if (url === runtimeSourceGapsSummaryUrl) {
     return jsonResponse({ item: emptyRuntimeSourceGapsSummaryFixture });
+  }
+
+  if (url === appEngineeringRuntimeSourceGapLifecycleUrl || url === growthRevenueRuntimeSourceGapLifecycleUrl) {
+    return jsonResponse({ item: emptyRuntimeSourceGapLifecycleFixture });
   }
 
   if (url === appEngineeringEvidenceRecordsUrl) {
@@ -4525,6 +4560,10 @@ afterEach(() => {
         return jsonResponse({ item: growthRevenueRuntimeSourceGapsSummaryFixture });
       }
 
+      if (url === growthRevenueRuntimeSourceGapLifecycleUrl) {
+        return jsonResponse({ item: growthRevenueRuntimeSourceGapLifecycleFixture });
+      }
+
       if (url === collectorSnapshotUrl) {
         return jsonResponse({
           item: {
@@ -4616,10 +4655,16 @@ afterEach(() => {
     expect(inspectPeek).toHaveTextContent('Mapped source');
     expect(inspectPeek).toHaveTextContent('Observed 2026-03-16T08:57:45.000Z');
     expect(inspectPeek).toHaveTextContent('Collected 2026-03-16T09:01:00.000Z');
-    expect(inspectPeek).toHaveTextContent('Lifecycle · 1 mapped · 0 unmapped');
+    await waitFor(() =>
+      expect(fetchMock.mock.calls.map(([request]) => String(request))).toContain(growthRevenueRuntimeSourceGapLifecycleUrl)
+    );
+    await waitFor(() => expect(inspectPeek).toHaveTextContent('Lifecycle · 1 mapped · 0 unmapped'));
     expect(inspectPeek).toHaveTextContent('Mapped lifecycle');
-    expect(inspectPeek).toHaveTextContent('Workspace files · degraded · Current gap');
+    expect(inspectPeek).toHaveTextContent('Workspace source · degraded · Opened gap');
     expect(inspectPeek).toHaveTextContent('1 row · Observed 2026-03-16T08:57:45.000Z');
+    expect(fetchMock.mock.calls.map(([request]) => String(request))).not.toContain(
+      '/runtime/source-gaps/lifecycle?newest_first=true&limit=3'
+    );
     expect(within(inspectPeek).getByRole('button', { name: 'Open Evidence drilldown' })).toBeVisible();
     expect(inspectPeek).not.toHaveTextContent('/tmp/growth-revenue');
     expect(inspectPeek).not.toHaveTextContent('6-web3-growth-revenue');
@@ -4651,6 +4696,10 @@ afterEach(() => {
         return jsonResponse({ item: growthRevenueRuntimeSourceGapsSummaryFixture });
       }
 
+      if (url === growthRevenueRuntimeSourceGapLifecycleUrl) {
+        return jsonResponse({ item: growthRevenueRuntimeSourceGapLifecycleFixture });
+      }
+
       return resolveTestFetchResponse(url);
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -4674,6 +4723,16 @@ afterEach(() => {
     expect(inspectPeek).toHaveTextContent('Mapped source');
     expect(inspectPeek).toHaveTextContent('Observed 2026-03-16T08:57:45.000Z');
     expect(inspectPeek).toHaveTextContent('Collected 2026-03-16T09:01:00.000Z');
+    await waitFor(() =>
+      expect(fetchMock.mock.calls.map(([request]) => String(request))).toContain(growthRevenueRuntimeSourceGapLifecycleUrl)
+    );
+    await waitFor(() => expect(inspectPeek).toHaveTextContent('Lifecycle · 1 mapped · 0 unmapped'));
+    expect(inspectPeek).toHaveTextContent('Mapped lifecycle');
+    expect(inspectPeek).toHaveTextContent('Workspace source · degraded · Opened gap');
+    expect(inspectPeek).not.toHaveTextContent('Lifecycle · no runtime source-gap snapshot');
+    expect(fetchMock.mock.calls.map(([request]) => String(request))).not.toContain(
+      '/runtime/source-gaps/lifecycle?newest_first=true&limit=3'
+    );
     expect(inspectPeek).not.toHaveTextContent('/tmp/growth-revenue');
     expect(inspectPeek).not.toHaveTextContent('6-web3-growth-revenue');
     expect(inspectPeek).not.toHaveTextContent('collector-snapshot:');

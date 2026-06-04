@@ -137,6 +137,26 @@ const runtimeSourceGapsSummary = {
   }
 };
 
+const runtimeSourceGapLifecycle = {
+  total_count: 1,
+  total_groups: 1,
+  returned_limit: 3,
+  groups: [
+    {
+      agent_id: 'app-engineering',
+      source_kind: 'workspace_file',
+      evidence_role: 'agent_output',
+      current_status: 'degraded',
+      lifecycle_state: 'opened',
+      first_observed_at: '2026-03-16T08:58:30.000Z',
+      last_observed_at: '2026-03-16T08:58:30.000Z',
+      first_collected_at: '2026-03-16T09:01:00.000Z',
+      last_collected_at: '2026-03-16T09:01:00.000Z',
+      record_count: 1
+    }
+  ]
+};
+
 const evidenceSourceMatrix = {
   item: {
     agent_count: 2,
@@ -338,6 +358,7 @@ const checkpointLogByEvidenceIdGet =
   `GET /accountability/replay/checkpoint-log?limit=3&evidence_id=${replayEvidenceId}`;
 const evidenceSpineSummaryGet = 'GET /agents/evidence-spine/summary?newest_first=true&limit=200';
 const evidenceSourceMatrixGet = 'GET /agents/evidence-spine/source-matrix?newest_first=true&limit=200';
+const sourceGapLifecycleGet = 'GET /runtime/source-gaps/lifecycle?agent_id=app-engineering&newest_first=true&limit=3';
 const expectedApiGets = new Set([
   'GET /office/overview',
   'GET /incidents?limit=200&window=8760h',
@@ -346,6 +367,7 @@ const expectedApiGets = new Set([
   'GET /collectors/controller-snapshot/source-health?limit=7',
   'GET /runtime/source-gaps?newest_first=true&limit=3',
   'GET /runtime/source-gaps/summary?newest_first=true&limit=3',
+  sourceGapLifecycleGet,
   evidenceSpineSummaryGet,
   evidenceSourceMatrixGet,
   'GET /agents/app-engineering/workflow?limit=10&window=60m',
@@ -482,6 +504,10 @@ async function installLiveEvidenceFixtures(
     await route.fulfill({ json: { item: sourceGapsSummary } });
   });
 
+  await routeExpectedApiGet(page, sourceGapLifecycleGet, async (route) => {
+    await route.fulfill({ json: { item: runtimeSourceGapLifecycle } });
+  });
+
   await routeExpectedApiGet(page, evidenceSourceMatrixGet, async (route) => {
     await route.fulfill({ json: evidenceSourceMatrix });
   });
@@ -561,6 +587,7 @@ test.describe('operator shell live evidence journey smoke', () => {
     const guardedReadPaths = [
       '/agents/evidence-spine/summary?newest_first=true&limit=200',
       '/agents/evidence-spine/source-matrix?newest_first=true&limit=200',
+      '/runtime/source-gaps/lifecycle?agent_id=app-engineering&newest_first=true&limit=3',
       '/evidence-records?agent_id=app-engineering&newest_first=true&limit=12',
       `/evidence-records/${replayEvidenceId}`,
       `/evidence-records/${replayEvidenceId}/provenance-bundle`,
@@ -576,6 +603,9 @@ test.describe('operator shell live evidence journey smoke', () => {
       '/agents/evidence-spine/source-matrix',
       '/agents/evidence-spine/source-matrix?limit=200&newest_first=true',
       '/agents/evidence-spine/source-matrix?newest_first=true&limit=200&raw=true',
+      '/runtime/source-gaps/lifecycle?newest_first=true&limit=3',
+      '/runtime/source-gaps/lifecycle?limit=3&newest_first=true&agent_id=app-engineering',
+      '/runtime/source-gaps/lifecycle?agent_id=app-engineering&newest_first=true&limit=3&raw=true',
       '/agents/app-engineering/evidence-spine?newest_first=true&limit=200',
       '/evidence-records',
       '/evidence-records?agent_id=app-engineering&limit=12&newest_first=true',
@@ -1020,6 +1050,9 @@ test.describe('operator shell live evidence journey smoke', () => {
       await expect(sourceGapInspectPeek).toContainText('Evidence only');
       await expect(sourceGapInspectPeek).toContainText('Workspace files · degraded');
       await expect(sourceGapInspectPeek).toContainText('Mapped source');
+      await expect(sourceGapInspectPeek).toContainText('Lifecycle · 1 mapped · 0 unmapped');
+      await expect(sourceGapInspectPeek).toContainText('Workspace source · degraded · Opened gap');
+      await expect(sourceGapInspectPeek).not.toContainText('Lifecycle · no runtime source-gap snapshot');
       await expect(
         sourceGapInspectPeek,
         'source-gap world pin inspect peek should not expose raw refs, runtime payloads, or reasons'

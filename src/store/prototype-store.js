@@ -285,7 +285,8 @@ class SqliteRecordLog {
       record_evidence_ref_count: Number.isSafeInteger(rows[0]?.record_evidence_ref_count)
         ? rows[0].record_evidence_ref_count
         : 0,
-      record_index_drift_count: await this.#countRecordIndexDrift(expectedIndexes)
+      record_index_drift_count: await this.#countRecordIndexDrift(expectedIndexes),
+      record_evidence_ref_drift_count: await this.#countRecordEvidenceRefDrift(expectedIndexes)
     };
   }
 
@@ -309,6 +310,46 @@ class SqliteRecordLog {
       const row = rowsBySeq.get(index + 1);
       if (!row || !sqliteRecordIndexFieldsMatch(row, expected)) {
         driftCount += 1;
+      }
+    }
+
+    return driftCount;
+  }
+
+  async #countRecordEvidenceRefDrift(expectedIndexes) {
+    const { stdout } = await this.#exec([
+      '-readonly',
+      this.filePath,
+      '-json',
+      'SELECT seq,evidence_ref FROM record_evidence_refs ORDER BY seq,evidence_ref;'
+    ]);
+    const rows = stdout.trim() ? JSON.parse(stdout) : [];
+    const actualRefs = new Map();
+    const expectedRefs = new Map();
+
+    for (const row of rows) {
+      const key = `${row.seq}\u0000${row.evidence_ref}`;
+      actualRefs.set(key, (actualRefs.get(key) || 0) + 1);
+    }
+
+    for (let index = 0; index < expectedIndexes.length; index += 1) {
+      for (const evidenceRef of expectedIndexes[index].evidence_refs) {
+        const key = `${index + 1}\u0000${evidenceRef}`;
+        expectedRefs.set(key, (expectedRefs.get(key) || 0) + 1);
+      }
+    }
+
+    let driftCount = 0;
+    for (const [key, expectedCount] of expectedRefs) {
+      const actualCount = actualRefs.get(key) || 0;
+      if (actualCount < expectedCount) {
+        driftCount += expectedCount - actualCount;
+      }
+    }
+    for (const [key, actualCount] of actualRefs) {
+      const expectedCount = expectedRefs.get(key) || 0;
+      if (actualCount > expectedCount) {
+        driftCount += actualCount - expectedCount;
       }
     }
 
@@ -4571,6 +4612,8 @@ async function projectStorageIndexHealth({ records, recordLog }) {
     record_count: records.length,
     record_index_count: null,
     record_evidence_ref_count: null,
+    record_index_drift_count: null,
+    record_evidence_ref_drift_count: null,
     sidecar_status: 'not_applicable',
     record_kind_buckets: createRecordKindBuckets(records),
     latest_record_ts: getLatestPublicRecordTimestamp(records)
@@ -4590,12 +4633,15 @@ async function projectStorageIndexHealth({ records, recordLog }) {
     const complete =
       counts.record_index_count === records.length &&
       counts.record_evidence_ref_count === expectedEvidenceRefCount &&
-      counts.record_index_drift_count === 0;
+      counts.record_index_drift_count === 0 &&
+      counts.record_evidence_ref_drift_count === 0;
 
     return {
       ...base,
       record_index_count: counts.record_index_count,
       record_evidence_ref_count: counts.record_evidence_ref_count,
+      record_index_drift_count: counts.record_index_drift_count,
+      record_evidence_ref_drift_count: counts.record_evidence_ref_drift_count,
       sidecar_status: complete ? 'complete' : 'stale',
       status: complete ? 'ok' : 'degraded'
     };

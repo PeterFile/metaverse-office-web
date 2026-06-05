@@ -340,13 +340,13 @@ describe('SceneStatusLegend', () => {
     const dataQualityList = await screen.findByRole('list', { name: 'Data quality legend' });
     const items = within(dataQualityList).getAllByRole('listitem');
     expect(items[0]).toHaveTextContent(
-      'Degraded · 3 evidence gaps · last overview 2026-03-14T09:55:00Z · overview unavailable; incident feed unavailable; workflow partial'
+      'Degraded · 3 evidence gaps · last overview 2026-03-14T09:55:00Z · Overview unavailable; Incident feed unavailable; Workflow partial'
     );
     expect(items[1]).toHaveTextContent(
-      'Incident-feed backfill · App Engineering Agent · incidents inc-alert, inc-active-2 · sources controller_event · correlations corr-a, corr-b · evidence refs /tmp/a.md, tmux://session/0.1 · workflow partial'
+      'Incident-feed backfill · App Engineering Agent · 2 incidents · sources Controller event · 2 correlations · 2 evidence refs · Workflow partial'
     );
     expect(items[2]).toHaveTextContent(
-      'Incident-feed backfill · Support Agent · incidents inc-support · sources controller_event · workflow partial'
+      'Incident-feed backfill · Support Agent · 1 incident · sources Controller event · Workflow partial'
     );
     expect(items[2]).not.toHaveTextContent('correlations');
     expect(items[2]).not.toHaveTextContent('evidence refs');
@@ -381,8 +381,82 @@ describe('SceneStatusLegend', () => {
     expect(screen.getByText('Incident evidence')).toBeVisible();
     expect(items).toHaveLength(1);
     expect(items[0]).toHaveTextContent(
-      'inc-alert · source controller_event · actor team-lead · correlation corr-alert · evidence /tmp/a.md, tmux://session/0.1 · counterparties ops-lead'
+      'Incident evidence · source Controller event · actor mapped · correlation linked · 2 evidence refs · 1 counterparty'
     );
+  });
+
+  it('sanitizes hostile evidence legend labels before rendering or serialization', async () => {
+    const canaries = [
+      'tmux://session/secret-pane',
+      'HermesProfileToken',
+      '/Users/alice/private/session.json',
+      'C:\\Users\\alice\\private\\session.json',
+      'file:///Users/alice/private/session.json',
+      'https://hooks.example.invalid/services/token',
+      'http://metadata.example.invalid/token',
+      'webhook_payload_token',
+      'control-plane-admin',
+      'profile://root',
+      'status://control-plane-open',
+    ];
+    const world = makeWorldState({
+      agents: new Map([
+        [
+          'app-engineering',
+          makeWorldAgent({
+            runtime_evidence: {
+              source: 'incident_feed_backfill',
+              degraded_reasons: [canaries[7], 'workflow partial'],
+              incident_ids: ['inc-secret'],
+              source_kinds: [canaries[1]],
+              correlation_ids: [canaries[8]],
+              evidence_refs: [canaries[0], canaries[2], canaries[3], canaries[4], canaries[5], canaries[6]],
+            },
+          }),
+        ],
+      ]),
+      data_quality: {
+        overview_available: false,
+        workflow_agent_ids: ['app-engineering'],
+        incident_feed_available: false,
+        last_overview_at: '2026-03-14T09:55:00Z',
+        degraded_reasons: [canaries[9]],
+      },
+      incidents: [
+        {
+          incident_id: canaries[8],
+          kind: 'peer_watch_alert',
+          agent_id: 'app-engineering',
+          actor_id: canaries[1],
+          severity: 'red',
+          status: canaries[10],
+          summary: 'Hostile provenance',
+          ts: '2026-03-14T10:00:00Z',
+          correlation_id: canaries[9],
+          source_kind: canaries[7],
+          evidence_refs: [canaries[0], canaries[2], canaries[4], canaries[5], canaries[6]],
+          counterparty_agent_ids: [canaries[1]],
+        },
+      ],
+    });
+
+    const { container } = renderLegend(world);
+
+    const serializedLegend = container.textContent ?? '';
+    const incidentEvidenceList = await screen.findByRole('list', { name: 'Incident evidence legend' });
+    const dataQualityList = await screen.findByRole('list', { name: 'Data quality legend' });
+
+    expect(within(incidentEvidenceList).getByText(/Unknown source/)).toBeVisible();
+    expect(within(dataQualityList).getAllByText(/Unknown source/)).toHaveLength(1);
+    expect(serializedLegend).toContain('Unknown evidence gap');
+    expect(serializedLegend).toContain('6 evidence refs');
+    expect(serializedLegend).toContain('5 evidence refs');
+
+    for (const canary of canaries) {
+      expect(serializedLegend).not.toContain(canary);
+    }
+    expect(serializedLegend).not.toMatch(/tmux|Hermes|session|profile|webhook|token|payload|control-plane/i);
+    expect(serializedLegend).not.toMatch(/C:\\Users|file:\/\/|https?:\/\//i);
   });
 
   it('renders bounded incident evidence overflow copy with correct plurals', async () => {
@@ -412,7 +486,7 @@ describe('SceneStatusLegend', () => {
 
     expect(items).toHaveLength(1);
     expect(items[0]).toHaveTextContent(
-      'inc-overflow · source controller_event · actor team-lead · correlation corr-overflow · evidence ref-1, ref-2, ref-3 (+2 more evidence refs) · counterparties agent-a, agent-b, agent-c (+2 more counterparties)'
+      'Incident evidence · source Controller event · actor mapped · correlation linked · 5 evidence refs · 5 counterparties'
     );
     expect(items[0]).not.toHaveTextContent('counterpartys');
   });

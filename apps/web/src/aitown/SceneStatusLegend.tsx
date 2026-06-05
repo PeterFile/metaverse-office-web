@@ -22,8 +22,44 @@ const SEVERITY_LABELS: Record<Severity, string> = {
   red: 'Red',
 };
 
+const SOURCE_KIND_LABELS: Record<string, string> = {
+  collector_snapshot: 'Collector snapshot',
+  controller_event: 'Controller event',
+  peer_watch: 'Peer watch',
+  peer_watch_alert: 'Peer watch alert',
+  workflow_interaction: 'Workflow interaction',
+  workspace_file: 'Workspace evidence',
+  workspace_root: 'Workspace evidence',
+};
+
+const DEGRADED_REASON_LABELS: Record<string, string> = {
+  'incident feed unavailable': 'Incident feed unavailable',
+  'overview unavailable': 'Overview unavailable',
+  'workflow partial': 'Workflow partial',
+};
+
 function formatCount(count: number, singular: string, plural = `${singular}s`): string {
   return `${count} ${count === 1 ? singular : plural}`;
+}
+
+function sanitizeSourceKindLabel(sourceKind: string): string {
+  const normalized = sourceKind.trim();
+  return SOURCE_KIND_LABELS[normalized] ?? 'Unknown source';
+}
+
+function sanitizeSourceKindLabels(sourceKinds: string[]): string[] {
+  const labels = sourceKinds.map(sanitizeSourceKindLabel);
+  return Array.from(new Set(labels));
+}
+
+function sanitizeDegradedReasonLabel(reason: string): string {
+  const normalized = reason.trim();
+  return DEGRADED_REASON_LABELS[normalized] ?? 'Unknown evidence gap';
+}
+
+function sanitizeDegradedReasonLabels(reasons: string[]): string[] {
+  const labels = reasons.map(sanitizeDegradedReasonLabel);
+  return Array.from(new Set(labels));
 }
 
 function formatHotZoneSummary(
@@ -77,30 +113,27 @@ function formatRuntimeBackfillEvidence(
 ): string {
   const parts = [`Incident-feed backfill · ${displayName}`];
   if (incidentIds.length > 0) {
-    parts.push(`incidents ${incidentIds.join(', ')}`);
+    parts.push(formatCount(incidentIds.length, 'incident'));
   }
-  if (sourceKinds.length > 0) {
-    parts.push(`sources ${sourceKinds.join(', ')}`);
+  const sourceKindLabels = sanitizeSourceKindLabels(sourceKinds);
+  if (sourceKindLabels.length > 0) {
+    parts.push(`sources ${sourceKindLabels.join(', ')}`);
   }
   if (correlationIds.length > 0) {
-    parts.push(`correlations ${correlationIds.join(', ')}`);
+    parts.push(formatCount(correlationIds.length, 'correlation'));
   }
   if (evidenceRefs.length > 0) {
-    parts.push(`evidence refs ${evidenceRefs.join(', ')}`);
+    parts.push(formatCount(evidenceRefs.length, 'evidence ref'));
   }
-  if (degradedReasons.length > 0) {
-    parts.push(degradedReasons.join('; '));
+  const degradedReasonLabels = sanitizeDegradedReasonLabels(degradedReasons);
+  if (degradedReasonLabels.length > 0) {
+    parts.push(degradedReasonLabels.join('; '));
   }
 
   return parts.join(' · ');
 }
 
-function formatOverflow(count: number, singular: string, plural = `${singular}s`): string {
-  return count > 0 ? ` (+${count} more ${count === 1 ? singular : plural})` : '';
-}
-
 function formatIncidentEvidenceSummary(
-  incidentId: string,
   sourceKind: string,
   actorId: string,
   correlationId: string | null,
@@ -109,27 +142,23 @@ function formatIncidentEvidenceSummary(
   counterpartyAgentIds: string[],
   counterpartyAgentOverflowCount: number
 ): string {
-  const parts = [incidentId];
+  const parts = ['Incident evidence'];
   if (sourceKind) {
-    parts.push(`source ${sourceKind}`);
+    parts.push(`source ${sanitizeSourceKindLabel(sourceKind)}`);
   }
   if (actorId) {
-    parts.push(`actor ${actorId}`);
+    parts.push('actor mapped');
   }
   if (correlationId) {
-    parts.push(`correlation ${correlationId}`);
+    parts.push('correlation linked');
   }
-  if (evidenceRefs.length > 0) {
-    parts.push(`evidence ${evidenceRefs.join(', ')}${formatOverflow(evidenceRefOverflowCount, 'evidence ref')}`);
+  const evidenceRefCount = evidenceRefs.length + evidenceRefOverflowCount;
+  if (evidenceRefCount > 0) {
+    parts.push(formatCount(evidenceRefCount, 'evidence ref'));
   }
-  if (counterpartyAgentIds.length > 0) {
-    parts.push(
-      `counterparties ${counterpartyAgentIds.join(', ')}${formatOverflow(
-        counterpartyAgentOverflowCount,
-        'counterparty',
-        'counterparties'
-      )}`
-    );
+  const counterpartyAgentCount = counterpartyAgentIds.length + counterpartyAgentOverflowCount;
+  if (counterpartyAgentCount > 0) {
+    parts.push(formatCount(counterpartyAgentCount, 'counterparty', 'counterparties'));
   }
 
   return parts.join(' · ');
@@ -197,7 +226,6 @@ export function SceneStatusLegend({
                   </span>
                   <span>
                     {formatIncidentEvidenceSummary(
-                      incident.incident_id,
                       incident.source_kind,
                       incident.actor_id,
                       incident.correlation_id,
@@ -289,7 +317,7 @@ export function SceneStatusLegend({
                       dataQualitySummary.last_overview_at
                     )}
                     {' · '}
-                    {dataQualitySummary.degraded_reasons.join('; ')}
+                    {sanitizeDegradedReasonLabels(dataQualitySummary.degraded_reasons).join('; ')}
                   </span>
                 </li>
               ) : null}

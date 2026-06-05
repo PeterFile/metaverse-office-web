@@ -7001,6 +7001,80 @@ test('GET /evidence-records/schema read route purity does not inspect evidence r
   assert.equal(await readFile(storeFile, 'utf8'), fileBeforeRead);
 });
 
+test('GET /agents/evidence-spine/schema read route purity does not inspect spine rows', async () => {
+  let collectCount = 0;
+  const controllerSnapshotCollector = {
+    async collectSnapshot() {
+      collectCount += 1;
+      throw new Error('GET /agents/evidence-spine/schema must not collect');
+    }
+  };
+  const root = await mkdtemp(path.join(os.tmpdir(), 'metaverse-office-agents-spine-schema-'));
+  const storeFile = path.join(root, 'prototype-store.jsonl');
+  const store = await createPrototypeStore({ filePath: storeFile });
+
+  await store.appendCollectorReport(createRouteParityCollectorReport());
+  const fileBeforeRead = await readFile(storeFile, 'utf8');
+  store.getAgentEvidenceSpineSummary = () => {
+    throw new Error('schema route must not summarize agents evidence spine rows');
+  };
+  store.getAgentEvidenceSourceStatusMatrix = () => {
+    throw new Error('schema route must not read source-matrix rows');
+  };
+  store.getAgentEvidenceSpine = () => {
+    throw new Error('schema route must not resolve schema as an agent id');
+  };
+  store.listEvidenceRecords = () => {
+    throw new Error('schema route must not list evidence records');
+  };
+
+  const response = await requestJsonDirect({
+    url: '/agents/evidence-spine/schema?limit=1&token=/tmp/spine-secret&status=<script>',
+    store,
+    controllerSnapshotCollector
+  });
+  assert.equal(response.response.status, 200);
+  assert.deepEqual(response.body.item.limit, {
+    default: 50,
+    max: 200
+  });
+  assert.deepEqual(response.body.item.surfaces, ['summary', 'source-matrix', 'per-agent']);
+  assert.deepEqual(
+    response.body.item.response_fields.map((field) => field.name),
+    [
+      'agent_count',
+      'returned_limit',
+      'total_count',
+      'mapped_count',
+      'unmapped_count',
+      'agents',
+      'unmapped_evidence_summary',
+      'sources'
+    ]
+  );
+  assert.deepEqual(response.body.item.count_semantics, [
+    'counts are computed after supported filters',
+    'limit bounds returned rows only',
+    'empty matches keep stable zero buckets'
+  ]);
+  assert.equal(response.body.item.source_kinds.includes('workspace_file'), true);
+  assert.equal(response.body.item.evidence_roles.includes('runtime_unmapped'), true);
+  assert.equal(response.body.item.source_statuses.includes('observed'), true);
+  assert.equal(response.body.item.supported_filters.includes('evidence_ref'), false);
+  assert.equal(response.body.item.supported_filters.includes('evidence_id'), false);
+  const serialized = JSON.stringify(response.body);
+  assert.equal(serialized.includes('/tmp/'), false);
+  assert.equal(serialized.includes('<script>'), false);
+  assert.equal(serialized.includes('tmux://'), false);
+  assert.equal(serialized.includes('Hermes'), false);
+  assert.equal(serialized.includes('session://'), false);
+  assert.equal(serialized.includes('webhook'), false);
+  assert.equal(serialized.includes('token'), false);
+  assert.equal(serialized.includes('collector-snapshot:'), false);
+  assert.equal(collectCount, 0);
+  assert.equal(await readFile(storeFile, 'utf8'), fileBeforeRead);
+});
+
 test('GET /runtime/source-gaps/lifecycle passes lifecycle_state as a read-only filter', async () => {
   let receivedFilters = null;
   const store = {

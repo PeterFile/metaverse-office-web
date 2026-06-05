@@ -90,8 +90,66 @@ const EVIDENCE_RECORD_BOOLEAN_FILTERS = Object.freeze([
   'mapped',
   'newest_first'
 ]);
+const AGENTS_EVIDENCE_SPINE_SUPPORTED_FILTERS = Object.freeze([
+  'source_kind',
+  'evidence_role',
+  'output_candidate',
+  'source_status',
+  'status',
+  'collector_snapshot_id',
+  'correlation_id',
+  'mapped',
+  'observed_since',
+  'observed_until',
+  'collected_since',
+  'collected_until',
+  'newest_first',
+  'limit'
+]);
+const AGENTS_EVIDENCE_SPINE_SURFACES = Object.freeze(['summary', 'source-matrix', 'per-agent']);
+const AGENTS_EVIDENCE_SPINE_RESPONSE_FIELDS = Object.freeze([
+  Object.freeze({
+    name: 'agent_count',
+    description: 'canonical agent roster size on aggregate surfaces'
+  }),
+  Object.freeze({
+    name: 'returned_limit',
+    description: 'parsed row limit applied after filters'
+  }),
+  Object.freeze({
+    name: 'total_count',
+    description: 'matching evidence count before response row limit'
+  }),
+  Object.freeze({
+    name: 'mapped_count',
+    description: 'matching evidence count linked to seeded agents'
+  }),
+  Object.freeze({
+    name: 'unmapped_count',
+    description: 'matching evidence count outside seeded agents'
+  }),
+  Object.freeze({
+    name: 'agents',
+    description: 'canonical agent rows with counts, stable buckets, and latest safe timestamps'
+  }),
+  Object.freeze({
+    name: 'unmapped_evidence_summary',
+    description: 'aggregate counts for evidence outside seeded agents'
+  }),
+  Object.freeze({
+    name: 'sources',
+    description: 'per-source rows with count buckets and latest safe timestamps'
+  })
+]);
+const AGENTS_EVIDENCE_SPINE_COUNT_SEMANTICS = Object.freeze([
+  'counts are computed after supported filters',
+  'limit bounds returned rows only',
+  'empty matches keep stable zero buckets'
+]);
 const EVIDENCE_RECORD_SCHEMA_WRITE_BOUNDARY =
   'read-only schema catalog; does not collect, read runtime sources, append records, or expose control-plane actions';
+const AGENTS_EVIDENCE_SPINE_SCHEMA_WRITE_BOUNDARY =
+  'read-only agents evidence-spine schema catalog; does not collect, read runtime sources, append records, or expose control-plane actions';
 const RUNTIME_SOURCE_GAP_STATUSES = Object.freeze(['degraded', 'missing', 'error']);
 const RUNTIME_SOURCE_GAP_SUPPORTED_FILTERS = Object.freeze(
   EVIDENCE_RECORD_SUPPORTED_FILTERS.filter((filter) => filter !== 'evidence_ref')
@@ -855,6 +913,24 @@ class PrototypeStore {
         max: 200
       },
       route_write_boundary: EVIDENCE_RECORD_SCHEMA_WRITE_BOUNDARY
+    };
+  }
+
+  getAgentsEvidenceSpineSchema() {
+    return {
+      source_kinds: [...EVIDENCE_RECORD_SOURCE_KINDS],
+      evidence_roles: [...EVIDENCE_RECORD_ROLES],
+      source_statuses: [...EVIDENCE_RECORD_SOURCE_STATUSES],
+      supported_filters: [...AGENTS_EVIDENCE_SPINE_SUPPORTED_FILTERS],
+      boolean_filters: [...EVIDENCE_RECORD_BOOLEAN_FILTERS],
+      surfaces: [...AGENTS_EVIDENCE_SPINE_SURFACES],
+      response_fields: AGENTS_EVIDENCE_SPINE_RESPONSE_FIELDS.map((field) => ({ ...field })),
+      count_semantics: [...AGENTS_EVIDENCE_SPINE_COUNT_SEMANTICS],
+      limit: {
+        default: 50,
+        max: 200
+      },
+      route_write_boundary: AGENTS_EVIDENCE_SPINE_SCHEMA_WRITE_BOUNDARY
     };
   }
 

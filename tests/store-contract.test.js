@@ -2416,6 +2416,76 @@ test('evidence-records schema exposes only static safe contract metadata', async
   assert.equal(serialized.includes('metadata'), false);
 });
 
+test('agents evidence-spine schema exposes only static safe contract metadata', async () => {
+  const storeFile = await createStoreFile();
+  const store = await createPrototypeStore({ filePath: storeFile });
+
+  await store.appendCollectorReport(createCollectorReport());
+
+  const schema = store.getAgentsEvidenceSpineSchema();
+  assert.deepEqual(schema.limit, {
+    default: 50,
+    max: 200
+  });
+  assert.deepEqual(schema.boolean_filters, ['output_candidate', 'mapped', 'newest_first']);
+  assert.deepEqual(schema.supported_filters, [
+    'source_kind',
+    'evidence_role',
+    'output_candidate',
+    'source_status',
+    'status',
+    'collector_snapshot_id',
+    'correlation_id',
+    'mapped',
+    'observed_since',
+    'observed_until',
+    'collected_since',
+    'collected_until',
+    'newest_first',
+    'limit'
+  ]);
+  assert.deepEqual(schema.surfaces, ['summary', 'source-matrix', 'per-agent']);
+  assert.deepEqual(
+    schema.response_fields.map((field) => field.name),
+    [
+      'agent_count',
+      'returned_limit',
+      'total_count',
+      'mapped_count',
+      'unmapped_count',
+      'agents',
+      'unmapped_evidence_summary',
+      'sources'
+    ]
+  );
+  assert.deepEqual(schema.count_semantics, [
+    'counts are computed after supported filters',
+    'limit bounds returned rows only',
+    'empty matches keep stable zero buckets'
+  ]);
+  assert.equal(schema.source_kinds.includes('workspace_file'), true);
+  assert.equal(schema.evidence_roles.includes('runtime_unmapped'), true);
+  assert.equal(schema.source_statuses.includes('observed'), true);
+  assert.equal(
+    schema.route_write_boundary,
+    'read-only agents evidence-spine schema catalog; does not collect, read runtime sources, append records, or expose control-plane actions'
+  );
+
+  const evidenceId = store.listEvidenceRecords()[0].evidence_id;
+  const serialized = JSON.stringify(schema);
+  assert.equal(serialized.includes('/tmp/store-contract'), false);
+  assert.equal(serialized.includes('tmux://'), false);
+  assert.equal(serialized.includes('Hermes'), false);
+  assert.equal(serialized.includes('session://'), false);
+  assert.equal(serialized.includes('webhook'), false);
+  assert.equal(serialized.includes('token'), false);
+  assert.equal(serialized.includes('collector-snapshot:'), false);
+  assert.equal(serialized.includes(evidenceId), false);
+  assert.equal(serialized.includes('metadata'), false);
+  assert.equal(serialized.includes('evidence_ref'), false);
+  assert.equal(serialized.includes('evidence_id'), false);
+});
+
 test('prototype store summarizes evidence records with list filter semantics before limit', async () => {
   const storeFile = await createStoreFile();
   const store = await createPrototypeStore({ filePath: storeFile });

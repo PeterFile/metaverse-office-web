@@ -87,6 +87,7 @@ async function requestJsonDirect({
   url,
   store,
   controllerSnapshotCollector,
+  now = () => '2026-03-09T18:05:00.000Z',
   method = 'GET',
   headers = {},
   body = ''
@@ -104,21 +105,32 @@ async function requestJsonDirect({
   };
   const chunks = body ? [Buffer.from(body)] : [];
 
-  await handleRequest({
-    req: {
-      url,
-      method,
-      headers,
-      async *[Symbol.asyncIterator]() {
-        yield* chunks;
-      }
-    },
-    res,
-    store,
-    now: () => '2026-03-09T18:05:00.000Z',
-    controllerSnapshotCollector,
-    allowedOrigins: []
-  });
+  try {
+    await handleRequest({
+      req: {
+        url,
+        method,
+        headers,
+        async *[Symbol.asyncIterator]() {
+          yield* chunks;
+        }
+      },
+      res,
+      store,
+      now,
+      controllerSnapshotCollector,
+      allowedOrigins: []
+    });
+  } catch (error) {
+    const publicError = formatPublicError(error);
+    res.writeHead(publicError.statusCode);
+    res.end(
+      JSON.stringify({
+        error: publicError.error,
+        details: publicError.details
+      })
+    );
+  }
 
   return {
     response: { status: statusCode },
@@ -159,7 +171,17 @@ function assertPublic404DoesNotExposeCanary(response, canary) {
   }
 }
 
-test('server error redaction bounds unexpected internal details while preserving safe public errors', () => {
+function getAppendCounts(store) {
+  const counts = store.getCounts();
+  return {
+    event_count: counts.event_count,
+    heartbeat_count: counts.heartbeat_count,
+    evidence_record_count: store.evidenceRecords.length,
+    collector_snapshot_count: store.collectorReports.length
+  };
+}
+
+test('server invalid runtime error redaction bounds unexpected internal details while preserving safe public errors', () => {
   const unexpected = formatPublicError(
     new Error(
       [
@@ -197,12 +219,16 @@ test('server error redaction bounds unexpected internal details while preserving
       new Error('Invalid Hermes runtime source fact at Hermes runtime source input 1 record 1: invalid status')
     ),
     {
-      statusCode: 500,
-      error: 'internal_error',
+      statusCode: 422,
+      error: 'invalid_runtime_evidence_input',
       details: 'Invalid Hermes runtime source fact at Hermes runtime source input 1 record 1: invalid status'
     }
   );
 });
+
+function assertNoPartialCollectorAppend(store, beforeCounts) {
+  assert.deepEqual(getAppendCounts(store), beforeCounts);
+}
 
 function createEvent({
   eventId,
@@ -5076,9 +5102,11 @@ test('GET /correlations/:correlation_id keeps full interaction counts when slice
 });
 
 test('write endpoints reject missing headers, invalid payloads, and actor-boundary violations', async (t) => {
-  const { baseUrl } = await createHarness(t);
+  const store = await createDirectStore();
 
-  const invalidJson = await requestJson(`${baseUrl}/events`, {
+  const invalidJson = await requestJsonDirect({
+    url: '/events',
+    store,
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -5092,7 +5120,9 @@ test('write endpoints reject missing headers, invalid payloads, and actor-bounda
   assert.equal(invalidJson.body.details.includes('/tmp/private'), false);
   assert.equal(invalidJson.body.details.includes('token='), false);
 
-  const missingActor = await requestJson(`${baseUrl}/events`, {
+  const missingActor = await requestJsonDirect({
+    url: '/events',
+    store,
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({})
@@ -5101,7 +5131,9 @@ test('write endpoints reject missing headers, invalid payloads, and actor-bounda
   assert.equal(missingActor.response.status, 400);
   assert.match(missingActor.body.error, /missing_actor_id/);
 
-  const forbidden = await requestJson(`${baseUrl}/events`, {
+  const forbidden = await requestJsonDirect({
+    url: '/events',
+    store,
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -5128,7 +5160,9 @@ test('write endpoints reject missing headers, invalid payloads, and actor-bounda
   assert.equal(forbidden.response.status, 422);
   assert.match(forbidden.body.error, /validation_failed/);
 
-  const invalidHeartbeat = await requestJson(`${baseUrl}/heartbeats`, {
+  const invalidHeartbeat = await requestJsonDirect({
+    url: '/heartbeats',
+    store,
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -5460,12 +5494,14 @@ test('collector snapshot persists opt-in task evidence without heartbeat advance
       rejected: []
     })
   });
-  const { baseUrl } = await createHarness(t, {
-    now: () => '2026-05-20T02:00:00.000Z',
-    controllerSnapshotCollector
-  });
+  const store = await createDirectStore();
+  const now = () => '2026-05-20T02:00:00.000Z';
 
-  const collected = await requestJson(`${baseUrl}/collectors/controller-snapshot`, {
+  const collected = await requestJsonDirect({
+    url: '/collectors/controller-snapshot',
+    store,
+    controllerSnapshotCollector,
+    now,
     method: 'POST',
     headers: {
       'x-actor-id': 'team-lead'
@@ -5481,7 +5517,12 @@ test('collector snapshot persists opt-in task evidence without heartbeat advance
     task_evidence: 1
   });
 
-  const evidence = await requestJson(`${baseUrl}/evidence-records?source_kind=kanban_fixture`);
+  const evidence = await requestJsonDirect({
+    url: '/evidence-records?source_kind=kanban_fixture',
+    store,
+    controllerSnapshotCollector,
+    now
+  });
   assert.equal(evidence.response.status, 200);
   assert.deepEqual(
     evidence.body.items.map((item) => ({
@@ -5504,13 +5545,24 @@ test('collector snapshot persists opt-in task evidence without heartbeat advance
     ]
   );
 
-  const sourceGaps = await requestJson(`${baseUrl}/runtime/source-gaps?source_kind=kanban_fixture`);
-  const sourceGapSummary = await requestJson(
-    `${baseUrl}/runtime/source-gaps/summary?source_kind=kanban_fixture`
-  );
-  const sourceGapAgentSummary = await requestJson(
-    `${baseUrl}/runtime/source-gaps/agent-summary?source_kind=kanban_fixture`
-  );
+  const sourceGaps = await requestJsonDirect({
+    url: '/runtime/source-gaps?source_kind=kanban_fixture',
+    store,
+    controllerSnapshotCollector,
+    now
+  });
+  const sourceGapSummary = await requestJsonDirect({
+    url: '/runtime/source-gaps/summary?source_kind=kanban_fixture',
+    store,
+    controllerSnapshotCollector,
+    now
+  });
+  const sourceGapAgentSummary = await requestJsonDirect({
+    url: '/runtime/source-gaps/agent-summary?source_kind=kanban_fixture',
+    store,
+    controllerSnapshotCollector,
+    now
+  });
   assert.equal(sourceGaps.response.status, 200);
   assert.deepEqual(sourceGaps.body.items, []);
   assert.equal(sourceGapSummary.response.status, 200);
@@ -5607,25 +5659,32 @@ test('collector snapshot rejects unsafe task evidence file paths before append',
     listTmuxPanes: async () => [],
     readTaskEvidenceCandidates: () => taskEvidenceReader.readEvidenceCandidates()
   });
-  const { baseUrl, storeFile } = await createHarness(t, { controllerSnapshotCollector });
+  const storeFile = path.join(root, 'prototype-store.jsonl');
+  const store = await createPrototypeStore({ filePath: storeFile });
+  const beforeCounts = getAppendCounts(store);
 
-  const collected = await requestJson(`${baseUrl}/collectors/controller-snapshot`, {
+  const collected = await requestJsonDirect({
+    url: '/collectors/controller-snapshot',
+    store,
+    controllerSnapshotCollector,
     method: 'POST',
     headers: {
       'x-actor-id': 'team-lead'
     }
   });
 
-  assert.equal(collected.response.status, 500);
-  assert.equal(collected.body.error, 'internal_error');
+  assert.equal(collected.response.status, 422);
+  assert.equal(collected.body.error, 'invalid_runtime_evidence_input');
   assert.match(collected.body.details, /Invalid task evidence input: 1 rejected task evidence record/);
   assert.equal(collected.body.details.includes(root), false);
   assert.equal(collected.body.details.includes('/tmp/private'), false);
   assert.equal(collected.body.details.includes('token='), false);
+  assertNoPartialCollectorAppend(store, beforeCounts);
   await assert.rejects(() => readFile(storeFile, 'utf8'), { code: 'ENOENT' });
 });
 
 test('collector snapshot error redaction hides unexpected internal failures before append', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'metaverse-office-collector-error-'));
   const controllerSnapshotCollector = {
     async collectSnapshot() {
       throw new Error(
@@ -5643,10 +5702,14 @@ test('collector snapshot error redaction hides unexpected internal failures befo
       );
     }
   };
-  const { baseUrl, store, storeFile } = await createHarness(t, { controllerSnapshotCollector });
-  const beforeCounts = store.getCounts();
+  const storeFile = path.join(root, 'prototype-store.jsonl');
+  const store = await createPrototypeStore({ filePath: storeFile });
+  const beforeCounts = getAppendCounts(store);
 
-  const collected = await requestJson(`${baseUrl}/collectors/controller-snapshot`, {
+  const collected = await requestJsonDirect({
+    url: '/collectors/controller-snapshot',
+    store,
+    controllerSnapshotCollector,
     method: 'POST',
     headers: {
       'x-actor-id': 'team-lead'
@@ -5656,7 +5719,7 @@ test('collector snapshot error redaction hides unexpected internal failures befo
   assert.equal(collected.response.status, 500);
   assert.equal(collected.body.error, 'internal_error');
   assert.equal(collected.body.details, 'internal_error');
-  assert.deepEqual(store.getCounts(), beforeCounts);
+  assertNoPartialCollectorAppend(store, beforeCounts);
   assert.equal(JSON.stringify(collected.body).includes('/Users/alice'), false);
   assert.equal(JSON.stringify(collected.body).includes('file://'), false);
   assert.equal(JSON.stringify(collected.body).includes('tmux://'), false);
@@ -5698,21 +5761,27 @@ test('collector snapshot rejects invalid Hermes runtime inputs before append', a
     listTmuxPanes: async () => [],
     readHermesRuntimeSources: createHermesRuntimeSourcesReader({ inputPaths: [sourcesDir] })
   });
-  const { baseUrl, storeFile } = await createHarness(t, { controllerSnapshotCollector });
+  const storeFile = path.join(root, 'prototype-store.jsonl');
+  const store = await createPrototypeStore({ filePath: storeFile });
+  const beforeCounts = getAppendCounts(store);
 
-  const collected = await requestJson(`${baseUrl}/collectors/controller-snapshot`, {
+  const collected = await requestJsonDirect({
+    url: '/collectors/controller-snapshot',
+    store,
+    controllerSnapshotCollector,
     method: 'POST',
     headers: {
       'x-actor-id': 'team-lead'
     }
   });
 
-  assert.equal(collected.response.status, 500);
-  assert.equal(collected.body.error, 'internal_error');
+  assert.equal(collected.response.status, 422);
+  assert.equal(collected.body.error, 'invalid_runtime_evidence_input');
   assert.match(collected.body.details, /Hermes runtime source input 2/);
   assert.equal(collected.body.details.includes(root), false);
   assert.equal(collected.body.details.includes(sourcesDir), false);
   assert.equal(collected.body.details.includes(invalidFile), false);
+  assertNoPartialCollectorAppend(store, beforeCounts);
   await assert.rejects(() => readFile(storeFile, 'utf8'), { code: 'ENOENT' });
 });
 
@@ -5726,20 +5795,26 @@ test('collector snapshot labels missing Hermes runtime input before append', asy
     listTmuxPanes: async () => [],
     readHermesRuntimeSources: createHermesRuntimeSourcesReader({ inputPaths: [missingFile] })
   });
-  const { baseUrl, storeFile } = await createHarness(t, { controllerSnapshotCollector });
+  const storeFile = path.join(root, 'prototype-store.jsonl');
+  const store = await createPrototypeStore({ filePath: storeFile });
+  const beforeCounts = getAppendCounts(store);
 
-  const collected = await requestJson(`${baseUrl}/collectors/controller-snapshot`, {
+  const collected = await requestJsonDirect({
+    url: '/collectors/controller-snapshot',
+    store,
+    controllerSnapshotCollector,
     method: 'POST',
     headers: {
       'x-actor-id': 'team-lead'
     }
   });
 
-  assert.equal(collected.response.status, 500);
-  assert.equal(collected.body.error, 'internal_error');
+  assert.equal(collected.response.status, 422);
+  assert.equal(collected.body.error, 'invalid_runtime_evidence_input');
   assert.match(collected.body.details, /Hermes runtime source input 1/);
   assert.equal(collected.body.details.includes(root), false);
   assert.equal(collected.body.details.includes(missingFile), false);
+  assertNoPartialCollectorAppend(store, beforeCounts);
   await assert.rejects(() => readFile(storeFile, 'utf8'), { code: 'ENOENT' });
 });
 
@@ -5753,20 +5828,26 @@ test('collector snapshot legacy Hermes runtime file read failure is labeled befo
     listTmuxPanes: async () => [],
     readHermesRuntimeSources: createHermesRuntimeSourcesFileReader({ filePath: missingFile })
   });
-  const { baseUrl, storeFile } = await createHarness(t, { controllerSnapshotCollector });
+  const storeFile = path.join(root, 'prototype-store.jsonl');
+  const store = await createPrototypeStore({ filePath: storeFile });
+  const beforeCounts = getAppendCounts(store);
 
-  const collected = await requestJson(`${baseUrl}/collectors/controller-snapshot`, {
+  const collected = await requestJsonDirect({
+    url: '/collectors/controller-snapshot',
+    store,
+    controllerSnapshotCollector,
     method: 'POST',
     headers: {
       'x-actor-id': 'team-lead'
     }
   });
 
-  assert.equal(collected.response.status, 500);
-  assert.equal(collected.body.error, 'internal_error');
+  assert.equal(collected.response.status, 422);
+  assert.equal(collected.body.error, 'invalid_runtime_evidence_input');
   assert.match(collected.body.details, /Hermes runtime sources file/);
   assert.equal(collected.body.details.includes(root), false);
   assert.equal(collected.body.details.includes(missingFile), false);
+  assertNoPartialCollectorAppend(store, beforeCounts);
   await assert.rejects(() => readFile(storeFile, 'utf8'), { code: 'ENOENT' });
 });
 
@@ -5781,21 +5862,27 @@ test('collector snapshot malformed Hermes runtime input is redacted before appen
     listTmuxPanes: async () => [],
     readHermesRuntimeSources: createHermesRuntimeSourcesReader({ inputPaths: [malformedFile] })
   });
-  const { baseUrl, storeFile } = await createHarness(t, { controllerSnapshotCollector });
+  const storeFile = path.join(root, 'prototype-store.jsonl');
+  const store = await createPrototypeStore({ filePath: storeFile });
+  const beforeCounts = getAppendCounts(store);
 
-  const collected = await requestJson(`${baseUrl}/collectors/controller-snapshot`, {
+  const collected = await requestJsonDirect({
+    url: '/collectors/controller-snapshot',
+    store,
+    controllerSnapshotCollector,
     method: 'POST',
     headers: {
       'x-actor-id': 'team-lead'
     }
   });
 
-  assert.equal(collected.response.status, 500);
-  assert.equal(collected.body.error, 'internal_error');
+  assert.equal(collected.response.status, 422);
+  assert.equal(collected.body.error, 'invalid_runtime_evidence_input');
   assert.match(collected.body.details, /Hermes runtime source input 1/);
   assert.match(collected.body.details, /invalid JSON syntax/);
   assert.equal(collected.body.details.includes(root), false);
   assert.equal(collected.body.details.includes(malformedFile), false);
+  assertNoPartialCollectorAppend(store, beforeCounts);
   await assert.rejects(() => readFile(storeFile, 'utf8'), { code: 'ENOENT' });
 });
 
@@ -5833,23 +5920,29 @@ test('collector snapshot rejects unsafe Hermes runtime canaries before append', 
     listTmuxPanes: async () => [],
     readHermesRuntimeSources: createHermesRuntimeSourcesReader({ inputPaths: [unsafeFile] })
   });
-  const { baseUrl, storeFile } = await createHarness(t, { controllerSnapshotCollector });
+  const storeFile = path.join(root, 'prototype-store.jsonl');
+  const store = await createPrototypeStore({ filePath: storeFile });
+  const beforeCounts = getAppendCounts(store);
 
-  const collected = await requestJson(`${baseUrl}/collectors/controller-snapshot`, {
+  const collected = await requestJsonDirect({
+    url: '/collectors/controller-snapshot',
+    store,
+    controllerSnapshotCollector,
     method: 'POST',
     headers: {
       'x-actor-id': 'team-lead'
     }
   });
 
-  assert.equal(collected.response.status, 500);
-  assert.equal(collected.body.error, 'internal_error');
+  assert.equal(collected.response.status, 422);
+  assert.equal(collected.body.error, 'invalid_runtime_evidence_input');
   assert.match(collected.body.details, /Hermes runtime source input 1/);
   assert.match(collected.body.details, /unsafe field metadata/);
   assert.equal(collected.body.details.includes(root), false);
   assert.equal(collected.body.details.includes(unsafeFile), false);
   assert.equal(canaries.some((canary) => collected.body.details.includes(canary)), false);
   assert.equal(collected.body.details.includes('private-runtime'), false);
+  assertNoPartialCollectorAppend(store, beforeCounts);
   await assert.rejects(() => readFile(storeFile, 'utf8'), { code: 'ENOENT' });
 });
 

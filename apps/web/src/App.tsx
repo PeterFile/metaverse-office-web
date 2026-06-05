@@ -49,8 +49,8 @@ import {
 } from './aitown/DetailsPanel';
 import { SceneStatusLegend } from './aitown/SceneStatusLegend';
 import {
-  deriveCollectorEvidenceCoverageFocusItems,
-  type CollectorEvidenceCoverageFocusItem
+  deriveCollectorEvidenceCoverageFocusSummary,
+  type CollectorEvidenceCoverageFocusSummaryItem
 } from './aitown/evidenceCoverage';
 import { resolveRolePawnAssetUrl } from './aitown/rolePawnAssets';
 import { adaptWorldToScene } from './aitown/sceneAdapter';
@@ -546,15 +546,15 @@ function renderEvidenceCoverageFocusRefCount(count: number) {
   return `${count} ref${count === 1 ? '' : 's'}`;
 }
 
-function renderEvidenceCoverageFocusSources(sourceKinds: string[]) {
-  return sourceKinds.length > 0 ? sourceKinds.join(', ') : 'No evidence sources';
+function renderEvidenceCoverageFocusSources(sourceLabels: string[]) {
+  return sourceLabels.length > 0 ? sourceLabels.join(' + ') : 'No evidence sources';
 }
 
-function renderEvidenceCoverageFocusStatus(item: CollectorEvidenceCoverageFocusItem) {
+function renderEvidenceCoverageFocusStatus(item: CollectorEvidenceCoverageFocusSummaryItem) {
   return item.status === 'uncovered_in_snapshot' ? 'Uncovered in snapshot' : 'Low-confidence evidence';
 }
 
-function renderEvidenceCoverageFocusLatest(item: CollectorEvidenceCoverageFocusItem) {
+function renderEvidenceCoverageFocusLatest(item: CollectorEvidenceCoverageFocusSummaryItem) {
   if (item.status === 'uncovered_in_snapshot') {
     return 'No coverage in snapshot';
   }
@@ -1793,13 +1793,18 @@ function AppInner() {
     () => overviewResource.data?.agents.filter((agent) => agent.kind === 'employee'),
     [overviewResource.data?.agents]
   );
-  const evidenceCoverageFocusItems = useMemo(
+  const evidenceCoverageFocusSummary = useMemo(
     () =>
       hubOpen || selectedAgentId !== null
-        ? []
-        : deriveCollectorEvidenceCoverageFocusItems(visibleEvidenceCoverage, evidenceCoverageOverviewAgents),
+        ? {
+            visibleItems: [],
+            totalGapCount: 0,
+            overflowCount: 0
+          }
+        : deriveCollectorEvidenceCoverageFocusSummary(visibleEvidenceCoverage, evidenceCoverageOverviewAgents),
     [evidenceCoverageOverviewAgents, hubOpen, selectedAgentId, visibleEvidenceCoverage]
   );
+  const evidenceCoverageFocusItems = evidenceCoverageFocusSummary.visibleItems;
   const sourceGapChips = useMemo(
     () =>
       hubOpen || selectedAgentId !== null
@@ -3460,7 +3465,7 @@ function AppInner() {
   }, [selectedAgentEvidenceRecordId, selectedAgentId]);
   const hudSignalSummary = [
     `Viewport · ${viewportToplineStatus.status}`,
-    evidenceCoverageFocusItems.length > 0 ? `Evidence · ${evidenceCoverageFocusItems.length}` : null,
+    evidenceCoverageFocusSummary.totalGapCount > 0 ? `Evidence · ${evidenceCoverageFocusSummary.totalGapCount}` : null,
     evidenceCoverageReadModelStatus
       ? `${evidenceCoverageReadModelStatus.label} · ${evidenceCoverageReadModelStatus.summary}`
       : null,
@@ -3591,7 +3596,7 @@ function AppInner() {
                       <span className="aitown-panel__topline-copy">{evidenceCoverageReadModelStatus.detail}</span>
                     </section>
                   ) : null}
-                  {evidenceCoverageFocusItems.length > 0 ? (
+                  {evidenceCoverageFocusSummary.totalGapCount > 0 ? (
                     <section
                       className="aitown-panel__signal-panel aitown-panel__evidence-focus"
                       role="region"
@@ -3600,7 +3605,7 @@ function AppInner() {
                       <div className="aitown-panel__evidence-focus__head">
                         <strong className="aitown-panel__topline-title">Evidence</strong>
                         <span className="aitown-panel__topline-copy">
-                          {`${evidenceCoverageFocusItems.length} coverage gap${evidenceCoverageFocusItems.length === 1 ? '' : 's'}`}
+                          {`${evidenceCoverageFocusSummary.totalGapCount} coverage gap${evidenceCoverageFocusSummary.totalGapCount === 1 ? '' : 's'}`}
                         </span>
                       </div>
                       <span className="aitown-panel__topline-copy">Low-confidence or uncovered evidence</span>
@@ -3621,11 +3626,16 @@ function AppInner() {
                             <span>{`ID · ${item.agent_id}`}</span>
                             <span>{renderEvidenceCoverageFocusStatus(item)}</span>
                             <span>
-                              {`${renderEvidenceCoverageFocusRefCount(item.evidence_ref_count)} · ${renderEvidenceCoverageFocusSources(item.source_kinds)}`}
+                              {`${renderEvidenceCoverageFocusRefCount(item.evidence_ref_count)} · ${renderEvidenceCoverageFocusSources(item.source_labels)}`}
                             </span>
                             <span>{renderEvidenceCoverageFocusLatest(item)}</span>
                           </button>
                         ))}
+                        {evidenceCoverageFocusSummary.overflowCount > 0 ? (
+                          <span className="aitown-focus-chip aitown-focus-chip--evidence aitown-focus-chip--readonly">
+                            <strong>{`+${evidenceCoverageFocusSummary.overflowCount} more`}</strong>
+                          </span>
+                        ) : null}
                       </span>
                     </section>
                   ) : null}

@@ -3936,9 +3936,87 @@ afterEach(() => {
     expect(focusChip).toBeVisible();
     expect(focusChip).toHaveTextContent('Growth Revenue Agent');
     expect(focusChip).toHaveTextContent('ID · growth-revenue');
-    expect(focusChip).toHaveTextContent('3 refs · tmux_observation, workspace_file, workspace_root');
+    expect(focusChip).toHaveTextContent('3 refs · Runtime evidence + Workspace evidence');
     expect(focusChip).toHaveTextContent('Latest evidence · 2026-03-16T08:58:40.000Z');
     expect(screen.queryByRole('dialog', { name: 'Hub' })).not.toBeInTheDocument();
+  });
+
+  it('shows total evidence coverage gaps and readonly overflow when focus chips are capped', async () => {
+    const user = userEvent.setup();
+    const overflowOverview = {
+      ...overviewFixture,
+      agents: [
+        ...overviewFixture.agents,
+        {
+          ...overviewFixture.agents[1],
+          agent_id: 'market-intel',
+          display_name: 'Market Intel Agent',
+          reboot_recommended: false
+        },
+        {
+          ...overviewFixture.agents[1],
+          agent_id: 'product-pmf',
+          display_name: 'Product PMF Agent',
+          reboot_recommended: false
+        },
+        {
+          ...overviewFixture.agents[1],
+          agent_id: 'tokenomics',
+          display_name: 'Tokenomics Agent',
+          reboot_recommended: false
+        }
+      ]
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString();
+
+      if (url === '/office/overview') {
+        return jsonResponse(overflowOverview);
+      }
+
+      if (url === collectorEvidenceCoverageUrl) {
+        return jsonResponse({
+          item: {
+            ...collectorSnapshotFixture.evidence_coverage,
+            collector_snapshot_id: '/tmp/tmux-token-control-plane',
+            low_confidence_agent_ids: ['growth-revenue'],
+            agent_items: [
+              {
+                agent_id: 'growth-revenue',
+                evidence_ref_count: 3,
+                evidence_refs: ['/tmp/token-webhook-control-plane.md'],
+                source_kinds: ['tmux_observation', 'workspace_file', 'workspace_root'],
+                latest_evidence_at: '2026-03-16T08:58:40.000Z',
+                confidence_level: 'medium'
+              }
+            ]
+          }
+        });
+      }
+
+      return resolveTestFetchResponse(url);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<App />);
+
+    await waitFor(() => expect(fetchMock.mock.calls.map(([request]) => String(request))).toContain(collectorEvidenceCoverageUrl));
+    const hudSignals = await screen.findByRole('region', { name: 'Office HUD signals' });
+    expect(within(hudSignals).getByText(/Evidence · 5/)).toBeVisible();
+    const signals = await openHudSignals(user);
+    const evidenceFocus = await within(signals).findByRole('region', { name: 'Evidence coverage focus' });
+    const focusButtons = within(evidenceFocus).getAllByRole('button', {
+      name: /Inspect evidence coverage focus agent/
+    });
+
+    expect(within(evidenceFocus).getByText('5 coverage gaps')).toBeVisible();
+    expect(within(evidenceFocus).getByText('+2 more')).toBeVisible();
+    expect(focusButtons[0]).toHaveTextContent('Runtime evidence + Workspace evidence');
+    expect(focusButtons).toHaveLength(3);
+    expect(within(evidenceFocus).queryByRole('button', { name: '+2 more' })).not.toBeInTheDocument();
+    expect(evidenceFocus).not.toHaveTextContent(
+      /\/tmp|tmux-token|token-webhook|control-plane|session_ref|profile|tmux_observation|workspace_file|workspace_root|hermes_profile|hermes_session/i
+    );
   });
 
   it('opens the selected agent Evidence tab from an evidence coverage focus chip', async () => {

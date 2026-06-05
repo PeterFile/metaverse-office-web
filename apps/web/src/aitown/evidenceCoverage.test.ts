@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   deriveCollectorEvidenceCoverageFocusItems,
+  deriveCollectorEvidenceCoverageFocusSummary,
   deriveCollectorEvidenceCoverageViewModel
 } from './evidenceCoverage';
 import type { CollectorEvidenceCoverage } from '../types';
@@ -204,6 +205,42 @@ describe('deriveCollectorEvidenceCoverageViewModel', () => {
       }
     ]);
     expect(JSON.stringify(focusItems)).not.toContain('/tmp/');
+  });
+
+  it('reports total and overflow before capping visible focus items', () => {
+    const coverage = buildCoverage();
+
+    const summary = deriveCollectorEvidenceCoverageFocusSummary(coverage, [
+      { agent_id: 'app-engineering', display_name: 'App Engineering Agent' },
+      { agent_id: 'growth-revenue', display_name: 'Growth Revenue Agent' },
+      { agent_id: 'market-intel', display_name: 'Market Intel Agent' },
+      { agent_id: 'product-pmf', display_name: 'Product PMF Agent' },
+      { agent_id: 'tokenomics', display_name: 'Tokenomics Agent' }
+    ], 2);
+
+    expect(summary.totalGapCount).toBe(4);
+    expect(summary.visibleItems).toHaveLength(2);
+    expect(summary.overflowCount).toBe(2);
+    expect(summary.visibleItems.map((item) => item.display_name)).toEqual([
+      'Growth Revenue Agent',
+      'Market Intel Agent'
+    ]);
+    expect(summary.visibleItems[0].source_labels).toEqual(['Runtime evidence', 'Workspace evidence']);
+    expect(JSON.stringify(summary)).not.toMatch(
+      /\/tmp\/|tmux\.log|token|webhook|control-plane|session_ref|profile|tmux_observation|workspace_file|workspace_root|hermes_profile|hermes_session/i
+    );
+
+    const zeroCapSummary = deriveCollectorEvidenceCoverageFocusSummary(coverage, [
+      { agent_id: 'app-engineering', display_name: 'App Engineering Agent' },
+      { agent_id: 'growth-revenue', display_name: 'Growth Revenue Agent' },
+      { agent_id: 'market-intel', display_name: 'Market Intel Agent' },
+      { agent_id: 'product-pmf', display_name: 'Product PMF Agent' },
+      { agent_id: 'tokenomics', display_name: 'Tokenomics Agent' }
+    ], 0);
+
+    expect(zeroCapSummary.totalGapCount).toBe(4);
+    expect(zeroCapSummary.visibleItems).toEqual([]);
+    expect(zeroCapSummary.overflowCount).toBe(4);
   });
 
   it('does not show focus items for missing coverage, non-overview agents, or non-positive limits', () => {

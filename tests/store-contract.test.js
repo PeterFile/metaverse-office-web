@@ -2492,6 +2492,145 @@ test('agents evidence-spine schema exposes only static safe contract metadata', 
   assert.equal(serialized.includes('evidence_id'), false);
 });
 
+test('collector snapshot schema exposes static safe route catalog metadata', async () => {
+  const storeFile = await createStoreFile();
+  const store = await createPrototypeStore({ filePath: storeFile });
+
+  await store.appendCollectorReport(createCollectorReport());
+
+  const schema = store.getControllerSnapshotSchema();
+  assert.deepEqual(schema.limit, {
+    default: 50,
+    max: 200
+  });
+  assert.deepEqual(schema.routes, [
+    {
+      name: 'latest',
+      path: '/collectors/controller-snapshot',
+      supported_filters: []
+    },
+    {
+      name: 'summary',
+      path: '/collectors/controller-snapshot/summary',
+      supported_filters: ['collector_snapshot_id']
+    },
+    {
+      name: 'evidence_coverage',
+      path: '/collectors/controller-snapshot/evidence-coverage',
+      supported_filters: ['agent_id', 'source_kind', 'confidence_level', 'limit']
+    },
+    {
+      name: 'source_health',
+      path: '/collectors/controller-snapshot/source-health',
+      supported_filters: ['collector_snapshot_id', 'agent_id', 'source_kind', 'status', 'limit']
+    },
+    {
+      name: 'history',
+      path: '/collectors/controller-snapshot/history',
+      supported_filters: [
+        'collector_snapshot_id',
+        'agent_id',
+        'source_kind',
+        'status',
+        'collected_since',
+        'collected_until',
+        'limit'
+      ]
+    },
+    {
+      name: 'diff',
+      path: '/collectors/controller-snapshot/diff',
+      supported_filters: ['from_collector_snapshot_id', 'to_collector_snapshot_id', 'from', 'to', 'limit']
+    }
+  ]);
+  assert.deepEqual(schema.source_kinds, [
+    'workspace_root',
+    'workspace_file',
+    'workspace_files',
+    'tmux_observation',
+    'tmux_session',
+    'hermes_profile',
+    'hermes_session',
+    'task_evidence',
+    'kanban_fixture',
+    'linear_fixture',
+    'slack_fixture',
+    'task_fixture',
+  ]);
+  assert.deepEqual(schema.source_statuses, ['observed', 'degraded', 'missing', 'error']);
+  assert.deepEqual(schema.confidence_levels, ['high', 'medium', 'low']);
+  assert.deepEqual(schema.snapshot_fields, {
+    latest: [
+      'collected_at',
+      'actor_id',
+      'summary',
+      'items',
+      'shared_artifacts',
+      'evidence_coverage',
+      'runtime_source_evidence'
+    ],
+    summary: [
+      'has_snapshot',
+      'collected_at',
+      'agent_count',
+      'heartbeat_count',
+      'tmux_observed_count',
+      'workspace_observed_count',
+      'reboot_recommended_count',
+      'evidence_ref_count',
+      'covered_agent_count',
+      'low_confidence_agent_count',
+      'source_kind_buckets',
+      'source_health_buckets',
+      'runtime_source_evidence'
+    ],
+    evidence_coverage: [
+      'collected_at',
+      'collector_snapshot_id',
+      'actor_id',
+      'evidence_ref_count',
+      'covered_agent_count',
+      'low_confidence_agent_ids',
+      'source_kind_buckets',
+      'agent_items'
+    ],
+    source_health: [
+      'collected_at',
+      'collector_snapshot_id',
+      'actor_id',
+      'summary',
+      'runtime_source_evidence',
+      'agent_items'
+    ],
+    history: ['total_count', 'returned_limit', 'source_kind_buckets', 'status_buckets', 'items'],
+    diff: [
+      'from_collector_snapshot_id',
+      'to_collector_snapshot_id',
+      'from_collected_at',
+      'to_collected_at',
+      'summary_delta',
+      'source_health_delta',
+      'agent_change_count',
+      'returned_limit',
+      'agent_changes'
+    ]
+  });
+  assert.equal(
+    schema.route_write_boundary,
+    'read-only controller snapshot schema catalog; does not inspect snapshots, collect, read runtime sources, append records, or expose control-plane actions'
+  );
+
+  const serialized = JSON.stringify(schema);
+  assert.equal(serialized.includes('/tmp/store-contract'), false);
+  assert.equal(serialized.includes('collector-snapshot:'), false);
+  assert.equal(serialized.includes('team-lead'), false);
+  assert.equal(serialized.includes('metadata'), false);
+  assert.equal(serialized.includes('degraded_reasons'), false);
+  for (const forbidden of ['tmux://', 'hermes://', 'session://', 'profile://', 'webhook', 'payload', 'token']) {
+    assert.equal(serialized.toLowerCase().includes(forbidden), false, forbidden);
+  }
+});
+
 test('prototype store summarizes evidence records with list filter semantics before limit', async () => {
   const storeFile = await createStoreFile();
   const store = await createPrototypeStore({ filePath: storeFile });

@@ -163,6 +163,125 @@ const RUNTIME_SOURCE_GAP_LIFECYCLE_STATES = Object.freeze([
 ]);
 const RUNTIME_SOURCE_GAP_SCHEMA_WRITE_BOUNDARY =
   'read-only runtime source-gap schema catalog; does not collect, read runtime sources, append records, or expose control-plane actions';
+const CONTROLLER_SNAPSHOT_SCHEMA_SOURCE_KINDS = Object.freeze([
+  'workspace_root',
+  'workspace_file',
+  'workspace_files',
+  'tmux_observation',
+  'tmux_session',
+  'hermes_profile',
+  'hermes_session',
+  'task_evidence',
+  'kanban_fixture',
+  'linear_fixture',
+  'slack_fixture',
+  'task_fixture',
+]);
+const CONTROLLER_SNAPSHOT_CONFIDENCE_LEVELS = Object.freeze(['high', 'medium', 'low']);
+const CONTROLLER_SNAPSHOT_SCHEMA_ROUTES = Object.freeze([
+  Object.freeze({
+    name: 'latest',
+    path: '/collectors/controller-snapshot',
+    supported_filters: Object.freeze([])
+  }),
+  Object.freeze({
+    name: 'summary',
+    path: '/collectors/controller-snapshot/summary',
+    supported_filters: Object.freeze(['collector_snapshot_id'])
+  }),
+  Object.freeze({
+    name: 'evidence_coverage',
+    path: '/collectors/controller-snapshot/evidence-coverage',
+    supported_filters: Object.freeze(['agent_id', 'source_kind', 'confidence_level', 'limit'])
+  }),
+  Object.freeze({
+    name: 'source_health',
+    path: '/collectors/controller-snapshot/source-health',
+    supported_filters: Object.freeze(['collector_snapshot_id', 'agent_id', 'source_kind', 'status', 'limit'])
+  }),
+  Object.freeze({
+    name: 'history',
+    path: '/collectors/controller-snapshot/history',
+    supported_filters: Object.freeze([
+      'collector_snapshot_id',
+      'agent_id',
+      'source_kind',
+      'status',
+      'collected_since',
+      'collected_until',
+      'limit'
+    ])
+  }),
+  Object.freeze({
+    name: 'diff',
+    path: '/collectors/controller-snapshot/diff',
+    supported_filters: Object.freeze([
+      'from_collector_snapshot_id',
+      'to_collector_snapshot_id',
+      'from',
+      'to',
+      'limit'
+    ])
+  })
+]);
+const CONTROLLER_SNAPSHOT_SCHEMA_FIELDS = Object.freeze({
+  latest: Object.freeze([
+    'collected_at',
+    'actor_id',
+    'summary',
+    'items',
+    'shared_artifacts',
+    'evidence_coverage',
+    'runtime_source_evidence'
+  ]),
+  summary: Object.freeze([
+    'has_snapshot',
+    'collected_at',
+    'agent_count',
+    'heartbeat_count',
+    'tmux_observed_count',
+    'workspace_observed_count',
+    'reboot_recommended_count',
+    'evidence_ref_count',
+    'covered_agent_count',
+    'low_confidence_agent_count',
+    'source_kind_buckets',
+    'source_health_buckets',
+    'runtime_source_evidence'
+  ]),
+  evidence_coverage: Object.freeze([
+    'collected_at',
+    'collector_snapshot_id',
+    'actor_id',
+    'evidence_ref_count',
+    'covered_agent_count',
+    'low_confidence_agent_ids',
+    'source_kind_buckets',
+    'agent_items'
+  ]),
+  source_health: Object.freeze([
+    'collected_at',
+    'collector_snapshot_id',
+    'actor_id',
+    'summary',
+    'runtime_source_evidence',
+    'agent_items'
+  ]),
+  history: Object.freeze(['total_count', 'returned_limit', 'source_kind_buckets', 'status_buckets', 'items']),
+  diff: Object.freeze([
+    'from_collector_snapshot_id',
+    'to_collector_snapshot_id',
+    'from_collected_at',
+    'to_collected_at',
+    'summary_delta',
+    'source_health_delta',
+    'agent_change_count',
+    'returned_limit',
+    'agent_changes'
+  ])
+});
+const CONTROLLER_SNAPSHOT_SCHEMA_WRITE_BOUNDARY =
+  'read-only controller snapshot schema catalog; does not inspect snapshots, collect, read runtime sources, append records, or expose control-plane actions';
 const execFileAsync = promisify(execFile);
 const SEVERITY_RANK = Object.freeze({
   normal: 0,
@@ -971,6 +1090,30 @@ class PrototypeStore {
 
   getCollectorSnapshotDiff(filters = {}) {
     return projectCollectorSnapshotDiff(this.collectorReports, filters);
+  }
+
+  getControllerSnapshotSchema() {
+    return {
+      routes: CONTROLLER_SNAPSHOT_SCHEMA_ROUTES.map((route) => ({
+        name: route.name,
+        path: route.path,
+        supported_filters: [...route.supported_filters]
+      })),
+      source_kinds: [...CONTROLLER_SNAPSHOT_SCHEMA_SOURCE_KINDS],
+      source_statuses: [...EVIDENCE_RECORD_SOURCE_STATUSES],
+      confidence_levels: [...CONTROLLER_SNAPSHOT_CONFIDENCE_LEVELS],
+      snapshot_fields: Object.fromEntries(
+        Object.entries(CONTROLLER_SNAPSHOT_SCHEMA_FIELDS).map(([routeName, fields]) => [
+          routeName,
+          [...fields]
+        ])
+      ),
+      limit: {
+        default: 50,
+        max: 200
+      },
+      route_write_boundary: CONTROLLER_SNAPSHOT_SCHEMA_WRITE_BOUNDARY
+    };
   }
 
   getReplayCheckpointSummary() {

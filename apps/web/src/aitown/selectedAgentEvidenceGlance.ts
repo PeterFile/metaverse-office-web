@@ -23,6 +23,20 @@ const SOURCE_KIND_LABELS: Record<CollectorEvidenceCoverageSourceKind, string> = 
   hermes_profile: 'Hermes',
   hermes_session: 'Hermes'
 };
+const SAFE_SOURCE_KIND_LABELS: Record<string, string> = {
+  ...SOURCE_KIND_LABELS
+};
+const SAFE_EVIDENCE_ROLE_LABELS: Record<string, string> = {
+  agent_output: 'agent output',
+  agent_plan: 'agent plan',
+  runtime_activity: 'runtime activity',
+  runtime_presence: 'runtime presence',
+  runtime_unmapped: 'runtime unmapped',
+  source_evidence: 'source evidence',
+  task_reference: 'task reference',
+  workspace_presence: 'workspace presence'
+};
+const UNKNOWN_BUCKET_LABEL = 'Unknown';
 
 export function deriveSelectedAgentEvidenceGlance({
   selectedAgentId,
@@ -84,7 +98,7 @@ function deriveEvidenceSpineProofCapsule(
     `Proof glance · ${renderRecordCount(row.evidence_count)} · Sources ${renderBucketSummary(row.source_kind_buckets, renderSourceKindLabel)}`,
     [
       `Coverage gap · ${renderSourceGapCount(row)}`,
-      `Roles ${renderBucketSummary(row.evidence_role_buckets, renderBucketLabel)}`,
+      `Roles ${renderBucketSummary(row.evidence_role_buckets, renderEvidenceRoleLabel)}`,
       `Latest observed ${row.latest_observed_at ?? 'unavailable'}`
     ].join(' · ')
   ];
@@ -125,28 +139,33 @@ function renderBucketSummary(
   buckets: Record<string, number>,
   renderKey: (key: string) => string
 ) {
-  const parts = Object.entries(buckets)
+  const projectedBuckets = Object.entries(buckets).reduce<Record<string, number>>((acc, [key, count]) => {
+    if (count > 0) {
+      const label = renderKey(key);
+      acc[label] = (acc[label] ?? 0) + count;
+    }
+    return acc;
+  }, {});
+  const parts = Object.entries(projectedBuckets)
     .filter(([, count]) => count > 0)
-    .sort(([leftKey, leftCount], [rightKey, rightCount]) => rightCount - leftCount || leftKey.localeCompare(rightKey))
+    .sort(([leftKey, leftCount], [rightKey, rightCount]) => {
+      const leftUnknown = leftKey === UNKNOWN_BUCKET_LABEL;
+      const rightUnknown = rightKey === UNKNOWN_BUCKET_LABEL;
+      if (leftUnknown !== rightUnknown) {
+        return leftUnknown ? 1 : -1;
+      }
+      return rightCount - leftCount || leftKey.localeCompare(rightKey);
+    })
     .slice(0, 3)
-    .map(([key, count]) => `${renderKey(key)} ${count}`);
+    .map(([key, count]) => `${key} ${count}`);
 
   return parts.length > 0 ? parts.join(', ') : 'unavailable';
 }
 
 function renderSourceKindLabel(sourceKind: string) {
-  if (sourceKind === 'workspace_file' || sourceKind === 'workspace_root') {
-    return 'workspace';
-  }
-  if (sourceKind === 'tmux_observation') {
-    return 'tmux';
-  }
-  if (sourceKind === 'hermes_profile' || sourceKind === 'hermes_session') {
-    return 'Hermes';
-  }
-  return renderBucketLabel(sourceKind);
+  return SAFE_SOURCE_KIND_LABELS[sourceKind] ?? UNKNOWN_BUCKET_LABEL;
 }
 
-function renderBucketLabel(value: string) {
-  return value.replace(/_/g, ' ');
+function renderEvidenceRoleLabel(evidenceRole: string) {
+  return SAFE_EVIDENCE_ROLE_LABELS[evidenceRole] ?? UNKNOWN_BUCKET_LABEL;
 }

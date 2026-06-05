@@ -151,6 +151,56 @@ describe('deriveSelectedAgentEvidenceGlance', () => {
     ]);
   });
 
+  it('projects hostile evidence-spine bucket keys through safe labels', () => {
+    const hostileSummary: AgentEvidenceSpineSummary = {
+      ...evidenceSpineSummary,
+      agents: [
+        {
+          agent_id: 'hostile-agent',
+          evidence_count: 9,
+          output_candidate_buckets: { true: 0, false: 9 },
+          source_kind_buckets: {
+            workspace_file: 3,
+            '/Users/cwp/private/token.md': 2,
+            'hermes://session/private': 1
+          },
+          evidence_role_buckets: {
+            source_evidence: 4,
+            webhook: 3,
+            metadata: 2
+          },
+          source_status_buckets: {
+            observed: 4,
+            'tmux://raw-session': 3,
+            'control-plane': 2
+          },
+          source_gap_buckets: {
+            missing: 1,
+            'profile://admin': 2
+          },
+          latest_observed_at: '2026-03-09T18:04:45.000Z',
+          latest_collected_at: '2026-03-09T18:05:00.000Z'
+        }
+      ]
+    };
+
+    const glance = deriveSelectedAgentEvidenceGlance({
+      selectedAgentId: 'hostile-agent',
+      evidenceSpineSummary: hostileSummary,
+      evidenceCoverage: null,
+      sourceHealth: null
+    });
+    const serialized = JSON.stringify(glance);
+
+    expect(glance).toEqual([
+      'Proof glance · 9 records · Sources workspace 3, Unknown 3',
+      'Coverage gap · 3 · Roles source evidence 4, Unknown 5 · Latest observed 2026-03-09T18:04:45.000Z'
+    ]);
+    expect(serialized).not.toMatch(
+      /\/Users\/cwp|hermes:\/\/|tmux:\/\/|profile:\/\/|session|token|webhook|metadata|control-plane/
+    );
+  });
+
   it('shows missing summary rows as unavailable coverage gaps without fabricated activity', () => {
     expect(
       deriveSelectedAgentEvidenceGlance({

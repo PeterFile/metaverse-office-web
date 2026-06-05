@@ -101,6 +101,13 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
     return;
   }
 
+  if (method === 'GET' && pathname === '/agents/evidence-spine/schema') {
+    sendJson(res, 200, {
+      item: store.getAgentsEvidenceSpineSchema()
+    });
+    return;
+  }
+
   if (method === 'GET' && pathname === '/agents/evidence-spine/summary') {
     sendJson(res, 200, {
       item: store.getAgentEvidenceSpineSummary(

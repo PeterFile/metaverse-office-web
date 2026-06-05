@@ -275,6 +275,10 @@ class JsonlRecordLog {
   async getStorageIndexCounts() {
     return null;
   }
+
+  async getEvidenceQueryProbeCounts() {
+    return null;
+  }
 }
 
 class SqliteRecordLog {
@@ -348,6 +352,22 @@ class SqliteRecordLog {
     };
   }
 
+  async getEvidenceQueryProbeCounts(probes = []) {
+    let driftCount = 0;
+
+    for (const probe of probes) {
+      const actualCount = await this.#countEvidenceQueryProbe(probe.filters);
+      if (actualCount !== probe.expected_count) {
+        driftCount += 1;
+      }
+    }
+
+    return {
+      evidence_query_probe_count: probes.length,
+      evidence_query_probe_drift_count: driftCount
+    };
+  }
+
   async #countRecordIndexDrift(expectedIndexes) {
     const { stdout } = await this.#exec([
       '-readonly',
@@ -412,6 +432,67 @@ class SqliteRecordLog {
     }
 
     return driftCount;
+  }
+
+  async #countEvidenceQueryProbe(filters) {
+    const evidenceRef = normalizeFilterValue(filters.evidence_ref);
+    const where = ["record_index.kind = 'evidence_record'"];
+
+    addSqlExactFilter(where, 'record_index.evidence_id', filters.evidence_id);
+    addSqlExactFilter(where, 'record_index.agent_id', filters.agent_id);
+    addSqlExactFilter(where, 'record_index.source_kind', filters.source_kind);
+    addSqlExactFilter(where, 'record_index.evidence_role', filters.evidence_role);
+    addSqlExactFilter(where, 'record_index.source_status', filters.source_status);
+    addSqlExactFilter(
+      where,
+      'record_index.collector_snapshot_id',
+      filters.collector_snapshot_id
+    );
+    addSqlExactFilter(where, 'record_index.correlation_id', filters.correlation_id);
+
+    const outputCandidate = normalizeOptionalBoolean(filters.output_candidate);
+    if (outputCandidate !== null) {
+      where.push(`record_index.output_candidate = ${outputCandidate ? 1 : 0}`);
+    }
+
+    const mapped = normalizeOptionalBoolean(filters.mapped);
+    if (mapped === true) {
+      where.push("record_index.agent_id IS NOT NULL AND record_index.agent_id <> ''");
+    } else if (mapped === false) {
+      where.push('record_index.agent_id IS NULL');
+    }
+
+    addSqlTimestampWindow(
+      where,
+      'record_index.observed_at',
+      filters.observed_since,
+      filters.observed_until
+    );
+    addSqlTimestampWindow(
+      where,
+      'record_index.collected_at',
+      filters.collected_since,
+      filters.collected_until
+    );
+
+    if (evidenceRef) {
+      where.push(`record_evidence_refs.evidence_ref = ${sqlText(evidenceRef)}`);
+    }
+
+    const from = evidenceRef
+      ? [
+          'record_index',
+          'JOIN record_evidence_refs ON record_evidence_refs.seq = record_index.seq'
+        ].join(' ')
+      : 'record_index';
+    const { stdout } = await this.#exec([
+      '-readonly',
+      this.filePath,
+      '-json',
+      `SELECT COUNT(*) AS count FROM ${from} WHERE ${where.join(' AND ')};`
+    ]);
+    const rows = stdout.trim() ? JSON.parse(stdout) : [];
+    return Number.isSafeInteger(rows[0]?.count) ? rows[0].count : 0;
   }
 
   async #ensureReady() {
@@ -678,6 +759,35 @@ function sqlInteger(value) {
   }
 
   return value ? '1' : '0';
+}
+
+function addSqlExactFilter(where, column, value) {
+  const normalizedValue = normalizeFilterValue(value);
+  if (normalizedValue) {
+    where.push(`${column} = ${sqlText(normalizedValue)}`);
+  }
+}
+
+function addSqlTimestampWindow(where, column, sinceValue, untilValue) {
+  const since = normalizeSqlTimestampFilter(sinceValue);
+  const until = normalizeSqlTimestampFilter(untilValue);
+
+  if (since) {
+    where.push(`${column} IS NOT NULL AND ${column} >= ${sqlText(since)}`);
+  }
+  if (until) {
+    where.push(`${column} IS NOT NULL AND ${column} <= ${sqlText(until)}`);
+  }
+}
+
+function normalizeSqlTimestampFilter(value) {
+  const normalized = normalizeFilterValue(value);
+  if (!normalized) {
+    return null;
+  }
+
+  const timestamp = Date.parse(normalized);
+  return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : null;
 }
 
 class PrototypeStore {
@@ -1402,50 +1512,7 @@ class PrototypeStore {
   }
 
   #filterEvidenceRecords(filters = {}) {
-    const evidenceId = normalizeFilterValue(filters.evidence_id);
-    const agentId = normalizeFilterValue(filters.agent_id);
-    const sourceKind = normalizeFilterValue(filters.source_kind);
-    const evidenceRole = normalizeFilterValue(filters.evidence_role);
-    const outputCandidate = normalizeOptionalBoolean(filters.output_candidate);
-    const evidenceRef = normalizeFilterValue(filters.evidence_ref);
-    const sourceStatus = normalizeFilterValue(filters.source_status);
-    const collectorSnapshotId = normalizeFilterValue(filters.collector_snapshot_id);
-    const correlationId = normalizeFilterValue(filters.correlation_id);
-    const mapped = normalizeOptionalBoolean(filters.mapped);
-    const observedSince = parseOptionalTimestampFilter(filters.observed_since);
-    const observedUntil = parseOptionalTimestampFilter(filters.observed_until);
-    const collectedSince = parseOptionalTimestampFilter(filters.collected_since);
-    const collectedUntil = parseOptionalTimestampFilter(filters.collected_until);
-    const newestFirst = normalizeOptionalBoolean(filters.newest_first) === true;
-    const limit = parseLimit(filters.limit);
-
-    const records = this.evidenceRecords
-      .filter((record) => !evidenceId || record.evidence_id === evidenceId)
-      .filter((record) => !agentId || record.agent_id === agentId)
-      .filter(
-        (record) =>
-          mapped === null ||
-          (mapped
-            ? typeof record.agent_id === 'string' && record.agent_id.length > 0
-            : record.agent_id === null)
-      )
-      .filter((record) => !sourceKind || record.source_kind === sourceKind)
-      .filter((record) => !evidenceRole || record.evidence_role === evidenceRole)
-      .filter((record) => outputCandidate === null || record.output_candidate === outputCandidate)
-      .filter((record) => !evidenceRef || record.evidence_ref === evidenceRef)
-      .filter((record) => !sourceStatus || record.source_status === sourceStatus)
-      .filter(
-        (record) => !collectorSnapshotId || record.collector_snapshot_id === collectorSnapshotId
-      )
-      .filter((record) => !correlationId || record.correlation_id === correlationId)
-      .filter((record) =>
-        matchesTimestampWindow(record.observed_at, observedSince, observedUntil)
-      )
-      .filter((record) =>
-        matchesTimestampWindow(record.collected_at, collectedSince, collectedUntil)
-      );
-
-    return { records, limit, newestFirst };
+    return filterEvidenceRecords(this.evidenceRecords, filters);
   }
 
   getCounts() {
@@ -4690,6 +4757,9 @@ async function projectStorageIndexHealth({ records, recordLog }) {
     record_evidence_ref_count: null,
     record_index_drift_count: null,
     record_evidence_ref_drift_count: null,
+    evidence_query_probe_count: null,
+    evidence_query_probe_drift_count: null,
+    evidence_query_probe_status: 'not_applicable',
     sidecar_status: 'not_applicable',
     record_kind_buckets: createRecordKindBuckets(records),
     latest_record_ts: getLatestPublicRecordTimestamp(records)
@@ -4702,6 +4772,9 @@ async function projectStorageIndexHealth({ records, recordLog }) {
   try {
     const expectedIndexes = records.map(createSqliteRecordIndex);
     const counts = await recordLog.getStorageIndexCounts(expectedIndexes);
+    const queryProbeCounts = await recordLog.getEvidenceQueryProbeCounts(
+      createEvidenceQueryParityProbes(records)
+    );
     const expectedEvidenceRefCount = expectedIndexes.reduce(
       (sum, indexRecord) => sum + indexRecord.evidence_refs.length,
       0
@@ -4710,7 +4783,8 @@ async function projectStorageIndexHealth({ records, recordLog }) {
       counts.record_index_count === records.length &&
       counts.record_evidence_ref_count === expectedEvidenceRefCount &&
       counts.record_index_drift_count === 0 &&
-      counts.record_evidence_ref_drift_count === 0;
+      counts.record_evidence_ref_drift_count === 0 &&
+      queryProbeCounts.evidence_query_probe_drift_count === 0;
 
     return {
       ...base,
@@ -4718,6 +4792,10 @@ async function projectStorageIndexHealth({ records, recordLog }) {
       record_evidence_ref_count: counts.record_evidence_ref_count,
       record_index_drift_count: counts.record_index_drift_count,
       record_evidence_ref_drift_count: counts.record_evidence_ref_drift_count,
+      evidence_query_probe_count: queryProbeCounts.evidence_query_probe_count,
+      evidence_query_probe_drift_count: queryProbeCounts.evidence_query_probe_drift_count,
+      evidence_query_probe_status:
+        queryProbeCounts.evidence_query_probe_drift_count === 0 ? 'complete' : 'stale',
       sidecar_status: complete ? 'complete' : 'stale',
       status: complete ? 'ok' : 'degraded'
     };
@@ -4725,9 +4803,132 @@ async function projectStorageIndexHealth({ records, recordLog }) {
     return {
       ...base,
       status: 'degraded',
+      evidence_query_probe_status: 'stale',
       sidecar_status: 'stale'
     };
   }
+}
+
+function createEvidenceQueryParityProbes(records) {
+  const evidenceRecords = records
+    .filter((record) => record.kind === EVIDENCE_RECORD_KIND)
+    .map((record) => record.payload || {});
+  const probes = [
+    {},
+    { mapped: 'true' },
+    { mapped: 'false' },
+    { output_candidate: 'true' },
+    { output_candidate: 'false' }
+  ];
+
+  addFirstEvidenceProbeValue(probes, evidenceRecords, 'evidence_id');
+  addFirstEvidenceProbeValue(probes, evidenceRecords, 'agent_id');
+  addFirstEvidenceProbeValue(probes, evidenceRecords, 'source_kind');
+  addFirstEvidenceProbeValue(probes, evidenceRecords, 'evidence_role');
+  addFirstEvidenceProbeValue(probes, evidenceRecords, 'evidence_ref');
+  addFirstEvidenceProbeValue(probes, evidenceRecords, 'source_status');
+  addFirstEvidenceProbeValue(probes, evidenceRecords, 'collector_snapshot_id');
+  addFirstEvidenceProbeValue(probes, evidenceRecords, 'correlation_id');
+
+  const observedAtValues = evidenceRecords
+    .map((record) => projectEvidenceTimestampValue(record.observed_at))
+    .filter(Boolean)
+    .sort(compareStringsAsc);
+  if (observedAtValues.length > 0) {
+    probes.push({
+      observed_since: observedAtValues[0],
+      observed_until: observedAtValues[observedAtValues.length - 1]
+    });
+  }
+
+  const collectedAtValues = evidenceRecords
+    .map((record) => projectEvidenceTimestampValue(record.collected_at))
+    .filter(Boolean)
+    .sort(compareStringsAsc);
+  if (collectedAtValues.length > 0) {
+    probes.push({
+      collected_since: collectedAtValues[0],
+      collected_until: collectedAtValues[collectedAtValues.length - 1]
+    });
+  }
+
+  const outputRecord = evidenceRecords.find((record) => record.output_candidate === true);
+  if (outputRecord) {
+    probes.push({
+      mapped: 'true',
+      output_candidate: 'true',
+      source_kind: outputRecord.source_kind,
+      evidence_role: outputRecord.evidence_role,
+      source_status: outputRecord.source_status,
+      observed_since: outputRecord.observed_at,
+      observed_until: outputRecord.observed_at,
+      collected_since: outputRecord.collected_at,
+      collected_until: outputRecord.collected_at
+    });
+  }
+
+  return probes.map((filters) => ({
+    filters,
+    expected_count: countEvidenceRecordsForProbe(evidenceRecords, filters)
+  }));
+}
+
+function addFirstEvidenceProbeValue(probes, records, field) {
+  const record = records.find((candidate) => normalizeFilterValue(candidate[field]));
+  if (record) {
+    probes.push({ [field]: record[field] });
+  }
+}
+
+function countEvidenceRecordsForProbe(records, filters) {
+  return filterEvidenceRecords(records, filters).records.length;
+}
+
+function filterEvidenceRecords(evidenceRecords, filters = {}) {
+  const evidenceId = normalizeFilterValue(filters.evidence_id);
+  const agentId = normalizeFilterValue(filters.agent_id);
+  const sourceKind = normalizeFilterValue(filters.source_kind);
+  const evidenceRole = normalizeFilterValue(filters.evidence_role);
+  const outputCandidate = normalizeOptionalBoolean(filters.output_candidate);
+  const evidenceRef = normalizeFilterValue(filters.evidence_ref);
+  const sourceStatus = normalizeFilterValue(filters.source_status);
+  const collectorSnapshotId = normalizeFilterValue(filters.collector_snapshot_id);
+  const correlationId = normalizeFilterValue(filters.correlation_id);
+  const mapped = normalizeOptionalBoolean(filters.mapped);
+  const observedSince = parseOptionalTimestampFilter(filters.observed_since);
+  const observedUntil = parseOptionalTimestampFilter(filters.observed_until);
+  const collectedSince = parseOptionalTimestampFilter(filters.collected_since);
+  const collectedUntil = parseOptionalTimestampFilter(filters.collected_until);
+  const newestFirst = normalizeOptionalBoolean(filters.newest_first) === true;
+  const limit = parseLimit(filters.limit);
+
+  const records = evidenceRecords
+    .filter((record) => !evidenceId || record.evidence_id === evidenceId)
+    .filter((record) => !agentId || record.agent_id === agentId)
+    .filter(
+      (record) =>
+        mapped === null ||
+        (mapped
+          ? typeof record.agent_id === 'string' && record.agent_id.length > 0
+          : record.agent_id === null)
+    )
+    .filter((record) => !sourceKind || record.source_kind === sourceKind)
+    .filter((record) => !evidenceRole || record.evidence_role === evidenceRole)
+    .filter((record) => outputCandidate === null || record.output_candidate === outputCandidate)
+    .filter((record) => !evidenceRef || record.evidence_ref === evidenceRef)
+    .filter((record) => !sourceStatus || record.source_status === sourceStatus)
+    .filter(
+      (record) => !collectorSnapshotId || record.collector_snapshot_id === collectorSnapshotId
+    )
+    .filter((record) => !correlationId || record.correlation_id === correlationId)
+    .filter((record) =>
+      matchesTimestampWindow(record.observed_at, observedSince, observedUntil)
+    )
+    .filter((record) =>
+      matchesTimestampWindow(record.collected_at, collectedSince, collectedUntil)
+    );
+
+  return { records, limit, newestFirst };
 }
 
 function getLatestPublicRecordTimestamp(records) {

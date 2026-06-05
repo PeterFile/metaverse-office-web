@@ -909,6 +909,21 @@ describe('deriveRuntimeSourceGapLifecycleStrip', () => {
           },
           {
             agent_id: 'app-engineering',
+            source_kind: 'workspace_file',
+            evidence_role: null,
+            current_status: 'degraded',
+            lifecycle_state:
+              'state-control-plane-token=/tmp/app-engineering' as RuntimeSourceGapLifecycle['groups'][number]['lifecycle_state'],
+            first_observed_at: '2026-03-16T08:58:30.000Z',
+            last_observed_at: '2026-03-16T08:59:30.000Z',
+            first_collected_at: '2026-03-16T09:00:00.000Z',
+            last_collected_at: '2026-03-16T09:01:00.000Z',
+            record_count: 96,
+            snapshot_count: 96,
+            source_status_buckets: { degraded: 96 }
+          },
+          {
+            agent_id: 'app-engineering',
             source_kind: null,
             evidence_role: 'collector_snapshot_id:secret',
             current_status: 'missing',
@@ -928,7 +943,7 @@ describe('deriveRuntimeSourceGapLifecycleStrip', () => {
       error: null
     });
 
-    expect(strip?.mappedRows).toHaveLength(2);
+    expect(strip?.mappedRows).toHaveLength(3);
     expect(strip?.mappedRows[0]).toMatchObject({
       sourceLabel: 'Workspace source',
       statusLabel: 'degraded',
@@ -940,6 +955,12 @@ describe('deriveRuntimeSourceGapLifecycleStrip', () => {
       statusLabel: 'unknown',
       lifecycleLabel: 'opened',
       countLabel: '97 rows'
+    });
+    expect(strip?.mappedRows[2]).toMatchObject({
+      sourceLabel: 'Workspace source',
+      statusLabel: 'degraded',
+      lifecycleLabel: 'unknown',
+      countLabel: '96 rows'
     });
     const serializedStrip = JSON.stringify(strip);
     expect(serializedStrip).not.toContain('/tmp/app-engineering');

@@ -894,6 +894,7 @@ function buildSelectedAgentEvidenceLedger(
         totalCount: 2
       }
     ],
+    proofCompassRows: [],
     ...overrides
   };
 }
@@ -1986,6 +1987,58 @@ describe('DetailsPanel selected-agent workflow lifecycle', () => {
     } finally {
       HTMLElement.prototype.scrollIntoView = previousScrollIntoView;
     }
+  });
+
+  it('renders safe Proof Compass ref-rollup rows without raw refs or enum canaries', () => {
+    render(
+      <DetailsPanel
+        {...buildProps({
+          activeHubCategory: 'evidence',
+          selectedAgentDrilldownTab: 'evidence',
+          selectedAgentEvidenceLedger: buildSelectedAgentEvidenceLedger({
+            outputEvidence: { totalCount: 0, overflowCount: 0, items: [] },
+            nonOutputEvidence: { totalCount: 0, overflowCount: 0, items: [] },
+            degradedEvidence: { totalCount: 0, overflowCount: 0, items: [] },
+            unmappedEvidence: { totalCount: 0, overflowCount: 0, items: [] },
+            sourceContextGroups: [],
+            sourceRefGroups: [],
+            proofCompassRows: [
+              {
+                groupKey: 'ref_group_001',
+                label: 'workspace_file degraded evidence',
+                recordCount: 7,
+                mappedCount: 5,
+                unmappedCount: 2,
+                sourceKindBuckets: [
+                  { key: 'workspace_file', count: 5 },
+                  { key: 'tmux_observation', count: 2 },
+                  { key: 'hermes_session', count: 1 }
+                ],
+                sourceStatusBuckets: [
+                  { key: 'observed', count: 5 },
+                  { key: 'missing', count: 2 }
+                ]
+              }
+            ]
+          }),
+          selectedAgentEvidenceLedgerState: 'ready'
+        })}
+      />
+    );
+
+    const section = screen.getByRole('heading', { name: 'Evidence Ledger' }).closest('section');
+    expect(section).not.toBeNull();
+    expect(within(section!).getByText('Proof Compass ref groups')).toBeVisible();
+    expect(
+      within(section!).getByText('Proof Compass ref group · Workspace file Degraded evidence · Records 7 · Mapped 5 · Unmapped 2')
+    ).toBeVisible();
+    expect(
+      within(section!).getByText('Evidence sources · Workspace file 5, Runtime observation 2, Runtime source 1')
+    ).toBeVisible();
+    expect(within(section!).getByText('Status mix · Observed 5, Missing 2')).toBeVisible();
+    expect(section!).not.toHaveTextContent(
+      /ref_group_001|workspace_file|tmux_observation|hermes_session|\/tmp|\/Users|tmux:\/\/|hermes:\/\/|session:\/\/|profile:\/\/|token|webhook|secret|metadata|control-plane|dispatch/i
+    );
   });
 
   it('hides zero-count selected-agent evidence bucket chips without misleading empty copy', () => {

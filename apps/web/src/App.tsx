@@ -24,6 +24,7 @@ import {
   fetchCorrelationDrilldown,
   fetchEvidenceRecord,
   fetchEvidenceProvenanceBundle,
+  fetchEvidenceRefRollup,
   fetchEvidenceReplayWindow,
   fetchEvidenceSourceContext,
   fetchEvidenceRecords,
@@ -73,8 +74,10 @@ import { WorldProvider, useWorld } from './context/WorldContext';
 import { usePolledResource, type LoadState } from './hooks/usePolledResource';
 import { getHubFocusableElements, isHubElementVisible } from './hubFocus';
 import {
+  buildSelectedAgentEvidenceProofCompassRows,
   buildSelectedAgentEvidenceLedger,
-  type SelectedAgentEvidenceLedgerModel
+  type SelectedAgentEvidenceLedgerModel,
+  type SelectedAgentEvidenceProofCompassRow
 } from './selectedAgentEvidenceLedger';
 import type {
   AccountabilityReplayBundle,
@@ -2261,23 +2264,49 @@ function AppInner() {
   const previousSelectedAgentEvidenceLedgerResourceKeyRef = useRef<string | null>(
     selectedAgentEvidenceLedgerResourceKey
   );
+  const selectedAgentEvidenceProofCompassRowsByLedgerKeyRef = useRef<
+    Map<string, SelectedAgentEvidenceProofCompassRow[]>
+  >(new Map());
   const selectedAgentEvidenceLedgerResource = usePolledResource<SelectedAgentEvidenceLedgerPayload>({
     enabled:
       hubOpen &&
       selectedAgentId !== null &&
       activeHubCategory === 'evidence' &&
       selectedAgentDrilldownTab === 'evidence',
-    load: async (signal) => ({
-      targetAgentId: selectedAgentId!,
-      evidenceLedger: buildSelectedAgentEvidenceLedger(
-        await fetchEvidenceRecords({
-          agentId: selectedAgentId!,
-          newestFirst: true,
-          limit: SELECTED_AGENT_EVIDENCE_LEDGER_LIMIT,
-          signal
+    load: async (signal) => {
+      const targetAgentId = selectedAgentId!;
+      const recordOptions = {
+        agentId: targetAgentId,
+        newestFirst: true,
+        limit: SELECTED_AGENT_EVIDENCE_LEDGER_LIMIT,
+        signal
+      };
+      const proofCompassRowsCacheKey = selectedAgentEvidenceLedgerResourceKey;
+      const cachedProofCompassRows = proofCompassRowsCacheKey
+        ? selectedAgentEvidenceProofCompassRowsByLedgerKeyRef.current.get(proofCompassRowsCacheKey)
+        : undefined;
+      const [records, proofCompassRows] = await Promise.all([
+        fetchEvidenceRecords(recordOptions),
+        cachedProofCompassRows !== undefined
+          ? Promise.resolve(cachedProofCompassRows)
+          : fetchEvidenceRefRollup(recordOptions)
+              .then((rollup) => buildSelectedAgentEvidenceProofCompassRows(rollup))
+              .catch(() => [])
+      ]);
+      if (proofCompassRowsCacheKey && cachedProofCompassRows === undefined) {
+        selectedAgentEvidenceProofCompassRowsByLedgerKeyRef.current.set(
+          proofCompassRowsCacheKey,
+          proofCompassRows
+        );
+      }
+
+      return {
+        targetAgentId,
+        evidenceLedger: buildSelectedAgentEvidenceLedger(records, {
+          proofCompassRows
         })
-      )
-    }),
+      };
+    },
     resourceKey: selectedAgentEvidenceLedgerResourceKey
   });
   const selectedAgentEvidenceLedgerSelectionChanged =

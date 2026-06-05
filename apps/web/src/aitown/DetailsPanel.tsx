@@ -58,6 +58,8 @@ import type {
   SelectedAgentEvidenceLedgerGroup,
   SelectedAgentEvidenceLedgerItem,
   SelectedAgentEvidenceLedgerModel,
+  SelectedAgentEvidenceProofCompassBucket,
+  SelectedAgentEvidenceProofCompassRow,
   SelectedAgentEvidenceLedgerSourceContextGroup,
   SelectedAgentEvidenceLedgerSourceRefGroup
 } from '../selectedAgentEvidenceLedger';
@@ -1383,10 +1385,16 @@ function renderSelectedAgentEvidenceProofCompass(model: SelectedAgentEvidenceLed
     }
   ];
   const visibleBuckets = buckets.filter((bucket) => bucket.totalCount > 0);
+  const proofCompassRows = model.proofCompassRows;
   const sourceContextGroups = model.sourceContextGroups;
   const sourceRefGroups = model.sourceRefGroups;
 
-  if (visibleBuckets.length === 0 && sourceContextGroups.length === 0 && sourceRefGroups.length === 0) {
+  if (
+    visibleBuckets.length === 0 &&
+    proofCompassRows.length === 0 &&
+    sourceContextGroups.length === 0 &&
+    sourceRefGroups.length === 0
+  ) {
     return null;
   }
 
@@ -1411,10 +1419,47 @@ function renderSelectedAgentEvidenceProofCompass(model: SelectedAgentEvidenceLed
           ))}
         </span>
       ) : null}
+      {proofCompassRows.length > 0 ? (
+        <>
+          <span>Proof Compass ref groups</span>
+          {proofCompassRows.map((row) => renderSelectedAgentEvidenceProofCompassRow(row))}
+        </>
+      ) : null}
       {sourceContextGroups.map((group) => renderSelectedAgentEvidenceSourceContextGroup(group))}
       {sourceRefGroups.map((group) => renderSelectedAgentEvidenceSourceRefGroup(group))}
     </li>
   );
+}
+
+function renderSelectedAgentEvidenceProofCompassRow(row: SelectedAgentEvidenceProofCompassRow) {
+  return (
+    <Fragment key={row.groupKey}>
+      <span>{`Proof Compass ref group · ${formatSelectedAgentEvidenceProofCompassLabel(row.label)} · Records ${row.recordCount} · Mapped ${row.mappedCount} · Unmapped ${row.unmappedCount}`}</span>
+      <span>{`Evidence sources · ${formatSelectedAgentEvidenceProofCompassBuckets(row.sourceKindBuckets, SELECTED_EVIDENCE_SOURCE_CONTEXT_KIND_LABELS)}`}</span>
+      <span>{`Status mix · ${formatSelectedAgentEvidenceProofCompassBuckets(row.sourceStatusBuckets, SELECTED_EVIDENCE_SOURCE_CONTEXT_STATUS_LABELS)}`}</span>
+    </Fragment>
+  );
+}
+
+function formatSelectedAgentEvidenceProofCompassLabel(value: string) {
+  let label = value.trim() || 'Evidence ref group';
+  for (const [sourceKind, sourceLabel] of Object.entries(SELECTED_EVIDENCE_SOURCE_CONTEXT_KIND_LABELS)) {
+    label = label.replaceAll(sourceKind, sourceLabel);
+  }
+  for (const [status, statusLabel] of Object.entries(SELECTED_EVIDENCE_SOURCE_CONTEXT_STATUS_LABELS)) {
+    label = label.replaceAll(status, statusLabel);
+  }
+  return label;
+}
+
+function formatSelectedAgentEvidenceProofCompassBuckets(
+  buckets: SelectedAgentEvidenceProofCompassBucket[],
+  labels: Readonly<Record<string, string>>
+) {
+  const formattedBuckets = buckets.map(
+    (bucket) => `${formatSelectedEvidenceSourceContextLabel(bucket.key, labels)} ${bucket.count}`
+  );
+  return formattedBuckets.length > 0 ? formattedBuckets.join(', ') : 'No rows';
 }
 
 function getSelectedAgentEvidenceLedgerGroupId(key: SelectedAgentEvidenceLedgerBucketKey) {

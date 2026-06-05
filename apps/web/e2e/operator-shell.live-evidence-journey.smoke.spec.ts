@@ -288,6 +288,44 @@ const replayEvidenceRecordGets = [
   `GET /evidence-records/${replayEvidenceId}`,
   `GET /evidence-records/${replayEvidenceId}/provenance-bundle`
 ];
+const replayEvidenceRefRollupGet =
+  'GET /evidence-records/ref-rollup?agent_id=app-engineering&newest_first=true&limit=12';
+const replayEvidenceRefRollupFixture = {
+  item: {
+    total_count: 8,
+    total_groups: 2,
+    returned_limit: 12,
+    groups: [
+      {
+        evidence_ref: null,
+        evidence_ref_key: 'ref_group_001',
+        evidence_ref_label: 'workspace_file degraded evidence',
+        record_count: 7,
+        mapped_count: 5,
+        unmapped_count: 2,
+        agent_id_buckets: { 'app-engineering': 7 },
+        source_kind_buckets: {
+          workspace_file: 5,
+          tmux_observation: 2,
+          '/tmp/secret-token.md': 99,
+          'control-plane': 99
+        },
+        source_status_buckets: { observed: 5, missing: 2, dispatch: 99 }
+      },
+      {
+        evidence_ref: null,
+        evidence_ref_key: '/tmp/private-token',
+        evidence_ref_label: '/tmp/output.md token=secret webhook tmux://raw hermes://profile metadata dispatch',
+        record_count: 1,
+        mapped_count: 0,
+        unmapped_count: 1,
+        agent_id_buckets: { 'app-engineering': 1 },
+        source_kind_buckets: { workspace_root: 1, 'tmux://raw': 1 },
+        source_status_buckets: { error: 1, metadata: 99 }
+      }
+    ]
+  }
+};
 const replaySourceContextGet = `GET /evidence-records/${replayEvidenceId}/source-context`;
 const replaySourceContextFixture = {
   item: {
@@ -571,6 +609,10 @@ async function installLiveEvidenceFixtures(
     await route.fulfill({ json: evidenceSourceMatrix });
   });
 
+  await routeExpectedApiGet(page, replayEvidenceRefRollupGet, async (route) => {
+    await route.fulfill({ json: replayEvidenceRefRollupFixture });
+  });
+
   await routeExpectedApiGet(page, 'GET /collectors/controller-snapshot/source-health?limit=7', async (route) => {
     await route.fulfill({ json: { item: sourceHealth } });
   });
@@ -639,6 +681,7 @@ test.describe('operator shell live evidence journey smoke', () => {
     const allowedApiGets = new Set([
       ...expectedApiGets,
       ...replayEvidenceRecordGets,
+      replayEvidenceRefRollupGet,
       replaySourceContextGet,
       checkpointLogByEvidenceIdGet,
       replayByEvidenceIdGet
@@ -651,6 +694,7 @@ test.describe('operator shell live evidence journey smoke', () => {
       '/runtime/source-gaps/lifecycle?agent_id=app-engineering&source_kind=hermes_session&source_status=degraded&mapped=true&newest_first=true&limit=3',
       '/runtime/source-gaps/lifecycle?source_kind=hermes_session&mapped=false&newest_first=true&limit=3',
       '/evidence-records?agent_id=app-engineering&newest_first=true&limit=12',
+      '/evidence-records/ref-rollup?agent_id=app-engineering&newest_first=true&limit=12',
       `/evidence-records/${replayEvidenceId}`,
       `/evidence-records/${replayEvidenceId}/provenance-bundle`,
       `/evidence-records/${replayEvidenceId}/source-context`,
@@ -677,6 +721,10 @@ test.describe('operator shell live evidence journey smoke', () => {
       '/evidence-records',
       '/evidence-records?agent_id=app-engineering&limit=12&newest_first=true',
       '/evidence-records?agent_id=app-engineering&newest_first=true&limit=12&raw=true',
+      '/evidence-records/ref-rollup',
+      '/evidence-records/ref-rollup?agent_id=app-engineering&limit=12&newest_first=true',
+      '/evidence-records/ref-rollup?agent_id=app-engineering&newest_first=true&limit=12&raw=true',
+      '/evidence-records/ref-rollup?newest_first=true&limit=12',
       `/evidence-records/${replayEvidenceId}?raw=true`,
       `/evidence-records/${replayEvidenceId}/provenance-bundle?metadata=true`,
       `/evidence-records/${replayEvidenceId}/source-context?raw=true`,
@@ -862,12 +910,14 @@ test.describe('operator shell live evidence journey smoke', () => {
     const allowedApiGets = new Set([
       ...expectedApiGets,
       ...replayEvidenceRecordGets,
+      replayEvidenceRefRollupGet,
       replaySourceContextGet,
       checkpointLogByEvidenceIdGet,
       replayByEvidenceIdGet,
       replayWindowByEvidenceIdGet
     ]);
     const evidenceRecordRequests: string[] = [];
+    const evidenceRefRollupRequests: string[] = [];
     const sourceContextRequests: string[] = [];
     const checkpointLogRequests: string[] = [];
     const replayRequests: string[] = [];
@@ -883,7 +933,9 @@ test.describe('operator shell live evidence journey smoke', () => {
       if (!isAllowedExactApiReadGet(request, allowedApiGets)) {
         apiRequestViolations.push(key);
       }
-      if (url.pathname.startsWith('/evidence-records')) {
+      if (url.pathname === '/evidence-records/ref-rollup') {
+        evidenceRefRollupRequests.push(key);
+      } else if (url.pathname.startsWith('/evidence-records')) {
         evidenceRecordRequests.push(key);
       }
       if (isExactSourceContextReadGet(request)) {
@@ -921,6 +973,7 @@ test.describe('operator shell live evidence journey smoke', () => {
       await expect(hub).toHaveCount(0);
       await expect(ledgerCta).toBeVisible();
       expect(evidenceRecordRequests, 'selecting an agent should not prefetch evidence records').toEqual([]);
+      expect(evidenceRefRollupRequests, 'selecting an agent should not prefetch ref-rollup proof rows').toEqual([]);
       expect(checkpointLogRequests, 'selecting an agent should not prefetch checkpoint proof').toEqual([]);
       expect(replayRequests, 'selecting an agent should not prefetch replay records').toEqual([]);
       expect(replayWindowRequests, 'selecting an agent should not prefetch replay window').toEqual([]);
@@ -931,6 +984,13 @@ test.describe('operator shell live evidence journey smoke', () => {
       await expect(hub).toBeVisible();
       await expect(evidencePanel.getByRole('heading', { name: 'Evidence Ledger' })).toBeVisible();
       await expect.poll(() => evidenceRecordRequests.slice()).toEqual([replayEvidenceRecordGets[0]]);
+      await expect.poll(() => evidenceRefRollupRequests.slice()).toEqual([replayEvidenceRefRollupGet]);
+      await expect(evidencePanel.getByText('Proof Compass ref groups')).toBeVisible();
+      await expect(evidencePanel.getByText('Evidence sources · Workspace file 5, Runtime observation 2')).toBeVisible();
+      const proofCompassRefGroups = evidencePanel.locator('li').filter({ hasText: 'Proof Compass ref groups' });
+      await expect(proofCompassRefGroups).not.toContainText(
+        /\/tmp|\/Users\/cwp|private-token|secret-token|token=secret|webhook|tmux:\/\/raw|hermes:\/\/profile|session:\/\/|profile:\/\/|metadata|control-plane|dispatch/i
+      );
       expect(checkpointLogRequests, 'opening Evidence Ledger should not prefetch checkpoint proof').toEqual([]);
       expect(replayRequests, 'opening Evidence Ledger should not prefetch replay records').toEqual([]);
       expect(replayWindowRequests, 'opening Evidence Ledger should not prefetch replay window').toEqual([]);

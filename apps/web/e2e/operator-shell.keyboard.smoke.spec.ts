@@ -413,23 +413,19 @@ function normalizePostJumpRequest(requestPath: string) {
   return requestPath.startsWith('GET ') ? requestPath.slice(4) : requestPath;
 }
 
+const SELECTED_AGENT_EVIDENCE_LEDGER_GET_REQUESTS = new Set([
+  '/evidence-records?agent_id=app-engineering&newest_first=true&limit=12',
+  '/evidence-records/ref-rollup?agent_id=app-engineering&newest_first=true&limit=12',
+  '/evidence-records?agent_id=growth-revenue&newest_first=true&limit=12',
+  '/evidence-records/ref-rollup?agent_id=growth-revenue&newest_first=true&limit=12'
+]);
+
 function isSelectedAgentEvidenceLedgerGetRequest(requestPath: string) {
   if (!requestPath.startsWith('GET ')) {
     return false;
   }
 
-  const [pathname, rawQuery = ''] = normalizePostJumpRequest(requestPath).split('?');
-  if (pathname !== '/evidence-records') {
-    return false;
-  }
-
-  const params = new URLSearchParams(rawQuery);
-  return (
-    params.size === 3 &&
-    Boolean(params.get('agent_id')) &&
-    params.get('newest_first') === 'true' &&
-    params.get('limit') === '12'
-  );
+  return SELECTED_AGENT_EVIDENCE_LEDGER_GET_REQUESTS.has(normalizePostJumpRequest(requestPath));
 }
 
 function expectOnlyBenignPostJumpRequests(postJumpRequests: string[], additionalAllowedRequests: string[] = []) {

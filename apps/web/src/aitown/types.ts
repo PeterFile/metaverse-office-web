@@ -1,6 +1,11 @@
-import type { CollectorSourceHealthStatus } from '../types';
+import type { CollectorSourceHealthKind, CollectorSourceHealthStatus } from '../types';
 import type { Severity } from '../world/types';
 import type { AgentPhase } from '../world/types';
+
+export type SceneSourceGapKind = Extract<
+  CollectorSourceHealthKind,
+  'workspace_root' | 'workspace_files' | 'tmux_session' | 'hermes_profile' | 'hermes_session'
+>;
 
 export interface AnimatedMapSprite {
   x: number;
@@ -129,7 +134,7 @@ export interface SceneSourceGapPin {
   displayName: string;
   isMapped: boolean;
   sourceDrilldownGroupKey?: 'workspace' | 'tmux' | 'hermes' | null;
-  sourceKind: string;
+  sourceKind: SceneSourceGapKind;
   sourceLabel: string;
   status: Exclude<CollectorSourceHealthStatus, 'observed'> | 'observed';
   lifecycleLabel?: string;

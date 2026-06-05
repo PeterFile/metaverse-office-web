@@ -60,6 +60,7 @@ import {
   deriveRuntimeSourceGapLifecycleStrip,
   deriveRuntimeSourceGapWorldPins,
   deriveSelectedAgentSourceGapFact,
+  type DisplayedSourceGapKind,
   type RuntimeSourceGapLifecycleStrip
 } from './aitown/sourceGapSignals';
 import {
@@ -254,6 +255,31 @@ function resolveSelectedAgentTabHubCategory(tab: SelectedAgentDrilldownTab, curr
   }
 
   return currentCategory === 'queue' ? 'queue' : 'crew';
+}
+
+function resolveRuntimeSourceGapLifecycleApiSourceKind(sourceKind: DisplayedSourceGapKind) {
+  switch (sourceKind) {
+    case 'workspace_files':
+      return 'workspace_file';
+    case 'tmux_session':
+      return 'tmux_observation';
+    case 'workspace_root':
+    case 'hermes_profile':
+    case 'hermes_session':
+      return sourceKind;
+  }
+}
+
+function mergeRuntimeSourceGapLifecycles(
+  mappedLifecycle: RuntimeSourceGapLifecycle,
+  unmappedLifecycle: RuntimeSourceGapLifecycle
+): RuntimeSourceGapLifecycle {
+  return {
+    total_count: mappedLifecycle.total_count + unmappedLifecycle.total_count,
+    total_groups: mappedLifecycle.total_groups + unmappedLifecycle.total_groups,
+    returned_limit: Math.max(mappedLifecycle.returned_limit, unmappedLifecycle.returned_limit),
+    groups: [...mappedLifecycle.groups, ...unmappedLifecycle.groups]
+  };
 }
 
 const EMPTY_SEVERITY_BUCKETS: Record<Severity, number> = {
@@ -1405,20 +1431,49 @@ function AppInner() {
       }),
     resourceKey: `runtime-source-gaps-summary:limit=${SOURCE_GAP_QUEUE_LIMIT}`
   });
-  const selectedSourceGapLifecycleAgentId =
-    selectedAgentId !== null && sourceGapFocusIntent?.agentId === selectedAgentId ? selectedAgentId : null;
+  const selectedSourceGapLifecycleSourceKind =
+    selectedAgentId !== null && sourceGapFocusIntent?.agentId === selectedAgentId
+      ? resolveRuntimeSourceGapLifecycleApiSourceKind(sourceGapFocusIntent.sourceKind)
+      : null;
   const selectedAgentRuntimeSourceGapLifecycleResource = usePolledResource<RuntimeSourceGapLifecycle>({
-    enabled: selectedSourceGapLifecycleAgentId !== null && overviewResource.data !== null,
-    load: (signal) =>
-      fetchRuntimeSourceGapLifecycle({
-        agentId: selectedSourceGapLifecycleAgentId!,
-        newestFirst: true,
-        limit: SOURCE_GAP_QUEUE_LIMIT,
-        signal
-      }),
-    resourceKey: selectedSourceGapLifecycleAgentId
-      ? `runtime-source-gaps-lifecycle:agent_id=${selectedSourceGapLifecycleAgentId}:newest_first=true:limit=${SOURCE_GAP_QUEUE_LIMIT}`
-      : null
+    enabled:
+      selectedAgentId !== null &&
+      sourceGapFocusIntent?.agentId === selectedAgentId &&
+      selectedSourceGapLifecycleSourceKind !== null &&
+      overviewResource.data !== null,
+    load: async (signal) => {
+      const [mappedLifecycle, unmappedLifecycle] = await Promise.all([
+        fetchRuntimeSourceGapLifecycle({
+          agentId: selectedAgentId,
+          sourceKind: selectedSourceGapLifecycleSourceKind,
+          sourceStatus: sourceGapFocusIntent?.status ?? null,
+          mapped: true,
+          newestFirst: true,
+          limit: SOURCE_GAP_QUEUE_LIMIT,
+          signal
+        }),
+        fetchRuntimeSourceGapLifecycle({
+          sourceKind: selectedSourceGapLifecycleSourceKind,
+          mapped: false,
+          newestFirst: true,
+          limit: SOURCE_GAP_QUEUE_LIMIT,
+          signal
+        })
+      ]);
+
+      return mergeRuntimeSourceGapLifecycles(mappedLifecycle, unmappedLifecycle);
+    },
+    resourceKey:
+      selectedAgentId && sourceGapFocusIntent?.agentId === selectedAgentId && selectedSourceGapLifecycleSourceKind
+        ? [
+            'runtime-source-gaps-lifecycle',
+            `agent_id=${selectedAgentId}`,
+            `source_kind=${selectedSourceGapLifecycleSourceKind}`,
+            `source_status=${sourceGapFocusIntent.status}`,
+            `request=${sourceGapFocusIntent.requestId}`,
+            `limit=${SOURCE_GAP_QUEUE_LIMIT}`
+          ].join(':')
+        : null
   });
   const selectedAgentEvidenceSpineSummaryResource = usePolledResource<AgentEvidenceSpineSummary>({
     enabled: selectedAgentId !== null && overviewResource.data !== null,
@@ -3015,6 +3070,7 @@ function AppInner() {
       setSourceGapFocusIntent({
         agentId: chip.agentId,
         agentLabel: chip.displayName,
+        sourceKind: chip.sourceKind,
         sourceLabel: chip.sourceLabel,
         status: chip.status,
         sourceDrilldownGroupKey: chip.sourceDrilldownGroupKey,
@@ -3041,6 +3097,7 @@ function AppInner() {
       setSourceGapFocusIntent({
         agentId: pin.agentId,
         agentLabel: pin.displayName,
+        sourceKind: pin.sourceKind,
         sourceLabel: pin.sourceLabel,
         status: pin.status,
         sourceDrilldownGroupKey: pin.sourceDrilldownGroupKey,
@@ -3321,6 +3378,7 @@ function AppInner() {
     setSourceGapFocusIntent({
       agentId: selectedAgentSourceGapFact.agentId,
       agentLabel: selectedAgent?.display_name ?? selectedAgentSourceGapFact.agentId,
+      sourceKind: selectedAgentSourceGapFact.sourceKind,
       sourceLabel: selectedAgentSourceGapFact.sourceLabel,
       status: selectedAgentSourceGapFact.status,
       sourceDrilldownGroupKey: selectedAgentSourceGapFact.sourceDrilldownGroupKey,

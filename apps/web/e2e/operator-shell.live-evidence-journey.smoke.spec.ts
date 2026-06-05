@@ -390,7 +390,14 @@ const checkpointLogByEvidenceIdGet =
   `GET /accountability/replay/checkpoint-log?limit=3&evidence_id=${replayEvidenceId}`;
 const evidenceSpineSummaryGet = 'GET /agents/evidence-spine/summary?newest_first=true&limit=200';
 const evidenceSourceMatrixGet = 'GET /agents/evidence-spine/source-matrix?newest_first=true&limit=200';
-const sourceGapLifecycleGet = 'GET /runtime/source-gaps/lifecycle?agent_id=app-engineering&newest_first=true&limit=3';
+const sourceGapLifecycleMappedGet =
+  'GET /runtime/source-gaps/lifecycle?agent_id=app-engineering&source_kind=workspace_file&source_status=degraded&mapped=true&newest_first=true&limit=3';
+const sourceGapLifecycleUnmappedGet =
+  'GET /runtime/source-gaps/lifecycle?source_kind=workspace_file&mapped=false&newest_first=true&limit=3';
+const sourceGapLifecycleHermesMappedGet =
+  'GET /runtime/source-gaps/lifecycle?agent_id=app-engineering&source_kind=hermes_session&source_status=degraded&mapped=true&newest_first=true&limit=3';
+const sourceGapLifecycleHermesUnmappedGet =
+  'GET /runtime/source-gaps/lifecycle?source_kind=hermes_session&mapped=false&newest_first=true&limit=3';
 const expectedApiGets = new Set([
   'GET /office/overview',
   'GET /incidents?limit=200&window=8760h',
@@ -400,7 +407,10 @@ const expectedApiGets = new Set([
   'GET /collectors/controller-snapshot/source-health?limit=7',
   'GET /runtime/source-gaps?newest_first=true&limit=3',
   'GET /runtime/source-gaps/summary?newest_first=true&limit=3',
-  sourceGapLifecycleGet,
+  sourceGapLifecycleMappedGet,
+  sourceGapLifecycleUnmappedGet,
+  sourceGapLifecycleHermesMappedGet,
+  sourceGapLifecycleHermesUnmappedGet,
   evidenceSpineSummaryGet,
   evidenceSourceMatrixGet,
   'GET /agents/app-engineering/workflow?limit=10&window=60m',
@@ -541,8 +551,20 @@ async function installLiveEvidenceFixtures(
     await route.fulfill({ json: { item: sourceGapsSummary } });
   });
 
-  await routeExpectedApiGet(page, sourceGapLifecycleGet, async (route) => {
+  await routeExpectedApiGet(page, sourceGapLifecycleMappedGet, async (route) => {
     await route.fulfill({ json: { item: runtimeSourceGapLifecycle } });
+  });
+
+  await routeExpectedApiGet(page, sourceGapLifecycleUnmappedGet, async (route) => {
+    await route.fulfill({ json: { item: { total_count: 0, total_groups: 0, returned_limit: 3, groups: [] } } });
+  });
+
+  await routeExpectedApiGet(page, sourceGapLifecycleHermesMappedGet, async (route) => {
+    await route.fulfill({ json: { item: { total_count: 0, total_groups: 0, returned_limit: 3, groups: [] } } });
+  });
+
+  await routeExpectedApiGet(page, sourceGapLifecycleHermesUnmappedGet, async (route) => {
+    await route.fulfill({ json: { item: { total_count: 0, total_groups: 0, returned_limit: 3, groups: [] } } });
   });
 
   await routeExpectedApiGet(page, evidenceSourceMatrixGet, async (route) => {
@@ -624,7 +646,10 @@ test.describe('operator shell live evidence journey smoke', () => {
     const guardedReadPaths = [
       '/agents/evidence-spine/summary?newest_first=true&limit=200',
       '/agents/evidence-spine/source-matrix?newest_first=true&limit=200',
-      '/runtime/source-gaps/lifecycle?agent_id=app-engineering&newest_first=true&limit=3',
+      '/runtime/source-gaps/lifecycle?agent_id=app-engineering&source_kind=workspace_file&source_status=degraded&mapped=true&newest_first=true&limit=3',
+      '/runtime/source-gaps/lifecycle?source_kind=workspace_file&mapped=false&newest_first=true&limit=3',
+      '/runtime/source-gaps/lifecycle?agent_id=app-engineering&source_kind=hermes_session&source_status=degraded&mapped=true&newest_first=true&limit=3',
+      '/runtime/source-gaps/lifecycle?source_kind=hermes_session&mapped=false&newest_first=true&limit=3',
       '/evidence-records?agent_id=app-engineering&newest_first=true&limit=12',
       `/evidence-records/${replayEvidenceId}`,
       `/evidence-records/${replayEvidenceId}/provenance-bundle`,
@@ -641,8 +666,13 @@ test.describe('operator shell live evidence journey smoke', () => {
       '/agents/evidence-spine/source-matrix?limit=200&newest_first=true',
       '/agents/evidence-spine/source-matrix?newest_first=true&limit=200&raw=true',
       '/runtime/source-gaps/lifecycle?newest_first=true&limit=3',
+      '/runtime/source-gaps/lifecycle?agent_id=app-engineering&newest_first=true&limit=3',
       '/runtime/source-gaps/lifecycle?limit=3&newest_first=true&agent_id=app-engineering',
       '/runtime/source-gaps/lifecycle?agent_id=app-engineering&newest_first=true&limit=3&raw=true',
+      '/runtime/source-gaps/lifecycle?agent_id=app-engineering&source_kind=workspace_file&source_status=degraded&mapped=true&limit=3&newest_first=true',
+      '/runtime/source-gaps/lifecycle?source_kind=workspace_file&mapped=false&limit=3&newest_first=true',
+      '/runtime/source-gaps/lifecycle?agent_id=app-engineering&source_kind=hermes_session&source_status=degraded&mapped=true&limit=3&newest_first=true',
+      '/runtime/source-gaps/lifecycle?source_kind=hermes_session&mapped=false&limit=3&newest_first=true',
       '/agents/app-engineering/evidence-spine?newest_first=true&limit=200',
       '/evidence-records',
       '/evidence-records?agent_id=app-engineering&limit=12&newest_first=true',

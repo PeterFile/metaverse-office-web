@@ -245,8 +245,16 @@ const runtimeSourceGapsUrl = '/runtime/source-gaps?newest_first=true&limit=3';
 const runtimeSourceGapsSummaryUrl = '/runtime/source-gaps/summary?newest_first=true&limit=3';
 const growthRevenueRuntimeSourceGapLifecycleUrl =
   '/runtime/source-gaps/lifecycle?agent_id=growth-revenue&newest_first=true&limit=3';
+const growthRevenueWorkspaceFilesMappedRuntimeSourceGapLifecycleUrl =
+  '/runtime/source-gaps/lifecycle?agent_id=growth-revenue&source_kind=workspace_file&source_status=degraded&mapped=true&newest_first=true&limit=3';
+const growthRevenueWorkspaceFilesUnmappedRuntimeSourceGapLifecycleUrl =
+  '/runtime/source-gaps/lifecycle?source_kind=workspace_file&mapped=false&newest_first=true&limit=3';
 const appEngineeringRuntimeSourceGapLifecycleUrl =
   '/runtime/source-gaps/lifecycle?agent_id=app-engineering&newest_first=true&limit=3';
+const appEngineeringWorkspaceFilesMappedRuntimeSourceGapLifecycleUrl =
+  '/runtime/source-gaps/lifecycle?agent_id=app-engineering&source_kind=workspace_file&source_status=degraded&mapped=true&newest_first=true&limit=3';
+const appEngineeringWorkspaceFilesUnmappedRuntimeSourceGapLifecycleUrl =
+  '/runtime/source-gaps/lifecycle?source_kind=workspace_file&mapped=false&newest_first=true&limit=3';
 const appEngineeringEvidenceRecordsUrl =
   '/evidence-records?agent_id=app-engineering&newest_first=true&limit=12';
 const appEngineeringEvidenceRecordDetailUrl = '/evidence-records/output-1';
@@ -2211,7 +2219,14 @@ function resolveDefaultFetchResponse(url: string) {
     return jsonResponse({ item: emptyRuntimeSourceGapsSummaryFixture });
   }
 
-  if (url === appEngineeringRuntimeSourceGapLifecycleUrl || url === growthRevenueRuntimeSourceGapLifecycleUrl) {
+  if (
+    url === appEngineeringRuntimeSourceGapLifecycleUrl ||
+    url === growthRevenueRuntimeSourceGapLifecycleUrl ||
+    url === appEngineeringWorkspaceFilesMappedRuntimeSourceGapLifecycleUrl ||
+    url === appEngineeringWorkspaceFilesUnmappedRuntimeSourceGapLifecycleUrl ||
+    url === growthRevenueWorkspaceFilesMappedRuntimeSourceGapLifecycleUrl ||
+    url === growthRevenueWorkspaceFilesUnmappedRuntimeSourceGapLifecycleUrl
+  ) {
     return jsonResponse({ item: emptyRuntimeSourceGapLifecycleFixture });
   }
 
@@ -4785,8 +4800,12 @@ afterEach(() => {
         return jsonResponse({ item: growthRevenueRuntimeSourceGapsSummaryFixture });
       }
 
-      if (url === growthRevenueRuntimeSourceGapLifecycleUrl) {
+      if (url === growthRevenueWorkspaceFilesMappedRuntimeSourceGapLifecycleUrl) {
         return jsonResponse({ item: growthRevenueRuntimeSourceGapLifecycleFixture });
+      }
+
+      if (url === growthRevenueWorkspaceFilesUnmappedRuntimeSourceGapLifecycleUrl) {
+        return jsonResponse({ item: emptyRuntimeSourceGapLifecycleFixture });
       }
 
       if (url === collectorSnapshotUrl) {
@@ -4876,12 +4895,14 @@ afterEach(() => {
     expect(sourceGapContext).toHaveTextContent('Workspace files · degraded');
     expect(sourceGapContext).not.toHaveTextContent('/tmp/growth-revenue');
     expect(sourceGapContext).not.toHaveTextContent('6-web3-growth-revenue');
-    await waitFor(() =>
-      expect(fetchMock.mock.calls.map(([request]) => String(request))).toContain(growthRevenueRuntimeSourceGapLifecycleUrl)
-    );
-    expect(fetchMock.mock.calls.map(([request]) => String(request))).not.toContain(
-      '/runtime/source-gaps/lifecycle?newest_first=true&limit=3'
-    );
+    await waitFor(() => {
+      const requestedLifecycleUrls = fetchMock.mock.calls.map(([request]) => String(request));
+      expect(requestedLifecycleUrls).toContain(growthRevenueWorkspaceFilesMappedRuntimeSourceGapLifecycleUrl);
+      expect(requestedLifecycleUrls).toContain(growthRevenueWorkspaceFilesUnmappedRuntimeSourceGapLifecycleUrl);
+    });
+    const requestedLifecycleUrls = fetchMock.mock.calls.map(([request]) => String(request));
+    expect(requestedLifecycleUrls).not.toContain(growthRevenueRuntimeSourceGapLifecycleUrl);
+    expect(requestedLifecycleUrls).not.toContain('/runtime/source-gaps/lifecycle?newest_first=true&limit=3');
     expect(screen.queryByRole('region', { name: 'Source gap inspect peek' })).not.toBeInTheDocument();
     const workspaceGroup = document.getElementById('aitown-selected-agent-source-drilldown-workspace');
     const tmuxGroup = document.getElementById('aitown-selected-agent-source-drilldown-tmux');
@@ -4909,8 +4930,12 @@ afterEach(() => {
         return jsonResponse({ item: growthRevenueRuntimeSourceGapsSummaryFixture });
       }
 
-      if (url === growthRevenueRuntimeSourceGapLifecycleUrl) {
+      if (url === growthRevenueWorkspaceFilesMappedRuntimeSourceGapLifecycleUrl) {
         return jsonResponse({ item: growthRevenueRuntimeSourceGapLifecycleFixture });
+      }
+
+      if (url === growthRevenueWorkspaceFilesUnmappedRuntimeSourceGapLifecycleUrl) {
+        return jsonResponse({ item: emptyRuntimeSourceGapLifecycleFixture });
       }
 
       return resolveTestFetchResponse(url);
@@ -4936,16 +4961,18 @@ afterEach(() => {
     expect(inspectPeek).toHaveTextContent('Mapped source');
     expect(inspectPeek).toHaveTextContent('Observed 2026-03-16T08:57:45.000Z');
     expect(inspectPeek).toHaveTextContent('Collected 2026-03-16T09:01:00.000Z');
-    await waitFor(() =>
-      expect(fetchMock.mock.calls.map(([request]) => String(request))).toContain(growthRevenueRuntimeSourceGapLifecycleUrl)
-    );
+    await waitFor(() => {
+      const requestedLifecycleUrls = fetchMock.mock.calls.map(([request]) => String(request));
+      expect(requestedLifecycleUrls).toContain(growthRevenueWorkspaceFilesMappedRuntimeSourceGapLifecycleUrl);
+      expect(requestedLifecycleUrls).toContain(growthRevenueWorkspaceFilesUnmappedRuntimeSourceGapLifecycleUrl);
+    });
     await waitFor(() => expect(inspectPeek).toHaveTextContent('Lifecycle · 1 mapped · 0 unmapped'));
     expect(inspectPeek).toHaveTextContent('Mapped lifecycle');
     expect(inspectPeek).toHaveTextContent('Workspace source · degraded · opened');
     expect(inspectPeek).not.toHaveTextContent('Lifecycle · no runtime source-gap snapshot');
-    expect(fetchMock.mock.calls.map(([request]) => String(request))).not.toContain(
-      '/runtime/source-gaps/lifecycle?newest_first=true&limit=3'
-    );
+    const requestedLifecycleUrls = fetchMock.mock.calls.map(([request]) => String(request));
+    expect(requestedLifecycleUrls).not.toContain(growthRevenueRuntimeSourceGapLifecycleUrl);
+    expect(requestedLifecycleUrls).not.toContain('/runtime/source-gaps/lifecycle?newest_first=true&limit=3');
     expect(inspectPeek).not.toHaveTextContent('/tmp/growth-revenue');
     expect(inspectPeek).not.toHaveTextContent('6-web3-growth-revenue');
     expect(inspectPeek).not.toHaveTextContent('collector-snapshot:');

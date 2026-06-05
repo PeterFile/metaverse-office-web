@@ -57,7 +57,8 @@ describe('buildSelectedAgentEvidenceLedger', () => {
       degradedEvidence: { totalCount: 0, overflowCount: 0, items: [] },
       unmappedEvidence: { totalCount: 0, overflowCount: 0, items: [] },
       sourceContextGroups: [],
-      sourceRefGroups: []
+      sourceRefGroups: [],
+      proofCompassRows: []
     });
   });
 
@@ -232,7 +233,8 @@ describe('buildSelectedAgentEvidenceLedger', () => {
           sourceStatus: 'observed',
           totalCount: 1
         }
-      ]
+      ],
+      proofCompassRows: []
     });
 
     expect(model.outputEvidence.items[0]).not.toBe(model.degradedEvidence.items[1]);
@@ -345,6 +347,69 @@ describe('buildSelectedAgentEvidenceLedger', () => {
     });
 
     expect(model.requestScopeLabel).toBe('Source-gap scope · workspace source records for app-engineering');
+    expect(model.proofCompassRows).toEqual([]);
+  });
+
+  it('preserves caller-provided safe Proof Compass rows on the ledger model', () => {
+    const proofCompassRows = [
+      {
+        groupKey: 'ref_group_001',
+        label: 'workspace_file evidence',
+        recordCount: 4,
+        mappedCount: 3,
+        unmappedCount: 1,
+        sourceKindBuckets: [
+          { key: 'workspace_file', count: 3 },
+          { key: 'tmux_observation', count: 1 }
+        ],
+        sourceStatusBuckets: [
+          { key: 'observed', count: 3 },
+          { key: 'missing', count: 1 }
+        ]
+      }
+    ];
+
+    const model = buildSelectedAgentEvidenceLedger([evidenceRecord({})], { proofCompassRows });
+
+    expect(model.proofCompassRows).toEqual(proofCompassRows);
+    expect(model.proofCompassRows).not.toBe(proofCompassRows);
+  });
+
+  it('sanitizes caller-provided Proof Compass rows before exposing the ledger model', () => {
+    const model = buildSelectedAgentEvidenceLedger([evidenceRecord({})], {
+      proofCompassRows: [
+        {
+          groupKey: 'profile-prod-private-token',
+          label: 'metadata dispatch token webhook hermes-session-app-engineering tmux-pane-1',
+          recordCount: 2.8,
+          mappedCount: -1,
+          unmappedCount: 1,
+          sourceKindBuckets: [
+            { key: 'workspace_file', count: 2 },
+            { key: 'dispatch', count: 99 }
+          ],
+          sourceStatusBuckets: [
+            { key: 'observed', count: 1 },
+            { key: 'metadata', count: 99 }
+          ]
+        }
+      ]
+    });
+
+    expect(model.proofCompassRows).toEqual([
+      {
+        groupKey: 'ref_group_1',
+        label: 'Evidence ref group',
+        recordCount: 2,
+        mappedCount: 0,
+        unmappedCount: 1,
+        sourceKindBuckets: [{ key: 'workspace_file', count: 2 }],
+        sourceStatusBuckets: [{ key: 'observed', count: 1 }]
+      }
+    ]);
+    expect(JSON.stringify(model.proofCompassRows)).not.toMatch(
+      /profile-prod|private-token|metadata|dispatch|token|webhook|hermes-session|tmux-pane/i
+    );
   });
 
   it('treats unmapped tmux records as degraded/unmapped evidence, not agent output', () => {
@@ -493,7 +558,7 @@ describe('buildSelectedAgentEvidenceProofCompassRows', () => {
         proofCompassRollupGroup({
           evidence_ref_key: '/tmp/ref-group-token-secret-payload-control-plane',
           evidence_ref_label:
-            '/tmp/output.md /Users/peter/outbox.md ~/secrets.md file:///tmp/raw http://localhost https://example.invalid tmux://pane hermes://profile session://abc profile://abc token webhook secret payload control-plane',
+            '/tmp/output.md /Users/peter/outbox.md ~/secrets.md file:///tmp/raw http://localhost https://example.invalid tmux://pane hermes://profile session://abc profile://abc tmux-pane hermes-session profile-prod session-prod token webhook secret payload control-plane',
           record_count: 6,
           mapped_count: 4,
           unmapped_count: 2,
@@ -562,6 +627,10 @@ describe('buildSelectedAgentEvidenceProofCompassRows', () => {
     expect(rendered).not.toContain('hermes://');
     expect(rendered).not.toContain('session://');
     expect(rendered).not.toContain('profile://');
+    expect(rendered).not.toContain('tmux-pane');
+    expect(rendered).not.toContain('hermes-session');
+    expect(rendered).not.toContain('profile-prod');
+    expect(rendered).not.toContain('session-prod');
     expect(rendered).not.toContain('~/');
     expect(rendered).not.toContain('file://');
     expect(rendered).not.toContain('http://');

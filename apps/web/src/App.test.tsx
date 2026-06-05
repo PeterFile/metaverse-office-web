@@ -257,6 +257,8 @@ const appEngineeringWorkspaceFilesUnmappedRuntimeSourceGapLifecycleUrl =
   '/runtime/source-gaps/lifecycle?source_kind=workspace_file&mapped=false&newest_first=true&limit=3';
 const appEngineeringEvidenceRecordsUrl =
   '/evidence-records?agent_id=app-engineering&newest_first=true&limit=12';
+const appEngineeringEvidenceRefRollupUrl =
+  '/evidence-records/ref-rollup?agent_id=app-engineering&newest_first=true&limit=12';
 const appEngineeringEvidenceRecordDetailUrl = '/evidence-records/output-1';
 const appEngineeringEvidenceProvenanceBundleUrl = '/evidence-records/output-1/provenance-bundle';
 const appEngineeringEvidenceSourceContextUrl = '/evidence-records/output-1/source-context';
@@ -1473,6 +1475,62 @@ const evidenceRecordsFixture = {
   ]
 };
 
+const evidenceRefRollupFixture = {
+  item: {
+    total_count: 8,
+    total_groups: 2,
+    returned_limit: 12,
+    groups: [
+      {
+        evidence_ref: null,
+        evidence_ref_key: 'ref_group_001',
+        evidence_ref_label: 'workspace_file degraded evidence',
+        record_count: 7,
+        mapped_count: 5,
+        unmapped_count: 2,
+        agent_id_buckets: {
+          'app-engineering': 7
+        },
+        source_kind_buckets: {
+          workspace_file: 5,
+          tmux_observation: 2,
+          '/tmp/secret-token.md': 99,
+          'hermes://profile': 99,
+          webhook: 99,
+          'control-plane': 99
+        },
+        source_status_buckets: {
+          observed: 5,
+          missing: 2,
+          'session://raw': 99,
+          token: 99,
+          dispatch: 99
+        }
+      },
+      {
+        evidence_ref: null,
+        evidence_ref_key: '/Users/cwp/private/ref-token-secret',
+        evidence_ref_label:
+          '/tmp/output.md /Users/cwp/private token=secret webhook tmux://raw hermes://profile session://abc profile://abc metadata control-plane dispatch',
+        record_count: 1,
+        mapped_count: 0,
+        unmapped_count: 1,
+        agent_id_buckets: {
+          'app-engineering': 1
+        },
+        source_kind_buckets: {
+          workspace_root: 1,
+          'tmux://raw': 1
+        },
+        source_status_buckets: {
+          error: 1,
+          secret: 1
+        }
+      }
+    ]
+  }
+};
+
 const evidenceRecordDetailFixture = {
   item: evidenceRecordsFixture.items[0]
 };
@@ -2232,6 +2290,10 @@ function resolveDefaultFetchResponse(url: string) {
 
   if (url === appEngineeringEvidenceRecordsUrl) {
     return jsonResponse(evidenceRecordsFixture);
+  }
+
+  if (url === appEngineeringEvidenceRefRollupUrl) {
+    return jsonResponse(evidenceRefRollupFixture);
   }
 
   if (url === appEngineeringEvidenceRecordDetailUrl) {
@@ -4057,6 +4119,7 @@ afterEach(() => {
       const requestedUrls = vi.mocked(globalThis.fetch).mock.calls.map(([request]) => String(request));
       expect(requestedUrls).toContain(workflowUrl);
       expect(requestedUrls).not.toContain(appEngineeringEvidenceRecordsUrl);
+      expect(requestedUrls).not.toContain(appEngineeringEvidenceRefRollupUrl);
     });
     expect(details).toHaveAttribute('data-active-hub-category', 'queue');
 
@@ -4064,12 +4127,15 @@ afterEach(() => {
     await user.click(within(categoryMenu).getByRole('button', { name: 'Evidence' }));
 
     await waitFor(() => {
-      expect(vi.mocked(globalThis.fetch).mock.calls.map(([request]) => String(request))).toContain(
-        appEngineeringEvidenceRecordsUrl
-      );
+      const requestedUrls = vi.mocked(globalThis.fetch).mock.calls.map(([request]) => String(request));
+      expect(requestedUrls).toContain(appEngineeringEvidenceRecordsUrl);
+      expect(requestedUrls).toContain(appEngineeringEvidenceRefRollupUrl);
     });
 
     const ledgerSection = await findHubSection(details, 'Evidence Ledger');
+    expect(ledgerSection).toHaveTextContent(
+      'Proof Compass ref group · Workspace file Degraded evidence · Records 7 · Mapped 5 · Unmapped 2'
+    );
     expect(ledgerSection).toHaveTextContent('Output evidence · 1');
     expect(ledgerSection).toHaveTextContent('Non-output evidence · 1');
     expect(ledgerSection).toHaveTextContent('Source context · workspace_file · agent_output · observed · mapped · 1');
@@ -4077,6 +4143,9 @@ afterEach(() => {
     expect(ledgerSection).not.toHaveTextContent('Ref ·');
     expect(ledgerSection).not.toHaveTextContent('/tmp/app/outbox.md');
     expect(ledgerSection).not.toHaveTextContent('raw_tmux_capture');
+    expect(ledgerSection).not.toHaveTextContent(
+      /\/Users\/cwp|secret-token|token=secret|webhook|tmux:\/\/raw|hermes:\/\/profile|session:\/\/|profile:\/\/|metadata|control-plane|dispatch/i
+    );
   });
 
   it('opens the selected-agent inspect peek evidence ledger CTA without prefetching ledger reads', async () => {
@@ -4120,6 +4189,7 @@ afterEach(() => {
     expect(requestedUrls).toContain(evidenceSpineSummaryUrl);
     expect(requestedUrls).not.toContain(workflowUrl);
     expect(requestedUrls).not.toContain(appEngineeringEvidenceRecordsUrl);
+    expect(requestedUrls).not.toContain(appEngineeringEvidenceRefRollupUrl);
 
     await user.click(
       within(inspectPeek).getByRole('button', {
@@ -4136,11 +4206,109 @@ afterEach(() => {
     await waitFor(() => {
       requestedUrls = vi.mocked(globalThis.fetch).mock.calls.map(([request]) => String(request));
       expect(requestedUrls).toContain(appEngineeringEvidenceRecordsUrl);
+      expect(requestedUrls).toContain(appEngineeringEvidenceRefRollupUrl);
     });
 
     const evidenceRecordRequests = requestedUrls.filter((url) => url.startsWith('/evidence-records'));
-    expect(evidenceRecordRequests).toEqual([appEngineeringEvidenceRecordsUrl]);
-    expect(await findHubSection(details, 'Evidence Ledger')).toBeVisible();
+    expect(evidenceRecordRequests).toEqual([appEngineeringEvidenceRecordsUrl, appEngineeringEvidenceRefRollupUrl]);
+    expect(evidenceRecordRequests.some((url) => url.includes('/dispatch'))).toBe(false);
+    expect(evidenceRecordRequests.some((url) => url.includes('/commands'))).toBe(false);
+    const ledgerSection = await findHubSection(details, 'Evidence Ledger');
+    expect(ledgerSection).toHaveTextContent('Proof Compass ref groups');
+    expect(ledgerSection).toHaveTextContent('Evidence sources · Workspace file 5, Runtime observation 2');
+    expect(ledgerSection).not.toHaveTextContent(
+      /\/Users\/cwp|secret-token|token=secret|webhook|tmux:\/\/raw|hermes:\/\/profile|session:\/\/|profile:\/\/|metadata|control-plane|dispatch/i
+    );
+  });
+
+  it('does not poll selected-agent ref-rollup rows after the Evidence Ledger loads', async () => {
+    (window as typeof window & { __AITOWN_POLL_INTERVAL_MS__?: number }).__AITOWN_POLL_INTERVAL_MS__ = 10;
+    const user = userEvent.setup();
+    render(<App />);
+
+    const roster = await screen.findByRole('navigation', { name: 'Agent roster' });
+    await user.click(
+      within(roster).getByRole('button', {
+        name: 'Select and locate App Engineering Agent'
+      })
+    );
+
+    const inspectPeek = await screen.findByRole('region', { name: 'Selected agent inspect peek' });
+    await user.click(
+      within(inspectPeek).getByRole('button', {
+        name: 'Open App Engineering Agent Evidence Ledger'
+      })
+    );
+
+    await waitFor(() => {
+      const requestedUrls = vi.mocked(globalThis.fetch).mock.calls.map(([request]) => String(request));
+      expect(requestedUrls.filter((url) => url === appEngineeringEvidenceRecordsUrl).length).toBeGreaterThanOrEqual(2);
+    });
+
+    const requestedUrls = vi.mocked(globalThis.fetch).mock.calls.map(([request]) => String(request));
+    expect(requestedUrls.filter((url) => url === appEngineeringEvidenceRefRollupUrl)).toEqual([
+      appEngineeringEvidenceRefRollupUrl
+    ]);
+    expect(requestedUrls.some((url) => url.includes('/dispatch'))).toBe(false);
+    expect(requestedUrls.some((url) => url.includes('/commands'))).toBe(false);
+  });
+
+  it('keeps the selected-agent Evidence Ledger usable when ref-rollup fails', async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === appEngineeringEvidenceRefRollupUrl) {
+          return new Response(
+            JSON.stringify({
+              error: 'internal_error',
+              details:
+                'rollup failed /Users/cwp/private token=secret webhook tmux://raw hermes://profile control-plane dispatch'
+            }),
+            {
+              status: 500,
+              headers: { 'content-type': 'application/json' }
+            }
+          );
+        }
+
+        return resolveTestFetchResponse(url);
+      })
+    );
+
+    render(<App />);
+
+    const roster = await screen.findByRole('navigation', { name: 'Agent roster' });
+    await user.click(
+      within(roster).getByRole('button', {
+        name: 'Select and locate App Engineering Agent'
+      })
+    );
+
+    const inspectPeek = await screen.findByRole('region', { name: 'Selected agent inspect peek' });
+    await user.click(
+      within(inspectPeek).getByRole('button', {
+        name: 'Open App Engineering Agent Evidence Ledger'
+      })
+    );
+
+    const details = await screen.findByRole('complementary', { name: 'Agent details' });
+    const ledgerSection = await findHubSection(details, 'Evidence Ledger');
+
+    await waitFor(() => {
+      const requestedUrls = vi.mocked(globalThis.fetch).mock.calls.map(([request]) => String(request));
+      expect(requestedUrls).toContain(appEngineeringEvidenceRecordsUrl);
+      expect(requestedUrls).toContain(appEngineeringEvidenceRefRollupUrl);
+      expect(ledgerSection).toHaveTextContent('Output evidence · 1');
+    });
+
+    expect(ledgerSection).not.toHaveTextContent('Unable to load evidence ledger');
+    expect(ledgerSection).not.toHaveTextContent('Proof Compass ref groups');
+    expect(ledgerSection).not.toHaveTextContent(
+      /\/Users\/cwp|token=secret|webhook|tmux:\/\/raw|hermes:\/\/profile|control-plane|dispatch/i
+    );
   });
 
   it('shows selected-agent source matrix facts in the compact inspect peek without prefetching ledger reads', async () => {
@@ -4744,7 +4912,7 @@ afterEach(() => {
     const detailRequests = vi
       .mocked(globalThis.fetch)
       .mock.calls.map(([request]) => String(request))
-      .filter((url) => url.startsWith('/evidence-records/'));
+      .filter((url) => url.startsWith('/evidence-records/') && !url.startsWith('/evidence-records/ref-rollup'));
     expect(detailRequests).toEqual([
       appEngineeringEvidenceRecordDetailUrl,
       appEngineeringEvidenceProvenanceBundleUrl,

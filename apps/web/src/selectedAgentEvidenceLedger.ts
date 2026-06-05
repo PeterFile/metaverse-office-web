@@ -62,6 +62,7 @@ export interface SelectedAgentEvidenceLedgerModel {
   unmappedEvidence: SelectedAgentEvidenceLedgerGroup;
   sourceContextGroups: SelectedAgentEvidenceLedgerSourceContextGroup[];
   sourceRefGroups: SelectedAgentEvidenceLedgerSourceRefGroup[];
+  proofCompassRows: SelectedAgentEvidenceProofCompassRow[];
 }
 
 const DEGRADED_SOURCE_STATUSES = new Set(['degraded', 'missing', 'error']);
@@ -69,7 +70,7 @@ const DEFAULT_REQUEST_SCOPE_LABEL = 'Selected-agent evidence records';
 const DEFAULT_PROOF_COMPASS_GROUP_LABEL = 'Evidence ref group';
 const SAFE_PROOF_COMPASS_KEY_PATTERN = /^[A-Za-z0-9_.:-]{1,64}$/;
 const UNSAFE_PROOF_COMPASS_TEXT_PATTERN =
-  /(?:^|[^A-Za-z0-9])(?:\/[^\s"'`]+|~\/|[A-Za-z]:[\\/])|(?:tmux|hermes|session|profile|file|https?):\/\/|(?:token|webhook|secret|payload|control-plane)/i;
+  /(?:^|[^A-Za-z0-9])(?:\/[^\s"'`]+|~\/|[A-Za-z]:[\\/])|(?:tmux|hermes|session|profile|file|https?):\/\/|(?:^|[^A-Za-z0-9])(?:tmux|hermes|session|profile)(?=$|[^A-Za-z0-9])|(?:token|webhook|secret|payload|metadata|control-plane|dispatch|command|commands)/i;
 const PROOF_COMPASS_SOURCE_KINDS = new Set([
   'workspace_root',
   'workspace_file',
@@ -90,7 +91,12 @@ type IndexedLedgerItem = {
 
 export function buildSelectedAgentEvidenceLedger(
   records: EvidenceRecord[],
-  options: { maxItemsPerGroup?: number; maxSourceRefGroups?: number; requestScopeLabel?: string } = {}
+  options: {
+    maxItemsPerGroup?: number;
+    maxSourceRefGroups?: number;
+    proofCompassRows?: SelectedAgentEvidenceProofCompassRow[];
+    requestScopeLabel?: string;
+  } = {}
 ): SelectedAgentEvidenceLedgerModel {
   const maxItemsPerGroup = Math.max(0, options.maxItemsPerGroup ?? 4);
   const maxSourceRefGroups = Math.max(0, options.maxSourceRefGroups ?? 4);
@@ -127,7 +133,8 @@ export function buildSelectedAgentEvidenceLedger(
     degradedEvidence: toBoundedGroup(degradedEvidence, maxItemsPerGroup),
     unmappedEvidence: toBoundedGroup(unmappedEvidence, maxItemsPerGroup),
     sourceContextGroups: toSourceContextGroups(records, maxSourceRefGroups),
-    sourceRefGroups: toSourceRefGroups(records, maxSourceRefGroups)
+    sourceRefGroups: toSourceRefGroups(records, maxSourceRefGroups),
+    proofCompassRows: cloneProofCompassRows(options.proofCompassRows ?? [])
   };
 }
 
@@ -252,6 +259,29 @@ function cloneLedgerItem(
     ...item,
     degradedReasons: [...item.degradedReasons]
   };
+}
+
+function cloneProofCompassRows(
+  rows: SelectedAgentEvidenceProofCompassRow[]
+): SelectedAgentEvidenceProofCompassRow[] {
+  return rows.map((row, index) => ({
+    groupKey: toSafeProofCompassGroupKey(row.groupKey, index),
+    label: toSafeProofCompassGroupLabel(row.label),
+    recordCount: toSafeProofCompassCount(row.recordCount),
+    mappedCount: toSafeProofCompassCount(row.mappedCount),
+    unmappedCount: toSafeProofCompassCount(row.unmappedCount),
+    sourceKindBuckets: cloneProofCompassBuckets(row.sourceKindBuckets, PROOF_COMPASS_SOURCE_KINDS),
+    sourceStatusBuckets: cloneProofCompassBuckets(row.sourceStatusBuckets, PROOF_COMPASS_SOURCE_STATUSES)
+  }));
+}
+
+function cloneProofCompassBuckets(
+  buckets: SelectedAgentEvidenceProofCompassBucket[],
+  allowedKeys: Set<string>
+): SelectedAgentEvidenceProofCompassBucket[] {
+  return buckets
+    .filter((bucket) => allowedKeys.has(bucket.key) && toSafeProofCompassCount(bucket.count) > 0)
+    .map((bucket) => ({ key: bucket.key, count: toSafeProofCompassCount(bucket.count) }));
 }
 
 export function selectSelectedAgentEvidenceLedgerSourceContextGroups(

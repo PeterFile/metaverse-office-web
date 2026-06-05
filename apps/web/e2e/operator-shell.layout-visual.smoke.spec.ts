@@ -1026,12 +1026,18 @@ test.describe('operator shell layout visual smoke', () => {
   test('@journey @evidence-live opens selected-agent inspect peek Evidence Ledger without prefetching records', async ({
     page
   }) => {
+    const expectedEvidenceRecordsGet = '/evidence-records?agent_id=growth-revenue&newest_first=true&limit=12';
+    const expectedEvidenceRefRollupGet =
+      '/evidence-records/ref-rollup?agent_id=growth-revenue&newest_first=true&limit=12';
     const evidenceRecordRequests: string[] = [];
+    const evidenceRefRollupRequests: string[] = [];
     const evidenceRecordViolations: string[] = [];
+    const evidenceRefRollupViolations: string[] = [];
     const apiRequestViolations: string[] = [];
     page.on('request', (request) => {
       const url = new URL(request.url());
-      const key = `${request.method()} ${url.pathname}${url.search}`;
+      const relativeUrl = `${url.pathname}${url.search}`;
+      const key = `${request.method()} ${relativeUrl}`;
       const apiPathIsReadModel =
         url.pathname.startsWith('/office/') ||
         url.pathname.startsWith('/incidents') ||
@@ -1046,12 +1052,20 @@ test.describe('operator shell layout visual smoke', () => {
         apiRequestViolations.push(key);
       }
 
+      if (url.pathname === '/evidence-records/ref-rollup') {
+        evidenceRefRollupRequests.push(relativeUrl);
+        if (request.method() !== 'GET' || relativeUrl !== expectedEvidenceRefRollupGet) {
+          evidenceRefRollupViolations.push(key);
+        }
+        return;
+      }
+
       if (url.pathname !== '/evidence-records') {
         return;
       }
 
-      evidenceRecordRequests.push(`${url.pathname}${url.search}`);
-      if (request.method() !== 'GET') {
+      evidenceRecordRequests.push(relativeUrl);
+      if (request.method() !== 'GET' || relativeUrl !== expectedEvidenceRecordsGet) {
         evidenceRecordViolations.push(key);
       }
     });
@@ -1101,6 +1115,7 @@ test.describe('operator shell layout visual smoke', () => {
       'Hub-closed proof capsule should summarize evidence without raw refs or runtime payloads'
     ).not.toMatch(/\/tmp\/|tmux:\/\/|hermes:\/\/|\b\d+-web3-[a-z0-9-]+\b|profile-[a-z0-9-]+/i);
     expect(evidenceRecordRequests, 'Hub-closed inspect peek should not prefetch evidence records').toEqual([]);
+    expect(evidenceRefRollupRequests, 'Hub-closed inspect peek should not prefetch ref-rollup rows').toEqual([]);
 
     await ledgerCta.click();
 
@@ -1112,10 +1127,10 @@ test.describe('operator shell layout visual smoke', () => {
     const evidencePanel = page.getByRole('tabpanel', { name: 'Evidence' });
     await expect(evidencePanel.getByRole('heading', { name: 'Evidence Ledger' })).toBeVisible();
     await expect(evidencePanel.getByText('Scope · Selected-agent evidence records')).toBeVisible();
-    await expect.poll(() => evidenceRecordRequests.slice()).toEqual([
-      '/evidence-records?agent_id=growth-revenue&newest_first=true&limit=12'
-    ]);
-    expect(evidenceRecordViolations, 'Inspect peek Evidence Ledger CTA should only issue read GETs').toEqual([]);
+    await expect.poll(() => evidenceRecordRequests.slice()).toEqual([expectedEvidenceRecordsGet]);
+    await expect.poll(() => evidenceRefRollupRequests.slice()).toEqual([expectedEvidenceRefRollupGet]);
+    expect(evidenceRecordViolations, 'Inspect peek Evidence Ledger CTA should only issue exact evidence-record GETs').toEqual([]);
+    expect(evidenceRefRollupViolations, 'Inspect peek Evidence Ledger CTA should only issue exact ref-rollup GETs').toEqual([]);
     expect(apiRequestViolations, 'Inspect peek Evidence Ledger CTA should not issue mutating API requests').toEqual([]);
   });
 
@@ -1130,6 +1145,8 @@ test.describe('operator shell layout visual smoke', () => {
       `/evidence-records/${evidenceId}`,
       `/evidence-records/${evidenceId}/provenance-bundle`
     ];
+    const expectedEvidenceRefRollupGet =
+      '/evidence-records/ref-rollup?agent_id=app-engineering&newest_first=true&limit=12';
     const expectedCheckpointLogGet = `/accountability/replay/checkpoint-log?limit=3&evidence_id=${encodeURIComponent(
       evidenceId
     )}`;
@@ -1153,12 +1170,15 @@ test.describe('operator shell layout visual smoke', () => {
       '/peer-watch/alerts?target_agent_id=app-engineering&limit=4',
       '/peer-watch/alerts?target_agent_id=app-engineering&correlation_id=collector-snapshot%3A2026-03-10T23%3A59%3A40.000Z&limit=4',
       '/correlations/collector-snapshot%3A2026-03-10T23%3A59%3A40.000Z?limit=10&window=60m',
+      expectedEvidenceRefRollupGet,
       expectedCheckpointLogGet,
       ...expectedEvidenceRecordGets
     ]);
     const checkpointLogRequests: string[] = [];
     const evidenceRecordRequests: string[] = [];
+    const evidenceRefRollupRequests: string[] = [];
     const evidenceRecordViolations: string[] = [];
+    const evidenceRefRollupViolations: string[] = [];
     const apiRequestViolations: string[] = [];
 
     page.on('request', (request) => {
@@ -1187,6 +1207,14 @@ test.describe('operator shell layout visual smoke', () => {
 
       if (url.pathname === '/accountability/replay/checkpoint-log') {
         checkpointLogRequests.push(relativeUrl);
+      }
+
+      if (url.pathname === '/evidence-records/ref-rollup') {
+        evidenceRefRollupRequests.push(relativeUrl);
+        if (request.method() !== 'GET' || relativeUrl !== expectedEvidenceRefRollupGet) {
+          evidenceRefRollupViolations.push(key);
+        }
+        return;
       }
 
       if (!url.pathname.startsWith('/evidence-records')) {
@@ -1242,6 +1270,7 @@ test.describe('operator shell layout visual smoke', () => {
     await expect(inspectPeek).toBeVisible();
     await expect(ledgerCta).toBeVisible();
     expect(evidenceRecordRequests, 'Selecting an agent should not prefetch evidence records').toEqual([]);
+    expect(evidenceRefRollupRequests, 'Selecting an agent should not prefetch ref-rollup rows').toEqual([]);
 
     await ledgerCta.click();
 
@@ -1250,6 +1279,7 @@ test.describe('operator shell layout visual smoke', () => {
     const evidencePanel = page.getByRole('tabpanel', { name: 'Evidence' });
     await expect(evidencePanel.getByRole('heading', { name: 'Evidence Ledger' })).toBeVisible();
     await expect.poll(() => evidenceRecordRequests.slice()).toEqual([expectedEvidenceRecordGets[0]]);
+    await expect.poll(() => evidenceRefRollupRequests.slice()).toEqual([expectedEvidenceRefRollupGet]);
     await expect(
       evidencePanel.getByRole('button', { name: `Inspect evidence record ${evidenceId}` })
     ).toHaveCount(0);
@@ -1276,6 +1306,7 @@ test.describe('operator shell layout visual smoke', () => {
     await expect(detailSection).not.toContainText('/evidence-records/');
     await expect(detailSection).not.toContainText('/tmp/revenue-handoff.md');
     expect(evidenceRecordViolations, 'Inspect record should issue only exact evidence read GETs').toEqual([]);
+    expect(evidenceRefRollupViolations, 'Evidence Ledger should issue only exact ref-rollup GETs').toEqual([]);
     expect(apiRequestViolations, 'Inspect record should not issue unlisted or mutating API requests').toEqual([]);
   });
 

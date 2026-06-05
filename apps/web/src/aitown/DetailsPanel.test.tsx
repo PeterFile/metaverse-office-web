@@ -9409,6 +9409,7 @@ describe('DetailsPanel accountability signals', () => {
           sourceGapFocusIntent: {
             agentId: 'app-engineering',
             agentLabel: 'App Engineering Agent',
+            sourceKind: 'workspace_files',
             sourceLabel: 'Workspace files',
             status: 'degraded',
             sourceDrilldownGroupKey: 'workspace',
@@ -9473,6 +9474,7 @@ describe('DetailsPanel accountability signals', () => {
           sourceGapFocusIntent: {
             agentId: 'app-engineering',
             agentLabel: 'App Engineering Agent',
+            sourceKind: 'tmux_session',
             sourceLabel: 'Tmux session',
             status: 'missing',
             sourceDrilldownGroupKey: 'tmux',
@@ -9539,6 +9541,7 @@ describe('DetailsPanel accountability signals', () => {
           sourceGapFocusIntent: {
             agentId: 'app-engineering',
             agentLabel: 'App Engineering Agent',
+            sourceKind: 'hermes_session',
             sourceLabel: 'Hermes session',
             status: 'degraded',
             sourceDrilldownGroupKey: 'hermes',
@@ -9572,6 +9575,7 @@ describe('DetailsPanel accountability signals', () => {
           sourceGapFocusIntent: {
             agentId: 'app-engineering',
             agentLabel: 'App Engineering Agent',
+            sourceKind: 'workspace_files',
             sourceLabel: 'Workspace files',
             status: 'degraded',
             sourceDrilldownGroupKey: 'workspace',

@@ -61,7 +61,7 @@ import type {
   SelectedAgentEvidenceLedgerSourceContextGroup,
   SelectedAgentEvidenceLedgerSourceRefGroup
 } from '../selectedAgentEvidenceLedger';
-import type { SourceGapDrilldownGroupKey } from './sourceGapSignals';
+import type { DisplayedSourceGapKind, SourceGapDrilldownGroupKey } from './sourceGapSignals';
 
 export type HubCategory = 'crew' | 'queue' | 'supervision' | 'evidence' | 'replay' | 'memory';
 
@@ -204,6 +204,7 @@ type DetailsPanelProps = {
 export type SourceGapFocusIntent = {
   agentId: string;
   agentLabel: string;
+  sourceKind: DisplayedSourceGapKind;
   sourceLabel: string;
   status: CollectorSourceHealthStatus;
   sourceDrilldownGroupKey: SourceGapDrilldownGroupKey;

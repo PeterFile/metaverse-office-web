@@ -879,6 +879,11 @@ async function readJsonBody(req) {
 
 function formatPublicError(error) {
   const statusCode = normalizeStatusCode(error?.statusCode);
+  const inputError = formatRuntimeEvidenceInputError(error);
+
+  if (statusCode >= 500 && inputError) {
+    return inputError;
+  }
 
   if (statusCode < 500) {
     const publicError = sanitizePublicErrorLabel(error?.publicMessage) || 'bad_request';
@@ -890,11 +895,23 @@ function formatPublicError(error) {
     };
   }
 
-  const knownDetails = sanitizeKnownInternalErrorDetails(error?.publicDetails || error?.message);
   return {
     statusCode,
     error: 'internal_error',
-    details: knownDetails || INTERNAL_ERROR_DETAIL
+    details: INTERNAL_ERROR_DETAIL
+  };
+}
+
+function formatRuntimeEvidenceInputError(error) {
+  const details = sanitizeKnownRuntimeEvidenceInputDetails(error?.publicDetails || error?.message);
+  if (!details) {
+    return null;
+  }
+
+  return {
+    statusCode: 422,
+    error: 'invalid_runtime_evidence_input',
+    details
   };
 }
 
@@ -909,8 +926,8 @@ function sanitizePublicErrorLabel(value) {
   return /^[a-z][a-z0-9_]{0,63}$/.test(label) ? label : null;
 }
 
-function sanitizeKnownInternalErrorDetails(value) {
-  if (!isKnownSafeInternalError(value)) {
+function sanitizeKnownRuntimeEvidenceInputDetails(value) {
+  if (!isKnownSafeRuntimeEvidenceInputError(value)) {
     return null;
   }
 
@@ -918,7 +935,7 @@ function sanitizeKnownInternalErrorDetails(value) {
   return hasPublicErrorLeak(details) ? null : details;
 }
 
-function isKnownSafeInternalError(value) {
+function isKnownSafeRuntimeEvidenceInputError(value) {
   if (typeof value !== 'string') {
     return false;
   }

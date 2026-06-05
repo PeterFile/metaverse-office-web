@@ -82,6 +82,8 @@ export type RuntimeSourceGapLifecycleStripRow = {
   observedAtLabel: string;
 };
 
+type RuntimeSourceGapLifecycleStripState = RuntimeSourceGapLifecycleGroup['lifecycle_state'] | 'unknown';
+
 export type RuntimeSourceGapLifecycleStrip = {
   status: 'loading' | 'error' | 'no_snapshot' | 'empty' | 'ready';
   summaryLabel: string;
@@ -659,30 +661,45 @@ function renderRuntimeSourceGapLifecycleGroupStripRow(
     return null;
   }
 
+  const lifecycleState = normalizeRuntimeSourceGapLifecycleGroupState(group.lifecycle_state);
   const statusLabel = normalizeRuntimeSourceGapLifecycleGroupStatus(
     group.current_status,
-    group.lifecycle_state
+    lifecycleState
   );
 
   return {
     key: [
       `scope:${group.agent_id === null ? 'unmapped' : 'mapped'}`,
       `source:${renderRuntimeSourceGapReadModelSourceKey(sourceKind)}`,
-      `state:${group.lifecycle_state}`,
+      `state:${lifecycleState}`,
       `status:${statusLabel}`,
       `index:${index}`
     ].join('|'),
     sourceLabel: group.agent_id === null ? 'Runtime source' : renderRuntimeSourceGapReadModelSourceLabel(sourceKind),
     statusLabel,
-    lifecycleLabel: renderRuntimeSourceGapLifecycleGroupLabel(group.lifecycle_state),
+    lifecycleLabel: renderRuntimeSourceGapLifecycleGroupLabel(lifecycleState),
     countLabel: `${group.record_count} row${group.record_count === 1 ? '' : 's'}`,
     observedAtLabel: renderObservedAtLabel(group.last_observed_at)
   };
 }
 
+function normalizeRuntimeSourceGapLifecycleGroupState(
+  lifecycleState: RuntimeSourceGapLifecycleGroup['lifecycle_state']
+): RuntimeSourceGapLifecycleStripState {
+  switch (lifecycleState) {
+    case 'opened':
+    case 'continuing':
+    case 'resolved':
+    case 'observed_unmapped':
+      return lifecycleState;
+    default:
+      return 'unknown';
+  }
+}
+
 function normalizeRuntimeSourceGapLifecycleGroupStatus(
   currentStatus: RuntimeSourceGapLifecycleGroup['current_status'],
-  lifecycleState: RuntimeSourceGapLifecycleGroup['lifecycle_state']
+  lifecycleState: RuntimeSourceGapLifecycleStripState
 ): RuntimeSourceGapLifecycleStripRow['statusLabel'] {
   if (lifecycleState === 'resolved') {
     return 'resolved';
@@ -728,7 +745,7 @@ function renderRuntimeSourceGapReadModelSourceLabel(sourceKind: DisplayedSourceG
   }
 }
 
-function renderRuntimeSourceGapLifecycleGroupLabel(state: RuntimeSourceGapLifecycleGroup['lifecycle_state']) {
+function renderRuntimeSourceGapLifecycleGroupLabel(state: RuntimeSourceGapLifecycleStripState) {
   switch (state) {
     case 'opened':
       return 'opened';
@@ -738,6 +755,8 @@ function renderRuntimeSourceGapLifecycleGroupLabel(state: RuntimeSourceGapLifecy
       return 'resolved';
     case 'observed_unmapped':
       return 'observed unmapped';
+    case 'unknown':
+      return 'unknown';
   }
 }
 

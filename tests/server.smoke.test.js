@@ -7075,6 +7075,111 @@ test('GET /agents/evidence-spine/schema read route purity does not inspect spine
   assert.equal(await readFile(storeFile, 'utf8'), fileBeforeRead);
 });
 
+test('GET /collectors/controller-snapshot/schema exposes static catalog without reading snapshots', async () => {
+  let collectCount = 0;
+  const controllerSnapshotCollector = {
+    async collectSnapshot() {
+      collectCount += 1;
+      throw new Error('GET /collectors/controller-snapshot/schema must not collect');
+    }
+  };
+  const root = await mkdtemp(path.join(os.tmpdir(), 'metaverse-office-controller-snapshot-schema-'));
+  const storeFile = path.join(root, 'prototype-store.jsonl');
+  const store = await createPrototypeStore({ filePath: storeFile });
+
+  await store.appendCollectorReport(createRouteParityCollectorReport());
+  const fileBeforeRead = await readFile(storeFile, 'utf8');
+  store.getLatestCollectorReport = () => {
+    throw new Error('schema route must not read latest snapshot');
+  };
+  store.getLatestCollectorSnapshotSummary = () => {
+    throw new Error('schema route must not read summary projection');
+  };
+  store.getLatestCollectorEvidenceCoverage = () => {
+    throw new Error('schema route must not read coverage projection');
+  };
+  store.getLatestCollectorSourceHealth = () => {
+    throw new Error('schema route must not read source-health projection');
+  };
+  store.getCollectorSnapshotHistorySummary = () => {
+    throw new Error('schema route must not read snapshot history');
+  };
+  store.getCollectorSnapshotDiff = () => {
+    throw new Error('schema route must not diff snapshots');
+  };
+
+  const response = await requestJsonDirect({
+    url: '/collectors/controller-snapshot/schema?collector_snapshot_id=/tmp/secret&token=<script>',
+    store,
+    controllerSnapshotCollector
+  });
+  assert.equal(response.response.status, 200);
+  assert.deepEqual(response.body.item.limit, {
+    default: 50,
+    max: 200
+  });
+  assert.deepEqual(
+    response.body.item.routes.map((route) => route.name),
+    ['latest', 'summary', 'evidence_coverage', 'source_health', 'history', 'diff']
+  );
+  assert.deepEqual(response.body.item.source_kinds, [
+    'workspace_root',
+    'workspace_file',
+    'workspace_files',
+    'tmux_observation',
+    'tmux_session',
+    'hermes_profile',
+    'hermes_session',
+    'task_evidence',
+    'kanban_fixture',
+    'linear_fixture',
+    'slack_fixture',
+    'task_fixture',
+  ]);
+  assert.equal(response.body.item.source_statuses.includes('missing'), true);
+  assert.equal(response.body.item.confidence_levels.includes('low'), true);
+  assert.deepEqual(response.body.item.snapshot_fields.latest, [
+    'collected_at',
+    'actor_id',
+    'summary',
+    'items',
+    'shared_artifacts',
+    'evidence_coverage',
+    'runtime_source_evidence'
+  ]);
+  assert.deepEqual(response.body.item.snapshot_fields.summary, [
+    'has_snapshot',
+    'collected_at',
+    'agent_count',
+    'heartbeat_count',
+    'tmux_observed_count',
+    'workspace_observed_count',
+    'reboot_recommended_count',
+    'evidence_ref_count',
+    'covered_agent_count',
+    'low_confidence_agent_count',
+    'source_kind_buckets',
+    'source_health_buckets',
+    'runtime_source_evidence'
+  ]);
+  assert.deepEqual(response.body.item.snapshot_fields.history, [
+    'total_count',
+    'returned_limit',
+    'source_kind_buckets',
+    'status_buckets',
+    'items'
+  ]);
+  assert.equal(JSON.stringify(response.body).includes('/tmp/'), false);
+  assert.equal(JSON.stringify(response.body).includes('<script>'), false);
+  assert.equal(JSON.stringify(response.body).includes('collector-snapshot:'), false);
+  assert.equal(JSON.stringify(response.body).includes('degraded_reasons'), false);
+  for (const forbidden of ['tmux://', 'hermes://', 'session://', 'profile://', 'webhook', 'payload', 'token']) {
+    assert.equal(JSON.stringify(response.body).toLowerCase().includes(forbidden), false, forbidden);
+  }
+  assert.equal(collectCount, 0);
+  assert.equal(await readFile(storeFile, 'utf8'), fileBeforeRead);
+});
+
 test('GET /runtime/source-gaps/lifecycle passes lifecycle_state as a read-only filter', async () => {
   let receivedFilters = null;
   const store = {

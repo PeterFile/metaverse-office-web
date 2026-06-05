@@ -58,6 +58,16 @@ export type CollectorEvidenceCoverageFocusItem = Pick<
   | 'warning'
 >;
 
+export type CollectorEvidenceCoverageFocusSummaryItem = Omit<CollectorEvidenceCoverageFocusItem, 'source_kinds'> & {
+  source_labels: string[];
+};
+
+export interface CollectorEvidenceCoverageFocusSummary {
+  visibleItems: CollectorEvidenceCoverageFocusSummaryItem[];
+  totalGapCount: number;
+  overflowCount: number;
+}
+
 type CoverageItemWithRefs = CollectorEvidenceCoverageAgentItem & {
   evidence_refs?: unknown;
 };
@@ -69,6 +79,14 @@ const SOURCE_KIND_ORDER: CollectorEvidenceCoverageSourceKind[] = [
   'hermes_profile',
   'hermes_session'
 ];
+
+const SOURCE_KIND_FOCUS_LABELS: Record<CollectorEvidenceCoverageSourceKind, string> = {
+  tmux_observation: 'Runtime evidence',
+  workspace_file: 'Workspace evidence',
+  workspace_root: 'Workspace evidence',
+  hermes_profile: 'Runtime evidence',
+  hermes_session: 'Runtime evidence'
+};
 
 const EMPTY_MODEL: CollectorEvidenceCoverageViewModel = {
   status: 'coverage_unavailable',
@@ -210,12 +228,11 @@ export function deriveCollectorEvidenceCoverageViewModel(
   };
 }
 
-export function deriveCollectorEvidenceCoverageFocusItems(
+function deriveCollectorEvidenceCoverageGapItems(
   coverage: CollectorEvidenceCoverage | null | undefined,
-  overviewAgents: CollectorEvidenceCoverageOverviewAgent[] = [],
-  limit = 3
+  overviewAgents: CollectorEvidenceCoverageOverviewAgent[] = []
 ): CollectorEvidenceCoverageFocusItem[] {
-  if (limit <= 0 || overviewAgents.length === 0) {
+  if (overviewAgents.length === 0) {
     return [];
   }
 
@@ -235,7 +252,6 @@ export function deriveCollectorEvidenceCoverageFocusItems(
       const rightPriority = right.status === 'low_confidence_evidence' ? 0 : 1;
       return leftPriority - rightPriority || left.display_name.localeCompare(right.display_name);
     })
-    .slice(0, limit)
     .map((row) => ({
       agent_id: row.agent_id,
       display_name: row.display_name,
@@ -245,4 +261,37 @@ export function deriveCollectorEvidenceCoverageFocusItems(
       status: row.status,
       warning: row.warning
     }));
+}
+
+function renderCollectorEvidenceCoverageFocusSourceLabels(sourceKinds: CollectorEvidenceCoverageSourceKind[]) {
+  return Array.from(new Set(sourceKinds.map((sourceKind) => SOURCE_KIND_FOCUS_LABELS[sourceKind]).filter(Boolean)));
+}
+
+export function deriveCollectorEvidenceCoverageFocusSummary(
+  coverage: CollectorEvidenceCoverage | null | undefined,
+  overviewAgents: CollectorEvidenceCoverageOverviewAgent[] = [],
+  limit = 3
+): CollectorEvidenceCoverageFocusSummary {
+  const gapItems = deriveCollectorEvidenceCoverageGapItems(coverage, overviewAgents);
+  const visibleLimit = Math.max(0, limit);
+
+  return {
+    visibleItems: gapItems.slice(0, visibleLimit).map(({ source_kinds: sourceKinds, ...item }) => ({
+      ...item,
+      source_labels: renderCollectorEvidenceCoverageFocusSourceLabels(sourceKinds)
+    })),
+    totalGapCount: gapItems.length,
+    overflowCount: Math.max(0, gapItems.length - visibleLimit)
+  };
+}
+
+export function deriveCollectorEvidenceCoverageFocusItems(
+  coverage: CollectorEvidenceCoverage | null | undefined,
+  overviewAgents: CollectorEvidenceCoverageOverviewAgent[] = [],
+  limit = 3
+): CollectorEvidenceCoverageFocusItem[] {
+  if (limit <= 0) {
+    return [];
+  }
+  return deriveCollectorEvidenceCoverageGapItems(coverage, overviewAgents).slice(0, limit);
 }

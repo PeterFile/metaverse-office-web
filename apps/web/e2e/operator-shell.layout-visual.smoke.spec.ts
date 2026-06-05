@@ -641,7 +641,7 @@ test.describe('operator shell layout visual smoke', () => {
     await expect(collectorSnapshotChip).not.toContainText('hermes://');
     await expect(signalsSummary.getByText('Signals', { exact: true })).toBeVisible();
     await expect(signalsSummary.locator('.aitown-panel__topline-copy')).toContainText('Snapshot · Snapshot available');
-    await expect(signalsSummary.locator('.aitown-panel__topline-copy')).toContainText('Evidence · 3');
+    await expect(signalsSummary.locator('.aitown-panel__topline-copy')).toContainText('Evidence · 6');
     await expect(signalsSummary.getByText(/Source gaps · 3/)).toBeVisible();
     await expect(evidenceFocus).toBeHidden();
     await expect(sourceGapFocus).toBeHidden();
@@ -665,11 +665,13 @@ test.describe('operator shell layout visual smoke', () => {
     await signalsSummary.click();
     await expect(evidenceFocus).toBeVisible();
     await expect(evidenceFocus.getByText('Evidence', { exact: true })).toBeVisible();
-    await expect(evidenceFocus.getByText('3 coverage gaps', { exact: true })).toBeVisible();
+    await expect(evidenceFocus.getByText('6 coverage gaps', { exact: true })).toBeVisible();
+    await expect(evidenceFocus.getByText('+3 more', { exact: true })).toBeVisible();
+    await expect(evidenceFocus.getByRole('button', { name: '+3 more' })).toHaveCount(0);
     await expect(evidenceFocus.getByText('Low-confidence or uncovered evidence', { exact: true })).toBeVisible();
     await expect(evidenceFocusChip).toBeVisible();
     await expect(evidenceFocusChip).toContainText('Low-confidence evidence');
-    await expect(evidenceFocusChip).toContainText('3 refs · tmux_observation, workspace_file, workspace_root');
+    await expect(evidenceFocusChip).toContainText('3 refs · Runtime evidence + Workspace evidence');
     await expect(evidenceFocusChip).toContainText('Latest evidence · 2026-03-16T08:58:40.000Z');
     await expect(evidenceFocusChip).not.toContainText('/tmp/launch-note.md');
     await expect(evidenceFocusChip).not.toContainText('/tmp/growth-revenue');

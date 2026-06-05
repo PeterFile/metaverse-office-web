@@ -1106,6 +1106,9 @@ test('JSONL prototype store reports storage index-health as not applicable', asy
     record_evidence_ref_count: null,
     record_index_drift_count: null,
     record_evidence_ref_drift_count: null,
+    evidence_query_probe_count: null,
+    evidence_query_probe_drift_count: null,
+    evidence_query_probe_status: 'not_applicable',
     sidecar_status: 'not_applicable',
     record_kind_buckets: {
       event: 3,
@@ -1156,6 +1159,9 @@ test('JSONL storage index-health buckets unknown record kinds without leaking ra
     record_evidence_ref_count: null,
     record_index_drift_count: null,
     record_evidence_ref_drift_count: null,
+    evidence_query_probe_count: null,
+    evidence_query_probe_drift_count: null,
+    evidence_query_probe_status: 'not_applicable',
     sidecar_status: 'not_applicable',
     record_kind_buckets: {
       event: 1,
@@ -4377,6 +4383,9 @@ test('SQLite prototype store reports sanitized storage index-health without side
     record_evidence_ref_count: 6,
     record_index_drift_count: 0,
     record_evidence_ref_drift_count: 0,
+    evidence_query_probe_count: 16,
+    evidence_query_probe_drift_count: 0,
+    evidence_query_probe_status: 'complete',
     sidecar_status: 'complete',
     record_kind_buckets: {
       event: 3,
@@ -4399,6 +4408,8 @@ test('SQLite prototype store reports sanitized storage index-health without side
     status: 'degraded',
     record_evidence_ref_count: 0,
     record_evidence_ref_drift_count: 6,
+    evidence_query_probe_drift_count: 1,
+    evidence_query_probe_status: 'stale',
     sidecar_status: 'stale'
   });
 
@@ -4420,6 +4431,8 @@ test('SQLite prototype store reports sanitized storage index-health without side
     ...health,
     status: 'degraded',
     record_index_drift_count: 3,
+    evidence_query_probe_drift_count: 2,
+    evidence_query_probe_status: 'stale',
     sidecar_status: 'stale'
   });
 
@@ -4431,6 +4444,9 @@ test('SQLite prototype store reports sanitized storage index-health without side
     record_evidence_ref_count: null,
     record_index_drift_count: null,
     record_evidence_ref_drift_count: null,
+    evidence_query_probe_count: null,
+    evidence_query_probe_drift_count: null,
+    evidence_query_probe_status: 'stale',
     sidecar_status: 'stale'
   });
 });

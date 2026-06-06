@@ -7180,6 +7180,79 @@ test('GET /collectors/controller-snapshot/schema exposes static catalog without 
   assert.equal(await readFile(storeFile, 'utf8'), fileBeforeRead);
 });
 
+test('GET /storage/schema exposes static catalog without reading storage surfaces', async () => {
+  let collectCount = 0;
+  const controllerSnapshotCollector = {
+    async collectSnapshot() {
+      collectCount += 1;
+      throw new Error('GET /storage/schema must not collect');
+    }
+  };
+  const root = await mkdtemp(path.join(os.tmpdir(), 'metaverse-office-storage-schema-'));
+  const storeFile = path.join(root, 'prototype-store.jsonl');
+  const store = await createPrototypeStore({ filePath: storeFile });
+
+  await store.appendCollectorReport(createRouteParityCollectorReport());
+  const evidenceRecord = store.listEvidenceRecords({ source_kind: 'workspace_file', limit: '1' })[0];
+  assert.ok(evidenceRecord);
+  const fileBeforeRead = await readFile(storeFile, 'utf8');
+  store.getStorageReplayManifest = () => {
+    throw new Error('schema route must not read replay manifest');
+  };
+  store.getStorageIndexHealth = () => {
+    throw new Error('schema route must not run storage index health');
+  };
+  store.getReplayCheckpointSummary = () => {
+    throw new Error('schema route must not read checkpoint summary');
+  };
+  store.listReplayCheckpointLog = () => {
+    throw new Error('schema route must not read checkpoint log');
+  };
+
+  const response = await requestJsonDirect({
+    url: '/storage/schema?limit=1&record_kind=/tmp/storage-secret&token=<script>&callback=https://hooks.example.test/storage',
+    store,
+    controllerSnapshotCollector
+  });
+  assert.equal(response.response.status, 200);
+  assert.deepEqual(response.body.item.limit, {
+    default: 50,
+    max: 200
+  });
+  assert.deepEqual(
+    response.body.item.routes.map((route) => route.name),
+    ['replay_manifest', 'index_health', 'checkpoint_summary', 'checkpoint_log']
+  );
+  assert.deepEqual(response.body.item.routes[3].supported_filters, [
+    'limit',
+    'record_kind',
+    'evidence_id',
+    'collector_snapshot_id',
+    'correlation_id',
+    'source_kind'
+  ]);
+  assert.deepEqual(response.body.item.route_fields.checkpoint_log, [
+    'append_index',
+    'record_kind',
+    'checkpoint'
+  ]);
+  const serialized = JSON.stringify(response.body);
+  assert.equal(serialized.includes('/tmp/'), false);
+  assert.equal(serialized.includes('<script>'), false);
+  assert.equal(serialized.includes('hooks.example.test'), false);
+  assert.equal(serialized.includes(evidenceRecord.evidence_id), false);
+  assert.equal(serialized.includes('collector-snapshot:'), false);
+  assert.equal(serialized.includes('tmux://'), false);
+  assert.equal(serialized.includes('payload'), false);
+  assert.equal(serialized.includes('metadata'), false);
+  assert.equal(serialized.includes('degraded_reasons'), false);
+  for (const forbidden of ['task dispatch', 'profile routing', 'worker orchestration']) {
+    assert.equal(serialized.includes(forbidden), false, forbidden);
+  }
+  assert.equal(collectCount, 0);
+  assert.equal(await readFile(storeFile, 'utf8'), fileBeforeRead);
+});
+
 test('GET /runtime/source-gaps/lifecycle passes lifecycle_state as a read-only filter', async () => {
   let receivedFilters = null;
   const store = {
@@ -8050,6 +8123,13 @@ test('GET evidence and source read routes keep JSONL and SQLite parity', async (
   assert.equal(JSON.stringify(jsonlReplayCheckpoint).includes('route-parity'), false);
   assert.equal(JSON.stringify(jsonlReplayCheckpoint).includes('tmux://'), false);
   assert.equal(JSON.stringify(jsonlReplayCheckpoint).includes('5-web3-app-engineering'), false);
+
+  const [jsonlStorageSchema, sqliteStorageSchema] = await parityRequest('/storage/schema');
+  assert.deepEqual(sqliteStorageSchema, jsonlStorageSchema);
+  assert.deepEqual(
+    jsonlStorageSchema.item.routes.map((route) => route.name),
+    ['replay_manifest', 'index_health', 'checkpoint_summary', 'checkpoint_log']
+  );
 
   const [jsonlStorageManifest, sqliteStorageManifest] = await parityRequest(
     '/storage/replay-manifest'
@@ -9004,6 +9084,7 @@ test('GET read route purity matrix leaves replay records and checkpoints unchang
     `/accountability/replay?evidence_id=${encodeURIComponent(evidenceRecord.evidence_id)}&limit=5&window=60m`,
     '/accountability/replay/checkpoint-summary',
     '/accountability/replay/checkpoint-log?limit=3',
+    '/storage/schema',
     '/storage/replay-manifest',
     '/storage/index-health',
     '/runtime/source-gaps?newest_first=true&limit=10',
@@ -9099,6 +9180,7 @@ test('GET safe-route leak regression matrix stays redacted and read-pure under h
     `/runtime/source-gaps/trend?newest_first=true&limit=2&${ignoredCanaryQuery}`,
     `/agents/evidence-spine/summary?newest_first=true&limit=2&${ignoredCanaryQuery}`,
     `/agents/evidence-spine/source-matrix?newest_first=true&limit=2&${ignoredCanaryQuery}`,
+    `/storage/schema?${ignoredCanaryQuery}`,
     `/storage/replay-manifest?${ignoredCanaryQuery}`,
     `/storage/index-health?${ignoredCanaryQuery}`,
     `/evidence-records/schema?${ignoredCanaryQuery}`,

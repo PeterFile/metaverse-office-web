@@ -1089,6 +1089,103 @@ test('prototype store exposes deterministic sanitized storage replay manifest', 
   assert.equal(unsafeSerialized.includes('degraded_reasons'), false);
 });
 
+test('storage schema exposes only static safe route catalog metadata', async () => {
+  const storeFile = await createStoreFile();
+  const store = await createPrototypeStore({ filePath: storeFile });
+
+  await store.appendEvent(createEvent());
+  await store.appendHeartbeat(createHeartbeat());
+  await store.appendCollectorReport(createCollectorReport());
+
+  const schema = store.getStorageSchema();
+  assert.deepEqual(schema.limit, {
+    default: 50,
+    max: 200
+  });
+  assert.deepEqual(schema.routes, [
+    {
+      name: 'replay_manifest',
+      path: '/storage/replay-manifest',
+      supported_filters: []
+    },
+    {
+      name: 'index_health',
+      path: '/storage/index-health',
+      supported_filters: []
+    },
+    {
+      name: 'checkpoint_summary',
+      path: '/accountability/replay/checkpoint-summary',
+      supported_filters: []
+    },
+    {
+      name: 'checkpoint_log',
+      path: '/accountability/replay/checkpoint-log',
+      supported_filters: [
+        'limit',
+        'record_kind',
+        'evidence_id',
+        'collector_snapshot_id',
+        'correlation_id',
+        'source_kind'
+      ]
+    }
+  ]);
+  assert.deepEqual(schema.route_fields, {
+    replay_manifest: [
+      'record_count',
+      'record_kind_buckets',
+      'evidence_summary',
+      'canonical_record_hash'
+    ],
+    index_health: [
+      'backend',
+      'status',
+      'record_count',
+      'record_index_count',
+      'record_evidence_ref_count',
+      'record_index_drift_count',
+      'record_evidence_ref_drift_count',
+      'evidence_query_probe_count',
+      'evidence_query_probe_drift_count',
+      'evidence_query_probe_status',
+      'sidecar_status',
+      'record_kind_buckets',
+      'latest_record_ts'
+    ],
+    checkpoint_summary: [
+      'record_count',
+      'event_count',
+      'heartbeat_count',
+      'evidence_record_count',
+      'collector_snapshot_count',
+      'record_kind_buckets',
+      'latest_event',
+      'latest_heartbeat',
+      'latest_evidence_record',
+      'latest_collector_snapshot'
+    ],
+    checkpoint_log: ['append_index', 'record_kind', 'checkpoint']
+  });
+  assert.equal(
+    schema.route_write_boundary,
+    'read-only storage schema catalog; does not inspect replayed records, run storage probes, collect runtime sources, or append records'
+  );
+
+  const evidenceId = store.listEvidenceRecords()[0].evidence_id;
+  const serialized = JSON.stringify(schema);
+  assert.equal(serialized.includes('/tmp/store-contract'), false);
+  assert.equal(serialized.includes('tmux://'), false);
+  assert.equal(serialized.includes('collector-snapshot:'), false);
+  assert.equal(serialized.includes(evidenceId), false);
+  assert.equal(serialized.includes('payload'), false);
+  assert.equal(serialized.includes('metadata'), false);
+  assert.equal(serialized.includes('degraded_reasons'), false);
+  assert.equal(serialized.includes('task dispatch'), false);
+  assert.equal(serialized.includes('profile routing'), false);
+  assert.equal(serialized.includes('worker orchestration'), false);
+});
+
 test('JSONL prototype store reports storage index-health as not applicable', async () => {
   const storeFile = await createStoreFile();
   const store = await createPrototypeStore({ filePath: storeFile });

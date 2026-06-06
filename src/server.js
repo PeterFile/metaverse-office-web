@@ -366,6 +366,13 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
     return;
   }
 
+  if (method === 'GET' && pathname === '/storage/schema') {
+    sendJson(res, 200, {
+      item: store.getStorageSchema()
+    });
+    return;
+  }
+
   if (method === 'GET' && pathname === '/storage/replay-manifest') {
     sendJson(res, 200, {
       item: store.getStorageReplayManifest()

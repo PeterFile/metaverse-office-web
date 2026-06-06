@@ -282,6 +282,73 @@ const CONTROLLER_SNAPSHOT_SCHEMA_FIELDS = Object.freeze({
 });
 const CONTROLLER_SNAPSHOT_SCHEMA_WRITE_BOUNDARY =
   'read-only controller snapshot schema catalog; does not inspect snapshots, collect, read runtime sources, append records, or expose control-plane actions';
+const STORAGE_SCHEMA_ROUTES = Object.freeze([
+  Object.freeze({
+    name: 'replay_manifest',
+    path: '/storage/replay-manifest',
+    supported_filters: Object.freeze([])
+  }),
+  Object.freeze({
+    name: 'index_health',
+    path: '/storage/index-health',
+    supported_filters: Object.freeze([])
+  }),
+  Object.freeze({
+    name: 'checkpoint_summary',
+    path: '/accountability/replay/checkpoint-summary',
+    supported_filters: Object.freeze([])
+  }),
+  Object.freeze({
+    name: 'checkpoint_log',
+    path: '/accountability/replay/checkpoint-log',
+    supported_filters: Object.freeze([
+      'limit',
+      'record_kind',
+      'evidence_id',
+      'collector_snapshot_id',
+      'correlation_id',
+      'source_kind'
+    ])
+  })
+]);
+const STORAGE_SCHEMA_FIELDS = Object.freeze({
+  replay_manifest: Object.freeze([
+    'record_count',
+    'record_kind_buckets',
+    'evidence_summary',
+    'canonical_record_hash'
+  ]),
+  index_health: Object.freeze([
+    'backend',
+    'status',
+    'record_count',
+    'record_index_count',
+    'record_evidence_ref_count',
+    'record_index_drift_count',
+    'record_evidence_ref_drift_count',
+    'evidence_query_probe_count',
+    'evidence_query_probe_drift_count',
+    'evidence_query_probe_status',
+    'sidecar_status',
+    'record_kind_buckets',
+    'latest_record_ts'
+  ]),
+  checkpoint_summary: Object.freeze([
+    'record_count',
+    'event_count',
+    'heartbeat_count',
+    'evidence_record_count',
+    'collector_snapshot_count',
+    'record_kind_buckets',
+    'latest_event',
+    'latest_heartbeat',
+    'latest_evidence_record',
+    'latest_collector_snapshot'
+  ]),
+  checkpoint_log: Object.freeze(['append_index', 'record_kind', 'checkpoint'])
+});
+const STORAGE_SCHEMA_WRITE_BOUNDARY =
+  'read-only storage schema catalog; does not inspect replayed records, run storage probes, collect runtime sources, or append records';
 const execFileAsync = promisify(execFile);
 const SEVERITY_RANK = Object.freeze({
   normal: 0,
@@ -1136,6 +1203,24 @@ class PrototypeStore {
       records: this.records,
       recordLog: this.recordLog
     });
+  }
+
+  getStorageSchema() {
+    return {
+      routes: STORAGE_SCHEMA_ROUTES.map((route) => ({
+        name: route.name,
+        path: route.path,
+        supported_filters: [...route.supported_filters]
+      })),
+      route_fields: Object.fromEntries(
+        Object.entries(STORAGE_SCHEMA_FIELDS).map(([routeName, fields]) => [routeName, [...fields]])
+      ),
+      limit: {
+        default: 50,
+        max: 200
+      },
+      route_write_boundary: STORAGE_SCHEMA_WRITE_BOUNDARY
+    };
   }
 
   listReplayCheckpointLog(filters = {}) {

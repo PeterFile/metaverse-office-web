@@ -8412,6 +8412,74 @@ test('GET /evidence-records/projection-audit returns count-only safety counters 
   }
 });
 
+test('GET /evidence-records append cursor filters compose with exact filters and stay read-only', async (t) => {
+  let collectCount = 0;
+  const controllerSnapshotCollector = {
+    async collectSnapshot() {
+      collectCount += 1;
+      throw new Error('GET /evidence-records append cursor must not collect');
+    }
+  };
+  const { baseUrl, store, storeFile } = await createHarness(t, { controllerSnapshotCollector });
+
+  await store.appendCollectorReport(createRouteParityCollectorReport());
+  const fileBeforeRead = await readFile(storeFile, 'utf8');
+  const countsBeforeRead = store.getCounts();
+
+  const appendOrdered = await requestJson(
+    `${baseUrl}/evidence-records?source_kind=workspace_file&limit=10`
+  );
+  assert.equal(appendOrdered.response.status, 200);
+  assert.equal(appendOrdered.body.items.length >= 2, true);
+
+  const afterAppendIndex = appendOrdered.body.items[0].append_index;
+  const newestWorkspace = await requestJson(
+    `${baseUrl}/evidence-records?source_kind=workspace_file&newest_first=true&limit=10`
+  );
+  const expectedAfterCursor = newestWorkspace.body.items
+    .filter((record) => record.append_index > afterAppendIndex)
+    .slice(0, 1)
+    .map((record) => record.append_index);
+
+  const afterCursor = await requestJson(
+    `${baseUrl}/evidence-records?source_kind=workspace_file&after_append_index=${afterAppendIndex}&newest_first=true&limit=1`
+  );
+  assert.equal(afterCursor.response.status, 200);
+  assert.deepEqual(
+    afterCursor.body.items.map((record) => record.append_index),
+    expectedAfterCursor
+  );
+  assert.equal(afterCursor.body.items.every((record) => record.source_kind === 'workspace_file'), true);
+
+  const beforeAppendIndex = appendOrdered.body.items.at(-1).append_index;
+  const expectedBeforeCursor = appendOrdered.body.items
+    .filter((record) => record.append_index < beforeAppendIndex)
+    .map((record) => record.append_index);
+  const beforeCursor = await requestJson(
+    `${baseUrl}/evidence-records?source_kind=workspace_file&before_append_index=${beforeAppendIndex}&limit=10`
+  );
+  assert.equal(beforeCursor.response.status, 200);
+  assert.deepEqual(
+    beforeCursor.body.items.map((record) => record.append_index),
+    expectedBeforeCursor
+  );
+
+  const cursorCanary = `${afterAppendIndex}.0-token=cursor-secret`;
+  const invalidCursor = await requestJson(
+    `${baseUrl}/evidence-records?source_kind=workspace_file&after_append_index=${encodeURIComponent(cursorCanary)}&limit=10`
+  );
+  assert.equal(invalidCursor.response.status, 200);
+  assert.deepEqual(
+    invalidCursor.body.items.map((record) => record.append_index),
+    appendOrdered.body.items.map((record) => record.append_index)
+  );
+  assert.equal(JSON.stringify(invalidCursor.body).includes(cursorCanary), false);
+
+  assert.equal(collectCount, 0);
+  assert.deepEqual(store.getCounts(), countsBeforeRead);
+  assert.equal(await readFile(storeFile, 'utf8'), fileBeforeRead);
+});
+
 test('GET /evidence-records lists stored evidence records read-only with exact filters', async (t) => {
   let collectCount = 0;
   const controllerSnapshotCollector = {

@@ -546,6 +546,64 @@ function assertNoReadOnlyRuntimeInputLeak(payload, route) {
   }
 }
 
+const READ_ONLY_ROUTE_BOUNDARY_SAFE_EVIDENCE_ID = 'ev_route_boundary_safe';
+const READ_ONLY_ROUTE_BOUNDARY_HOSTILE_ID = SAFE_ROUTE_HOSTILE_CANARIES.join(' ');
+
+const READ_ONLY_ROUTE_BOUNDARY_WRITE_METHODS = [
+  'appendEvent',
+  'appendHeartbeat',
+  'appendCollectorReport'
+];
+
+function withHostileRouteBoundaryQuery(pathname) {
+  const separator = pathname.includes('?') ? '&' : '?';
+  return `${pathname}${separator}ignored_hostile_id=${encodeURIComponent(
+    READ_ONLY_ROUTE_BOUNDARY_HOSTILE_ID
+  )}`;
+}
+
+function createReadOnlyRouteBoundaryStore(route) {
+  const calls = [];
+  const methods = route.methods;
+
+  return {
+    calls,
+    store: new Proxy(
+      {},
+      {
+        get(_target, property) {
+          if (typeof property !== 'string') {
+            return undefined;
+          }
+
+          return (...args) => {
+            calls.push(property);
+
+            if (READ_ONLY_ROUTE_BOUNDARY_WRITE_METHODS.includes(property)) {
+              throw new Error(`${route.name} called write method ${property}`);
+            }
+
+            const method = methods[property];
+            if (!method) {
+              throw new Error(`${route.name} crossed route boundary into ${property}`);
+            }
+
+            return method(...args);
+          };
+        }
+      }
+    )
+  };
+}
+
+function createReadOnlyRouteBoundaryEvidenceRecord() {
+  return {
+    evidence_id: READ_ONLY_ROUTE_BOUNDARY_SAFE_EVIDENCE_ID,
+    agent_id: 'app-engineering',
+    evidence_ref: 'route-boundary-safe-ref'
+  };
+}
+
 function createSafeRouteCanaryCollectorReport() {
   return {
     collected_at: '2026-03-09T18:06:00.000Z',
@@ -9972,6 +10030,141 @@ test('GET read route purity matrix leaves replay records and checkpoints unchang
   assert.deepEqual(store.getReplayCheckpointSummary(), before.checkpoint);
   assert.deepEqual(store.listReplayCheckpointLog({ limit: '3' }), before.checkpointLog);
   assert.equal(await readFile(storeFile, 'utf8'), before.file);
+  assert.equal(collectCount, 0);
+});
+
+test('read-only GET route boundary matrix non-echoes hostile ids and stays collection-free', async (t) => {
+  let collectCount = 0;
+  const controllerSnapshotCollector = {
+    async collectSnapshot() {
+      collectCount += 1;
+      throw new Error('read-only route boundary matrix must not collect runtime evidence');
+    }
+  };
+  const safeRecord = createReadOnlyRouteBoundaryEvidenceRecord();
+  const safeItem = { label: 'route-boundary-safe' };
+  const safeList = [safeItem];
+  const safeEvidenceList = [safeRecord];
+  const safeNull = () => null;
+  const safeObject = () => safeItem;
+  const routes = [
+    ['inventory route: evidence records schema', '/evidence-records/schema?limit=1', 'getEvidenceRecordsSchema'],
+    [
+      'list route: evidence records',
+      '/evidence-records?agent_id=app-engineering&source_kind=workspace_file&limit=1',
+      'listEvidenceRecords',
+      () => safeEvidenceList
+    ],
+    [
+      'detail route: evidence record',
+      `/evidence-records/${encodeURIComponent(safeRecord.evidence_id)}`,
+      'getEvidenceRecord',
+      () => safeRecord
+    ],
+    [
+      'non-echo detail route: unknown hostile evidence id',
+      `/evidence-records/${encodeURIComponent(READ_ONLY_ROUTE_BOUNDARY_HOSTILE_ID)}`,
+      'getEvidenceRecord',
+      safeNull,
+      404
+    ],
+    [
+      'ref-rollup route',
+      '/evidence-records/ref-rollup?agent_id=app-engineering&limit=1',
+      'getEvidenceRefRollup'
+    ],
+    [
+      'input-proof-summary route',
+      '/evidence-records/input-proof-summary?agent_id=app-engineering&limit=1',
+      'getEvidenceInputProofSummary'
+    ],
+    ['inventory route: agent evidence-spine schema', '/agents/evidence-spine/schema?limit=1', 'getAgentsEvidenceSpineSchema'],
+    [
+      'agent evidence-spine summary route',
+      '/agents/evidence-spine/summary?agent_id=app-engineering&limit=1',
+      'getAgentEvidenceSpineSummary'
+    ],
+    [
+      'agent evidence-spine source-matrix route',
+      '/agents/evidence-spine/source-matrix?agent_id=app-engineering&limit=1',
+      'getAgentEvidenceSourceStatusMatrix'
+    ],
+    [
+      'agent evidence-spine detail route',
+      '/agents/app-engineering/evidence-spine?source_kind=workspace_file&limit=1',
+      'getAgentEvidenceSpine'
+    ],
+    [
+      'non-echo agent evidence-spine route: unknown hostile agent id',
+      `/agents/${encodeURIComponent(READ_ONLY_ROUTE_BOUNDARY_HOSTILE_ID)}/evidence-spine`,
+      'getAgentEvidenceSpine',
+      safeNull,
+      404
+    ],
+    ['inventory route: runtime source-gaps schema', '/runtime/source-gaps/schema?limit=1', 'getRuntimeSourceGapsSchema'],
+    ['source-gaps list route', '/runtime/source-gaps?agent_id=app-engineering&limit=1', 'listRuntimeSourceGaps', () => safeList],
+    ['source-gaps summary route', '/runtime/source-gaps/summary?agent_id=app-engineering&limit=1', 'getRuntimeSourceGapsSummary'],
+    ['source-gaps agent-summary route', '/runtime/source-gaps/agent-summary?agent_id=app-engineering&limit=1', 'getRuntimeSourceGapAgentSummary'],
+    ['source-gaps lifecycle route', '/runtime/source-gaps/lifecycle?agent_id=app-engineering&limit=1', 'getRuntimeSourceGapLifecycle'],
+    ['source-gaps trend route', '/runtime/source-gaps/trend?agent_id=app-engineering&limit=1', 'getRuntimeSourceGapTrend'],
+    [
+      'source-context route',
+      `/evidence-records/${encodeURIComponent(safeRecord.evidence_id)}/source-context`,
+      'getEvidenceSourceContext'
+    ],
+    [
+      'non-echo source-context route: unknown hostile evidence id',
+      `/evidence-records/${encodeURIComponent(READ_ONLY_ROUTE_BOUNDARY_HOSTILE_ID)}/source-context`,
+      'getEvidenceSourceContext',
+      safeNull,
+      404
+    ],
+    [
+      'replay-window route',
+      `/evidence-records/${encodeURIComponent(safeRecord.evidence_id)}/replay-window?before=1&after=1`,
+      'getEvidenceReplayWindow'
+    ],
+    [
+      'non-echo replay-window route: unknown hostile evidence id',
+      `/evidence-records/${encodeURIComponent(READ_ONLY_ROUTE_BOUNDARY_HOSTILE_ID)}/replay-window`,
+      'getEvidenceReplayWindow',
+      safeNull,
+      404
+    ],
+    ['storage replay-manifest route', '/storage/replay-manifest', 'getStorageReplayManifest'],
+    ['storage index-health route', '/storage/index-health', 'getStorageIndexHealth'],
+    ['inventory route: controller snapshot schema', '/collectors/controller-snapshot/schema?limit=1', 'getControllerSnapshotSchema']
+  ];
+
+  for (const [name, pathname, methodName, method = safeObject, status = 200] of routes) {
+    await t.test(name, async () => {
+      const route = {
+        name,
+        methods: {
+          [methodName]: method
+        }
+      };
+      const { store, calls } = createReadOnlyRouteBoundaryStore(route);
+      const response = await requestJsonDirect({
+        url: withHostileRouteBoundaryQuery(pathname),
+        store,
+        controllerSnapshotCollector
+      });
+
+      assert.equal(response.response.status, status, name);
+      assert.deepEqual(calls, [methodName], name);
+      for (const writeMethod of READ_ONLY_ROUTE_BOUNDARY_WRITE_METHODS) {
+        assert.equal(calls.includes(writeMethod), false, `${name} called ${writeMethod}`);
+      }
+      assertNoSafeRouteCanaries(response.body, name);
+      assert.equal(
+        response.text.includes(READ_ONLY_ROUTE_BOUNDARY_HOSTILE_ID),
+        false,
+        `${name} echoed hostile id matrix`
+      );
+    });
+  }
+
   assert.equal(collectCount, 0);
 });
 

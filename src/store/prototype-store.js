@@ -47,6 +47,14 @@ const TASK_EVIDENCE_SOURCE_KINDS = new Set([
 const RUNTIME_SOURCE_GAP_TRANSITION_SOURCE_KINDS = Object.freeze(
   EVIDENCE_RECORD_SOURCE_KINDS.filter((sourceKind) => !TASK_EVIDENCE_SOURCE_KINDS.has(sourceKind))
 );
+const RUNTIME_INPUT_SOURCE_FAMILIES = Object.freeze({
+  hermes_runtime_sources: Object.freeze(['hermes_profile', 'hermes_session']),
+  task_evidence_sources: Object.freeze([...TASK_EVIDENCE_SOURCE_KINDS])
+});
+const RUNTIME_INPUT_SOURCE_KINDS = Object.freeze([
+  ...RUNTIME_INPUT_SOURCE_FAMILIES.hermes_runtime_sources,
+  ...RUNTIME_INPUT_SOURCE_FAMILIES.task_evidence_sources
+]);
 const SAFE_TASK_EVIDENCE_VALUE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/;
 const TASK_EVIDENCE_WARNING_CODES = new Set(['agent_id suppressed']);
 const UNSAFE_TASK_EVIDENCE_VALUE_PATTERNS = Object.freeze([
@@ -2098,6 +2106,45 @@ class PrototypeStore {
     return audit;
   }
 
+  getRuntimeInputEvidenceWatermark() {
+    const watermark = createEmptyRuntimeInputEvidenceWatermark();
+
+    for (const record of this.evidenceRecords) {
+      const sourceFamily = getRuntimeInputSourceFamily(record.source_kind);
+      if (!sourceFamily) {
+        continue;
+      }
+
+      const inputProof = projectEvidenceInputProof(record);
+      if (!inputProof) {
+        continue;
+      }
+
+      watermark.input_evidence_count += 1;
+      incrementKnownBucket(watermark.source_family_buckets, sourceFamily);
+      incrementKnownBucket(watermark.source_kind_buckets, record.source_kind);
+      incrementKnownBucket(watermark.source_format_buckets, inputProof.source_format);
+      watermark.latest_observed_at = getLatestEvidenceRecordIsoValue(
+        watermark.latest_observed_at,
+        record.observed_at
+      );
+      watermark.latest_collected_at = getLatestEvidenceRecordIsoValue(
+        watermark.latest_collected_at,
+        record.collected_at
+      );
+      watermark.max_source_input_ordinal = maxSafeOrdinal(
+        watermark.max_source_input_ordinal,
+        inputProof.source_input_ordinal
+      );
+      watermark.max_source_file_ordinal = maxSafeOrdinal(
+        watermark.max_source_file_ordinal,
+        inputProof.source_file_ordinal
+      );
+    }
+
+    return watermark;
+  }
+
   getEvidenceRefRollup(filters = {}) {
     const { records, limit } = this.#filterEvidenceRecords(filters);
     const groups = new Map();
@@ -3673,6 +3720,46 @@ function boundEvidenceInputProofSummary(summary, limit) {
       limit
     )
   };
+}
+
+function createEmptyRuntimeInputEvidenceWatermark() {
+  return {
+    input_evidence_count: 0,
+    source_family_buckets: createZeroBuckets(Object.keys(RUNTIME_INPUT_SOURCE_FAMILIES)),
+    source_kind_buckets: createZeroBuckets(RUNTIME_INPUT_SOURCE_KINDS),
+    latest_collected_at: null,
+    latest_observed_at: null,
+    max_source_input_ordinal: null,
+    max_source_file_ordinal: null,
+    source_format_buckets: {
+      json_array: 0,
+      jsonl: 0
+    }
+  };
+}
+
+function getRuntimeInputSourceFamily(sourceKind) {
+  if (RUNTIME_INPUT_SOURCE_FAMILIES.hermes_runtime_sources.includes(sourceKind)) {
+    return 'hermes_runtime_sources';
+  }
+
+  if (TASK_EVIDENCE_SOURCE_KINDS.has(sourceKind)) {
+    return 'task_evidence_sources';
+  }
+
+  return null;
+}
+
+function maxSafeOrdinal(currentValue, nextValue) {
+  if (!Number.isSafeInteger(nextValue) || nextValue < 1) {
+    return currentValue;
+  }
+
+  if (!Number.isSafeInteger(currentValue)) {
+    return nextValue;
+  }
+
+  return Math.max(currentValue, nextValue);
 }
 
 function sortNumericBucketKeys(buckets, limit) {

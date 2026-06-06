@@ -440,6 +440,13 @@ async function handleRequest({
     return;
   }
 
+  if (method === 'GET' && pathname === '/runtime/input-evidence-watermark') {
+    sendJson(res, 200, {
+      item: store.getRuntimeInputEvidenceWatermark()
+    });
+    return;
+  }
+
   if (method === 'GET' && pathname === '/peer-watch/alerts') {
     sendJson(res, 200, {
       items: store.listPeerWatchAlerts({

@@ -8335,6 +8335,132 @@ test('GET /runtime/input-inventory exposes bounded config state without reading 
   assert.equal(collectCount, 0);
 });
 
+test('GET /runtime/input-evidence-watermark returns replayed evidence metadata watermark', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'metaverse-office-watermark-'));
+  const storeFile = path.join(root, 'prototype-store.jsonl');
+  const records = [
+    {
+      evidence_id: 'ev_route_watermark_hermes',
+      observed_at: '2026-05-20T01:02:00.000Z',
+      collected_at: '2026-05-20T01:04:00.000Z',
+      agent_id: 'app-engineering',
+      source_kind: 'hermes_profile',
+      evidence_ref: 'hermes://profile/route-watermark-secret',
+      evidence_role: 'runtime_presence',
+      source_status: 'observed',
+      output_candidate: false,
+      collector_snapshot_id: 'collector-snapshot:2026-05-20T01:04:00.000Z',
+      correlation_id: 'collector-snapshot:2026-05-20T01:04:00.000Z',
+      degraded_reasons: ['raw degraded reason'],
+      metadata: {
+        profile_id: 'route-watermark-secret',
+        source_provenance: {
+          source_format: 'json_array',
+          source_index: 0,
+          source_input_ordinal: 2,
+          source_file_ordinal: 1,
+          raw_path: '/tmp/route-watermark-secret/hermes.json'
+        }
+      }
+    },
+    {
+      evidence_id: 'ev_route_watermark_task',
+      observed_at: '2026-05-20T01:03:00.000Z',
+      collected_at: '2026-05-20T01:05:00.000Z',
+      agent_id: null,
+      source_kind: 'slack_fixture',
+      evidence_ref: 'task://slack_fixture/route-watermark-task-secret',
+      evidence_role: 'task_reference',
+      source_status: 'observed',
+      output_candidate: false,
+      collector_snapshot_id: 'collector-snapshot:2026-05-20T01:05:00.000Z',
+      correlation_id: 'collector-snapshot:2026-05-20T01:05:00.000Z',
+      degraded_reasons: ['raw degraded reason'],
+      metadata: {
+        task_ref: 'route-watermark-task-secret',
+        source_provenance: {
+          source_format: 'jsonl',
+          source_index: 4,
+          line: 5,
+          source_input_ordinal: 7,
+          source_file_ordinal: 3,
+          payload: 'token=route-watermark-secret'
+        }
+      }
+    }
+  ];
+  await writeFile(
+    storeFile,
+    records
+      .map((payload) => JSON.stringify({ kind: 'evidence_record', payload }))
+      .join('\n') + '\n'
+  );
+  const store = await createPrototypeStore({ filePath: storeFile });
+  const before = {
+    counts: store.getCounts(),
+    file: await readFile(storeFile, 'utf8')
+  };
+  let collectCount = 0;
+
+  const response = await requestJsonDirect({
+    url: '/runtime/input-evidence-watermark?token=/tmp/route-watermark-secret&payload=<script>',
+    store,
+    controllerSnapshotCollector: {
+      async collectSnapshot() {
+        collectCount += 1;
+        throw new Error('GET /runtime/input-evidence-watermark must not collect');
+      }
+    }
+  });
+
+  assert.equal(response.response.status, 200);
+  assert.deepEqual(response.body, {
+    item: {
+      input_evidence_count: 2,
+      source_family_buckets: {
+        hermes_runtime_sources: 1,
+        task_evidence_sources: 1
+      },
+      source_kind_buckets: {
+        hermes_profile: 1,
+        hermes_session: 0,
+        kanban_fixture: 0,
+        linear_fixture: 0,
+        slack_fixture: 1,
+        task_fixture: 0
+      },
+      latest_collected_at: '2026-05-20T01:05:00.000Z',
+      latest_observed_at: '2026-05-20T01:03:00.000Z',
+      max_source_input_ordinal: 7,
+      max_source_file_ordinal: 3,
+      source_format_buckets: {
+        json_array: 1,
+        jsonl: 1
+      }
+    }
+  });
+
+  const serialized = JSON.stringify(response.body);
+  for (const unsafeFragment of [
+    'evidence_id',
+    'evidence_ref',
+    'metadata',
+    'degraded_reasons',
+    '/tmp/route-watermark-secret',
+    '<script>',
+    'hermes://',
+    'task://',
+    'route-watermark-secret',
+    'route-watermark-task-secret',
+    'token='
+  ]) {
+    assert.equal(serialized.includes(unsafeFragment), false, unsafeFragment);
+  }
+  assert.deepEqual(store.getCounts(), before.counts);
+  assert.equal(await readFile(storeFile, 'utf8'), before.file);
+  assert.equal(collectCount, 0);
+});
+
 test('GET static schema and aggregate routes are not swallowed by dynamic detail fallbacks', async () => {
   const calls = [];
   const responseFor = (method) => {

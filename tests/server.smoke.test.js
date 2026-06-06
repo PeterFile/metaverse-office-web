@@ -13,7 +13,12 @@ const {
   createHermesRuntimeSourcesFileReader
 } = require('../src/collectors/controller-snapshot');
 const { SEED_AGENTS } = require('../src/domain');
-const { createAppServer, formatPublicError, handleRequest } = require('../src/server');
+const {
+  MAX_WRITE_JSON_BODY_BYTES,
+  createAppServer,
+  formatPublicError,
+  handleRequest
+} = require('../src/server');
 const { createPrototypeStore } = require('../src/store/prototype-store');
 const {
   taskEvidenceFileReaderFrom,
@@ -5182,6 +5187,107 @@ test('write endpoints reject missing headers, invalid payloads, and actor-bounda
 
   assert.equal(invalidHeartbeat.response.status, 422);
   assert.match(invalidHeartbeat.body.error, /validation_failed/);
+});
+
+test('write endpoints reject oversized bodies before append', async () => {
+  const oversizedCanaries = [
+    '/tmp/private/request-body.json',
+    'tmux://private-session/0.0',
+    'hermes://profile/private-runtime',
+    'session_ref=private-session',
+    'profile_id=private-profile',
+    'token=collector-secret',
+    'https://hooks.example.invalid/private',
+    '{"raw_payload":true}',
+    'control-plane'
+  ];
+  const oversizedBody = JSON.stringify({
+    canary: oversizedCanaries.join(' '),
+    filler: 'x'.repeat(MAX_WRITE_JSON_BODY_BYTES)
+  });
+  const cases = [
+    {
+      url: '/events',
+      headers: {
+        'content-type': 'application/json',
+        'x-actor-id': 'team-lead'
+      }
+    },
+    {
+      url: '/heartbeats',
+      headers: {
+        'content-type': 'application/json',
+        'x-actor-id': 'app-engineering'
+      }
+    },
+    {
+      url: '/collectors/controller-snapshot',
+      headers: {
+        'content-type': 'application/json',
+        'x-actor-id': 'team-lead'
+      }
+    }
+  ];
+
+  for (const testCase of cases) {
+    let collectCalled = false;
+    const store = await createDirectStore();
+    const beforeCounts = getAppendCounts(store);
+    const response = await requestJsonDirect({
+      url: testCase.url,
+      store,
+      method: 'POST',
+      headers: testCase.headers,
+      body: oversizedBody,
+      controllerSnapshotCollector: {
+        async collectSnapshot() {
+          collectCalled = true;
+          return createRouteParityCollectorReport();
+        }
+      }
+    });
+
+    assert.equal(response.response.status, 413);
+    assert.deepEqual(response.body, {
+      error: 'request_body_too_large',
+      details: 'request_body_too_large'
+    });
+    assertNoPartialCollectorAppend(store, beforeCounts);
+    assert.equal(collectCalled, false);
+
+    const serialized = JSON.stringify(response.body);
+    for (const canary of oversizedCanaries) {
+      assert.equal(serialized.includes(canary), false, `${testCase.url} leaked ${canary}`);
+    }
+  }
+});
+
+test('oversized malformed JSON is rejected before invalid_json parsing', async () => {
+  const store = await createDirectStore();
+  const oversizedMalformedBody = `{"filler":"${'x'.repeat(MAX_WRITE_JSON_BODY_BYTES)}`;
+
+  const response = await requestJsonDirect({
+    url: '/events',
+    store,
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-actor-id': 'team-lead'
+    },
+    body: oversizedMalformedBody
+  });
+
+  assert.equal(response.response.status, 413);
+  assert.deepEqual(response.body, {
+    error: 'request_body_too_large',
+    details: 'request_body_too_large'
+  });
+  assertNoPartialCollectorAppend(store, {
+    event_count: 0,
+    heartbeat_count: 0,
+    evidence_record_count: 0,
+    collector_snapshot_count: 0
+  });
 });
 
 test('POST /events allows team-lead task dispatch without advancing meaningful-output freshness', async (t) => {

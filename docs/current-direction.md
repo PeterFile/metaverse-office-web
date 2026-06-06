@@ -66,6 +66,14 @@ Scoreable near-term slices for this milestone:
 - World-first operator workflow: selected-agent peek, source-gap pins, evidence ledger, replay drilldown, and legend/HUD surfaces must stay compact, CTA-gated, and safe-labeled, with AI Town as the primary layer and Hub/drilldowns used only for explicit inspection.
 - Cross-surface leak guards: tests should cover forbidden visible strings across peek, HUD, legend, evidence ledger, source context, and replay surfaces, including local paths, `tmux://`, `hermes://`, tokens, webhook-shaped strings, raw metadata, and control-plane language.
 
+Additional scoreable delivery checklist for the next implementation batch:
+
+- Evidence replay navigation: append-order cursor filters and collector snapshot append proof must use safe numeric anchors only, preserve JSONL/SQLite replay agreement, and avoid raw id/ref/path/payload disclosure.
+- Runtime input accountability: input inventory, evidence watermarks, and mapping/reason summaries must be derived from configuration counts or replayed evidence only; they must not read sources during GETs or expose configured paths, filenames, env values, runtime payloads, or liveness/productivity claims.
+- Route/read boundary verification: read-only schema, summary, detail, source-context, replay-window, storage, and runtime inventory routes must prove no append, no collection, and non-echo behavior for hostile ids.
+- Operator-world workflow verification: selected-agent evidence navigation and lazy-read smoke coverage must stay CTA-gated, Hub-light, world-first, and free of raw paths, `tmux://`, `hermes://`, token/webhook-shaped strings, raw metadata, and control-plane language.
+- Claim accountability aggregates: any office/agent/incident claim audit must expose only counts and safe buckets, with missing evidence represented as traceability gaps rather than severity, liveness, productivity, or task-routing semantics.
+
 ## Documentation discipline
 
 Every future PR that changes one of these areas must update docs in the same PR:

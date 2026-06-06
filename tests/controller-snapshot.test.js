@@ -549,6 +549,76 @@ test('collector treats injected Hermes runtime facts as source evidence only', a
   assert.deepEqual(factoryReport.items[0].hermes_runtime_observations, item.hermes_runtime_observations);
 });
 
+test('collector keeps missing and error Hermes facts as source gaps only', async () => {
+  const appAgent = SEED_AGENTS.find((agent) => agent.agent_id === 'app-engineering');
+  const fact = (sourceKind, ids, status, sourceIndex, ordinal, line = null) => ({
+    source_kind: sourceKind,
+    ...ids,
+    status,
+    degraded_reasons: [status === 'missing' ? 'Hermes source not observed' : 'Hermes source read failed'],
+    source_provenance: {
+      source_format: line ? 'jsonl' : 'json_array',
+      source_index: sourceIndex,
+      ...(line ? { line } : {}),
+      source_input_ordinal: ordinal,
+      source_file_ordinal: 1
+    }
+  });
+  const readHermesRuntimeSources = async () => [
+    fact('hermes_profile', { agent_id: 'app-engineering', profile_id: 'app-runtime-missing' }, 'missing', 0, 1),
+    fact('hermes_session', { session_ref: appAgent.session_ref }, 'error', 1, 2, 2),
+    fact('hermes_profile', { profile_id: 'orphan-runtime-missing' }, 'missing', 2, 3),
+    fact('hermes_session', { session_ref: 'orphan-runtime-error' }, 'error', 3, 4, 4)
+  ];
+
+  const report = await collectControllerSnapshot({
+    agents: [appAgent],
+    collectedAt: '2026-03-09T18:05:00.000Z',
+    readPathStat: async () => null,
+    listTmuxPanes: async () => [],
+    readHermesRuntimeSources
+  });
+
+  const item = report.items[0];
+  assert.equal(item.heartbeat.current_state, 'idle');
+  assert.equal(item.heartbeat.active_task, 'No evidence captured');
+  assert.equal(item.heartbeat.last_meaningful_output_at, null);
+  assert.equal(item.heartbeat.last_file_write_at, null);
+  assert.deepEqual(
+    item.hermes_runtime_observations.map((observation) => [
+      observation.source_kind,
+      observation.status,
+      observation.last_observed_at,
+      observation.source_provenance.source_input_ordinal
+    ]),
+    [
+      ['hermes_profile', 'missing', null, 1],
+      ['hermes_session', 'error', null, 2]
+    ]
+  );
+  assert.equal(item.source_health.hermes_profile.status, 'missing');
+  assert.equal(item.source_health.hermes_session.status, 'error');
+  assert.deepEqual(report.evidence_coverage.source_kind_buckets, {
+    workspace_file: 0,
+    workspace_root: 0,
+    tmux_observation: 0,
+    hermes_profile: 1,
+    hermes_session: 1
+  });
+  assert.deepEqual(
+    report.runtime_source_evidence.unmapped_hermes_sources.map((source) => [
+      source.source_kind,
+      source.status,
+      source.agent_id ?? null,
+      source.source_provenance.source_input_ordinal
+    ]),
+    [
+      ['hermes_profile', 'missing', null, 3],
+      ['hermes_session', 'error', null, 4]
+    ]
+  );
+});
+
 test('collector rejects unsafe injected Hermes runtime facts before mapping', async () => {
   const appAgent = {
     ...SEED_AGENTS.find((agent) => agent.agent_id === 'app-engineering'),

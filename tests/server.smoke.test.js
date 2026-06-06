@@ -5682,6 +5682,160 @@ test('collector snapshot persists opt-in task evidence without heartbeat advance
   });
 });
 
+test('collector snapshot persists opt-in Hermes gaps without heartbeat advancement', async () => {
+  const appAgent = SEED_AGENTS.find((agent) => agent.agent_id === 'app-engineering');
+  const fact = (sourceKind, ids, status, sourceIndex, ordinal, line = null) => ({
+    source_kind: sourceKind,
+    ...ids,
+    status,
+    degraded_reasons: [status === 'missing' ? 'Hermes source not observed' : 'Hermes source read failed'],
+    source_provenance: {
+      source_format: line ? 'jsonl' : 'json_array',
+      source_index: sourceIndex,
+      ...(line ? { line } : {}),
+      source_input_ordinal: ordinal,
+      source_file_ordinal: 1
+    }
+  });
+  const controllerSnapshotCollector = createControllerSnapshotCollector({
+    agents: [appAgent],
+    readPathStat: async () => null,
+    listTmuxPanes: async () => [],
+    readHermesRuntimeSources: async () => [
+      fact('hermes_profile', { agent_id: 'app-engineering', profile_id: 'app-runtime-missing' }, 'missing', 0, 1),
+      fact('hermes_session', { session_ref: appAgent.session_ref }, 'error', 1, 2, 2),
+      fact('hermes_profile', { profile_id: 'orphan-runtime-missing' }, 'missing', 2, 3),
+      fact('hermes_session', { session_ref: 'orphan-runtime-error' }, 'error', 3, 4, 4)
+    ]
+  });
+  const store = await createDirectStore();
+  const now = () => '2026-03-09T18:10:00.000Z';
+  await store.appendHeartbeat({
+    agent_id: 'app-engineering',
+    actor_id: 'app-engineering',
+    received_at: '2026-03-09T18:01:00.000Z',
+    current_state: 'coding',
+    active_task: 'Implement output boundary',
+    last_meaningful_output_at: '2026-03-09T18:00:30.000Z',
+    last_file_write_at: '2026-03-09T18:00:20.000Z',
+    current_blocker: '',
+    confidence_level: 'high',
+    reboot_recommended: false
+  });
+  const beforeCounts = store.getCounts();
+  const beforeWorkflow = store.getAgentWorkflow('app-engineering', {
+    now: now()
+  });
+
+  const collected = await requestJsonDirect({
+    url: '/collectors/controller-snapshot',
+    store,
+    controllerSnapshotCollector,
+    now,
+    method: 'POST',
+    headers: {
+      'x-actor-id': 'team-lead'
+    }
+  });
+  assert.equal(collected.response.status, 201);
+  assert.equal(collected.body.item.summary.heartbeat_count, 0);
+  assert.deepEqual(store.getCounts(), beforeCounts);
+  assert.equal(store.getAgent('runtime_unmapped'), null);
+  assert.equal(store.getAgent('app-engineering').active_task, 'Implement output boundary');
+  assert.equal(
+    store.getAgent('app-engineering').last_meaningful_output_at,
+    '2026-03-09T18:00:30.000Z'
+  );
+  const afterWorkflow = store.getAgentWorkflow('app-engineering', {
+    now: now()
+  });
+  assert.deepEqual(afterWorkflow.summary, beforeWorkflow.summary);
+  assert.equal(afterWorkflow.detail.active_task, beforeWorkflow.detail.active_task);
+  assert.equal(
+    afterWorkflow.detail.last_meaningful_output_at,
+    beforeWorkflow.detail.last_meaningful_output_at
+  );
+
+  const sourceHealth = await requestJsonDirect({
+    url: '/collectors/controller-snapshot/source-health?source_kind=hermes_profile&status=missing&limit=10',
+    store,
+    controllerSnapshotCollector,
+    now
+  });
+  assert.equal(sourceHealth.response.status, 200);
+  assert.equal(
+    sourceHealth.body.item.summary.source_kind_buckets.hermes_profile.missing,
+    1
+  );
+  assert.equal(
+    sourceHealth.body.item.agent_items[0].source_health.hermes_profile.status,
+    'missing'
+  );
+
+  const sourceGaps = await requestJsonDirect({
+    url: '/runtime/source-gaps?source_kind=hermes_session&output_candidate=false&limit=10',
+    store,
+    controllerSnapshotCollector,
+    now
+  });
+  assert.equal(sourceGaps.response.status, 200);
+  assert.deepEqual(
+    sourceGaps.body.items.map((item) => ({
+      agent_id: item.agent_id,
+      evidence_role: item.evidence_role,
+      source_status: item.source_status,
+      output_candidate: item.output_candidate,
+      unmapped: item.unmapped
+    })),
+    [
+      {
+        agent_id: 'app-engineering',
+        evidence_role: 'runtime_presence',
+        source_status: 'error',
+        output_candidate: false,
+        unmapped: false
+      },
+      {
+        agent_id: null,
+        evidence_role: 'runtime_unmapped',
+        source_status: 'error',
+        output_candidate: false,
+        unmapped: true
+      }
+    ]
+  );
+
+  const proof = await requestJsonDirect({
+    url: '/evidence-records/input-proof-summary?source_kind=hermes_session&output_candidate=false&limit=10',
+    store,
+    controllerSnapshotCollector,
+    now
+  });
+  assert.equal(proof.response.status, 200);
+  assert.equal(proof.body.item.total_count, 2);
+  assert.equal(proof.body.item.proof_count, 2);
+  assert.deepEqual(proof.body.item.source_input_ordinal_buckets, {
+    '2': 1,
+    '4': 1
+  });
+
+  const serializedPublicProof = JSON.stringify({
+    sourceHealth: sourceHealth.body,
+    sourceGaps: sourceGaps.body,
+    proof: proof.body
+  });
+  for (const unsafeFragment of [
+    'hermes://',
+    'app-runtime-missing',
+    'orphan-runtime-missing',
+    'orphan-runtime-error',
+    appAgent.session_ref,
+    '/tmp'
+  ]) {
+    assert.equal(serializedPublicProof.includes(unsafeFragment), false, unsafeFragment);
+  }
+});
+
 test('collector snapshot persists task evidence PATHS directory input with abstract provenance only', async (t) => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'metaverse-office-task-evidence-paths-'));
   const sourcesDir = path.join(root, 'task-source-dir-canary');

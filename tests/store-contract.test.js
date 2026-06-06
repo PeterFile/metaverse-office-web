@@ -6,7 +6,9 @@ const path = require('node:path');
 const { promisify } = require('node:util');
 const test = require('node:test');
 
+const { collectControllerSnapshot } = require('../src/collectors/controller-snapshot');
 const taskEvidenceSource = require('../src/collectors/task-evidence-source');
+const { SEED_AGENTS } = require('../src/domain');
 const { PrototypeStore, createPrototypeStore } = require('../src/store/prototype-store');
 
 const execFileAsync = promisify(execFile);
@@ -1821,6 +1823,97 @@ test('prototype store persists Hermes runtime source facts as read-only evidence
 
   const records = (await readFile(jsonlStoreFile, 'utf8')).trim().split('\n').map((line) => JSON.parse(line));
   assert.equal(records.filter((record) => record.kind === 'evidence_record').length, 3);
+});
+
+test('prototype store keeps Hermes missing and error facts as source gaps only', async () => {
+  const appAgent = SEED_AGENTS.find((agent) => agent.agent_id === 'app-engineering');
+  const fact = (sourceKind, ids, status, sourceIndex, ordinal, line = null) => ({
+    source_kind: sourceKind,
+    ...ids,
+    status,
+    degraded_reasons: [status === 'missing' ? 'Hermes source not observed' : 'Hermes source read failed'],
+    source_provenance: {
+      source_format: line ? 'jsonl' : 'json_array',
+      source_index: sourceIndex,
+      ...(line ? { line } : {}),
+      source_input_ordinal: ordinal,
+      source_file_ordinal: 1
+    }
+  });
+  const store = await createPrototypeStore({ filePath: await createStoreFile() });
+  await store.appendHeartbeat({
+    ...createHeartbeat(),
+    agent_id: 'app-engineering',
+    active_task: 'Implement output boundary',
+    last_meaningful_output_at: '2026-03-09T18:00:30.000Z'
+  });
+  const beforeCounts = store.getCounts();
+  const beforeWorkflow = store.getAgentWorkflow('app-engineering', { now: '2026-03-09T18:10:00.000Z' });
+
+  await store.appendCollectorReport(
+    await collectControllerSnapshot({
+      agents: [appAgent],
+      collectedAt: '2026-03-09T18:10:00.000Z',
+      readPathStat: async () => null,
+      listTmuxPanes: async () => [],
+      readHermesRuntimeSources: async () => [
+        fact('hermes_profile', { agent_id: 'app-engineering', profile_id: 'app-runtime-missing' }, 'missing', 0, 1),
+        fact('hermes_session', { session_ref: appAgent.session_ref }, 'error', 1, 2, 2),
+        fact('hermes_profile', { profile_id: 'orphan-runtime-missing' }, 'missing', 2, 3),
+        fact('hermes_session', { session_ref: 'orphan-runtime-error' }, 'error', 3, 4, 4)
+      ]
+    })
+  );
+
+  const afterWorkflow = store.getAgentWorkflow('app-engineering', { now: '2026-03-09T18:10:00.000Z' });
+  assert.deepEqual(store.getCounts(), beforeCounts);
+  assert.deepEqual(store.listEvents({ agent_id: 'app-engineering', limit: 10 }), []);
+  assert.equal(store.getAgent('app-engineering').active_task, 'Implement output boundary');
+  assert.equal(store.getAgent('app-engineering').last_meaningful_output_at, '2026-03-09T18:00:30.000Z');
+  assert.equal(store.getAgent('runtime_unmapped'), null);
+  assert.deepEqual(afterWorkflow.summary, beforeWorkflow.summary);
+  assert.equal(afterWorkflow.detail.active_task, beforeWorkflow.detail.active_task);
+
+  const hermesRecords = store
+    .listEvidenceRecords({ output_candidate: 'false', limit: 10 })
+    .filter((record) => ['hermes_profile', 'hermes_session'].includes(record.source_kind));
+  assert.deepEqual(
+    hermesRecords.map((record) => [
+      record.agent_id,
+      record.source_kind,
+      record.evidence_role,
+      record.source_status,
+      record.output_candidate,
+      record.metadata.source_provenance.source_input_ordinal
+    ]),
+    [
+      ['app-engineering', 'hermes_profile', 'runtime_presence', 'missing', false, 1],
+      ['app-engineering', 'hermes_session', 'runtime_presence', 'error', false, 2],
+      [null, 'hermes_profile', 'runtime_unmapped', 'missing', false, 3],
+      [null, 'hermes_session', 'runtime_unmapped', 'error', false, 4]
+    ]
+  );
+  assert.equal(
+    store.getRuntimeSourceGapsSummary({ source_kind: 'hermes_profile' }).source_status_buckets.missing,
+    2
+  );
+  assert.equal(
+    store.getRuntimeSourceGapsSummary({ source_kind: 'hermes_session' }).source_status_buckets.error,
+    2
+  );
+
+  const unmappedSessionRecord = hermesRecords.find(
+    (record) => record.source_kind === 'hermes_session' && record.agent_id === null
+  );
+  const unmappedSessionProvenance = store.getEvidenceProvenanceBundle(unmappedSessionRecord.evidence_id);
+  assert.deepEqual(unmappedSessionProvenance.input_proof, {
+    source_format: 'jsonl',
+    source_index: 3,
+    line: 4,
+    source_input_ordinal: 4,
+    source_file_ordinal: 1
+  });
+  assert.equal(JSON.stringify(unmappedSessionProvenance.input_proof).includes('orphan-runtime-error'), false);
 });
 
 test('prototype store persists task evidence observations as bounded read-only evidence records', async () => {

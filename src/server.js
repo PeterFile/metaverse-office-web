@@ -489,6 +489,15 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
     return;
   }
 
+  if (method === 'GET' && pathname === '/collectors/controller-snapshot/append-proof') {
+    sendJson(res, 200, {
+      item: store.getCollectorSnapshotAppendProof({
+        collector_snapshot_id: url.searchParams.get('collector_snapshot_id')
+      })
+    });
+    return;
+  }
+
   if (method === 'GET' && pathname === '/collectors/controller-snapshot/evidence-coverage') {
     sendJson(res, 200, {
       item: store.getLatestCollectorEvidenceCoverage({

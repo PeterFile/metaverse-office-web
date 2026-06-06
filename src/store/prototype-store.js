@@ -202,6 +202,11 @@ const CONTROLLER_SNAPSHOT_SCHEMA_ROUTES = Object.freeze([
     supported_filters: Object.freeze(['collector_snapshot_id'])
   }),
   Object.freeze({
+    name: 'append_proof',
+    path: '/collectors/controller-snapshot/append-proof',
+    supported_filters: Object.freeze(['collector_snapshot_id'])
+  }),
+  Object.freeze({
     name: 'evidence_coverage',
     path: '/collectors/controller-snapshot/evidence-coverage',
     supported_filters: Object.freeze(['agent_id', 'source_kind', 'confidence_level', 'limit'])
@@ -260,6 +265,19 @@ const CONTROLLER_SNAPSHOT_SCHEMA_FIELDS = Object.freeze({
     'source_kind_buckets',
     'source_health_buckets',
     'runtime_source_evidence'
+  ]),
+  append_proof: Object.freeze([
+    'has_snapshot',
+    'snapshot_append_index',
+    'evidence_record_count',
+    'first_evidence_append_index',
+    'last_evidence_append_index',
+    'ordering_status',
+    'source_kind_buckets',
+    'evidence_role_buckets',
+    'source_status_buckets',
+    'output_candidate_buckets',
+    'mapped_buckets'
   ]),
   evidence_coverage: Object.freeze([
     'collected_at',
@@ -1131,6 +1149,15 @@ class PrototypeStore {
     return projectLatestCollectorSnapshotSummary(
       findCollectorReportByIdOrLatest(this.collectorReports, this.getLatestCollectorReport(), filters)
     );
+  }
+
+  getCollectorSnapshotAppendProof(filters = {}) {
+    return projectCollectorSnapshotAppendProof({
+      records: this.records,
+      collectorReports: this.collectorReports,
+      latestReport: this.getLatestCollectorReport(),
+      filters
+    });
   }
 
   getLatestCollectorEvidenceCoverage(filters = {}) {
@@ -6428,6 +6455,93 @@ function createEmptyCollectorSnapshotSummary() {
       latest_observed_at: null
     }
   };
+}
+
+function projectCollectorSnapshotAppendProof({
+  records = [],
+  collectorReports = [],
+  latestReport = null,
+  filters = {}
+}) {
+  const report = findCollectorReportByIdOrLatest(collectorReports, latestReport, filters);
+  if (!report) {
+    return createEmptyCollectorSnapshotAppendProof();
+  }
+
+  const entries = records.map((record, index) => ({ record, appendIndex: index + 1 }));
+  const snapshotEntry = entries.find(
+    ({ record }) => record.kind === COLLECTOR_SNAPSHOT_RECORD_KIND && record.payload === report
+  );
+  if (!snapshotEntry) {
+    return createEmptyCollectorSnapshotAppendProof();
+  }
+
+  const previousSnapshotAppendIndex = entries
+    .filter(
+      ({ record, appendIndex }) =>
+        appendIndex < snapshotEntry.appendIndex && record.kind === COLLECTOR_SNAPSHOT_RECORD_KIND
+    )
+    .at(-1)?.appendIndex || 0;
+  const nextSnapshotAppendIndex = entries.find(
+    ({ record, appendIndex }) =>
+      appendIndex > snapshotEntry.appendIndex && record.kind === COLLECTOR_SNAPSHOT_RECORD_KIND
+  )?.appendIndex || Number.POSITIVE_INFINITY;
+  const collectorSnapshotId = createCollectorSnapshotId(report);
+  const evidenceEntries = entries.filter(
+    ({ record, appendIndex }) =>
+      appendIndex > previousSnapshotAppendIndex &&
+      appendIndex < nextSnapshotAppendIndex &&
+      record.kind === EVIDENCE_RECORD_KIND &&
+      record.payload?.collector_snapshot_id === collectorSnapshotId
+  );
+  const proof = createEmptyCollectorSnapshotAppendProof();
+  let orderingStatus = 'missing_evidence_records';
+  if (evidenceEntries.some(({ appendIndex }) => appendIndex > snapshotEntry.appendIndex)) {
+    orderingStatus = 'out_of_order';
+  } else if (evidenceEntries.length > 0) {
+    orderingStatus = 'ordered';
+  }
+
+  proof.has_snapshot = true;
+  proof.snapshot_append_index = snapshotEntry.appendIndex;
+  proof.evidence_record_count = evidenceEntries.length;
+  proof.first_evidence_append_index = evidenceEntries[0]?.appendIndex || null;
+  proof.last_evidence_append_index = evidenceEntries.at(-1)?.appendIndex || null;
+  proof.ordering_status = orderingStatus;
+
+  for (const { record } of evidenceEntries) {
+    addEvidenceRecordToCollectorSnapshotAppendProof(proof, record.payload || {});
+  }
+
+  return proof;
+}
+
+function createEmptyCollectorSnapshotAppendProof() {
+  return {
+    has_snapshot: false,
+    snapshot_append_index: null,
+    evidence_record_count: 0,
+    first_evidence_append_index: null,
+    last_evidence_append_index: null,
+    ordering_status: 'missing_snapshot',
+    source_kind_buckets: createZeroBuckets(EVIDENCE_RECORD_SOURCE_KINDS),
+    evidence_role_buckets: createZeroBuckets(EVIDENCE_RECORD_ROLES),
+    source_status_buckets: createZeroBuckets(EVIDENCE_RECORD_SOURCE_STATUSES),
+    output_candidate_buckets: { true: 0, false: 0 },
+    mapped_buckets: { mapped: 0, unmapped: 0 }
+  };
+}
+
+function addEvidenceRecordToCollectorSnapshotAppendProof(proof, record) {
+  incrementKnownBucket(proof.source_kind_buckets, record.source_kind);
+  incrementKnownBucket(proof.evidence_role_buckets, record.evidence_role);
+  incrementKnownBucket(proof.source_status_buckets, record.source_status);
+  proof.output_candidate_buckets[String(record.output_candidate === true)] += 1;
+  if (record.agent_id === null) {
+    proof.mapped_buckets.unmapped += 1;
+  } else if (typeof record.agent_id === 'string' && record.agent_id.length > 0) {
+    proof.mapped_buckets.mapped += 1;
+  }
 }
 
 function createCollectorSnapshotCoverageBuckets(sourceKindBuckets = {}) {

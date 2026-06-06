@@ -2957,6 +2957,11 @@ test('collector snapshot schema exposes static safe route catalog metadata', asy
       supported_filters: ['collector_snapshot_id']
     },
     {
+      name: 'append_proof',
+      path: '/collectors/controller-snapshot/append-proof',
+      supported_filters: ['collector_snapshot_id']
+    },
+    {
       name: 'evidence_coverage',
       path: '/collectors/controller-snapshot/evidence-coverage',
       supported_filters: ['agent_id', 'source_kind', 'confidence_level', 'limit']
@@ -3025,6 +3030,19 @@ test('collector snapshot schema exposes static safe route catalog metadata', asy
       'source_kind_buckets',
       'source_health_buckets',
       'runtime_source_evidence'
+    ],
+    append_proof: [
+      'has_snapshot',
+      'snapshot_append_index',
+      'evidence_record_count',
+      'first_evidence_append_index',
+      'last_evidence_append_index',
+      'ordering_status',
+      'source_kind_buckets',
+      'evidence_role_buckets',
+      'source_status_buckets',
+      'output_candidate_buckets',
+      'mapped_buckets'
     ],
     evidence_coverage: [
       'collected_at',
@@ -5296,6 +5314,92 @@ test('prototype store projects collector snapshot summary for requested snapshot
       }
     }
   );
+});
+
+test('prototype store exposes collector snapshot append proof with snapshot ordering', async () => {
+  const storeFile = await createStoreFile();
+  const store = await createPrototypeStore({ filePath: storeFile });
+  const secondReport = createCollectorReport();
+  secondReport.collected_at = '2026-03-09T18:07:00.000Z';
+  secondReport.summary.workspace_observed_count = 0;
+  secondReport.items[0].workspace_observations = [];
+  secondReport.items[0].source_health.workspace_files.status = 'observed';
+  secondReport.items[0].source_health.workspace_files.degraded_reasons = [];
+
+  const missingProof = store.getCollectorSnapshotAppendProof();
+  assert.equal(missingProof.has_snapshot, false);
+  assert.equal(missingProof.snapshot_append_index, null);
+  assert.equal(missingProof.evidence_record_count, 0);
+  assert.equal(missingProof.ordering_status, 'missing_snapshot');
+  assert.deepEqual(missingProof.output_candidate_buckets, { true: 0, false: 0 });
+  assert.deepEqual(missingProof.mapped_buckets, { mapped: 0, unmapped: 0 });
+
+  await store.appendEvent(createEvent());
+  await store.appendHeartbeat(createHeartbeat());
+  await store.appendCollectorReport(createCollectorReport());
+  await store.appendCollectorReport(secondReport);
+
+  assert.deepEqual(store.getCollectorSnapshotAppendProof(), {
+    has_snapshot: true,
+    snapshot_append_index: 13,
+    evidence_record_count: 2,
+    first_evidence_append_index: 11,
+    last_evidence_append_index: 12,
+    ordering_status: 'ordered',
+    source_kind_buckets: {
+      workspace_root: 1,
+      workspace_file: 0,
+      tmux_observation: 1,
+      hermes_profile: 0,
+      hermes_session: 0,
+      kanban_fixture: 0,
+      linear_fixture: 0,
+      slack_fixture: 0,
+      task_fixture: 0
+    },
+    evidence_role_buckets: {
+      workspace_presence: 1,
+      inbound_task: 0,
+      agent_output: 0,
+      agent_plan: 0,
+      runtime_activity: 1,
+      runtime_presence: 0,
+      runtime_unmapped: 0,
+      task_reference: 0
+    },
+    source_status_buckets: {
+      observed: 2,
+      degraded: 0,
+      missing: 0,
+      error: 0
+    },
+    output_candidate_buckets: { true: 1, false: 1 },
+    mapped_buckets: { mapped: 2, unmapped: 0 }
+  });
+
+  const historical = store.getCollectorSnapshotAppendProof({
+    collector_snapshot_id: 'collector-snapshot:2026-03-09T18:06:00.000Z'
+  });
+  assert.equal(historical.snapshot_append_index, 9);
+  assert.equal(historical.evidence_record_count, 3);
+  assert.equal(historical.first_evidence_append_index, 6);
+  assert.equal(historical.last_evidence_append_index, 8);
+  assert.equal(historical.ordering_status, 'ordered');
+
+  const unknown = store.getCollectorSnapshotAppendProof({
+    collector_snapshot_id: 'collector-snapshot:/tmp/store-contract-token-sk-live'
+  });
+  assert.equal(unknown.has_snapshot, false);
+  assert.equal(unknown.ordering_status, 'missing_snapshot');
+
+  const serialized = JSON.stringify(store.getCollectorSnapshotAppendProof());
+  assert.equal(serialized.includes('/tmp/store-contract'), false);
+  assert.equal(serialized.includes('tmux://'), false);
+  assert.equal(serialized.includes('collector-snapshot:'), false);
+  assert.equal(serialized.includes('degraded_reasons'), false);
+
+  const reloadedStore = await createPrototypeStore({ filePath: storeFile });
+  assert.deepEqual(reloadedStore.getCollectorSnapshotAppendProof(), store.getCollectorSnapshotAppendProof());
 });
 
 test('SQLite prototype store replays the same contract as JSONL and survives reload', async () => {

@@ -3430,12 +3430,14 @@ function renderSelectedEvidenceReplayWindowCard({
   replayWindow,
   replayWindowError,
   replayWindowState,
-  agentNameById
+  agentNameById,
+  onBackToEvidence
 }: {
   replayWindow: EvidenceReplayWindow | null;
   replayWindowError: string | null;
   replayWindowState: LoadState;
   agentNameById: ReadonlyMap<string, string>;
+  onBackToEvidence?: () => void;
 }) {
   if (replayWindowError && !replayWindow) {
     return (
@@ -3477,6 +3479,11 @@ function renderSelectedEvidenceReplayWindowCard({
         <strong>{`Center · ${sourceKind} · ${role} · ${status}`}</strong>
         <span>{`Bounds · before ${replayWindow.window.before} · after ${replayWindow.window.after}`}</span>
         {rows.length > 0 ? rows : <span>No adjacent replay rows.</span>}
+        {onBackToEvidence ? (
+          <button type="button" className="aitown-link-button" onClick={onBackToEvidence}>
+            Back to Evidence
+          </button>
+        ) : null}
       </div>
     </section>
   );
@@ -7182,7 +7189,8 @@ export function DetailsPanel({
         replayWindow: selectedAgentEvidenceReplayWindow,
         replayWindowError: selectedAgentEvidenceReplayWindowError,
         replayWindowState: selectedAgentEvidenceReplayWindowState,
-        agentNameById
+        agentNameById,
+        onBackToEvidence: onBackToSelectedAgentEvidenceRecord
       })}
 
       {renderSelectedAgentReplayBundleSection({

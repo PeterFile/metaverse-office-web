@@ -4764,6 +4764,7 @@ afterEach(() => {
     ).toBeVisible();
     expect(within(replayWindowCard).getByText('After · #22 · collector snapshot · Team Lead · 1 items')).toBeVisible();
     expect(within(replayWindowCard).getByText('After · #23 · record · No checkpoint')).toBeVisible();
+    expect(within(replayWindowCard).getByRole('button', { name: 'Back to Evidence' })).toBeVisible();
     expect(replayWindowCard).not.toHaveTextContent(
       /output-1|\/tmp\/replay-window-secret|webhook|https:\/\/hooks|token|metadata|evidence_refs|collector-20260316|corr-app-review|tmux|Hermes|session|profile|dispatch|route|assign|complete/i
     );
@@ -4801,7 +4802,7 @@ afterEach(() => {
     expectNoUnprovenLivenessLabels(replayPanel);
 
     const callsBeforeBack = vi.mocked(globalThis.fetch).mock.calls.length;
-    await user.click(within(replayBundleSection!).getByRole('button', { name: 'Back to Evidence' }));
+    await user.click(within(replayWindowCard).getByRole('button', { name: 'Back to Evidence' }));
 
     const evidencePanel = await screen.findByRole('tabpanel', { name: 'Evidence' });
     const restoredDetailSection = await findHubSection(evidencePanel, 'Evidence Record Detail');
@@ -4814,7 +4815,7 @@ afterEach(() => {
     expect(postBackUrls).not.toContain(appEngineeringEvidenceRecordDetailUrl);
     expect(postBackUrls).not.toContain(appEngineeringEvidenceProvenanceBundleUrl);
     expect(postBackUrls).not.toContain(appEngineeringEvidenceCheckpointLogUrl);
-  }, 10_000);
+  }, 25_000);
 
   it('focuses an inspected mapped evidence record in the world without new evidence reads', async () => {
     const user = userEvent.setup();

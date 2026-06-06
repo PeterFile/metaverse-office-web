@@ -1481,6 +1481,39 @@ test('prototype store filters replay checkpoint log by exact evidence provenance
   );
 });
 
+test('prototype store keeps append indexes stable for duplicate evidence ids', async () => {
+  const storeFile = await createStoreFile();
+  const store = await createPrototypeStore({ filePath: storeFile });
+
+  await store.appendCollectorReport(createCollectorReport());
+  await store.appendCollectorReport(createCollectorReport());
+
+  const duplicateEvidenceId = store.listEvidenceRecords({ source_kind: 'workspace_file', limit: '1' })[0]
+    .evidence_id;
+  const evidenceRecords = store.listEvidenceRecords({
+    evidence_id: duplicateEvidenceId,
+    limit: '10'
+  });
+  const checkpointLog = store.listReplayCheckpointLog({
+    evidence_id: duplicateEvidenceId,
+    limit: '10'
+  });
+
+  assert.deepEqual(evidenceRecords.map((record) => record.append_index), [5, 10]);
+  assert.deepEqual(
+    checkpointLog.map((item) => item.append_index),
+    [5, 10]
+  );
+
+  const reloadedStore = await createPrototypeStore({ filePath: storeFile });
+  assert.deepEqual(
+    reloadedStore
+      .listEvidenceRecords({ evidence_id: duplicateEvidenceId, limit: '10' })
+      .map((record) => record.append_index),
+    [5, 10]
+  );
+});
+
 test('prototype store exposes bounded replay window around selected evidence', async () => {
   const storeFile = await createStoreFile();
   const store = await createPrototypeStore({ filePath: storeFile });
@@ -1508,9 +1541,20 @@ test('prototype store exposes bounded replay window around selected evidence', a
     evidence_ref: '/tmp/store-contract/outbox.md'
   })[0];
   const replayWindow = store.getEvidenceReplayWindow(evidenceRecord.evidence_id);
+  const checkpointLog = store.listReplayCheckpointLog({
+    evidence_id: evidenceRecord.evidence_id,
+    limit: 1
+  });
 
   assert.equal(store.getEvidenceReplayWindow('missing-evidence-id'), null);
+  assert.equal(Number.isSafeInteger(evidenceRecord.append_index), true);
+  assert.equal(
+    store.getEvidenceRecord(evidenceRecord.evidence_id).append_index,
+    evidenceRecord.append_index
+  );
   assert.equal(replayWindow.center.evidence_id, evidenceRecord.evidence_id);
+  assert.equal(replayWindow.center.append_index, evidenceRecord.append_index);
+  assert.equal(checkpointLog[0].append_index, evidenceRecord.append_index);
   assert.deepEqual(replayWindow.window, { before: 2, after: 2 });
   assert.deepEqual(
     replayWindow.before.map((item) => item.append_index),
@@ -1632,7 +1676,8 @@ test('JSONL prototype store replays canonical task evidence records as read-only
   const store = await createPrototypeStore({ filePath: storeFile });
   const records = store.listEvidenceRecords({ source_kind: 'kanban_fixture' });
 
-  assert.deepEqual(records, taskEvidence.records);
+  assert.equal(Object.hasOwn(taskEvidence.records[0], 'append_index'), false);
+  assert.deepEqual(records, [{ ...taskEvidence.records[0], append_index: 1 }]);
   assert.deepEqual(store.getCounts(), {
     agent_count: 7,
     event_count: 0,

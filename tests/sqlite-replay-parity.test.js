@@ -310,6 +310,7 @@ function projectParityReadModels(store, root) {
         source_kind: 'workspace_file',
         limit: '1'
       }),
+      selectedEvidenceRecord: store.getEvidenceRecord(outputRecord.evidence_id),
       replayWindow: store.getEvidenceReplayWindow(outputRecord.evidence_id),
       provenanceBundle: store.getEvidenceProvenanceBundle(outputRecord.evidence_id)
     },
@@ -398,6 +399,14 @@ test('JSONL and SQLite stores replay evidence read models with parity', async (t
   const sqliteIndexHealth = await sqliteReloaded.getStorageIndexHealth();
 
   assert.deepEqual(sqliteProjection, jsonlProjection);
+  assert.equal(
+    jsonlProjection.selectedEvidenceRecord.append_index,
+    jsonlProjection.replayWindow.center.append_index
+  );
+  assert.equal(
+    jsonlProjection.filteredCheckpointLog[0].append_index,
+    jsonlProjection.selectedEvidenceRecord.append_index
+  );
   assert.deepEqual(sqliteManifest, jsonlManifest);
   assert.deepEqual(
     {

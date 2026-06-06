@@ -1223,7 +1223,7 @@ class PrototypeStore {
 
     return (newestFirst ? records.slice().sort(compareEvidenceRecordRecency) : records)
       .slice(0, limit)
-      .map(cloneEvidenceRecord);
+      .map((record) => this.#cloneEvidenceRecordWithAppendIndex(record));
   }
 
   getEvidenceRecordsSchema() {
@@ -1286,7 +1286,7 @@ class PrototypeStore {
     const record = this.evidenceRecords.find(
       (evidenceRecord) => evidenceRecord.evidence_id === normalizedEvidenceId
     );
-    return record ? cloneEvidenceRecord(record) : null;
+    return record ? this.#cloneEvidenceRecordWithAppendIndex(record) : null;
   }
 
   getEvidenceProvenanceBundle(evidenceId) {
@@ -1771,6 +1771,21 @@ class PrototypeStore {
 
   #filterEvidenceRecords(filters = {}) {
     return filterEvidenceRecords(this.evidenceRecords, filters);
+  }
+
+  #cloneEvidenceRecordWithAppendIndex(record) {
+    return cloneEvidenceRecord(record, this.#findEvidenceRecordAppendIndex(record));
+  }
+
+  #findEvidenceRecordAppendIndex(record) {
+    if (!record) {
+      return null;
+    }
+
+    const appendIndex = this.records.findIndex(
+      (candidate) => candidate.kind === EVIDENCE_RECORD_KIND && candidate.payload === record
+    );
+    return appendIndex === -1 ? null : appendIndex + 1;
   }
 
   getCounts() {
@@ -5122,12 +5137,18 @@ function createEvidenceRecordId({ collectorSnapshotId, agentId, sourceKind, evid
   ].join('_');
 }
 
-function cloneEvidenceRecord(record) {
-  return {
+function cloneEvidenceRecord(record, appendIndex = null) {
+  const clone = {
     ...record,
     degraded_reasons: Array.isArray(record.degraded_reasons) ? record.degraded_reasons.slice() : [],
     metadata: record.metadata && typeof record.metadata === 'object' ? { ...record.metadata } : {}
   };
+
+  if (Number.isSafeInteger(appendIndex)) {
+    clone.append_index = appendIndex;
+  }
+
+  return clone;
 }
 
 function projectReplayCheckpointSummary({

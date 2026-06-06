@@ -333,6 +333,7 @@ test('collector reports source health for missing tmux sessions and unmapped tmu
         session_name: 'unseeded-runtime-session',
         observed_count: 1,
         last_observed_at: '2026-03-09T18:04:00.000Z',
+        mapping_decision: 'non_seeded_agent',
         pane_refs: ['tmux://unseeded-runtime-session/0.0']
       }
     ]
@@ -532,6 +533,7 @@ test('collector treats injected Hermes runtime facts as source evidence only', a
       session_ref: null,
       observed_at: '2026-03-09T18:04:00.000Z',
       status: 'observed',
+      mapping_decision: 'unmapped_unknown',
       degraded_reasons: []
     }
   ]);
@@ -833,6 +835,7 @@ test('collector treats injected task evidence facts as evidence only', async () 
       correlation_id: 'corr-unmapped',
       evidence_ref: 'task://linear_fixture/TASK-201',
       source_index: 1,
+      mapping_decision: 'unmapped_unknown',
       source_provenance: {
         source_format: 'jsonl',
         source_index: 1,
@@ -936,13 +939,14 @@ test('collector degrades duplicate Hermes runtime mappings without promoting uns
       source.source_kind,
       source.evidence_ref,
       source.status,
+      source.mapping_decision,
       source.degraded_reasons
     ]),
     [
-      ['hermes_profile', 'hermes://profile/app-profile-primary', 'degraded', ['Hermes profile duplicate mapping']],
-      ['hermes_profile', 'hermes://profile/app-profile-shadow', 'degraded', ['Hermes profile duplicate mapping']],
-      ['hermes_session', `hermes://session/${appAgent.session_ref}`, 'degraded', ['Hermes session duplicate mapping']],
-      ['hermes_session', `hermes://session/${appAgent.session_ref}#duplicate`, 'degraded', ['Hermes session duplicate mapping']]
+      ['hermes_profile', 'hermes://profile/app-profile-primary', 'degraded', 'duplicate_source', ['Hermes profile duplicate mapping']],
+      ['hermes_profile', 'hermes://profile/app-profile-shadow', 'degraded', 'duplicate_source', ['Hermes profile duplicate mapping']],
+      ['hermes_session', `hermes://session/${appAgent.session_ref}`, 'degraded', 'duplicate_source', ['Hermes session duplicate mapping']],
+      ['hermes_session', `hermes://session/${appAgent.session_ref}#duplicate`, 'degraded', 'duplicate_source', ['Hermes session duplicate mapping']]
     ]
   );
 
@@ -955,13 +959,15 @@ test('collector degrades duplicate Hermes runtime mappings without promoting uns
       agent_id: record.agent_id,
       evidence_role: record.evidence_role,
       output_candidate: record.output_candidate,
-      evidence_ref: record.evidence_ref
+      evidence_ref: record.evidence_ref,
+      mapping_decision: record.mapping_decision
     })),
     report.runtime_source_evidence.unmapped_hermes_sources.map((source) => ({
       agent_id: null,
       evidence_role: 'runtime_unmapped',
       output_candidate: false,
-      evidence_ref: source.evidence_ref
+      evidence_ref: source.evidence_ref,
+      mapping_decision: 'duplicate_source'
     }))
   );
 });
@@ -1035,11 +1041,12 @@ test('collector keeps shared Hermes runtime refs out of shared artifact rollups'
       source.source_kind,
       source.evidence_ref,
       source.status,
+      source.mapping_decision,
       source.degraded_reasons
     ]),
     [
-      ['hermes_profile', 'hermes://profile/shared-runtime', 'degraded', ['Hermes profile duplicate mapping']],
-      ['hermes_profile', 'hermes://profile/shared-runtime', 'degraded', ['Hermes profile duplicate mapping']]
+      ['hermes_profile', 'hermes://profile/shared-runtime', 'degraded', 'shared_ref', ['Hermes profile duplicate mapping']],
+      ['hermes_profile', 'hermes://profile/shared-runtime', 'degraded', 'shared_ref', ['Hermes profile duplicate mapping']]
     ]
   );
 
@@ -1056,20 +1063,23 @@ test('collector keeps shared Hermes runtime refs out of shared artifact rollups'
       agent_id: record.agent_id,
       evidence_ref: record.evidence_ref,
       evidence_role: record.evidence_role,
-      output_candidate: record.output_candidate
+      output_candidate: record.output_candidate,
+      mapping_decision: record.mapping_decision
     })),
     [
       {
         agent_id: null,
         evidence_ref: 'hermes://profile/shared-runtime',
         evidence_role: 'runtime_unmapped',
-        output_candidate: false
+        output_candidate: false,
+        mapping_decision: 'shared_ref'
       },
       {
         agent_id: null,
         evidence_ref: 'hermes://profile/shared-runtime',
         evidence_role: 'runtime_unmapped',
-        output_candidate: false
+        output_candidate: false,
+        mapping_decision: 'shared_ref'
       }
     ]
   );

@@ -6701,7 +6701,8 @@ test('GET /collectors/controller-snapshot/source-health projects latest source h
     {
       status: 'observed',
       observed_count: 1,
-      last_observed_at: '2026-03-09T18:02:00.000Z'
+      last_observed_at: '2026-03-09T18:02:00.000Z',
+      mapping_decision: 'non_seeded_agent'
     }
   ]);
   assert.deepEqual(sourceHealth.body.item.agent_items.map((item) => item.agent_id), [
@@ -7686,6 +7687,17 @@ test('GET /runtime/source-gaps returns compact gap and unmapped evidence read-on
       missing: 0,
       error: 0
     },
+    mapping_decision_buckets: {
+      mapped: 0,
+      unmapped_unknown: 0,
+      non_seeded_agent: 0,
+      duplicate_source: 0,
+      shared_ref: 0,
+      unsafe_identifier: 0,
+      missing_expected_source: 0,
+      read_error: 0,
+      unknown: 0
+    },
     collector_snapshot_id_buckets: {},
     first_observed_at: null,
     last_observed_at: null,
@@ -8255,6 +8267,31 @@ test('GET /runtime/source-gaps/schema exposes static catalog without reading sou
   assert.equal(JSON.stringify(response.body).includes('collector-snapshot:'), false);
   assert.equal(collectCount, 0);
   assert.equal(await readFile(storeFile, 'utf8'), fileBeforeRead);
+});
+
+test('GET /evidence-records/summary exposes safe mapping decision counts', async (t) => {
+  const { store, baseUrl } = await createHarness(t);
+  await store.appendCollectorReport(createRouteParityCollectorReport());
+
+  const response = await requestJson(`${baseUrl}/evidence-records/summary?output_candidate=false&limit=10`);
+
+  assert.equal(response.response.status, 200);
+  assert.deepEqual(response.body.item.mapping_decision_buckets, {
+    mapped: 2,
+    unmapped_unknown: 0,
+    non_seeded_agent: 1,
+    duplicate_source: 0,
+    shared_ref: 0,
+    unsafe_identifier: 0,
+    missing_expected_source: 1,
+    read_error: 0,
+    unknown: 0
+  });
+
+  const serialized = JSON.stringify(response.body);
+  assert.equal(serialized.includes('/tmp/route-parity'), false);
+  assert.equal(serialized.includes('tmux://unmapped-route-parity'), false);
+  assert.equal(serialized.includes('missing workspace files'), false);
 });
 
 test('GET /runtime/input-inventory exposes bounded config state without reading inputs', async (t) => {
@@ -9157,6 +9194,7 @@ test('GET /evidence-records lists stored evidence records read-only with exact f
       output_candidate: false,
       collector_snapshot_id: 'collector-snapshot:2026-03-09T18:06:00.000Z',
       correlation_id: 'collector-snapshot:2026-03-09T18:06:00.000Z',
+      mapping_decision: 'non_seeded_agent',
       degraded_reasons: [],
       metadata: {
         session_name: 'unmapped-session',
@@ -9279,6 +9317,17 @@ test('GET /evidence-records lists stored evidence records read-only with exact f
         missing: 1,
         error: 0
       },
+      mapping_decision_buckets: {
+        mapped: 2,
+        unmapped_unknown: 0,
+        non_seeded_agent: 1,
+        duplicate_source: 0,
+        shared_ref: 0,
+        unsafe_identifier: 0,
+        missing_expected_source: 1,
+        read_error: 0,
+        unknown: 0
+      },
       collector_snapshot_id_buckets: {
         'collector-snapshot:2026-03-09T18:06:00.000Z': 4
       },
@@ -9384,6 +9433,17 @@ test('GET /evidence-records lists stored evidence records read-only with exact f
       missing: 0,
       error: 0
     },
+    mapping_decision_buckets: {
+      mapped: 0,
+      unmapped_unknown: 0,
+      non_seeded_agent: 0,
+      duplicate_source: 0,
+      shared_ref: 0,
+      unsafe_identifier: 0,
+      missing_expected_source: 0,
+      read_error: 0,
+      unknown: 0
+    },
     collector_snapshot_id_buckets: {},
     first_observed_at: null,
     last_observed_at: null,
@@ -9427,6 +9487,17 @@ test('GET /evidence-records lists stored evidence records read-only with exact f
         degraded: 0,
         missing: 1,
         error: 0
+      },
+      mapping_decision_buckets: {
+        mapped: 2,
+        unmapped_unknown: 0,
+        non_seeded_agent: 1,
+        duplicate_source: 0,
+        shared_ref: 0,
+        unsafe_identifier: 0,
+        missing_expected_source: 1,
+        read_error: 0,
+        unknown: 0
       },
       output_candidate_buckets: {
         true: 0,
@@ -9488,6 +9559,17 @@ test('GET /evidence-records lists stored evidence records read-only with exact f
       degraded: 0,
       missing: 0,
       error: 0
+    },
+    mapping_decision_buckets: {
+      mapped: 0,
+      unmapped_unknown: 0,
+      non_seeded_agent: 0,
+      duplicate_source: 0,
+      shared_ref: 0,
+      unsafe_identifier: 0,
+      missing_expected_source: 0,
+      read_error: 0,
+      unknown: 0
     },
     output_candidate_buckets: {
       true: 0,
@@ -9691,6 +9773,11 @@ test('GET evidence and source read routes keep JSONL and SQLite parity', async (
           observed: 3,
           degraded: 2,
           missing: 1
+        },
+        mapping_decision_buckets: {
+          mapped: 4,
+          missing_expected_source: 1,
+          non_seeded_agent: 1
         },
         input_provenance_manifest: {
           source_kind_buckets: {},

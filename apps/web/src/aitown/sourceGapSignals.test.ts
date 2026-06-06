@@ -499,6 +499,40 @@ describe('deriveRuntimeSourceGapChips', () => {
     expect(JSON.stringify(peek)).not.toContain('kanban');
     expect(JSON.stringify(peek)).not.toContain('route');
   });
+
+  it('keeps runtime source-gap inspect peek pinned to the requested source kind and status', () => {
+    const peek = deriveRuntimeSourceGapInspectPeek(
+      [
+        {
+          ...runtimeSourceGaps[0],
+          source_kind: 'workspace_root',
+          source_status: 'error',
+          degraded_reasons: ['raw path /tmp/app-engineering/root must not render']
+        },
+        runtimeSourceGaps[0]
+      ],
+      'app-engineering',
+      {
+        agentId: 'app-engineering',
+        sourceDrilldownGroupKey: 'workspace',
+        sourceKind: 'workspace_files',
+        status: 'degraded'
+      },
+      [{ agent_id: 'app-engineering', display_name: 'App Engineering Agent' }]
+    );
+
+    expect(peek).toEqual({
+      agentId: 'app-engineering',
+      displayName: 'App Engineering Agent',
+      evidenceOnlyLabel: 'Evidence only',
+      mappingLabel: 'Mapped source',
+      sourceKindLabel: 'Workspace files',
+      statusLabel: 'degraded',
+      observedAtLabel: 'Observed 2026-03-16T08:59:30.000Z',
+      collectedAtLabel: 'Collected 2026-03-16T09:01:00.000Z'
+    });
+    expect(JSON.stringify(peek)).not.toContain('/tmp/app-engineering');
+  });
 });
 
 describe('deriveRuntimeSourceGapLifecycle', () => {

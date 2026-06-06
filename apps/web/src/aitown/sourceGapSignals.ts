@@ -115,6 +115,8 @@ export type SourceGapWorldPin = {
 export type RuntimeSourceGapInspectFocus = {
   agentId: string;
   sourceDrilldownGroupKey: SourceGapDrilldownGroupKey;
+  sourceKind?: DisplayedSourceGapKind;
+  status?: CollectorSourceHealthStatus;
 };
 
 export type RuntimeSourceGapInspectPeek = {
@@ -317,7 +319,9 @@ export function deriveRuntimeSourceGapInspectPeek(
         Boolean(item.sourceKind) &&
         item.gap.agent_id === selectedAgentId &&
         !item.gap.unmapped &&
-        resolveSourceGapDrilldownGroupKey(item.sourceKind as DisplayedSourceGapKind) === focus.sourceDrilldownGroupKey
+        resolveSourceGapDrilldownGroupKey(item.sourceKind as DisplayedSourceGapKind) === focus.sourceDrilldownGroupKey &&
+        (focus.sourceKind === undefined || item.sourceKind === focus.sourceKind) &&
+        (focus.status === undefined || item.gap.source_status === focus.status)
     )
     .sort(compareRuntimeSourceGapInspectCandidates);
 

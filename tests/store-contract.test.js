@@ -699,6 +699,113 @@ test('agent evidence source matrix counts unknown unmapped source kinds without 
   assert.equal(JSON.stringify(matrix).includes(unknownSourceKind), false);
 });
 
+test('prototype store aggregates office claim audit counts without leaking claim material', async () => {
+  const store = new PrototypeStore({ filePath: await createStoreFile() });
+  await store.load();
+
+  await store.appendEvent({
+    event_id: 'evt_claim_audit_backed',
+    ts: '2026-03-09T18:03:00.000Z',
+    agent_id: 'app-engineering',
+    actor_id: 'team-lead',
+    agent_role: 'app-engineering',
+    event_type: 'peer_watch_alert_raised',
+    current_state: 'blocked',
+    active_task: 'Audit backed claim',
+    location: 'review-zone',
+    summary: 'token=claim-audit-secret /tmp/claim-audit-backed',
+    severity: 'red',
+    correlation_id: 'corr-claim-audit-backed',
+    counterparty_agent_ids: ['protocol-engineering'],
+    evidence_refs: ['/tmp/claim-audit-backed.md'],
+    source_kind: 'controller_event',
+    metadata: {}
+  });
+  await store.appendEvent({
+    event_id: 'evt_claim_audit_missing',
+    ts: '2026-03-09T18:04:00.000Z',
+    agent_id: 'protocol-engineering',
+    actor_id: 'team-lead',
+    agent_role: 'protocol-engineering',
+    event_type: 'peer_watch_alert_raised',
+    current_state: 'blocked',
+    active_task: 'Audit missing claim',
+    location: 'review-zone',
+    summary: 'missing evidence claim',
+    severity: 'orange',
+    correlation_id: 'corr-claim-audit-missing',
+    counterparty_agent_ids: ['app-engineering'],
+    evidence_refs: [],
+    source_kind: 'controller_event',
+    metadata: {}
+  });
+  await store.appendHeartbeat({
+    agent_id: 'market-intel',
+    actor_id: 'market-intel',
+    received_at: '2026-03-09T18:05:00.000Z',
+    current_state: 'researching',
+    active_task: 'Audit heartbeat claim',
+    last_meaningful_output_at: '2026-03-09T18:04:30.000Z',
+    last_file_write_at: '2026-03-09T18:04:20.000Z',
+    current_blocker: '',
+    confidence_level: 'medium',
+    reboot_recommended: false
+  });
+
+  const audit = store.getOfficeClaimAudit({ limit: '20' });
+  assert.deepEqual(audit.items, [
+    {
+      surface: 'office',
+      claim_count: 7,
+      evidence_backed_count: 1,
+      missing_evidence_count: 6,
+      safe_kind_buckets: { agent_projection: 7 }
+    },
+    {
+      surface: 'agent',
+      claim_count: 7,
+      evidence_backed_count: 1,
+      missing_evidence_count: 6,
+      safe_kind_buckets: { agent_projection: 7 }
+    },
+    {
+      surface: 'incident',
+      claim_count: 2,
+      evidence_backed_count: 1,
+      missing_evidence_count: 1,
+      safe_kind_buckets: { peer_watch_alert: 2, handoff: 0, reboot: 0 }
+    },
+    {
+      surface: 'status',
+      claim_count: 3,
+      evidence_backed_count: 1,
+      missing_evidence_count: 2,
+      safe_kind_buckets: { event: 2, heartbeat: 1 }
+    }
+  ]);
+
+  assert.deepEqual(store.getOfficeClaimAudit({
+    agent_id: 'app-engineering',
+    surface: 'incident',
+    limit: '1'
+  }).items, [
+    {
+      surface: 'incident',
+      claim_count: 1,
+      evidence_backed_count: 1,
+      missing_evidence_count: 0,
+      safe_kind_buckets: { peer_watch_alert: 1, handoff: 0, reboot: 0 }
+    }
+  ]);
+
+  const serialized = JSON.stringify(audit);
+  assert.equal(serialized.includes('/tmp/claim-audit'), false);
+  assert.equal(serialized.includes('token=claim-audit-secret'), false);
+  assert.equal(serialized.includes('evt_claim_audit'), false);
+  assert.equal(serialized.includes('corr-claim-audit'), false);
+  assert.deepEqual(store.getOfficeClaimAudit({ surface: 'tmux://secret' }).items, []);
+});
+
 test('agent evidence spine returns null for unknown agents', async () => {
   const store = new PrototypeStore({ filePath: await createStoreFile() });
   await store.load();

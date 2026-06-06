@@ -45,6 +45,7 @@ This is the current API/read-model contract for Metaverse Office Web. It grew ou
 - `GET /interactions?event_id=&evidence_ref=&interaction_type=&counterparty_agent_id=&severity=&correlation_id=&limit=&window=`
 - `GET /office/overview`
 - `GET /office/operations?limit=&state=&agent_id=&severity=`
+- `GET /office/claim-audit?agent_id=&surface=&limit=`
 - `GET /timeline?window=&event_id=&agent_id=&event_type=&severity=&source_kind=&evidence_ref=&correlation_id=&limit=`
 - `GET /accountability/replay?event_id=&evidence_id=&evidence_ref=&correlation_id=&agent_id=&source_kind=&artifact_kind=&limit=&window=`
 - `GET /accountability/replay/checkpoint-summary`
@@ -977,6 +978,13 @@ This is the current API/read-model contract for Metaverse Office Web. It grew ou
   ]
 }
 ```
+
+## Office claim audit semantics
+- `GET /office/claim-audit` is a read-only aggregate that audits operator-visible office, agent, incident, and status claims for evidence backing using only replayed store state
+- response shape is `{ "items": [{ "surface": "office"|"agent"|"incident"|"status", "claim_count": number, "evidence_backed_count": number, "missing_evidence_count": number, "safe_kind_buckets": object }] }`
+- supported query params are `agent_id`, `surface`, and `limit`; `agent_id` exact-filters source claims without being echoed, `surface` exact-filters the safe surface labels and unknown values return an empty `items` array, and `limit` caps source claims per surface before counting
+- `safe_kind_buckets` uses only allowlisted public keys: `agent_projection` for `office` and `agent`, `peer_watch_alert`/`handoff`/`reboot` for `incident`, and `event`/`heartbeat` for `status`
+- evidence backing is counted from replayed evidence refs and persisted evidence records; the route never returns raw summaries, raw refs, local paths, tmux/Hermes/session/profile refs, agent ids, incident ids, event ids, correlation ids, incident text, metadata, degraded reason arrays, payloads, severity/liveness/productivity upgrades, task dispatch, writes, or control-plane state
 
 ## Event payload minimum
 ```json

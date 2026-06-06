@@ -102,6 +102,15 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
     return;
   }
 
+  if (method === 'GET' && pathname === '/office/claim-audit') {
+    sendJson(res, 200, store.getOfficeClaimAudit({
+      agent_id: url.searchParams.get('agent_id'),
+      surface: url.searchParams.get('surface'),
+      limit: url.searchParams.get('limit')
+    }));
+    return;
+  }
+
   if (method === 'GET' && pathname === '/agents/evidence-spine/schema') {
     sendJson(res, 200, {
       item: store.getAgentsEvidenceSpineSchema()

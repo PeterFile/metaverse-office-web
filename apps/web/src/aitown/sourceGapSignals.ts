@@ -9,6 +9,8 @@ import type {
   RuntimeSourceGapLifecycleGroup
 } from '../types';
 
+import { safeVisibleText } from './safeVisibleText';
+
 export type { SourceHealthWorldBadge } from '../sourceHealthWorldBadges';
 export {
   deriveSourceHealthWorldBadges,
@@ -166,6 +168,16 @@ const RUNTIME_SOURCE_KIND_MAP: Record<string, DisplayedSourceGapKind> = {
   hermes_session: 'hermes_session'
 };
 
+const EVIDENCE_ROLE_LABELS: Record<string, string> = {
+  agent_output: 'agent output',
+  agent_plan: 'agent plan',
+  runtime_activity: 'runtime activity',
+  runtime_source: 'runtime source',
+  source_evidence: 'source evidence',
+  workspace_presence: 'workspace presence',
+  workspace_snapshot: 'workspace snapshot'
+};
+
 export function deriveSourceGapChips(
   sourceHealth: CollectorSourceHealthProjection | null | undefined,
   agents: SourceGapAgent[] | null | undefined
@@ -191,7 +203,7 @@ export function deriveSourceGapChips(
 
       chips.push({
         agentId: item.agent_id,
-        displayName,
+        displayName: renderSourceGapDisplayName(displayName),
         sourceDrilldownGroupKey: resolveSourceGapDrilldownGroupKey(sourceKind),
         sourceKind,
         status: health.status,
@@ -248,7 +260,7 @@ export function deriveRuntimeSourceGapChips(
     const lifecycle = lifecycleByKey.get(buildRuntimeSourceGapLifecycleKey(gap, sourceKind));
     chips.push({
       agentId: isMapped ? gap.agent_id : null,
-      displayName: isMapped ? displayName! : 'Unmapped runtime source',
+      displayName: isMapped ? renderSourceGapDisplayName(displayName) : 'Unmapped runtime source',
       isMapped,
       sourceDrilldownGroupKey: isMapped ? resolveSourceGapDrilldownGroupKey(sourceKind) : null,
       sourceKind,
@@ -335,7 +347,7 @@ export function deriveRuntimeSourceGapInspectPeek(
 
   return {
     agentId: selectedAgentId,
-    displayName,
+    displayName: renderSourceGapDisplayName(displayName),
     evidenceOnlyLabel: 'Evidence only',
     mappingLabel: 'Mapped source',
     sourceKindLabel: SOURCE_KIND_LABELS[selected.sourceKind],
@@ -823,7 +835,10 @@ function renderSourceGapDetail(
   sourceKind: DisplayedSourceGapKind
 ) {
   const countLabel = renderSourceGapCount(item, sourceKind);
-  return `${countLabel} · latest evidence ${item.latest_evidence_at ?? 'unavailable'}`;
+  const latestEvidenceAt = item.latest_evidence_at
+    ? safeVisibleText(item.latest_evidence_at, 'available')
+    : 'unavailable';
+  return `${countLabel} · latest evidence ${latestEvidenceAt}`;
 }
 
 function renderRuntimeSourceGapDetail(gap: RuntimeSourceGap) {
@@ -837,7 +852,16 @@ function renderRuntimeSourceGapDetail(gap: RuntimeSourceGap) {
 }
 
 function renderEvidenceRoleLabel(evidenceRole: string | null) {
-  return evidenceRole ? evidenceRole.replace(/_/g, ' ') : 'source evidence';
+  const normalized = evidenceRole?.trim();
+  if (!normalized) {
+    return 'source evidence';
+  }
+
+  return safeVisibleText(EVIDENCE_ROLE_LABELS[normalized] ?? normalized.replace(/_/g, ' '), 'source evidence');
+}
+
+function renderSourceGapDisplayName(displayName: string | null | undefined) {
+  return safeVisibleText(displayName, 'Mapped agent');
 }
 
 function renderSourceGapCount(
@@ -965,9 +989,9 @@ function renderObservationCount(count: number) {
 }
 
 function renderObservedAtLabel(lastObservedAt: string | null | undefined) {
-  return lastObservedAt ? `Observed ${lastObservedAt}` : 'Not observed';
+  return lastObservedAt ? `Observed ${safeVisibleText(lastObservedAt, 'available')}` : 'Not observed';
 }
 
 function renderCollectedAtLabel(collectedAt: string | null | undefined) {
-  return collectedAt ? `Collected ${collectedAt}` : 'Not collected';
+  return collectedAt ? `Collected ${safeVisibleText(collectedAt, 'available')}` : 'Not collected';
 }

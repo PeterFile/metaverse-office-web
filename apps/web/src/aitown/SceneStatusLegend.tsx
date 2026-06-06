@@ -11,9 +11,12 @@ import {
 import type { Severity, WorldState } from '../world/types';
 
 import { SCENE_AGENT_STATUS_LEGEND } from './agentStatusBadge';
+import { safeVisibleText } from './safeVisibleText';
 
 const SELECTED_SUPERVISION_NOTE =
   'Selected links only. Gold rings mark selected/linked agents; teal halos mark agents participating in the active correlation; arrows run watcher to target; thick links mean lead watch; colors show target severity.';
+
+const LEGEND_SECTION_ITEM_LIMIT = 3;
 
 const SEVERITY_LABELS: Record<Severity, string> = {
   normal: 'Normal',
@@ -98,7 +101,7 @@ function formatHotZoneSummary(
 function formatDataQualitySummary(degradedReasonCount: number, lastOverviewAt: string | null): string {
   const parts = [formatCount(degradedReasonCount, 'evidence gap')];
   if (lastOverviewAt) {
-    parts.push(`last overview ${lastOverviewAt}`);
+    parts.push(`last overview ${safeVisibleText(lastOverviewAt, 'available')}`);
   }
   return parts.join(' · ');
 }
@@ -111,7 +114,7 @@ function formatRuntimeBackfillEvidence(
   evidenceRefs: string[],
   degradedReasons: string[]
 ): string {
-  const parts = [`Incident-feed backfill · ${displayName}`];
+  const parts = [`Incident-feed backfill · ${safeVisibleText(displayName, 'Backfill agent')}`];
   if (incidentIds.length > 0) {
     parts.push(formatCount(incidentIds.length, 'incident'));
   }
@@ -131,6 +134,17 @@ function formatRuntimeBackfillEvidence(
   }
 
   return parts.join(' · ');
+}
+
+function renderOverflowItem(key: string, label: string) {
+  return (
+    <li key={key} className="aitown-status-legend__item">
+      <span className="aitown-status-legend__token" aria-hidden="true">
+        …
+      </span>
+      <span>{label}</span>
+    </li>
+  );
 }
 
 function formatIncidentEvidenceSummary(
@@ -178,14 +192,20 @@ export function SceneStatusLegend({
   const { world: contextWorld } = useWorld();
   const [expanded, setExpanded] = useState(defaultOpen);
   const world = providedWorld ?? contextWorld;
-  const hotZones = selectHotZones(world);
+  const allHotZones = selectHotZones(world, Number.MAX_SAFE_INTEGER);
+  const hotZones = allHotZones.slice(0, LEGEND_SECTION_ITEM_LIMIT);
   const dataQualitySummary = selectDataQualitySummary(world);
-  const runtimeBackfillEvidence = selectRuntimeBackfillEvidence(world);
-  const incidentEvidenceSummaries = selectIncidentEvidenceSummaries(world);
+  const allRuntimeBackfillEvidence = selectRuntimeBackfillEvidence(world);
+  const runtimeBackfillEvidence = allRuntimeBackfillEvidence.slice(0, LEGEND_SECTION_ITEM_LIMIT);
+  const allIncidentEvidenceSummaries = selectIncidentEvidenceSummaries(world, Number.MAX_SAFE_INTEGER);
+  const incidentEvidenceSummaries = allIncidentEvidenceSummaries.slice(0, LEGEND_SECTION_ITEM_LIMIT);
+  const hotZoneOverflowCount = allHotZones.length - hotZones.length;
+  const runtimeBackfillEvidenceOverflowCount = allRuntimeBackfillEvidence.length - runtimeBackfillEvidence.length;
+  const incidentEvidenceOverflowCount = allIncidentEvidenceSummaries.length - incidentEvidenceSummaries.length;
   const focusedSignalCount =
-    hotZones.length +
-    incidentEvidenceSummaries.length +
-    runtimeBackfillEvidence.length +
+    allHotZones.length +
+    allIncidentEvidenceSummaries.length +
+    allRuntimeBackfillEvidence.length +
     (dataQualitySummary ? 1 : 0);
 
   return (
@@ -237,6 +257,12 @@ export function SceneStatusLegend({
                   </span>
                 </li>
               ))}
+              {incidentEvidenceOverflowCount > 0
+                ? renderOverflowItem(
+                    'incident-evidence-overflow',
+                    `+${incidentEvidenceOverflowCount} more incident evidence signals`
+                  )
+                : null}
             </ul>
           </>
         ) : null}
@@ -254,6 +280,7 @@ export function SceneStatusLegend({
                   zone.open_alert_or_incident_occupant_count,
                   zone.runtime_freshness_degraded_count
                 );
+                const zoneLabel = safeVisibleText(zone.label, 'World zone');
 
                 return (
                   <li key={zone.zone_id} className="aitown-status-legend__item">
@@ -261,7 +288,7 @@ export function SceneStatusLegend({
                       <button
                         type="button"
                         className="aitown-status-legend__action"
-                        aria-label={`${zone.label} · ${summary} · Focus in world viewport`}
+                        aria-label={`${zoneLabel} · ${summary} · Focus in world viewport`}
                         onClick={() => onFocusWorldZone(zone.zone_id)}
                       >
                         <span
@@ -272,7 +299,7 @@ export function SceneStatusLegend({
                           {SEVERITY_EMOJI[zone.highest_severity]}
                         </span>
                         <span className="aitown-status-legend__action-copy">
-                          <strong>{zone.label}</strong>
+                          <strong>{zoneLabel}</strong>
                           {' · '}
                           {summary}
                         </span>
@@ -287,7 +314,7 @@ export function SceneStatusLegend({
                           {SEVERITY_EMOJI[zone.highest_severity]}
                         </span>
                         <span>
-                          <strong>{zone.label}</strong>
+                          <strong>{zoneLabel}</strong>
                           {' · '}
                           {summary}
                         </span>
@@ -296,6 +323,9 @@ export function SceneStatusLegend({
                   </li>
                 );
               })}
+              {hotZoneOverflowCount > 0
+                ? renderOverflowItem('hot-zone-overflow', `+${hotZoneOverflowCount} more hot zones`)
+                : null}
             </ul>
           </>
         ) : null}
@@ -338,6 +368,12 @@ export function SceneStatusLegend({
                   </span>
                 </li>
               ))}
+              {runtimeBackfillEvidenceOverflowCount > 0
+                ? renderOverflowItem(
+                    'runtime-backfill-overflow',
+                    `+${runtimeBackfillEvidenceOverflowCount} more backfill signals`
+                  )
+                : null}
             </ul>
           </>
         ) : null}

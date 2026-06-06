@@ -3778,6 +3778,124 @@ test('prototype store summarizes evidence records with list filter semantics bef
   });
 });
 
+test('prototype store summarizes hostile historical evidence buckets without raw keys', async () => {
+  const storeFile = await createStoreFile();
+  const safeSnapshotId = 'collector-snapshot:2026-06-07T01:01:00.000Z';
+  const unsafeSourceKind = '/tmp/summary-bucket/source-kind?token=summary-secret';
+  const unsafeEvidenceRole = 'tmux://summary-bucket/role/0.0';
+  const unsafeSourceStatus = 'https://hooks.slack.com/services/summary-bucket/status';
+  const unsafeRuntimeSourceKind = 'hermes://profile/summary-bucket-secret';
+  const unsafeRuntimeRole = 'raw payload dump role token=summary-bucket';
+  const unsafeSnapshotId = '/tmp/summary-bucket/snapshot-token';
+  const unsafeCorrelationId = 'https://hooks.slack.com/services/summary-bucket/correlation';
+  const unsafeEvidenceRef = '/tmp/summary-bucket/evidence-ref-token';
+  const records = [
+    {
+      evidence_id: 'ev_summary_safe_missing',
+      observed_at: '2026-06-07T01:00:00.000Z',
+      collected_at: '2026-06-07T01:01:00.000Z',
+      agent_id: 'app-engineering',
+      source_kind: 'workspace_file',
+      evidence_ref: '/tmp/summary-bucket/safe-gap',
+      evidence_role: 'agent_output',
+      source_status: 'missing',
+      output_candidate: false,
+      collector_snapshot_id: safeSnapshotId,
+      correlation_id: safeSnapshotId,
+      degraded_reasons: [],
+      metadata: {}
+    },
+    {
+      evidence_id: 'ev_summary_unsafe_enums',
+      observed_at: '2026-06-07T01:02:00.000Z',
+      collected_at: '2026-06-07T01:03:00.000Z',
+      agent_id: 'app-engineering',
+      source_kind: unsafeSourceKind,
+      evidence_ref: unsafeEvidenceRef,
+      evidence_role: unsafeEvidenceRole,
+      source_status: unsafeSourceStatus,
+      output_candidate: false,
+      collector_snapshot_id: unsafeSnapshotId,
+      correlation_id: unsafeCorrelationId,
+      degraded_reasons: [unsafeSourceStatus],
+      metadata: { payload: unsafeEvidenceRef }
+    },
+    {
+      evidence_id: 'ev_runtime_gap_unsafe_buckets',
+      observed_at: '2026-06-07T01:04:00.000Z',
+      collected_at: '2026-06-07T01:05:00.000Z',
+      agent_id: null,
+      source_kind: unsafeRuntimeSourceKind,
+      evidence_ref: unsafeEvidenceRef,
+      evidence_role: unsafeRuntimeRole,
+      source_status: 'missing',
+      output_candidate: false,
+      collector_snapshot_id: unsafeSnapshotId,
+      correlation_id: unsafeCorrelationId,
+      degraded_reasons: [unsafeRuntimeRole],
+      metadata: { raw_ref: unsafeEvidenceRef }
+    }
+  ];
+
+  await writeFile(
+    storeFile,
+    records
+      .map((payload) => JSON.stringify({ kind: 'evidence_record', payload }))
+      .join('\n') + '\n'
+  );
+
+  const store = await createPrototypeStore({ filePath: storeFile });
+  const evidenceSummary = store.getEvidenceRecordsSummary({ newest_first: 'true', limit: '1' });
+  const runtimeSummary = store.getRuntimeSourceGapsSummary({ newest_first: 'true', limit: '1' });
+
+  assert.equal(evidenceSummary.total_count, 3);
+  assert.equal(evidenceSummary.returned_limit, 1);
+  assert.equal(evidenceSummary.mapped_count, 2);
+  assert.equal(evidenceSummary.unmapped_count, 1);
+  assert.equal(evidenceSummary.source_kind_buckets.workspace_file, 1);
+  assert.equal(evidenceSummary.source_kind_buckets.unknown, 2);
+  assert.equal(evidenceSummary.evidence_role_buckets.agent_output, 1);
+  assert.equal(evidenceSummary.evidence_role_buckets.unknown, 2);
+  assert.equal(evidenceSummary.source_status_buckets.missing, 2);
+  assert.equal(evidenceSummary.source_status_buckets.unknown, 1);
+  assert.deepEqual(evidenceSummary.collector_snapshot_id_buckets, {
+    [safeSnapshotId]: 1,
+    unknown: 2
+  });
+
+  assert.equal(runtimeSummary.total_count, 2);
+  assert.equal(runtimeSummary.returned_limit, 1);
+  assert.equal(runtimeSummary.mapped_count, 1);
+  assert.equal(runtimeSummary.unmapped_count, 1);
+  assert.equal(runtimeSummary.source_kind_buckets.workspace_file, 1);
+  assert.equal(runtimeSummary.source_kind_buckets.unknown, 1);
+  assert.equal(runtimeSummary.evidence_role_buckets.agent_output, 1);
+  assert.equal(runtimeSummary.evidence_role_buckets.unknown, 1);
+  assert.equal(runtimeSummary.source_status_buckets.missing, 2);
+  assert.deepEqual(runtimeSummary.collector_snapshot_id_buckets, {
+    [safeSnapshotId]: 1,
+    unknown: 1
+  });
+
+  const serialized = JSON.stringify({ evidenceSummary, runtimeSummary });
+  for (const unsafeFragment of [
+    unsafeSourceKind,
+    unsafeEvidenceRole,
+    unsafeSourceStatus,
+    unsafeRuntimeSourceKind,
+    unsafeRuntimeRole,
+    unsafeSnapshotId,
+    unsafeCorrelationId,
+    unsafeEvidenceRef,
+    'token=',
+    'tmux://',
+    'hermes://',
+    'hooks.slack.com'
+  ]) {
+    assert.equal(serialized.includes(unsafeFragment), false, unsafeFragment);
+  }
+});
+
 test('prototype store returns safe evidence facet buckets before limit truncation', async () => {
   const storeFile = await createStoreFile();
   const store = await createPrototypeStore({ filePath: storeFile });

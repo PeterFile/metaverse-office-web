@@ -7305,7 +7305,7 @@ test('GET /collectors/controller-snapshot/source-health projects requested histo
   assert.equal(await readFile(storeFile, 'utf8'), fileBeforeRead);
 });
 
-test('GET /runtime/source-gaps returns compact gap and unmapped evidence read-only', async (t) => {
+test('GET /runtime/source-gaps returns compact gap, reason buckets, and unmapped evidence read-only', async (t) => {
   let collectCount = 0;
   const controllerSnapshotCollector = {
     async collectSnapshot() {
@@ -7395,6 +7395,9 @@ test('GET /runtime/source-gaps returns compact gap and unmapped evidence read-on
 
   const response = await requestJson(`${baseUrl}/runtime/source-gaps?newest_first=true&limit=10`);
   const summary = await requestJson(`${baseUrl}/runtime/source-gaps/summary?newest_first=true&limit=1`);
+  const reasonSummary = await requestJson(
+    `${baseUrl}/runtime/source-gaps/reason-summary?newest_first=true&limit=1`
+  );
   const agentSummary = await requestJson(
     `${baseUrl}/runtime/source-gaps/agent-summary?newest_first=true&limit=1`
   );
@@ -7494,6 +7497,18 @@ test('GET /runtime/source-gaps returns compact gap and unmapped evidence read-on
   assert.equal(Object.hasOwn(summary.body.item, 'evidence_id'), false);
   assert.equal(Object.hasOwn(summary.body.item, 'evidence_ref'), false);
   assert.equal(Object.hasOwn(summary.body.item, 'metadata'), false);
+  assert.equal(reasonSummary.response.status, 200);
+  assert.equal(reasonSummary.body.item.total_count, 1);
+  assert.equal(reasonSummary.body.item.returned_limit, 1);
+  assert.equal(reasonSummary.body.item.reason_code_buckets.missing_workspace_file, 1);
+  assert.equal(reasonSummary.body.item.source_kind_buckets.workspace_file, 1);
+  assert.equal(reasonSummary.body.item.source_status_buckets.degraded, 1);
+  assert.equal(JSON.stringify(reasonSummary.body).includes('/tmp/source-gaps'), false);
+  assert.equal(JSON.stringify(reasonSummary.body).includes('tmux://'), false);
+  assert.equal(JSON.stringify(reasonSummary.body).includes('evidence_id'), false);
+  assert.equal(JSON.stringify(reasonSummary.body).includes('evidence_ref'), false);
+  assert.equal(JSON.stringify(reasonSummary.body).includes('metadata'), false);
+  assert.equal(JSON.stringify(reasonSummary.body).includes('degraded_reasons'), false);
   assert.equal(agentSummary.response.status, 200);
   assert.deepEqual(agentSummary.body.item, {
     total_count: 2,
@@ -8261,6 +8276,8 @@ test('GET /runtime/source-gaps/schema exposes static catalog without reading sou
   assert.equal(response.body.item.evidence_roles.includes('runtime_unmapped'), true);
   assert.equal(response.body.item.source_statuses.includes('observed'), true);
   assert.equal(response.body.item.source_gap_statuses.includes('missing'), true);
+  assert.equal(response.body.item.reason_codes.includes('missing_workspace_file'), true);
+  assert.equal(response.body.item.reason_codes.includes('tmux_session_missing'), true);
   assert.equal(JSON.stringify(response.body).includes('/tmp/'), false);
   assert.equal(JSON.stringify(response.body).includes('<script>'), false);
   assert.equal(JSON.stringify(response.body).includes('tmux://'), false);
@@ -10806,6 +10823,7 @@ test('GET read route purity matrix leaves replay records and checkpoints unchang
     '/runtime/source-gaps?newest_first=true&limit=10',
     '/runtime/source-gaps/schema',
     '/runtime/source-gaps/summary?newest_first=true&limit=1',
+    '/runtime/source-gaps/reason-summary?newest_first=true&limit=1',
     '/runtime/source-gaps/agent-summary?newest_first=true&limit=1',
     '/runtime/source-gaps/lifecycle?newest_first=true&limit=1',
     '/runtime/source-gaps/trend?newest_first=true&limit=1',
@@ -11136,6 +11154,7 @@ test('GET safe-route leak regression matrix stays redacted and read-pure under h
     `/collectors/controller-snapshot/diff?limit=2&${hostileInputQuery}`,
     `/runtime/source-gaps/schema?${hostileInputQuery}`,
     `/runtime/source-gaps/summary?newest_first=true&limit=2&${hostileInputQuery}`,
+    `/runtime/source-gaps/reason-summary?newest_first=true&limit=2&${hostileInputQuery}`,
     `/runtime/source-gaps/agent-summary?newest_first=true&limit=2&${hostileInputQuery}`,
     `/runtime/source-gaps/lifecycle?newest_first=true&limit=2&${hostileInputQuery}`,
     `/runtime/source-gaps/transition-summary?newest_first=true&limit=2&${hostileInputQuery}`,

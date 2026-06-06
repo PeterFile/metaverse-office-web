@@ -652,6 +652,17 @@ async function handleRequest({
     return;
   }
 
+  if (method === 'GET' && pathname === '/runtime/source-gaps/reason-summary') {
+    sendJson(res, 200, {
+      item: store.getRuntimeSourceGapReasonSummary({
+        evidence_id: url.searchParams.get('evidence_id'),
+        agent_id: url.searchParams.get('agent_id'),
+        ...getSourceEvidenceQuery(url.searchParams)
+      })
+    });
+    return;
+  }
+
   if (method === 'GET' && pathname === '/runtime/source-gaps/agent-summary') {
     sendJson(res, 200, {
       item: store.getRuntimeSourceGapAgentSummary({

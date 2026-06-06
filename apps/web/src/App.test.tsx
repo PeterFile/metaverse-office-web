@@ -5459,34 +5459,46 @@ afterEach(() => {
     const user = userEvent.setup();
     const canaries = [
       '/Users/cwp/private/source-gap.md',
+      '/Volumes/source-gap/private.md',
+      '../source-gap/private.md',
       'tmux://source-gap-pane',
-      'https://hooks.example.test/source-gap-token',
+      'hermes://source-gap-runtime',
+      'task://source-gap/raw-ref',
+      'token=source-gap-canary',
+      'github_pat_source_gap_canary',
+      'xoxb-source-gap-canary',
       'webhook_payload_token',
+      'payload=source-gap-canary',
+      'metadata=source-gap-canary',
       'control-plane-dispatch'
     ];
     const hostileOverview = {
       ...overviewFixture,
-      agents: overviewFixture.agents.map((agent) =>
-        agent.agent_id === 'growth-revenue'
-          ? { ...agent, display_name: `Growth ${canaries[0]}` }
-          : agent
-      )
+      agents: overviewFixture.agents.map((agent) => {
+        if (agent.agent_id === 'growth-revenue') {
+          return { ...agent, display_name: `Growth ${canaries[2]}` };
+        }
+        if (agent.agent_id === 'app-engineering') {
+          return { ...agent, display_name: `App ${canaries[7]} ${canaries[8]}` };
+        }
+        return agent;
+      })
     };
     const sourceGapItems = [
       {
         ...growthRevenueRuntimeSourceGapsFixture.items[0],
         source_status: 'error',
-        evidence_role: `webhook_url=${canaries[2]}`,
-        collector_snapshot_id: canaries[1],
-        correlation_id: canaries[3],
-        degraded_reasons: [canaries[4]]
+        evidence_role: `webhook_url=${canaries[9]}`,
+        collector_snapshot_id: canaries[3],
+        correlation_id: canaries[10],
+        degraded_reasons: [canaries[12]]
       },
       {
         ...growthRevenueRuntimeSourceGapsFixture.items[0],
         agent_id: 'app-engineering',
         source_kind: 'tmux_session',
         source_status: 'missing',
-        evidence_role: 'runtime_activity',
+        evidence_role: canaries[11],
         output_candidate: false
       },
       {
@@ -5494,7 +5506,7 @@ afterEach(() => {
         agent_id: 'app-engineering',
         source_kind: 'hermes_session',
         source_status: 'degraded',
-        evidence_role: 'source_evidence',
+        evidence_role: canaries[5],
         output_candidate: false
       },
       {

@@ -41,6 +41,11 @@ import { selectWorkflowSummaryFacets } from '../workflow/summary';
 import type { WorldState } from '../world/types';
 import { selectAgentBadge, selectAgentZoneLabel, selectAttentionQueue, selectWatchEdgeRisk } from '../world/selectors';
 import {
+  formatEvidenceRoleLabel,
+  formatEvidenceSourceKindLabel,
+  formatEvidenceSourceStatusLabel
+} from '../evidenceEnumLabels';
+import {
   collectInteractionSourceKinds,
   formatCollectorDerivedPeerWatchMetadata
 } from './accountabilitySignals';
@@ -1079,7 +1084,7 @@ function renderCorrelationClosureLedger({
           <span>{`Transition · ${entry.ts}`}</span>
           <span>{`Agent · ${entry.agent_id}`}</span>
           {entry.actor_id ? <span>{`Actor · ${entry.actor_id}`}</span> : null}
-          <span>{`Source · ${entry.source_kind}`}</span>
+          <span>{`Source · ${formatEvidenceSourceKindLabel(entry.source_kind, 'ledger')}`}</span>
           <span>
             Evidence ·{' '}
             {renderSharedMemoryEvidenceRefs({
@@ -1546,9 +1551,9 @@ function focusSelectedAgentEvidenceLedgerGroup(key: SelectedAgentEvidenceLedgerB
 }
 
 function renderSelectedAgentEvidenceSourceContextGroup(group: SelectedAgentEvidenceLedgerSourceContextGroup) {
-  const sourceKind = formatSelectedEvidenceSourceKindLabel(group.sourceKind);
-  const evidenceRole = formatSelectedEvidenceRoleLabel(group.evidenceRole);
-  const sourceStatus = formatSelectedEvidenceStatusLabel(group.sourceStatus);
+  const sourceKind = formatEvidenceSourceKindLabel(group.sourceKind, 'ledger');
+  const evidenceRole = formatEvidenceRoleLabel(group.evidenceRole, 'ledger');
+  const sourceStatus = formatEvidenceSourceStatusLabel(group.sourceStatus, 'ledger');
 
   return (
     <span
@@ -1560,9 +1565,9 @@ function renderSelectedAgentEvidenceSourceContextGroup(group: SelectedAgentEvide
 }
 
 function renderSelectedAgentEvidenceSourceRefGroup(group: SelectedAgentEvidenceLedgerSourceRefGroup) {
-  const sourceKind = formatSelectedEvidenceSourceKindLabel(group.sourceKind);
-  const evidenceRole = formatSelectedEvidenceRoleLabel(group.evidenceRole);
-  const sourceStatus = formatSelectedEvidenceStatusLabel(group.sourceStatus);
+  const sourceKind = formatEvidenceSourceKindLabel(group.sourceKind, 'ledger');
+  const evidenceRole = formatEvidenceRoleLabel(group.evidenceRole, 'ledger');
+  const sourceStatus = formatEvidenceSourceStatusLabel(group.sourceStatus, 'ledger');
 
   return (
     <span key={`${group.sourceKind}:${group.evidenceRole ?? 'none'}:${group.sourceStatus ?? 'none'}`}>
@@ -1596,9 +1601,9 @@ function renderSelectedAgentEvidenceLedgerItem(
 ) {
   const mapped = item.agentId !== null && item.evidenceRole !== 'runtime_unmapped';
   const evidenceId = formatBoundedEvidenceLedgerToken(item.evidenceId);
-  const sourceKind = formatSelectedEvidenceSourceKindLabel(item.sourceKind);
-  const evidenceRole = formatSelectedEvidenceRoleLabel(item.evidenceRole);
-  const sourceStatus = formatSelectedEvidenceStatusLabel(item.sourceStatus);
+  const sourceKind = formatEvidenceSourceKindLabel(item.sourceKind, 'ledger');
+  const evidenceRole = formatEvidenceRoleLabel(item.evidenceRole, 'ledger');
+  const sourceStatus = formatEvidenceSourceStatusLabel(item.sourceStatus, 'ledger');
 
   return (
     <Fragment key={item.evidenceId}>
@@ -1715,9 +1720,9 @@ function renderSelectedAgentEvidenceRecordDetail(
             {error ? <span>{`Last-good detail · Refresh failed: ${formatEvidenceReadModelError(error, requestedEvidenceId)}`}</span> : null}
             <span>{`Observed · ${renderTimestamp(record.observed_at, 'No observed timestamp')}`}</span>
             <span>{`Collected · ${renderTimestamp(record.collected_at, 'No collected timestamp')}`}</span>
-            <span>{`Source · ${record.source_kind}`}</span>
-            <span>{`Status · ${record.source_status ?? 'unknown'}`}</span>
-            <span>{`Role · ${record.evidence_role ?? 'unclassified'}`}</span>
+            <span>{`Source · ${formatEvidenceSourceKindLabel(record.source_kind, 'ledger')}`}</span>
+            <span>{`Status · ${formatEvidenceSourceStatusLabel(record.source_status, 'ledger')}`}</span>
+            <span>{`Role · ${formatEvidenceRoleLabel(record.evidence_role, 'ledger')}`}</span>
             <span>{`Output candidate · ${String(record.output_candidate)}`}</span>
             <span>{`Snapshot · ${formatBoundedEvidenceLedgerToken(record.collector_snapshot_id)}`}</span>
             <span>{`Correlation · ${record.correlation_id ? formatBoundedEvidenceLedgerToken(record.correlation_id) : 'none'}`}</span>
@@ -1958,7 +1963,7 @@ function renderSelectedAgentEvidenceCheckpointProofRow(
   if (checkpoint && 'event_id' in checkpoint) {
     facts.push(formatBoundedEvidenceLedgerToken(checkpoint.event_id), checkpoint.event_type);
     if (checkpoint.source_kind) {
-      facts.push(checkpoint.source_kind);
+      facts.push(formatEvidenceSourceKindLabel(checkpoint.source_kind, 'ledger'));
     }
     facts.push(renderTimestamp(checkpoint.ts, 'No timestamp'));
   } else if (checkpoint && 'received_at' in checkpoint) {
@@ -1974,9 +1979,9 @@ function renderSelectedAgentEvidenceCheckpointProofRow(
     );
   } else if (checkpoint) {
     facts.push(
-      checkpoint.source_kind ?? 'unknown source',
-      checkpoint.evidence_role ?? 'unclassified',
-      checkpoint.source_status ?? 'unknown',
+      formatEvidenceSourceKindLabel(checkpoint.source_kind, 'ledger'),
+      formatEvidenceRoleLabel(checkpoint.evidence_role, 'ledger'),
+      formatEvidenceSourceStatusLabel(checkpoint.source_status, 'ledger'),
       checkpoint.output_candidate ? 'output candidate' : 'non-output',
       checkpoint.correlation_id ? formatBoundedEvidenceLedgerToken(checkpoint.correlation_id) : 'no correlation',
       renderTimestamp(checkpoint.observed_at, 'No observed timestamp')
@@ -2053,7 +2058,7 @@ function renderSelectedAgentEvidenceProvenanceAnchors(
       ) : null}
       {source ? (
         <span>
-          {`Source anchor · ${formatBoundedEvidenceLedgerToken(source.evidence_id, { includeLocalPathBasename: false })} · ${source.source_kind} · ${source.evidence_role ?? 'unclassified'} · ${source.source_status ?? 'unknown'}`}
+          {`Source anchor · ${formatBoundedEvidenceLedgerToken(source.evidence_id, { includeLocalPathBasename: false })} · ${formatEvidenceSourceKindLabel(source.source_kind, 'ledger')} · ${formatEvidenceRoleLabel(source.evidence_role, 'ledger')} · ${formatEvidenceSourceStatusLabel(source.source_status, 'ledger')}`}
         </span>
       ) : null}
       {replay && replayAnchorLabel ? (
@@ -2347,9 +2352,11 @@ function renderFreshnessCause({
 }
 
 function renderActiveQueueRunContextPreview(operation: OfficeOperation) {
+  const sourceKind = findFirstNonEmptyString([operation.latest_event?.source_kind]);
+
   return [
     `Event · ${findFirstNonEmptyString([operation.latest_event?.summary]) ?? 'No latest event yet'}`,
-    `Source · ${findFirstNonEmptyString([operation.latest_event?.source_kind]) ?? 'No latest event source'}`,
+    `Source · ${sourceKind ? formatEvidenceSourceKindLabel(sourceKind, 'ledger') : 'No latest event source'}`,
     `Freshness · ${renderTimestamp(operation.last_event_at, 'No last event timestamp')}`,
     `Heartbeat · ${renderTimestamp(operation.last_heartbeat_at, 'No heartbeat yet')}`,
     `Output · ${renderTimestamp(operation.last_meaningful_output_at, 'No last output timestamp')}`,
@@ -2938,7 +2945,7 @@ function renderCorrelationInteraction({
       <span>{`Started · ${interaction.started_at}`}</span>
       {interaction.ended_at ? <span>{`Ended · ${interaction.ended_at}`}</span> : null}
       <span>{`Trigger · ${interaction.trigger_event_id}`}</span>
-      {sourceKind ? <span>{`Source · ${sourceKind}`}</span> : null}
+      {sourceKind ? <span>{`Source · ${formatEvidenceSourceKindLabel(sourceKind, 'ledger')}`}</span> : null}
       {relatedEventIds.length > 0 ? <span>{`Related events · ${relatedEventIds.join(', ')}`}</span> : null}
       {stateTransition ? <span>{`State · ${stateTransition}`}</span> : null}
       <span>
@@ -3095,7 +3102,7 @@ function renderCorrelationTimelineEvent(
       ) : (
         <span>{`Evidence · ${renderEvidenceRefs(event.evidence_refs)}`}</span>
       )}
-      <span>{`Source · ${event.source_kind}`}</span>
+      <span>{`Source · ${formatEvidenceSourceKindLabel(event.source_kind, 'ledger')}`}</span>
     </li>
   );
 }
@@ -3187,7 +3194,7 @@ function renderReplayTimelineEvent({
           allowExactFallback
         })}
       </span>
-      <span>{`Source · ${event.source_kind}`}</span>
+      <span>{`Source · ${formatEvidenceSourceKindLabel(event.source_kind, 'ledger')}`}</span>
       {event.correlation_id ? (
         <span>
           Correlation pivot ·{' '}
@@ -3435,7 +3442,7 @@ function renderReplaySummaryFacets(facets: ReplaySummaryFacets) {
 function renderReplayBundleSourceKindCounts(sourceKindBuckets: Record<string, number>) {
   const sourceKindCounts = Object.entries(sourceKindBuckets)
     .filter(([, count]) => count > 0)
-    .map(([sourceKind, count]) => `${sourceKind} (${count})`);
+    .map(([sourceKind, count]) => `${formatEvidenceSourceKindLabel(sourceKind, 'ledger')} (${count})`);
 
   return renderNamedList(sourceKindCounts, 'No source-kind counts');
 }
@@ -3631,7 +3638,7 @@ function renderReplayBundleLedgerSourceKinds(entry: AccountabilityReplayLedgerEn
   const sourceKinds = dedupeNonEmptyStrings([
     entry.source_kind,
     ...(entry.source_kinds ?? [])
-  ]);
+  ]).map((sourceKind) => formatEvidenceSourceKindLabel(sourceKind, 'ledger'));
 
   return renderNamedList(sourceKinds, 'No source kinds');
 }
@@ -4022,7 +4029,7 @@ function renderWorkflowStatusRecord({
           onSelectCorrelation
         })}
       </span>
-      <span>{`Source · ${sourceKind}`}</span>
+      <span>{`Source · ${formatEvidenceSourceKindLabel(sourceKind, 'ledger')}`}</span>
     </li>
   );
 }
@@ -4113,7 +4120,7 @@ function renderWorkflowPeerWatchAlert({
         })}
       </span>
       <span>{`Evidence count · ${alert.evidence_count}`}</span>
-      <span>{`Source · ${alert.source_kind}`}</span>
+      <span>{`Source · ${formatEvidenceSourceKindLabel(alert.source_kind, 'ledger')}`}</span>
     </li>
   );
 }
@@ -4214,7 +4221,7 @@ function renderSelectedAgentSupervisionAlert({
           })}
         </span>
         <span className="aitown-evidence-card__fact">{`Evidence count · ${alert.evidence_count}`}</span>
-        <span className="aitown-evidence-card__fact">{`Source · ${alert.source_kind}`}</span>
+        <span className="aitown-evidence-card__fact">{`Source · ${formatEvidenceSourceKindLabel(alert.source_kind, 'ledger')}`}</span>
       </div>
     </li>
   );
@@ -4346,7 +4353,7 @@ function renderCrewOpenSupervisionAlert({
           })}
         </span>
         <span className="aitown-evidence-card__fact">{`Evidence count · ${alert.evidence_count}`}</span>
-        <span className="aitown-evidence-card__fact">{`Source · ${alert.source_kind}`}</span>
+        <span className="aitown-evidence-card__fact">{`Source · ${formatEvidenceSourceKindLabel(alert.source_kind, 'ledger')}`}</span>
       </div>
     </li>
   );
@@ -4433,7 +4440,10 @@ function renderSharedMemoryArtifact({
         </span>
       ) : null}
       {artifact.source_kinds.length > 0 ? (
-        <span>{`Source kinds · ${renderNamedList(dedupeNonEmptyStrings(artifact.source_kinds), 'No source kinds')}`}</span>
+        <span>{`Source kinds · ${renderNamedList(
+          dedupeNonEmptyStrings(artifact.source_kinds).map((sourceKind) => formatEvidenceSourceKindLabel(sourceKind, 'ledger')),
+          'No source kinds'
+        )}`}</span>
       ) : null}
       {artifact.collector_last_modified_at ? (
         <span>{`Collector modified · ${artifact.collector_last_modified_at}`}</span>
@@ -4762,7 +4772,7 @@ function renderIncidentRecord({
           <span className="aitown-evidence-card__fact aitown-evidence-card__fact--wide">
             Evidence · {renderedEvidence}
           </span>
-          <span className="aitown-evidence-card__fact aitown-evidence-card__fact--wide">{`Source · ${incident.source_kind}`}</span>
+          <span className="aitown-evidence-card__fact aitown-evidence-card__fact--wide">{`Source · ${formatEvidenceSourceKindLabel(incident.source_kind, 'ledger')}`}</span>
         </div>
       </li>
     );
@@ -4792,7 +4802,7 @@ function renderIncidentRecord({
       <span>{`Severity · ${SEVERITY_LABELS[incident.severity]}`}</span>
       <span>Counterparties · {renderedCounterparties}</span>
       <span>Evidence · {renderedEvidence}</span>
-      <span>{`Source · ${incident.source_kind}`}</span>
+      <span>{`Source · ${formatEvidenceSourceKindLabel(incident.source_kind, 'ledger')}`}</span>
     </li>
   );
 }
@@ -4855,7 +4865,10 @@ function renderCollectorEvidenceCoverageItem({
     <>
       <span>{`Coverage status · ${coverageLow ? 'below high-confidence/no evidence' : 'evidence coverage present'}`}</span>
       <span>
-        {`Evidence coverage · ${renderEvidenceRefCount(coverageItem.evidence_ref_count)} · ${renderNamedList(coverageItem.source_kinds, 'No evidence sources')}`}
+        {`Evidence coverage · ${renderEvidenceRefCount(coverageItem.evidence_ref_count)} · ${renderNamedList(
+          coverageItem.source_kinds.map((sourceKind) => formatEvidenceSourceKindLabel(sourceKind, 'ledger')),
+          'No evidence sources'
+        )}`}
       </span>
       <span>{`Latest evidence · ${renderTimestamp(coverageItem.latest_evidence_at, 'No recent evidence')}`}</span>
     </>
@@ -5762,7 +5775,10 @@ export function DetailsPanel({
                 <span>{`Agent count · ${artifact.agent_count}`}</span>
                 <span>{`Mention count · ${artifact.mention_count}`}</span>
                 <span>{`Last seen · ${renderTimestamp(artifact.last_seen_at, 'No shared snapshot timestamp')}`}</span>
-                <span>{`Source kinds · ${renderNamedList(artifact.source_kinds, 'No source kinds')}`}</span>
+                <span>{`Source kinds · ${renderNamedList(
+                  artifact.source_kinds.map((sourceKind) => formatEvidenceSourceKindLabel(sourceKind, 'ledger')),
+                  'No source kinds'
+                )}`}</span>
                 <span>{`Participating agents · ${renderNamedList(artifact.agent_ids, 'No participating agents')}`}</span>
               </li>
             ))}
@@ -6485,7 +6501,9 @@ export function DetailsPanel({
     ...(alignedCorrelation?.timeline.map((event) => event.source_kind) ?? []),
     ...accountabilityMemoryArtifacts.flatMap((artifact) => artifact.source_kinds),
     accountabilityCorrelationId || !collectorSnapshot ? null : `collector:${collectorSnapshot.actor_id}`
-  ]).slice(0, 5);
+  ])
+    .map((sourceKind) => formatEvidenceSourceKindLabel(sourceKind, 'ledger'))
+    .slice(0, 5);
   const accountabilityCorrelationCounts =
     alignedCorrelation
       ? `${alignedCorrelation.incident_count} incidents · ${alignedCorrelation.interaction_count} interactions · ${alignedCorrelation.event_count} events`
@@ -6830,7 +6848,11 @@ export function DetailsPanel({
                       allowExactFallback: true
                     })}
                   </span>
-                  <span>{`Source · ${selectedOperation.latest_event?.source_kind ?? 'No latest event source'}`}</span>
+                  <span>{`Source · ${
+                    selectedOperation.latest_event?.source_kind
+                      ? formatEvidenceSourceKindLabel(selectedOperation.latest_event.source_kind, 'ledger')
+                      : 'No latest event source'
+                  }`}</span>
                 </li>
               ) : null}
             </ul>
@@ -7089,7 +7111,11 @@ export function DetailsPanel({
               </span>
               <span>{`Structured rows · ${renderStructuredEvidenceFacetCount(selectedAgentDetailEvidenceFacets.rows.length, 'loaded detail row')}`}</span>
               <span>{`Evidence refs · ${renderCompactFacetList(selectedAgentDetailEvidenceFacets.evidence_refs, 'No evidence refs', formatPublicEvidenceRefLabel)}`}</span>
-              <span>{`Source kinds · ${renderCompactFacetList(selectedAgentDetailEvidenceFacets.source_kinds, 'No source kinds')}`}</span>
+              <span>{`Source kinds · ${renderCompactFacetList(
+                selectedAgentDetailEvidenceFacets.source_kinds,
+                'No source kinds',
+                (sourceKind) => formatEvidenceSourceKindLabel(sourceKind, 'ledger')
+              )}`}</span>
               <span>{`Correlations · ${renderCompactFacetList(selectedAgentDetailEvidenceFacets.correlation_ids, 'No correlations')}`}</span>
               <span>{`Events · ${renderCompactFacetList(selectedAgentDetailEvidenceFacets.event_ids, 'No event ids')}`}</span>
               <span>{`Incidents · ${renderCompactFacetList(selectedAgentDetailEvidenceFacets.incident_ids, 'No incident ids')}`}</span>

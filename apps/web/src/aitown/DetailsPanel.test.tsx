@@ -1941,7 +1941,7 @@ describe('DetailsPanel selected-agent workflow lifecycle', () => {
     expect(
       within(facetsRecord!).getByText('Evidence refs · Local evidence, Local evidence, Local evidence, +1 more')
     ).toBeVisible();
-    expect(within(facetsRecord!).getByText('Source kinds · incident_reader, peer_watch, workflow_event, +1 more')).toBeVisible();
+    expect(within(facetsRecord!).getByText('Source kinds · Incident reader, Peer watch, Workflow event, +1 more')).toBeVisible();
     expect(within(facetsRecord!).getByText('Correlations · corr-app-review, corr-peer-watch')).toBeVisible();
     expect(within(facetsRecord!).getByText('Events · evt-2, evt-interaction, evt-related')).toBeVisible();
     expect(within(facetsRecord!).getByText('Incidents · inc-structured-facet')).toBeVisible();
@@ -2100,6 +2100,211 @@ describe('DetailsPanel selected-agent workflow lifecycle', () => {
     expect(within(section!).getByText('Status mix · Observed 5, Missing 2')).toBeVisible();
     expect(section!).not.toHaveTextContent(
       /ref_group_001|workspace_file|tmux_observation|hermes_session|\/tmp|\/Users|tmux:\/\/|hermes:\/\/|session:\/\/|profile:\/\/|token|webhook|secret|metadata|control-plane|dispatch/i
+    );
+  });
+
+  it('uses allowlisted Unknown enum labels across evidence ledger, source context, and replay window text', () => {
+    const hostileSourceKind = 'payload metadata webhook control-plane session://raw /tmp/raw';
+    const hostileRole = 'dispatch metadata webhook /tmp/raw';
+    const hostileStatus = 'profile payload session://raw /tmp/raw';
+    const selectedAgentEvidenceLedger = buildSelectedAgentEvidenceLedger({
+      outputEvidence: {
+        totalCount: 1,
+        overflowCount: 0,
+        items: [
+          {
+            evidenceId: 'hostile-enum-output',
+            observedAt: '2026-03-16T08:58:00.000Z',
+            collectedAt: '2026-03-16T08:59:00.000Z',
+            agentId: 'app-engineering',
+            sourceKind: hostileSourceKind,
+            evidenceRef: '/tmp/raw',
+            evidenceRole: hostileRole,
+            sourceStatus: hostileStatus,
+            outputCandidate: true,
+            collectorSnapshotId: 'collector-20260316',
+            correlationId: 'corr-app-review',
+            degradedReasons: []
+          }
+        ]
+      },
+      nonOutputEvidence: { totalCount: 0, overflowCount: 0, items: [] },
+      degradedEvidence: { totalCount: 0, overflowCount: 0, items: [] },
+      unmappedEvidence: { totalCount: 0, overflowCount: 0, items: [] },
+      sourceContextGroups: [
+        {
+          sourceKind: hostileSourceKind,
+          evidenceRole: hostileRole,
+          sourceStatus: hostileStatus,
+          mapped: true,
+          observedAt: '2026-03-16T08:58:00.000Z',
+          collectedAt: '2026-03-16T08:59:00.000Z',
+          totalCount: 1
+        }
+      ],
+      sourceRefGroups: [
+        {
+          sourceKind: hostileSourceKind,
+          evidenceRole: hostileRole,
+          sourceStatus: hostileStatus,
+          totalCount: 1
+        }
+      ],
+      proofCompassRows: []
+    });
+
+    const hostileSourceContext = buildEvidenceSourceContext({
+      source_summary: {
+        kind: hostileSourceKind,
+        role: hostileRole,
+        status: hostileStatus,
+        output_candidate: true,
+        mapped: true,
+        time: {
+          observed_at: '2026-03-16T08:58:00.000Z',
+          collected_at: '2026-03-16T08:59:00.000Z'
+        }
+      }
+    });
+    const hostileReplayWindow = {
+      center: {
+        append_index: 21,
+        evidence_id: 'hostile-enum-output',
+        source_summary: {
+          kind: hostileSourceKind,
+          role: hostileRole,
+          status: hostileStatus,
+          output_candidate: true,
+          mapped: true,
+          time: {
+            observed_at: '2026-03-16T08:58:00.000Z',
+            collected_at: '2026-03-16T08:59:00.000Z'
+          }
+        },
+        record: {
+          observed_at: '2026-03-16T08:58:00.000Z',
+          collected_at: '2026-03-16T08:59:00.000Z',
+          agent_id: 'app-engineering',
+          source_kind: hostileSourceKind,
+          evidence_role: hostileRole,
+          source_status: hostileStatus,
+          output_candidate: true,
+          unmapped: false
+        }
+      },
+      window: { before: 1, after: 1 },
+      before: [
+        {
+          append_index: 20,
+          record_kind: 'evidence_record',
+          checkpoint: {
+            observed_at: '2026-03-16T08:57:00.000Z',
+            collected_at: '2026-03-16T08:59:00.000Z',
+            agent_id: 'app-engineering',
+            source_kind: hostileSourceKind,
+            evidence_role: hostileRole,
+            source_status: hostileStatus,
+            output_candidate: true,
+            unmapped: false
+          }
+        }
+      ],
+      after: []
+    };
+
+    const evidenceRender = render(
+      <DetailsPanel
+        {...buildProps({
+          activeHubCategory: 'evidence',
+          selectedAgentDrilldownTab: 'evidence',
+          selectedAgentEvidenceLedger,
+          selectedAgentEvidenceLedgerState: 'ready',
+          selectedAgentEvidenceRecord: buildEvidenceRecord({
+            evidence_id: 'hostile-enum-output',
+            source_kind: hostileSourceKind,
+            evidence_role: hostileRole,
+            source_status: hostileStatus
+          }),
+          selectedAgentEvidenceRecordId: 'hostile-enum-output',
+          selectedAgentEvidenceRecordState: 'ready',
+          selectedAgentEvidenceProvenanceBundle: buildEvidenceProvenanceBundle({
+            anchors: {
+              snapshot: null,
+              source: {
+                evidence_id: 'hostile-enum-output',
+                source_kind: hostileSourceKind,
+                evidence_role: hostileRole,
+                source_status: hostileStatus,
+                route: '/evidence-records/hostile-enum-output'
+              },
+              replay: {
+                evidence_id: 'hostile-enum-output',
+                route: '/accountability/replay?evidence_id=hostile-enum-output'
+              }
+            }
+          }),
+          selectedAgentEvidenceProvenanceBundleState: 'ready',
+          selectedAgentEvidenceSourceContext: hostileSourceContext,
+          selectedAgentEvidenceSourceContextState: 'ready',
+          selectedAgentEvidenceCheckpointLog: {
+            items: [
+              {
+                append_index: 21,
+                record_kind: 'evidence_record',
+                checkpoint: {
+                  observed_at: '2026-03-16T08:58:00.000Z',
+                  collected_at: '2026-03-16T08:59:00.000Z',
+                  agent_id: 'app-engineering',
+                  source_kind: hostileSourceKind,
+                  evidence_role: hostileRole,
+                  source_status: hostileStatus,
+                  output_candidate: true,
+                  collector_snapshot_id: 'collector-20260316',
+                  correlation_id: 'corr-app-review',
+                  unmapped: false
+                }
+              }
+            ]
+          },
+          selectedAgentEvidenceCheckpointLogState: 'ready',
+          selectedAgentEvidenceReplayWindow: null,
+          selectedAgentEvidenceReplayWindowState: 'idle'
+        })}
+      />
+    );
+
+    const evidenceText = evidenceRender.container.textContent ?? '';
+    const evidenceAriaText = Array.from(evidenceRender.container.querySelectorAll('[aria-label]'))
+      .map((element) => element.getAttribute('aria-label') ?? '')
+      .join(' ');
+
+    expect(evidenceText).toContain('Source context · Unknown · Unknown · Unknown · mapped');
+    expect(evidenceText).toContain('Ref rollup · Unknown · Unknown · Unknown · refs available · 1');
+    expect(evidenceText).toContain('Source · Unknown · Role · Unknown · Status · Unknown · mapped');
+    expect(evidenceText).toContain('Source anchor · hostile-enum-output · Unknown · Unknown · Unknown');
+    expect(evidenceText).toContain('#21 · evidence_record · Unknown · Unknown · Unknown · output candidate');
+
+    evidenceRender.unmount();
+
+    const replayRender = render(
+      <DetailsPanel
+        {...buildProps({
+          activeHubCategory: 'evidence',
+          selectedAgentDrilldownTab: 'replay',
+          selectedAgentEvidenceReplayWindow: hostileReplayWindow,
+          selectedAgentEvidenceReplayWindowState: 'ready'
+        })}
+      />
+    );
+    const replayText = replayRender.container.textContent ?? '';
+    const replayAriaText = Array.from(replayRender.container.querySelectorAll('[aria-label]'))
+      .map((element) => element.getAttribute('aria-label') ?? '')
+      .join(' ');
+
+    expect(replayText).toContain('Center · Unknown · Unknown · Unknown');
+    expect(replayText).toContain('Before · #20 · evidence record · Unknown · Unknown · Unknown');
+    expect(`${evidenceText} ${evidenceAriaText} ${replayText} ${replayAriaText}`).not.toMatch(
+      /payload|metadata|webhook|control-plane|dispatch|session:\/\/raw|\/tmp\/raw|profile payload/
     );
   });
 
@@ -2303,9 +2508,9 @@ describe('DetailsPanel selected-agent workflow lifecycle', () => {
     expect(within(section!).getByText('Evidence id · output-1')).toBeVisible();
     expect(within(section!).getByText('Observed · 2026-03-16T08:58:00.000Z')).toBeVisible();
     expect(within(section!).getByText('Collected · 2026-03-16T08:59:00.000Z')).toBeVisible();
-    expect(within(section!).getByText('Source · workspace_file')).toBeVisible();
-    expect(within(section!).getByText('Status · observed')).toBeVisible();
-    expect(within(section!).getByText('Role · agent_output')).toBeVisible();
+    expect(within(section!).getByText('Source · Workspace file')).toBeVisible();
+    expect(within(section!).getByText('Status · Observed')).toBeVisible();
+    expect(within(section!).getByText('Role · Agent output')).toBeVisible();
     expect(within(section!).getByText('Output candidate · true')).toBeVisible();
     expect(within(section!).getByText('Snapshot · collector-20260316')).toBeVisible();
     expect(within(section!).getByText('Correlation · corr-app-review')).toBeVisible();
@@ -2315,7 +2520,7 @@ describe('DetailsPanel selected-agent workflow lifecycle', () => {
       within(section!).getByText(/Snapshot anchor · collector-snapshot-20260316-with-a-very-long-\[redacted\]/)
     ).toBeVisible();
     expect(
-      within(section!).getByText(/Source anchor · output-1:\[local path\] · workspace_file · agent_output · observed/)
+      within(section!).getByText(/Source anchor · output-1:\[local path\] · Workspace file · Agent output · Observed/)
     ).toBeVisible();
     expect(within(section!).getByText(/Replay anchor · corr-app-review-with-\[redacted\]/)).toBeVisible();
     expect(section!).not.toHaveTextContent('/tmp/app/outbox.md');
@@ -2564,12 +2769,12 @@ describe('DetailsPanel selected-agent workflow lifecycle', () => {
     expect(within(proofStrip).getByText('Checkpoint proof')).toBeVisible();
     expect(
       within(proofStrip).getByText(
-        '#21 · evidence_record · workspace_file · agent_output · observed · output candidate · corr-app-review · 2026-03-16T08:58:00.000Z'
+        '#21 · evidence_record · Workspace file · Agent output · Observed · output candidate · corr-app-review · 2026-03-16T08:58:00.000Z'
       )
     ).toBeVisible();
     expect(
       within(proofStrip).getByText(
-        '#22 · event · evt-real-replay-anchor · workflow_reviewed · controller_event · 2026-03-16T08:58:30.000Z'
+        '#22 · event · evt-real-replay-anchor · workflow_reviewed · Controller event · 2026-03-16T08:58:30.000Z'
       )
     ).toBeVisible();
     expect(
@@ -2737,7 +2942,7 @@ describe('DetailsPanel selected-agent workflow lifecycle', () => {
     expect(section).not.toBeNull();
     expect(
       within(section!).getByText(
-        /Source anchor · \[tmux ref\] \[runtime ref\] \[runtime ref\] \[runtime ref\] \[local path\] · tmux_observation · runtime_unmapped · observed/
+        /Source anchor · \[tmux ref\] \[runtime ref\] \[runtime ref\] \[runtime ref\] \[local path\] · Runtime observation · Runtime unmapped · Observed/
       )
     ).toBeVisible();
     expect(section!).not.toHaveTextContent('/Users/cwp/private/note.md');
@@ -4230,7 +4435,7 @@ describe('DetailsPanel accountability signals', () => {
       'blocked · Waiting on review sign-off'
     );
     expect(document.getElementById('aitown-active-queue-preview-app-engineering')).toHaveTextContent(
-      'Event · Followed up on missing workflow evidence · Source · controller_event · Freshness · 2026-03-16T08:58:30.000Z · Heartbeat · 2026-03-16T08:59:30.000Z · Output · 2026-03-16T08:58:00.000Z · Staleness · Yellow · 5m · Reboot · Recommended'
+      'Event · Followed up on missing workflow evidence · Source · Controller event · Freshness · 2026-03-16T08:58:30.000Z · Heartbeat · 2026-03-16T08:59:30.000Z · Output · 2026-03-16T08:58:00.000Z · Staleness · Yellow · 5m · Reboot · Recommended'
     );
     expect(document.getElementById('aitown-active-queue-status-team-lead')).toHaveTextContent(
       'reviewing · Coordinate rollout'
@@ -4762,7 +4967,7 @@ describe('DetailsPanel accountability signals', () => {
     ).toBeVisible();
     expect(within(section!).getByText('Counts · 1 events · 1 interactions · 2 artifacts')).toBeVisible();
     expect(
-      within(section!).getByText('Source-kind counts · controller_event (2), collector_snapshot (1) · derived/read-only')
+      within(section!).getByText('Source-kind counts · Controller event (2), Collector snapshot (1) · derived/read-only')
     ).toBeVisible();
     expect(within(section!).getByText('Ledger · 4 entries · derived/read-only')).toBeVisible();
     expect(within(section!).getByText('Participants · app-engineering, team-lead')).toBeVisible();
@@ -6125,7 +6330,7 @@ describe('DetailsPanel accountability signals', () => {
     expect(incidentCard!).toHaveTextContent('Actor · team-lead');
     expect(incidentCard!).toHaveTextContent('Counterparties · team-lead');
     expect(incidentCard!).toHaveTextContent('Evidence · /evidence/review.md');
-    expect(incidentCard!).toHaveTextContent('Source · controller_event');
+    expect(incidentCard!).toHaveTextContent('Source · Controller event');
     expect(
       within(incidentCard!).getByRole('button', {
         name: 'Select incident feed actor from incident inc-feed-1 team-lead'
@@ -7069,7 +7274,7 @@ describe('DetailsPanel accountability signals', () => {
     const card = within(section!).getByText('Controller event interaction provenance').closest('li');
     expect(card).not.toBeNull();
     expect(within(card!).getByText('Trigger · evt-start')).toBeVisible();
-    expect(within(card!).getByText('Source · controller_event')).toBeVisible();
+    expect(within(card!).getByText('Source · Controller event')).toBeVisible();
     expect(within(card!).getByText('Related events · evt-end')).toBeVisible();
     expect(within(card!).queryByText('Related events · evt-start, evt-end')).not.toBeInTheDocument();
   });
@@ -8477,7 +8682,7 @@ describe('DetailsPanel accountability signals', () => {
     ).toHaveTextContent('Review note (artifact/review-note)');
     expect(
       within(section!).getByText(
-        'Source · controller_event, workflow_event, timeline_replay, evidence_ref'
+        'Source · Controller event, Workflow event, Timeline replay, Evidence ref'
       )
     ).toBeVisible();
     expect(
@@ -9268,7 +9473,7 @@ describe('DetailsPanel accountability signals', () => {
     ).toHaveTextContent(sharedArtifactRef);
     expect(sharedArtifactRecord!).toHaveTextContent('Mention count · 3');
     expect(sharedArtifactRecord!).toHaveTextContent('Last seen · 2026-03-16T08:59:00.000Z');
-    expect(sharedArtifactRecord!).toHaveTextContent('Source kinds · workspace_file, tmux_observation');
+    expect(sharedArtifactRecord!).toHaveTextContent('Source kinds · Workspace file, Runtime observation');
     expect(sharedArtifactRecord!).toHaveTextContent('Participating agents · app-engineering, growth-revenue');
 
     await user.click(
@@ -12177,7 +12382,7 @@ describe('DetailsPanel accountability signals', () => {
         name: 'Jump to shared memory artifact artifact/secondary-bundle'
       })
     ).toHaveTextContent('Secondary evidence bundle (artifact/secondary-bundle)');
-    expect(within(section!).getByText('Source · handoff_log, controller_event, timeline_replay')).toBeVisible();
+    expect(within(section!).getByText('Source · Handoff log, Controller event, Timeline replay')).toBeVisible();
     expect(within(section!).queryByText(/review-only\.md/)).not.toBeInTheDocument();
     expect(within(section!).queryByText(/Replay evidence bundle/)).not.toBeInTheDocument();
     expect(within(section!).queryByText(/collector:collector-watch/)).not.toBeInTheDocument();
@@ -12246,7 +12451,7 @@ describe('DetailsPanel accountability signals', () => {
       within(section!).getByText('What · Peer watch alert: waiting on aligned workflow evidence')
     ).toBeVisible();
     expect(section!).toHaveTextContent('Evidence · /evidence/peer-watch-only.md');
-    expect(within(section!).getByText('Source · peer_watch_alert')).toBeVisible();
+    expect(within(section!).getByText('Source · Peer watch alert')).toBeVisible();
     expect(within(section!).queryByText(/What · Waiting on review sign-off/)).not.toBeInTheDocument();
     expect(within(section!).queryByText(/What · Fix workflow issue/)).not.toBeInTheDocument();
   });
@@ -12408,7 +12613,7 @@ describe('DetailsPanel accountability signals', () => {
     expect(section!).toHaveTextContent('Evidence · /evidence/open-alert.md, /evidence/workflow-interaction.md, /evidence/workflow-incident.md, /evidence/workflow-handoff.md');
     expect(
       within(section!).getByText(
-        'Source · workflow_interaction, correlation_interaction, peer_watch_alert, workflow_incident, handoff_log'
+        'Source · Workflow interaction, Correlation interaction, Peer watch alert, Workflow incident, Handoff log'
       )
     ).toBeVisible();
   });
@@ -13796,7 +14001,7 @@ describe('DetailsPanel workflow peer-watch alerts', () => {
       })
     ).not.toBeInTheDocument();
     expect(within(alertRecord!).getByText('Evidence count · 2')).toBeVisible();
-    expect(within(alertRecord!).getByText('Source · controller_event')).toBeVisible();
+    expect(within(alertRecord!).getByText('Source · Controller event')).toBeVisible();
 
     await user.click(
       localEvidenceButtons[0]
@@ -13922,7 +14127,7 @@ describe('DetailsPanel workflow peer-watch alerts', () => {
       })
     ).not.toBeInTheDocument();
     expect(within(alertRecord!).getByText('Evidence count · 2')).toBeVisible();
-    expect(within(alertRecord!).getByText('Source · controller_event')).toBeVisible();
+    expect(within(alertRecord!).getByText('Source · Controller event')).toBeVisible();
 
     await user.click(
       localEvidenceButtons[0]
@@ -14475,7 +14680,7 @@ describe('DetailsPanel shared memory', () => {
     expect(within(section!).getByText('Team lead kept a local review note')).toBeVisible();
     expect(within(section!).getByText('Correlations · No correlation ids')).toBeVisible();
     expect(within(section!).getByText('Latest event type · agent_noted')).toBeVisible();
-    expect(within(section!).getByText('Source kinds · workspace_snapshot')).toBeVisible();
+    expect(within(section!).getByText('Source kinds · Workspace snapshot')).toBeVisible();
     expect(within(section!).getByText('Collector modified · 2026-03-16T08:59:00.000Z')).toBeVisible();
     expect(
       within(section!).queryByRole('button', {

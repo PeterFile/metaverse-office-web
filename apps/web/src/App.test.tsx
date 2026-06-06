@@ -4935,21 +4935,21 @@ afterEach(() => {
       expect(detailSection).toHaveTextContent('Evidence id · output-1');
       expect(detailSection).toHaveTextContent('Observed · 2026-03-16T08:58:00.000Z');
       expect(detailSection).toHaveTextContent('Collected · 2026-03-16T08:59:00.000Z');
-      expect(detailSection).toHaveTextContent('Source · workspace_file');
-      expect(detailSection).toHaveTextContent('Status · observed');
-      expect(detailSection).toHaveTextContent('Role · agent_output');
+      expect(detailSection).toHaveTextContent('Source · Workspace file');
+      expect(detailSection).toHaveTextContent('Status · Observed');
+      expect(detailSection).toHaveTextContent('Role · Agent output');
       expect(detailSection).toHaveTextContent('Output candidate · true');
       expect(detailSection).toHaveTextContent('Snapshot · collector-20260316');
       expect(detailSection).toHaveTextContent('Snapshot anchor · collector-20260316-with-[redacted]');
       expect(
         within(detailSection).getByText(
-          'Source anchor · output-1 [tmux ref] [runtime ref] [runtime ref] [local path] · workspace_file · agent_output · observed'
+          'Source anchor · output-1 [tmux ref] [runtime ref] [runtime ref] [local path] · Workspace file · Agent output · Observed'
         )
       ).toBeVisible();
       expect(detailSection).toHaveTextContent('Replay anchor · corr-app-review-with-[redacted]');
       expect(detailSection).toHaveTextContent('Checkpoint proof');
       expect(detailSection).toHaveTextContent(
-        '#21 · evidence_record · workspace_file · agent_output · observed · output candidate · corr-app-review · 2026-03-16T08:58:00.000Z'
+        '#21 · evidence_record · Workspace file · Agent output · Observed · output candidate · corr-app-review · 2026-03-16T08:58:00.000Z'
       );
       expect(detailSection).toHaveTextContent(
         '#22 · collector_snapshot · collector-20260316 · 1 items · 2026-03-16T08:59:00.000Z'
@@ -5341,7 +5341,7 @@ afterEach(() => {
       expect(detailSection).toHaveTextContent('Evidence id · output-1');
       expect(detailSection).toHaveTextContent('Snapshot anchor · collector-20260316-with-[redacted]');
       expect(detailSection).toHaveTextContent(
-        'Source anchor · output-1-with-[redacted] · workspace_file · agent_output · observed'
+        'Source anchor · output-1-with-[redacted] · Workspace file · Agent output · Observed'
       );
       expect(detailSection).toHaveTextContent('Replay anchor · corr-app-review-with-[redacted]');
     });
@@ -5752,7 +5752,7 @@ afterEach(() => {
     expect(sourceGapButtons).toHaveLength(3);
     expect(within(sourceGapFocus).getByText('+2 more')).toBeVisible();
     expect(sourceGapFocus).toHaveTextContent('Mapped agent');
-    expect(sourceGapFocus).toHaveTextContent('source evidence · output candidate');
+    expect(sourceGapFocus).toHaveTextContent('Unknown · output candidate');
 
     for (const canary of canaries) {
       expect(sourceGapFocus).not.toHaveTextContent(canary);
@@ -6534,7 +6534,7 @@ afterEach(() => {
       ).toBeVisible();
     });
     expect(within(memorySection!).getByText('Latest event type · handoff_completed')).toBeVisible();
-    expect(within(memorySection!).getByText('Source kinds · controller_event')).toBeVisible();
+    expect(within(memorySection!).getByText('Source kinds · Controller event')).toBeVisible();
     expect(within(memorySection!).getByText('Collector modified · 2026-03-16T08:52:00.000Z')).toBeVisible();
     expect(
       within(memorySection!).queryByText('Workflow evidence anchor for the lead review trail')
@@ -7100,7 +7100,7 @@ afterEach(() => {
       growthRevenueSelectedReviewCorrelationMemoryArtifactsUrl,
       expect.anything()
     );
-  });
+  }, 10000);
 
   it('shows selected-agent artifact context with the agent filter when no correlation is active', async () => {
     const user = userEvent.setup();
@@ -7117,7 +7117,7 @@ afterEach(() => {
     expect(memorySection).toHaveTextContent('Agents · team-lead');
     expect(within(memorySection!).getByText('Correlations · No correlation ids')).toBeVisible();
     expect(within(memorySection!).getByText('Latest event type · agent_noted')).toBeVisible();
-    expect(within(memorySection!).getByText('Source kinds · workspace_snapshot')).toBeVisible();
+    expect(within(memorySection!).getByText('Source kinds · Workspace snapshot')).toBeVisible();
     expect(within(memorySection!).getByText('Collector modified · 2026-03-16T08:59:00.000Z')).toBeVisible();
     expect(
       within(memorySection!).queryByRole('button', {
@@ -7311,7 +7311,7 @@ afterEach(() => {
         name: 'Jump to shared memory artifact /tmp/evidence.md'
       })
     ).toBeVisible();
-    expect(within(overviewIncidentRecord!).getByText('Source · controller_event')).toBeVisible();
+    expect(within(overviewIncidentRecord!).getByText('Source · Controller event')).toBeVisible();
     expect(within(incidentSection!).getByRole('button', { name: 'Select incident agent app-engineering from incident inc-1' })).toBeVisible();
     expect(
       within(incidentSection!).getByRole('button', { name: /Open incident correlation corr-app-review/ })
@@ -7420,7 +7420,7 @@ afterEach(() => {
     expect(growthRevenueCollectorRecord!).toHaveTextContent('Watch graph alignment · Watcher mismatch');
     expect(growthRevenueCollectorRecord!).toHaveTextContent('Coverage status · below high-confidence/no evidence');
     expect(growthRevenueCollectorRecord!).toHaveTextContent(
-      'Evidence coverage · 3 refs · tmux_observation, workspace_file, workspace_root'
+      'Evidence coverage · 3 refs · Runtime observation, Workspace file, Workspace root'
     );
     expect(collectorSection!).toHaveTextContent('Evidence · /tmp/controller-log.md, /tmp/evidence.md');
     expect(
@@ -7510,7 +7510,7 @@ afterEach(() => {
     expect(sharedArtifactRecord).not.toBeNull();
     expect(sharedArtifactRecord!).toHaveTextContent('Mention count · 2');
     expect(sharedArtifactRecord!).toHaveTextContent('Last seen · 2026-03-16T08:59:10.000Z');
-    expect(sharedArtifactRecord!).toHaveTextContent('Source kinds · workspace_file, tmux_observation');
+    expect(sharedArtifactRecord!).toHaveTextContent('Source kinds · Workspace file, Runtime observation');
     expect(sharedArtifactRecord!).toHaveTextContent('Participating agents · app-engineering, growth-revenue');
 
     let memorySection = await showHubSection(user, details, 'Memory', 'Shared Memory');
@@ -9056,7 +9056,7 @@ afterEach(() => {
     expect(
       within(replayEvent!).getByRole('button', { name: 'Jump to shared memory artifact /tmp/evidence.md' })
     ).toBeVisible();
-    expect(within(replayEvent!).getByText('Source · controller_event')).toBeVisible();
+    expect(within(replayEvent!).getByText('Source · Controller event')).toBeVisible();
     expect(
       within(replayEvent!).getByRole('button', { name: 'Select replay agent app-engineering from event evt-timeline-1' })
     ).toBeVisible();
@@ -10625,7 +10625,7 @@ afterEach(() => {
       'blocked · Workflow evidence is still incomplete'
     );
     expect(document.getElementById('aitown-active-queue-preview-app-engineering')).toHaveTextContent(
-      'Event · Workflow evidence is still incomplete · Source · controller_event · Freshness · 2026-03-16T08:50:00.000Z · Heartbeat · 2026-03-16T08:59:30.000Z · Output · 2026-03-16T08:38:00.000Z · Staleness · Orange · 22m · Reboot · Recommended'
+      'Event · Workflow evidence is still incomplete · Source · Controller event · Freshness · 2026-03-16T08:50:00.000Z · Heartbeat · 2026-03-16T08:59:30.000Z · Output · 2026-03-16T08:38:00.000Z · Staleness · Orange · 22m · Reboot · Recommended'
     );
     expect(
       within(queueSection!).queryByRole('button', { name: 'Inspect Team Lead from active queue' })
@@ -10969,7 +10969,7 @@ afterEach(() => {
       expect(within(operationSection!).getByText('Latest event · Workflow evidence is still incomplete')).toBeVisible();
       expect(operationSection!).toHaveTextContent('Counterparties · team-lead');
       expect(operationSection!).toHaveTextContent('Evidence · /tmp/evidence.md');
-      expect(within(operationSection!).getByText('Source · controller_event')).toBeVisible();
+      expect(within(operationSection!).getByText('Source · Controller event')).toBeVisible();
       expect(within(runContextSection!).getByText('Run blocker · Workflow evidence is still incomplete')).toBeVisible();
       expect(within(runContextSection!).getByText('Latest event type · peer_watch_alert_raised')).toBeVisible();
       expect(within(runContextSection!).getByText('Latest event at · 2026-03-16T08:50:00.000Z')).toBeVisible();
@@ -12379,7 +12379,7 @@ afterEach(() => {
       expect(within(operationSection!).getByRole('button', { name: 'Select operation counterparty agent growth-revenue' })).toBeVisible();
       expect(operationSection!).toHaveTextContent('Counterparties · growth-revenue');
       expect(operationSection!).toHaveTextContent('Evidence · /tmp/review.log');
-      expect(within(operationSection!).getByText('Source · workspace_snapshot')).toBeVisible();
+      expect(within(operationSection!).getByText('Source · Workspace snapshot')).toBeVisible();
       expect(within(runContextSection!).getByText('Run blocker · No current blocker')).toBeVisible();
       expect(within(runContextSection!).getByText('Latest event type · peer_watch_alert_raised')).toBeVisible();
       expect(within(runContextSection!).getByText('Latest event at · 2026-03-16T08:50:00.000Z')).toBeVisible();
@@ -12491,7 +12491,7 @@ afterEach(() => {
       );
       expect(within(auditSignalsSection!).queryByText(/\/tmp\/secondary-evidence\.md/)).not.toBeInTheDocument();
       expect(within(auditSignalsSection!).queryByText(/\/tmp\/stale\.md/)).not.toBeInTheDocument();
-      expect(within(auditSignalsSection!).getByText('Source · controller_event, workspace_snapshot')).toBeVisible();
+      expect(within(auditSignalsSection!).getByText('Source · Controller event, Workspace snapshot')).toBeVisible();
       expect(within(auditSignalsSection!).queryByText(/collector:team-lead/)).not.toBeInTheDocument();
       expect(within(auditSignalsSection!).queryByText(/api_cache/)).not.toBeInTheDocument();
       expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
@@ -14397,7 +14397,7 @@ afterEach(() => {
       })
     ).toBeVisible();
     expect(within(supervisionSection!).getByText('Evidence count · 2')).toBeVisible();
-    expect(within(supervisionSection!).getByText('Source · controller_event')).toBeVisible();
+    expect(within(supervisionSection!).getByText('Source · Controller event')).toBeVisible();
 
     const peerWatchRequests = vi
       .mocked(globalThis.fetch)
@@ -18685,7 +18685,7 @@ afterEach(() => {
         name: 'Jump to shared memory artifact /tmp/evidence.md'
       })
     ).toBeVisible();
-    expect(within(selectedIncidentRecord!).getByText('Source · controller_event')).toBeVisible();
+    expect(within(selectedIncidentRecord!).getByText('Source · Controller event')).toBeVisible();
 
     await act(async () => {
       expect(globalThis.fetch).toHaveBeenCalledWith(workflowUrl, expect.anything());

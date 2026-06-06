@@ -432,6 +432,22 @@ describe('deriveRuntimeSourceGapChips', () => {
     expect(chip.detail).not.toContain('agent output');
   });
 
+  it('uses an Unknown runtime evidence-role label for hostile mapped source-gap keys', () => {
+    const [chip] = deriveRuntimeSourceGapChips(
+      [
+        {
+          ...runtimeSourceGaps[0],
+          evidence_role: 'payload metadata webhook control-plane session://raw /tmp/raw',
+          source_status: 'degraded'
+        }
+      ],
+      [{ agent_id: 'app-engineering', display_name: 'App Engineering Agent' }]
+    );
+
+    expect(chip.detail).toBe('Unknown · output candidate');
+    expect(chip.detail).not.toMatch(/payload|metadata|webhook|control-plane|session:\/\/raw|\/tmp\/raw/);
+  });
+
   it('projects runtime source gaps as passive world pins with unmapped evidence kept separate', () => {
     const pins = deriveRuntimeSourceGapWorldPins(runtimeSourceGaps, [
       { agent_id: 'app-engineering', display_name: 'App Engineering Agent' }

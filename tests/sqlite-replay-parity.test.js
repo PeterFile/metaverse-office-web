@@ -908,3 +908,66 @@ test('SQLite sidecar evidence coverage matches read filters without public raw r
   assert.equal(serializedPublicReadiness.includes('/app/outbox.md'), false);
   assert.equal(serializedPublicReadiness.includes('tmux://'), false);
 });
+
+test('SQLite evidence sidecar prefilters supported filters before canonical projection', async (t) => {
+  if (!(await hasSqlite3())) {
+    t.skip('sqlite3 binary not found; SQLite evidence prefilter skipped explicitly');
+    return;
+  }
+
+  const root = await createHarnessRoot();
+  const jsonlStore = await createPrototypeStore({
+    filePath: path.join(root, 'prototype-store.jsonl')
+  });
+  const sqliteStore = await createPrototypeStore({
+    sqliteFilePath: path.join(root, 'prototype-store.sqlite')
+  });
+
+  await appendCanonicalRecords(jsonlStore, root);
+  await appendCanonicalRecords(sqliteStore, root);
+
+  const filters = {
+    agent_id: 'app-engineering',
+    source_kind: 'workspace_file',
+    evidence_role: 'agent_output',
+    source_status: 'degraded',
+    output_candidate: 'true',
+    mapped: 'true',
+    newest_first: 'true',
+    limit: '10'
+  };
+  const expected = redact(jsonlStore.listEvidenceRecords(filters), root);
+
+  assert.equal(typeof sqliteStore.recordLog.getEvidenceQueryCandidateSeqs, 'function');
+
+  const originalPrefilter = sqliteStore.recordLog.getEvidenceQueryCandidateSeqs.bind(
+    sqliteStore.recordLog
+  );
+  let observedFilters = null;
+  let observedCandidateSeqs = null;
+  sqliteStore.recordLog.getEvidenceQueryCandidateSeqs = (nextFilters) => {
+    observedFilters = { ...nextFilters };
+    observedCandidateSeqs = originalPrefilter(nextFilters);
+    return observedCandidateSeqs;
+  };
+
+  const actual = redact(sqliteStore.listEvidenceRecords(filters), root);
+
+  assert.deepEqual(actual, expected);
+  assert.deepEqual(observedFilters, filters);
+  assert.deepEqual(observedCandidateSeqs, [8, 16]);
+
+  sqliteStore.recordLog.getEvidenceQueryCandidateSeqs = () => {
+    throw new Error('unsupported filters must not use SQLite evidence prefilter');
+  };
+  assert.deepEqual(
+    redact(
+      sqliteStore.listEvidenceRecords({
+        ...filters,
+        evidence_ref: path.join(root, 'app', 'outbox.md')
+      }),
+      root
+    ),
+    expected
+  );
+});

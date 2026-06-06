@@ -1579,6 +1579,7 @@ type WorldSceneProps = {
     requestId: number;
   } | null;
   showActiveCorrelationOverlay?: boolean;
+  selectedAgentProofGlance?: readonly string[] | null;
 };
 
 type CenteredAgentState = {
@@ -1603,7 +1604,8 @@ export default function WorldScene({
   resetViewSignal = 0,
   agentFocusRequest = null,
   zoneFocusRequest = null,
-  showActiveCorrelationOverlay = true
+  showActiveCorrelationOverlay = true,
+  selectedAgentProofGlance = null
 }: WorldSceneProps) {
   const sceneMaps = useMemo(() => (scene.maps?.length ? scene.maps : [scene.map]), [scene.map, scene.maps]);
   const initialMapId = scene.map.id ?? sceneMaps[0]?.id ?? 'legacy-map';
@@ -1674,6 +1676,8 @@ export default function WorldScene({
   sceneMapIdsRef.current = new Set(sceneMaps.map((map) => map.id).filter(Boolean));
   const showWatchOverlayCaption = ready && !loadError && watchOverlayCaptionItems.length > 0;
   const selectedSceneAgent = renderScene.agents.find((agent) => agent.agentId === renderScene.selectedAgentId);
+  const selectedAgentProofLensLines =
+    ready && !loadError && selectedSceneAgent ? (selectedAgentProofGlance ?? []).slice(0, 2) : [];
   const activeCorrelationOverlayParticipants = resolveActiveCorrelationOverlayParticipants(renderScene);
   const showSceneCorrelationOverlay =
     showActiveCorrelationOverlay && ready && !loadError && renderScene.activeCorrelationId !== null;
@@ -2973,6 +2977,16 @@ export default function WorldScene({
               </li>
             ))}
           </ul>
+        </section>
+      ) : null}
+      {selectedAgentProofLensLines.length > 0 ? (
+        <section className="aitown-world-proof-lens" aria-label="Selected agent proof lens">
+          <span className="aitown-world-proof-lens__label">Proof lens</span>
+          {selectedAgentProofLensLines.map((line) => (
+            <span key={line} className="aitown-world-proof-lens__line">
+              {line}
+            </span>
+          ))}
         </section>
       ) : null}
       {loadError ? (

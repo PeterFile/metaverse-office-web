@@ -359,6 +359,7 @@ type ResettableWorldSceneProps = {
   resetViewSignal?: number;
   agentFocusRequest?: { agentId: string; requestId: number } | null;
   zoneFocusRequest?: { zoneId: string; requestId: number } | null;
+  selectedAgentProofGlance?: readonly string[] | null;
 };
 
 const ResettableWorldScene = WorldScene as unknown as ComponentType<ResettableWorldSceneProps>;
@@ -2604,6 +2605,41 @@ describe('WorldScene watch overlay caption gating', () => {
       expect(center.x).toBeCloseTo((selectedAgent?.position.x ?? 0) + expectedBiasX, 4);
       expect(center.y).toBeCloseTo(selectedAgent?.position.y ?? 0, 4);
     });
+  });
+
+  it('renders a compact selected-agent proof lens only for an agent in the current world scene', async () => {
+    appInitMock.mockReset().mockResolvedValue(undefined);
+    vi.mocked(loadAiTownAssets).mockResolvedValue(makeAssets());
+
+    const scene = makeScene();
+    const { rerender } = render(
+      <WorldScene
+        scene={scene}
+        onSelectAgent={vi.fn()}
+        selectedAgentProofGlance={[
+          'Proof glance · 6 records · Sources workspace 3, tmux 2',
+          'Coverage gap · 1 · Roles source evidence 4',
+          'Ignored extra line'
+        ]}
+      />
+    );
+
+    const lens = await screen.findByRole('region', { name: 'Selected agent proof lens' });
+    expect(within(lens).getByText('Proof lens')).toBeVisible();
+    expect(within(lens).getByText('Proof glance · 6 records · Sources workspace 3, tmux 2')).toBeVisible();
+    expect(within(lens).getByText('Coverage gap · 1 · Roles source evidence 4')).toBeVisible();
+    expect(within(lens).queryByText('Ignored extra line')).not.toBeInTheDocument();
+    expect(within(lens).queryAllByText(/^(Proof glance|Coverage gap)/)).toHaveLength(2);
+
+    rerender(
+      <WorldScene
+        scene={{ ...scene, selectedAgentId: 'missing-agent' }}
+        onSelectAgent={vi.fn()}
+        selectedAgentProofGlance={['Proof glance · 6 records · Sources workspace 3']}
+      />
+    );
+
+    expect(screen.queryByRole('region', { name: 'Selected agent proof lens' })).not.toBeInTheDocument();
   });
 
   it('biases selected-agent recenter into the split-topline safe lane before Hub opens', async () => {

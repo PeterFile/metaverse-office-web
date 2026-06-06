@@ -4028,6 +4028,7 @@ function AppInner() {
                 resetViewSignal={resetViewSignal}
                 agentFocusRequest={agentFocusRequest}
                 zoneFocusRequest={zoneFocusRequest}
+                selectedAgentProofGlance={!hubOpen ? selectedAgentEvidenceGlance : null}
               />
             </Suspense>
           )}

@@ -17,7 +17,8 @@ const rightSelectors = [
   '.aitown-panel__topline > span:last-child',
   '.aitown-hub-sheet',
   '.aitown-correlation-overlay',
-  '.aitown-watch-overlay'
+  '.aitown-watch-overlay',
+  '.aitown-world-proof-lens'
 ];
 const clampContributorSelectors = [...new Set([...topSelectors, ...leftSelectors, ...rightSelectors])];
 const subtreeMutationContributorSelectors = [
@@ -28,7 +29,12 @@ const subtreeMutationContributorSelectors = [
   '.aitown-hub-category-bar',
   '.aitown-panel__hot-zone-focus'
 ];
-const fixedWidthContributorSelectors = ['.aitown-hub-sheet', '.aitown-correlation-overlay', '.aitown-watch-overlay'];
+const fixedWidthContributorSelectors = [
+  '.aitown-hub-sheet',
+  '.aitown-correlation-overlay',
+  '.aitown-watch-overlay',
+  '.aitown-world-proof-lens'
+];
 const textContributorSelectors = [...new Set(topSelectors)];
 const clampContributorRootClasses = new Set([
   'aitown-shell__brand',
@@ -39,7 +45,8 @@ const clampContributorRootClasses = new Set([
   'aitown-panel__hot-zone-focus',
   'aitown-hub-sheet',
   'aitown-correlation-overlay',
-  'aitown-watch-overlay'
+  'aitown-watch-overlay',
+  'aitown-world-proof-lens'
 ]);
 
 function resolveViewportClampPaddingRoot(host: HTMLDivElement) {

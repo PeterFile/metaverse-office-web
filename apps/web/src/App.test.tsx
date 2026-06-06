@@ -264,6 +264,9 @@ const appEngineeringEvidenceProvenanceBundleUrl = '/evidence-records/output-1/pr
 const appEngineeringEvidenceSourceContextUrl = '/evidence-records/output-1/source-context';
 const appEngineeringEvidenceReplayWindowUrl = '/evidence-records/output-1/replay-window?before=2&after=2';
 const appEngineeringEvidenceCheckpointLogUrl = '/accountability/replay/checkpoint-log?limit=3&evidence_id=output-1';
+const presenceEvidenceRecordDetailUrl = '/evidence-records/presence-1';
+const presenceEvidenceProvenanceBundleUrl = '/evidence-records/presence-1/provenance-bundle';
+const presenceEvidenceSourceContextUrl = '/evidence-records/presence-1/source-context';
 const missingEvidenceRecordDetailUrl = '/evidence-records/missing-1';
 const missingEvidenceProvenanceBundleUrl = '/evidence-records/missing-1/provenance-bundle';
 
@@ -4846,6 +4849,108 @@ afterEach(() => {
     },
     10_000
   );
+
+  it('steps selected-agent evidence detail by bounded ledger order and clears gated context on step and Hub close', async () => {
+    const user = userEvent.setup();
+    const sourceContextAbort = vi.fn();
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input.toString();
+
+        if (url === appEngineeringEvidenceSourceContextUrl) {
+          return new Promise<Response>((_resolve, reject) => {
+            const timeout = window.setTimeout(() => {
+              reject(new Error('source context request was not aborted'));
+            }, 1000);
+            init?.signal?.addEventListener('abort', () => {
+              window.clearTimeout(timeout);
+              sourceContextAbort();
+              reject(new DOMException('Aborted', 'AbortError'));
+            });
+          });
+        }
+
+        if (url === presenceEvidenceRecordDetailUrl) {
+          return jsonResponse({ item: evidenceRecordsFixture.items[1] });
+        }
+
+        if (url === presenceEvidenceProvenanceBundleUrl) {
+          return jsonResponse({ item: null });
+        }
+
+        return resolveTestFetchResponse(url);
+      })
+    );
+
+    render(<App />);
+
+    const roster = await screen.findByRole('navigation', { name: 'Agent roster' });
+    await user.click(within(roster).getByRole('button', { name: 'Select and locate App Engineering Agent' }));
+
+    const inspectPeek = await screen.findByRole('region', { name: 'Selected agent inspect peek' });
+    await user.click(
+      within(inspectPeek).getByRole('button', {
+        name: 'Open App Engineering Agent Evidence Ledger'
+      })
+    );
+
+    const details = await screen.findByRole('complementary', { name: 'Agent details' });
+    await findHubSection(details, 'Evidence Ledger');
+    await user.click(within(details).getByRole('button', { name: 'Inspect evidence record output-1' }));
+
+    let detailSection = await findHubSection(details, 'Evidence Record Detail');
+    await within(detailSection).findByRole('button', {
+      name: 'Inspect source context for evidence output-1'
+    });
+    await user.click(
+      within(detailSection).getByRole('button', {
+        name: 'Inspect source context for evidence output-1'
+      })
+    );
+
+    await waitFor(() => {
+      expect(vi.mocked(globalThis.fetch).mock.calls.map(([request]) => String(request))).toContain(
+        appEngineeringEvidenceSourceContextUrl
+      );
+    });
+
+    await user.click(
+      within(detailSection).getByRole('button', {
+        name: 'Next evidence record at ledger position 2 of 2'
+      })
+    );
+
+    await waitFor(() => expect(sourceContextAbort).toHaveBeenCalledTimes(1));
+    detailSection = await findHubSection(details, 'Evidence Record Detail');
+    await waitFor(() => {
+      expect(detailSection).toHaveTextContent('Evidence id · presence-1');
+      expect(detailSection).toHaveTextContent('Source context · not loaded');
+      expect(detailSection).not.toHaveTextContent('Evidence Source Context');
+      expect(detailSection).not.toHaveTextContent('Replay anchor · corr-app-review-with-[redacted]');
+    });
+
+    const postStepUrls = vi.mocked(globalThis.fetch).mock.calls.map(([request]) => String(request));
+    expect(postStepUrls).toContain(presenceEvidenceRecordDetailUrl);
+    expect(postStepUrls).toContain(presenceEvidenceProvenanceBundleUrl);
+    expect(postStepUrls).not.toContain(presenceEvidenceSourceContextUrl);
+    expect(postStepUrls).not.toContain(appEngineeringEvidenceReplayWindowUrl);
+
+    await user.click(screen.getByRole('button', { name: 'Close panel' }));
+    expect(screen.queryByRole('dialog', { name: 'Hub' })).not.toBeInTheDocument();
+
+    const reopenedInspectPeek = await screen.findByRole('region', { name: 'Selected agent inspect peek' });
+    await user.click(
+      within(reopenedInspectPeek).getByRole('button', {
+        name: 'Open App Engineering Agent Evidence Ledger'
+      })
+    );
+
+    const reopenedDetails = await screen.findByRole('complementary', { name: 'Agent details' });
+    await findHubSection(reopenedDetails, 'Evidence Ledger');
+    expect(within(reopenedDetails).queryByRole('heading', { name: 'Evidence Record Detail' })).not.toBeInTheDocument();
+  }, 10_000);
 
   it('replays an inspected evidence record by evidence_id with read-only accountability GETs and Back to Evidence reuses detail', async () => {
     const user = userEvent.setup();

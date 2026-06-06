@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildSelectedAgentEvidenceProofCompassRows,
   buildSelectedAgentEvidenceLedger,
+  selectSelectedAgentEvidenceLedgerStepper,
   selectSelectedAgentEvidenceLedgerSourceContextGroups
 } from './selectedAgentEvidenceLedger';
 import { expectNoForbiddenPublicUiText } from './test/publicLeakSentinel';
@@ -467,6 +468,53 @@ describe('buildSelectedAgentEvidenceLedger', () => {
       }
     ]);
     expect(JSON.stringify(model.sourceRefGroups)).not.toContain('/tmp/');
+  });
+
+  it('selects previous and next evidence from the current bounded ledger order without duplicate rows', () => {
+    const model = buildSelectedAgentEvidenceLedger(
+      [
+        evidenceRecord({ evidence_id: 'output-new' }),
+        evidenceRecord({
+          evidence_id: 'degraded-output',
+          source_status: 'degraded',
+          degraded_reasons: ['workspace file not observed']
+        }),
+        evidenceRecord({
+          evidence_id: 'presence',
+          source_kind: 'workspace_root',
+          evidence_role: 'workspace_presence',
+          output_candidate: false
+        }),
+        evidenceRecord({
+          evidence_id: 'missing',
+          evidence_role: 'workspace_file',
+          source_status: 'missing',
+          output_candidate: false
+        }),
+        evidenceRecord({
+          evidence_id: 'unmapped',
+          agent_id: null,
+          source_kind: 'tmux_observation',
+          evidence_role: 'runtime_unmapped',
+          output_candidate: false
+        })
+      ],
+      { maxItemsPerGroup: 2 }
+    );
+
+    expect(selectSelectedAgentEvidenceLedgerStepper(model, 'presence')).toEqual({
+      totalCount: 5,
+      current: { evidenceId: 'presence', position: 3 },
+      previous: { evidenceId: 'degraded-output', position: 2 },
+      next: { evidenceId: 'missing', position: 4 }
+    });
+    expect(selectSelectedAgentEvidenceLedgerStepper(model, 'degraded-output')).toEqual({
+      totalCount: 5,
+      current: { evidenceId: 'degraded-output', position: 2 },
+      previous: { evidenceId: 'output-new', position: 1 },
+      next: { evidenceId: 'presence', position: 3 }
+    });
+    expect(selectSelectedAgentEvidenceLedgerStepper(model, 'not-visible')).toBeNull();
   });
 });
 

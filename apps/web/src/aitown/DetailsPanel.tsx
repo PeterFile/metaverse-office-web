@@ -56,6 +56,7 @@ import {
   type SourceDrilldownGroup,
   type SourceHealthFact
 } from './sourceHealth';
+import { selectSelectedAgentEvidenceLedgerStepper } from '../selectedAgentEvidenceLedger';
 import type {
   SelectedAgentEvidenceLedgerGroup,
   SelectedAgentEvidenceLedgerItem,
@@ -63,7 +64,8 @@ import type {
   SelectedAgentEvidenceProofCompassBucket,
   SelectedAgentEvidenceProofCompassRow,
   SelectedAgentEvidenceLedgerSourceContextGroup,
-  SelectedAgentEvidenceLedgerSourceRefGroup
+  SelectedAgentEvidenceLedgerSourceRefGroup,
+  SelectedAgentEvidenceLedgerStepper
 } from '../selectedAgentEvidenceLedger';
 import type { DisplayedSourceGapKind, SourceGapDrilldownGroupKey } from './sourceGapSignals';
 
@@ -1613,6 +1615,50 @@ function renderSelectedAgentEvidenceLedgerItem(
   );
 }
 
+function renderSelectedAgentEvidenceStepper(
+  stepper: SelectedAgentEvidenceLedgerStepper | null,
+  onInspectRecord: (evidenceId: string) => void
+) {
+  if (!stepper) {
+    return null;
+  }
+
+  const previousEvidenceId = stepper.previous?.evidenceId ?? null;
+  const nextEvidenceId = stepper.next?.evidenceId ?? null;
+
+  return (
+    <span className="aitown-evidence-stepper" aria-label="Selected evidence bounded ledger stepper">
+      <span>{`Ledger position · ${stepper.current.position} of ${stepper.totalCount}`}</span>
+      <button
+        type="button"
+        className="aitown-link-button"
+        aria-label={
+          stepper.previous
+            ? `Previous evidence record at ledger position ${stepper.previous.position} of ${stepper.totalCount}`
+            : 'No previous evidence record in bounded ledger'
+        }
+        disabled={!previousEvidenceId}
+        onClick={previousEvidenceId ? () => onInspectRecord(previousEvidenceId) : undefined}
+      >
+        Previous evidence
+      </button>
+      <button
+        type="button"
+        className="aitown-link-button"
+        aria-label={
+          stepper.next
+            ? `Next evidence record at ledger position ${stepper.next.position} of ${stepper.totalCount}`
+            : 'No next evidence record in bounded ledger'
+        }
+        disabled={!nextEvidenceId}
+        onClick={nextEvidenceId ? () => onInspectRecord(nextEvidenceId) : undefined}
+      >
+        Next evidence
+      </button>
+    </span>
+  );
+}
+
 function renderSelectedAgentEvidenceRecordDetail(
   record: EvidenceRecord | null,
   state: LoadState,
@@ -1628,6 +1674,8 @@ function renderSelectedAgentEvidenceRecordDetail(
   checkpointLogState: LoadState,
   checkpointLogError: string | null,
   world: WorldState,
+  stepper: SelectedAgentEvidenceLedgerStepper | null,
+  onInspectRecord: (evidenceId: string) => void,
   onInspectSourceContext: (evidenceId: string) => void,
   onReplayRecord: (evidenceId: string) => void,
   onFocusWorldAgent?: (agentId: string) => void
@@ -1661,6 +1709,7 @@ function renderSelectedAgentEvidenceRecordDetail(
         {record ? (
           <li className="aitown-record">
             <strong>{`Evidence id · ${recordBoundedEvidenceId}`}</strong>
+            {renderSelectedAgentEvidenceStepper(stepper, onInspectRecord)}
             {state === 'loading' ? <span>Refreshing evidence record detail...</span> : null}
             {!recordMatchesRequestedEvidence ? <span>Waiting for requested evidence record...</span> : null}
             {error ? <span>{`Last-good detail · Refresh failed: ${formatEvidenceReadModelError(error, requestedEvidenceId)}`}</span> : null}
@@ -6441,6 +6490,13 @@ export function DetailsPanel({
     alignedCorrelation
       ? `${alignedCorrelation.incident_count} incidents · ${alignedCorrelation.interaction_count} interactions · ${alignedCorrelation.event_count} events`
       : null;
+  const selectedAgentEvidenceStepper =
+    selectedAgentEvidenceLedger && selectedAgentEvidenceRecordId
+      ? selectSelectedAgentEvidenceLedgerStepper(
+          selectedAgentEvidenceLedger,
+          selectedAgentEvidenceRecordId
+        )
+      : null;
 
   return (
     <aside
@@ -6946,6 +7002,8 @@ export function DetailsPanel({
         selectedAgentEvidenceCheckpointLogState,
         selectedAgentEvidenceCheckpointLogError,
         world,
+        selectedAgentEvidenceStepper,
+        onInspectSelectedAgentEvidenceRecord,
         onInspectSelectedAgentEvidenceSourceContext,
         onReplaySelectedAgentEvidenceRecord,
         onFocusWorldAgent

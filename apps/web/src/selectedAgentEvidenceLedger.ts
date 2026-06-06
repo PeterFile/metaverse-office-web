@@ -65,6 +65,18 @@ export interface SelectedAgentEvidenceLedgerModel {
   proofCompassRows: SelectedAgentEvidenceProofCompassRow[];
 }
 
+export interface SelectedAgentEvidenceLedgerStepperItem {
+  evidenceId: string;
+  position: number;
+}
+
+export interface SelectedAgentEvidenceLedgerStepper {
+  totalCount: number;
+  current: SelectedAgentEvidenceLedgerStepperItem;
+  previous: SelectedAgentEvidenceLedgerStepperItem | null;
+  next: SelectedAgentEvidenceLedgerStepperItem | null;
+}
+
 const DEGRADED_SOURCE_STATUSES = new Set(['degraded', 'missing', 'error']);
 const DEFAULT_REQUEST_SCOPE_LABEL = 'Selected-agent evidence records';
 const DEFAULT_PROOF_COMPASS_GROUP_LABEL = 'Evidence ref group';
@@ -289,6 +301,66 @@ export function selectSelectedAgentEvidenceLedgerSourceContextGroups(
   maxGroups = 4
 ): SelectedAgentEvidenceLedgerSourceContextGroup[] {
   return model.sourceContextGroups.slice(0, Math.max(0, maxGroups));
+}
+
+export function selectSelectedAgentEvidenceLedgerStepper(
+  model: SelectedAgentEvidenceLedgerModel,
+  evidenceId: string | null | undefined
+): SelectedAgentEvidenceLedgerStepper | null {
+  const currentEvidenceId = evidenceId?.trim();
+  if (!currentEvidenceId) {
+    return null;
+  }
+
+  const orderedItems = selectBoundedLedgerOrder(model);
+  const currentIndex = orderedItems.findIndex((item) => item.evidenceId === currentEvidenceId);
+  if (currentIndex < 0) {
+    return null;
+  }
+
+  return {
+    totalCount: orderedItems.length,
+    current: toStepperItem(orderedItems[currentIndex], currentIndex),
+    previous: currentIndex > 0 ? toStepperItem(orderedItems[currentIndex - 1], currentIndex - 1) : null,
+    next:
+      currentIndex < orderedItems.length - 1
+        ? toStepperItem(orderedItems[currentIndex + 1], currentIndex + 1)
+        : null
+  };
+}
+
+function selectBoundedLedgerOrder(
+  model: SelectedAgentEvidenceLedgerModel
+): SelectedAgentEvidenceLedgerItem[] {
+  const seenEvidenceIds = new Set<string>();
+  const orderedItems: SelectedAgentEvidenceLedgerItem[] = [];
+
+  for (const group of [
+    model.outputEvidence,
+    model.nonOutputEvidence,
+    model.degradedEvidence,
+    model.unmappedEvidence
+  ]) {
+    for (const item of group.items) {
+      if (seenEvidenceIds.has(item.evidenceId)) {
+        continue;
+      }
+      seenEvidenceIds.add(item.evidenceId);
+      orderedItems.push(item);
+    }
+  }
+
+  return orderedItems;
+}
+
+function toStepperItem(
+  item: SelectedAgentEvidenceLedgerItem,
+  index: number
+): SelectedAgentEvidenceLedgerStepperItem {
+  return {
+    evidenceId: item.evidenceId,
+    position: index + 1
+  };
 }
 
 function toSourceContextGroups(

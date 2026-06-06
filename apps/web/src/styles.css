@@ -2997,6 +2997,20 @@ button {
   gap: 4px;
 }
 
+.aitown-hub-sheet .aitown-record .aitown-evidence-stepper {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.aitown-hub-sheet .aitown-record .aitown-evidence-stepper > span {
+  min-width: 0;
+  padding: 0;
+  border-left: 0;
+  background: transparent;
+}
+
 .aitown-evidence-proof-strip__row {
   color: rgba(232, 246, 242, 0.78);
 }

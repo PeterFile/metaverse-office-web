@@ -1,6 +1,6 @@
 # Current Direction: Live Evidence Spine
 
-Updated: 2026-06-05T11:38:23+08:00
+Updated: 2026-06-07T02:59:51+08:00
 
 ## Product vision
 
@@ -56,6 +56,16 @@ Minimum target outcomes:
 4. Upgrade the prototype JSONL event spine to a structured append-only store, likely SQLite first, with indexes for event id, agent id, correlation id, source kind, evidence ref, and time range.
 5. Preserve replayability: service restart must rebuild the same projection from persisted events, and each visible incident or status claim must point back to concrete evidence.
 6. Keep AI Town as the primary operator surface, with Hub/drilldown views used for evidence inspection rather than dumping every fact into a side panel.
+
+Current parallel execution routes must not keep piling every change into Live Evidence Spine. Score each lane with the delivery gate below and keep each PR scoped to one route:
+
+- Evidence spine closure: finish storage/API/query/replay guarantees that make runtime facts durable and queryable without leaking raw refs or changing JSONL/SQLite public parity.
+- AI Town operator surface: move operator attention into the world through small inspect affordances, pips, floor signals, and keyboard triage; Hub remains a drilldown, not the default dashboard.
+- Accountability and why-this-state: every visible operation, incident, collaboration, or replay claim must have an evidence/replay/correlation anchor or an explicit insufficient-evidence state.
+- Collaboration and handoff topology: expose peer-watch, interaction, artifact, memory, and handoff relationships as read-only evidence trails, never as assignment or routing controls.
+- Conformance guardrails: keep raw path/ref/token/control-plane canaries, read-only method boundaries, and fast verification lanes close to the surfaces they protect.
+
+A route target is scoreable only if it names the user-visible claim it improves, the safe evidence source that backs it, the paths likely to change, the fastest validation command, the PR size budget, and the exact product boundary it must not cross.
 
 ## Documentation discipline
 

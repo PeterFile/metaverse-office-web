@@ -5,7 +5,7 @@ import type {
   CollectorSourceHealthProjection,
   CollectorSourceHealthStatus
 } from '../types';
-import { selectZoneEvidenceFloors } from '../world/selectors';
+import { selectZoneEvidenceInspections } from '../world/selectors';
 
 import { deriveCollectorEvidenceCoverageViewModel } from './evidenceCoverage';
 import { CHARACTER_KEYS } from './characters';
@@ -311,11 +311,11 @@ export function adaptWorldToScene(
 ): AiTownSceneModel {
   const map = AI_TOWN_MAP_BY_ID.get(DEFAULT_AI_TOWN_MAP_ID) ?? GENTLE_MAP;
   const evidenceCueByAgentId = deriveEvidenceCueByAgentId(world, evidenceCueInputs);
-  const evidenceFloorByZoneId = new Map(
-    selectZoneEvidenceFloors(world).map((floor) => [floor.zone_id, floor])
+  const evidenceInspectionByZoneId = new Map(
+    selectZoneEvidenceInspections(world).map((inspection) => [inspection.zone_id, inspection])
   );
   const sceneZones: SceneZone[] = world.zones.map((zone) => {
-    const evidenceFloor = evidenceFloorByZoneId.get(zone.zone_id);
+    const evidenceInspection = evidenceInspectionByZoneId.get(zone.zone_id);
 
     return {
       zoneId: zone.zone_id,
@@ -323,10 +323,16 @@ export function adaptWorldToScene(
       kind: zone.kind,
       anchor: { x: 0, y: 0 },
       occupantIds: zone.occupant_ids,
-      ...(evidenceFloor
+      ...(evidenceInspection
         ? {
             evidenceFloor: {
-              present: true as const
+              present: true as const,
+              inspection: {
+                label: evidenceInspection.label,
+                occupantCount: evidenceInspection.occupant_count,
+                evidenceBackedAgentCount: evidenceInspection.evidence_backed_agent_count,
+                sourceHealthStatus: evidenceInspection.source_health_status
+              }
             }
           }
         : {})

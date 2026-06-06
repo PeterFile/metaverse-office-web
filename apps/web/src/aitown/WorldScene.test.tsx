@@ -1242,7 +1242,7 @@ describe('WorldScene watch overlay caption gating', () => {
     expect(textLabels).not.toContain('Review Zone');
   });
 
-  it('renders neutral passive zone evidence floors without labels, severity payload, or pointer targets', async () => {
+  it('opens compact zone evidence cards from floor clicks and keyboard focus without raw provenance', async () => {
     appInitMock.mockReset().mockResolvedValue(undefined);
     vi.mocked(loadAiTownAssets).mockResolvedValue(makeAssets());
     const scene = {
@@ -1255,7 +1255,29 @@ describe('WorldScene watch overlay caption gating', () => {
           anchor: { x: 10, y: 10 },
           occupantIds: ['app-engineering'],
           evidenceFloor: {
-            present: true
+            present: true,
+            inspection: {
+              label: 'Delivery Desk',
+              occupantCount: 1,
+              evidenceBackedAgentCount: 1,
+              sourceHealthStatus: 'error'
+            }
+          }
+        },
+        {
+          zoneId: 'quiet-zone',
+          label: 'Quiet Zone',
+          kind: 'shared' as const,
+          anchor: { x: 12, y: 12 },
+          occupantIds: ['team-lead'],
+          evidenceFloor: {
+            present: true,
+            inspection: {
+              label: 'Quiet Zone',
+              occupantCount: 1,
+              evidenceBackedAgentCount: null,
+              sourceHealthStatus: null
+            }
           }
         }
       ],
@@ -1267,11 +1289,37 @@ describe('WorldScene watch overlay caption gating', () => {
       expect(readZoneLayer()?.children).toHaveLength(1);
     });
 
-    const [floor] = readZoneLayer()?.children ?? [];
+    const [floorOverlay] = readZoneLayer()?.children ?? [];
+    const [deliveryFloor] = floorOverlay?.children ?? [];
     const textLabels = collectPixiTextLabels(appInstances.at(-1)?.stage);
 
-    expect(floor?.eventMode).toBe('none');
+    expect(deliveryFloor?.eventMode).toBe('static');
     expect(textLabels).not.toContain('Delivery Desk');
+
+    let floorEvent: { stopPropagation: ReturnType<typeof vi.fn> } | undefined;
+    act(() => {
+      floorEvent = (
+        deliveryFloor as { emit?: (event: string) => { stopPropagation: ReturnType<typeof vi.fn> } } | undefined
+      )?.emit?.('pointertap');
+    });
+
+    expect(floorEvent?.stopPropagation).toHaveBeenCalledTimes(1);
+
+    const deliveryCard = await screen.findByRole('region', { name: 'Delivery Desk evidence zone card' });
+    expect(deliveryCard).toHaveTextContent('Delivery Desk');
+    expect(deliveryCard).toHaveTextContent('Occupants');
+    expect(deliveryCard).toHaveTextContent('1');
+    expect(deliveryCard).toHaveTextContent('Evidence-backed agents');
+    expect(deliveryCard).toHaveTextContent('Worst source health');
+    expect(deliveryCard).toHaveTextContent('Error');
+    expect(deliveryCard).not.toHaveTextContent(/tmux|session|profile|webhook|token|payload|control-plane/i);
+
+    fireEvent.focus(screen.getByRole('button', { name: 'Inspect evidence zone Quiet Zone' }));
+
+    const quietCard = await screen.findByRole('region', { name: 'Quiet Zone evidence zone card' });
+    expect(quietCard).toHaveTextContent('Quiet Zone');
+    expect(quietCard).toHaveTextContent('Insufficient evidence');
+    expect(quietCard).not.toHaveTextContent(/tmux|session|profile|webhook|token|payload|control-plane/i);
   });
 
   it('renders compact source evidence health badges without creating pointer targets', async () => {

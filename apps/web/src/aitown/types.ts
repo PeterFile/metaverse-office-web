@@ -96,6 +96,12 @@ export interface SceneZone {
   occupantIds: string[];
   evidenceFloor?: {
     present: true;
+    inspection: {
+      label: string;
+      occupantCount: number;
+      evidenceBackedAgentCount: number | null;
+      sourceHealthStatus: Exclude<CollectorSourceHealthStatus, 'observed'> | null;
+    };
   };
 }
 

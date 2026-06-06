@@ -2076,6 +2076,54 @@ button {
   touch-action: pinch-zoom;
 }
 
+.aitown-zone-inspector {
+  position: absolute; left: 16px; bottom: 112px; z-index: 6;
+  display: flex; flex-wrap: wrap; gap: 8px;
+  max-width: min(280px, calc(100% - 32px)); pointer-events: none;
+}
+
+.aitown-zone-inspector__button {
+  width: 24px; height: 24px; border: 1px solid rgba(139, 233, 213, 0.72);
+  border-radius: 6px; background: rgba(18, 35, 38, 0.74);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.24);
+  cursor: pointer; pointer-events: auto;
+}
+
+.aitown-zone-inspector__button > span {
+  display: block; width: 8px; height: 8px; margin: 7px auto;
+  border-radius: 50%; background: #8be9d5;
+}
+
+.aitown-zone-inspector__button:hover,
+.aitown-zone-inspector__button:focus-visible,
+.aitown-zone-inspector__button.is-active {
+  border-color: #fff3d0; outline: none;
+  box-shadow:
+    0 0 0 2px rgba(32, 22, 42, 0.9),
+    0 0 0 4px rgba(139, 233, 213, 0.52);
+}
+
+.aitown-zone-card {
+  position: absolute; left: 16px; bottom: 148px; z-index: 7;
+  width: min(280px, calc(100% - 32px)); padding: 10px 12px 12px;
+  border: 1px solid rgba(139, 233, 213, 0.42); border-radius: 8px;
+  background: rgba(22, 14, 23, 0.9); color: #fff3d0;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.32); pointer-events: auto;
+}
+
+.aitown-zone-card__header,
+.aitown-zone-card__facts > div {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+}
+
+.aitown-zone-card__header { margin-bottom: 8px; }
+
+.aitown-zone-card__facts { display: grid; gap: 6px; margin: 0; }
+
+.aitown-zone-card__facts dt { color: rgba(255, 243, 208, 0.7); }
+
+.aitown-zone-card__facts dd { margin: 0; text-align: right; }
+
 .aitown-world__placeholder {
   position: absolute;
   inset: 0;

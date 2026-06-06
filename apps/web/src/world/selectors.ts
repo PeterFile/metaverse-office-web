@@ -30,6 +30,12 @@ const SEVERITY_EMOJI: Record<Severity, string> = {
   red: '🔴',
 };
 
+const SOURCE_HEALTH_STATUS_RANK: Record<NonNullable<WorldAgent['source_evidence_health_status']>, number> = {
+  degraded: 1,
+  missing: 2,
+  error: 3,
+};
+
 const HOT_ZONE_LIMIT = 3;
 const INCIDENT_EVIDENCE_LIMIT = 3;
 const INCIDENT_EVIDENCE_REF_LIMIT = 3;
@@ -49,6 +55,14 @@ export interface HotZoneSummary {
 export interface ZoneEvidenceFloorSummary {
   zone_id: string;
   label: string;
+}
+
+export interface ZoneEvidenceInspectionSummary {
+  zone_id: string;
+  label: string;
+  occupant_count: number;
+  evidence_backed_agent_count: number | null;
+  source_health_status: NonNullable<WorldAgent['source_evidence_health_status']> | null;
 }
 
 export interface DataQualitySummary {
@@ -490,13 +504,83 @@ export function selectHotZones(
 export function selectZoneEvidenceFloors(
   world: WorldState | null | undefined
 ): ZoneEvidenceFloorSummary[] {
-  return selectHotZones(world, Number.MAX_SAFE_INTEGER).map((zone) => ({
+  return selectZoneEvidenceInspections(world).map((zone) => ({
     zone_id: zone.zone_id,
     label: zone.label,
   }));
 }
 
+export function selectZoneEvidenceInspections(
+  world: WorldState | null | undefined
+): ZoneEvidenceInspectionSummary[] {
+  if (!world) {
+    return [];
+  }
+
+  return selectHotZones(world, Number.MAX_SAFE_INTEGER).map((zone) => {
+    const snapshot = world.zones.find((candidate) => candidate.zone_id === zone.zone_id);
+    const occupants = selectZoneOccupants(snapshot, world.agents);
+
+    return {
+      zone_id: zone.zone_id,
+      label: zone.label,
+      occupant_count: occupants.length,
+      evidence_backed_agent_count: countEvidenceBackedAgents(occupants),
+      source_health_status: selectWorstSourceHealthStatus(occupants),
+    };
+  });
+}
+
 // ── Internal helpers ──
+
+function selectZoneOccupants(
+  zone: ZoneSnapshot | undefined,
+  agents: WorldState['agents']
+): WorldAgent[] {
+  if (!zone) {
+    return [];
+  }
+
+  return zone.occupant_ids
+    .map((occupantId) => agents.get(occupantId))
+    .filter((occupant): occupant is WorldAgent => occupant !== undefined);
+}
+
+function countEvidenceBackedAgents(occupants: WorldAgent[]): number | null {
+  let count = 0;
+
+  for (const occupant of occupants) {
+    const evidence = occupant.runtime_evidence;
+    if (!evidence) {
+      return null;
+    }
+
+    if (uniqueTrimmedStrings(evidence.evidence_refs).length > 0) {
+      count += 1;
+    }
+  }
+
+  return count;
+}
+
+function selectWorstSourceHealthStatus(
+  occupants: WorldAgent[]
+): ZoneEvidenceInspectionSummary['source_health_status'] {
+  let worstStatus: ZoneEvidenceInspectionSummary['source_health_status'] = null;
+
+  for (const occupant of occupants) {
+    const status = occupant.source_evidence_health_status ?? null;
+    if (!status) {
+      continue;
+    }
+
+    if (!worstStatus || SOURCE_HEALTH_STATUS_RANK[status] > SOURCE_HEALTH_STATUS_RANK[worstStatus]) {
+      worstStatus = status;
+    }
+  }
+
+  return worstStatus;
+}
 
 function isHotZone(zone: HotZoneSummary): boolean {
   return (

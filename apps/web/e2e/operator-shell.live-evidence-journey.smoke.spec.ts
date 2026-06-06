@@ -434,6 +434,10 @@ const sourceGapLifecycleMappedGet =
   'GET /runtime/source-gaps/lifecycle?agent_id=app-engineering&source_kind=workspace_file&source_status=degraded&mapped=true&newest_first=true&limit=3';
 const sourceGapLifecycleUnmappedGet =
   'GET /runtime/source-gaps/lifecycle?source_kind=workspace_file&mapped=false&newest_first=true&limit=3';
+const sourceGapLifecycleProfileMappedGet =
+  'GET /runtime/source-gaps/lifecycle?agent_id=app-engineering&source_kind=hermes_profile&source_status=missing&mapped=true&newest_first=true&limit=3';
+const sourceGapLifecycleProfileUnmappedGet =
+  'GET /runtime/source-gaps/lifecycle?source_kind=hermes_profile&mapped=false&newest_first=true&limit=3';
 const sourceGapLifecycleHermesMappedGet =
   'GET /runtime/source-gaps/lifecycle?agent_id=app-engineering&source_kind=hermes_session&source_status=degraded&mapped=true&newest_first=true&limit=3';
 const sourceGapLifecycleHermesUnmappedGet =
@@ -449,6 +453,8 @@ const expectedApiGets = new Set([
   'GET /runtime/source-gaps/summary?newest_first=true&limit=3',
   sourceGapLifecycleMappedGet,
   sourceGapLifecycleUnmappedGet,
+  sourceGapLifecycleProfileMappedGet,
+  sourceGapLifecycleProfileUnmappedGet,
   sourceGapLifecycleHermesMappedGet,
   sourceGapLifecycleHermesUnmappedGet,
   evidenceSpineSummaryGet,
@@ -669,6 +675,14 @@ async function installLiveEvidenceFixtures(
     await route.fulfill({ json: { item: { total_count: 0, total_groups: 0, returned_limit: 3, groups: [] } } });
   });
 
+  await routeExpectedApiGet(page, sourceGapLifecycleProfileMappedGet, async (route) => {
+    await route.fulfill({ json: { item: { total_count: 0, total_groups: 0, returned_limit: 3, groups: [] } } });
+  });
+
+  await routeExpectedApiGet(page, sourceGapLifecycleProfileUnmappedGet, async (route) => {
+    await route.fulfill({ json: { item: { total_count: 0, total_groups: 0, returned_limit: 3, groups: [] } } });
+  });
+
   await routeExpectedApiGet(page, sourceGapLifecycleHermesMappedGet, async (route) => {
     await route.fulfill({ json: { item: { total_count: 0, total_groups: 0, returned_limit: 3, groups: [] } } });
   });
@@ -763,6 +777,8 @@ test.describe('operator shell live evidence journey smoke', () => {
       '/agents/evidence-spine/source-matrix?newest_first=true&limit=200',
       '/runtime/source-gaps/lifecycle?agent_id=app-engineering&source_kind=workspace_file&source_status=degraded&mapped=true&newest_first=true&limit=3',
       '/runtime/source-gaps/lifecycle?source_kind=workspace_file&mapped=false&newest_first=true&limit=3',
+      '/runtime/source-gaps/lifecycle?agent_id=app-engineering&source_kind=hermes_profile&source_status=missing&mapped=true&newest_first=true&limit=3',
+      '/runtime/source-gaps/lifecycle?source_kind=hermes_profile&mapped=false&newest_first=true&limit=3',
       '/runtime/source-gaps/lifecycle?agent_id=app-engineering&source_kind=hermes_session&source_status=degraded&mapped=true&newest_first=true&limit=3',
       '/runtime/source-gaps/lifecycle?source_kind=hermes_session&mapped=false&newest_first=true&limit=3',
       '/evidence-records?agent_id=app-engineering&newest_first=true&limit=12',
@@ -787,6 +803,8 @@ test.describe('operator shell live evidence journey smoke', () => {
       '/runtime/source-gaps/lifecycle?agent_id=app-engineering&newest_first=true&limit=3&raw=true',
       '/runtime/source-gaps/lifecycle?agent_id=app-engineering&source_kind=workspace_file&source_status=degraded&mapped=true&limit=3&newest_first=true',
       '/runtime/source-gaps/lifecycle?source_kind=workspace_file&mapped=false&limit=3&newest_first=true',
+      '/runtime/source-gaps/lifecycle?agent_id=app-engineering&source_kind=hermes_profile&source_status=missing&mapped=true&limit=3&newest_first=true',
+      '/runtime/source-gaps/lifecycle?source_kind=hermes_profile&mapped=false&limit=3&newest_first=true',
       '/runtime/source-gaps/lifecycle?agent_id=app-engineering&source_kind=hermes_session&source_status=degraded&mapped=true&limit=3&newest_first=true',
       '/runtime/source-gaps/lifecycle?source_kind=hermes_session&mapped=false&limit=3&newest_first=true',
       '/agents/app-engineering/evidence-spine?newest_first=true&limit=200',
@@ -928,46 +946,32 @@ test.describe('operator shell live evidence journey smoke', () => {
 
       const hub = page.getByRole('dialog', { name: 'Hub' });
       const inspectPeek = page.getByRole('region', { name: 'Selected agent inspect peek' });
-      const sourceHealthPeek = page.getByRole('region', { name: 'Selected agent source-health inspect peek' });
+      const legacySourceHealthPeek = page.getByRole('region', { name: 'Selected agent source-health inspect peek' });
       const sourceMatrixPeek = page.getByRole('region', { name: 'Selected agent source matrix peek' });
 
       await expect(hub).toHaveCount(0);
       await expect(page.getByRole('complementary', { name: 'Agent details' })).toHaveCount(0);
       await expect(inspectPeek).toBeVisible();
-      await expect(sourceHealthPeek).toBeVisible();
-      await expect(sourceMatrixPeek).toBeVisible();
-      await expect(sourceHealthPeek).toContainText('Evidence only');
-      await expect(sourceHealthPeek).toContainText('Hermes profile · missing');
-      await expect(sourceHealthPeek).toContainText('Mapped source');
-      await expect(sourceHealthPeek).toContainText('Diff · No comparison');
-      await expect(sourceHealthPeek).not.toContainText('Reason · Redacted');
-      await expect(sourceHealthPeek).not.toContainText('Configured · Yes');
+      await expect(inspectPeek).toContainText('Sources · 3 classes · 2 unmapped');
+      await expect(inspectPeek).toContainText('Source gap · Hermes profile · missing');
+      await expect(legacySourceHealthPeek).toHaveCount(0);
+      await expect(sourceMatrixPeek).toHaveCount(0);
+      await expect(inspectPeek).not.toContainText('Reason · Redacted');
+      await expect(inspectPeek).not.toContainText('Configured · Yes');
       await expect(
-        sourceHealthPeek,
-        'selected-agent source-health peek should not expose raw refs, sessions, profiles, payloads, or reasons'
+        inspectPeek,
+        'selected-agent inspect peek should not expose raw refs, sessions, profiles, payloads, or reasons'
       ).not.toContainText(visibleProofRawRefPattern);
-      await expect(sourceMatrixPeek).toContainText('Source matrix');
-      await expect(sourceMatrixPeek).toContainText('Workspace file · Observed');
-      await expect(sourceMatrixPeek).toContainText('Agent output · Output candidate · 4');
-      await expect(sourceMatrixPeek).toContainText('Tmux observation · Degraded');
-      await expect(sourceMatrixPeek).toContainText('Runtime activity · Supporting evidence · 3');
-      await expect(sourceMatrixPeek).toContainText('Unknown · Unknown');
-      await expect(sourceMatrixPeek).toContainText('Unmapped evidence · 2 separate');
-      await expect(
-        sourceMatrixPeek,
-        'selected-agent source matrix peek should not expose raw refs, enum keys, sessions, payloads, or reasons'
-      ).not.toContainText(visibleProofRawRefPattern);
+      await expect(inspectPeek.getByText('Workspace file · Observed')).toBeHidden();
+      await expect(inspectPeek.getByText('Agent output · Output candidate · 4')).toBeHidden();
+      await expect(inspectPeek.getByText('Unmapped evidence · 2 separate')).toBeHidden();
       expect(eagerDrilldownRequests, 'source peeks should not prefetch evidence or replay records').toEqual([]);
 
       const peekRect = await readRect(inspectPeek);
-      expect(peekRect.width, 'source-health inspect peek should stay compact').toBeLessThanOrEqual(420);
-      expect(peekRect.height, 'source-health inspect peek should stay compact').toBeLessThanOrEqual(300);
+      expect(peekRect.width, 'selected-agent inspect peek should stay compact').toBeLessThanOrEqual(420);
+      expect(peekRect.height, 'selected-agent inspect peek should stay compact').toBeLessThanOrEqual(300);
 
-      await sourceHealthPeek
-        .getByRole('button', {
-          name: 'Open source gap supervision for App Engineering Agent hermes profile missing'
-        })
-        .click();
+      await inspectPeek.getByRole('button', { name: 'Open App Engineering Agent Supervision drilldown' }).click();
 
       await expect(hub).toBeVisible();
       expect(apiRequestViolations).toEqual([]);

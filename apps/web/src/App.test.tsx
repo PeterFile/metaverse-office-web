@@ -2339,6 +2339,8 @@ const FORBIDDEN_OPERATOR_CONTROL_LABELS = [
   'Profile route'
 ] as const;
 const FORBIDDEN_UNPROVEN_LIVENESS_LABELS = ['Live', 'Healthy'] as const;
+const FORBIDDEN_SELECTED_AGENT_PEEK_TEXT_PATTERN =
+  /\/(?:tmp|Users|Volumes|private|var|home|workspace|mnt)\/|[A-Za-z]:\\|tmux:\/\/|hermes:\/\/|session:\/\/|profile:\/\/|session\/[a-z0-9-]+|profile-[a-z0-9-]+|\b\d+-web3-[a-z0-9-]+\b|workspace_(?:root|files?)|tmux_session|hermes_(?:profile|session)|profile_id|session_ref|evidence_refs?|source_health|collector_snapshot_id|correlation_id|source_kind|source_status|evidence_role|output_candidate|webhook|access[_-]?token|secret|payload|metadata|control-plane|dispatch|route|writeback|mutate|claim|complete|assign/i;
 
 function expectEvidenceJourneyReadOnly(scope: HTMLElement) {
   for (const label of FORBIDDEN_OPERATOR_CONTROL_LABELS) {
@@ -2352,6 +2354,13 @@ function expectNoUnprovenLivenessLabels(scope: HTMLElement) {
     expect(within(scope).queryByRole('button', { name: label })).not.toBeInTheDocument();
     expect(within(scope).queryByText(new RegExp(`^${label}$`, 'i'))).not.toBeInTheDocument();
   }
+}
+
+function readTextAndAriaLabels(scope: HTMLElement) {
+  return [
+    scope.textContent ?? '',
+    ...Array.from(scope.querySelectorAll('[aria-label]')).map((element) => element.getAttribute('aria-label') ?? '')
+  ].join('\n');
 }
 
 async function openHub(user: ReturnType<typeof userEvent.setup>, category: HubCategoryLabel = 'Crew') {
@@ -3749,18 +3758,16 @@ afterEach(() => {
       expect(requestedUrls).not.toContain(workflowUrl);
       expect(requestedUrls).not.toContain(appEngineeringEvidenceRecordsUrl);
     });
-    const sourceHealthPeek = await within(inspectPeek).findByRole('region', {
-      name: 'Selected agent source-health inspect peek'
-    });
-    expect(within(sourceHealthPeek).getByText('Evidence only')).toBeVisible();
-    expect(within(sourceHealthPeek).getByText('Hermes session · missing')).toBeVisible();
-    expect(within(sourceHealthPeek).getByText('Mapped source')).toBeVisible();
-    expect(within(sourceHealthPeek).getByText('Diff · No comparison')).toBeVisible();
-    expect(sourceHealthPeek).not.toHaveTextContent('Configured · Yes');
-    expect(sourceHealthPeek).not.toHaveTextContent('Evidence refs · Available');
-    expect(sourceHealthPeek).not.toHaveTextContent('Reason · Redacted');
-    expect(sourceHealthPeek).not.toHaveTextContent('Collected 2026-03-16T09:01:00.000Z');
-    expect(sourceHealthPeek).not.toHaveTextContent('Hermes session missing');
+    expect(await within(inspectPeek).findByText('Source gap · Hermes session · missing')).toBeVisible();
+    expect(
+      within(inspectPeek).getByRole('button', { name: 'Open App Engineering Agent Supervision drilldown' })
+    ).toBeVisible();
+    expect(within(inspectPeek).queryByRole('region', { name: 'Selected agent source-health inspect peek' })).not.toBeInTheDocument();
+    expect(inspectPeek).not.toHaveTextContent('Configured · Yes');
+    expect(inspectPeek).not.toHaveTextContent('Evidence refs · Available');
+    expect(inspectPeek).not.toHaveTextContent('Reason · Redacted');
+    expect(inspectPeek).not.toHaveTextContent('Collected 2026-03-16T09:01:00.000Z');
+    expect(inspectPeek).not.toHaveTextContent('Hermes session missing');
     expect(inspectPeek).not.toHaveTextContent('/tmp/');
     expect(inspectPeek).not.toHaveTextContent('hermes://');
     expect(inspectPeek).not.toHaveTextContent('5-web3-app-engineering');
@@ -3869,18 +3876,14 @@ afterEach(() => {
 
       await user.click(await screen.findByRole('button', { name: 'Select and locate App Engineering Agent' }));
       const inspectPeek = await screen.findByRole('region', { name: 'Selected agent inspect peek' });
-      const sourceHealthFact = await within(inspectPeek).findByRole('button', {
-        name: 'Open source gap supervision for App Engineering Agent workspace files degraded'
+      expect(await within(inspectPeek).findByText('Source gap · Workspace files · degraded')).toBeVisible();
+      const sourceHealthFact = within(inspectPeek).getByRole('button', {
+        name: 'Open App Engineering Agent Supervision drilldown'
       });
-      expect(sourceHealthFact).toHaveTextContent('Open Supervision');
-      const sourceHealthPeek = within(inspectPeek).getByRole('region', {
-        name: 'Selected agent source-health inspect peek'
-      });
-      expect(sourceHealthPeek).toHaveTextContent('Workspace files · degraded');
-      expect(sourceHealthPeek).toHaveTextContent('Mapped source');
-      expect(sourceHealthPeek).toHaveTextContent('Diff · No comparison');
-      expect(sourceHealthPeek).not.toHaveTextContent('Configured · Yes');
-      expect(sourceHealthPeek).not.toHaveTextContent('Reason · Redacted');
+      expect(sourceHealthFact).toHaveTextContent('Supervision');
+      expect(within(inspectPeek).queryByRole('region', { name: 'Selected agent source-health inspect peek' })).not.toBeInTheDocument();
+      expect(inspectPeek).not.toHaveTextContent('Configured · Yes');
+      expect(inspectPeek).not.toHaveTextContent('Reason · Redacted');
       expect(inspectPeek).not.toHaveTextContent('/tmp/app-engineering');
 
       await waitFor(() => {
@@ -4219,6 +4222,60 @@ afterEach(() => {
     expect(ledgerSection).not.toHaveTextContent(
       /\/Users\/cwp|secret-token|token=secret|webhook|tmux:\/\/raw|hermes:\/\/profile|session:\/\/|profile:\/\/|metadata|control-plane|dispatch/i
     );
+  }, 10_000);
+
+  it('keeps the selected-agent inspect peek as a compact triage card with safe CTA order', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const roster = await screen.findByRole('navigation', { name: 'Agent roster' });
+    await user.click(
+      within(roster).getByRole('button', {
+        name: 'Select and locate App Engineering Agent'
+      })
+    );
+
+    const inspectPeek = await screen.findByRole('region', { name: 'Selected agent inspect peek' });
+    expect(screen.queryByRole('dialog', { name: 'Hub' })).not.toBeInTheDocument();
+    expect(within(inspectPeek).getByText('App Engineering Agent')).toBeVisible();
+    expect(within(inspectPeek).getByText('State · blocked')).toBeVisible();
+    expect(await within(inspectPeek).findByText('Sources · 3 classes · 2 unmapped')).toBeVisible();
+
+    const closedSourceMatrix = within(inspectPeek).queryByRole('region', { name: 'Selected agent source matrix peek' });
+    expect(closedSourceMatrix).not.toBeNull();
+    expect(closedSourceMatrix).not.toBeVisible();
+    expect(within(inspectPeek).queryByRole('region', { name: 'Runtime facts evidence card' })).not.toBeInTheDocument();
+    expect(
+      within(inspectPeek).queryByRole('region', { name: 'Selected agent source-health inspect peek' })
+    ).not.toBeInTheDocument();
+
+    const actions = within(inspectPeek).getByRole('group', { name: 'Selected agent triage actions' });
+    expect(within(actions).getAllByRole('button').map((button) => button.textContent)).toEqual([
+      'Now',
+      'Evidence',
+      'Replay',
+      'Supervision'
+    ]);
+
+    expect(readTextAndAriaLabels(inspectPeek)).not.toMatch(FORBIDDEN_SELECTED_AGENT_PEEK_TEXT_PATTERN);
+    expectNoUnprovenLivenessLabels(inspectPeek);
+
+    await act(async () => {});
+    const requestedUrls = vi.mocked(globalThis.fetch).mock.calls.map(([request]) => String(request));
+    expect(requestedUrls).not.toContain(workflowUrl);
+    expect(requestedUrls).not.toContain(appEngineeringEvidenceRecordsUrl);
+    expect(requestedUrls).not.toContain(appEngineeringEvidenceRefRollupUrl);
+    expect(requestedUrls).not.toContain(appEngineeringEvidenceRecordDetailUrl);
+    expect(requestedUrls).not.toContain(appEngineeringEvidenceSourceContextUrl);
+    expect(requestedUrls).not.toContain(appEngineeringEvidenceReplayWindowUrl);
+    expect(requestedUrls.some((url) => url.startsWith('/accountability/replay'))).toBe(false);
+
+    await user.click(within(actions).getByRole('button', { name: 'Open App Engineering Agent Supervision drilldown' }));
+
+    const details = await screen.findByRole('complementary', { name: 'Agent details' });
+    expect(screen.getByRole('dialog', { name: 'Hub' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Supervision' })).toHaveAttribute('aria-expanded', 'true');
+    expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
   });
 
   it('does not poll selected-agent ref-rollup rows after the Evidence Ledger loads', async () => {
@@ -4323,6 +4380,7 @@ afterEach(() => {
     );
 
     const inspectPeek = await screen.findByRole('region', { name: 'Selected agent inspect peek' });
+    expect(await within(inspectPeek).findByText('Sources · 3 classes · 2 unmapped')).toBeVisible();
     const closedSourceMatrix = within(inspectPeek).queryByRole('region', {
       name: 'Selected agent source matrix peek'
     });
@@ -4345,7 +4403,7 @@ afterEach(() => {
     expect(sourceMatrix).not.toHaveTextContent(
       /workspace_file|tmux_observation|agent_output|output_candidate|runtime_activity|source_kind|source_status|evidence_role/i
     );
-    expect(sourceMatrix).not.toHaveTextContent('hermes_profile');
+    expect(inspectPeek).not.toHaveTextContent('hermes_profile');
     expect(inspectPeek).not.toHaveTextContent('/tmp/app/secret-token.md');
     expect(inspectPeek).not.toHaveTextContent('tmux://raw-session');
     expect(inspectPeek).not.toHaveTextContent('webhook');
@@ -4387,6 +4445,12 @@ afterEach(() => {
     );
 
     let inspectPeek = await screen.findByRole('region', { name: 'Selected agent inspect peek' });
+    expect(await within(inspectPeek).findByText('Sources · Loading')).toBeVisible();
+    let closedSourceMatrix = within(inspectPeek).queryByRole('region', {
+      name: 'Selected agent source matrix peek'
+    });
+    expect(closedSourceMatrix).not.toBeNull();
+    expect(closedSourceMatrix).not.toBeVisible();
     await user.click(within(inspectPeek).getByText('Source details'));
     let sourceMatrix = await within(inspectPeek).findByRole('region', {
       name: 'Selected agent source matrix peek'
@@ -4429,6 +4493,12 @@ afterEach(() => {
     );
 
     inspectPeek = await screen.findByRole('region', { name: 'Selected agent inspect peek' });
+    expect(await within(inspectPeek).findByText('Sources · Unavailable')).toBeVisible();
+    closedSourceMatrix = within(inspectPeek).queryByRole('region', {
+      name: 'Selected agent source matrix peek'
+    });
+    expect(closedSourceMatrix).not.toBeNull();
+    expect(closedSourceMatrix).not.toBeVisible();
     await user.click(within(inspectPeek).getByText('Source details'));
     sourceMatrix = await within(inspectPeek).findByRole('region', {
       name: 'Selected agent source matrix peek'
@@ -4473,13 +4543,23 @@ afterEach(() => {
     );
 
     const inspectPeek = await screen.findByRole('region', { name: 'Selected agent inspect peek' });
+    expect(await within(inspectPeek).findByText('Sources · 3 classes · 2 unmapped')).toBeVisible();
+    const closedSourceMatrix = within(inspectPeek).queryByRole('region', {
+      name: 'Selected agent source matrix peek'
+    });
+    expect(closedSourceMatrix).not.toBeNull();
+    expect(closedSourceMatrix).not.toBeVisible();
+    await waitFor(() => expect(sourceMatrixRequests).toBeGreaterThan(1));
+    expect(within(inspectPeek).getByText('Sources · 3 classes · 2 unmapped')).toBeVisible();
+    const currentClosedSourceMatrix = within(inspectPeek).queryByRole('region', {
+      name: 'Selected agent source matrix peek'
+    });
+    expect(currentClosedSourceMatrix).not.toBeNull();
+    expect(currentClosedSourceMatrix).not.toBeVisible();
     await user.click(within(inspectPeek).getByText('Source details'));
     const sourceMatrix = await within(inspectPeek).findByRole('region', {
       name: 'Selected agent source matrix peek'
     });
-
-    expect(await within(sourceMatrix).findByText('Workspace file · Observed')).toBeVisible();
-    await waitFor(() => expect(sourceMatrixRequests).toBeGreaterThan(1));
     expect(await within(sourceMatrix).findByText('Source matrix · Last loaded rows')).toBeVisible();
     expect(within(sourceMatrix).getByText('Refresh failed; showing the last loaded selected-agent source rows.')).toBeVisible();
     expect(within(sourceMatrix).getByText('Workspace file · Observed')).toBeVisible();
@@ -5438,7 +5518,7 @@ afterEach(() => {
     }
   });
 
-  it('renders selected-agent runtime facts evidence card from safe source read models only', async () => {
+  it('summarizes selected-agent source gaps without dumping runtime facts into the peek', async () => {
     const user = userEvent.setup();
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = typeof input === 'string' ? input : input.toString();
@@ -5518,41 +5598,32 @@ afterEach(() => {
 
     await user.click(await screen.findByRole('button', { name: 'Select and locate App Engineering Agent' }));
     const inspectPeek = await screen.findByRole('region', { name: 'Selected agent inspect peek' });
-    const runtimeFactsCard = await within(inspectPeek).findByRole('region', {
-      name: 'Runtime facts evidence card'
-    });
-
-    expect(within(runtimeFactsCard).getByText('Runtime facts')).toBeVisible();
-    expect(within(runtimeFactsCard).getByText('Evidence/source facts only')).toBeVisible();
-    expect(within(runtimeFactsCard).getByText('Safe read model · Available')).toBeVisible();
-    expect(within(runtimeFactsCard).getByText('Evidence refs · 4')).toBeVisible();
-    expect(within(runtimeFactsCard).getByText('Sources · 4 reported')).toBeVisible();
-    expect(within(runtimeFactsCard).getByText('Observed · 2')).toBeVisible();
-    expect(within(runtimeFactsCard).getByText('Gaps · 2')).toBeVisible();
-    expect(within(runtimeFactsCard).getByText('Latest evidence · 2026-03-16T08:58:40.000Z')).toBeVisible();
-    expect(runtimeFactsCard).not.toHaveTextContent('/tmp/');
-    expect(runtimeFactsCard).not.toHaveTextContent('tmux://');
-    expect(runtimeFactsCard).not.toHaveTextContent('hermes.example');
-    expect(runtimeFactsCard).not.toHaveTextContent('5-web3-app-engineering');
-    expect(runtimeFactsCard).not.toHaveTextContent('missing /tmp');
-    expect(runtimeFactsCard).not.toHaveTextContent(/live|healthy|productive|severity/i);
+    expect(await within(inspectPeek).findByText('Source gap · Tmux session · missing')).toBeVisible();
+    expect(within(inspectPeek).queryByRole('region', { name: 'Runtime facts evidence card' })).not.toBeInTheDocument();
+    expect(inspectPeek).not.toHaveTextContent('Evidence/source facts only');
+    expect(inspectPeek).not.toHaveTextContent('Safe read model · Available');
+    expect(inspectPeek).not.toHaveTextContent('Evidence refs · 4');
+    expect(inspectPeek).not.toHaveTextContent('Sources · 4 reported');
+    expect(inspectPeek).not.toHaveTextContent('/tmp/');
+    expect(inspectPeek).not.toHaveTextContent('tmux://');
+    expect(inspectPeek).not.toHaveTextContent('hermes.example');
+    expect(inspectPeek).not.toHaveTextContent('5-web3-app-engineering');
+    expect(inspectPeek).not.toHaveTextContent('missing /tmp');
+    expect(inspectPeek).not.toHaveTextContent(/live|healthy|productive|severity/i);
   });
 
-  it('renders selected-agent runtime facts evidence card unavailable when safe facts are absent', async () => {
+  it('does not render an unavailable runtime facts card when safe facts are absent', async () => {
     const user = userEvent.setup();
     render(<App />);
 
     await user.click(await screen.findByRole('button', { name: 'Select and locate App Engineering Agent' }));
     const inspectPeek = await screen.findByRole('region', { name: 'Selected agent inspect peek' });
-    const runtimeFactsCard = await within(inspectPeek).findByRole('region', {
-      name: 'Runtime facts evidence card'
-    });
-
-    expect(within(runtimeFactsCard).getByText('Runtime facts')).toBeVisible();
-    expect(within(runtimeFactsCard).getByText('Evidence/source facts only')).toBeVisible();
-    expect(within(runtimeFactsCard).getByText('Safe read model · Unavailable')).toBeVisible();
-    expect(within(runtimeFactsCard).getByText('No safe runtime facts for this agent yet.')).toBeVisible();
-    expect(runtimeFactsCard).not.toHaveTextContent(/path|tmux|Hermes|session|profile|url|token|reason/i);
+    expect(within(inspectPeek).queryByRole('region', { name: 'Runtime facts evidence card' })).not.toBeInTheDocument();
+    expect(inspectPeek).not.toHaveTextContent('Runtime facts');
+    expect(inspectPeek).not.toHaveTextContent('Evidence/source facts only');
+    expect(inspectPeek).not.toHaveTextContent('Safe read model · Unavailable');
+    expect(inspectPeek).not.toHaveTextContent('No safe runtime facts for this agent yet.');
+    expect(inspectPeek).not.toHaveTextContent(/path|tmux:\/\/|session\/|profile-|url|token|reason/i);
   });
 
   it('omits non-overview coverage agents while surfacing uncovered overview agents', async () => {
@@ -7975,7 +8046,7 @@ afterEach(() => {
       expect(within(replaySection!).getByText('Team lead normal replay checkpoint')).toBeVisible();
       expect(within(replaySection!).getByText('Team lead orange replay checkpoint')).toBeVisible();
     });
-  });
+  }, 10_000);
 
   it('keeps selected-agent timeline replay scoped to the active correlation via canonical timeline queries without widening to the crew replay feed', async () => {
     const user = userEvent.setup();

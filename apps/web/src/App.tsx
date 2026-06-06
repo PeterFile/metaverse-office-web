@@ -64,10 +64,7 @@ import {
   type DisplayedSourceGapKind,
   type RuntimeSourceGapLifecycleStrip
 } from './aitown/sourceGapSignals';
-import {
-  deriveSelectedAgentRuntimeFactsEvidenceCard,
-  deriveSelectedAgentSourceHealthInspectPeek
-} from './aitown/sourceHealth';
+import { deriveSelectedAgentSourceHealthInspectPeek } from './aitown/sourceHealth';
 import { deriveSelectedAgentEvidenceGlance } from './aitown/selectedAgentEvidenceGlance';
 import { deriveSelectedAgentSourceMatrixViewModel } from './aitown/selectedAgentSourceMatrix';
 import { WorldProvider, useWorld } from './context/WorldContext';
@@ -1203,6 +1200,31 @@ export function resolveSelectedAgentPeekEvidenceRef({
     ],
     correlationId
   );
+}
+
+function resolveSelectedAgentSourceSummary(sourceMatrix: ReturnType<typeof deriveSelectedAgentSourceMatrixViewModel>) {
+  if (sourceMatrix.status === 'ready' || sourceMatrix.status === 'last-good') {
+    const classCount = sourceMatrix.rows.length;
+    const classLabel = classCount === 1 ? 'class' : 'classes';
+    const unmappedCount = sourceMatrix.unmappedSummary.totalCount;
+    const unmappedLabel = unmappedCount > 0 ? ` · ${unmappedCount} unmapped` : '';
+
+    return `Sources · ${classCount} ${classLabel}${unmappedLabel}`;
+  }
+
+  if (sourceMatrix.status === 'loading') {
+    return 'Sources · Loading';
+  }
+
+  if (sourceMatrix.status === 'error') {
+    return 'Sources · Unavailable';
+  }
+
+  if (sourceMatrix.selectedAgentId) {
+    return 'Sources · No mapped classes';
+  }
+
+  return null;
 }
 
 function AppInner() {
@@ -3350,14 +3372,11 @@ function AppInner() {
       selectedAgentId
     ]
   );
+  const selectedAgentSourceSummary = resolveSelectedAgentSourceSummary(selectedAgentSourceMatrix);
   const selectedAgentSourceGapFact = deriveSelectedAgentSourceGapFact(latestSourceHealth, selectedAgentId);
   const selectedAgentSourceHealthInspectPeek = useMemo(
     () => deriveSelectedAgentSourceHealthInspectPeek(latestSourceHealth, selectedAgentId, previousSourceHealth),
     [latestSourceHealth, previousSourceHealth, selectedAgentId]
-  );
-  const selectedAgentRuntimeFactsEvidenceCard = useMemo(
-    () => deriveSelectedAgentRuntimeFactsEvidenceCard(latestSourceHealth, selectedAgentId),
-    [latestSourceHealth, selectedAgentId]
   );
   const selectedAgentSourceGapInspectPeek = useMemo(
     () =>
@@ -3473,6 +3492,23 @@ function AppInner() {
     setSelectedAgentDrilldownTab('replay');
     setHubOpen(true);
   }, [selectedAgentId]);
+  const handleSelectedAgentSupervisionOpen = useCallback(() => {
+    if (selectedAgentSourceGapFact) {
+      handleSelectedAgentSourceGapFactOpen();
+      return;
+    }
+
+    if (selectedAgentId === null) {
+      return;
+    }
+
+    requestedSelectedAgentDrilldownTabRef.current = 'evidence';
+    activeHubCategoryFromSelectedAgentTabRef.current = false;
+    setSourceGapFocusIntent(null);
+    setActiveHubCategory('supervision');
+    setSelectedAgentDrilldownTab('evidence');
+    setHubOpen(true);
+  }, [handleSelectedAgentSourceGapFactOpen, selectedAgentId, selectedAgentSourceGapFact]);
   const handleReplaySelectedAgentEvidenceRecord = useCallback((evidenceId: string) => {
     const replayEvidenceId = evidenceId.trim();
     if (!replayEvidenceId) {
@@ -3835,15 +3871,15 @@ function AppInner() {
                 <span className="aitown-selected-agent-peek__eyebrow">Selected agent</span>
                 <strong>{selectedAgent.display_name}</strong>
                 <span>{`State · ${selectedAgentPeekStatus}`}</span>
-                <details className="aitown-selected-agent-peek__facts">
-                  <summary>Inspect facts</summary>
-                  {selectedAgentPeekZone ? <span>{`Zone · ${selectedAgentPeekZone}`}</span> : null}
-                  {selectedAgentPeekOperation ? <span>{`Operation · ${selectedAgentPeekOperation}`}</span> : null}
-                  {selectedAgentPeekCorrelationId ? (
-                    <span>Correlation · available</span>
-                  ) : null}
-                  {selectedAgentPeekEvidenceRef ? <span>Evidence · attached</span> : null}
-                </details>
+              </div>
+              <div className="aitown-selected-agent-peek__triage">
+                {selectedAgentPeekOperation ? <span>{`Work · ${selectedAgentPeekOperation}`}</span> : null}
+                {selectedAgentSourceSummary ? <span>{selectedAgentSourceSummary}</span> : null}
+                {selectedAgentSourceHealthInspectPeek ? (
+                  <span>
+                    {`Source gap · ${selectedAgentSourceHealthInspectPeek.sourceKindLabel} · ${selectedAgentSourceHealthInspectPeek.statusLabel}`}
+                  </span>
+                ) : null}
                 {selectedAgentEvidenceGlance ? (
                   <span className="aitown-selected-agent-peek__proof" role="group" aria-label="Selected agent proof glance">
                     {selectedAgentEvidenceGlance.map((line) => (
@@ -3851,103 +3887,72 @@ function AppInner() {
                     ))}
                   </span>
                 ) : null}
-                {selectedAgentSourceMatrix.status !== 'empty' || selectedAgentSourceMatrix.selectedAgentId ? (
-                  <details className="aitown-selected-agent-peek__source-details">
-                    <summary>Source details</summary>
-                    <section
-                      className="aitown-selected-agent-peek__source-matrix"
-                      role="region"
-                      aria-label="Selected agent source matrix peek"
-                    >
-                      <span className="aitown-selected-agent-peek__source-matrix-label">
-                        {selectedAgentSourceMatrix.statusLabel}
-                      </span>
-                      {selectedAgentSourceMatrix.status === 'ready' ? null : (
-                        <span>{selectedAgentSourceMatrix.detailLabel}</span>
-                      )}
-                      {selectedAgentSourceMatrix.rows.map((row) => (
-                        <span
-                          key={`${row.source}:${row.status}:${row.role}:${row.output}:${row.count}:${row.latest_at ?? 'unknown'}`}
-                          className="aitown-selected-agent-peek__source-matrix-row"
-                        >
-                          <strong>{`${row.source} · ${row.status}`}</strong>
-                          <span>{`${row.role} · ${row.output} · ${row.count}`}</span>
-                          <span>{`Latest · ${row.latest_at ?? 'unknown'}`}</span>
-                        </span>
-                      ))}
-                      {selectedAgentSourceMatrix.unmappedSummary.totalCount > 0 ? (
-                        <span>{`Unmapped evidence · ${selectedAgentSourceMatrix.unmappedSummary.totalCount} separate`}</span>
-                      ) : null}
-                    </section>
-                  </details>
-                ) : null}
-                <section
-                  className="aitown-selected-agent-peek__runtime-facts"
-                  role="region"
-                  aria-label="Runtime facts evidence card"
-                >
-                  <span className="aitown-selected-agent-peek__runtime-facts-label">
-                    {selectedAgentRuntimeFactsEvidenceCard.scopeLabel}
-                  </span>
-                  <strong>{selectedAgentRuntimeFactsEvidenceCard.title}</strong>
-                  <span>{selectedAgentRuntimeFactsEvidenceCard.availabilityLabel}</span>
-                  {selectedAgentRuntimeFactsEvidenceCard.detailLines.map((line) => (
-                    <span key={line}>{line}</span>
-                  ))}
-                </section>
-                {selectedAgentSourceHealthInspectPeek && selectedAgentSourceGapFact ? (
+              </div>
+              {selectedAgentSourceMatrix.status !== 'empty' || selectedAgentSourceMatrix.selectedAgentId ? (
+                <details className="aitown-selected-agent-peek__source-details">
+                  <summary>Source details</summary>
                   <section
-                    className="aitown-selected-agent-peek__source-health-inspect"
+                    className="aitown-selected-agent-peek__source-matrix"
                     role="region"
-                    aria-label="Selected agent source-health inspect peek"
+                    aria-label="Selected agent source matrix peek"
                   >
-                    <span className="aitown-selected-agent-peek__source-health-inspect-label">
-                      {selectedAgentSourceHealthInspectPeek.evidenceOnlyLabel}
+                    <span className="aitown-selected-agent-peek__source-matrix-label">
+                      {selectedAgentSourceMatrix.statusLabel}
                     </span>
-                    <strong>
-                      {`${selectedAgentSourceHealthInspectPeek.sourceKindLabel} · ${selectedAgentSourceHealthInspectPeek.statusLabel}`}
-                    </strong>
-                    <span>{selectedAgentSourceHealthInspectPeek.mappingLabel}</span>
-                    <span>{selectedAgentSourceHealthInspectPeek.diffLineLabel}</span>
-                    <button
-                      type="button"
-                      className="aitown-selected-agent-peek__source-gap-fact"
-                      aria-label={`Open source gap supervision for ${selectedAgent.display_name} ${selectedAgentSourceGapFact.sourceLabel.toLowerCase()} ${selectedAgentSourceGapFact.status}`}
-                      onClick={handleSelectedAgentSourceGapFactOpen}
-                    >
-                      Open Supervision
-                    </button>
-                  </section>
-                ) : null}
-                {selectedAgentSourceGapInspectPeek || selectedAgentSourceGapLifecycleStrip ? (
-                  <section
-                    className="aitown-selected-agent-peek__source-gap-inspect"
-                    role="region"
-                    aria-label="Source gap inspect peek"
-                  >
-                    {selectedAgentSourceGapInspectPeek ? (
-                      <>
-                        <span className="aitown-selected-agent-peek__source-gap-inspect-label">
-                          {selectedAgentSourceGapInspectPeek.evidenceOnlyLabel}
-                        </span>
-                        <strong>
-                          {`${selectedAgentSourceGapInspectPeek.sourceKindLabel} · ${selectedAgentSourceGapInspectPeek.statusLabel}`}
-                        </strong>
-                        <span>{selectedAgentSourceGapInspectPeek.mappingLabel}</span>
-                        <span>{selectedAgentSourceGapInspectPeek.observedAtLabel}</span>
-                        <span>{selectedAgentSourceGapInspectPeek.collectedAtLabel}</span>
-                      </>
+                    {selectedAgentSourceMatrix.status === 'ready' ? null : <span>{selectedAgentSourceMatrix.detailLabel}</span>}
+                    {selectedAgentSourceMatrix.rows.map((row) => (
+                      <span
+                        key={`${row.source}:${row.status}:${row.role}:${row.output}:${row.count}:${row.latest_at ?? 'unknown'}`}
+                        className="aitown-selected-agent-peek__source-matrix-row"
+                      >
+                        <strong>{`${row.source} · ${row.status}`}</strong>
+                        <span>{`${row.role} · ${row.output} · ${row.count}`}</span>
+                        <span>{`Latest · ${row.latest_at ?? 'unknown'}`}</span>
+                      </span>
+                    ))}
+                    {selectedAgentSourceMatrix.unmappedSummary.totalCount > 0 ? (
+                      <span>{`Unmapped evidence · ${selectedAgentSourceMatrix.unmappedSummary.totalCount} separate`}</span>
                     ) : null}
-                    {renderRuntimeSourceGapLifecycleStrip(selectedAgentSourceGapLifecycleStrip)}
-                    <button
-                      type="button"
-                      className="aitown-selected-agent-peek__source-gap-inspect-link"
-                      onClick={handleSelectedAgentEvidenceLedgerOpen}
-                    >
-                      Open source-gap drilldown
-                    </button>
                   </section>
-                ) : null}
+                </details>
+              ) : null}
+              <details className="aitown-selected-agent-peek__facts">
+                <summary>Inspect facts</summary>
+                {selectedAgentPeekZone ? <span>{`Zone · ${selectedAgentPeekZone}`}</span> : null}
+                {selectedAgentPeekOperation ? <span>{`Operation · ${selectedAgentPeekOperation}`}</span> : null}
+                {selectedAgentPeekCorrelationId ? <span>Correlation · available</span> : null}
+                {selectedAgentPeekEvidenceRef ? <span>Evidence · attached</span> : null}
+              </details>
+              {selectedAgentSourceGapInspectPeek || selectedAgentSourceGapLifecycleStrip ? (
+                <section
+                  className="aitown-selected-agent-peek__source-gap-inspect"
+                  role="region"
+                  aria-label="Source gap inspect peek"
+                >
+                  {selectedAgentSourceGapInspectPeek ? (
+                    <>
+                      <span className="aitown-selected-agent-peek__source-gap-inspect-label">
+                        {selectedAgentSourceGapInspectPeek.evidenceOnlyLabel}
+                      </span>
+                      <strong>
+                        {`${selectedAgentSourceGapInspectPeek.sourceKindLabel} · ${selectedAgentSourceGapInspectPeek.statusLabel}`}
+                      </strong>
+                      <span>{selectedAgentSourceGapInspectPeek.mappingLabel}</span>
+                      <span>{selectedAgentSourceGapInspectPeek.observedAtLabel}</span>
+                      <span>{selectedAgentSourceGapInspectPeek.collectedAtLabel}</span>
+                    </>
+                  ) : null}
+                  {renderRuntimeSourceGapLifecycleStrip(selectedAgentSourceGapLifecycleStrip)}
+                  <button
+                    type="button"
+                    className="aitown-selected-agent-peek__source-gap-inspect-link"
+                    onClick={handleSelectedAgentEvidenceLedgerOpen}
+                  >
+                    Open source-gap drilldown
+                  </button>
+                </section>
+              ) : null}
+              <div className="aitown-selected-agent-peek__actions" role="group" aria-label="Selected agent triage actions">
                 <button
                   type="button"
                   className="aitown-button aitown-selected-agent-peek__action"
@@ -3971,6 +3976,14 @@ function AppInner() {
                   onClick={handleSelectedAgentReplayOpen}
                 >
                   Replay
+                </button>
+                <button
+                  type="button"
+                  className="aitown-button aitown-selected-agent-peek__action"
+                  aria-label={`Open ${selectedAgent.display_name} Supervision drilldown`}
+                  onClick={handleSelectedAgentSupervisionOpen}
+                >
+                  Supervision
                 </button>
               </div>
             </aside>

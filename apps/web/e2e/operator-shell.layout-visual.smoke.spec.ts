@@ -1122,7 +1122,7 @@ test.describe('operator shell layout visual smoke', () => {
     await expect(inspectPeek.getByText('Correlation · corr-growth-lead-review')).toHaveCount(0);
     await expect(inspectPeek.getByText('Evidence · /tmp/growth-review-complete.md')).toHaveCount(0);
 
-    await inspectPeek.getByText('Inspect facts').click();
+    await inspectPeek.getByText('Inspect facts').press('Enter');
     await expect(inspectPeek.getByText('Operation · Prepare handoff notes')).toBeVisible();
 
     const [worldRect, peekRect] = await Promise.all([readRect(worldHost), readRect(inspectPeek)]);

@@ -188,6 +188,60 @@ test('rejects task control-plane fields without leakage', () => {
   assertNoLeaks(result);
 });
 
+test('rejects nested task control-plane fields without rejecting benign descriptors', () => {
+  const result = taskEvidenceSource.normalizeTaskEvidenceFacts([
+    {
+      task_ref: 'TASK-131',
+      source_kind: 'kanban_fixture',
+      observed_at: '2026-05-20T01:00:00.000Z',
+      correlation_id: 'corr-nested-control',
+      context: {
+        [`claim_${LEAK_CANARIES[3]}`]: 'redacted-field-name',
+        routing: {
+          dispatchPayload: LEAK_CANARIES[6],
+          write_back_status: 'pending'
+        }
+      },
+      history: [
+        {
+          completedAt: '2026-05-20T01:05:00.000Z',
+          assignment: { mutationToken: LEAK_CANARIES[3] }
+        }
+      ]
+    },
+    {
+      task_ref: 'TASK-132',
+      source_kind: 'slack_fixture',
+      observed_at: '2026-05-20T01:10:00.000Z',
+      correlation_id: 'corr-benign-descriptors',
+      context: {
+        note: LEAK_CANARIES[6],
+        labels: [{ display: LEAK_CANARIES[1] }]
+      }
+    }
+  ]);
+
+  assert.deepEqual(result.candidates, [
+    {
+      status: 'observed',
+      task_ref: 'TASK-132',
+      source_kind: 'slack_fixture',
+      observed_at: '2026-05-20T01:10:00.000Z',
+      correlation_id: 'corr-benign-descriptors'
+    }
+  ]);
+  assert.deepEqual(result.rejected, [
+    {
+      status: 'invalid',
+      index: 0,
+      missing_fields: ['assign', 'claim', 'complete', 'dispatch', 'mutate', 'route', 'writeback'],
+      error: 'task evidence fact contains control-plane fields'
+    }
+  ]);
+  assert.equal(Object.hasOwn(result.candidates[0], 'context'), false);
+  assertNoLeaks(result);
+});
+
 test('rejects or suppresses secret-shaped identifier fields without leakage', () => {
   const result = taskEvidenceSource.normalizeTaskEvidenceFacts([
     {

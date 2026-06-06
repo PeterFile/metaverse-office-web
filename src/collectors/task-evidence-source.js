@@ -536,13 +536,30 @@ function normalizeTaskEvidenceSourceProvenance(sourceProvenance) {
 
 function controlPlaneFields(fact) {
   const categories = new Set();
-
-  for (const field of Object.keys(fact)) {
-    const fieldCategories = controlPlaneFieldCategories(field);
-    fieldCategories.forEach((category) => categories.add(category));
-  }
+  collectControlPlaneFieldCategories(fact, categories, new Set());
 
   return Array.from(categories).sort();
+}
+
+function collectControlPlaneFieldCategories(value, categories, visited) {
+  if (!value || typeof value !== 'object') {
+    return;
+  }
+  if (visited.has(value)) {
+    return;
+  }
+  visited.add(value);
+
+  if (Array.isArray(value)) {
+    value.forEach((item) => collectControlPlaneFieldCategories(item, categories, visited));
+    return;
+  }
+
+  for (const [field, nestedValue] of Object.entries(value)) {
+    const fieldCategories = controlPlaneFieldCategories(field);
+    fieldCategories.forEach((category) => categories.add(category));
+    collectControlPlaneFieldCategories(nestedValue, categories, visited);
+  }
 }
 
 function controlPlaneFieldCategories(field) {

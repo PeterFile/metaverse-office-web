@@ -10,6 +10,7 @@ const {
   taskEvidenceFileReaderFrom,
   taskEvidencePathsReaderFrom
 } = require('./collectors/task-evidence-source');
+const { createRuntimeInputInventory } = require('./runtime-input-inventory');
 const { createPrototypeStore } = require('./store/prototype-store');
 
 async function main() {
@@ -52,7 +53,18 @@ async function main() {
     ...createHermesRuntimeSourcesOptions({ hermesRuntimeSourcesFile, hermesRuntimeSourcesPaths }),
     ...createTaskEvidenceOptions({ taskEvidenceFile, taskEvidencePaths })
   });
-  const server = createAppServer({ store, controllerSnapshotCollector, allowedOrigins });
+  const runtimeInputInventory = createRuntimeInputInventory({
+    hermesRuntimeSourcesFile,
+    hermesRuntimeSourcesPaths,
+    taskEvidenceFile,
+    taskEvidencePaths
+  });
+  const server = createAppServer({
+    store,
+    controllerSnapshotCollector,
+    allowedOrigins,
+    runtimeInputInventory
+  });
 
   server.listen(port, () => {
     process.stdout.write(
@@ -113,6 +125,7 @@ if (require.main === module) {
 module.exports = {
   main,
   parseDelimitedEnvPaths,
+  createRuntimeInputInventory,
   createHermesRuntimeSourcesOptions,
   createTaskEvidenceOptions
 };

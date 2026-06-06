@@ -2,6 +2,7 @@ const http = require('node:http');
 
 const { getAgentById, validateEventPayload, validateHeartbeatPayload } = require('./domain');
 const { createControllerSnapshotCollector } = require('./collectors/controller-snapshot');
+const { createRuntimeInputInventory } = require('./runtime-input-inventory');
 
 const INTERNAL_ERROR_DETAIL = 'internal_error';
 const MAX_PUBLIC_ERROR_DETAIL_LENGTH = 200;
@@ -42,10 +43,19 @@ function createAppServer({
   store,
   now = () => new Date().toISOString(),
   controllerSnapshotCollector = createControllerSnapshotCollector(),
-  allowedOrigins = []
+  allowedOrigins = [],
+  runtimeInputInventory = createRuntimeInputInventory()
 }) {
   return http.createServer((req, res) => {
-    handleRequest({ req, res, store, now, controllerSnapshotCollector, allowedOrigins }).catch((error) => {
+    handleRequest({
+      req,
+      res,
+      store,
+      now,
+      controllerSnapshotCollector,
+      allowedOrigins,
+      runtimeInputInventory
+    }).catch((error) => {
       const publicError = formatPublicError(error);
       sendJson(res, publicError.statusCode, {
         error: publicError.error,
@@ -55,7 +65,15 @@ function createAppServer({
   });
 }
 
-async function handleRequest({ req, res, store, now, controllerSnapshotCollector, allowedOrigins }) {
+async function handleRequest({
+  req,
+  res,
+  store,
+  now,
+  controllerSnapshotCollector,
+  allowedOrigins,
+  runtimeInputInventory = createRuntimeInputInventory()
+}) {
   const url = new URL(req.url, 'http://127.0.0.1');
   const pathname = url.pathname;
   const method = req.method || 'GET';
@@ -411,6 +429,13 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
   if (method === 'GET' && pathname === '/storage/index-health') {
     sendJson(res, 200, {
       item: await store.getStorageIndexHealth()
+    });
+    return;
+  }
+
+  if (method === 'GET' && pathname === '/runtime/input-inventory') {
+    sendJson(res, 200, {
+      item: runtimeInputInventory
     });
     return;
   }

@@ -1991,23 +1991,23 @@ describe('DetailsPanel selected-agent workflow lifecycle', () => {
       expect(within(section!).getByText('Unmapped evidence · 1')).toBeVisible();
       expect(
         within(section!).getByText(
-          'Source context · workspace_file · agent_output · observed · mapped · 1 · Observed 2026-03-16T08:58:00.000Z · Collected 2026-03-16T08:59:00.000Z'
+          'Source context · Workspace file · Agent output · Observed · mapped · 1 · Observed 2026-03-16T08:58:00.000Z · Collected 2026-03-16T08:59:00.000Z'
         )
       ).toBeVisible();
       expect(
-        within(section!).getByText('Ref rollup · workspace_file · agent_output · observed · refs available · 1')
+        within(section!).getByText('Ref rollup · Workspace file · Agent output · Observed · refs available · 1')
       ).toBeVisible();
       expect(
-        within(section!).getByText('Ref rollup · tmux_observation · runtime_unmapped · observed · refs available · 2')
+        within(section!).getByText('Ref rollup · Runtime observation · Runtime unmapped · Observed · refs available · 2')
       ).toBeVisible();
       expect(
         within(section!).getByText(
-          'Source context · tmux_observation · runtime_unmapped · observed · unmapped · 1 · Observed 2026-03-16T08:56:00.000Z · Collected 2026-03-16T08:59:00.000Z'
+          'Source context · Runtime observation · Runtime unmapped · Observed · unmapped · 1 · Observed 2026-03-16T08:56:00.000Z · Collected 2026-03-16T08:59:00.000Z'
         )
       ).toBeVisible();
       expect(
         within(section!).getByText(
-          'Source · workspace_file · Role · agent_output · Status · observed · mapped · Observed · 2026-03-16T08:58:00.000Z · Collected · 2026-03-16T08:59:00.000Z'
+          'Source · Workspace file · Role · Agent output · Status · Observed · mapped · Observed · 2026-03-16T08:58:00.000Z · Collected · 2026-03-16T08:59:00.000Z'
         )
       ).toBeVisible();
 
@@ -2023,7 +2023,6 @@ describe('DetailsPanel selected-agent workflow lifecycle', () => {
       expect(section!).not.toHaveTextContent('Evidence id ·');
       expect(section!).not.toHaveTextContent('Snapshot ·');
       expect(section!).not.toHaveTextContent('Correlation ·');
-      expect(section!).not.toHaveTextContent('Degraded ·');
       expect(section!).not.toHaveTextContent('metadata');
       expect(section!).not.toHaveTextContent('idle');
       expect(section!).not.toHaveTextContent('offline');
@@ -2036,6 +2035,12 @@ describe('DetailsPanel selected-agent workflow lifecycle', () => {
       expect(section!).not.toHaveTextContent('control-plane');
       expect(section!).not.toHaveTextContent('tmux://');
       expect(section!).not.toHaveTextContent('hermes://');
+      expect(section!).not.toHaveTextContent('workspace_file');
+      expect(section!).not.toHaveTextContent('tmux_observation');
+      expect(section!).not.toHaveTextContent('agent_output');
+      expect(section!).not.toHaveTextContent('runtime_unmapped');
+      expect(section!).not.toHaveTextContent('hermes_runtime');
+      expect(section!).not.toHaveTextContent('runtime_profile');
       expect(section!).not.toHaveTextContent('hermes-session-app-engineering');
       expect(section!).not.toHaveTextContent('session_ref');
       expect(section!).not.toHaveTextContent('secret_token');
@@ -2173,12 +2178,12 @@ describe('DetailsPanel selected-agent workflow lifecycle', () => {
     expect(section).not.toBeNull();
     expect(
       within(section!).getByText(
-        'Source context · workspace_file · agent_output · observed · mapped · 1 · Observed No observed timestamp · Collected 2026-03-16T08:59:00.000Z'
+        'Source context · Workspace file · Agent output · Observed · mapped · 1 · Observed No observed timestamp · Collected 2026-03-16T08:59:00.000Z'
       )
     ).toBeVisible();
     expect(
       within(section!).getByText(
-        'Source · workspace_file · Role · agent_output · Status · observed · mapped · Observed · No observed timestamp · Collected · 2026-03-16T08:59:00.000Z'
+        'Source · Workspace file · Role · Agent output · Status · Observed · mapped · Observed · No observed timestamp · Collected · 2026-03-16T08:59:00.000Z'
       )
     ).toBeVisible();
     expect(section!).not.toHaveTextContent('Evidence id ·');

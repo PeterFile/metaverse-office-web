@@ -1,6 +1,6 @@
 # Current Direction: Live Evidence Spine
 
-Updated: 2026-06-05T11:38:23+08:00
+Updated: 2026-06-06T20:34:00+08:00
 
 ## Product vision
 
@@ -56,6 +56,15 @@ Minimum target outcomes:
 4. Upgrade the prototype JSONL event spine to a structured append-only store, likely SQLite first, with indexes for event id, agent id, correlation id, source kind, evidence ref, and time range.
 5. Preserve replayability: service restart must rebuild the same projection from persisted events, and each visible incident or status claim must point back to concrete evidence.
 6. Keep AI Town as the primary operator surface, with Hub/drilldown views used for evidence inspection rather than dumping every fact into a side panel.
+
+Scoreable near-term slices for this milestone:
+
+- Storage contract visibility: add static, read-only schema catalogs for storage/replay surfaces without reading records, collecting sources, appending data, or exposing raw ids, refs, paths, SQL details, payloads, metadata, or secrets.
+- Replay anchor integrity: expose only safe append-order anchors where they improve replay/debug flows; JSONL and SQLite replay must agree, unknown evidence remains non-echoing, and canonical append-only records stay the source of truth.
+- SQLite query hardening: use SQLite sidecars only as read-only query accelerators or parity probes; stale/drifting sidecars must be observable as degraded state rather than an invisible semantic fallback.
+- Runtime input observability: show whether Hermes/task evidence inputs are configured only as bounded inventory state; never return configured paths, expanded paths, env values, raw file names, runtime payloads, or source contents.
+- World-first operator workflow: selected-agent peek, source-gap pins, evidence ledger, replay drilldown, and legend/HUD surfaces must stay compact, CTA-gated, and safe-labeled, with AI Town as the primary layer and Hub/drilldowns used only for explicit inspection.
+- Cross-surface leak guards: tests should cover forbidden visible strings across peek, HUD, legend, evidence ledger, source context, and replay surfaces, including local paths, `tmux://`, `hermes://`, tokens, webhook-shaped strings, raw metadata, and control-plane language.
 
 ## Documentation discipline
 

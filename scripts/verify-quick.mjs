@@ -413,6 +413,14 @@ export function formatVerifyQuickPlanSummary(plan) {
     : `[verify:quick] selected ${plan.changed ? "changed-files route=lane " : ""}lane=${plan.lane} steps=${plan.steps.length}`;
 
   const lines = [selectedLine];
+  if (plan.mode === "focused-files") {
+    lines.push(
+      ...plan.focusedFiles.map((filePath, index) =>
+        `[verify:quick] focused-file ${index + 1}/${plan.focusedFiles.length}: ${filePath}`,
+      ),
+    );
+  }
+
   if (plan.mode === "lane" && plan.lane === "ui" && plan.existingWebTests.length === 0) {
     lines.push("[verify:quick] no focused UI tests found; running typecheck only");
   }
@@ -422,6 +430,18 @@ export function formatVerifyQuickPlanSummary(plan) {
       `[verify:quick] plan ${index + 1}/${plan.steps.length}: ${formatCommand(command, args)}`,
     ),
   );
+}
+
+function formatVerifyQuickRoute(plan) {
+  if (plan.mode === "focused-files") {
+    return `${plan.changed ? "changed-files route=focused-files " : ""}focused-files=${plan.focusedFiles.length}`;
+  }
+
+  return `${plan.changed ? "changed-files route=lane " : ""}lane=${plan.lane}`;
+}
+
+function formatVerifyQuickResultSummary(plan, { completed, failed, elapsedSeconds }) {
+  return `[verify:quick] result ${formatVerifyQuickRoute(plan)} passed-steps=${completed} failed-steps=${failed ? 1 : 0} total-steps=${plan.steps.length} elapsed=${elapsedSeconds}s`;
 }
 
 export async function main(cliArgs = process.argv.slice(2)) {
@@ -469,6 +489,7 @@ export async function main(cliArgs = process.argv.slice(2)) {
       const reason = result.error
         ? result.error.message
         : `exit ${result.code ?? `signal ${result.signal}`}`;
+      console.error(formatVerifyQuickResultSummary(plan, { completed, failed: true, elapsedSeconds }));
       console.error(`[verify:quick] failed after ${completed}/${plan.steps.length} steps (${elapsedSeconds}s): ${label}`);
       console.error(`[verify:quick] reason: ${reason}`);
       process.exit(result.code ?? 1);
@@ -477,6 +498,7 @@ export async function main(cliArgs = process.argv.slice(2)) {
   }
 
   const elapsedSeconds = ((Date.now() - startedAt) / 1000).toFixed(1);
+  console.error(formatVerifyQuickResultSummary(plan, { completed, failed: false, elapsedSeconds }));
   console.error(`[verify:quick] ok: ${completed}/${plan.steps.length} steps (${elapsedSeconds}s)`);
 }
 

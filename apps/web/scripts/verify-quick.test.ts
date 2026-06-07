@@ -95,6 +95,7 @@ describe('verify-quick helpers', () => {
 
     expect(formatVerifyQuickPlanSummary(focusedPlan)).toEqual([
       '[verify:quick] selected focused-files=1 steps=2',
+      '[verify:quick] focused-file 1/1: src/App.test.tsx',
       '[verify:quick] plan 1/2: git diff --check',
       '[verify:quick] plan 2/2: pnpm --filter @metaverse-office/web exec vitest run src/App.test.tsx'
     ]);
@@ -106,6 +107,29 @@ describe('verify-quick helpers', () => {
 
     expect(formatVerifyQuickPlanSummary(changedFocusedPlan)[0]).toBe(
       '[verify:quick] selected changed-files route=focused-files focused-files=1 steps=2'
+    );
+  });
+
+  it('lists focused files explicitly in planned output', () => {
+    const focusedPlan = resolveVerifyQuickSteps(parseVerifyQuickArgs(['--focused-files', 'src/App.test.tsx']), {
+      cwd: repoRoot
+    });
+
+    expect(formatVerifyQuickPlanSummary(focusedPlan)).toContain(
+      '[verify:quick] focused-file 1/1: src/App.test.tsx'
+    );
+  });
+
+  it('prints strict command-step counts after a successful lane run', () => {
+    const result = spawnSync('node', [verifyQuickScript, '--lane=docs'], {
+      cwd: repoRoot,
+      encoding: 'utf8'
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toContain('[verify:quick] run: git diff --check');
+    expect(result.stderr).toContain(
+      '[verify:quick] result lane=docs passed-steps=1 failed-steps=0 total-steps=1'
     );
   });
 
@@ -158,18 +182,16 @@ describe('verify-quick helpers', () => {
       runGit('add', '.');
       runGit('commit', '-m', 'bad docs');
 
-      let output = '';
-      try {
-        execFileSync('node', [verifyQuickScript, '--since=HEAD~1'], {
-          cwd: tempRepo,
-          encoding: 'utf8',
-          stdio: 'pipe'
-        });
-      } catch (error) {
-        const execError = error as { stdout?: string; stderr?: string };
-        output = `${execError.stdout ?? ''}${execError.stderr ?? ''}`;
-      }
+      const result = spawnSync('node', [verifyQuickScript, '--since=HEAD~1'], {
+        cwd: tempRepo,
+        encoding: 'utf8'
+      });
+      const output = `${result.stdout}${result.stderr}`;
 
+      expect(result.status).not.toBe(0);
+      expect(output).toContain(
+        '[verify:quick] result changed-files route=lane lane=docs passed-steps=0 failed-steps=1 total-steps=1'
+      );
       expect(output).toMatch(/trailing whitespace/);
     } finally {
       rmSync(tempRepo, { recursive: true, force: true });

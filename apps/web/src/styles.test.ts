@@ -149,6 +149,15 @@ describe('AI Town shell styles', () => {
     expect(styles).toMatch(/\.aitown-focus-chip\s*\{[\s\S]*?pointer-events:\s*auto;/);
   });
 
+  it('keeps the collector freshness pulse compact inside the draggable world chrome', () => {
+    expect(styles).toMatch(/\.aitown-collector-summary-chip\s*\{[\s\S]*?grid-template-columns:\s*auto minmax\(0, 1fr\);/);
+    expect(styles).toMatch(/\.aitown-collector-summary-chip\s*\{[\s\S]*?flex:\s*0 1 176px;/);
+    expect(styles).toMatch(/\.aitown-collector-summary-chip\s*\{[\s\S]*?max-width:\s*min\(176px, 24vw\);/);
+    expect(styles).toMatch(/\.aitown-collector-summary-chip__pulse\s*\{[\s\S]*?width:\s*8px;[\s\S]*?height:\s*8px;/);
+    expect(styles).toMatch(/\.aitown-collector-summary-chip__meta\s*\{[\s\S]*?display:\s*contents;/);
+    expect(styles).not.toMatch(/\.aitown-collector-summary-chip\s*\{[\s\S]*?border-width:\s*clamp/);
+  });
+
   it('keeps the Live Focus reason line from expanding the draggable world safe lane', () => {
     expect(styles).toMatch(/\.aitown-panel__topline > span,[\s\S]*?\.aitown-panel__topline-popover\s*\{[\s\S]*?min-width:\s*0;/);
     expect(styles).toContain('.aitown-panel__topline > .aitown-panel__topline-card--live-focus {\n  max-width: min(42ch, 46%);\n}');

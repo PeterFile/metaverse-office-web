@@ -174,8 +174,8 @@ type CollectorSnapshotSummaryChipModel = {
   statusLabel: string;
   countLabel: string;
   healthLabel: string;
-  timeLabel: string;
-  tone: 'loading' | 'empty' | 'ready' | 'unavailable';
+  coverageLabel: string;
+  tone: 'loading' | 'empty' | 'fresh' | 'degraded' | 'coverage-gap' | 'unavailable';
 };
 
 type HudReadModelStatus = {
@@ -611,13 +611,20 @@ function resolveCollectorSnapshotSummaryChip(
     const healthBuckets = summary.source_health_buckets.status_buckets;
     const unstableHealthCount =
       (healthBuckets.degraded ?? 0) + (healthBuckets.missing ?? 0) + (healthBuckets.error ?? 0);
+    const uncoveredAgentCount = Math.max(0, summary.agent_count - summary.covered_agent_count);
+    const coverageGapCount = uncoveredAgentCount + summary.low_confidence_agent_count;
+    const statusLabel =
+      unstableHealthCount > 0 ? 'Degraded' : coverageGapCount > 0 ? 'Coverage gap' : 'Fresh';
 
     return {
-      statusLabel: 'Snapshot available',
+      statusLabel,
       countLabel: `${summary.agent_count} agents · ${summary.heartbeat_count} heartbeats`,
       healthLabel: `${healthBuckets.observed ?? 0} observed · ${unstableHealthCount} source gaps`,
-      timeLabel: `Collected · ${summary.collected_at ?? 'unknown'}`,
-      tone: 'ready'
+      coverageLabel:
+        coverageGapCount > 0
+          ? `${summary.evidence_ref_count} refs · ${coverageGapCount} coverage gap${coverageGapCount === 1 ? '' : 's'}`
+          : `${summary.evidence_ref_count} refs · all covered`,
+      tone: unstableHealthCount > 0 ? 'degraded' : coverageGapCount > 0 ? 'coverage-gap' : 'fresh'
     };
   }
 
@@ -626,7 +633,7 @@ function resolveCollectorSnapshotSummaryChip(
       statusLabel: 'No snapshot',
       countLabel: '0 agents · 0 heartbeats',
       healthLabel: '0 observed · 0 source gaps',
-      timeLabel: 'Collected · none',
+      coverageLabel: '0 refs · no coverage',
       tone: 'empty'
     };
   }
@@ -636,7 +643,7 @@ function resolveCollectorSnapshotSummaryChip(
       statusLabel: 'Snapshot summary unavailable',
       countLabel: 'Safe summary read failed',
       healthLabel: 'Safe aggregate unavailable',
-      timeLabel: 'Collected · unknown',
+      coverageLabel: 'Coverage unavailable',
       tone: 'unavailable'
     };
   }
@@ -646,7 +653,7 @@ function resolveCollectorSnapshotSummaryChip(
       statusLabel: 'Snapshot summary loading',
       countLabel: 'Safe summary boundary',
       healthLabel: 'Waiting for aggregate state',
-      timeLabel: 'Collected · unknown',
+      coverageLabel: 'Coverage pending',
       tone: 'loading'
     };
   }
@@ -655,7 +662,7 @@ function resolveCollectorSnapshotSummaryChip(
     statusLabel: 'No snapshot',
     countLabel: '0 agents · 0 heartbeats',
     healthLabel: '0 observed · 0 source gaps',
-    timeLabel: 'Collected · none',
+    coverageLabel: '0 refs · no coverage',
     tone: 'empty'
   };
 }
@@ -3650,11 +3657,14 @@ function AppInner() {
                 onPointerDown={(event) => event.stopPropagation()}
                 onClick={handleCollectorSnapshotSummaryOpen}
               >
-                <span className="aitown-panel__topline-title">Collector snapshot</span>
-                <strong>{collectorSnapshotSummaryChip.statusLabel}</strong>
-                <span>{collectorSnapshotSummaryChip.countLabel}</span>
-                <span>{collectorSnapshotSummaryChip.healthLabel}</span>
-                <span>{collectorSnapshotSummaryChip.timeLabel}</span>
+                <span className="aitown-collector-summary-chip__pulse" aria-hidden="true" />
+                <span className="aitown-collector-summary-chip__meta">
+                  <span className="aitown-panel__topline-title">Collector freshness</span>
+                  <strong>{collectorSnapshotSummaryChip.statusLabel}</strong>
+                  <span>{collectorSnapshotSummaryChip.countLabel}</span>
+                  <span>{collectorSnapshotSummaryChip.healthLabel}</span>
+                  <span>{collectorSnapshotSummaryChip.coverageLabel}</span>
+                </span>
               </button>
               <details className="aitown-panel__signal-cluster" role="region" aria-label="Office HUD signals">
                 <summary className="aitown-panel__hud-popover-summary">

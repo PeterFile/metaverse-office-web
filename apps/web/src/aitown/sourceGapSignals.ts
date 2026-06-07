@@ -132,7 +132,30 @@ export type RuntimeSourceGapInspectPeek = {
   collectedAtLabel: string;
 };
 
+export type UnmappedEvidencePocketSourceLabel =
+  | 'Runtime source'
+  | 'Task evidence'
+  | 'Hermes source'
+  | 'Unknown source';
+
+export type UnmappedEvidencePocketStatusLabel = CollectorSourceHealthStatus | 'unknown';
+
+export type UnmappedEvidencePocketRow = {
+  count: number;
+  sourceLabel: UnmappedEvidencePocketSourceLabel;
+  statusLabel: UnmappedEvidencePocketStatusLabel;
+};
+
+export type UnmappedEvidencePocketHelper = {
+  visibility: 'hidden' | 'ready';
+  totalCount: number;
+  rows: UnmappedEvidencePocketRow[];
+  overflowCount: number;
+  overflowLabel: string | null;
+};
+
 const MAX_SOURCE_GAP_CHIPS = 3;
+const MAX_UNMAPPED_EVIDENCE_POCKET_ROWS = 3;
 const SELECTED_SOURCE_GAP_REASON_LIMIT = 96;
 
 const SOURCE_GAP_STATUS_RANK: Record<CollectorSourceHealthStatus, number> = {
@@ -176,6 +199,21 @@ const EVIDENCE_ROLE_LABELS: Record<string, string> = {
   source_evidence: 'source evidence',
   workspace_presence: 'workspace presence',
   workspace_snapshot: 'workspace snapshot'
+};
+
+const UNMAPPED_EVIDENCE_POCKET_SOURCE_RANK: Record<UnmappedEvidencePocketSourceLabel, number> = {
+  'Runtime source': 0,
+  'Task evidence': 1,
+  'Hermes source': 2,
+  'Unknown source': 3
+};
+
+const UNMAPPED_EVIDENCE_POCKET_STATUS_RANK: Record<UnmappedEvidencePocketStatusLabel, number> = {
+  observed: 0,
+  missing: 1,
+  degraded: 2,
+  error: 3,
+  unknown: 4
 };
 
 export function deriveSourceGapChips(
@@ -292,6 +330,58 @@ export function deriveRuntimeSourceGapChips(
       return SOURCE_KIND_ORDER.indexOf(left.sourceKind) - SOURCE_KIND_ORDER.indexOf(right.sourceKind);
     })
     .slice(0, MAX_SOURCE_GAP_CHIPS);
+}
+
+export function deriveUnmappedEvidencePocketHelper(
+  runtimeSourceGaps: RuntimeSourceGap[] | null | undefined
+): UnmappedEvidencePocketHelper {
+  if (!runtimeSourceGaps?.length) {
+    return createHiddenUnmappedEvidencePocketHelper();
+  }
+
+  const groups = new Map<string, UnmappedEvidencePocketRow>();
+  let totalCount = 0;
+
+  for (const gap of runtimeSourceGaps) {
+    if (!gap.unmapped && gap.agent_id) {
+      continue;
+    }
+
+    totalCount += 1;
+    const sourceLabel = resolveUnmappedEvidencePocketSourceLabel(gap.source_kind);
+    const statusLabel = resolveUnmappedEvidencePocketStatusLabel(gap.source_status);
+    const key = `${sourceLabel}|${statusLabel}`;
+    const existing = groups.get(key);
+
+    if (existing) {
+      existing.count += 1;
+      continue;
+    }
+
+    groups.set(key, {
+      count: 1,
+      sourceLabel,
+      statusLabel
+    });
+  }
+
+  if (totalCount === 0) {
+    return createHiddenUnmappedEvidencePocketHelper();
+  }
+
+  const sortedRows = Array.from(groups.values()).sort(compareUnmappedEvidencePocketRows);
+  const rows = sortedRows.slice(0, MAX_UNMAPPED_EVIDENCE_POCKET_ROWS);
+  const overflowCount = sortedRows
+    .slice(MAX_UNMAPPED_EVIDENCE_POCKET_ROWS)
+    .reduce((sum, row) => sum + row.count, 0);
+
+  return {
+    visibility: 'ready',
+    totalCount,
+    rows,
+    overflowCount,
+    overflowLabel: overflowCount > 0 ? `+${overflowCount} more` : null
+  };
 }
 
 export function deriveRuntimeSourceGapWorldPins(
@@ -808,6 +898,66 @@ function compareRuntimeSourceGapInspectCandidates(
   }
 
   return (right.gap.observed_at ?? '').localeCompare(left.gap.observed_at ?? '');
+}
+
+function compareUnmappedEvidencePocketRows(
+  left: UnmappedEvidencePocketRow,
+  right: UnmappedEvidencePocketRow
+) {
+  const sourceRank =
+    UNMAPPED_EVIDENCE_POCKET_SOURCE_RANK[left.sourceLabel] -
+    UNMAPPED_EVIDENCE_POCKET_SOURCE_RANK[right.sourceLabel];
+  if (sourceRank !== 0) {
+    return sourceRank;
+  }
+
+  const statusRank =
+    UNMAPPED_EVIDENCE_POCKET_STATUS_RANK[left.statusLabel] -
+    UNMAPPED_EVIDENCE_POCKET_STATUS_RANK[right.statusLabel];
+  if (statusRank !== 0) {
+    return statusRank;
+  }
+
+  return left.sourceLabel.localeCompare(right.sourceLabel);
+}
+
+function createHiddenUnmappedEvidencePocketHelper(): UnmappedEvidencePocketHelper {
+  return {
+    visibility: 'hidden',
+    totalCount: 0,
+    rows: [],
+    overflowCount: 0,
+    overflowLabel: null
+  };
+}
+
+function resolveUnmappedEvidencePocketSourceLabel(sourceKind: string): UnmappedEvidencePocketSourceLabel {
+  switch (sourceKind) {
+    case 'tmux_observation':
+    case 'tmux_session':
+      return 'Runtime source';
+    case 'task_evidence':
+      return 'Task evidence';
+    case 'hermes_profile':
+    case 'hermes_session':
+      return 'Hermes source';
+    default:
+      return 'Unknown source';
+  }
+}
+
+function resolveUnmappedEvidencePocketStatusLabel(
+  status: RuntimeSourceGap['source_status'] | string | null | undefined
+): UnmappedEvidencePocketStatusLabel {
+  switch (status) {
+    case 'observed':
+    case 'missing':
+    case 'degraded':
+    case 'error':
+      return status;
+    default:
+      return 'unknown';
+  }
 }
 
 function minNullableTimestamp(left: string | null, right: string | null) {

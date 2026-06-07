@@ -6,6 +6,7 @@ import {
   deriveRuntimeSourceGapLifecycleStrip,
   deriveRuntimeSourceGapLifecycle,
   deriveSelectedAgentSourceGapFact,
+  deriveUnmappedEvidencePocketHelper,
   deriveRuntimeSourceGapChips,
   deriveSourceGapChips,
   deriveSourceHealthWorldBadges
@@ -532,6 +533,145 @@ describe('deriveRuntimeSourceGapChips', () => {
       collectedAtLabel: 'Collected 2026-03-16T09:01:00.000Z'
     });
     expect(JSON.stringify(peek)).not.toContain('/tmp/app-engineering');
+  });
+});
+
+describe('deriveUnmappedEvidencePocketHelper', () => {
+  const baseGap: RuntimeSourceGap = {
+    observed_at: '2026-03-16T08:59:30.000Z',
+    collected_at: '2026-03-16T09:01:00.000Z',
+    agent_id: null,
+    source_kind: 'tmux_observation',
+    evidence_role: 'runtime_unmapped',
+    source_status: 'observed',
+    output_candidate: false,
+    collector_snapshot_id: 'collector-snapshot:current',
+    correlation_id: 'collector-snapshot:current',
+    degraded_reasons: ['raw tmux://outside-tools/0.0 must not render'],
+    unmapped: true
+  };
+
+  it('returns a hidden empty helper state when there are no unmapped evidence rows', () => {
+    expect(deriveUnmappedEvidencePocketHelper([])).toEqual({
+      visibility: 'hidden',
+      totalCount: 0,
+      rows: [],
+      overflowCount: 0,
+      overflowLabel: null
+    });
+    expect(
+      deriveUnmappedEvidencePocketHelper([
+        {
+          ...baseGap,
+          agent_id: 'app-engineering',
+          unmapped: false,
+          source_kind: 'workspace_file',
+          source_status: 'degraded',
+          degraded_reasons: ['raw path /tmp/app-engineering/outbox.md must not render']
+        }
+      ])
+    ).toEqual({
+      visibility: 'hidden',
+      totalCount: 0,
+      rows: [],
+      overflowCount: 0,
+      overflowLabel: null
+    });
+  });
+
+  it('summarizes unmapped runtime, task, and Hermes evidence as counts with allowlisted labels only', () => {
+    const helper = deriveUnmappedEvidencePocketHelper([
+      baseGap,
+      { ...baseGap, correlation_id: 'second-runtime-row' },
+      {
+        ...baseGap,
+        source_kind: 'task_evidence',
+        source_status: 'degraded',
+        degraded_reasons: ['payload token=/tmp/task-webhook must not render']
+      },
+      {
+        ...baseGap,
+        source_kind: 'hermes_session',
+        source_status: 'missing',
+        degraded_reasons: ['hermes://session/5-web3-app-engineering must not render']
+      }
+    ]);
+
+    expect(helper).toEqual({
+      visibility: 'ready',
+      totalCount: 4,
+      rows: [
+        { count: 2, sourceLabel: 'Runtime source', statusLabel: 'observed' },
+        { count: 1, sourceLabel: 'Task evidence', statusLabel: 'degraded' },
+        { count: 1, sourceLabel: 'Hermes source', statusLabel: 'missing' }
+      ],
+      overflowCount: 0,
+      overflowLabel: null
+    });
+
+    const serializedHelper = JSON.stringify(helper).toLowerCase();
+    expect(serializedHelper).not.toContain('tmux://');
+    expect(serializedHelper).not.toContain('hermes://');
+    expect(serializedHelper).not.toContain('/tmp');
+    expect(serializedHelper).not.toContain('5-web3');
+    expect(serializedHelper).not.toContain('payload');
+    expect(serializedHelper).not.toContain('token');
+    expect(serializedHelper).not.toContain('webhook');
+    expect(serializedHelper).not.toContain('agent');
+    expect(serializedHelper).not.toContain('liveness');
+    expect(serializedHelper).not.toContain('productivity');
+    expect(serializedHelper).not.toContain('severity');
+  });
+
+  it('uses Unknown fallback labels for unsupported hostile source and status values', () => {
+    const helper = deriveUnmappedEvidencePocketHelper([
+      {
+        ...baseGap,
+        source_kind: '/tmp/app-engineering?token=secret-control-plane',
+        source_status: 'dispatch-control-plane-token' as RuntimeSourceGap['source_status'],
+        evidence_role: 'webhook_url=https://example.invalid/hook',
+        degraded_reasons: ['profile=session payload must not render']
+      }
+    ]);
+
+    expect(helper).toEqual({
+      visibility: 'ready',
+      totalCount: 1,
+      rows: [{ count: 1, sourceLabel: 'Unknown source', statusLabel: 'unknown' }],
+      overflowCount: 0,
+      overflowLabel: null
+    });
+    const serializedHelper = JSON.stringify(helper);
+    expect(serializedHelper).not.toContain('/tmp/app-engineering');
+    expect(serializedHelper).not.toContain('token');
+    expect(serializedHelper).not.toContain('control-plane');
+    expect(serializedHelper).not.toContain('dispatch');
+    expect(serializedHelper).not.toContain('webhook');
+    expect(serializedHelper).not.toContain('profile=');
+    expect(serializedHelper).not.toContain('session');
+    expect(serializedHelper).not.toContain('payload');
+  });
+
+  it('keeps pocket rows bounded with a safe overflow label', () => {
+    const helper = deriveUnmappedEvidencePocketHelper([
+      { ...baseGap, source_status: 'observed' },
+      { ...baseGap, source_status: 'missing' },
+      { ...baseGap, source_kind: 'task_evidence', source_status: 'degraded' },
+      { ...baseGap, source_kind: 'hermes_profile', source_status: 'error' },
+      { ...baseGap, source_kind: 'unknown_runtime_source' }
+    ]);
+
+    expect(helper).toEqual({
+      visibility: 'ready',
+      totalCount: 5,
+      rows: [
+        { count: 1, sourceLabel: 'Runtime source', statusLabel: 'observed' },
+        { count: 1, sourceLabel: 'Runtime source', statusLabel: 'missing' },
+        { count: 1, sourceLabel: 'Task evidence', statusLabel: 'degraded' }
+      ],
+      overflowCount: 2,
+      overflowLabel: '+2 more'
+    });
   });
 });
 

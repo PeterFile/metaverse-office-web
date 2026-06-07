@@ -5719,7 +5719,7 @@ test('SQLite prototype store reports sanitized storage index-health without side
     record_evidence_ref_count: 6,
     record_index_drift_count: 0,
     record_evidence_ref_drift_count: 0,
-    evidence_query_probe_count: 16,
+    evidence_query_probe_count: 18,
     evidence_query_probe_drift_count: 0,
     evidence_query_probe_status: 'complete',
     health_reason_codes: [],
@@ -5769,7 +5769,7 @@ test('SQLite prototype store reports sanitized storage index-health without side
     ...health,
     status: 'degraded',
     record_index_drift_count: 3,
-    evidence_query_probe_drift_count: 2,
+    evidence_query_probe_drift_count: 3,
     evidence_query_probe_status: 'stale',
     health_reason_codes: ['sidecar_drift', 'evidence_query_probe_drift'],
     sidecar_status: 'stale'
@@ -5789,6 +5789,31 @@ test('SQLite prototype store reports sanitized storage index-health without side
     health_reason_codes: ['sidecar_unavailable'],
     sidecar_status: 'stale'
   });
+});
+
+test('SQLite prototype store flags newest evidence query ordering drift', async () => {
+  const sqliteStoreFile = await createSqliteStoreFile();
+  const store = await createPrototypeStore({ sqliteFilePath: sqliteStoreFile });
+
+  await store.appendCollectorReport(createCollectorReport());
+
+  await execSqlite(
+    sqliteStoreFile,
+    [
+      'UPDATE record_index',
+      "SET observed_at = '2026-03-09T18:05:30.000Z'",
+      "WHERE kind = 'evidence_record' AND source_kind = 'workspace_root';",
+      'UPDATE record_index',
+      "SET observed_at = '2026-03-09T18:05:20.000Z'",
+      "WHERE kind = 'evidence_record' AND source_kind = 'tmux_observation';"
+    ].join(' ')
+  );
+
+  const health = await store.getStorageIndexHealth();
+  assert.equal(health.status, 'degraded');
+  assert.equal(health.sidecar_status, 'stale');
+  assert.equal(health.evidence_query_probe_status, 'stale');
+  assert.equal(health.evidence_query_probe_drift_count > 0, true);
 });
 
 test('SQLite prototype store populates sidecars when appending collector evidence records', async () => {

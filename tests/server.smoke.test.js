@@ -9545,7 +9545,7 @@ test('GET evidence and source read routes keep JSONL and SQLite parity', async (
       record_evidence_ref_count: 10,
       record_index_drift_count: 0,
       record_evidence_ref_drift_count: 0,
-      evidence_query_probe_count: 16,
+      evidence_query_probe_count: 18,
       evidence_query_probe_drift_count: 0,
       evidence_query_probe_status: 'complete',
       health_reason_codes: [],

@@ -102,6 +102,8 @@ pnpm backend:start
 
 Add `--plan` or `--dry-run` to any `verify:quick` route to print the selected lane or focused test files plus the exact commands that would run, then exit without executing them. Plan mode keeps the same conservative routing: unknown, cross-layer, or unsafe focused paths still fail nonzero.
 
+Before running commands, `verify:quick` prints the selected lane or focused-file route plus the planned step list so agents can catch wrong-lane retries early.
+
 `pnpm web:test:browser-smoke` runs the Playwright smoke bundle from the repository root (currently the keyboard, active-queue, and layout-visual smokes), starts its own hermetic read-only backend seeded under `./.tmp/browser-smoke`, starts its own Vite shell on ephemeral localhost ports, and passes the resolved base URL into Playwright so stale orphaned processes do not block startup.
 
 `pnpm web:test:browser-smoke:live-evidence` runs only the short Live Evidence journey smoke through the same hermetic wrapper. Use it for focused validation when the changed surface is limited to the live evidence journey; it does not replace the full smoke bundle for broad shell changes.

@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   classifyChangedFiles,
+  formatVerifyQuickPlanSummary,
   listChangedFiles,
   parseVerifyQuickArgs,
   resolveVerifyQuickSteps
@@ -75,6 +76,37 @@ describe('verify-quick helpers', () => {
       ]
     ]);
     expect(JSON.stringify(plan.steps)).not.toMatch(/\btest:all\b|\bweb:build\b|\bbuild\b/);
+  });
+
+  it('summarizes selected routing and planned steps before execution', () => {
+    const changedPlan = resolveVerifyQuickSteps(parseVerifyQuickArgs(['--changed']), {
+      cwd: repoRoot,
+      changedFiles: ['README.md']
+    });
+
+    expect(formatVerifyQuickPlanSummary(changedPlan)).toEqual([
+      '[verify:quick] selected changed-files route=lane lane=docs steps=1',
+      '[verify:quick] plan 1/1: git diff --check HEAD --'
+    ]);
+
+    const focusedPlan = resolveVerifyQuickSteps(parseVerifyQuickArgs(['--focused-files', 'src/App.test.tsx']), {
+      cwd: repoRoot
+    });
+
+    expect(formatVerifyQuickPlanSummary(focusedPlan)).toEqual([
+      '[verify:quick] selected focused-files=1 steps=2',
+      '[verify:quick] plan 1/2: git diff --check',
+      '[verify:quick] plan 2/2: pnpm --filter @metaverse-office/web exec vitest run src/App.test.tsx'
+    ]);
+
+    const changedFocusedPlan = resolveVerifyQuickSteps(parseVerifyQuickArgs(['--changed']), {
+      cwd: repoRoot,
+      changedFiles: ['apps/web/src/App.test.tsx']
+    });
+
+    expect(formatVerifyQuickPlanSummary(changedFocusedPlan)[0]).toBe(
+      '[verify:quick] selected changed-files route=focused-files focused-files=1 steps=2'
+    );
   });
 
   it('rejects unsafe or non-test focused file paths', () => {

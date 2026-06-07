@@ -23,6 +23,7 @@ import {
   fetchEvidenceRecord,
   fetchEvidenceRefRollup,
   fetchEvidenceRecords,
+  fetchEvidenceRecordsSchema,
   fetchRuntimeSourceGapAgentSummary,
   fetchRuntimeSourceGapLifecycle,
   fetchRuntimeSourceGapTrend,
@@ -2009,6 +2010,84 @@ describe('fetchEvidenceRecords', () => {
       '/evidence-records?newest_first=false&limit=3',
       expect.objectContaining({ signal: undefined })
     );
+  });
+});
+
+describe('fetchEvidenceRecordsSchema', () => {
+  it('fetches the static evidence-records schema endpoint without query strings', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            item: {
+              source_kinds: ['workspace_file'],
+              evidence_roles: ['agent_plan'],
+              source_statuses: ['observed'],
+              supported_filters: ['source_kind', 'evidence_ref', 'limit'],
+              boolean_filters: ['newest_first'],
+              limit: { default: 50, max: 200 },
+              route_write_boundary: 'read-only evidence-record schema catalog'
+            }
+          }),
+          { headers: JSON_HEADERS }
+        )
+      )
+    );
+
+    await expect(fetchEvidenceRecordsSchema()).resolves.toMatchObject({
+      source_kinds: ['workspace_file'],
+      evidence_roles: ['agent_plan'],
+      source_statuses: ['observed'],
+      supported_filters: ['source_kind', 'evidence_ref', 'limit'],
+      boolean_filters: ['newest_first'],
+      limit: { default: 50, max: 200 },
+      route_write_boundary: 'read-only evidence-record schema catalog'
+    });
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/evidence-records/schema',
+      expect.objectContaining({ signal: undefined })
+    );
+  });
+
+  it('drops unsafe schema strings and falls back to bounded limit metadata', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            item: {
+              source_kinds: ['workspace_file', '/tmp/secret', 'token'],
+              evidence_roles: ['runtime_unmapped', 'payload'],
+              source_statuses: ['missing', 'webhook'],
+              supported_filters: ['source_kind', 'evidence_ref', 'token'],
+              boolean_filters: ['mapped', 'secret'],
+              limit: { default: 999, max: 999 },
+              route_write_boundary: '/tmp/secret token'
+            }
+          }),
+          { headers: JSON_HEADERS }
+        )
+      )
+    );
+
+    const schema = await fetchEvidenceRecordsSchema();
+
+    expect(schema).toMatchObject({
+      source_kinds: ['workspace_file'],
+      evidence_roles: ['runtime_unmapped'],
+      source_statuses: ['missing'],
+      supported_filters: ['source_kind', 'evidence_ref'],
+      boolean_filters: ['mapped'],
+      limit: { default: 50, max: 200 },
+      route_write_boundary: 'read-only evidence-record schema catalog'
+    });
+    const serialized = JSON.stringify(schema).toLowerCase();
+    expect(serialized).not.toContain('/tmp/');
+    expect(serialized).not.toContain('token');
+    expect(serialized).not.toContain('payload');
+    expect(serialized).not.toContain('webhook');
   });
 });
 

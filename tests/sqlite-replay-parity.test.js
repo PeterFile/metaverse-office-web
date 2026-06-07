@@ -511,6 +511,15 @@ test('JSONL and SQLite stores replay evidence read models with parity', async (t
           degraded: 4,
           missing: 2
         },
+        input_provenance_manifest: {
+          source_kind_buckets: {},
+          source_format_buckets: {
+            json_array: 0,
+            jsonl: 0
+          },
+          source_input_ordinal_buckets: {},
+          source_file_ordinal_buckets: {}
+        },
         output_candidate_count: 4,
         unmapped_count: 2,
         latest_observed_at: '2026-03-09T18:05:50.000Z',

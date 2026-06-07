@@ -518,6 +518,34 @@ function assertNoSafeRouteCanaries(payload, route) {
   }
 }
 
+const READONLY_RUNTIME_INPUT_CANARIES = [
+  '/tmp/readonly-no-append-proof/runtime.jsonl',
+  'file:///tmp/readonly-no-append-proof/runtime.jsonl',
+  'tmux://readonly-no-append-proof/0.1',
+  'hermes://profile/readonly-no-append-proof',
+  'hermes://session/readonly-no-append-proof',
+  'token=readonly-no-append-proof',
+  'webhook-readonly-no-append-proof'
+];
+
+const READONLY_ACTION_CANARY_PATTERNS = [
+  /\bdispatch\b/i,
+  /\bclaim\b/i,
+  /\bassign(?:ment)?\b/i,
+  /\bcomplete\b/i,
+  /\bworker orchestration\b/i
+];
+
+function assertNoReadOnlyRuntimeInputLeak(payload, route) {
+  const serialized = JSON.stringify(payload);
+  for (const canary of READONLY_RUNTIME_INPUT_CANARIES) {
+    assert.equal(serialized.includes(canary), false, `${route} leaked ${canary}`);
+  }
+  for (const pattern of READONLY_ACTION_CANARY_PATTERNS) {
+    assert.equal(pattern.test(serialized), false, `${route} exposed ${pattern}`);
+  }
+}
+
 function createSafeRouteCanaryCollectorReport() {
   return {
     collected_at: '2026-03-09T18:06:00.000Z',
@@ -7935,6 +7963,62 @@ test('GET static schema and aggregate routes are not swallowed by dynamic detail
       assert.equal(serialized.includes(forbidden), false, route);
     }
   }
+});
+
+test('GET schema and summary routes ignore runtime inputs without appending or echoing action canaries', async () => {
+  let collectCount = 0;
+  const controllerSnapshotCollector = {
+    async collectSnapshot() {
+      collectCount += 1;
+      throw new Error('GET schema and summary routes must not collect runtime inputs');
+    }
+  };
+  const root = await mkdtemp(path.join(os.tmpdir(), 'metaverse-office-readonly-no-append-'));
+  const storeFile = path.join(root, 'prototype-store.jsonl');
+  const store = await createPrototypeStore({ filePath: storeFile });
+
+  await store.appendCollectorReport(createRouteParityCollectorReport());
+
+  const query = new URLSearchParams({
+    hermes_runtime_sources_file: '/tmp/readonly-no-append-proof/runtime.jsonl',
+    hermes_runtime_source: 'hermes://profile/readonly-no-append-proof',
+    task_evidence_paths: '/tmp/readonly-no-append-proof/runtime.jsonl',
+    token: 'token=readonly-no-append-proof',
+    webhook: 'webhook-readonly-no-append-proof',
+    action: 'control-plane dispatch claim assign complete'
+  }).toString();
+  const unknownSnapshot = encodeURIComponent(
+    'collector-snapshot:/tmp/readonly-no-append-proof/runtime.jsonl'
+  );
+  const routes = [
+    `/evidence-records/schema?${query}`,
+    `/agents/evidence-spine/schema?${query}`,
+    `/collectors/controller-snapshot/schema?collector_snapshot_id=${unknownSnapshot}&${query}`,
+    `/runtime/source-gaps/schema?${query}`,
+    `/agents/evidence-spine/summary?source_kind=workspace_file&limit=1&${query}`,
+    `/runtime/source-gaps/summary?source_kind=workspace_file&limit=1&${query}`,
+    `/collectors/controller-snapshot/summary?collector_snapshot_id=${unknownSnapshot}&${query}`
+  ];
+  const before = {
+    recordCount: store.records.length,
+    counts: store.getCounts(),
+    file: await readFile(storeFile, 'utf8')
+  };
+
+  for (const route of routes) {
+    const response = await requestJsonDirect({
+      url: route,
+      store,
+      controllerSnapshotCollector
+    });
+    assert.equal(response.response.status, 200, route);
+    assertNoReadOnlyRuntimeInputLeak(response.body, route);
+    assert.equal(store.records.length, before.recordCount, route);
+    assert.deepEqual(store.getCounts(), before.counts, route);
+    assert.equal(await readFile(storeFile, 'utf8'), before.file, route);
+  }
+
+  assert.equal(collectCount, 0);
 });
 
 test('GET evidence-record detail and provenance unknown ids do not echo unsafe ids', async () => {

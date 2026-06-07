@@ -4291,7 +4291,9 @@ afterEach(() => {
     expect(inspectPeek).not.toHaveTextContent('/tmp/evidence.md');
     expect(within(inspectPeek).getByRole('group', { name: 'Selected agent proof glance' })).toBeVisible();
     expect(
-      await within(inspectPeek).findByText('Proof glance · 6 records · Sources workspace 3, tmux 2, Hermes 1')
+      await within(inspectPeek).findByText(
+        'Proof glance · 6 records · Sources Runtime evidence 3, Workspace evidence 3'
+      )
     ).toBeVisible();
     expect(
       within(inspectPeek).getByText(
@@ -4428,7 +4430,9 @@ afterEach(() => {
       const sourceMatrix = within(ledgerSection).getByRole('group', {
         name: 'Selected agent source matrix proof spine'
       });
-      expect(ledgerSection).toHaveTextContent('Proof glance · 6 records · Sources workspace 3, tmux 2, Hermes 1');
+      expect(ledgerSection).toHaveTextContent(
+        'Proof glance · 6 records · Sources Runtime evidence 3, Workspace evidence 3'
+      );
       expect(ledgerSection).toHaveTextContent(
         'Coverage gap · 1 · Roles source evidence 4, agent output 2 · Latest observed 2026-03-16T08:59:10.000Z'
       );
@@ -4467,7 +4471,9 @@ afterEach(() => {
     );
 
     const proofLens = await screen.findByRole('region', { name: 'Selected agent proof lens' });
-    expect(within(proofLens).getByText('Proof glance · 6 records · Sources workspace 3, tmux 2, Hermes 1')).toBeVisible();
+    expect(
+      within(proofLens).getByText('Proof glance · 6 records · Sources Runtime evidence 3, Workspace evidence 3')
+    ).toBeVisible();
     expect(
       within(proofLens).getByText(
         'Coverage gap · 1 · Roles source evidence 4, agent output 2 · Latest observed 2026-03-16T08:59:10.000Z'
@@ -4475,7 +4481,7 @@ afterEach(() => {
     ).toBeVisible();
     expect(within(proofLens).queryAllByText(/^(Proof glance|Coverage gap)/)).toHaveLength(2);
     expect(proofLens).not.toHaveTextContent(
-      /\/Users\/cwp|\/tmp\/|secret-token|token=secret|webhook|tmux:\/\/|hermes:\/\/|session:\/\/|profile:\/\/|metadata|control-plane|dispatch/i
+      /\/Users\/cwp|\/tmp\/|secret-token|token=secret|webhook|tmux|Hermes|session|profile|metadata|control-plane|dispatch/i
     );
 
     await act(async () => {});

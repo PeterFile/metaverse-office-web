@@ -147,7 +147,7 @@ describe('deriveSelectedAgentEvidenceGlance', () => {
         sourceHealth
       })
     ).toEqual([
-      'Proof glance · 6 records · Sources workspace 3, tmux 2, Hermes 1',
+      'Proof glance · 6 records · Sources Runtime evidence 3, Workspace evidence 3',
       'Coverage gap · 1 · Roles source evidence 4, agent output 2 · Latest observed 2026-03-09T18:04:45.000Z'
     ]);
   });
@@ -199,7 +199,7 @@ describe('deriveSelectedAgentEvidenceGlance', () => {
     const serialized = JSON.stringify(glance);
 
     expect(glance).toEqual([
-      'Proof glance · 9 records · Sources workspace 3, Unknown 3',
+      'Proof glance · 9 records · Sources Workspace evidence 3, Unknown 3',
       'Coverage gap · 3 · Roles source evidence 4, Unknown 10 · Latest observed 2026-03-09T18:04:45.000Z'
     ]);
     expectNoForbiddenPublicUiText(glance);
@@ -237,7 +237,7 @@ describe('deriveSelectedAgentEvidenceGlance', () => {
         sourceHealth
       })
     ).toEqual([
-      'Proof glance · 2 records · Sources tmux + workspace',
+      'Proof glance · 2 records · Sources Runtime evidence + Workspace evidence',
       'Coverage backed · Confidence high · Latest observed 2026-03-09T18:04:45.000Z'
     ]);
   });
@@ -250,7 +250,7 @@ describe('deriveSelectedAgentEvidenceGlance', () => {
         sourceHealth
       })
     ).toEqual([
-      'Proof glance · 1 record · Sources workspace',
+      'Proof glance · 1 record · Sources Workspace evidence',
       'Coverage low confidence · Confidence medium · Latest observed unavailable'
     ]);
 
@@ -262,7 +262,7 @@ describe('deriveSelectedAgentEvidenceGlance', () => {
       })
     ).toEqual([
       'Proof glance · 0 records · Sources unavailable',
-      'Coverage gap · loaded snapshot has no row'
+      'Coverage gap · selected-agent coverage unavailable'
     ]);
   });
 
@@ -274,8 +274,8 @@ describe('deriveSelectedAgentEvidenceGlance', () => {
     });
 
     expect(glance).toEqual([
-      'Proof glance · 1 record · Source-health snapshot',
-      'Coverage source-health only · Latest observed 2026-03-16T08:59:30.000Z'
+      'Proof glance · 1 record · Sources unavailable',
+      'Coverage limited summary · Latest observed 2026-03-16T08:59:30.000Z'
     ]);
     expect(glance).toHaveLength(2);
     expectNoForbiddenPublicUiText(glance);

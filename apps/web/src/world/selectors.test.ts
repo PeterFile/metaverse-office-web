@@ -1062,4 +1062,98 @@ describe('selectZoneEvidenceInspections', () => {
       },
     ]);
   });
+
+  it('does not treat overview-only refs as zone occupant proof', () => {
+    const world = makeWorldState({
+      agents: new Map([
+        [
+          'workflow-backed',
+          makeWorldAgent({
+            agent_id: 'workflow-backed',
+            display_name: 'Workflow Backed',
+            zone: 'proof-zone',
+            severity: 'yellow',
+            runtime_evidence: {
+              source: 'workflow',
+              degraded_reasons: [],
+              incident_ids: [],
+              source_kinds: [],
+              correlation_ids: [],
+              evidence_refs: ['tmux://workflow/0.1'],
+            },
+          }),
+        ],
+        [
+          'backfill-backed',
+          makeWorldAgent({
+            agent_id: 'backfill-backed',
+            display_name: 'Backfill Backed',
+            zone: 'proof-zone',
+            severity: 'yellow',
+            runtime_evidence: {
+              source: 'incident_feed_backfill',
+              degraded_reasons: ['workflow partial'],
+              incident_ids: ['inc-backfill'],
+              source_kinds: ['collector_snapshot'],
+              correlation_ids: [],
+              evidence_refs: ['/tmp/backfill.md'],
+            },
+          }),
+        ],
+        [
+          'overview-only',
+          makeWorldAgent({
+            agent_id: 'overview-only',
+            display_name: 'Overview Only',
+            zone: 'proof-zone',
+            severity: 'yellow',
+            runtime_evidence: {
+              source: 'overview_only',
+              degraded_reasons: [],
+              incident_ids: [],
+              source_kinds: [],
+              correlation_ids: [],
+              evidence_refs: ['/tmp/should-not-count.md'],
+            },
+          }),
+        ],
+      ]),
+      zones: [
+        makeZoneSnapshot({
+          zone_id: 'proof-zone',
+          label: 'Proof Zone',
+          kind: 'shared',
+          occupant_ids: ['workflow-backed', 'backfill-backed', 'overview-only'],
+        }),
+      ],
+    });
+
+    expect(selectZoneEvidenceInspections(world)).toEqual([
+      {
+        zone_id: 'proof-zone',
+        label: 'Proof Zone',
+        occupant_count: 3,
+        evidence_backed_agent_count: 2,
+        source_health_status: null,
+        occupant_proof_summaries: [
+          {
+            display_name: 'Workflow Backed',
+            evidence_backed: true,
+            source_health_status: null,
+          },
+          {
+            display_name: 'Backfill Backed',
+            evidence_backed: true,
+            source_health_status: null,
+          },
+          {
+            display_name: 'Overview Only',
+            evidence_backed: false,
+            source_health_status: null,
+          },
+        ],
+        occupant_proof_overflow_count: 0,
+      },
+    ]);
+  });
 });

@@ -1,4 +1,4 @@
-import type { Severity, WatchEdgeSnapshot, WorldAgent, WorldState, ZoneSnapshot } from './types';
+import type { RuntimeEvidenceSource, Severity, WatchEdgeSnapshot, WorldAgent, WorldState, ZoneSnapshot } from './types';
 
 const SEVERITY_RANK: Record<Severity, number> = {
   normal: 0,
@@ -41,6 +41,7 @@ const INCIDENT_EVIDENCE_LIMIT = 3;
 const INCIDENT_EVIDENCE_REF_LIMIT = 3;
 const INCIDENT_COUNTERPARTY_LIMIT = 3;
 const ZONE_OCCUPANT_PROOF_LIMIT = 3;
+const ZONE_OCCUPANT_PROOF_SOURCES = new Set<RuntimeEvidenceSource>(['workflow', 'incident_feed_backfill']);
 
 export interface HotZoneSummary {
   zone_id: string;
@@ -574,7 +575,12 @@ function countEvidenceBackedAgents(occupants: WorldAgent[]): number | null {
 }
 
 function isEvidenceBackedAgent(agent: WorldAgent): boolean {
-  return uniqueTrimmedStrings(agent.runtime_evidence?.evidence_refs ?? []).length > 0;
+  const evidence = agent.runtime_evidence;
+  return (
+    !!evidence &&
+    ZONE_OCCUPANT_PROOF_SOURCES.has(evidence.source) &&
+    uniqueTrimmedStrings(evidence.evidence_refs).length > 0
+  );
 }
 
 function selectZoneOccupantProofSummaries(occupants: WorldAgent[]): ZoneOccupantProofSummary[] {

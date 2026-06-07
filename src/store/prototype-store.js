@@ -195,6 +195,30 @@ const ACCOUNTABILITY_REPLAY_SCHEMA_WRITE_BOUNDARY =
   'read-only accountability replay schema catalog; does not read replay rows, collect, append records, expose raw refs, or expose control-plane actions';
 const AGENTS_EVIDENCE_SPINE_SCHEMA_WRITE_BOUNDARY =
   'read-only agents evidence-spine schema catalog; does not collect, read runtime sources, append records, or expose control-plane actions';
+const INCIDENT_EVIDENCE_AUDIT_SUPPORTED_FILTERS = Object.freeze([
+  'kind',
+  'agent_id',
+  'severity',
+  'status',
+  'window',
+  'limit'
+]);
+const INCIDENT_EVIDENCE_AUDIT_BUCKETS = Object.freeze([
+  'evidence_backed',
+  'insufficient_evidence'
+]);
+const INCIDENT_EVIDENCE_AUDIT_COUNT_FIELDS = Object.freeze([
+  'total_count',
+  'evidence_backed_count',
+  'insufficient_evidence_count'
+]);
+const INCIDENT_EVIDENCE_AUDIT_ACCOUNTABILITY_GAP_SEMANTICS = Object.freeze([
+  'insufficient evidence is an accountability gap only',
+  'audit buckets do not change incident severity or lifecycle',
+  'audit buckets do not infer liveness or productivity'
+]);
+const INCIDENT_EVIDENCE_AUDIT_SCHEMA_WRITE_BOUNDARY =
+  'read-only incident evidence-audit schema catalog; does not inspect incident rows, collect, read runtime sources, append records, change lifecycle, or infer severity, liveness, or productivity';
 const RUNTIME_SOURCE_GAP_STATUSES = Object.freeze(['degraded', 'missing', 'error']);
 const RUNTIME_SOURCE_GAP_UNSUPPORTED_FILTERS = new Set([
   'evidence_ref',
@@ -1356,6 +1380,20 @@ class PrototypeStore {
         max: 200
       },
       route_write_boundary: AGENTS_EVIDENCE_SPINE_SCHEMA_WRITE_BOUNDARY
+    };
+  }
+
+  getIncidentEvidenceAuditSchema() {
+    return {
+      supported_filters: [...INCIDENT_EVIDENCE_AUDIT_SUPPORTED_FILTERS],
+      audit_buckets: [...INCIDENT_EVIDENCE_AUDIT_BUCKETS],
+      count_fields: [...INCIDENT_EVIDENCE_AUDIT_COUNT_FIELDS],
+      accountability_gap_semantics: [...INCIDENT_EVIDENCE_AUDIT_ACCOUNTABILITY_GAP_SEMANTICS],
+      limit: {
+        default: 50,
+        max: 200
+      },
+      route_write_boundary: INCIDENT_EVIDENCE_AUDIT_SCHEMA_WRITE_BOUNDARY
     };
   }
 

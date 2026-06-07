@@ -965,6 +965,101 @@ describe('deriveRuntimeSourceGapLifecycleStrip', () => {
     expect(serializedStrip).not.toContain('profile');
   });
 
+  it('renders read-model unmapped pockets with allowlisted source and status labels', () => {
+    const strip = deriveRuntimeSourceGapLifecycleStrip({
+      runtimeSourceGapLifecycle: {
+        ...baseLifecycle,
+        groups: [
+          {
+            agent_id: null,
+            source_kind: 'task_evidence',
+            evidence_role: 'webhook_url=https://example.invalid/hook',
+            current_status: 'degraded',
+            lifecycle_state: 'opened',
+            first_observed_at: '2026-03-16T08:58:30.000Z',
+            last_observed_at: '2026-03-16T08:59:30.000Z',
+            first_collected_at: '2026-03-16T09:00:00.000Z',
+            last_collected_at: '2026-03-16T09:01:00.000Z',
+            record_count: 1,
+            snapshot_count: 1,
+            source_status_buckets: { degraded: 1 }
+          },
+          {
+            agent_id: null,
+            source_kind: 'hermes_session',
+            evidence_role: 'hermes://session/5-web3-app-engineering',
+            current_status: 'missing',
+            lifecycle_state: 'continuing',
+            first_observed_at: '2026-03-16T08:58:30.000Z',
+            last_observed_at: '2026-03-16T08:59:31.000Z',
+            first_collected_at: '2026-03-16T09:00:00.000Z',
+            last_collected_at: '2026-03-16T09:01:00.000Z',
+            record_count: 2,
+            snapshot_count: 2,
+            source_status_buckets: { missing: 2 }
+          },
+          {
+            agent_id: null,
+            source_kind: '/tmp/app-engineering?token=secret-control-plane',
+            evidence_role: 'payload profile=session',
+            current_status:
+              'dispatch-control-plane-token=/tmp/app-engineering' as RuntimeSourceGapLifecycle['groups'][number]['current_status'],
+            lifecycle_state:
+              'state-control-plane-token=/tmp/app-engineering' as RuntimeSourceGapLifecycle['groups'][number]['lifecycle_state'],
+            first_observed_at: '2026-03-16T08:58:30.000Z',
+            last_observed_at: null,
+            first_collected_at: '2026-03-16T09:00:00.000Z',
+            last_collected_at: '2026-03-16T09:01:00.000Z',
+            record_count: 3,
+            snapshot_count: 3,
+            source_status_buckets: { error: 3 }
+          }
+        ]
+      },
+      selectedAgentId: 'app-engineering',
+      state: 'ready',
+      error: null
+    });
+
+    expect(strip?.unmappedRows).toEqual([
+      {
+        key: 'scope:unmapped|source:task|state:opened|status:degraded|index:0',
+        sourceLabel: 'Task evidence',
+        statusLabel: 'degraded',
+        lifecycleLabel: 'opened',
+        countLabel: '1 row',
+        observedAtLabel: 'Observed 2026-03-16T08:59:30.000Z'
+      },
+      {
+        key: 'scope:unmapped|source:hermes|state:continuing|status:missing|index:1',
+        sourceLabel: 'Hermes source',
+        statusLabel: 'missing',
+        lifecycleLabel: 'continuing',
+        countLabel: '2 rows',
+        observedAtLabel: 'Observed 2026-03-16T08:59:31.000Z'
+      },
+      {
+        key: 'scope:unmapped|source:unknown|state:unknown|status:unknown|index:2',
+        sourceLabel: 'Unknown source',
+        statusLabel: 'unknown',
+        lifecycleLabel: 'unknown',
+        countLabel: '3 rows',
+        observedAtLabel: 'Not observed'
+      }
+    ]);
+
+    const serializedStrip = JSON.stringify(strip);
+    expect(serializedStrip).not.toContain('/tmp/app-engineering');
+    expect(serializedStrip).not.toContain('token');
+    expect(serializedStrip).not.toContain('control-plane');
+    expect(serializedStrip).not.toContain('dispatch');
+    expect(serializedStrip).not.toContain('webhook');
+    expect(serializedStrip).not.toContain('payload');
+    expect(serializedStrip).not.toContain('profile=');
+    expect(serializedStrip).not.toContain('5-web3');
+    expect(serializedStrip).not.toContain('hermes://');
+  });
+
   it('renders explicit empty, error, and no-snapshot states without implying health', () => {
     expect(
       deriveRuntimeSourceGapLifecycleStrip({

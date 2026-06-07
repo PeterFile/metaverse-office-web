@@ -758,12 +758,8 @@ function renderRuntimeSourceGapLifecycleGroupStripRow(
   group: RuntimeSourceGapLifecycleGroup,
   index: number
 ): RuntimeSourceGapLifecycleStripRow | null {
-  if (!group.source_kind) {
-    return null;
-  }
-
-  const sourceKind = RUNTIME_SOURCE_KIND_MAP[group.source_kind];
-  if (!sourceKind) {
+  const sourceModel = resolveRuntimeSourceGapLifecycleGroupSourceModel(group);
+  if (!sourceModel) {
     return null;
   }
 
@@ -776,16 +772,42 @@ function renderRuntimeSourceGapLifecycleGroupStripRow(
   return {
     key: [
       `scope:${group.agent_id === null ? 'unmapped' : 'mapped'}`,
-      `source:${renderRuntimeSourceGapReadModelSourceKey(sourceKind)}`,
+      `source:${sourceModel.key}`,
       `state:${lifecycleState}`,
       `status:${statusLabel}`,
       `index:${index}`
     ].join('|'),
-    sourceLabel: group.agent_id === null ? 'Runtime source' : renderRuntimeSourceGapReadModelSourceLabel(sourceKind),
+    sourceLabel: sourceModel.label,
     statusLabel,
     lifecycleLabel: renderRuntimeSourceGapLifecycleGroupLabel(lifecycleState),
     countLabel: `${group.record_count} row${group.record_count === 1 ? '' : 's'}`,
     observedAtLabel: renderObservedAtLabel(group.last_observed_at)
+  };
+}
+
+function resolveRuntimeSourceGapLifecycleGroupSourceModel(
+  group: RuntimeSourceGapLifecycleGroup
+): { key: string; label: string } | null {
+  if (group.agent_id === null) {
+    const sourceLabel = resolveUnmappedEvidencePocketSourceLabel(group.source_kind);
+    return {
+      key: renderUnmappedEvidencePocketSourceKey(sourceLabel),
+      label: sourceLabel
+    };
+  }
+
+  if (!group.source_kind) {
+    return null;
+  }
+
+  const sourceKind = RUNTIME_SOURCE_KIND_MAP[group.source_kind];
+  if (!sourceKind) {
+    return null;
+  }
+
+  return {
+    key: renderRuntimeSourceGapReadModelSourceKey(sourceKind),
+    label: renderRuntimeSourceGapReadModelSourceLabel(sourceKind)
   };
 }
 
@@ -848,6 +870,19 @@ function renderRuntimeSourceGapReadModelSourceLabel(sourceKind: DisplayedSourceG
     case 'hermes_profile':
     case 'hermes_session':
       return 'Runtime source';
+  }
+}
+
+function renderUnmappedEvidencePocketSourceKey(sourceLabel: UnmappedEvidencePocketSourceLabel) {
+  switch (sourceLabel) {
+    case 'Runtime source':
+      return 'runtime';
+    case 'Task evidence':
+      return 'task';
+    case 'Hermes source':
+      return 'hermes';
+    case 'Unknown source':
+      return 'unknown';
   }
 }
 
@@ -931,7 +966,9 @@ function createHiddenUnmappedEvidencePocketHelper(): UnmappedEvidencePocketHelpe
   };
 }
 
-function resolveUnmappedEvidencePocketSourceLabel(sourceKind: string): UnmappedEvidencePocketSourceLabel {
+function resolveUnmappedEvidencePocketSourceLabel(
+  sourceKind: string | null | undefined
+): UnmappedEvidencePocketSourceLabel {
   switch (sourceKind) {
     case 'tmux_observation':
     case 'tmux_session':

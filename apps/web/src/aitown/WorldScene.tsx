@@ -76,6 +76,17 @@ const ZONE_SOURCE_HEALTH_LABELS = {
   error: 'Error'
 } as const;
 
+type ZoneEvidenceInspection = NonNullable<SceneZone['evidenceFloor']>['inspection'];
+type ZoneSourceHealthStatus = ZoneEvidenceInspection['sourceHealthStatus'];
+
+function resolveZoneSourceHealthLabel(status: ZoneSourceHealthStatus) {
+  return status ? ZONE_SOURCE_HEALTH_LABELS[status] : 'Insufficient evidence';
+}
+
+function formatZoneOccupantOverflow(count: number) {
+  return `+${count} more ${count === 1 ? 'occupant' : 'occupants'}`;
+}
+
 const nameLabelStyle = new TextStyle({
   fontFamily: '"VCR OSD Mono", monospace',
   fontSize: 8,
@@ -2957,13 +2968,31 @@ export default function WorldScene({
             </div>
             <div>
               <dt>Worst source health</dt>
-              <dd>
-                {inspectedZoneInspection.sourceHealthStatus
-                  ? ZONE_SOURCE_HEALTH_LABELS[inspectedZoneInspection.sourceHealthStatus]
-                  : 'Insufficient evidence'}
-              </dd>
+              <dd>{resolveZoneSourceHealthLabel(inspectedZoneInspection.sourceHealthStatus)}</dd>
             </div>
           </dl>
+          {inspectedZoneInspection.occupantProofSummaries.length > 0 ? (
+            <div
+              className="aitown-zone-card__proofs"
+              aria-label={`${inspectedZoneInspection.label} occupant proof summaries`}
+            >
+              <span className="aitown-zone-card__proofs-label">Occupant proof</span>
+              <ul className="aitown-zone-card__proof-list">
+                {inspectedZoneInspection.occupantProofSummaries.map((occupant, index) => (
+                  <li key={`${occupant.displayName}:${index}`}>
+                    <strong>{occupant.displayName}</strong>
+                    <span>{`Evidence-backed · ${occupant.evidenceBacked ? 'Yes' : 'No'}`}</span>
+                    <span>{`Worst source health · ${resolveZoneSourceHealthLabel(occupant.sourceHealthStatus)}`}</span>
+                  </li>
+                ))}
+                {inspectedZoneInspection.occupantProofOverflowCount > 0 ? (
+                  <li className="aitown-zone-card__proof-overflow">
+                    {formatZoneOccupantOverflow(inspectedZoneInspection.occupantProofOverflowCount)}
+                  </li>
+                ) : null}
+              </ul>
+            </div>
+          ) : null}
         </section>
       ) : null}
       {showMapGatewayControls ? (

@@ -1258,9 +1258,27 @@ describe('WorldScene watch overlay caption gating', () => {
             present: true,
             inspection: {
               label: 'Delivery Desk',
-              occupantCount: 1,
-              evidenceBackedAgentCount: 1,
-              sourceHealthStatus: 'error'
+              occupantCount: 4,
+              evidenceBackedAgentCount: 2,
+              sourceHealthStatus: 'error',
+              occupantProofSummaries: [
+                {
+                  displayName: 'App Engineering Agent',
+                  evidenceBacked: true,
+                  sourceHealthStatus: 'error'
+                },
+                {
+                  displayName: 'Growth Revenue Agent',
+                  evidenceBacked: false,
+                  sourceHealthStatus: 'missing'
+                },
+                {
+                  displayName: 'Protocol Operator',
+                  evidenceBacked: true,
+                  sourceHealthStatus: null
+                }
+              ],
+              occupantProofOverflowCount: 1
             }
           }
         },
@@ -1276,7 +1294,15 @@ describe('WorldScene watch overlay caption gating', () => {
               label: 'Quiet Zone',
               occupantCount: 1,
               evidenceBackedAgentCount: null,
-              sourceHealthStatus: null
+              sourceHealthStatus: null,
+              occupantProofSummaries: [
+                {
+                  displayName: 'Team Lead',
+                  evidenceBacked: false,
+                  sourceHealthStatus: null
+                }
+              ],
+              occupantProofOverflowCount: 0
             }
           }
         }
@@ -1295,6 +1321,7 @@ describe('WorldScene watch overlay caption gating', () => {
 
     expect(deliveryFloor?.eventMode).toBe('static');
     expect(textLabels).not.toContain('Delivery Desk');
+    expect(screen.queryByText('App Engineering Agent')).not.toBeInTheDocument();
 
     let floorEvent: { stopPropagation: ReturnType<typeof vi.fn> } | undefined;
     act(() => {
@@ -1308,16 +1335,28 @@ describe('WorldScene watch overlay caption gating', () => {
     const deliveryCard = await screen.findByRole('region', { name: 'Delivery Desk evidence zone card' });
     expect(deliveryCard).toHaveTextContent('Delivery Desk');
     expect(deliveryCard).toHaveTextContent('Occupants');
-    expect(deliveryCard).toHaveTextContent('1');
+    expect(deliveryCard).toHaveTextContent('4');
     expect(deliveryCard).toHaveTextContent('Evidence-backed agents');
     expect(deliveryCard).toHaveTextContent('Worst source health');
     expect(deliveryCard).toHaveTextContent('Error');
+    expect(deliveryCard).toHaveTextContent('Occupant proof');
+    expect(deliveryCard).toHaveTextContent('App Engineering Agent');
+    expect(deliveryCard).toHaveTextContent('Evidence-backed · Yes');
+    expect(deliveryCard).toHaveTextContent('Growth Revenue Agent');
+    expect(deliveryCard).toHaveTextContent('Evidence-backed · No');
+    expect(deliveryCard).toHaveTextContent('Worst source health · Missing');
+    expect(deliveryCard).toHaveTextContent('Protocol Operator');
+    expect(deliveryCard).toHaveTextContent('Worst source health · Insufficient evidence');
+    expect(deliveryCard).toHaveTextContent('+1 more occupant');
+    expect(deliveryCard).not.toHaveTextContent('Team Lead');
     expect(deliveryCard).not.toHaveTextContent(/tmux|session|profile|webhook|token|payload|control-plane/i);
 
     fireEvent.focus(screen.getByRole('button', { name: 'Inspect evidence zone Quiet Zone' }));
 
     const quietCard = await screen.findByRole('region', { name: 'Quiet Zone evidence zone card' });
     expect(quietCard).toHaveTextContent('Quiet Zone');
+    expect(quietCard).toHaveTextContent('Team Lead');
+    expect(quietCard).toHaveTextContent('Evidence-backed · No');
     expect(quietCard).toHaveTextContent('Insufficient evidence');
     expect(quietCard).not.toHaveTextContent(/tmux|session|profile|webhook|token|payload|control-plane/i);
   });

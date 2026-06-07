@@ -50,7 +50,16 @@ const world: WorldState = {
         },
         recent_trail: [],
         open_alert_count: 1,
-        has_open_incidents: true
+        has_open_incidents: true,
+        runtime_evidence: {
+          source: 'workflow',
+          degraded_reasons: [],
+          incident_ids: [],
+          source_kinds: [],
+          correlation_ids: [],
+          evidence_refs: ['tmux://session/0.1']
+        },
+        source_evidence_health_status: 'degraded'
       }
     ],
     [
@@ -282,8 +291,16 @@ describe('adaptWorldToScene', () => {
       inspection: {
         label: 'Meeting Zone',
         occupantCount: 1,
-        evidenceBackedAgentCount: null,
-        sourceHealthStatus: null
+        evidenceBackedAgentCount: 1,
+        sourceHealthStatus: 'degraded',
+        occupantProofSummaries: [
+          {
+            displayName: 'App Engineering Agent',
+            evidenceBacked: true,
+            sourceHealthStatus: 'degraded'
+          }
+        ],
+        occupantProofOverflowCount: 0
       }
     });
     expect(meetingZone?.evidenceFloor).not.toHaveProperty('highestSeverity');

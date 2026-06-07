@@ -2124,6 +2124,48 @@ button {
 
 .aitown-zone-card__facts dd { margin: 0; text-align: right; }
 
+.aitown-zone-card__proofs {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(139, 233, 213, 0.2);
+}
+
+.aitown-zone-card__proofs-label {
+  color: #8be9d5;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.aitown-zone-card__proof-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.aitown-zone-card__proof-list li {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.aitown-zone-card__proof-list strong,
+.aitown-zone-card__proof-list span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.aitown-zone-card__proof-list span,
+.aitown-zone-card__proof-overflow {
+  color: rgba(255, 243, 208, 0.74);
+  font-size: 0.72rem;
+  line-height: 1.25;
+}
+
 .aitown-world__placeholder {
   position: absolute;
   inset: 0;

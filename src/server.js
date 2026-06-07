@@ -342,6 +342,13 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
     return;
   }
 
+  if (method === 'GET' && pathname === '/accountability/replay/schema') {
+    sendJson(res, 200, {
+      item: store.getAccountabilityReplaySchema()
+    });
+    return;
+  }
+
   if (method === 'GET' && pathname === '/accountability/replay') {
     if (!hasReplayAnchor(url.searchParams)) {
       sendJson(res, 400, {

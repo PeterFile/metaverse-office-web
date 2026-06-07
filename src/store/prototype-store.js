@@ -95,6 +95,44 @@ const EVIDENCE_RECORD_BOOLEAN_FILTERS = Object.freeze([
   'mapped',
   'newest_first'
 ]);
+const ACCOUNTABILITY_REPLAY_SUPPORTED_ANCHORS = Object.freeze([
+  'event_id',
+  'evidence_id',
+  'evidence_ref',
+  'correlation_id',
+  'agent_id'
+]);
+const ACCOUNTABILITY_REPLAY_SUPPORTED_FILTERS = Object.freeze(['source_kind', 'artifact_kind']);
+const ACCOUNTABILITY_REPLAY_CHECKPOINT_LOG_SUPPORTED_FILTERS = Object.freeze([
+  'record_kind',
+  'evidence_id',
+  'collector_snapshot_id',
+  'correlation_id',
+  'source_kind'
+]);
+const ACCOUNTABILITY_REPLAY_SCHEMA_ROUTES = Object.freeze([
+  Object.freeze({
+    name: 'bundle',
+    path: '/accountability/replay',
+    supported_anchors: ACCOUNTABILITY_REPLAY_SUPPORTED_ANCHORS,
+    supported_filters: ACCOUNTABILITY_REPLAY_SUPPORTED_FILTERS,
+    supported_bounds: Object.freeze(['limit', 'window'])
+  }),
+  Object.freeze({
+    name: 'checkpoint_summary',
+    path: '/accountability/replay/checkpoint-summary',
+    supported_anchors: Object.freeze([]),
+    supported_filters: Object.freeze([]),
+    supported_bounds: Object.freeze([])
+  }),
+  Object.freeze({
+    name: 'checkpoint_log',
+    path: '/accountability/replay/checkpoint-log',
+    supported_anchors: Object.freeze([]),
+    supported_filters: ACCOUNTABILITY_REPLAY_CHECKPOINT_LOG_SUPPORTED_FILTERS,
+    supported_bounds: Object.freeze(['limit'])
+  })
+]);
 const AGENTS_EVIDENCE_SPINE_SUPPORTED_FILTERS = Object.freeze([
   'source_kind',
   'evidence_role',
@@ -153,6 +191,8 @@ const AGENTS_EVIDENCE_SPINE_COUNT_SEMANTICS = Object.freeze([
 ]);
 const EVIDENCE_RECORD_SCHEMA_WRITE_BOUNDARY =
   'read-only schema catalog; does not collect, read runtime sources, append records, or expose control-plane actions';
+const ACCOUNTABILITY_REPLAY_SCHEMA_WRITE_BOUNDARY =
+  'read-only accountability replay schema catalog; does not read replay rows, collect, append records, expose raw refs, or expose control-plane actions';
 const AGENTS_EVIDENCE_SPINE_SCHEMA_WRITE_BOUNDARY =
   'read-only agents evidence-spine schema catalog; does not collect, read runtime sources, append records, or expose control-plane actions';
 const RUNTIME_SOURCE_GAP_STATUSES = Object.freeze(['degraded', 'missing', 'error']);
@@ -1252,6 +1292,30 @@ class PrototypeStore {
       limit: parseLimit(filters.limit),
       filters
     });
+  }
+
+  getAccountabilityReplaySchema() {
+    return {
+      routes: ACCOUNTABILITY_REPLAY_SCHEMA_ROUTES.map((route) => ({
+        name: route.name,
+        path: route.path,
+        supported_anchors: [...route.supported_anchors],
+        supported_filters: [...route.supported_filters],
+        supported_bounds: [...route.supported_bounds]
+      })),
+      anchor_requirement: 'one replay bundle anchor is required',
+      bounds: {
+        limit: {
+          default: 10,
+          max: 200
+        },
+        window: {
+          default: '60m',
+          format: 'Nm|Nh'
+        }
+      },
+      route_write_boundary: ACCOUNTABILITY_REPLAY_SCHEMA_WRITE_BOUNDARY
+    };
   }
 
   listEvidenceRecords(filters = {}) {

@@ -184,6 +184,7 @@ Optional env:
 - `GET /office/claim-audit?agent_id=&surface=&limit=`
 - `GET /timeline?window=&event_id=&agent_id=&event_type=&severity=&source_kind=&evidence_ref=&correlation_id=&limit=`
 - `GET /accountability/replay?event_id=&evidence_id=&evidence_ref=&correlation_id=&agent_id=&source_kind=&artifact_kind=&limit=&window=`
+- `GET /accountability/replay/schema`
 - `GET /accountability/replay/checkpoint-summary`
 - `GET /accountability/replay/checkpoint-log?limit=&record_kind=&evidence_id=&collector_snapshot_id=&correlation_id=&source_kind=`
 - `GET /storage/schema`
@@ -284,6 +285,7 @@ Optional env:
 - the web Evidence Record Detail view may open this route with `evidence_id` only when the provenance bundle exposes a replay anchor for that evidence id; collector-only evidence remains labelled non-replayable
 - the web Evidence Record Detail view loads `checkpoint-log?limit=3&evidence_id=...` only after an explicit record inspection and renders a bounded sanitized proof strip for that selected evidence; it does not show a global audit table or raw evidence refs, paths, payloads, metadata, or degraded reason arrays
 - the route does not add a write path, storage table, command dispatch path, or collector filesystem/tmux read
+- accountability replay clients can read static route, anchor, filter, and bound metadata from `GET /accountability/replay/schema`; it ignores query filters, must stay before the main replay route, and does not inspect replay rows, collect, append records, read runtime inputs, or expose actual ids, refs, paths, payloads, metadata, secrets, liveness/productivity/severity claims, or control-plane actions
 - `GET /accountability/replay/checkpoint-summary` returns a sanitized append-order checkpoint over replayed records, with record/count buckets and latest bounded anchors for events, heartbeats, evidence records, and collector snapshots; it does not return evidence record ids derived from raw refs, raw evidence refs, paths, summaries, metadata, payloads, degraded reasons, or trigger collection, tmux/filesystem reads, append-only writes, or control-plane actions
 - `GET /accountability/replay/checkpoint-log?limit=&record_kind=&evidence_id=&collector_snapshot_id=&correlation_id=&source_kind=` returns newest append-order checkpoint rows as `{ "items": [{ "append_index": number, "record_kind": string, "checkpoint": object|null }] }`; optional non-blank `record_kind`, `evidence_id`, `collector_snapshot_id`, `correlation_id`, and `source_kind` exact-match replayed records before limit, unknown values return empty `items`, and rows use the same sanitized event, heartbeat, evidence-record, and collector-snapshot checkpoint shapes as the summary and omit raw evidence ids, refs, paths, payloads, metadata, degraded reasons, collector reads, writes, and control-plane actions
 - `GET /storage/schema` returns a static storage-route catalog with route names, top-level response field names, backend/status enum metadata, and the read/write boundary; it does not inspect replayed rows, sqlite files, runtime inputs, ids, refs, paths, hash values, payloads, secrets, or run writes/migrations

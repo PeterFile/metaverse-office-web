@@ -1000,6 +1000,69 @@ test('prototype store exposes sanitized replay checkpoint summary that survives 
   assert.deepEqual(reloadedStore.getReplayCheckpointSummary(), summary);
 });
 
+test('prototype store exposes static accountability replay schema without replay row data', async () => {
+  const storeFile = await createStoreFile();
+  const store = await createPrototypeStore({ filePath: storeFile });
+  const emptySchema = store.getAccountabilityReplaySchema();
+
+  assert.deepEqual(emptySchema, {
+    routes: [
+      {
+        name: 'bundle',
+        path: '/accountability/replay',
+        supported_anchors: ['event_id', 'evidence_id', 'evidence_ref', 'correlation_id', 'agent_id'],
+        supported_filters: ['source_kind', 'artifact_kind'],
+        supported_bounds: ['limit', 'window']
+      },
+      {
+        name: 'checkpoint_summary',
+        path: '/accountability/replay/checkpoint-summary',
+        supported_anchors: [],
+        supported_filters: [],
+        supported_bounds: []
+      },
+      {
+        name: 'checkpoint_log',
+        path: '/accountability/replay/checkpoint-log',
+        supported_anchors: [],
+        supported_filters: [
+          'record_kind',
+          'evidence_id',
+          'collector_snapshot_id',
+          'correlation_id',
+          'source_kind'
+        ],
+        supported_bounds: ['limit']
+      }
+    ],
+    anchor_requirement: 'one replay bundle anchor is required',
+    bounds: {
+      limit: {
+        default: 10,
+        max: 200
+      },
+      window: {
+        default: '60m',
+        format: 'Nm|Nh'
+      }
+    },
+    route_write_boundary:
+      'read-only accountability replay schema catalog; does not read replay rows, collect, append records, expose raw refs, or expose control-plane actions'
+  });
+
+  await store.appendEvent(createEvent());
+  await store.appendHeartbeat(createHeartbeat());
+  await store.appendCollectorReport(createCollectorReport());
+
+  const populatedSchema = store.getAccountabilityReplaySchema();
+  assert.deepEqual(populatedSchema, emptySchema);
+  const serialized = JSON.stringify(populatedSchema);
+  assert.equal(serialized.includes('/tmp/store-contract'), false);
+  assert.equal(serialized.includes('corr-store-contract'), false);
+  assert.equal(serialized.includes('tmux://'), false);
+  assert.equal(serialized.includes('5-web3-app-engineering'), false);
+});
+
 test('prototype store exposes deterministic sanitized storage replay manifest', async () => {
   const storeFile = await createStoreFile();
   const store = await createPrototypeStore({ filePath: storeFile });

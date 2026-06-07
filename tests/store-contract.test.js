@@ -937,6 +937,45 @@ test('JSONL prototype store replays event, heartbeat, and collector snapshot rea
   );
 });
 
+test('prototype store bounds unknown accountability evidence audit with deny disclosure', async () => {
+  const storeFile = await createStoreFile();
+  const store = await createPrototypeStore({ filePath: storeFile });
+  const unsafeEvidenceId = '/tmp/accountability-audit-token?token=secret';
+
+  const replay = store.getAccountabilityReplay({
+    evidence_id: unsafeEvidenceId,
+    limit: 5,
+    window: '60m',
+    now: '2026-03-09T18:10:00.000Z'
+  });
+
+  assert.deepEqual(replay.query, {
+    limit: 5,
+    window: '60m'
+  });
+  assert.deepEqual(replay.replay_audit, {
+    evidence_id_status: 'unknown_evidence_id',
+    disclosure: {
+      decision: 'deny',
+      reason_code: 'unknown_evidence',
+      mapping: 'unknown',
+      freshness: 'unknown'
+    },
+    event_count: 0,
+    interaction_count: 0,
+    artifact_count: 0,
+    ledger_entry_count: 0,
+    anchor_event_count: 0,
+    anchor_event_ids: []
+  });
+  assert.deepEqual(replay.events, []);
+  assert.deepEqual(replay.interactions, []);
+  assert.deepEqual(replay.memory_artifacts, []);
+  assert.deepEqual(replay.ledger, []);
+  assert.equal(JSON.stringify(replay).includes(unsafeEvidenceId), false);
+  assert.equal(JSON.stringify(replay).includes('token=secret'), false);
+});
+
 test('prototype store exposes sanitized replay checkpoint summary that survives reload', async () => {
   const storeFile = await createStoreFile();
   const store = await createPrototypeStore({ filePath: storeFile });

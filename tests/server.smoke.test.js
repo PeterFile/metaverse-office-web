@@ -10421,6 +10421,21 @@ test('GET read route purity matrix leaves replay records and checkpoints unchang
     limit: 5,
     window: '60m'
   });
+  assert.deepEqual(unknownReplay.body.replay_audit, {
+    evidence_id_status: 'unknown_evidence_id',
+    disclosure: {
+      decision: 'deny',
+      reason_code: 'unknown_evidence',
+      mapping: 'unknown',
+      freshness: 'unknown'
+    },
+    event_count: 0,
+    interaction_count: 0,
+    artifact_count: 0,
+    ledger_entry_count: 0,
+    anchor_event_count: 0,
+    anchor_event_ids: []
+  });
   assert.equal(JSON.stringify(unknownReplay.body).includes('missing-evidence-id'), false);
   assert.deepEqual(unknownReplay.body.events, []);
   assert.deepEqual(unknownReplay.body.interactions, []);
@@ -10940,7 +10955,13 @@ test('GET evidence replay-window is bounded, sanitized, capped, and 404s unknown
   assert.equal(unknown.response.status, 404);
   assert.deepEqual(unknown.body, {
     error: 'not_found',
-    details: 'unknown evidence record'
+    details: 'unknown evidence record',
+    disclosure: {
+      decision: 'deny',
+      reason_code: 'unknown_evidence',
+      mapping: 'unknown',
+      freshness: 'unknown'
+    }
   });
   assert.equal(JSON.stringify(unknown.body).includes('missing-evidence-id'), false);
 

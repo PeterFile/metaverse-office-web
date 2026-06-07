@@ -172,6 +172,7 @@ type SourceGapSummaryReadState = {
 
 type CollectorSnapshotSummaryChipModel = {
   statusLabel: string;
+  timestampLabel: string;
   countLabel: string;
   healthLabel: string;
   coverageLabel: string;
@@ -618,6 +619,7 @@ function resolveCollectorSnapshotSummaryChip(
 
     return {
       statusLabel,
+      timestampLabel: `Collected · ${summary.collected_at ?? 'No timestamp'}`,
       countLabel: `${summary.agent_count} agents · ${summary.heartbeat_count} heartbeats`,
       healthLabel: `${healthBuckets.observed ?? 0} observed · ${unstableHealthCount} source gaps`,
       coverageLabel:
@@ -631,6 +633,7 @@ function resolveCollectorSnapshotSummaryChip(
   if (summary && !summary.has_snapshot) {
     return {
       statusLabel: 'No snapshot',
+      timestampLabel: 'Collected · No snapshot',
       countLabel: '0 agents · 0 heartbeats',
       healthLabel: '0 observed · 0 source gaps',
       coverageLabel: '0 refs · no coverage',
@@ -641,6 +644,7 @@ function resolveCollectorSnapshotSummaryChip(
   if (error) {
     return {
       statusLabel: 'Snapshot summary unavailable',
+      timestampLabel: 'Collected · Unavailable',
       countLabel: 'Safe summary read failed',
       healthLabel: 'Safe aggregate unavailable',
       coverageLabel: 'Coverage unavailable',
@@ -651,6 +655,7 @@ function resolveCollectorSnapshotSummaryChip(
   if (state === 'loading' || state === 'idle') {
     return {
       statusLabel: 'Snapshot summary loading',
+      timestampLabel: 'Collected · Pending',
       countLabel: 'Safe summary boundary',
       healthLabel: 'Waiting for aggregate state',
       coverageLabel: 'Coverage pending',
@@ -660,6 +665,7 @@ function resolveCollectorSnapshotSummaryChip(
 
   return {
     statusLabel: 'No snapshot',
+    timestampLabel: 'Collected · No snapshot',
     countLabel: '0 agents · 0 heartbeats',
     healthLabel: '0 observed · 0 source gaps',
     coverageLabel: '0 refs · no coverage',
@@ -3661,6 +3667,7 @@ function AppInner() {
                 <span className="aitown-collector-summary-chip__meta">
                   <span className="aitown-panel__topline-title">Collector freshness</span>
                   <strong>{collectorSnapshotSummaryChip.statusLabel}</strong>
+                  <span>{collectorSnapshotSummaryChip.timestampLabel}</span>
                   <span>{collectorSnapshotSummaryChip.countLabel}</span>
                   <span>{collectorSnapshotSummaryChip.healthLabel}</span>
                   <span>{collectorSnapshotSummaryChip.coverageLabel}</span>

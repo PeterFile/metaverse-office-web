@@ -28,6 +28,7 @@ import {
   fetchRuntimeSourceGapLifecycle,
   fetchRuntimeSourceGapTrend,
   fetchRuntimeSourceGaps,
+  fetchRuntimeSourceGapsSchema,
   fetchStorageIndexHealth,
   fetchStorageReplayManifest,
   fetchMemoryArtifacts,
@@ -2088,6 +2089,60 @@ describe('fetchEvidenceRecordsSchema', () => {
     expect(serialized).not.toContain('token');
     expect(serialized).not.toContain('payload');
     expect(serialized).not.toContain('webhook');
+  });
+});
+
+describe('fetchRuntimeSourceGapsSchema', () => {
+  it('fetches the static runtime source-gap schema endpoint, forwards abort signal, and bounds schema strings', async () => {
+    const controller = new AbortController();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            item: {
+              source_kinds: ['workspace_file', '/tmp/secret', 'token'],
+              evidence_roles: ['runtime_unmapped', 'payload'],
+              source_statuses: ['observed', 'webhook'],
+              source_gap_statuses: ['missing', 'observed', 'token'],
+              supported_filters: ['source_kind', 'evidence_ref', 'token'],
+              boolean_filters: ['mapped', 'secret'],
+              lifecycle_states: ['opened', 'closed', 'payload'],
+              trend_buckets: ['day', 'week', 'token'],
+              limit: { default: 999, max: 999 },
+              route_write_boundary: '/tmp/secret token'
+            }
+          }),
+          { headers: JSON_HEADERS }
+        )
+      )
+    );
+
+    const schema = await fetchRuntimeSourceGapsSchema({ signal: controller.signal });
+
+    expect(schema).toMatchObject({
+      source_kinds: ['workspace_file'],
+      evidence_roles: ['runtime_unmapped'],
+      source_statuses: ['observed'],
+      source_gap_statuses: ['missing'],
+      supported_filters: ['source_kind'],
+      boolean_filters: ['mapped'],
+      lifecycle_states: ['opened'],
+      trend_buckets: ['day'],
+      limit: { default: 50, max: 200 },
+      route_write_boundary:
+        'read-only runtime source-gap schema catalog; does not collect, read runtime sources, append records, or expose control-plane actions'
+    });
+    const serialized = JSON.stringify(schema).toLowerCase();
+    expect(serialized).not.toContain('/tmp/');
+    expect(serialized).not.toContain('token');
+    expect(serialized).not.toContain('payload');
+    expect(serialized).not.toContain('webhook');
+    expect(schema.supported_filters).not.toContain('evidence_ref');
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/runtime/source-gaps/schema',
+      expect.objectContaining({ signal: controller.signal })
+    );
   });
 });
 

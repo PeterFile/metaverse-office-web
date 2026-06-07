@@ -708,6 +708,19 @@ export interface RuntimeSourceGapLifecycleResponse {
   item: RuntimeSourceGapLifecycle;
 }
 
+export interface RuntimeSourceGapsSchema {
+  source_kinds: string[];
+  evidence_roles: string[];
+  source_statuses: RuntimeSourceGap['source_status'][];
+  source_gap_statuses: Array<'degraded' | 'missing' | 'error'>;
+  supported_filters: string[];
+  boolean_filters: string[];
+  lifecycle_states: RuntimeSourceGapLifecycleState[];
+  trend_buckets: RuntimeSourceGapTrend['bucket'][];
+  limit: SchemaCatalogLimit;
+  route_write_boundary: string;
+}
+
 export type StorageIndexHealthBackend = 'jsonl' | 'sqlite';
 
 export type StorageIndexHealthStatus = 'ok' | 'degraded';

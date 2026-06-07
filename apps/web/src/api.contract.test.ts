@@ -33,6 +33,7 @@ import type {
   ReplayCheckpointLogResponse,
   EvidenceRefRollup,
   RuntimeSourceGapLifecycle,
+  RuntimeSourceGapsSchema,
   StorageIndexHealth,
   StorageReplayManifest,
   TimelineReplayResponse
@@ -324,6 +325,33 @@ describe('read-only frontend/backend contract smoke', () => {
       }
     ]);
     expectEvidenceRecordsSchemaContract(schema);
+  });
+
+  it('loads the runtime source-gap schema catalog through the typed client from the real backend', async () => {
+    harness = await createHarness(() => '2026-03-09T19:00:00.000Z');
+
+    const nativeFetch = globalThis.fetch.bind(globalThis);
+    const requests: RequestContract[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+        requests.push(getRequestContract(input, harness!.baseUrl, init));
+        return nativeFetch(input, init);
+      })
+    );
+
+    const api = await loadApi(harness.baseUrl);
+    const schema = await api.fetchRuntimeSourceGapsSchema();
+
+    expect(requests).toEqual([
+      {
+        method: 'GET',
+        origin: harness.baseUrl,
+        pathname: '/runtime/source-gaps/schema',
+        query: []
+      }
+    ]);
+    expectRuntimeSourceGapsSchemaContract(schema);
   });
 
   it('loads the sanitized collector snapshot diff from latest-vs-previous reports', async () => {
@@ -2527,6 +2555,25 @@ function expectEvidenceRecordsSchemaContract(schema: EvidenceRecordsSchema) {
   expect(schema.source_statuses).toContain('observed');
   expect(schema.supported_filters).toContain('evidence_ref');
   expect(schema.boolean_filters).toContain('mapped');
+  expectSchemaCatalogDoesNotLeakRawValues(schema);
+}
+
+function expectRuntimeSourceGapsSchemaContract(schema: RuntimeSourceGapsSchema) {
+  expect(schema.limit).toEqual({ default: 50, max: 200 });
+  expect(schema.source_kinds).toContain('workspace_file');
+  expect(schema.evidence_roles).toContain('runtime_unmapped');
+  expect(schema.source_statuses).toContain('observed');
+  expect(schema.source_gap_statuses).toEqual(['degraded', 'missing', 'error']);
+  expect(schema.supported_filters).toContain('evidence_id');
+  expect(schema.supported_filters).not.toContain('evidence_ref');
+  expect(schema.boolean_filters).toContain('mapped');
+  expect(schema.lifecycle_states).toEqual([
+    'opened',
+    'continuing',
+    'resolved',
+    'observed_unmapped'
+  ]);
+  expect(schema.trend_buckets).toEqual(['hour', 'day']);
   expectSchemaCatalogDoesNotLeakRawValues(schema);
 }
 

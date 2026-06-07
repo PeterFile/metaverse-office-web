@@ -44,6 +44,7 @@ import type {
   RuntimeSourceGapLifecycleResponse,
   RuntimeSourceGapsSummaryResponse,
   RuntimeSourceGapsResponse,
+  RuntimeSourceGapsSchema,
   SchemaCatalogLimit,
   SchemaCatalogResponse,
   StorageIndexHealth,
@@ -110,6 +111,54 @@ const EVIDENCE_RECORDS_SCHEMA: EvidenceRecordsSchema = {
   boolean_filters: ['mapped', 'output_candidate', 'newest_first'],
   limit: SCHEMA_LIMIT,
   route_write_boundary: 'read-only evidence-record schema catalog'
+};
+const RUNTIME_SOURCE_GAPS_SCHEMA: RuntimeSourceGapsSchema = {
+  source_kinds: [
+    'workspace_root',
+    'workspace_file',
+    'tmux_observation',
+    'hermes_profile',
+    'hermes_session',
+    'kanban_fixture',
+    'linear_fixture',
+    'slack_fixture',
+    'task_fixture'
+  ],
+  evidence_roles: [
+    'workspace_presence',
+    'inbound_task',
+    'agent_output',
+    'agent_plan',
+    'runtime_activity',
+    'runtime_presence',
+    'runtime_unmapped',
+    'task_reference'
+  ],
+  source_statuses: ['observed', 'degraded', 'missing', 'error'],
+  source_gap_statuses: ['degraded', 'missing', 'error'],
+  supported_filters: [
+    'evidence_id',
+    'agent_id',
+    'source_kind',
+    'evidence_role',
+    'output_candidate',
+    'source_status',
+    'collector_snapshot_id',
+    'correlation_id',
+    'mapped',
+    'observed_since',
+    'observed_until',
+    'collected_since',
+    'collected_until',
+    'newest_first',
+    'limit'
+  ],
+  boolean_filters: ['output_candidate', 'mapped', 'newest_first'],
+  lifecycle_states: ['opened', 'continuing', 'resolved', 'observed_unmapped'],
+  trend_buckets: ['hour', 'day'],
+  limit: SCHEMA_LIMIT,
+  route_write_boundary:
+    'read-only runtime source-gap schema catalog; does not collect, read runtime sources, append records, or expose control-plane actions'
 };
 const UNSAFE_SCHEMA_TEXT_PATTERN =
   /(?:\b(?:[a-z][a-z0-9+.-]*:\/\/|www\.)|(?:^|[\s([{'"`])(?:\/|~\/|\.{1,2}\/|\.{2}(?:$|[\\/])|[A-Za-z]:[^\s]*)|[<>\\]|(?:^|[^A-Za-z0-9])(?:access[-_ ]?keys?|api[-_ ]?keys?|authorization|bearer|cookies?|credentials?|javascript|jwt|oauth|passwords?|passwds?|private[-_ ]?keys?|secrets?|ssh[-_ ]?keys?|script|tokens?|webhooks?|payloads?)(?:$|[^A-Za-z0-9]))/i;
@@ -255,15 +304,57 @@ function normalizeEvidenceRecordsSchema(value: unknown): EvidenceRecordsSchema {
   };
 }
 
-function readAllowedSchemaStrings(value: unknown, allowed: string[]): string[] {
+function normalizeRuntimeSourceGapsSchema(value: unknown): RuntimeSourceGapsSchema {
+  const item = asSchemaObject(value);
+  return {
+    source_kinds: readAllowedSchemaStrings(
+      item.source_kinds,
+      RUNTIME_SOURCE_GAPS_SCHEMA.source_kinds
+    ),
+    evidence_roles: readAllowedSchemaStrings(
+      item.evidence_roles,
+      RUNTIME_SOURCE_GAPS_SCHEMA.evidence_roles
+    ),
+    source_statuses: readAllowedSchemaStrings(
+      item.source_statuses,
+      RUNTIME_SOURCE_GAPS_SCHEMA.source_statuses
+    ),
+    source_gap_statuses: readAllowedSchemaStrings(
+      item.source_gap_statuses,
+      RUNTIME_SOURCE_GAPS_SCHEMA.source_gap_statuses
+    ),
+    supported_filters: readAllowedSchemaStrings(
+      item.supported_filters,
+      RUNTIME_SOURCE_GAPS_SCHEMA.supported_filters
+    ),
+    boolean_filters: readAllowedSchemaStrings(
+      item.boolean_filters,
+      RUNTIME_SOURCE_GAPS_SCHEMA.boolean_filters
+    ),
+    lifecycle_states: readAllowedSchemaStrings(
+      item.lifecycle_states,
+      RUNTIME_SOURCE_GAPS_SCHEMA.lifecycle_states
+    ),
+    trend_buckets: readAllowedSchemaStrings(
+      item.trend_buckets,
+      RUNTIME_SOURCE_GAPS_SCHEMA.trend_buckets
+    ),
+    limit: readSchemaLimit(item.limit),
+    route_write_boundary: RUNTIME_SOURCE_GAPS_SCHEMA.route_write_boundary
+  };
+}
+
+function readAllowedSchemaStrings<T extends string>(value: unknown, allowed: readonly T[]): T[] {
   if (!Array.isArray(value)) {
     return [...allowed];
   }
 
   const allowedValues = new Set(allowed);
   const result = value.filter(
-    (item): item is string =>
-      typeof item === 'string' && allowedValues.has(item) && !UNSAFE_SCHEMA_TEXT_PATTERN.test(item)
+    (item): item is T =>
+      typeof item === 'string' &&
+      allowedValues.has(item as T) &&
+      !UNSAFE_SCHEMA_TEXT_PATTERN.test(item)
   );
   return result.length > 0 ? result : [...allowed];
 }
@@ -531,6 +622,16 @@ export async function fetchEvidenceRecordsSchema(
   });
   const body = await parseJson<SchemaCatalogResponse<unknown>>(response);
   return normalizeEvidenceRecordsSchema(body.item);
+}
+
+export async function fetchRuntimeSourceGapsSchema(
+  options: { signal?: AbortSignal } = {}
+): Promise<RuntimeSourceGapsSchema> {
+  const response = await fetch(resolveApiUrl('/runtime/source-gaps/schema'), {
+    signal: options.signal
+  });
+  const body = await parseJson<SchemaCatalogResponse<unknown>>(response);
+  return normalizeRuntimeSourceGapsSchema(body.item);
 }
 
 export async function fetchEvidenceRefRollup(

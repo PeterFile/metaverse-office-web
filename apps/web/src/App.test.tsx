@@ -4164,7 +4164,7 @@ afterEach(() => {
             agent_items: [
               {
                 agent_id: 'growth-revenue',
-                evidence_ref_count: 3,
+                evidence_ref_count: 9,
                 evidence_refs: ['/tmp/token-webhook-control-plane.md'],
                 source_kinds: ['tmux_observation', 'workspace_file', 'workspace_root'],
                 latest_evidence_at: '2026-03-16T08:58:40.000Z',
@@ -5451,6 +5451,8 @@ afterEach(() => {
       'session://live-evidence',
       '6-web3-growth-revenue',
       'token=live-evidence-secret',
+      'https://hooks.example.invalid/live-evidence-webhook-token',
+      'raw-evidence-ref://live-evidence',
       '/control-plane/dispatch'
     ];
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
@@ -5589,6 +5591,10 @@ afterEach(() => {
     expect(gapChip).not.toHaveTextContent('/tmp/growth-revenue');
     expect(gapChip).not.toHaveTextContent('6-web3-growth-revenue');
     expect(gapChip).not.toHaveTextContent('collector-snapshot:');
+    expect(gapChip).toHaveAttribute(
+      'aria-label',
+      'Open source gap supervision for Growth Revenue Agent workspace files degraded'
+    );
 
     const requestedUrls = fetchMock.mock.calls.map(([request]) => String(request));
     expect(requestedUrls).toContain(runtimeSourceGapsUrl);
@@ -5635,8 +5641,18 @@ afterEach(() => {
     expect(tmuxGroup).not.toBeNull();
     expect(tmuxGroup).not.toHaveAttribute('data-source-gap-focus');
     const sourceGapContextText = sourceGapContext.textContent ?? '';
+    const sourceGapAriaLabels = [
+      gapChip.getAttribute('aria-label') ?? '',
+      ...Array.from(sourceGapContext.querySelectorAll('[aria-label]')).map(
+        (element) => element.getAttribute('aria-label') ?? ''
+      )
+    ]
+      .filter(Boolean)
+      .join(' ');
     for (const canary of leakCanaries) {
+      expect(document.body).not.toHaveTextContent(canary);
       expect(sourceGapContextText).not.toContain(canary);
+      expect(sourceGapAriaLabels).not.toContain(canary);
     }
   });
 
@@ -18737,24 +18753,18 @@ afterEach(() => {
     ).toBeVisible();
     expect(within(collectorContainer!).getByText('Workspace observations · 2')).toBeVisible();
     expect(within(collectorContainer!).getByText('Tmux observations · 1')).toBeVisible();
-    expect(collectorContainer!).toHaveTextContent('Evidence · /tmp/controller-log.md, /tmp/evidence.md');
+    expect(collectorContainer!).toHaveTextContent('Evidence · Local evidence, Local evidence');
     const collectorEvidenceLine = within(collectorContainer!).getByText(
       (_content, element) =>
         element?.tagName === 'SPAN' &&
-        element.textContent === 'Evidence · /tmp/controller-log.md, /tmp/evidence.md'
+        element.textContent === 'Evidence · Local evidence, Local evidence'
     );
     const artifactRecord = within(memorySection!).getByText('Ref · /tmp/evidence.md').closest('li');
     expect(artifactRecord).not.toBeNull();
-    expect(
-      within(collectorEvidenceLine).getByRole('button', {
-        name: 'Jump to collector evidence ref /tmp/evidence.md'
-      })
-    ).toBeVisible();
-    expect(
-      within(collectorEvidenceLine).getByRole('button', {
-        name: 'Jump to collector evidence ref /tmp/controller-log.md'
-      })
-    ).toBeVisible();
+    const collectorEvidenceButtons = within(collectorEvidenceLine).getAllByRole('button', {
+      name: 'Jump to collector evidence ref local evidence'
+    });
+    expect(collectorEvidenceButtons.length).toBeGreaterThan(0);
 
     await waitFor(() => {
       expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
@@ -18763,9 +18773,7 @@ afterEach(() => {
     const fetchCallCountBeforeJump = vi.mocked(globalThis.fetch).mock.calls.length;
 
     await user.click(
-      within(collectorEvidenceLine).getByRole('button', {
-        name: 'Jump to collector evidence ref /tmp/evidence.md'
-      })
+      collectorEvidenceButtons.at(-1)!
     );
 
     expect(document.activeElement).toBe(artifactRecord);

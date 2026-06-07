@@ -9376,24 +9376,20 @@ describe('DetailsPanel accountability signals', () => {
     const collectorObservationEvidenceLine = within(collectorObservationSection!).getByText(
       (_content, element) =>
         element?.tagName === 'SPAN' &&
-        element.textContent === 'Evidence · /evidence/log.md, /evidence/controller.md'
+        element.textContent === 'Evidence · Local evidence, Local evidence'
     );
     const artifactRecord = within(sharedMemorySection!).getByText('Ref · /evidence/controller.md').closest('li');
     expect(artifactRecord).not.toBeNull();
     expect(
-      within(collectorObservationEvidenceLine).getByRole('button', {
-        name: 'Jump to collector evidence ref /evidence/controller.md'
+      within(collectorObservationEvidenceLine).getAllByRole('button', {
+        name: 'Jump to collector evidence ref local evidence'
       })
-    ).toBeVisible();
-    expect(
-      within(collectorObservationEvidenceLine).queryByRole('button', {
-        name: 'Jump to collector evidence ref /evidence/log.md'
-      })
-    ).not.toBeInTheDocument();
+    ).toHaveLength(1);
+    expect(collectorObservationEvidenceLine).not.toHaveTextContent('/evidence/');
 
     await user.click(
       within(collectorObservationEvidenceLine).getByRole('button', {
-        name: 'Jump to collector evidence ref /evidence/controller.md'
+        name: 'Jump to collector evidence ref local evidence'
       })
     );
 
@@ -9877,6 +9873,105 @@ describe('DetailsPanel accountability signals', () => {
     expect(
       within(collectorObservationSection!).getByText('Source health · Hermes source drilldown · observed')
     ).toBeVisible();
+  });
+
+  it('firewalls selected-agent collector observation text and aria labels from raw operator refs', () => {
+    const rawCanaries = [
+      '/Users/cwp/private/operator-token.md',
+      'tmux://5-web3-app-engineering/0.1',
+      'hermes://session/app-engineering',
+      'profile://app-engineering',
+      'session://app-engineering',
+      'operator-session-ref-with-token',
+      'token=operator-secret',
+      'https://hooks.example.invalid/webhook-token',
+      'raw-evidence-ref://collector-snapshot-token',
+      'control-plane dispatch writeback'
+    ];
+    const baseCollectorSnapshot = buildCollectorSnapshot();
+    const collectorSnapshot: CollectorSnapshot = {
+      ...baseCollectorSnapshot,
+      items: [
+        {
+          ...baseCollectorSnapshot.items[0],
+          workspace_root: rawCanaries[0],
+          session_ref: rawCanaries[5],
+          evidence_refs: [rawCanaries[0], rawCanaries[1], rawCanaries[2], rawCanaries[7]],
+          heartbeat: {
+            ...baseCollectorSnapshot.items[0].heartbeat,
+            evidence_refs: [rawCanaries[4], rawCanaries[6], rawCanaries[8], rawCanaries[9]]
+          },
+          source_health: {
+            workspace_root: {
+              status: 'observed',
+              path: rawCanaries[0],
+              last_observed_at: '2026-03-16T08:55:00.000Z',
+              degraded_reasons: []
+            },
+            tmux_session: {
+              status: 'observed',
+              expected_session_ref: rawCanaries[1],
+              observed_count: 1,
+              last_observed_at: '2026-03-16T08:57:00.000Z',
+              degraded_reasons: []
+            },
+            hermes_session: {
+              status: 'observed',
+              expected_session_ref: rawCanaries[2],
+              evidence_ref: rawCanaries[3],
+              last_observed_at: '2026-03-16T08:58:00.000Z',
+              degraded_reasons: []
+            }
+          }
+        }
+      ]
+    };
+    const memoryArtifacts = {
+      ...buildMemoryArtifacts(),
+      items: [
+        {
+          ...buildMemoryArtifacts().items[0],
+          artifact_ref: rawCanaries[0],
+          latest_summary: 'Collector local evidence'
+        },
+        ...buildMemoryArtifacts().items
+      ]
+    };
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          activeHubCategory: 'supervision',
+          collectorSnapshot,
+          memoryArtifacts
+        })}
+      />
+    );
+
+    const collectorObservationSection = screen.getByRole('heading', { name: 'Collector Observation' }).closest('section');
+    expect(collectorObservationSection).not.toBeNull();
+    expect(collectorObservationSection!).toHaveTextContent('Workspace root · configured');
+    expect(collectorObservationSection!).toHaveTextContent('Runtime session · configured');
+    expect(
+      within(collectorObservationSection!).getByRole('button', { name: 'Jump to collector evidence ref local evidence' })
+    ).toBeVisible();
+
+    const serializedText = collectorObservationSection!.textContent ?? '';
+    const serializedAria = Array.from(collectorObservationSection!.querySelectorAll('[aria-label]'))
+      .map((element) => element.getAttribute('aria-label') ?? '')
+      .join(' ');
+    const serialized = `${serializedText} ${serializedAria}`;
+
+    expect(serialized).toContain('Local evidence');
+    expect(serialized).toContain('Runtime evidence');
+    expect(serialized).toContain('External evidence');
+    expect(serialized).toContain('Linked evidence');
+    for (const canary of rawCanaries) {
+      expect(serialized).not.toContain(canary);
+    }
+    expect(serialized).not.toMatch(
+      /\/Users\/cwp|tmux:\/\/|hermes:\/\/|profile:\/\/|session:\/\/|operator-session-ref|token=|webhook|raw-evidence-ref|control-plane|writeback/i
+    );
   });
 
   it('opens the selected-agent collector panel and focuses the exact workspace source gap group', async () => {

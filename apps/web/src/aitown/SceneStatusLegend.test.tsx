@@ -445,7 +445,10 @@ describe('SceneStatusLegend', () => {
 
     const { container } = renderLegend(world);
 
-    const serializedLegend = container.textContent ?? '';
+    const serializedAriaLabels = Array.from(container.querySelectorAll('[aria-label]'))
+      .map((element) => element.getAttribute('aria-label') ?? '')
+      .join(' ');
+    const serializedLegend = `${container.textContent ?? ''} ${serializedAriaLabels}`;
     const incidentEvidenceList = await screen.findByRole('list', { name: 'Incident evidence legend' });
     const dataQualityList = await screen.findByRole('list', { name: 'Data quality legend' });
 

@@ -180,11 +180,13 @@ describe('deriveSelectedAgentEvidenceGlance', () => {
           source_status_buckets: {
             observed: 4,
             'tmux://raw-session': 3,
-            'control-plane': 2
+            'control-plane': 2,
+            'session://raw': 1
           },
           source_gap_buckets: {
             missing: 1,
-            'profile://admin': 2
+            'profile://admin': 2,
+            'token=secret': 1
           },
           latest_observed_at: '2026-03-09T18:04:45.000Z',
           latest_collected_at: '2026-03-09T18:05:00.000Z'
@@ -202,7 +204,7 @@ describe('deriveSelectedAgentEvidenceGlance', () => {
 
     expect(glance).toEqual([
       'Proof glance · 9 records · Sources Workspace evidence 3, Unknown 8',
-      'Coverage gap · 3 · Roles source evidence 4, Unknown 10 · Latest observed 2026-03-09T18:04:45.000Z'
+      'Coverage gap · 4 · Roles source evidence 4, Unknown 10 · Latest observed 2026-03-09T18:04:45.000Z'
     ]);
     expectNoForbiddenPublicUiText(glance);
     expect(serialized).not.toMatch(

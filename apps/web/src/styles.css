@@ -1152,6 +1152,23 @@ button {
   overflow-wrap: anywhere;
 }
 
+.aitown-selected-agent-peek__source-details {
+  flex-basis: 100%;
+  min-width: 0;
+}
+
+.aitown-selected-agent-peek__source-details summary {
+  color: #8be9d5;
+  cursor: pointer;
+  font-size: 0.74rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.aitown-selected-agent-peek__source-details summary::-webkit-details-marker {
+  display: none;
+}
+
 .aitown-selected-agent-peek__source-matrix {
   display: grid;
   flex-basis: 100%;

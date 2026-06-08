@@ -3852,31 +3852,34 @@ function AppInner() {
                   </span>
                 ) : null}
                 {selectedAgentSourceMatrix.status !== 'empty' || selectedAgentSourceMatrix.selectedAgentId ? (
-                  <section
-                    className="aitown-selected-agent-peek__source-matrix"
-                    role="region"
-                    aria-label="Selected agent source matrix peek"
-                  >
-                    <span className="aitown-selected-agent-peek__source-matrix-label">
-                      {selectedAgentSourceMatrix.statusLabel}
-                    </span>
-                    {selectedAgentSourceMatrix.status === 'ready' ? null : (
-                      <span>{selectedAgentSourceMatrix.detailLabel}</span>
-                    )}
-                    {selectedAgentSourceMatrix.rows.map((row) => (
-                      <span
-                        key={`${row.source}:${row.status}:${row.role}:${row.output}:${row.count}:${row.latest_at ?? 'unknown'}`}
-                        className="aitown-selected-agent-peek__source-matrix-row"
-                      >
-                        <strong>{`${row.source} · ${row.status}`}</strong>
-                        <span>{`${row.role} · ${row.output} · ${row.count}`}</span>
-                        <span>{`Latest · ${row.latest_at ?? 'unknown'}`}</span>
+                  <details className="aitown-selected-agent-peek__source-details">
+                    <summary>Source details</summary>
+                    <section
+                      className="aitown-selected-agent-peek__source-matrix"
+                      role="region"
+                      aria-label="Selected agent source matrix peek"
+                    >
+                      <span className="aitown-selected-agent-peek__source-matrix-label">
+                        {selectedAgentSourceMatrix.statusLabel}
                       </span>
-                    ))}
-                    {selectedAgentSourceMatrix.unmappedSummary.totalCount > 0 ? (
-                      <span>{`Unmapped evidence · ${selectedAgentSourceMatrix.unmappedSummary.totalCount} separate`}</span>
-                    ) : null}
-                  </section>
+                      {selectedAgentSourceMatrix.status === 'ready' ? null : (
+                        <span>{selectedAgentSourceMatrix.detailLabel}</span>
+                      )}
+                      {selectedAgentSourceMatrix.rows.map((row) => (
+                        <span
+                          key={`${row.source}:${row.status}:${row.role}:${row.output}:${row.count}:${row.latest_at ?? 'unknown'}`}
+                          className="aitown-selected-agent-peek__source-matrix-row"
+                        >
+                          <strong>{`${row.source} · ${row.status}`}</strong>
+                          <span>{`${row.role} · ${row.output} · ${row.count}`}</span>
+                          <span>{`Latest · ${row.latest_at ?? 'unknown'}`}</span>
+                        </span>
+                      ))}
+                      {selectedAgentSourceMatrix.unmappedSummary.totalCount > 0 ? (
+                        <span>{`Unmapped evidence · ${selectedAgentSourceMatrix.unmappedSummary.totalCount} separate`}</span>
+                      ) : null}
+                    </section>
+                  </details>
                 ) : null}
                 <section
                   className="aitown-selected-agent-peek__runtime-facts"

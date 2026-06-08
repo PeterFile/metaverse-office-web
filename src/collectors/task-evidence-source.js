@@ -9,6 +9,8 @@ const SUPPORTED_SOURCE_KINDS = new Set([
 ]);
 const REQUIRED_FIELDS = Object.freeze(['task_ref', 'source_kind', 'observed_at', 'correlation_id']);
 const FILE_OPTIONAL_IDENTIFIER_FIELDS = Object.freeze(['id', 'agent_id', 'local_path', 'path']);
+const MAX_RUNTIME_EVIDENCE_FILE_BYTES = 1024 * 1024;
+const MAX_RUNTIME_EVIDENCE_RECORDS_PER_COLLECTION = 1000;
 const CONTROL_FIELD_CATEGORIES = Object.freeze({
   claim: new Set(['claim', 'claimed', 'claiming']),
   complete: new Set(['complete', 'completed', 'completing', 'completion']),
@@ -68,16 +70,20 @@ function taskEvidenceFileReaderFrom(options = {}) {
         return fileFailure('task evidence file path is required');
       }
 
-      let content;
-      try {
-        content = await readFile(filePath, 'utf8');
-      } catch {
-        return fileFailure('task evidence file could not be read');
+      const readResult = await readTaskEvidenceFile(filePath, {
+        readError: 'task evidence file could not be read',
+        sizeError: 'task evidence file is too large'
+      });
+      if (!readResult.ok) {
+        return readResult.failure;
       }
 
-      const parsed = parseTaskEvidenceFileContent(content);
+      const parsed = parseTaskEvidenceFileContent(readResult.content);
       if (parsed.rejected.length > 0) {
         return parsed;
+      }
+      if (parsed.facts.length > MAX_RUNTIME_EVIDENCE_RECORDS_PER_COLLECTION) {
+        return fileFailure('task evidence input has too many records');
       }
 
       return normalizeTaskEvidenceFileFacts(parsed.facts);
@@ -108,19 +114,23 @@ function taskEvidencePathsReaderFrom(options = {}) {
         }
 
         for (const filePath of filePaths) {
-          let content;
-          try {
-            content = await readFile(filePath, 'utf8');
-          } catch {
-            return fileFailure('task evidence input could not be read');
+          const readResult = await readTaskEvidenceFile(filePath, {
+            readError: 'task evidence input could not be read',
+            sizeError: 'task evidence input is too large'
+          });
+          if (!readResult.ok) {
+            return readResult.failure;
           }
 
-          const parsed = parseTaskEvidenceFileContent(content, {
+          const parsed = parseTaskEvidenceFileContent(readResult.content, {
             source_input_ordinal: sourcePathIndex + 1,
             source_file_ordinal: sourceFileIndex + 1
           });
           if (parsed.rejected.length > 0) {
             return parsed;
+          }
+          if (facts.length + parsed.facts.length > MAX_RUNTIME_EVIDENCE_RECORDS_PER_COLLECTION) {
+            return fileFailure('task evidence input has too many records');
           }
 
           sourceFileIndex += 1;
@@ -131,6 +141,28 @@ function taskEvidencePathsReaderFrom(options = {}) {
       return normalizeTaskEvidenceFileFacts(facts);
     }
   };
+}
+
+async function readTaskEvidenceFile(filePath, { readError, sizeError }) {
+  let fileStat;
+  try {
+    fileStat = await stat(filePath);
+  } catch {
+    return { ok: false, failure: fileFailure(readError) };
+  }
+
+  if (!fileStat.isFile() || fileStat.size > MAX_RUNTIME_EVIDENCE_FILE_BYTES) {
+    return {
+      ok: false,
+      failure: fileFailure(fileStat.isFile() ? sizeError : readError)
+    };
+  }
+
+  try {
+    return { ok: true, content: await readFile(filePath, 'utf8') };
+  } catch {
+    return { ok: false, failure: fileFailure(readError) };
+  }
 }
 
 async function listTaskEvidenceFiles(inputPath) {

@@ -1435,7 +1435,7 @@ test('collector labels malformed Hermes runtime source files without echoing inp
   );
 });
 
-test('collector labels unreadable Hermes runtime source files without leaking paths', async () => {
+test('collector labels unreadable Hermes runtime source inputs without leaking paths', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'metaverse-office-hermes-runtime-'));
   const sourcesDir = path.join(root, 'runtime-sources');
   const validFile = path.join(sourcesDir, '01-valid.jsonl');
@@ -1457,7 +1457,7 @@ test('collector labels unreadable Hermes runtime source files without leaking pa
         inputPaths: [sourcesDir]
       })(),
     (error) => {
-      assert.match(error.message, /Hermes runtime source file 2/);
+      assert.match(error.message, /Hermes runtime source input 2/);
       assert.equal(error.message.includes(root), false);
       assert.equal(error.message.includes(sourcesDir), false);
       assert.equal(error.message.includes(unreadableFile), false);

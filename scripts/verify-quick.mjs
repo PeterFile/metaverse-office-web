@@ -54,6 +54,11 @@ const liveEvidenceHelperFocusedTestPaths = new Map([
   ["apps/web/src/aitown/selectedAgentSourceMatrix.ts", "apps/web/src/aitown/selectedAgentSourceMatrix.test.ts"],
 ]);
 
+const focusedWebHelperTestBySourcePath = new Map([
+  ["apps/web/scripts/stability.ts", "apps/web/scripts/stability.test.ts"],
+  ["apps/web/scripts/viewport-reachability.ts", "apps/web/scripts/viewport-reachability.test.ts"],
+]);
+
 function formatCommand(command, args) {
   return [command, ...args].join(" ");
 }
@@ -249,6 +254,11 @@ export function classifyChangedFiles(changedFiles = []) {
       categories.set("smoke", (categories.get("smoke") ?? []).concat(filePath));
     } else if (isWebApiPath(filePath)) {
       categories.set("web-api", (categories.get("web-api") ?? []).concat(filePath));
+    } else if (focusedWebHelperTestBySourcePath.has(filePath)) {
+      categories.set(
+        "focused-files",
+        (categories.get("focused-files") ?? []).concat(focusedWebHelperTestBySourcePath.get(filePath)),
+      );
     } else if (isWebVitestPath(filePath)) {
       categories.set("focused-files", (categories.get("focused-files") ?? []).concat(filePath));
     } else if (filePath.startsWith("apps/web/src/")) {

@@ -377,6 +377,42 @@ describe('verify-quick helpers', () => {
     });
   });
 
+  it('routes allowlisted web helper source changes to adjacent focused tests', () => {
+    const plan = resolveVerifyQuickSteps(parseVerifyQuickArgs(['--changed']), {
+      cwd: repoRoot,
+      changedFiles: ['apps/web/scripts/stability.ts']
+    });
+
+    expect(plan).toMatchObject({
+      mode: 'focused-files',
+      focusedFiles: ['scripts/stability.test.ts']
+    });
+  });
+
+  it('deduplicates allowlisted web helper source and adjacent test changes', () => {
+    const plan = resolveVerifyQuickSteps(parseVerifyQuickArgs(['--changed']), {
+      cwd: repoRoot,
+      changedFiles: ['apps/web/scripts/stability.ts', 'apps/web/scripts/stability.test.ts']
+    });
+
+    expect(plan).toMatchObject({
+      mode: 'focused-files',
+      focusedFiles: ['scripts/stability.test.ts']
+    });
+  });
+
+  it('rejects web helper source changes without an allowlisted adjacent test', () => {
+    expect(() =>
+      classifyChangedFiles(['apps/web/scripts/perf-audit.mjs'])
+    ).toThrow(/Cannot safely route changed files/);
+  });
+
+  it('rejects allowlisted web helper changes mixed with another layer', () => {
+    expect(() =>
+      classifyChangedFiles(['apps/web/scripts/stability.ts', 'src/server.js'])
+    ).toThrow(/cross-layer/);
+  });
+
   it('routes smoke and e2e changes to the smoke lane', () => {
     const plan = resolveVerifyQuickSteps(parseVerifyQuickArgs(['--changed']), {
       cwd: repoRoot,

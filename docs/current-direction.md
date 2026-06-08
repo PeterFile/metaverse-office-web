@@ -57,6 +57,18 @@ Minimum target outcomes:
 5. Preserve replayability: service restart must rebuild the same projection from persisted events, and each visible incident or status claim must point back to concrete evidence.
 6. Keep AI Town as the primary operator surface, with Hub/drilldown views used for evidence inspection rather than dumping every fact into a side panel.
 
+## Near-term route scoring
+
+Parallel delivery should advance durable Live Evidence Spine routes, not create temporary progress markdown. Score each route with the delivery gate below before opening a PR, and split work when one change crosses product/API/storage/UI semantic axes.
+
+- Runtime and storage provenance: prove opt-in Hermes/task runtime inputs are bounded, append-before-fail, replayable across JSONL and SQLite, and never expose local paths, payloads, refs, tokens, or control-plane actions. Fast checks should prefer focused backend smoke/store-contract tests before wider lanes.
+- Web API and client safety: keep client types, schema clients, and read-model normalizers aligned with bounded backend contracts. Tests should inject raw path/ref/token/control-plane canaries and prove they cannot enter UI state.
+- AI Town operator-world affordances: keep the world as the primary surface, use lightweight inspect peeks/popovers for first-fold evidence, and reserve Hub views for explicit drilldown. Browser checks should prove drag lanes, viewport bounds, and overlay containment, not just unit-level copy.
+- Verification and delivery feedback: shorten first feedback with `verify:quick`, focused-file tests, CI concurrency, and advisory PR-size checks, but do not replace parent diff review or lane-specific validation with generated scores.
+- Documentation and status hygiene: update existing durable docs only when product/API/storage/runtime/UI semantics change; transient run state, blockers, scores, and completion status belong in Slack, Linear, or controller/runtime systems.
+
+Default PR target: one scored behavior, at most five files and roughly 250 net lines. Hard cap: eight files or roughly 400 net lines unless the PR is test-only and the excess is explicitly justified. Hard-fail any lane whose validation skips the intended tests, reports zero matching tests, or relies on a child-agent summary without parent verification.
+
 ## Documentation discipline
 
 Every future PR that changes one of these areas must update docs in the same PR:

@@ -36,7 +36,7 @@ import {
   fetchTimeline,
   resolveApiUrl
 } from './api';
-import type { StorageReplayManifest } from './types';
+import type { StorageIndexHealth, StorageReplayManifest } from './types';
 
 const JSON_HEADERS = {
   'content-type': 'application/json'
@@ -998,27 +998,88 @@ describe('fetchCollectorSourceHealth', () => {
 });
 
 describe('fetchStorageIndexHealth', () => {
-  it('unwraps sanitized append-only storage index health', async () => {
+  const storageIndexHealthCases: Array<[string, StorageIndexHealth]> = [
+    [
+      'sqlite complete',
+      {
+        backend: 'sqlite',
+        status: 'ok',
+        record_count: 9,
+        record_index_count: 9,
+        record_evidence_ref_count: 10,
+        record_index_drift_count: 0,
+        record_evidence_ref_drift_count: 0,
+        evidence_query_probe_count: 16,
+        evidence_query_probe_drift_count: 0,
+        evidence_query_probe_status: 'complete',
+        health_reason_codes: [],
+        sidecar_status: 'complete',
+        record_kind_buckets: {
+          event: 3,
+          heartbeat: 2,
+          evidence_record: 3,
+          collector_snapshot: 1
+        },
+        latest_record_ts: '2026-03-09T18:06:00.000Z'
+      }
+    ],
+    [
+      'sqlite stale',
+      {
+        backend: 'sqlite',
+        status: 'degraded',
+        record_count: 9,
+        record_index_count: 9,
+        record_evidence_ref_count: 0,
+        record_index_drift_count: 1,
+        record_evidence_ref_drift_count: 3,
+        evidence_query_probe_count: 16,
+        evidence_query_probe_drift_count: 2,
+        evidence_query_probe_status: 'stale',
+        health_reason_codes: ['sidecar_drift', 'evidence_query_probe_drift'],
+        sidecar_status: 'stale',
+        record_kind_buckets: {
+          event: 3,
+          heartbeat: 2,
+          evidence_record: 3,
+          collector_snapshot: 1
+        },
+        latest_record_ts: '2026-03-09T18:06:00.000Z'
+      }
+    ],
+    [
+      'jsonl not_applicable',
+      {
+        backend: 'jsonl',
+        status: 'ok',
+        record_count: 9,
+        record_index_count: null,
+        record_evidence_ref_count: null,
+        record_index_drift_count: null,
+        record_evidence_ref_drift_count: null,
+        evidence_query_probe_count: null,
+        evidence_query_probe_drift_count: null,
+        evidence_query_probe_status: 'not_applicable',
+        health_reason_codes: [],
+        sidecar_status: 'not_applicable',
+        record_kind_buckets: {
+          event: 3,
+          heartbeat: 2,
+          evidence_record: 3,
+          collector_snapshot: 1
+        },
+        latest_record_ts: '2026-03-09T18:06:00.000Z'
+      }
+    ]
+  ];
+
+  it.each(storageIndexHealthCases)('unwraps sanitized %s storage index health', async (_name, item) => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue(
         new Response(
           JSON.stringify({
-            item: {
-              backend: 'sqlite',
-              status: 'degraded',
-              record_count: 9,
-              record_index_count: 9,
-              record_evidence_ref_count: 0,
-              sidecar_status: 'stale',
-              record_kind_buckets: {
-                event: 3,
-                heartbeat: 2,
-                evidence_record: 3,
-                collector_snapshot: 1
-              },
-              latest_record_ts: '2026-03-09T18:06:00.000Z'
-            }
+            item
           }),
           {
             headers: JSON_HEADERS
@@ -1027,21 +1088,7 @@ describe('fetchStorageIndexHealth', () => {
       )
     );
 
-    await expect(fetchStorageIndexHealth()).resolves.toEqual({
-      backend: 'sqlite',
-      status: 'degraded',
-      record_count: 9,
-      record_index_count: 9,
-      record_evidence_ref_count: 0,
-      sidecar_status: 'stale',
-      record_kind_buckets: {
-        event: 3,
-        heartbeat: 2,
-        evidence_record: 3,
-        collector_snapshot: 1
-      },
-      latest_record_ts: '2026-03-09T18:06:00.000Z'
-    });
+    await expect(fetchStorageIndexHealth()).resolves.toEqual(item);
     expect(globalThis.fetch).toHaveBeenCalledWith(
       '/storage/index-health',
       expect.objectContaining({ signal: undefined })

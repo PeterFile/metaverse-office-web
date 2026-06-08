@@ -3225,15 +3225,43 @@ function expectCollectorSnapshotDiffContract(diff: CollectorSnapshotDiff | null)
 }
 
 function expectStorageIndexHealthContract(health: StorageIndexHealth) {
+  expect(Object.keys(health).sort()).toEqual([
+    'backend',
+    'evidence_query_probe_count',
+    'evidence_query_probe_drift_count',
+    'evidence_query_probe_status',
+    'health_reason_codes',
+    'latest_record_ts',
+    'record_count',
+    'record_evidence_ref_count',
+    'record_evidence_ref_drift_count',
+    'record_index_count',
+    'record_index_drift_count',
+    'record_kind_buckets',
+    'sidecar_status',
+    'status'
+  ]);
   expect(health).toMatchObject({
     backend: 'jsonl',
     status: 'ok',
     record_index_count: null,
     record_evidence_ref_count: null,
+    record_index_drift_count: null,
+    record_evidence_ref_drift_count: null,
+    evidence_query_probe_count: null,
+    evidence_query_probe_drift_count: null,
+    evidence_query_probe_status: 'not_applicable',
+    health_reason_codes: [],
     sidecar_status: 'not_applicable',
     latest_record_ts: '2026-03-09T18:59:00.000Z'
   });
   expect(health.record_count).toBeGreaterThan(0);
+  expect(Object.keys(health.record_kind_buckets).sort()).toEqual([
+    'collector_snapshot',
+    'event',
+    'evidence_record',
+    'heartbeat'
+  ]);
   expect(health.record_kind_buckets.event).toBeGreaterThan(0);
   expect(health.record_kind_buckets.heartbeat).toBeGreaterThan(0);
   expect(health.record_kind_buckets.evidence_record).toBeGreaterThan(0);
@@ -3247,9 +3275,20 @@ function expectStorageIndexHealthContract(health: StorageIndexHealth) {
   expect(serializedHealth).not.toContain('/Users');
   expect(serializedHealth).not.toContain('/Volumes');
   expect(serializedHealth).not.toContain('tmux://');
+  expect(serializedHealth).not.toContain('5-web3-app-engineering');
+  expect(serializedHealth).not.toContain('app-engineering');
+  expect(serializedHealth).not.toContain('workspace_file');
+  expect(serializedHealth).not.toContain('agent_plan');
+  expect(serializedHealth).not.toContain('collector-snapshot:');
+  expect(serializedHealth).not.toContain('sqlite_master');
+  expect(serializedHealth).not.toContain('record_evidence_refs');
+  expect(serializedHealth).not.toContain('SELECT ');
+  expect(serializedHealth).not.toContain('WHERE ');
   expect(serializedHealth).not.toContain('payload');
   expect(serializedHealth).not.toContain('metadata');
   expect(serializedHealth).not.toContain('stderr');
+  expect(serializedHealth).not.toContain('token');
+  expect(serializedHealth).not.toContain('webhook');
   expect(serializedHealth).not.toContain('degraded_reasons');
 }
 

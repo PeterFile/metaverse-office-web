@@ -701,6 +701,12 @@ export interface StorageIndexHealth {
   record_count: number;
   record_index_count: number | null;
   record_evidence_ref_count: number | null;
+  record_index_drift_count: number | null;
+  record_evidence_ref_drift_count: number | null;
+  evidence_query_probe_count: number | null;
+  evidence_query_probe_drift_count: number | null;
+  evidence_query_probe_status: StorageIndexHealthSidecarStatus;
+  health_reason_codes: string[];
   sidecar_status: StorageIndexHealthSidecarStatus;
   record_kind_buckets: Record<string, number>;
   latest_record_ts: string | null;

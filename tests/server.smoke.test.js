@@ -7217,6 +7217,60 @@ test('GET /evidence-records/schema read route purity does not inspect evidence r
   assert.equal(await readFile(storeFile, 'utf8'), fileBeforeRead);
 });
 
+test('GET /storage/schema exposes static catalog without reading storage rows', async () => {
+  let collectCount = 0;
+  const controllerSnapshotCollector = {
+    async collectSnapshot() {
+      collectCount += 1;
+      throw new Error('GET /storage/schema must not collect');
+    }
+  };
+  const root = await mkdtemp(path.join(os.tmpdir(), 'metaverse-office-storage-schema-'));
+  const storeFile = path.join(root, 'prototype-store.jsonl');
+  const store = await createPrototypeStore({ filePath: storeFile });
+
+  await store.appendCollectorReport(createRouteParityCollectorReport());
+  const fileBeforeRead = await readFile(storeFile, 'utf8');
+  store.getStorageReplayManifest = () => {
+    throw new Error('schema route must not inspect replay manifest rows');
+  };
+  store.getStorageIndexHealth = () => {
+    throw new Error('schema route must not inspect storage indexes');
+  };
+
+  const response = await requestJsonDirect({
+    url: '/storage/schema?ignored=/tmp/storage-secret&token=<script>',
+    store,
+    controllerSnapshotCollector
+  });
+  assert.equal(response.response.status, 200);
+  assert.deepEqual(
+    response.body.item.routes.map((route) => route.name),
+    ['replay_manifest', 'index_health']
+  );
+  assert.deepEqual(response.body.item.response_fields.replay_manifest, [
+    'record_count',
+    'record_kind_buckets',
+    'evidence_summary',
+    'canonical_record_hash'
+  ]);
+  assert.deepEqual(response.body.item.backends, ['jsonl', 'sqlite']);
+  assert.deepEqual(response.body.item.statuses, ['ok', 'degraded']);
+  assert.equal(response.body.item.sidecar_statuses.includes('stale'), true);
+  assert.equal(response.body.item.evidence_query_probe_statuses.includes('complete'), true);
+  const serialized = JSON.stringify(response.body);
+  assert.equal(serialized.includes('/tmp/storage-secret'), false);
+  assert.equal(serialized.includes('<script>'), false);
+  assert.equal(serialized.includes('tmux://'), false);
+  assert.equal(serialized.includes('collector-snapshot:'), false);
+  assert.equal(serialized.includes('metadata'), false);
+  assert.equal(serialized.includes('degraded_reasons'), false);
+  assert.equal(serialized.includes('payload'), false);
+  assert.equal(serialized.includes('token'), false);
+  assert.equal(collectCount, 0);
+  assert.equal(await readFile(storeFile, 'utf8'), fileBeforeRead);
+});
+
 test('GET /agents/evidence-spine/schema read route purity does not inspect spine rows', async () => {
   let collectCount = 0;
   const controllerSnapshotCollector = {
@@ -9442,6 +9496,7 @@ test('GET read route purity matrix leaves replay records and checkpoints unchang
     '/accountability/replay/checkpoint-log?limit=3',
     '/storage/replay-manifest',
     '/storage/index-health',
+    '/storage/schema',
     '/runtime/source-gaps?newest_first=true&limit=10',
     '/runtime/source-gaps/schema',
     '/runtime/source-gaps/summary?newest_first=true&limit=1',
@@ -9554,6 +9609,7 @@ test('GET safe-route leak regression matrix stays redacted and read-pure under h
     `/agents/evidence-spine/schema?${hostileInputQuery}`,
     `/agents/evidence-spine/summary?newest_first=true&limit=2&${hostileInputQuery}`,
     `/agents/evidence-spine/source-matrix?newest_first=true&limit=2&${hostileInputQuery}`,
+    `/storage/schema?${hostileInputQuery}`,
     `/storage/replay-manifest?${hostileInputQuery}`,
     `/storage/index-health?${hostileInputQuery}`,
     `/accountability/replay/checkpoint-summary?${hostileInputQuery}`,

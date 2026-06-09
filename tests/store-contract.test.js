@@ -2453,6 +2453,70 @@ test('evidence-records schema exposes only static safe contract metadata', async
   assert.equal(serialized.includes('metadata'), false);
 });
 
+test('storage schema exposes only static safe route catalog metadata', async () => {
+  const storeFile = await createStoreFile();
+  const store = await createPrototypeStore({ filePath: storeFile });
+
+  await store.appendCollectorReport(createCollectorReport());
+
+  const schema = store.getStorageSchema();
+  assert.deepEqual(schema.routes, [
+    {
+      name: 'replay_manifest',
+      path: '/storage/replay-manifest',
+      supported_filters: []
+    },
+    {
+      name: 'index_health',
+      path: '/storage/index-health',
+      supported_filters: []
+    }
+  ]);
+  assert.deepEqual(schema.response_fields, {
+    replay_manifest: [
+      'record_count',
+      'record_kind_buckets',
+      'evidence_summary',
+      'canonical_record_hash'
+    ],
+    index_health: [
+      'backend',
+      'status',
+      'record_count',
+      'record_index_count',
+      'record_evidence_ref_count',
+      'record_index_drift_count',
+      'record_evidence_ref_drift_count',
+      'evidence_query_probe_count',
+      'evidence_query_probe_drift_count',
+      'evidence_query_probe_status',
+      'sidecar_status',
+      'record_kind_buckets',
+      'latest_record_ts'
+    ]
+  });
+  assert.deepEqual(schema.backends, ['jsonl', 'sqlite']);
+  assert.deepEqual(schema.statuses, ['ok', 'degraded']);
+  assert.deepEqual(schema.sidecar_statuses, ['complete', 'stale', 'not_applicable']);
+  assert.deepEqual(schema.evidence_query_probe_statuses, ['complete', 'stale', 'not_applicable']);
+  assert.equal(
+    schema.route_write_boundary,
+    'read-only storage schema catalog; does not inspect replayed rows, read sqlite files, append records, or expose control-plane actions'
+  );
+
+  const manifest = store.getStorageReplayManifest();
+  const serialized = JSON.stringify(schema);
+  assert.equal(serialized.includes(manifest.canonical_record_hash), false);
+  assert.equal(serialized.includes('/tmp/store-contract'), false);
+  assert.equal(serialized.includes('tmux://'), false);
+  assert.equal(serialized.includes('collector-snapshot:'), false);
+  assert.equal(serialized.includes('metadata'), false);
+  assert.equal(serialized.includes('degraded_reasons'), false);
+  for (const forbidden of ['hermes://', 'session://', 'profile://', 'webhook', 'payload', 'token']) {
+    assert.equal(serialized.toLowerCase().includes(forbidden), false, forbidden);
+  }
+});
+
 test('agents evidence-spine schema exposes only static safe contract metadata', async () => {
   const storeFile = await createStoreFile();
   const store = await createPrototypeStore({ filePath: storeFile });

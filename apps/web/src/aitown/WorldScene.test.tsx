@@ -1298,6 +1298,48 @@ describe('WorldScene watch overlay caption gating', () => {
     expect(readAgentSprites()).toHaveLength(2);
   });
 
+  it('renders bounded passive evidence cues on agent chrome without raw refs', async () => {
+    appInitMock.mockReset().mockResolvedValue(undefined);
+    vi.mocked(loadAiTownAssets).mockResolvedValue(makeAssets());
+    const scene = {
+      ...makeScene(),
+      agents: [
+        makeAgent({
+          agentId: 'app-engineering',
+          displayName: 'App Engineering Agent',
+          evidenceCue: { recordCount: 6, gapCount: 1, status: 'gap' }
+        }),
+        makeAgent({
+          agentId: 'growth-revenue',
+          displayName: 'Growth Revenue Agent',
+          selected: false,
+          evidenceCue: { recordCount: 3, gapCount: 0, status: 'backed' }
+        }),
+        makeAgent({
+          agentId: 'team-lead',
+          displayName: 'Team Lead',
+          selected: false,
+          evidenceCue: null
+        })
+      ]
+    } satisfies AiTownSceneModel;
+
+    render(<WorldScene scene={scene} onSelectAgent={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(readAgentLayer()?.children).toHaveLength(scene.agents.length);
+    });
+
+    const textLabels = collectPixiTextLabels(appInstances.at(-1)?.stage);
+    expect(textLabels.filter((label) => label === 'EV 6 GAP')).toHaveLength(1);
+    expect(textLabels.filter((label) => label === 'EV 3 OK')).toHaveLength(1);
+    expect(JSON.stringify(textLabels)).not.toMatch(/\/tmp|\/Users\/cwp|tmux:\/\/|hermes:\/\/|session|token|webhook/i);
+
+    const evidenceCueText = findPixiTextNode(appInstances.at(-1)?.stage, 'EV 6 GAP');
+    expect(evidenceCueText?.eventMode).toBeUndefined();
+    expect(readAgentSprites()).toHaveLength(3);
+  });
+
   it('renders source-gap world pins while keeping unmapped runtime evidence passive', async () => {
     appInitMock.mockReset().mockResolvedValue(undefined);
     vi.mocked(loadAiTownAssets).mockResolvedValue(makeAssets());

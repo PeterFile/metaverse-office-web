@@ -56,6 +56,20 @@ const SOURCE_EVIDENCE_HEALTH_COLORS = {
   error: 0xf26767
 } as const;
 
+const AGENT_EVIDENCE_CUE_COLORS = {
+  backed: 0x8be9d5,
+  gap: 0xff9551,
+  low_confidence: 0xf8d34b,
+  unavailable: 0xa8b0bd
+} as const;
+
+const AGENT_EVIDENCE_CUE_LABELS = {
+  backed: 'OK',
+  gap: 'GAP',
+  low_confidence: 'LOW',
+  unavailable: 'UNK'
+} as const;
+
 const nameLabelStyle = new TextStyle({
   fontFamily: '"VCR OSD Mono", monospace',
   fontSize: 8,
@@ -1335,6 +1349,61 @@ function createAgentSourceEvidenceHealthBadge(agent: SceneAgent) {
   return container;
 }
 
+function formatEvidenceCueCount(count: number | null) {
+  if (count === null) {
+    return '?';
+  }
+
+  const normalized = Math.max(0, Math.floor(count));
+  return normalized > 99 ? '99+' : String(normalized);
+}
+
+function resolveAgentEvidenceCueLabel(agent: SceneAgent) {
+  const cue = agent.evidenceCue;
+  if (!cue) {
+    return null;
+  }
+
+  return `EV ${formatEvidenceCueCount(cue.recordCount)} ${AGENT_EVIDENCE_CUE_LABELS[cue.status]}`;
+}
+
+function createAgentEvidenceCueBadge(agent: SceneAgent) {
+  const cue = agent.evidenceCue;
+  const labelText = resolveAgentEvidenceCueLabel(agent);
+  if (!cue || !labelText) {
+    return null;
+  }
+
+  const container = new Container();
+  const background = new Graphics();
+  const width = Math.max(36, Math.min(72, labelText.length * 6 + 8));
+  const left = -width / 2;
+  const color = AGENT_EVIDENCE_CUE_COLORS[cue.status];
+
+  background.roundRect(left, -7, width, 14, 5).fill({
+    color: 0x162328,
+    alpha: 0.94
+  });
+  background.roundRect(left, -7, width, 14, 5).stroke({
+    color,
+    width: 1,
+    alpha: 0.9
+  });
+
+  const label = new Text({
+    text: labelText,
+    style: statusBadgeStyle,
+    resolution: 2
+  });
+  label.anchor.set(0.5, 0.5);
+
+  container.position.set(0, -46);
+  container.eventMode = 'none';
+  container.addChild(background, label);
+
+  return container;
+}
+
 function createCachedAgentChrome(...children: Array<Container | Graphics | Text>) {
   const chrome = new Container();
   chrome.eventMode = 'none';
@@ -1361,6 +1430,8 @@ function resolveAgentSpriteRenderKey(
     agent.openAlertCount,
     agent.hasOpenIncidents ? 'incidents' : 'clear',
     agent.sourceEvidenceHealthStatus ?? 'source-ok',
+    resolveAgentEvidenceCueLabel(agent) ?? 'evidence-none',
+    agent.evidenceCue?.gapCount ?? 0,
     emphasis,
     correlationHighlighted ? 'correlated' : 'uncorrelated'
   ].join('|');
@@ -1463,9 +1534,14 @@ function createAgentSprite(
   });
   const statusBadge = createAgentStatusBadge(agent);
   const sourceEvidenceHealthBadge = createAgentSourceEvidenceHealthBadge(agent);
-  const chromeChildren = sourceEvidenceHealthBadge
-    ? [statusDot, nameLabel, sourceEvidenceHealthBadge]
-    : [statusDot, nameLabel];
+  const evidenceCueBadge = createAgentEvidenceCueBadge(agent);
+  const chromeChildren: Array<Container | Graphics | Text> = [statusDot, nameLabel];
+  if (sourceEvidenceHealthBadge) {
+    chromeChildren.push(sourceEvidenceHealthBadge);
+  }
+  if (evidenceCueBadge) {
+    chromeChildren.push(evidenceCueBadge);
+  }
 
   container.on('pointertap', (event) => {
     event.stopPropagation();

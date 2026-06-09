@@ -2657,6 +2657,60 @@ describe('DetailsPanel selected-agent workflow lifecycle', () => {
     );
   });
 
+  it('redacts the requested missing evidence id from selected-agent detail errors', () => {
+    const sensitiveError =
+      'unknown evidence record missing-1 path /Users/cwp/private/evidence.md token=secret-value';
+
+    const { rerender } = render(
+      <DetailsPanel
+        {...buildProps({
+          activeHubCategory: 'evidence',
+          selectedAgentDrilldownTab: 'evidence',
+          selectedAgentEvidenceLedger: buildSelectedAgentEvidenceLedger(),
+          selectedAgentEvidenceLedgerState: 'ready',
+          selectedAgentEvidenceRecord: null,
+          selectedAgentEvidenceRecordError: sensitiveError,
+          selectedAgentEvidenceRecordId: 'missing-1',
+          selectedAgentEvidenceRecordState: 'error'
+        })}
+      />
+    );
+
+    let section = screen.getByRole('heading', { name: 'Evidence Record Detail' }).closest('section');
+    expect(section).not.toBeNull();
+    expect(within(section!).getByText(/Unable to load selected evidence record\./)).toBeVisible();
+    expect(section!).not.toHaveTextContent('missing-1');
+    expect(section!).not.toHaveTextContent('/Users/cwp/private/evidence.md');
+    expect(section!).not.toHaveTextContent('secret-value');
+
+    rerender(
+      <DetailsPanel
+        {...buildProps({
+          activeHubCategory: 'evidence',
+          selectedAgentDrilldownTab: 'evidence',
+          selectedAgentEvidenceLedger: buildSelectedAgentEvidenceLedger(),
+          selectedAgentEvidenceLedgerState: 'ready',
+          selectedAgentEvidenceRecord: buildEvidenceRecord({ evidence_id: 'output-1' }),
+          selectedAgentEvidenceRecordError: sensitiveError,
+          selectedAgentEvidenceRecordId: 'missing-1',
+          selectedAgentEvidenceRecordState: 'error',
+          selectedAgentEvidenceProvenanceBundleError: sensitiveError,
+          selectedAgentEvidenceProvenanceBundleState: 'error',
+          selectedAgentEvidenceCheckpointLogError: sensitiveError,
+          selectedAgentEvidenceCheckpointLogState: 'error'
+        })}
+      />
+    );
+
+    section = screen.getByRole('heading', { name: 'Evidence Record Detail' }).closest('section');
+    expect(section).not.toBeNull();
+    expect(within(section!).getByText('Evidence id · output-1')).toBeVisible();
+    expect(within(section!).getByText(/Last-good detail · Refresh failed:/)).toBeVisible();
+    expect(section!).not.toHaveTextContent('missing-1');
+    expect(section!).not.toHaveTextContent('/Users/cwp/private/evidence.md');
+    expect(section!).not.toHaveTextContent('secret-value');
+  });
+
   it('renders an empty selected-agent evidence detail response without implying stale output', () => {
     render(
       <DetailsPanel

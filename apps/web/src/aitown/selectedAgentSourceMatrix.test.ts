@@ -324,4 +324,70 @@ describe('deriveSelectedAgentSourceMatrixViewModel', () => {
       expect.objectContaining({ source: 'Unknown', status: 'Unknown', role: 'Unknown' })
     ]);
   });
+
+  it('projects fixture source kinds into world-safe evidence labels', () => {
+    const fixtureMatrix: AgentEvidenceSourceMatrix = {
+      ...sourceMatrix,
+      agents: [
+        {
+          agent_id: 'fixture-agent',
+          sources: [
+            {
+              source_kind: 'kanban_fixture',
+              evidence_count: 4,
+              source_status_buckets: { observed: 4 },
+              evidence_role_buckets: { task_reference: 4 },
+              output_candidate_buckets: { true: 0, false: 4 },
+              latest_observed_at: '2026-03-09T18:10:00.000Z',
+              latest_collected_at: '2026-03-09T18:10:01.000Z'
+            },
+            {
+              source_kind: 'linear_fixture',
+              evidence_count: 3,
+              source_status_buckets: { observed: 3 },
+              evidence_role_buckets: { task_reference: 3 },
+              output_candidate_buckets: { true: 0, false: 3 },
+              latest_observed_at: '2026-03-09T18:09:00.000Z',
+              latest_collected_at: '2026-03-09T18:09:01.000Z'
+            },
+            {
+              source_kind: 'slack_fixture',
+              evidence_count: 2,
+              source_status_buckets: { observed: 2 },
+              evidence_role_buckets: { task_reference: 2 },
+              output_candidate_buckets: { true: 0, false: 2 },
+              latest_observed_at: '2026-03-09T18:08:00.000Z',
+              latest_collected_at: '2026-03-09T18:08:01.000Z'
+            },
+            {
+              source_kind: 'task_fixture',
+              evidence_count: 1,
+              source_status_buckets: { observed: 1 },
+              evidence_role_buckets: { task_reference: 1 },
+              output_candidate_buckets: { true: 0, false: 1 },
+              latest_observed_at: '2026-03-09T18:07:00.000Z',
+              latest_collected_at: '2026-03-09T18:07:01.000Z'
+            }
+          ]
+        }
+      ],
+      unmapped_evidence_summary: {
+        total_count: 0,
+        sources: []
+      }
+    };
+
+    const model = deriveSelectedAgentSourceMatrixViewModel(fixtureMatrix, 'fixture-agent', {
+      maxRows: 4
+    });
+    const serialized = JSON.stringify(model);
+
+    expect(model.rows.map((row) => row.source)).toEqual([
+      'Tool evidence',
+      'Tool evidence',
+      'Tool evidence',
+      'Linked evidence'
+    ]);
+    expect(serialized).not.toMatch(/Kanban|Linear|Slack|Task fixture|control-plane|dispatch|claim|complete/i);
+  });
 });

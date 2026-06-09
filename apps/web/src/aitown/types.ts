@@ -99,6 +99,14 @@ export interface SceneZone {
   };
 }
 
+export type SceneAgentEvidenceCueStatus = 'backed' | 'gap' | 'low_confidence' | 'unavailable';
+
+export interface SceneAgentEvidenceCue {
+  recordCount: number | null;
+  gapCount: number;
+  status: SceneAgentEvidenceCueStatus;
+}
+
 export interface SceneAgent {
   agentId: string;
   displayName: string;
@@ -119,6 +127,7 @@ export interface SceneAgent {
   hasOpenIncidents: boolean;
   runtimeFreshnessSeverity?: Severity | null;
   sourceEvidenceHealthStatus?: Exclude<CollectorSourceHealthStatus, 'observed'> | null;
+  evidenceCue?: SceneAgentEvidenceCue | null;
 }
 
 export interface SceneWatchEdge {

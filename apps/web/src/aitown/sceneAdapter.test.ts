@@ -195,6 +195,83 @@ describe('adaptWorldToScene', () => {
     expect(growthRevenue?.sourceEvidenceHealthStatus).toBe('missing');
   });
 
+  it('projects bounded evidence cues from the evidence spine without raw refs', () => {
+    const scene = adaptWorldToScene(world, 'app-engineering', null, [], [], {
+      evidenceSpineSummary: {
+        agent_count: 2,
+        returned_limit: 200,
+        total_count: 2,
+        mapped_count: 2,
+        unmapped_count: 0,
+        agents: [
+          {
+            agent_id: 'app-engineering',
+            evidence_count: 6,
+            output_candidate_buckets: { true: 2, false: 4 },
+            source_kind_buckets: {
+              workspace_file: 3,
+              tmux_observation: 2,
+              '/Users/cwp/private/token.md': 1
+            },
+            evidence_role_buckets: {
+              source_evidence: 4,
+              webhook_payload: 2
+            },
+            source_status_buckets: {
+              observed: 5,
+              missing: 1
+            },
+            source_gap_buckets: {
+              missing: 1,
+              'tmux://raw-session': 2
+            },
+            latest_observed_at: '2026-03-16T08:59:10.000Z',
+            latest_collected_at: '2026-03-16T09:01:00.000Z'
+          },
+          {
+            agent_id: 'growth-revenue',
+            evidence_count: 3,
+            output_candidate_buckets: { true: 1, false: 2 },
+            source_kind_buckets: {
+              workspace_file: 2,
+              tmux_observation: 1
+            },
+            evidence_role_buckets: {
+              source_evidence: 3
+            },
+            source_status_buckets: {
+              observed: 3
+            },
+            source_gap_buckets: {},
+            latest_observed_at: '2026-03-16T08:58:40.000Z',
+            latest_collected_at: '2026-03-16T09:01:00.000Z'
+          }
+        ],
+        unmapped_evidence_summary: {
+          total_count: 0,
+          source_kind_buckets: {},
+          evidence_role_buckets: {},
+          source_status_buckets: {},
+          latest_observed_at: null,
+          latest_collected_at: null
+        }
+      }
+    });
+
+    const evidenceCueByAgentId = Object.fromEntries(
+      scene.agents.map((agent) => [agent.agentId, agent.evidenceCue])
+    );
+
+    expect(evidenceCueByAgentId).toEqual({
+      'app-engineering': { recordCount: 6, gapCount: 3, status: 'gap' },
+      'growth-revenue': { recordCount: 3, gapCount: 0, status: 'backed' },
+      'team-lead': { recordCount: null, gapCount: 0, status: 'unavailable' }
+    });
+    expect(JSON.stringify(evidenceCueByAgentId)).not.toMatch(
+      /\/Users\/cwp|token|webhook|tmux:\/\/|raw-session|payload|session_ref|\/tmp\/growth-revenue/i
+    );
+  });
+
   it('attaches neutral passive zone evidence floors without severity or count encodings', () => {
     const scene = adaptWorldToScene(world, 'app-engineering');
     const meetingZone = scene.zones.find((zone) => zone.zoneId === 'meeting-zone');

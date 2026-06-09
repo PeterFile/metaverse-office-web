@@ -9396,25 +9396,45 @@ test('GET safe-route leak regression matrix stays redacted and read-pure under h
   })[0];
   assert.ok(evidenceRecord);
 
-  const ignoredCanaryQuery = `ignored_canary=${encodeURIComponent(SAFE_ROUTE_HOSTILE_CANARIES.join(' '))}`;
+  const hostileInputQuery = new URLSearchParams({
+    ignored_canary: SAFE_ROUTE_HOSTILE_CANARIES.join(' '),
+    runtime_sources_file: SAFE_ROUTE_HOSTILE_CANARIES[0],
+    hermes_runtime_sources_file: SAFE_ROUTE_HOSTILE_CANARIES[1],
+    task_evidence_file: SAFE_ROUTE_HOSTILE_CANARIES[2],
+    task_evidence_paths: SAFE_ROUTE_HOSTILE_CANARIES[3],
+    controller_snapshot_id: SAFE_ROUTE_HOSTILE_CANARIES[4],
+    from_collector_snapshot_id: SAFE_ROUTE_HOSTILE_CANARIES[5],
+    to_collector_snapshot_id: SAFE_ROUTE_HOSTILE_CANARIES[6],
+    evidence_id: SAFE_ROUTE_HOSTILE_CANARIES[7],
+    evidence_ref: SAFE_ROUTE_HOSTILE_CANARIES[8],
+    token: SAFE_ROUTE_HOSTILE_CANARIES[9],
+    webhook: SAFE_ROUTE_HOSTILE_CANARIES[10]
+  }).toString();
   const routes = [
-    `/collectors/controller-snapshot/summary?${ignoredCanaryQuery}`,
-    `/collectors/controller-snapshot/history?agent_id=app-engineering&limit=2&${ignoredCanaryQuery}`,
-    `/collectors/controller-snapshot/diff?limit=2&${ignoredCanaryQuery}`,
-    `/runtime/source-gaps/summary?newest_first=true&limit=2&${ignoredCanaryQuery}`,
-    `/runtime/source-gaps/agent-summary?newest_first=true&limit=2&${ignoredCanaryQuery}`,
-    `/runtime/source-gaps/lifecycle?newest_first=true&limit=2&${ignoredCanaryQuery}`,
-    `/runtime/source-gaps/transition-summary?newest_first=true&limit=2&${ignoredCanaryQuery}`,
-    `/runtime/source-gaps/trend?newest_first=true&limit=2&${ignoredCanaryQuery}`,
-    `/agents/evidence-spine/summary?newest_first=true&limit=2&${ignoredCanaryQuery}`,
-    `/agents/evidence-spine/source-matrix?newest_first=true&limit=2&${ignoredCanaryQuery}`,
-    `/storage/replay-manifest?${ignoredCanaryQuery}`,
-    `/storage/index-health?${ignoredCanaryQuery}`,
-    `/evidence-records/schema?${ignoredCanaryQuery}`,
-    `/evidence-records/input-proof-summary?agent_id=app-engineering&source_kind=hermes_profile&limit=2&${ignoredCanaryQuery}`,
-    `/evidence-records/ref-rollup?agent_id=app-engineering&limit=5&${ignoredCanaryQuery}`,
-    `/evidence-records/${encodeURIComponent(evidenceRecord.evidence_id)}/source-context?${ignoredCanaryQuery}`,
-    `/evidence-records/${encodeURIComponent(evidenceRecord.evidence_id)}/replay-window?before=1&after=1&${ignoredCanaryQuery}`
+    `/collectors/controller-snapshot/schema?${hostileInputQuery}`,
+    `/collectors/controller-snapshot/summary?${hostileInputQuery}`,
+    `/collectors/controller-snapshot/evidence-coverage?agent_id=app-engineering&source_kind=workspace_file&limit=2&${hostileInputQuery}`,
+    `/collectors/controller-snapshot/source-health?agent_id=app-engineering&source_kind=workspace_file&limit=2&${hostileInputQuery}`,
+    `/collectors/controller-snapshot/history?agent_id=app-engineering&limit=2&${hostileInputQuery}`,
+    `/collectors/controller-snapshot/diff?limit=2&${hostileInputQuery}`,
+    `/runtime/source-gaps/schema?${hostileInputQuery}`,
+    `/runtime/source-gaps/summary?newest_first=true&limit=2&${hostileInputQuery}`,
+    `/runtime/source-gaps/agent-summary?newest_first=true&limit=2&${hostileInputQuery}`,
+    `/runtime/source-gaps/lifecycle?newest_first=true&limit=2&${hostileInputQuery}`,
+    `/runtime/source-gaps/transition-summary?newest_first=true&limit=2&${hostileInputQuery}`,
+    `/runtime/source-gaps/trend?newest_first=true&limit=2&${hostileInputQuery}`,
+    `/agents/evidence-spine/schema?${hostileInputQuery}`,
+    `/agents/evidence-spine/summary?newest_first=true&limit=2&${hostileInputQuery}`,
+    `/agents/evidence-spine/source-matrix?newest_first=true&limit=2&${hostileInputQuery}`,
+    `/storage/replay-manifest?${hostileInputQuery}`,
+    `/storage/index-health?${hostileInputQuery}`,
+    `/accountability/replay/checkpoint-summary?${hostileInputQuery}`,
+    `/accountability/replay/checkpoint-log?limit=2&${hostileInputQuery}`,
+    `/evidence-records/schema?${hostileInputQuery}`,
+    `/evidence-records/input-proof-summary?agent_id=app-engineering&source_kind=hermes_profile&limit=2&${hostileInputQuery}`,
+    `/evidence-records/ref-rollup?agent_id=app-engineering&limit=5&${hostileInputQuery}`,
+    `/evidence-records/${encodeURIComponent(evidenceRecord.evidence_id)}/source-context?${hostileInputQuery}`,
+    `/evidence-records/${encodeURIComponent(evidenceRecord.evidence_id)}/replay-window?before=1&after=1&${hostileInputQuery}`
   ];
 
   const before = {

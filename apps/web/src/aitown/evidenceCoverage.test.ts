@@ -225,9 +225,9 @@ describe('deriveCollectorEvidenceCoverageViewModel', () => {
       'Growth Revenue Agent',
       'Market Intel Agent'
     ]);
-    expect(summary.visibleItems[0].source_labels).toEqual(['Runtime evidence', 'Workspace evidence']);
+    expect(summary.visibleItems[0].source_labels).toEqual(['Runtime evidence', 'Local evidence']);
     expect(JSON.stringify(summary)).not.toMatch(
-      /\/tmp\/|tmux\.log|token|webhook|control-plane|session_ref|profile|tmux_observation|workspace_file|workspace_root|hermes_profile|hermes_session/i
+      /\/tmp\/|tmux\.log|token|webhook|control-plane|session_ref|profile|tmux_observation|workspace_file|workspace_root|hermes_profile|hermes_session|Workspace evidence/i
     );
 
     const zeroCapSummary = deriveCollectorEvidenceCoverageFocusSummary(coverage, [

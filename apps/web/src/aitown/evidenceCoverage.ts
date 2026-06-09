@@ -82,8 +82,8 @@ const SOURCE_KIND_ORDER: CollectorEvidenceCoverageSourceKind[] = [
 
 const SOURCE_KIND_FOCUS_LABELS: Record<CollectorEvidenceCoverageSourceKind, string> = {
   tmux_observation: 'Runtime evidence',
-  workspace_file: 'Workspace evidence',
-  workspace_root: 'Workspace evidence',
+  workspace_file: 'Local evidence',
+  workspace_root: 'Local evidence',
   hermes_profile: 'Runtime evidence',
   hermes_session: 'Runtime evidence'
 };

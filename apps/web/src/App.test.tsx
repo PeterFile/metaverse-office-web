@@ -3998,7 +3998,7 @@ afterEach(() => {
     expect(focusChip).toBeVisible();
     expect(focusChip).toHaveTextContent('Growth Revenue Agent');
     expect(focusChip).toHaveTextContent('ID · growth-revenue');
-    expect(focusChip).toHaveTextContent('3 refs · Runtime evidence + Workspace evidence');
+    expect(focusChip).toHaveTextContent('3 refs · Runtime evidence + Local evidence');
     expect(focusChip).toHaveTextContent('Latest evidence · 2026-03-16T08:58:40.000Z');
     expect(screen.queryByRole('dialog', { name: 'Hub' })).not.toBeInTheDocument();
   });
@@ -4073,7 +4073,7 @@ afterEach(() => {
 
     expect(within(evidenceFocus).getByText('5 coverage gaps')).toBeVisible();
     expect(within(evidenceFocus).getByText('+2 more')).toBeVisible();
-    expect(focusButtons[0]).toHaveTextContent('Runtime evidence + Workspace evidence');
+    expect(focusButtons[0]).toHaveTextContent('Runtime evidence + Local evidence');
     expect(focusButtons).toHaveLength(3);
     expect(within(evidenceFocus).queryByRole('button', { name: '+2 more' })).not.toBeInTheDocument();
     expect(evidenceFocus).not.toHaveTextContent(

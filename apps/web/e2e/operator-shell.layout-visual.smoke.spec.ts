@@ -671,7 +671,7 @@ test.describe('operator shell layout visual smoke', () => {
     await expect(evidenceFocus.getByText('Low-confidence or uncovered evidence', { exact: true })).toBeVisible();
     await expect(evidenceFocusChip).toBeVisible();
     await expect(evidenceFocusChip).toContainText('Low-confidence evidence');
-    await expect(evidenceFocusChip).toContainText('3 refs · Runtime evidence + Workspace evidence');
+    await expect(evidenceFocusChip).toContainText('3 refs · Runtime evidence + Local evidence');
     await expect(evidenceFocusChip).toContainText('Latest evidence · 2026-03-16T08:58:40.000Z');
     await expect(evidenceFocusChip).not.toContainText('/tmp/launch-note.md');
     await expect(evidenceFocusChip).not.toContainText('/tmp/growth-revenue');

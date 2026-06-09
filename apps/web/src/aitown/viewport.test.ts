@@ -458,63 +458,65 @@ describe('default entry viewport travel budget', () => {
     });
   }
 
-  it('allows immediate horizontal drag from the centered default view', () => {
-    const sceneWidth = 2048;
-    const sceneHeight = 1536;
-    const entryRect = resolveEntryViewportRect(1280, 720, sceneWidth, sceneHeight);
-    const panBounds = resolveViewportPanBounds(sceneWidth, sceneHeight, 1280, 720, entryRect.scale);
-    const dragLeft = resolveViewportCornerAfterScreenDrag({
-      cornerX: entryRect.left,
-      cornerY: entryRect.top,
-      scale: entryRect.scale,
-      deltaX: -24,
-      deltaY: 0
-    });
-    const dragRight = resolveViewportCornerAfterScreenDrag({
-      cornerX: entryRect.left,
-      cornerY: entryRect.top,
-      scale: entryRect.scale,
-      deltaX: 24,
-      deltaY: 0
-    });
-    const clampedDragLeft = clampViewportLeft(dragLeft.x, entryRect.width, panBounds);
-    const clampedDragRight = clampViewportLeft(dragRight.x, entryRect.width, panBounds);
+  for (const shell of shells) {
+    it(`allows immediate horizontal drag from the centered default ${shell.name} view`, () => {
+      const sceneWidth = 2048;
+      const sceneHeight = 1536;
+      const entryRect = resolveEntryViewportRect(shell.width, shell.height, sceneWidth, sceneHeight);
+      const panBounds = resolveViewportPanBounds(sceneWidth, sceneHeight, shell.width, shell.height, entryRect.scale);
+      const dragLeft = resolveViewportCornerAfterScreenDrag({
+        cornerX: entryRect.left,
+        cornerY: entryRect.top,
+        scale: entryRect.scale,
+        deltaX: -24,
+        deltaY: 0
+      });
+      const dragRight = resolveViewportCornerAfterScreenDrag({
+        cornerX: entryRect.left,
+        cornerY: entryRect.top,
+        scale: entryRect.scale,
+        deltaX: 24,
+        deltaY: 0
+      });
+      const clampedDragLeft = clampViewportLeft(dragLeft.x, entryRect.width, panBounds);
+      const clampedDragRight = clampViewportLeft(dragRight.x, entryRect.width, panBounds);
 
-    expect(entryRect.left).toBeGreaterThan(panBounds.left);
-    expect(entryRect.left + entryRect.width).toBeLessThan(panBounds.right);
-    expect(clampedDragLeft).toBeGreaterThan(entryRect.left);
-    expect(clampedDragRight).toBeLessThan(entryRect.left);
-  });
-
-  it('clamps default horizontal edge drags without exposing left gutter or incomplete right edge', () => {
-    const sceneWidth = 2048;
-    const sceneHeight = 1536;
-    const hostWidth = 1280;
-    const hostHeight = 720;
-    const entryRect = resolveEntryViewportRect(hostWidth, hostHeight, sceneWidth, sceneHeight);
-    const panBounds = resolveViewportPanBounds(sceneWidth, sceneHeight, hostWidth, hostHeight, entryRect.scale);
-    const leftEdgeDrag = resolveViewportCornerAfterScreenDrag({
-      cornerX: entryRect.left,
-      cornerY: entryRect.top,
-      scale: entryRect.scale,
-      deltaX: 4000,
-      deltaY: 0
+      expect(entryRect.left).toBeGreaterThan(panBounds.left);
+      expect(entryRect.left + entryRect.width).toBeLessThan(panBounds.right);
+      expect(clampedDragLeft).toBeGreaterThan(entryRect.left);
+      expect(clampedDragRight).toBeLessThan(entryRect.left);
     });
-    const rightEdgeDrag = resolveViewportCornerAfterScreenDrag({
-      cornerX: entryRect.left,
-      cornerY: entryRect.top,
-      scale: entryRect.scale,
-      deltaX: -4000,
-      deltaY: 0
-    });
-    const clampedLeft = clampViewportLeft(leftEdgeDrag.x, entryRect.width, panBounds);
-    const clampedRight = clampViewportLeft(rightEdgeDrag.x, entryRect.width, panBounds);
+  }
 
-    expect(clampedLeft).toBe(0);
-    expect(clampedLeft + entryRect.width).toBeLessThanOrEqual(sceneWidth);
-    expect(clampedRight).toBeGreaterThanOrEqual(0);
-    expect(clampedRight + entryRect.width).toBe(sceneWidth);
-  });
+  for (const shell of shells) {
+    it(`clamps default ${shell.name} horizontal edge drags without exposing left gutter or incomplete right edge`, () => {
+      const sceneWidth = 2048;
+      const sceneHeight = 1536;
+      const entryRect = resolveEntryViewportRect(shell.width, shell.height, sceneWidth, sceneHeight);
+      const panBounds = resolveViewportPanBounds(sceneWidth, sceneHeight, shell.width, shell.height, entryRect.scale);
+      const leftEdgeDrag = resolveViewportCornerAfterScreenDrag({
+        cornerX: entryRect.left,
+        cornerY: entryRect.top,
+        scale: entryRect.scale,
+        deltaX: 4000,
+        deltaY: 0
+      });
+      const rightEdgeDrag = resolveViewportCornerAfterScreenDrag({
+        cornerX: entryRect.left,
+        cornerY: entryRect.top,
+        scale: entryRect.scale,
+        deltaX: -4000,
+        deltaY: 0
+      });
+      const clampedLeft = clampViewportLeft(leftEdgeDrag.x, entryRect.width, panBounds);
+      const clampedRight = clampViewportLeft(rightEdgeDrag.x, entryRect.width, panBounds);
+
+      expect(clampedLeft).toBe(0);
+      expect(clampedLeft + entryRect.width).toBeLessThanOrEqual(sceneWidth);
+      expect(clampedRight).toBeGreaterThanOrEqual(0);
+      expect(clampedRight + entryRect.width).toBe(sceneWidth);
+    });
+  }
 });
 
 describe('resolveViewportCornerAfterScreenDrag', () => {

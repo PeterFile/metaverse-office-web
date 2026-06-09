@@ -3678,6 +3678,111 @@ test('prototype store summarizes runtime source gaps before limit truncation', a
   });
 });
 
+test('prototype store keeps unknown runtime source-gap filters empty and redacted', async () => {
+  const storeFile = await createStoreFile();
+  const store = await createPrototypeStore({ filePath: storeFile });
+  const leakCanaries = [
+    '/tmp/source-gap-empty-filter-secret.md',
+    'tmux://source-gap-empty-filter/0.0',
+    'token=source-gap-empty-filter'
+  ];
+  const report = createCollectorReport();
+  report.items[0].evidence_refs.push(...leakCanaries);
+  await store.appendCollectorReport(report);
+
+  const emptyFilters = {
+    agent_id: 'missing-source-gap-agent',
+    source_kind: 'tmux://source-gap-empty-source/0.0',
+    source_status: 'token=source-gap-empty-status',
+    observed_since: '2026-03-09T19:00:00.000Z',
+    collected_since: '2026-03-09T19:00:00.000Z',
+    newest_first: 'true',
+    limit: '2'
+  };
+  const emptySummary = {
+    total_count: 0,
+    returned_limit: 2,
+    mapped_count: 0,
+    unmapped_count: 0,
+    output_candidate_buckets: {
+      true: 0,
+      false: 0
+    },
+    source_kind_buckets: {
+      workspace_root: 0,
+      workspace_file: 0,
+      tmux_observation: 0,
+      hermes_profile: 0,
+      hermes_session: 0,
+      kanban_fixture: 0,
+      linear_fixture: 0,
+      slack_fixture: 0,
+      task_fixture: 0
+    },
+    evidence_role_buckets: {
+      workspace_presence: 0,
+      inbound_task: 0,
+      agent_output: 0,
+      agent_plan: 0,
+      runtime_activity: 0,
+      runtime_presence: 0,
+      runtime_unmapped: 0,
+      task_reference: 0
+    },
+    source_status_buckets: {
+      observed: 0,
+      degraded: 0,
+      missing: 0,
+      error: 0
+    },
+    collector_snapshot_id_buckets: {},
+    first_observed_at: null,
+    last_observed_at: null,
+    first_collected_at: null,
+    last_collected_at: null
+  };
+  const emptyGrouped = {
+    total_count: 0,
+    total_groups: 0,
+    returned_limit: 2,
+    groups: []
+  };
+  const emptyTrend = {
+    bucket: 'hour',
+    total_count: 0,
+    total_buckets: 0,
+    returned_limit: 2,
+    buckets: []
+  };
+  const emptyLifecycle = store.getRuntimeSourceGapLifecycle({
+    ...emptyFilters,
+    lifecycle_state: 'token=source-gap-empty-lifecycle'
+  });
+
+  assert.deepEqual(store.listRuntimeSourceGaps(emptyFilters), []);
+  assert.deepEqual(store.getRuntimeSourceGapsSummary(emptyFilters), emptySummary);
+  assert.deepEqual(store.getRuntimeSourceGapAgentSummary(emptyFilters), emptyGrouped);
+  assert.deepEqual(emptyLifecycle, emptyGrouped);
+  assert.deepEqual(store.getRuntimeSourceGapTrend(emptyFilters), emptyTrend);
+
+  const serialized = JSON.stringify({
+    items: store.listRuntimeSourceGaps(emptyFilters),
+    summary: store.getRuntimeSourceGapsSummary(emptyFilters),
+    agent_summary: store.getRuntimeSourceGapAgentSummary(emptyFilters),
+    lifecycle: emptyLifecycle,
+    trend: store.getRuntimeSourceGapTrend(emptyFilters)
+  });
+  for (const canary of [
+    ...leakCanaries,
+    emptyFilters.agent_id,
+    emptyFilters.source_kind,
+    emptyFilters.source_status,
+    'token=source-gap-empty-lifecycle'
+  ]) {
+    assert.equal(serialized.includes(canary), false, `leaked canary: ${canary}`);
+  }
+});
+
 test('prototype store trends runtime source gaps with safe count buckets only', async () => {
   const storeFile = await createStoreFile();
   const store = await createPrototypeStore({ filePath: storeFile });

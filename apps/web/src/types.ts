@@ -313,6 +313,12 @@ export interface CollectorSnapshotDiffAgentChange {
   >;
 }
 
+export interface CollectorRuntimeSourceEvidenceDelta {
+  unmapped_tmux_session_count_delta: number;
+  unmapped_hermes_source_count_delta: number;
+  unmapped_task_evidence_count_delta: number;
+}
+
 export interface CollectorSnapshotDiff {
   from_collector_snapshot_id: string;
   to_collector_snapshot_id: string;
@@ -323,6 +329,7 @@ export interface CollectorSnapshotDiff {
     source_kind_buckets: Record<CollectorSourceHealthKind, number>;
     status_buckets: Record<CollectorSourceHealthStatus, number>;
   };
+  runtime_source_evidence_delta?: CollectorRuntimeSourceEvidenceDelta;
   agent_change_count: number;
   returned_limit: number;
   agent_changes: CollectorSnapshotDiffAgentChange[];

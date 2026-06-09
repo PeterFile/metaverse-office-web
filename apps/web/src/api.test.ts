@@ -1725,6 +1725,67 @@ describe('fetchCollectorSnapshotDiff', () => {
     );
   });
 
+  it('unwraps optional runtime source evidence count deltas from the compact diff', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            item: {
+              from_collector_snapshot_id: 'collector-snapshot:2026-03-09T18:58:00.000Z',
+              to_collector_snapshot_id: 'collector-snapshot:2026-03-09T18:59:00.000Z',
+              from_collected_at: '2026-03-09T18:58:00.000Z',
+              to_collected_at: '2026-03-09T18:59:00.000Z',
+              summary_delta: {
+                agent_count: 0,
+                heartbeat_count: 0,
+                tmux_observed_count: 0,
+                workspace_observed_count: 0,
+                reboot_recommended_count: 0
+              },
+              source_health_delta: {
+                source_kind_buckets: {},
+                status_buckets: {}
+              },
+              runtime_source_evidence_delta: {
+                unmapped_tmux_session_count_delta: -1,
+                unmapped_hermes_source_count_delta: 1,
+                unmapped_task_evidence_count_delta: 0
+              },
+              agent_change_count: 0,
+              returned_limit: 50,
+              agent_changes: []
+            }
+          }),
+          {
+            headers: JSON_HEADERS
+          }
+        )
+      )
+    );
+
+    const diff = await fetchCollectorSnapshotDiff();
+
+    expect(diff).not.toBeNull();
+    if (!diff) {
+      throw new Error('expected collector snapshot diff');
+    }
+    if (!diff.runtime_source_evidence_delta) {
+      throw new Error('expected runtime source evidence delta');
+    }
+    const runtimeSourceEvidenceDelta = diff.runtime_source_evidence_delta;
+    expect(runtimeSourceEvidenceDelta).toEqual({
+      unmapped_tmux_session_count_delta: -1,
+      unmapped_hermes_source_count_delta: 1,
+      unmapped_task_evidence_count_delta: 0
+    });
+    expect(Object.keys(runtimeSourceEvidenceDelta)).toEqual([
+      'unmapped_tmux_session_count_delta',
+      'unmapped_hermes_source_count_delta',
+      'unmapped_task_evidence_count_delta'
+    ]);
+  });
+
   it('passes explicit diff ids and limit using backend query names', async () => {
     vi.stubGlobal(
       'fetch',

@@ -317,6 +317,56 @@ function projectParityReadModels(store, root) {
   );
 }
 
+function projectRuntimeSourceGapAggregateProbe(store) {
+  const mappedWindowFilters = {
+    mapped: 'true',
+    source_kind: 'workspace_file',
+    evidence_role: 'agent_output',
+    source_status: 'degraded',
+    observed_since: '2026-03-09T18:04:30.000Z',
+    observed_until: '2026-03-09T18:05:30.000Z',
+    newest_first: 'true',
+    limit: '1'
+  };
+  const unmappedWindowFilters = {
+    mapped: 'false',
+    source_kind: 'tmux_observation',
+    evidence_role: 'runtime_unmapped',
+    source_status: 'observed',
+    observed_since: '2026-03-09T18:05:45.000Z',
+    observed_until: '2026-03-09T18:05:55.000Z',
+    newest_first: 'true',
+    limit: '1'
+  };
+
+  return {
+    mappedSummary: store.getRuntimeSourceGapsSummary(mappedWindowFilters),
+    unmappedSummary: store.getRuntimeSourceGapsSummary(unmappedWindowFilters),
+    mappedAgentSummary: store.getRuntimeSourceGapAgentSummary(mappedWindowFilters),
+    unmappedAgentSummary: store.getRuntimeSourceGapAgentSummary(unmappedWindowFilters),
+    mappedLifecycle: store.getRuntimeSourceGapLifecycle(mappedWindowFilters),
+    unmappedLifecycle: store.getRuntimeSourceGapLifecycle(unmappedWindowFilters),
+    mappedTrend: store.getRuntimeSourceGapTrend(mappedWindowFilters),
+    unmappedTrend: store.getRuntimeSourceGapTrend(unmappedWindowFilters)
+  };
+}
+
+function assertRuntimeSourceGapAggregateIsSafe(projection, root) {
+  const serialized = JSON.stringify(projection);
+  for (const forbidden of [
+    'evidence_id',
+    'evidence_ref',
+    'metadata',
+    'degraded_reasons',
+    root,
+    '/app/',
+    'tmux://',
+    'unmapped-sqlite-parity'
+  ]) {
+    assert.equal(serialized.includes(forbidden), false, `leaked ${forbidden}`);
+  }
+}
+
 test('JSONL and SQLite stores replay evidence read models with parity', async (t) => {
   if (!(await hasSqlite3())) {
     t.skip('sqlite3 binary not found; SQLite replay parity skipped explicitly');
@@ -659,6 +709,117 @@ test('JSONL and SQLite stores replay evidence read models with parity', async (t
       collected_at: '2026-03-09T18:07:00.000Z'
     }
   });
+});
+
+test('JSONL and SQLite stores replay runtime source-gap aggregates with parity', async (t) => {
+  if (!(await hasSqlite3())) {
+    t.skip('sqlite3 binary not found; SQLite runtime source-gap parity skipped explicitly');
+    return;
+  }
+
+  const root = await createHarnessRoot();
+  const jsonlStore = await createPrototypeStore({
+    filePath: path.join(root, 'prototype-store.jsonl')
+  });
+  const sqliteStore = await createPrototypeStore({
+    sqliteFilePath: path.join(root, 'prototype-store.sqlite')
+  });
+
+  await appendCanonicalRecords(jsonlStore, root);
+  await appendCanonicalRecords(sqliteStore, root);
+
+  const jsonlReloaded = await createPrototypeStore({
+    filePath: path.join(root, 'prototype-store.jsonl')
+  });
+  const sqliteReloaded = await createPrototypeStore({
+    sqliteFilePath: path.join(root, 'prototype-store.sqlite')
+  });
+  const jsonlProjection = projectRuntimeSourceGapAggregateProbe(jsonlReloaded);
+  const sqliteProjection = projectRuntimeSourceGapAggregateProbe(sqliteReloaded);
+
+  assert.deepEqual(sqliteProjection, jsonlProjection);
+  assert.equal(jsonlProjection.mappedSummary.total_count, 2);
+  assert.equal(jsonlProjection.mappedSummary.returned_limit, 1);
+  assert.equal(jsonlProjection.mappedSummary.mapped_count, 2);
+  assert.equal(jsonlProjection.mappedSummary.unmapped_count, 0);
+  assert.equal(jsonlProjection.mappedSummary.source_status_buckets.degraded, 2);
+  assert.equal(jsonlProjection.mappedSummary.first_observed_at, '2026-03-09T18:05:00.000Z');
+  assert.equal(jsonlProjection.mappedSummary.last_collected_at, '2026-03-09T18:07:00.000Z');
+  assert.equal(jsonlProjection.unmappedSummary.total_count, 2);
+  assert.equal(jsonlProjection.unmappedSummary.mapped_count, 0);
+  assert.equal(jsonlProjection.unmappedSummary.unmapped_count, 2);
+  assert.equal(jsonlProjection.unmappedSummary.source_status_buckets.observed, 2);
+
+  assert.deepEqual(jsonlProjection.mappedAgentSummary.groups, [
+    {
+      agent_id: 'app-engineering',
+      source_kind: 'workspace_file',
+      record_count: 2,
+      mapped_count: 2,
+      unmapped_count: 0,
+      output_candidate_buckets: { true: 2, false: 0 },
+      evidence_role_buckets: { agent_output: 2 },
+      source_status_buckets: { degraded: 2 },
+      first_observed_at: '2026-03-09T18:05:00.000Z',
+      last_observed_at: '2026-03-09T18:05:00.000Z',
+      first_collected_at: '2026-03-09T18:06:00.000Z',
+      last_collected_at: '2026-03-09T18:07:00.000Z'
+    }
+  ]);
+  assert.deepEqual(jsonlProjection.unmappedAgentSummary.groups, [
+    {
+      agent_id: null,
+      source_kind: 'tmux_observation',
+      record_count: 2,
+      mapped_count: 0,
+      unmapped_count: 2,
+      output_candidate_buckets: { true: 0, false: 2 },
+      evidence_role_buckets: { runtime_unmapped: 2 },
+      source_status_buckets: { observed: 2 },
+      first_observed_at: '2026-03-09T18:05:50.000Z',
+      last_observed_at: '2026-03-09T18:05:50.000Z',
+      first_collected_at: '2026-03-09T18:06:00.000Z',
+      last_collected_at: '2026-03-09T18:07:00.000Z'
+    }
+  ]);
+  assert.equal(jsonlProjection.mappedLifecycle.total_count, 2);
+  assert.equal(jsonlProjection.mappedLifecycle.groups[0].lifecycle_state, 'continuing');
+  assert.equal(jsonlProjection.mappedLifecycle.groups[0].snapshot_count, 2);
+  assert.equal(jsonlProjection.unmappedLifecycle.total_count, 2);
+  assert.equal(jsonlProjection.unmappedLifecycle.groups[0].lifecycle_state, 'observed_unmapped');
+  assert.equal(jsonlProjection.unmappedLifecycle.groups[0].agent_id, null);
+  assert.deepEqual(jsonlProjection.mappedTrend, {
+    bucket: 'hour',
+    total_count: 2,
+    total_buckets: 1,
+    returned_limit: 1,
+    buckets: [
+      {
+        bucket_start: '2026-03-09T18:00:00.000Z',
+        total_count: 2,
+        mapped_count: 2,
+        unmapped_count: 0,
+        output_candidate_buckets: { true: 2, false: 0 },
+        source_kind_buckets: { workspace_file: 2 },
+        evidence_role_buckets: { agent_output: 2 },
+        source_status_buckets: { degraded: 2 }
+      }
+    ]
+  });
+  assert.deepEqual(jsonlProjection.unmappedTrend.buckets, [
+    {
+      bucket_start: '2026-03-09T18:00:00.000Z',
+      total_count: 2,
+      mapped_count: 0,
+      unmapped_count: 2,
+      output_candidate_buckets: { true: 0, false: 2 },
+      source_kind_buckets: { tmux_observation: 2 },
+      evidence_role_buckets: { runtime_unmapped: 2 },
+      source_status_buckets: { observed: 2 }
+    }
+  ]);
+  assertRuntimeSourceGapAggregateIsSafe(jsonlProjection, root);
+  assertRuntimeSourceGapAggregateIsSafe(sqliteProjection, root);
 });
 
 test('SQLite sidecar evidence coverage matches read filters without public raw refs', async (t) => {

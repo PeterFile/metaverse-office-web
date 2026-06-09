@@ -4943,6 +4943,7 @@ function projectStorageReplayManifest(records) {
   return {
     record_count: canonicalRecords.length,
     record_kind_buckets: createRecordKindBuckets(canonicalRecords),
+    runtime_gap_summary: projectStorageReplayManifestRuntimeGapSummary(records),
     evidence_summary: projectStorageReplayManifestEvidenceSummary(records),
     canonical_record_hash: createHash('sha256')
       .update(stableStringify(canonicalRecords))
@@ -4990,6 +4991,48 @@ function projectStorageReplayManifestEvidenceSummary(records) {
     if (record.agent_id === null) {
       summary.unmapped_count += 1;
     }
+    summary.latest_observed_at = latestEvidenceTimestamp(
+      summary.latest_observed_at,
+      record.observed_at
+    );
+    summary.latest_collected_at = latestEvidenceTimestamp(
+      summary.latest_collected_at,
+      record.collected_at
+    );
+  }
+
+  return summary;
+}
+
+function projectStorageReplayManifestRuntimeGapSummary(records) {
+  const gapRecords = records
+    .filter((record) => record.kind === EVIDENCE_RECORD_KIND)
+    .map((record) => record.payload || {})
+    .filter(isRuntimeSourceGapRecord);
+  const summary = {
+    total_count: gapRecords.length,
+    mapped_count: 0,
+    unmapped_count: 0,
+    source_kind_buckets: {},
+    source_status_buckets: {},
+    latest_observed_at: null,
+    latest_collected_at: null
+  };
+
+  for (const record of gapRecords) {
+    if (typeof record.agent_id === 'string' && record.agent_id.length > 0) {
+      summary.mapped_count += 1;
+    } else if (record.agent_id === null) {
+      summary.unmapped_count += 1;
+    }
+    incrementBucket(
+      summary.source_kind_buckets,
+      projectKnownEvidenceValue(record.source_kind, EVIDENCE_RECORD_SOURCE_KINDS) || 'unknown'
+    );
+    incrementBucket(
+      summary.source_status_buckets,
+      projectKnownEvidenceValue(record.source_status, EVIDENCE_RECORD_SOURCE_STATUSES) || 'unknown'
+    );
     summary.latest_observed_at = latestEvidenceTimestamp(
       summary.latest_observed_at,
       record.observed_at

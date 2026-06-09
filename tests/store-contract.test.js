@@ -2610,6 +2610,7 @@ test('collector snapshot schema exposes static safe route catalog metadata', asy
       'to_collected_at',
       'summary_delta',
       'source_health_delta',
+      'runtime_source_evidence_delta',
       'agent_change_count',
       'returned_limit',
       'agent_changes'
@@ -2628,6 +2629,119 @@ test('collector snapshot schema exposes static safe route catalog metadata', asy
   assert.equal(serialized.includes('degraded_reasons'), false);
   for (const forbidden of ['tmux://', 'hermes://', 'session://', 'profile://', 'webhook', 'payload', 'token']) {
     assert.equal(serialized.toLowerCase().includes(forbidden), false, forbidden);
+  }
+});
+
+test('prototype store diffs runtime source evidence as count-only deltas', async () => {
+  const storeFile = await createStoreFile();
+  const store = await createPrototypeStore({ filePath: storeFile });
+
+  await store.appendCollectorReport({
+    ...createCollectorReport(),
+    collected_at: '2026-03-09T18:06:00.000Z',
+    runtime_source_evidence: {
+      unmapped_tmux_sessions: [
+        {
+          session_name: 'from-runtime-delta-secret',
+          pane_refs: ['tmux://from-runtime-delta-secret/0.0'],
+          observed_count: 1,
+          status: 'observed',
+          last_observed_at: '2026-03-09T18:05:50.000Z',
+          degraded_reasons: ['from-runtime-delta-reason']
+        }
+      ],
+      unmapped_task_evidence: [
+        {
+          task_ref: 'TASK-DELTA-FROM',
+          source_kind: 'kanban_fixture',
+          status: 'observed',
+          observed_at: '2026-03-09T18:05:55.000Z',
+          correlation_id: 'corr-runtime-delta-from'
+        }
+      ]
+    }
+  });
+  await store.appendCollectorReport({
+    ...createCollectorReport(),
+    collected_at: '2026-03-09T18:11:00.000Z',
+    runtime_source_evidence: {
+      unmapped_tmux_sessions: [
+        {
+          session_name: 'to-runtime-delta-secret-a',
+          pane_refs: ['tmux://to-runtime-delta-secret-a/0.0'],
+          observed_count: 1,
+          status: 'observed',
+          last_observed_at: '2026-03-09T18:10:50.000Z',
+          degraded_reasons: []
+        },
+        {
+          session_name: 'to-runtime-delta-secret-b',
+          pane_refs: ['tmux://to-runtime-delta-secret-b/0.0'],
+          observed_count: 1,
+          status: 'observed',
+          last_observed_at: '2026-03-09T18:10:51.000Z',
+          degraded_reasons: []
+        }
+      ],
+      unmapped_hermes_sources: [
+        {
+          source_kind: 'hermes_session',
+          evidence_ref: 'hermes://to-runtime-delta-secret',
+          profile_id: 'to-runtime-delta-profile-secret',
+          session_ref: 'to-runtime-delta-session-secret',
+          observed_at: '2026-03-09T18:10:45.000Z',
+          status: 'observed',
+          degraded_reasons: ['to-runtime-delta-reason'],
+          metadata: {
+            token: 'to-runtime-delta-token'
+          }
+        }
+      ],
+      unmapped_task_evidence: [
+        {
+          task_ref: 'TASK-DELTA-TO-A',
+          source_kind: 'kanban_fixture',
+          status: 'observed',
+          observed_at: '2026-03-09T18:10:55.000Z',
+          correlation_id: 'corr-runtime-delta-to-a'
+        },
+        {
+          task_ref: 'TASK-DELTA-TO-B',
+          source_kind: 'linear_fixture',
+          status: 'observed',
+          observed_at: '2026-03-09T18:10:56.000Z',
+          correlation_id: 'corr-runtime-delta-to-b'
+        },
+        {
+          task_ref: 'TASK-DELTA-TO-C',
+          source_kind: 'slack_fixture',
+          status: 'observed',
+          observed_at: '2026-03-09T18:10:57.000Z',
+          correlation_id: 'corr-runtime-delta-to-c'
+        }
+      ]
+    }
+  });
+
+  const diff = store.getCollectorSnapshotDiff();
+  assert.deepEqual(diff.runtime_source_evidence_delta, {
+    unmapped_tmux_session_count_delta: 1,
+    unmapped_hermes_source_count_delta: 1,
+    unmapped_task_evidence_count_delta: 2
+  });
+
+  const serialized = JSON.stringify(diff);
+  assert.equal(serialized.includes('runtime_source_evidence_delta'), true);
+  for (const forbidden of [
+    'runtime-delta-secret',
+    'tmux://',
+    'hermes://',
+    'task://',
+    'metadata',
+    'degraded_reasons',
+    'token'
+  ]) {
+    assert.equal(serialized.includes(forbidden), false, forbidden);
   }
 });
 

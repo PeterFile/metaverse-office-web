@@ -1109,6 +1109,7 @@ test('JSONL prototype store reports storage index-health as not applicable', asy
     evidence_query_probe_count: null,
     evidence_query_probe_drift_count: null,
     evidence_query_probe_status: 'not_applicable',
+    health_reason_codes: [],
     sidecar_status: 'not_applicable',
     record_kind_buckets: {
       event: 3,
@@ -1162,6 +1163,7 @@ test('JSONL storage index-health buckets unknown record kinds without leaking ra
     evidence_query_probe_count: null,
     evidence_query_probe_drift_count: null,
     evidence_query_probe_status: 'not_applicable',
+    health_reason_codes: [],
     sidecar_status: 'not_applicable',
     record_kind_buckets: {
       event: 1,
@@ -4525,6 +4527,7 @@ test('SQLite prototype store reports sanitized storage index-health without side
     evidence_query_probe_count: 16,
     evidence_query_probe_drift_count: 0,
     evidence_query_probe_status: 'complete',
+    health_reason_codes: [],
     sidecar_status: 'complete',
     record_kind_buckets: {
       event: 3,
@@ -4549,6 +4552,7 @@ test('SQLite prototype store reports sanitized storage index-health without side
     record_evidence_ref_drift_count: 6,
     evidence_query_probe_drift_count: 1,
     evidence_query_probe_status: 'stale',
+    health_reason_codes: ['sidecar_drift', 'evidence_query_probe_drift'],
     sidecar_status: 'stale'
   });
 
@@ -4572,6 +4576,7 @@ test('SQLite prototype store reports sanitized storage index-health without side
     record_index_drift_count: 3,
     evidence_query_probe_drift_count: 2,
     evidence_query_probe_status: 'stale',
+    health_reason_codes: ['sidecar_drift', 'evidence_query_probe_drift'],
     sidecar_status: 'stale'
   });
 
@@ -4586,6 +4591,7 @@ test('SQLite prototype store reports sanitized storage index-health without side
     evidence_query_probe_count: null,
     evidence_query_probe_drift_count: null,
     evidence_query_probe_status: 'stale',
+    health_reason_codes: ['sidecar_unavailable'],
     sidecar_status: 'stale'
   });
 });

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { deriveSelectedAgentEvidenceGlance } from './selectedAgentEvidenceGlance';
+import { expectNoForbiddenPublicUiText } from '../test/publicLeakSentinel';
 import type {
   AgentEvidenceSpineSummary,
   CollectorEvidenceCoverage,
@@ -167,7 +168,12 @@ describe('deriveSelectedAgentEvidenceGlance', () => {
           evidence_role_buckets: {
             source_evidence: 4,
             webhook: 3,
-            metadata: 2
+            metadata: 2,
+            dispatch: 1,
+            route: 1,
+            claim: 1,
+            complete: 1,
+            assign: 1
           },
           source_status_buckets: {
             observed: 4,
@@ -194,11 +200,10 @@ describe('deriveSelectedAgentEvidenceGlance', () => {
 
     expect(glance).toEqual([
       'Proof glance · 9 records · Sources workspace 3, Unknown 3',
-      'Coverage gap · 3 · Roles source evidence 4, Unknown 5 · Latest observed 2026-03-09T18:04:45.000Z'
+      'Coverage gap · 3 · Roles source evidence 4, Unknown 10 · Latest observed 2026-03-09T18:04:45.000Z'
     ]);
-    expect(serialized).not.toMatch(
-      /\/Users\/cwp|hermes:\/\/|tmux:\/\/|profile:\/\/|session|token|webhook|metadata|control-plane/
-    );
+    expectNoForbiddenPublicUiText(glance);
+    expect(serialized).not.toContain('metadata');
   });
 
   it('shows missing summary rows as unavailable coverage gaps without fabricated activity', () => {
@@ -273,10 +278,7 @@ describe('deriveSelectedAgentEvidenceGlance', () => {
       'Coverage source-health only · Latest observed 2026-03-16T08:59:30.000Z'
     ]);
     expect(glance).toHaveLength(2);
-    const glanceText = glance?.join('\n') ?? '';
-    expect(glanceText).not.toContain('/tmp/');
-    expect(glanceText).not.toContain('hermes://');
-    expect(glanceText).not.toContain('7-web3-support');
+    expectNoForbiddenPublicUiText(glance);
   });
 
   it('returns null until a selected agent and loaded read model row exist', () => {

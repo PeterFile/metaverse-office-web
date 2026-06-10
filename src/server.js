@@ -540,6 +540,18 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
     return;
   }
 
+  if (method === 'GET' && pathname === '/runtime/source-gaps/transition-summary') {
+    sendJson(res, 200, {
+      item: store.getRuntimeSourceGapTransitionSummary({
+        evidence_id: url.searchParams.get('evidence_id'),
+        agent_id: url.searchParams.get('agent_id'),
+        ...getSourceEvidenceQuery(url.searchParams),
+        lifecycle_state: url.searchParams.get('lifecycle_state')
+      })
+    });
+    return;
+  }
+
   if (method === 'GET' && pathname === '/runtime/source-gaps') {
     sendJson(res, 200, {
       items: store.listRuntimeSourceGaps({

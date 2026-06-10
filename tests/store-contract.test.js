@@ -3801,16 +3801,113 @@ test('prototype store derives compact runtime source gap lifecycle across snapsh
     groups: []
   });
 
+  const transitionSummary = store.getRuntimeSourceGapTransitionSummary({
+    newest_first: 'true',
+    limit: '2'
+  });
+  assert.deepEqual(transitionSummary, {
+    total_records: 5,
+    total_groups: 3,
+    returned_limit: 2,
+    lifecycle_state_buckets: {
+      opened: { group_count: 1, record_count: 2 },
+      continuing: { group_count: 0, record_count: 0 },
+      resolved: { group_count: 1, record_count: 2 },
+      observed_unmapped: { group_count: 1, record_count: 1 }
+    },
+    source_kind_buckets: {
+      workspace_root: { group_count: 0, record_count: 0 },
+      workspace_file: { group_count: 1, record_count: 2 },
+      tmux_observation: { group_count: 2, record_count: 3 },
+      hermes_profile: { group_count: 0, record_count: 0 },
+      hermes_session: { group_count: 0, record_count: 0 }
+    },
+    source_status_buckets: {
+      observed: { group_count: 3, record_count: 3 },
+      degraded: { group_count: 1, record_count: 1 },
+      missing: { group_count: 1, record_count: 1 },
+      error: { group_count: 0, record_count: 0 }
+    },
+    mapped_state_buckets: {
+      mapped: { group_count: 2, record_count: 4 },
+      unmapped: { group_count: 1, record_count: 1 }
+    },
+    latest_observed_at: '2026-03-09T18:06:50.000Z',
+    latest_collected_at: '2026-03-09T18:07:00.000Z'
+  });
+  const resolvedTransitionSummary = store.getRuntimeSourceGapTransitionSummary({
+    lifecycle_state: 'resolved'
+  });
+  assert.equal(resolvedTransitionSummary.total_records, 2);
+  assert.equal(resolvedTransitionSummary.total_groups, 1);
+  assert.deepEqual(resolvedTransitionSummary.lifecycle_state_buckets.resolved, {
+    group_count: 1,
+    record_count: 2
+  });
+  const unknownTransitionSummary = store.getRuntimeSourceGapTransitionSummary({
+    lifecycle_state: 'token=lifecycle-secret'
+  });
+  assert.deepEqual(unknownTransitionSummary, {
+    total_records: 0,
+    total_groups: 0,
+    returned_limit: 50,
+    lifecycle_state_buckets: {
+      opened: { group_count: 0, record_count: 0 },
+      continuing: { group_count: 0, record_count: 0 },
+      resolved: { group_count: 0, record_count: 0 },
+      observed_unmapped: { group_count: 0, record_count: 0 }
+    },
+    source_kind_buckets: {
+      workspace_root: { group_count: 0, record_count: 0 },
+      workspace_file: { group_count: 0, record_count: 0 },
+      tmux_observation: { group_count: 0, record_count: 0 },
+      hermes_profile: { group_count: 0, record_count: 0 },
+      hermes_session: { group_count: 0, record_count: 0 }
+    },
+    source_status_buckets: {
+      observed: { group_count: 0, record_count: 0 },
+      degraded: { group_count: 0, record_count: 0 },
+      missing: { group_count: 0, record_count: 0 },
+      error: { group_count: 0, record_count: 0 }
+    },
+    mapped_state_buckets: {
+      mapped: { group_count: 0, record_count: 0 },
+      unmapped: { group_count: 0, record_count: 0 }
+    },
+    latest_observed_at: null,
+    latest_collected_at: null
+  });
+
   const serializedLifecycle = JSON.stringify(lifecycle);
+  const serializedTransitionSummary = JSON.stringify(transitionSummary);
   assert.equal(lifecycle.groups.every((group) => Number.isSafeInteger(group.record_count)), true);
   for (const canary of ['/tmp/lifecycle', 'token=lifecycle-secret', 'tmux://unmapped-session']) {
     assert.equal(serializedLifecycle.includes(canary), false, `leaked canary: ${canary}`);
+    assert.equal(
+      serializedTransitionSummary.includes(canary),
+      false,
+      `leaked transition summary canary: ${canary}`
+    );
   }
   assert.equal(serializedLifecycle.includes('evidence_id'), false);
   assert.equal(serializedLifecycle.includes('evidence_ref'), false);
   assert.equal(serializedLifecycle.includes('metadata'), false);
   assert.equal(serializedLifecycle.includes('degraded_reasons'), false);
   assert.equal(serializedLifecycle.includes('collector_snapshot_id'), false);
+  for (const forbidden of [
+    'agent_id',
+    'evidence_id',
+    'evidence_ref',
+    'metadata',
+    'degraded_reasons',
+    'collector_snapshot_id',
+    'current_status',
+    'snapshot_count',
+    'task_reference',
+    'task_fixture'
+  ]) {
+    assert.equal(serializedTransitionSummary.includes(forbidden), false, forbidden);
+  }
 });
 
 test('prototype store groups evidence refs with evidence-record filters before group limit', async () => {

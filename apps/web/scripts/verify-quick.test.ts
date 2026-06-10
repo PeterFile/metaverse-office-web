@@ -250,6 +250,67 @@ describe('verify-quick helpers', () => {
     expect(plan).toMatchObject({ mode: 'lane', lane: 'ui', changed: true });
   });
 
+  it('routes Live Evidence helper source changes to their exact focused tests', () => {
+    const plan = resolveVerifyQuickSteps(parseVerifyQuickArgs(['--changed']), {
+      cwd: repoRoot,
+      changedFiles: [
+        'apps/web/src/selectedAgentEvidenceLedger.ts',
+        'apps/web/src/evidenceProvenanceBundle.ts',
+        'apps/web/src/aitown/selectedAgentEvidenceGlance.ts',
+        'apps/web/src/aitown/selectedAgentSourceMatrix.ts'
+      ]
+    });
+
+    expect(plan).toMatchObject({
+      mode: 'focused-files',
+      focusedFiles: [
+        'src/aitown/selectedAgentEvidenceGlance.test.ts',
+        'src/aitown/selectedAgentSourceMatrix.test.ts',
+        'src/evidenceProvenanceBundle.test.ts',
+        'src/selectedAgentEvidenceLedger.test.ts'
+      ]
+    });
+  });
+
+  it('dedupes Live Evidence helper source and counterpart test changes', () => {
+    const plan = resolveVerifyQuickSteps(parseVerifyQuickArgs(['--changed']), {
+      cwd: repoRoot,
+      changedFiles: [
+        'apps/web/src/selectedAgentEvidenceLedger.ts',
+        'apps/web/src/selectedAgentEvidenceLedger.test.ts'
+      ]
+    });
+
+    expect(plan).toMatchObject({
+      mode: 'focused-files',
+      focusedFiles: ['src/selectedAgentEvidenceLedger.test.ts']
+    });
+  });
+
+  it('keeps Live Evidence containers on the broad ui lane', () => {
+    for (const changedFile of [
+      'apps/web/src/App.tsx',
+      'apps/web/src/aitown/DetailsPanel.tsx',
+      'apps/web/src/aitown/WorldScene.tsx'
+    ]) {
+      const plan = resolveVerifyQuickSteps(parseVerifyQuickArgs(['--changed']), {
+        cwd: repoRoot,
+        changedFiles: [changedFile]
+      });
+
+      expect(plan).toMatchObject({ mode: 'lane', lane: 'ui', changed: true });
+    }
+  });
+
+  it('rejects mixed Live Evidence helper and container changes', () => {
+    expect(() =>
+      classifyChangedFiles([
+        'apps/web/src/selectedAgentEvidenceLedger.ts',
+        'apps/web/src/aitown/DetailsPanel.tsx'
+      ])
+    ).toThrow(/cross-layer/);
+  });
+
   it('routes known changed web unit tests to focused-files', () => {
     const plan = resolveVerifyQuickSteps(parseVerifyQuickArgs(['--changed']), {
       cwd: repoRoot,

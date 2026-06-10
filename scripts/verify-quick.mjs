@@ -47,6 +47,13 @@ const sourceGapUiChangedPaths = new Set([
   "apps/web/src/sourceHealthWorldBadges.test.ts",
 ]);
 
+const liveEvidenceHelperFocusedTestPaths = new Map([
+  ["apps/web/src/selectedAgentEvidenceLedger.ts", "apps/web/src/selectedAgentEvidenceLedger.test.ts"],
+  ["apps/web/src/evidenceProvenanceBundle.ts", "apps/web/src/evidenceProvenanceBundle.test.ts"],
+  ["apps/web/src/aitown/selectedAgentEvidenceGlance.ts", "apps/web/src/aitown/selectedAgentEvidenceGlance.test.ts"],
+  ["apps/web/src/aitown/selectedAgentSourceMatrix.ts", "apps/web/src/aitown/selectedAgentSourceMatrix.test.ts"],
+]);
+
 function formatCommand(command, args) {
   return [command, ...args].join(" ");
 }
@@ -233,7 +240,10 @@ export function classifyChangedFiles(changedFiles = []) {
   const unknownFiles = [];
 
   for (const filePath of nonDocsFiles) {
-    if (isBackendPath(filePath)) {
+    const focusedTestPath = liveEvidenceHelperFocusedTestPaths.get(filePath);
+    if (focusedTestPath) {
+      categories.set("focused-files", (categories.get("focused-files") ?? []).concat(focusedTestPath));
+    } else if (isBackendPath(filePath)) {
       categories.set("backend", (categories.get("backend") ?? []).concat(filePath));
     } else if (isSmokePath(filePath)) {
       categories.set("smoke", (categories.get("smoke") ?? []).concat(filePath));
@@ -260,7 +270,7 @@ export function classifyChangedFiles(changedFiles = []) {
   if (category === "focused-files") {
     return {
       mode: "focused-files",
-      focusedFiles: files.map(toWebPackagePath),
+      focusedFiles: uniqueSorted(files).map(toWebPackagePath),
     };
   }
 

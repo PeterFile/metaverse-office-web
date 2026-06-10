@@ -89,6 +89,8 @@ pnpm verify:quick -- --lane=<docs|backend|web-api|ui|ui-source-gap|smoke>
 pnpm verify:quick -- --focused-files src/App.test.tsx
 pnpm verify:quick -- --changed
 pnpm verify:quick -- --since=origin/master
+pnpm verify:quick -- --plan --changed
+pnpm verify:quick -- --dry-run --focused-files src/App.test.tsx
 pnpm backend:start
 ```
 
@@ -97,6 +99,8 @@ pnpm backend:start
 `pnpm verify:quick -- --focused-files <web-package-relative-test> [...]` runs `git diff --check` plus `pnpm --filter @metaverse-office/web exec vitest run <files>` for explicit Vitest test/spec files under `apps/web`. It is for dense local iteration and does not route to `test:all`, build, or lane defaults.
 
 `pnpm verify:quick -- --changed` routes staged, unstaged, and untracked files to the narrowest safe quick lane. `pnpm verify:quick -- --since=<ref>` routes files changed since a ref. The classifier is conservative: docs-only changes use `docs`, backend-only changes use `backend`, known web API/client changes use `web-api`, source-gap/source-health UI source+test changes use `ui-source-gap`, changed web Vitest files use `focused-files`, and smoke/e2e changes use `smoke`. Unknown or cross-layer changes fail instead of pretending to replace full CI.
+
+Add `--plan` or `--dry-run` to any `verify:quick` route to print the selected lane or focused test files plus the exact commands that would run, then exit without executing them. Plan mode keeps the same conservative routing: unknown, cross-layer, or unsafe focused paths still fail nonzero.
 
 `pnpm web:test:browser-smoke` runs the Playwright smoke bundle from the repository root (currently the keyboard, active-queue, and layout-visual smokes), starts its own hermetic read-only backend seeded under `./.tmp/browser-smoke`, starts its own Vite shell on ephemeral localhost ports, and passes the resolved base URL into Playwright so stale orphaned processes do not block startup.
 

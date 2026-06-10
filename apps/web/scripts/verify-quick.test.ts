@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -14,6 +14,18 @@ import {
 
 const repoRoot = resolve(process.cwd(), '../..');
 const verifyQuickScript = resolve(repoRoot, 'scripts/verify-quick.mjs');
+
+function runVerifyQuick(args: string[], cwd = repoRoot) {
+  const result = spawnSync('node', [verifyQuickScript, ...args], {
+    cwd,
+    encoding: 'utf8'
+  });
+
+  return {
+    status: result.status,
+    output: `${result.stdout ?? ''}${result.stderr ?? ''}`
+  };
+}
 
 describe('verify-quick helpers', () => {
   it('keeps lane mode separate from explicit focused file runs', () => {
@@ -268,5 +280,77 @@ describe('verify-quick helpers', () => {
     expect(() =>
       classifyChangedFiles(['src/server.js', 'apps/web/src/api.ts'])
     ).toThrow(/cross-layer/);
+  });
+
+  it('prints a lane plan without running commands', () => {
+    const result = runVerifyQuick(['--plan', '--lane=docs']);
+
+    expect(result.status).toBe(0);
+    expect(result.output).toMatch(/\[verify:quick\] lane=docs/);
+    expect(result.output).toMatch(/\[verify:quick\] plan: git diff --check/);
+    expect(result.output).not.toMatch(/\[verify:quick\] run:/);
+  });
+
+  it('prints a focused-files plan with exact Vitest command', () => {
+    const result = runVerifyQuick(['--dry-run', '--focused-files', 'src/App.test.tsx']);
+
+    expect(result.status).toBe(0);
+    expect(result.output).toMatch(/\[verify:quick\] focused-files=1/);
+    expect(result.output).toMatch(
+      /\[verify:quick\] plan: pnpm --filter @metaverse-office\/web exec vitest run src\/App\.test\.tsx/
+    );
+    expect(result.output).not.toMatch(/\[verify:quick\] run:/);
+  });
+
+  it('prints changed and since plans with the routed diff check args', () => {
+    const tempRepo = mkdtempSync(join(tmpdir(), 'verify-quick-plan-diff-'));
+    const runGit = (...args: string[]) => execFileSync('git', args, { cwd: tempRepo, stdio: 'ignore' });
+
+    try {
+      writeFileSync(join(tempRepo, 'README.md'), '# Temp repo\n');
+      runGit('init');
+      runGit('config', 'user.email', 'verify-quick@example.invalid');
+      runGit('config', 'user.name', 'verify quick');
+      runGit('add', '.');
+      runGit('commit', '-m', 'initial');
+
+      writeFileSync(join(tempRepo, 'README.md'), '# Temp repo\n\nDocs edit.\n');
+      const changedResult = runVerifyQuick(['--plan', '--changed'], tempRepo);
+      expect(changedResult.status).toBe(0);
+      expect(changedResult.output).toMatch(/\[verify:quick\] lane=docs/);
+      expect(changedResult.output).toMatch(/\[verify:quick\] plan: git diff --check HEAD --/);
+
+      runGit('add', 'README.md');
+      runGit('commit', '-m', 'docs edit');
+      const sinceResult = runVerifyQuick(['--dry-run', '--since=HEAD~1'], tempRepo);
+      expect(sinceResult.status).toBe(0);
+      expect(sinceResult.output).toMatch(/\[verify:quick\] lane=docs/);
+      expect(sinceResult.output).toMatch(/\[verify:quick\] plan: git diff --check HEAD~1 --/);
+    } finally {
+      rmSync(tempRepo, { recursive: true, force: true });
+    }
+  });
+
+  it('fails plan mode for unsafe changed-file routes', () => {
+    const tempRepo = mkdtempSync(join(tmpdir(), 'verify-quick-plan-fail-'));
+    const runGit = (...args: string[]) => execFileSync('git', args, { cwd: tempRepo, stdio: 'ignore' });
+
+    try {
+      mkdirSync(join(tempRepo, 'scripts'));
+      writeFileSync(join(tempRepo, 'README.md'), '# Temp repo\n');
+      runGit('init');
+      runGit('config', 'user.email', 'verify-quick@example.invalid');
+      runGit('config', 'user.name', 'verify quick');
+      runGit('add', '.');
+      runGit('commit', '-m', 'initial');
+      writeFileSync(join(tempRepo, 'scripts', 'tool.mjs'), 'export const tool = true;\n');
+
+      const result = runVerifyQuick(['--plan', '--changed'], tempRepo);
+      expect(result.status).not.toBe(0);
+      expect(result.output).toMatch(/Cannot safely route changed files: scripts\/tool\.mjs/);
+      expect(result.output).not.toMatch(/\[verify:quick\] plan:/);
+    } finally {
+      rmSync(tempRepo, { recursive: true, force: true });
+    }
   });
 });

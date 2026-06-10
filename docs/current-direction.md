@@ -1,6 +1,6 @@
 # Current Direction: Live Evidence Spine
 
-Updated: 2026-06-05T11:38:23+08:00
+Updated: 2026-06-10T10:33:01+08:00
 
 ## Product vision
 
@@ -56,6 +56,20 @@ Minimum target outcomes:
 4. Upgrade the prototype JSONL event spine to a structured append-only store, likely SQLite first, with indexes for event id, agent id, correlation id, source kind, evidence ref, and time range.
 5. Preserve replayability: service restart must rebuild the same projection from persisted events, and each visible incident or status claim must point back to concrete evidence.
 6. Keep AI Town as the primary operator surface, with Hub/drilldown views used for evidence inspection rather than dumping every fact into a side panel.
+
+Current scored route objectives for the next Live Evidence Spine delivery stack:
+
+| Route | Objective | Scoreable done checklist | Fastest useful gate |
+| --- | --- | --- | --- |
+| Storage health | Make SQLite/index-health degradation explainable with bounded reason codes. | Reason codes are additive, stable, path-free, stderr-free, and distinguish ok, JSONL not-applicable, stale sidecar, and query-probe drift. | `pnpm verify:quick -- --lane=backend` |
+| Evidence projection | Add count-only proof that persisted evidence projects safely without leaking invalid enum, timestamp, input-proof, ref, or payload samples. | Audit output is aggregate-only, filter-compatible, read-only, and keeps hostile stored values as counters, not public strings. | `pnpm verify:quick -- --lane=backend` |
+| Runtime gaps | Summarize source-gap lifecycle transitions as counts without agent productivity, severity, degraded-reason, or raw-ref semantics. | Counts separate group and record semantics, preserve mapped/unmapped boundaries, and return zero safe shapes for unknown filters. | `pnpm verify:quick -- --lane=backend` |
+| Feedback loop | Shorten dense iteration without changing required check names or pretending narrow tests replace full CI. | `verify:quick` can explain the planned lane quickly, helper-only paths can route to exact tests, and cross-layer ambiguity still fails closed. | `pnpm --filter @metaverse-office/web exec vitest run scripts/verify-quick.test.ts` |
+| Public label firewall | Catch forbidden public UI strings before browser smoke. | Unit-level guards cover local paths, tmux/Hermes/profile/session refs, tokens, webhooks, and control-plane verbs while leaving raw refs internal. | `pnpm verify:quick -- --focused-files src/selectedAgentEvidenceLedger.test.ts src/evidenceProvenanceBundle.test.ts` |
+| World-first evidence flow | Let operators jump from an inspected mapped evidence record back to the world without opening another evidence dump. | Mapped evidence can focus the existing world target; unmapped evidence stays bounded and passive; no new fetch, no raw evidence labels, no Hub dumping. | `pnpm verify:quick -- --focused-files src/App.test.tsx src/aitown/DetailsPanel.test.tsx` |
+| World interaction guard | Keep new evidence controls from blocking default AI Town drag and edge navigation. | Real browser smoke proves default left/right/top-left drag remains available with evidence controls present. | `pnpm web:test:browser-smoke:live-evidence -- --grep '@journey @evidence-live'` |
+
+These objectives are durable for the milestone because they define product and verification boundaries. Per-lane progress, run status, blockers, and PR queues still belong in Slack, Linear, or controller/runtime systems, not new markdown files.
 
 ## Documentation discipline
 

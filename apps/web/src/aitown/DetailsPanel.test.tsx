@@ -2219,6 +2219,66 @@ describe('DetailsPanel selected-agent workflow lifecycle', () => {
     expectNoUnprovenLivenessLabels(section!);
   });
 
+  it('focuses inspected mapped evidence records in the world without exposing refs', async () => {
+    const user = userEvent.setup();
+    const onFocusWorldAgent = vi.fn();
+    const props = {
+      ...buildProps({
+        activeHubCategory: 'evidence',
+        selectedAgentDrilldownTab: 'evidence',
+        selectedAgentEvidenceLedger: buildSelectedAgentEvidenceLedger(),
+        selectedAgentEvidenceLedgerState: 'ready',
+        selectedAgentEvidenceRecord: buildEvidenceRecord(),
+        selectedAgentEvidenceRecordId: 'output-1',
+        selectedAgentEvidenceRecordState: 'ready',
+        selectedAgentEvidenceProvenanceBundle: buildEvidenceProvenanceBundle(),
+        selectedAgentEvidenceProvenanceBundleState: 'ready'
+      }),
+      onFocusWorldAgent
+    };
+
+    const { rerender } = render(<DetailsPanel {...props} />);
+    const getDetailSection = () => {
+      const detailSection = screen.getByRole('heading', { name: 'Evidence Record Detail' }).closest('section');
+      expect(detailSection).not.toBeNull();
+      return detailSection as HTMLElement;
+    };
+
+    const section = getDetailSection();
+    const focusButton = within(section!).getByRole('button', { name: 'Focus in world' });
+    expect(focusButton).toBeVisible();
+    expect(focusButton).not.toHaveAccessibleName(/output-1|\/tmp|tmux|hermes|session|profile|token|webhook/i);
+
+    await user.click(focusButton);
+
+    expect(onFocusWorldAgent).toHaveBeenCalledWith('app-engineering');
+
+    rerender(
+      <DetailsPanel
+        {...{
+          ...props,
+          selectedAgentEvidenceRecord: buildEvidenceRecord({
+            agent_id: null,
+            evidence_role: 'runtime_unmapped'
+          })
+        }}
+      />
+    );
+    expect(within(getDetailSection()).queryByRole('button', { name: 'Focus in world' })).not.toBeInTheDocument();
+
+    rerender(
+      <DetailsPanel
+        {...{
+          ...props,
+          selectedAgentEvidenceRecord: buildEvidenceRecord({
+            agent_id: 'ghost-agent'
+          })
+        }}
+      />
+    );
+    expect(within(getDetailSection()).queryByRole('button', { name: 'Focus in world' })).not.toBeInTheDocument();
+  });
+
   it('does not expose stale source-context disclosure while a different evidence record is loading', () => {
     const onInspectSelectedAgentEvidenceSourceContext = vi.fn();
 

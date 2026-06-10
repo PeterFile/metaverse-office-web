@@ -199,6 +199,7 @@ type DetailsPanelProps = {
   onReplaySelectedAgentEvidenceRecord: (evidenceId: string) => void;
   onBackToSelectedAgentEvidenceRecord?: () => void;
   onFocusSharedMemoryArtifact?: (artifactRef: string, scope?: SharedMemoryJumpScope) => void;
+  onFocusWorldAgent?: (agentId: string) => void;
   onOpenReplayCheckpoint?: (eventId: string) => void;
   onFocusWorldZone?: (zoneId: string) => void;
 };
@@ -1557,8 +1558,10 @@ function renderSelectedAgentEvidenceRecordDetail(
   checkpointLog: ReplayCheckpointLogResponse | null,
   checkpointLogState: LoadState,
   checkpointLogError: string | null,
+  world: WorldState,
   onInspectSourceContext: (evidenceId: string) => void,
-  onReplayRecord: (evidenceId: string) => void
+  onReplayRecord: (evidenceId: string) => void,
+  onFocusWorldAgent?: (agentId: string) => void
 ) {
   if (!requestedEvidenceId && !record) {
     return null;
@@ -1625,11 +1628,35 @@ function renderSelectedAgentEvidenceRecordDetail(
               checkpointLogError,
               requestedEvidenceId
             )}
+            {recordMatchesRequestedEvidence
+              ? renderSelectedAgentEvidenceWorldFocusAction(record, world, onFocusWorldAgent)
+              : null}
             {renderSelectedAgentEvidenceReplayAction(record, provenanceBundle, provenanceState, onReplayRecord)}
           </li>
         ) : null}
       </ul>
     </section>
+  );
+}
+
+function renderSelectedAgentEvidenceWorldFocusAction(
+  record: EvidenceRecord,
+  world: WorldState,
+  onFocusWorldAgent?: (agentId: string) => void
+) {
+  const agentId = record.agent_id?.trim() ?? '';
+  if (!onFocusWorldAgent || !agentId || !world.agents.has(agentId)) {
+    return null;
+  }
+
+  return (
+    <button
+      type="button"
+      className="aitown-link-button"
+      onClick={() => onFocusWorldAgent(agentId)}
+    >
+      Focus in world
+    </button>
   );
 }
 
@@ -4976,6 +5003,7 @@ export function DetailsPanel({
   onReplaySelectedAgentEvidenceRecord,
   onBackToSelectedAgentEvidenceRecord,
   onFocusSharedMemoryArtifact,
+  onFocusWorldAgent,
   onOpenReplayCheckpoint,
   onFocusWorldZone
 }: DetailsPanelProps) {
@@ -6818,8 +6846,10 @@ export function DetailsPanel({
         selectedAgentEvidenceCheckpointLog,
         selectedAgentEvidenceCheckpointLogState,
         selectedAgentEvidenceCheckpointLogError,
+        world,
         onInspectSelectedAgentEvidenceSourceContext,
-        onReplaySelectedAgentEvidenceRecord
+        onReplaySelectedAgentEvidenceRecord,
+        onFocusWorldAgent
       )}
 
       <section

@@ -4253,6 +4253,7 @@ function AppInner() {
                 selectedAgentEvidenceRecordId ? handleBackToSelectedAgentEvidenceRecord : undefined
               }
               onFocusSharedMemoryArtifact={handleFocusSharedMemoryArtifact}
+              onFocusWorldAgent={requestAgentFocus}
               onOpenReplayCheckpoint={handleOpenReplayCheckpoint}
               onFocusWorldZone={handleFocusWorldZone}
               />

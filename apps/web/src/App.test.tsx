@@ -4816,6 +4816,43 @@ afterEach(() => {
     expect(postBackUrls).not.toContain(appEngineeringEvidenceCheckpointLogUrl);
   }, 10_000);
 
+  it('focuses an inspected mapped evidence record in the world without new evidence reads', async () => {
+    const user = userEvent.setup();
+    setNavigatorUserAgent('VitestBrowser');
+    render(<App />);
+
+    const details = await openHub(user, 'Crew');
+    await user.click(within(details).getByRole('button', { name: /^Inspect App Engineering Agent$/ }));
+    await user.click(screen.getByRole('tab', { name: 'Evidence' }));
+
+    await findHubSection(details, 'Evidence Ledger');
+    await user.click(
+      within(details).getByRole('button', {
+        name: 'Inspect evidence record output-1'
+      })
+    );
+
+    const detailSection = await findHubSection(details, 'Evidence Record Detail');
+    await within(detailSection).findByText('Evidence id · output-1');
+    expect(screen.getByTestId('mock-agent-focus-request')).toHaveTextContent('');
+
+    const callsBeforeFocus = vi.mocked(globalThis.fetch).mock.calls.length;
+    const focusButton = within(detailSection).getByRole('button', { name: 'Focus in world' });
+    expect(focusButton).not.toHaveAccessibleName(/\/tmp|tmux|hermes|session|profile|token|webhook/i);
+
+    await user.click(focusButton);
+
+    expect(screen.getByTestId('mock-agent-focus-request')).toHaveTextContent('app-engineering:1');
+    expect(within(detailSection).getByText('Evidence id · output-1')).toBeVisible();
+
+    const postFocusUrls = vi
+      .mocked(globalThis.fetch)
+      .mock.calls.slice(callsBeforeFocus)
+      .map(([input]) => (typeof input === 'string' ? input : input.toString()));
+    expect(postFocusUrls).toEqual([]);
+    expect(detailSection).not.toHaveTextContent('/tmp/app/outbox.md');
+  }, 10_000);
+
   it('clears stale selected-agent evidence detail when the next detail response is empty', async () => {
     const user = userEvent.setup();
     const missingEvidenceRecordsFixture = {

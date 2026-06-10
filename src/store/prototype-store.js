@@ -1605,6 +1605,38 @@ class PrototypeStore {
     return boundEvidenceInputProofSummary(summary, limit);
   }
 
+  getEvidenceProjectionAudit(filters = {}) {
+    const { records, limit } = this.#filterEvidenceRecords(filters);
+    const audit = createEmptyEvidenceProjectionAudit(records.length, limit);
+
+    for (const record of records) {
+      const sourceFields = projectEvidenceSourceFields(record);
+
+      if (!sourceFields.kind) {
+        audit.unknown_source_kind_count += 1;
+      }
+      if (!sourceFields.role) {
+        audit.unknown_evidence_role_count += 1;
+      }
+      if (!sourceFields.status) {
+        audit.unknown_source_status_count += 1;
+      }
+      if (hasInvalidEvidenceProjectionTimestamp(record.observed_at)) {
+        audit.invalid_observed_at_count += 1;
+      }
+      if (hasInvalidEvidenceProjectionTimestamp(record.collected_at)) {
+        audit.invalid_collected_at_count += 1;
+      }
+      if (projectEvidenceInputProof(record)) {
+        audit.input_proof_count += 1;
+      } else {
+        audit.missing_input_proof_count += 1;
+      }
+    }
+
+    return audit;
+  }
+
   getEvidenceRefRollup(filters = {}) {
     const { records, limit } = this.#filterEvidenceRecords(filters);
     const groups = new Map();
@@ -2931,6 +2963,20 @@ function createEmptyEvidenceInputProofSummary(totalCount, limit) {
     line_buckets: {},
     source_input_ordinal_buckets: {},
     source_file_ordinal_buckets: {}
+  };
+}
+
+function createEmptyEvidenceProjectionAudit(totalCount, limit) {
+  return {
+    total_count: totalCount,
+    returned_limit: limit,
+    input_proof_count: 0,
+    missing_input_proof_count: 0,
+    unknown_source_kind_count: 0,
+    unknown_evidence_role_count: 0,
+    unknown_source_status_count: 0,
+    invalid_observed_at_count: 0,
+    invalid_collected_at_count: 0
   };
 }
 
@@ -5426,6 +5472,15 @@ function projectEvidenceTimestampValue(value) {
   }
 
   return new Date(Date.parse(value)).toISOString();
+}
+
+function hasInvalidEvidenceProjectionTimestamp(value) {
+  return (
+    value !== null &&
+    value !== undefined &&
+    value !== '' &&
+    !isValidEvidenceRecordIsoValue(value)
+  );
 }
 
 function projectKnownEvidenceValue(value, allowedValues) {

@@ -7312,6 +7312,159 @@ test('GET evidence-record detail and provenance unknown ids do not echo unsafe i
   }
 });
 
+test('GET /evidence-records/projection-audit returns count-only safety counters read-only', async () => {
+  let collectCount = 0;
+  const controllerSnapshotCollector = {
+    async collectSnapshot() {
+      collectCount += 1;
+      throw new Error('GET /evidence-records/projection-audit must not collect');
+    }
+  };
+  const root = await mkdtemp(path.join(os.tmpdir(), 'metaverse-office-projection-audit-'));
+  const storeFile = path.join(root, 'prototype-store.jsonl');
+  const unsafeSourceKind = '/tmp/projection-audit-route/source-kind-token';
+  const unsafeSourceStatus = 'token=projection-audit-route-status';
+  const unsafeEvidenceRole = 'tmux://projection-audit-route-role/0.0';
+  const unsafeObservedAt = '/tmp/projection-audit-route/observed-token';
+  const unsafeCollectedAt = 'https://hooks.slack.com/services/projection-audit-route-time';
+  const unsafeEvidenceRef = '/tmp/projection-audit-route/evidence.md';
+  const unsafeInputProof = 'https://hooks.slack.com/services/projection-audit-route-proof';
+
+  await writeFile(
+    storeFile,
+    [
+      {
+        kind: 'evidence_record',
+        payload: {
+          evidence_id: 'ev_projection_audit_route_safe',
+          observed_at: '2026-03-09T18:05:00.000Z',
+          collected_at: '2026-03-09T18:06:00.000Z',
+          agent_id: 'app-engineering',
+          source_kind: 'workspace_file',
+          evidence_ref: '/tmp/projection-audit-route/safe.md',
+          evidence_role: 'agent_output',
+          source_status: 'observed',
+          output_candidate: true,
+          collector_snapshot_id: 'collector-snapshot:2026-03-09T18:06:00.000Z',
+          correlation_id: 'corr-projection-audit-route-safe',
+          degraded_reasons: [],
+          metadata: {
+            source_provenance: {
+              source_format: 'json_array',
+              source_index: 0,
+              source_input_ordinal: 1,
+              source_file_ordinal: 1
+            }
+          }
+        }
+      },
+      {
+        kind: 'evidence_record',
+        payload: {
+          evidence_id: 'ev_projection_audit_route_unsafe',
+          observed_at: unsafeObservedAt,
+          collected_at: unsafeCollectedAt,
+          agent_id: null,
+          source_kind: unsafeSourceKind,
+          evidence_ref: unsafeEvidenceRef,
+          evidence_role: unsafeEvidenceRole,
+          source_status: unsafeSourceStatus,
+          output_candidate: false,
+          collector_snapshot_id: 'collector-snapshot:2026-03-09T18:07:00.000Z',
+          correlation_id: 'corr-projection-audit-route-unsafe',
+          degraded_reasons: [unsafeSourceStatus],
+          metadata: {
+            source_provenance: {
+              source_format: unsafeInputProof,
+              source_index: 0
+            },
+            payload: 'token=projection-audit-route-payload'
+          }
+        }
+      },
+      {
+        kind: 'evidence_record',
+        payload: {
+          evidence_id: 'ev_projection_audit_route_missing_proof',
+          observed_at: '2026-03-09T18:08:00.000Z',
+          collected_at: '2026-03-09T18:09:00.000Z',
+          agent_id: null,
+          source_kind: 'tmux_observation',
+          evidence_ref: 'tmux://projection-audit-route/0.0',
+          evidence_role: 'runtime_unmapped',
+          source_status: 'observed',
+          output_candidate: false,
+          collector_snapshot_id: 'collector-snapshot:2026-03-09T18:09:00.000Z',
+          correlation_id: 'corr-projection-audit-route-missing-proof',
+          degraded_reasons: [],
+          metadata: {}
+        }
+      }
+    ].map((record) => JSON.stringify(record)).join('\n') + '\n',
+    'utf8'
+  );
+
+  const store = await createPrototypeStore({ filePath: storeFile });
+  const before = {
+    recordCount: store.records.length,
+    counts: store.getCounts(),
+    file: await readFile(storeFile, 'utf8')
+  };
+  store.getEvidenceRecord = () => {
+    throw new Error('projection-audit route must not resolve projection-audit as evidence id');
+  };
+
+  const response = await requestJsonDirect({
+    url: `/evidence-records/projection-audit?evidence_ref=${encodeURIComponent('/tmp/projection-audit-route/safe.md')}&limit=1`,
+    store,
+    controllerSnapshotCollector
+  });
+
+  assert.equal(response.response.status, 200);
+  assert.deepEqual(response.body, {
+    item: {
+      total_count: 3,
+      returned_limit: 1,
+      input_proof_count: 1,
+      missing_input_proof_count: 2,
+      unknown_source_kind_count: 1,
+      unknown_evidence_role_count: 1,
+      unknown_source_status_count: 1,
+      invalid_observed_at_count: 1,
+      invalid_collected_at_count: 1
+    }
+  });
+  assert.deepEqual(
+    {
+      recordCount: store.records.length,
+      counts: store.getCounts(),
+      file: await readFile(storeFile, 'utf8')
+    },
+    before
+  );
+  assert.equal(collectCount, 0);
+
+  const serialized = JSON.stringify(response.body);
+  for (const canary of [
+    unsafeSourceKind,
+    unsafeSourceStatus,
+    unsafeEvidenceRole,
+    unsafeObservedAt,
+    unsafeCollectedAt,
+    unsafeEvidenceRef,
+    unsafeInputProof,
+    'ev_projection_audit_route_unsafe',
+    'token=projection-audit-route-payload',
+    'tmux://projection-audit-route',
+    'evidence_ref',
+    'metadata',
+    'degraded_reasons',
+    'payload'
+  ]) {
+    assert.equal(serialized.includes(canary), false, canary);
+  }
+});
+
 test('GET /evidence-records lists stored evidence records read-only with exact filters', async (t) => {
   let collectCount = 0;
   const controllerSnapshotCollector = {

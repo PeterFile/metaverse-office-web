@@ -1321,13 +1321,17 @@ function formatBoundedEvidenceLedgerToken(value: string, options: EvidenceLedger
   return `${redacted.slice(0, EVIDENCE_LEDGER_TOKEN_LIMIT - 3)}...`;
 }
 
-function formatEvidenceReadModelError(value: string) {
-  const sanitized = redactLocalEvidenceLedgerRefs(value.trim(), { includeBasename: false })
+function formatEvidenceReadModelError(value: string, requestedEvidenceId: string | null = null) {
+  let sanitized = redactLocalEvidenceLedgerRefs(value.trim(), { includeBasename: false })
     .replace(NON_FILE_URI_EVIDENCE_LEDGER_REF_PATTERN, '[uri ref]')
     .replace(SENSITIVE_EVIDENCE_LEDGER_TOKEN_VALUE_PATTERN, '[redacted]')
     .replace(EVIDENCE_READ_MODEL_ERROR_REF_PATTERN, 'read_model_ref [redacted]')
     .replace(EVIDENCE_READ_MODEL_STANDALONE_REF_PATTERN, '[read model ref]')
     .replace(EVIDENCE_READ_MODEL_CONTROL_PLANE_PATTERN, '[redacted]');
+
+  if (requestedEvidenceId) {
+    sanitized = sanitized.replaceAll(requestedEvidenceId, '[read model ref]');
+  }
 
   if (sanitized.length <= EVIDENCE_LEDGER_TOKEN_LIMIT) {
     return sanitized;
@@ -1577,7 +1581,7 @@ function renderSelectedAgentEvidenceRecordDetail(
           <li className="aitown-record">Loading evidence record detail...</li>
         ) : null}
         {error && !record ? (
-          <li className="aitown-record">{`Unable to load selected evidence record. ${formatEvidenceReadModelError(error)}`}</li>
+          <li className="aitown-record">{`Unable to load selected evidence record. ${formatEvidenceReadModelError(error, requestedEvidenceId)}`}</li>
         ) : null}
         {state === 'ready' && !error && !record ? (
           <li className="aitown-record">No evidence record returned for this bounded detail request.</li>
@@ -1587,7 +1591,7 @@ function renderSelectedAgentEvidenceRecordDetail(
             <strong>{`Evidence id · ${recordBoundedEvidenceId}`}</strong>
             {state === 'loading' ? <span>Refreshing evidence record detail...</span> : null}
             {!recordMatchesRequestedEvidence ? <span>Waiting for requested evidence record...</span> : null}
-            {error ? <span>{`Last-good detail · Refresh failed: ${formatEvidenceReadModelError(error)}`}</span> : null}
+            {error ? <span>{`Last-good detail · Refresh failed: ${formatEvidenceReadModelError(error, requestedEvidenceId)}`}</span> : null}
             <span>{`Observed · ${renderTimestamp(record.observed_at, 'No observed timestamp')}`}</span>
             <span>{`Collected · ${renderTimestamp(record.collected_at, 'No collected timestamp')}`}</span>
             <span>{`Source · ${record.source_kind}`}</span>
@@ -1598,7 +1602,12 @@ function renderSelectedAgentEvidenceRecordDetail(
             <span>{`Correlation · ${record.correlation_id ? formatBoundedEvidenceLedgerToken(record.correlation_id) : 'none'}`}</span>
             <span>{`Degraded count · ${record.degraded_reasons.length}`}</span>
             <span>{`Ref · ${formatEvidenceLedgerRef(record.evidence_ref)}`}</span>
-            {renderSelectedAgentEvidenceProvenanceAnchors(provenanceBundle, provenanceState, provenanceError)}
+            {renderSelectedAgentEvidenceProvenanceAnchors(
+              provenanceBundle,
+              provenanceState,
+              provenanceError,
+              requestedEvidenceId
+            )}
             {recordMatchesRequestedEvidence ? (
               renderSelectedAgentEvidenceSourceContext(
                 record.evidence_id,
@@ -1610,7 +1619,12 @@ function renderSelectedAgentEvidenceRecordDetail(
             ) : (
               <span>Source context · waiting for requested evidence record</span>
             )}
-            {renderSelectedAgentEvidenceCheckpointProofStrip(checkpointLog, checkpointLogState, checkpointLogError)}
+            {renderSelectedAgentEvidenceCheckpointProofStrip(
+              checkpointLog,
+              checkpointLogState,
+              checkpointLogError,
+              requestedEvidenceId
+            )}
             {renderSelectedAgentEvidenceReplayAction(record, provenanceBundle, provenanceState, onReplayRecord)}
           </li>
         ) : null}
@@ -1736,14 +1750,15 @@ function renderSelectedAgentEvidenceSourceContext(
 function renderSelectedAgentEvidenceCheckpointProofStrip(
   log: ReplayCheckpointLogResponse | null,
   state: LoadState,
-  error: string | null
+  error: string | null,
+  requestedEvidenceId: string | null = null
 ) {
   if (state === 'loading' && !log) {
     return <span>Checkpoint proof · loading selected evidence rows...</span>;
   }
 
   if (error && !log) {
-    return <span>{`Checkpoint proof · unavailable · ${formatEvidenceReadModelError(error)}`}</span>;
+    return <span>{`Checkpoint proof · unavailable · ${formatEvidenceReadModelError(error, requestedEvidenceId)}`}</span>;
   }
 
   if (!log) {
@@ -1846,14 +1861,15 @@ function renderSelectedAgentEvidenceReplayAction(
 function renderSelectedAgentEvidenceProvenanceAnchors(
   bundle: EvidenceProvenanceBundle | null,
   state: LoadState,
-  error: string | null
+  error: string | null,
+  requestedEvidenceId: string | null = null
 ) {
   if (state === 'loading' && !bundle) {
     return <span>Loading provenance anchors...</span>;
   }
 
   if (error && !bundle) {
-    return <span>{`Provenance anchors unavailable · ${formatEvidenceReadModelError(error)}`}</span>;
+    return <span>{`Provenance anchors unavailable · ${formatEvidenceReadModelError(error, requestedEvidenceId)}`}</span>;
   }
 
   if (!bundle) {

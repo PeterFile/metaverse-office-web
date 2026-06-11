@@ -7844,6 +7844,99 @@ test('GET /runtime/source-gaps/schema exposes static catalog without reading sou
   assert.equal(await readFile(storeFile, 'utf8'), fileBeforeRead);
 });
 
+test('GET static schema and aggregate routes are not swallowed by dynamic detail fallbacks', async () => {
+  const calls = [];
+  const responseFor = (method) => {
+    calls.push(method);
+    return { route: method, total_count: 0, returned_limit: 0, items: [], groups: [] };
+  };
+  const dynamicFallback = (method) => () => {
+    throw new Error(`${method} must not handle static schema or aggregate routes`);
+  };
+  const store = {
+    getEvidenceRecordsSchema: () => responseFor('getEvidenceRecordsSchema'),
+    getEvidenceRecordFacets: () => responseFor('getEvidenceRecordFacets'),
+    getEvidenceRecordsSummary: () => responseFor('getEvidenceRecordsSummary'),
+    getEvidenceInputProofSummary: () => responseFor('getEvidenceInputProofSummary'),
+    getEvidenceRefRollup: () => responseFor('getEvidenceRefRollup'),
+    getEvidenceRecord: dynamicFallback('getEvidenceRecord'),
+    getEvidenceProvenanceBundle: dynamicFallback('getEvidenceProvenanceBundle'),
+    getEvidenceSourceContext: dynamicFallback('getEvidenceSourceContext'),
+    getEvidenceReplayWindow: dynamicFallback('getEvidenceReplayWindow'),
+    getRuntimeSourceGapsSchema: () => responseFor('getRuntimeSourceGapsSchema'),
+    listRuntimeSourceGaps: dynamicFallback('listRuntimeSourceGaps'),
+    getRuntimeSourceGapsSummary: () => responseFor('getRuntimeSourceGapsSummary'),
+    getRuntimeSourceGapAgentSummary: () => responseFor('getRuntimeSourceGapAgentSummary'),
+    getRuntimeSourceGapLifecycle: () => responseFor('getRuntimeSourceGapLifecycle'),
+    getRuntimeSourceGapTrend: () => responseFor('getRuntimeSourceGapTrend'),
+    getAgentsEvidenceSpineSchema: () => responseFor('getAgentsEvidenceSpineSchema'),
+    getAgentEvidenceSpineSummary: () => responseFor('getAgentEvidenceSpineSummary'),
+    getAgentEvidenceSourceStatusMatrix: () => responseFor('getAgentEvidenceSourceStatusMatrix'),
+    getAgentEvidenceSpine: dynamicFallback('getAgentEvidenceSpine'),
+    getControllerSnapshotSchema: () => responseFor('getControllerSnapshotSchema'),
+    getLatestCollectorReport: dynamicFallback('getLatestCollectorReport'),
+    getLatestCollectorSnapshotSummary: () => responseFor('getLatestCollectorSnapshotSummary'),
+    getLatestCollectorEvidenceCoverage: () => responseFor('getLatestCollectorEvidenceCoverage'),
+    getLatestCollectorSourceHealth: () => responseFor('getLatestCollectorSourceHealth'),
+    getCollectorSnapshotHistorySummary: () => responseFor('getCollectorSnapshotHistorySummary'),
+    getCollectorSnapshotDiff: () => responseFor('getCollectorSnapshotDiff')
+  };
+  const controllerSnapshotCollector = {
+    collectSnapshot: dynamicFallback('collectSnapshot')
+  };
+  const hostileQuery = new URLSearchParams({
+    evidence_id: 'route-order-evidence-id',
+    evidence_ref: '/tmp/route-order-ref',
+    path: '/tmp/route-order-path',
+    payload: '{"token":"route-order-token"}',
+    metadata: '{"secret":"route-order-secret"}'
+  }).toString();
+  const cases = [
+    ['/evidence-records/schema', 'getEvidenceRecordsSchema'],
+    ['/evidence-records/facets', 'getEvidenceRecordFacets'],
+    ['/evidence-records/summary', 'getEvidenceRecordsSummary'],
+    ['/evidence-records/input-proof-summary', 'getEvidenceInputProofSummary'],
+    ['/evidence-records/ref-rollup', 'getEvidenceRefRollup'],
+    ['/runtime/source-gaps/schema', 'getRuntimeSourceGapsSchema'],
+    ['/runtime/source-gaps/summary', 'getRuntimeSourceGapsSummary'],
+    ['/runtime/source-gaps/agent-summary', 'getRuntimeSourceGapAgentSummary'],
+    ['/runtime/source-gaps/lifecycle', 'getRuntimeSourceGapLifecycle'],
+    ['/runtime/source-gaps/trend', 'getRuntimeSourceGapTrend'],
+    ['/agents/evidence-spine/schema', 'getAgentsEvidenceSpineSchema'],
+    ['/agents/evidence-spine/summary', 'getAgentEvidenceSpineSummary'],
+    ['/agents/evidence-spine/source-matrix', 'getAgentEvidenceSourceStatusMatrix'],
+    ['/collectors/controller-snapshot/schema', 'getControllerSnapshotSchema'],
+    ['/collectors/controller-snapshot/summary', 'getLatestCollectorSnapshotSummary'],
+    ['/collectors/controller-snapshot/evidence-coverage', 'getLatestCollectorEvidenceCoverage'],
+    ['/collectors/controller-snapshot/source-health', 'getLatestCollectorSourceHealth'],
+    ['/collectors/controller-snapshot/history', 'getCollectorSnapshotHistorySummary'],
+    ['/collectors/controller-snapshot/diff', 'getCollectorSnapshotDiff']
+  ];
+
+  for (const [route, expectedMethod] of cases) {
+    calls.length = 0;
+    const separator = route.includes('?') ? '&' : '?';
+    const response = await requestJsonDirect({
+      url: `${route}${separator}${hostileQuery}`,
+      store,
+      controllerSnapshotCollector
+    });
+
+    assert.equal(response.response.status, 200, route);
+    assert.deepEqual(calls, [expectedMethod], route);
+    assert.equal(response.body.item.route, expectedMethod, route);
+    const serialized = JSON.stringify(response.body);
+    for (const forbidden of [
+      'route-order-evidence-id',
+      '/tmp/route-order',
+      'route-order-token',
+      'route-order-secret'
+    ]) {
+      assert.equal(serialized.includes(forbidden), false, route);
+    }
+  }
+});
+
 test('GET evidence-record detail and provenance unknown ids do not echo unsafe ids', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'metaverse-office-evidence-404-'));
   const store = await createPrototypeStore({ filePath: path.join(root, 'prototype-store.jsonl') });

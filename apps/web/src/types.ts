@@ -724,10 +724,21 @@ export interface StorageReplayManifestEvidenceSummary {
   latest_collected_at: string | null;
 }
 
+export interface StorageReplayManifestRuntimeGapSummary {
+  total_count: number;
+  mapped_count: number;
+  unmapped_count: number;
+  source_kind_buckets: Record<string, number>;
+  source_status_buckets: Record<string, number>;
+  latest_observed_at: string | null;
+  latest_collected_at: string | null;
+}
+
 export interface StorageReplayManifest {
   record_count: number;
   record_kind_buckets: Record<string, number>;
   evidence_summary: StorageReplayManifestEvidenceSummary;
+  runtime_gap_summary?: StorageReplayManifestRuntimeGapSummary;
   canonical_record_hash: string;
 }
 

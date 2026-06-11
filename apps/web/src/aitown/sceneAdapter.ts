@@ -1,6 +1,13 @@
 import type { WorldAgent, WorldState } from '../world/types';
+import type {
+  AgentEvidenceSpineSummary,
+  CollectorEvidenceCoverage,
+  CollectorSourceHealthProjection,
+  CollectorSourceHealthStatus
+} from '../types';
 import { selectZoneEvidenceFloors } from '../world/selectors';
 
+import { deriveCollectorEvidenceCoverageViewModel } from './evidenceCoverage';
 import { CHARACTER_KEYS } from './characters';
 import { AI_TOWN_GENERATED_MAPS, AI_TOWN_GATEWAYS, AI_TOWN_MAP_BY_ID, DEFAULT_AI_TOWN_MAP_ID, GENTLE_MAP } from './mapData';
 import type { SourceGapWorldPin } from './sourceGapSignals';
@@ -9,6 +16,7 @@ import type {
   CharacterKey,
   Facing,
   RolePawnKey,
+  SceneAgentEvidenceCue,
   ScenePoint,
   SceneWatchEdge,
   SceneZone
@@ -42,6 +50,12 @@ const FIXED_SHARED_ZONE_ANCHORS: Record<string, ScenePoint> = {
   'reboot-zone': { x: 29.5, y: 14.5 },
   'handoff-hub': { x: 21.5, y: 9.5 },
   'war-room': { x: 27.5, y: 9.5 }
+};
+
+export type AiTownEvidenceCueInputs = {
+  evidenceSpineSummary?: AgentEvidenceSpineSummary | null;
+  evidenceCoverage?: CollectorEvidenceCoverage | null;
+  sourceHealth?: CollectorSourceHealthProjection | null;
 };
 
 function hasFixedSharedZoneAnchor(zoneId: string) {
@@ -135,6 +149,130 @@ function agentMapId(agent: WorldAgent) {
   return agent.current_map_id || DEFAULT_AI_TOWN_MAP_ID;
 }
 
+function normalizeCueCount(value: unknown) {
+  return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
+}
+
+function countPositiveBuckets(buckets: Record<string, number> | null | undefined) {
+  return Object.values(buckets ?? {}).reduce((sum, count) => sum + normalizeCueCount(count), 0);
+}
+
+function countSourceHealthGaps(sourceHealth: CollectorSourceHealthProjection['agent_items'][number]['source_health']) {
+  return Object.values(sourceHealth).filter(
+    (health): health is { status: CollectorSourceHealthStatus } =>
+      Boolean(health) && health.status !== 'observed'
+  ).length;
+}
+
+function deriveEvidenceSpineCueByAgentId(
+  agentIds: string[],
+  evidenceSpineSummary: AgentEvidenceSpineSummary
+) {
+  const rowByAgentId = new Map(evidenceSpineSummary.agents.map((row) => [row.agent_id, row]));
+
+  return new Map<string, SceneAgentEvidenceCue>(
+    agentIds.map((agentId): [string, SceneAgentEvidenceCue] => {
+      const row = rowByAgentId.get(agentId);
+      if (!row) {
+        return [agentId, { recordCount: null, gapCount: 0, status: 'unavailable' } satisfies SceneAgentEvidenceCue];
+      }
+
+      const recordCount = normalizeCueCount(row.evidence_count);
+      const gapCount = countPositiveBuckets(row.source_gap_buckets);
+
+      return [
+        agentId,
+        {
+          recordCount,
+          gapCount,
+          status: recordCount > 0 && gapCount === 0 ? 'backed' : 'gap'
+        } satisfies SceneAgentEvidenceCue
+      ];
+    })
+  );
+}
+
+function deriveCoverageCueByAgentId(agentIds: string[], world: WorldState, evidenceCoverage: CollectorEvidenceCoverage) {
+  const overviewAgents = [...world.agents.values()].map((agent) => ({
+    agent_id: agent.agent_id,
+    display_name: agent.display_name
+  }));
+  const rowByAgentId = new Map(
+    deriveCollectorEvidenceCoverageViewModel(evidenceCoverage, overviewAgents).rows.map((row) => [row.agent_id, row])
+  );
+
+  return new Map<string, SceneAgentEvidenceCue>(
+    agentIds.map((agentId): [string, SceneAgentEvidenceCue] => {
+      const row = rowByAgentId.get(agentId);
+      if (!row) {
+        return [agentId, { recordCount: null, gapCount: 0, status: 'unavailable' } satisfies SceneAgentEvidenceCue];
+      }
+
+      const status = row.status === 'evidence_backed'
+        ? 'backed'
+        : row.status === 'low_confidence_evidence'
+          ? 'low_confidence'
+          : 'gap';
+
+      return [
+        agentId,
+        {
+          recordCount: normalizeCueCount(row.evidence_ref_count),
+          gapCount: status === 'backed' ? 0 : 1,
+          status
+        } satisfies SceneAgentEvidenceCue
+      ];
+    })
+  );
+}
+
+function deriveSourceHealthCueByAgentId(agentIds: string[], sourceHealth: CollectorSourceHealthProjection) {
+  const itemByAgentId = new Map(sourceHealth.agent_items.map((item) => [item.agent_id, item]));
+
+  return new Map<string, SceneAgentEvidenceCue>(
+    agentIds.map((agentId): [string, SceneAgentEvidenceCue] => {
+      const item = itemByAgentId.get(agentId);
+      if (!item) {
+        return [agentId, { recordCount: null, gapCount: 0, status: 'unavailable' } satisfies SceneAgentEvidenceCue];
+      }
+
+      const recordCount = normalizeCueCount(item.evidence_ref_count);
+      const gapCount = countSourceHealthGaps(item.source_health);
+
+      return [
+        agentId,
+        {
+          recordCount,
+          gapCount,
+          status: recordCount > 0 && gapCount === 0 ? 'backed' : 'gap'
+        } satisfies SceneAgentEvidenceCue
+      ];
+    })
+  );
+}
+
+function deriveEvidenceCueByAgentId(world: WorldState, inputs: AiTownEvidenceCueInputs) {
+  const agentIds = [...world.agents.keys()];
+
+  if (agentIds.length === 0) {
+    return new Map<string, SceneAgentEvidenceCue>();
+  }
+
+  if (inputs.evidenceSpineSummary) {
+    return deriveEvidenceSpineCueByAgentId(agentIds, inputs.evidenceSpineSummary);
+  }
+
+  if (inputs.evidenceCoverage) {
+    return deriveCoverageCueByAgentId(agentIds, world, inputs.evidenceCoverage);
+  }
+
+  if (inputs.sourceHealth) {
+    return deriveSourceHealthCueByAgentId(agentIds, inputs.sourceHealth);
+  }
+
+  return new Map<string, SceneAgentEvidenceCue>();
+}
+
 function findFallbackZone(agent: WorldAgent, zones: SceneZone[]) {
   const directMatch = zones.find((zone) => zone.zoneId === agent.zone);
   if (directMatch) {
@@ -168,9 +306,11 @@ export function adaptWorldToScene(
   selectedAgentId: string | null,
   activeCorrelationId: string | null = null,
   correlationParticipantAgentIds: string[] = [],
-  sourceGapWorldPins: SourceGapWorldPin[] = []
+  sourceGapWorldPins: SourceGapWorldPin[] = [],
+  evidenceCueInputs: AiTownEvidenceCueInputs = {}
 ): AiTownSceneModel {
   const map = AI_TOWN_MAP_BY_ID.get(DEFAULT_AI_TOWN_MAP_ID) ?? GENTLE_MAP;
+  const evidenceCueByAgentId = deriveEvidenceCueByAgentId(world, evidenceCueInputs);
   const evidenceFloorByZoneId = new Map(
     selectZoneEvidenceFloors(world).map((floor) => [floor.zone_id, floor])
   );
@@ -240,7 +380,8 @@ export function adaptWorldToScene(
       openAlertCount: agent.open_alert_count,
       hasOpenIncidents: agent.has_open_incidents,
       runtimeFreshnessSeverity: agent.staleness?.severity ?? null,
-      sourceEvidenceHealthStatus: agent.source_evidence_health_status ?? null
+      sourceEvidenceHealthStatus: agent.source_evidence_health_status ?? null,
+      evidenceCue: evidenceCueByAgentId.get(agent.agent_id) ?? null
     };
   });
 

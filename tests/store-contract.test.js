@@ -1514,6 +1514,106 @@ test('prototype store keeps append indexes stable for duplicate evidence ids', a
   );
 });
 
+test('prototype store filters evidence records by append cursor before newest order and limit', async () => {
+  const jsonlStoreFile = await createStoreFile();
+  const sqliteStoreFile = await createSqliteStoreFile();
+  const jsonlStore = await createPrototypeStore({ filePath: jsonlStoreFile });
+  const sqliteStore = await createPrototypeStore({ sqliteFilePath: sqliteStoreFile });
+
+  await jsonlStore.appendCollectorReport(createCollectorReport());
+  await jsonlStore.appendCollectorReport(createCollectorReport());
+  await sqliteStore.appendCollectorReport(createCollectorReport());
+  await sqliteStore.appendCollectorReport(createCollectorReport());
+
+  const appendOrdered = jsonlStore.listEvidenceRecords({ source_kind: 'workspace_file' });
+  assert.equal(appendOrdered.length >= 2, true);
+
+  const afterAppendIndex = appendOrdered[0].append_index;
+  const newestWorkspace = jsonlStore.listEvidenceRecords({
+    source_kind: 'workspace_file',
+    newest_first: 'true',
+    limit: '10'
+  });
+  const expectedAfterCursor = newestWorkspace
+    .filter((record) => record.append_index > afterAppendIndex)
+    .slice(0, 1)
+    .map((record) => record.append_index);
+
+  assert.deepEqual(
+    jsonlStore
+      .listEvidenceRecords({
+        source_kind: 'workspace_file',
+        after_append_index: String(afterAppendIndex),
+        newest_first: 'true',
+        limit: '1'
+      })
+      .map((record) => record.append_index),
+    expectedAfterCursor
+  );
+  assert.deepEqual(
+    sqliteStore
+      .listEvidenceRecords({
+        source_kind: 'workspace_file',
+        after_append_index: String(afterAppendIndex),
+        newest_first: 'true',
+        limit: '1'
+      })
+      .map((record) => record.append_index),
+    expectedAfterCursor
+  );
+
+  const beforeAppendIndex = appendOrdered.at(-1).append_index;
+  const expectedBeforeCursor = appendOrdered
+    .filter((record) => record.append_index < beforeAppendIndex)
+    .map((record) => record.append_index);
+  assert.deepEqual(
+    jsonlStore
+      .listEvidenceRecords({
+        source_kind: 'workspace_file',
+        before_append_index: String(beforeAppendIndex),
+        limit: '10'
+      })
+      .map((record) => record.append_index),
+    expectedBeforeCursor
+  );
+  assert.deepEqual(
+    sqliteStore
+      .listEvidenceRecords({
+        source_kind: 'workspace_file',
+        before_append_index: String(beforeAppendIndex),
+        limit: '10'
+      })
+      .map((record) => record.append_index),
+    expectedBeforeCursor
+  );
+
+  const invalidCursorResult = jsonlStore
+    .listEvidenceRecords({
+      source_kind: 'workspace_file',
+      after_append_index: `${afterAppendIndex}.0`,
+      before_append_index: '0',
+      limit: '10'
+    })
+    .map((record) => record.append_index);
+  assert.deepEqual(
+    invalidCursorResult,
+    appendOrdered.map((record) => record.append_index)
+  );
+
+  const reloadedSqliteStore = await createPrototypeStore({ sqliteFilePath: sqliteStoreFile });
+  assert.deepEqual(
+    reloadedSqliteStore
+      .listEvidenceRecords({
+        source_kind: 'workspace_file',
+        after_append_index: String(afterAppendIndex),
+        newest_first: 'true',
+        limit: '1'
+      })
+      .map((record) => record.append_index),
+    expectedAfterCursor
+  );
+});
+
 test('prototype store exposes bounded replay window around selected evidence', async () => {
   const storeFile = await createStoreFile();
   const store = await createPrototypeStore({ filePath: storeFile });
@@ -2659,6 +2759,8 @@ test('evidence-records schema exposes only static safe contract metadata', async
     'observed_until',
     'collected_since',
     'collected_until',
+    'after_append_index',
+    'before_append_index',
     'newest_first',
     'limit'
   ]);

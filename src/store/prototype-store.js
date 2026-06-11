@@ -85,6 +85,8 @@ const EVIDENCE_RECORD_SUPPORTED_FILTERS = Object.freeze([
   'observed_until',
   'collected_since',
   'collected_until',
+  'after_append_index',
+  'before_append_index',
   'newest_first',
   'limit'
 ]);
@@ -154,8 +156,15 @@ const EVIDENCE_RECORD_SCHEMA_WRITE_BOUNDARY =
 const AGENTS_EVIDENCE_SPINE_SCHEMA_WRITE_BOUNDARY =
   'read-only agents evidence-spine schema catalog; does not collect, read runtime sources, append records, or expose control-plane actions';
 const RUNTIME_SOURCE_GAP_STATUSES = Object.freeze(['degraded', 'missing', 'error']);
+const RUNTIME_SOURCE_GAP_UNSUPPORTED_FILTERS = new Set([
+  'evidence_ref',
+  'after_append_index',
+  'before_append_index'
+]);
 const RUNTIME_SOURCE_GAP_SUPPORTED_FILTERS = Object.freeze(
-  EVIDENCE_RECORD_SUPPORTED_FILTERS.filter((filter) => filter !== 'evidence_ref')
+  EVIDENCE_RECORD_SUPPORTED_FILTERS.filter(
+    (filter) => !RUNTIME_SOURCE_GAP_UNSUPPORTED_FILTERS.has(filter)
+  )
 );
 const RUNTIME_SOURCE_GAP_TREND_BUCKETS = Object.freeze(['hour', 'day']);
 const RUNTIME_SOURCE_GAP_LIFECYCLE_STATES = Object.freeze([
@@ -1770,11 +1779,27 @@ class PrototypeStore {
   }
 
   #filterEvidenceRecords(filters = {}) {
-    return filterEvidenceRecords(this.evidenceRecords, filters);
+    return filterEvidenceRecords(
+      this.evidenceRecords,
+      filters,
+      this.#createEvidenceRecordAppendIndexLookup()
+    );
   }
 
   #cloneEvidenceRecordWithAppendIndex(record) {
     return cloneEvidenceRecord(record, this.#findEvidenceRecordAppendIndex(record));
+  }
+
+  #createEvidenceRecordAppendIndexLookup() {
+    const appendIndexes = new Map();
+    for (let index = 0; index < this.records.length; index += 1) {
+      const record = this.records[index];
+      if (record.kind === EVIDENCE_RECORD_KIND) {
+        appendIndexes.set(record.payload, index + 1);
+      }
+    }
+
+    return (record) => appendIndexes.get(record) || null;
   }
 
   #findEvidenceRecordAppendIndex(record) {
@@ -5455,7 +5480,7 @@ function countEvidenceRecordsForProbe(records, filters) {
   return filterEvidenceRecords(records, filters).records.length;
 }
 
-function filterEvidenceRecords(evidenceRecords, filters = {}) {
+function filterEvidenceRecords(evidenceRecords, filters = {}, getAppendIndex = null) {
   const evidenceId = normalizeFilterValue(filters.evidence_id);
   const agentId = normalizeFilterValue(filters.agent_id);
   const sourceKind = normalizeFilterValue(filters.source_kind);
@@ -5470,6 +5495,8 @@ function filterEvidenceRecords(evidenceRecords, filters = {}) {
   const observedUntil = parseOptionalTimestampFilter(filters.observed_until);
   const collectedSince = parseOptionalTimestampFilter(filters.collected_since);
   const collectedUntil = parseOptionalTimestampFilter(filters.collected_until);
+  const afterAppendIndex = parseOptionalPositiveIntegerFilter(filters.after_append_index);
+  const beforeAppendIndex = parseOptionalPositiveIntegerFilter(filters.before_append_index);
   const newestFirst = normalizeOptionalBoolean(filters.newest_first) === true;
   const limit = parseLimit(filters.limit);
 
@@ -5497,6 +5524,9 @@ function filterEvidenceRecords(evidenceRecords, filters = {}) {
     )
     .filter((record) =>
       matchesTimestampWindow(record.collected_at, collectedSince, collectedUntil)
+    )
+    .filter((record) =>
+      matchesAppendIndexWindow(record, getAppendIndex, afterAppendIndex, beforeAppendIndex)
     );
 
   return { records, limit, newestFirst };
@@ -7106,6 +7136,16 @@ function parseOptionalTimestampFilter(value) {
   return Number.isFinite(timestamp) ? timestamp : null;
 }
 
+function parseOptionalPositiveIntegerFilter(value) {
+  const normalized = normalizeFilterValue(value);
+  if (!normalized || !/^[1-9]\d*$/.test(normalized)) {
+    return null;
+  }
+
+  const parsed = Number(normalized);
+  return Number.isSafeInteger(parsed) ? parsed : null;
+}
+
 function matchesTimestampWindow(value, since, until) {
   if (since === null && until === null) {
     return true;
@@ -7117,6 +7157,23 @@ function matchesTimestampWindow(value, since, until) {
   }
 
   return (since === null || timestamp >= since) && (until === null || timestamp <= until);
+}
+
+function matchesAppendIndexWindow(record, getAppendIndex, afterAppendIndex, beforeAppendIndex) {
+  if (afterAppendIndex === null && beforeAppendIndex === null) {
+    return true;
+  }
+
+  const appendIndex =
+    typeof getAppendIndex === 'function' ? getAppendIndex(record) : record?.append_index;
+  if (!Number.isSafeInteger(appendIndex)) {
+    return false;
+  }
+
+  return (
+    (afterAppendIndex === null || appendIndex > afterAppendIndex) &&
+    (beforeAppendIndex === null || appendIndex < beforeAppendIndex)
+  );
 }
 
 function compareEvidenceRecordRecency(left, right) {

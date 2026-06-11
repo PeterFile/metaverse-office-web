@@ -27,6 +27,17 @@ function getSourceEvidenceQuery(searchParams, { sourceStatusAlias = false } = {}
   };
 }
 
+function getEvidenceRecordQuery(searchParams) {
+  return {
+    evidence_id: searchParams.get('evidence_id'),
+    agent_id: searchParams.get('agent_id'),
+    evidence_ref: searchParams.get('evidence_ref'),
+    after_append_index: searchParams.get('after_append_index'),
+    before_append_index: searchParams.get('before_append_index'),
+    ...getSourceEvidenceQuery(searchParams)
+  };
+}
+
 function createAppServer({
   store,
   now = () => new Date().toISOString(),
@@ -533,12 +544,7 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
 
   if (method === 'GET' && pathname === '/evidence-records') {
     sendJson(res, 200, {
-      items: store.listEvidenceRecords({
-        evidence_id: url.searchParams.get('evidence_id'),
-        agent_id: url.searchParams.get('agent_id'),
-        evidence_ref: url.searchParams.get('evidence_ref'),
-        ...getSourceEvidenceQuery(url.searchParams)
-      })
+      items: store.listEvidenceRecords(getEvidenceRecordQuery(url.searchParams))
     });
     return;
   }
@@ -628,59 +634,36 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
 
   if (method === 'GET' && pathname === '/evidence-records/facets') {
     sendJson(res, 200, {
-      item: store.getEvidenceRecordFacets({
-        evidence_id: url.searchParams.get('evidence_id'),
-        agent_id: url.searchParams.get('agent_id'),
-        evidence_ref: url.searchParams.get('evidence_ref'),
-        ...getSourceEvidenceQuery(url.searchParams)
-      })
+      item: store.getEvidenceRecordFacets(getEvidenceRecordQuery(url.searchParams))
     });
     return;
   }
 
   if (method === 'GET' && pathname === '/evidence-records/summary') {
     sendJson(res, 200, {
-      item: store.getEvidenceRecordsSummary({
-        evidence_id: url.searchParams.get('evidence_id'),
-        agent_id: url.searchParams.get('agent_id'),
-        evidence_ref: url.searchParams.get('evidence_ref'),
-        ...getSourceEvidenceQuery(url.searchParams)
-      })
+      item: store.getEvidenceRecordsSummary(getEvidenceRecordQuery(url.searchParams))
     });
     return;
   }
 
   if (method === 'GET' && pathname === '/evidence-records/input-proof-summary') {
     sendJson(res, 200, {
-      item: store.getEvidenceInputProofSummary({
-        evidence_id: url.searchParams.get('evidence_id'),
-        agent_id: url.searchParams.get('agent_id'),
-        evidence_ref: url.searchParams.get('evidence_ref'),
-        ...getSourceEvidenceQuery(url.searchParams)
-      })
+      item: store.getEvidenceInputProofSummary(getEvidenceRecordQuery(url.searchParams))
     });
     return;
   }
 
   if (method === 'GET' && pathname === '/evidence-records/projection-audit') {
+    const { evidence_ref: _evidenceRef, ...query } = getEvidenceRecordQuery(url.searchParams);
     sendJson(res, 200, {
-      item: store.getEvidenceProjectionAudit({
-        evidence_id: url.searchParams.get('evidence_id'),
-        agent_id: url.searchParams.get('agent_id'),
-        ...getSourceEvidenceQuery(url.searchParams)
-      })
+      item: store.getEvidenceProjectionAudit(query)
     });
     return;
   }
 
   if (method === 'GET' && pathname === '/evidence-records/ref-rollup') {
     sendJson(res, 200, {
-      item: store.getEvidenceRefRollup({
-        evidence_id: url.searchParams.get('evidence_id'),
-        agent_id: url.searchParams.get('agent_id'),
-        evidence_ref: url.searchParams.get('evidence_ref'),
-        ...getSourceEvidenceQuery(url.searchParams)
-      })
+      item: store.getEvidenceRefRollup(getEvidenceRecordQuery(url.searchParams))
     });
     return;
   }

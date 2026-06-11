@@ -1768,6 +1768,9 @@ function AppInner() {
     setWorld(projectedWorld);
   }, [projectedWorld, setWorld]);
 
+  const visibleCollectorSnapshot = collectorSnapshotResource.data;
+  const visibleEvidenceCoverage =
+    collectorSnapshotResource.data?.evidence_coverage ?? defaultEvidenceCoverage;
   const scene = useMemo(
     () =>
       adaptWorldToScene(
@@ -1775,23 +1778,28 @@ function AppInner() {
         selectedAgentId,
         activeCorrelationSpotlight?.correlation_id ?? null,
         activeCorrelationParticipantAgentIds,
-        deriveRuntimeSourceGapWorldPins(runtimeSourceGapsResource.data, overviewResource.data?.agents)
+        deriveRuntimeSourceGapWorldPins(runtimeSourceGapsResource.data, overviewResource.data?.agents),
+        {
+          evidenceSpineSummary: selectedAgentEvidenceSpineSummaryResource.data,
+          evidenceCoverage: visibleEvidenceCoverage,
+          sourceHealth: latestSourceHealth
+        }
       ),
     [
       activeCorrelationParticipantAgentIds,
       activeCorrelationSpotlight?.correlation_id,
+      latestSourceHealth,
       overviewResource.data?.agents,
       projectedWorld,
       runtimeSourceGapsResource.data,
-      selectedAgentId
+      selectedAgentEvidenceSpineSummaryResource.data,
+      selectedAgentId,
+      visibleEvidenceCoverage
     ]
   );
   const liveFocusAgents = useMemo(() => selectAttentionQueue(projectedWorld), [projectedWorld]);
   const liveFocusReasonLine = useMemo(() => resolveLiveFocusReasonLine(liveFocusAgents), [liveFocusAgents]);
   const hotZones = useMemo(() => selectHotZones(projectedWorld), [projectedWorld]);
-  const visibleCollectorSnapshot = collectorSnapshotResource.data;
-  const visibleEvidenceCoverage =
-    collectorSnapshotResource.data?.evidence_coverage ?? defaultEvidenceCoverage;
   const evidenceCoverageOverviewAgents = useMemo(
     () => overviewResource.data?.agents.filter((agent) => agent.kind === 'employee'),
     [overviewResource.data?.agents]

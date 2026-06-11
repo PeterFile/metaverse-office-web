@@ -338,6 +338,13 @@ const ACTIVE_INCIDENT_STATUSES_BY_KIND = Object.freeze({
   handoff: Object.freeze(['waiting', 'started']),
   reboot: Object.freeze(['waiting', 'started', 'requested'])
 });
+const OFFICE_CLAIM_AUDIT_SURFACES = Object.freeze(['office', 'agent', 'incident', 'status']);
+const OFFICE_CLAIM_AUDIT_KIND_BUCKETS = Object.freeze({
+  office: Object.freeze(['agent_projection']),
+  agent: Object.freeze(['agent_projection']),
+  incident: Object.freeze(['peer_watch_alert', 'handoff', 'reboot']),
+  status: Object.freeze(['event', 'heartbeat'])
+});
 const LIFECYCLE_INCIDENT_KINDS = new Set(['handoff', 'reboot']);
 const INTERACTION_EVENT_DESCRIPTORS = Object.freeze({
   agent_asked_question: Object.freeze({
@@ -2475,6 +2482,24 @@ class PrototypeStore {
       items
     };
   }
+
+  getOfficeClaimAudit(filters = {}) {
+    const requestedSurface = normalizeFilterValue(filters.surface);
+    const surfaces = OFFICE_CLAIM_AUDIT_SURFACES.filter(
+      (surface) => !requestedSurface || surface === requestedSurface
+    );
+    const claimsBySurface = createOfficeClaimAuditClaims({
+      store: this,
+      agentId: normalizeFilterValue(filters.agent_id)
+    });
+    const limit = parseLimit(filters.limit);
+
+    return {
+      items: surfaces.map((surface) =>
+        createOfficeClaimAuditSurfaceSummary(surface, claimsBySurface[surface] || [], limit)
+      )
+    };
+  }
 }
 
 function createZoneOccupant(agent) {
@@ -2595,6 +2620,139 @@ function createOfficeOperationsSummary(items) {
     state_buckets: stateBuckets,
     severity_buckets: severityBuckets
   };
+}
+
+function createOfficeClaimAuditClaims({ store, agentId }) {
+  const evidenceIndex = createOfficeClaimAuditEvidenceIndex(store.evidenceRecords);
+  const agents = store.listAgents().filter((agent) => matchesOfficeClaimAuditAgent(agent, agentId));
+  const agentClaims = agents.map((agent) => ({
+    kind: 'agent_projection',
+    evidenceBacked: isAgentProjectionClaimEvidenceBacked({ store, agent, evidenceIndex })
+  }));
+
+  return {
+    office: agentClaims,
+    agent: agentClaims,
+    incident: store.listIncidents({ agent_id: agentId, limit: null }).map((incident) => ({
+      kind: incident.kind,
+      evidenceBacked: isIncidentClaimEvidenceBacked(incident, evidenceIndex)
+    })),
+    status: [
+      ...store.events
+        .filter((event) => matchesOfficeClaimAuditAgent(event, agentId))
+        .map((event) => ({
+          kind: 'event',
+          evidenceBacked: isEventClaimEvidenceBacked(event, evidenceIndex)
+        })),
+      ...store.heartbeats
+        .filter((heartbeat) => matchesOfficeClaimAuditAgent(heartbeat, agentId))
+        .map((heartbeat) => ({
+          kind: 'heartbeat',
+          evidenceBacked: isHeartbeatClaimEvidenceBacked(heartbeat, evidenceIndex)
+        }))
+    ]
+  };
+}
+
+function createOfficeClaimAuditSurfaceSummary(surface, claims, limit) {
+  const safeKindBuckets = createZeroBuckets(OFFICE_CLAIM_AUDIT_KIND_BUCKETS[surface] || []);
+  let claimCount = 0;
+  let evidenceBackedCount = 0;
+
+  for (const claim of claims.slice(0, limit)) {
+    if (!Object.hasOwn(safeKindBuckets, claim.kind)) {
+      continue;
+    }
+
+    claimCount += 1;
+    safeKindBuckets[claim.kind] += 1;
+
+    if (claim.evidenceBacked) {
+      evidenceBackedCount += 1;
+    }
+  }
+
+  return {
+    surface,
+    claim_count: claimCount,
+    evidence_backed_count: evidenceBackedCount,
+    missing_evidence_count: claimCount - evidenceBackedCount,
+    safe_kind_buckets: safeKindBuckets
+  };
+}
+
+function createOfficeClaimAuditEvidenceIndex(evidenceRecords) {
+  const agentIds = new Set();
+  const correlationIds = new Set();
+
+  for (const record of evidenceRecords) {
+    const agentId = normalizeFilterValue(record.agent_id);
+    const correlationId = normalizeFilterValue(record.correlation_id);
+
+    if (agentId) {
+      agentIds.add(agentId);
+    }
+
+    if (correlationId) {
+      correlationIds.add(correlationId);
+    }
+  }
+
+  return { agentIds, correlationIds };
+}
+
+function matchesOfficeClaimAuditAgent(item, agentId) {
+  return !agentId || item.agent_id === agentId;
+}
+
+function isAgentProjectionClaimEvidenceBacked({ store, agent, evidenceIndex }) {
+  const latestEvent = agent.last_event_id
+    ? store.events.find((event) => event.event_id === agent.last_event_id) || null
+    : null;
+  const latestHeartbeat = store.getLatestHeartbeat(agent.agent_id);
+
+  return Boolean(
+    (latestEvent && isEventClaimEvidenceBacked(latestEvent, evidenceIndex)) ||
+      (latestHeartbeat && isHeartbeatClaimEvidenceBacked(latestHeartbeat, evidenceIndex)) ||
+      evidenceIndex.agentIds.has(agent.agent_id)
+  );
+}
+
+function isIncidentClaimEvidenceBacked(incident, evidenceIndex) {
+  return Boolean(
+    hasOfficeClaimAuditEvidenceRefs(incident) ||
+      hasOfficeClaimAuditCorrelationEvidence(evidenceIndex, incident.correlation_id) ||
+      hasOfficeClaimAuditAgentEvidence(evidenceIndex, incident.agent_id)
+  );
+}
+
+function isEventClaimEvidenceBacked(event, evidenceIndex) {
+  return Boolean(
+    hasOfficeClaimAuditEvidenceRefs(event) ||
+      hasOfficeClaimAuditCorrelationEvidence(evidenceIndex, event.correlation_id) ||
+      hasOfficeClaimAuditAgentEvidence(evidenceIndex, event.agent_id)
+  );
+}
+
+function isHeartbeatClaimEvidenceBacked(heartbeat, evidenceIndex) {
+  return Boolean(
+    hasOfficeClaimAuditEvidenceRefs(heartbeat) ||
+      evidenceIndex.agentIds.has(heartbeat.agent_id)
+  );
+}
+
+function hasOfficeClaimAuditEvidenceRefs(item) {
+  return normalizeEvidenceRefs(item && item.evidence_refs).length > 0;
+}
+
+function hasOfficeClaimAuditCorrelationEvidence(evidenceIndex, correlationId) {
+  const normalized = normalizeFilterValue(correlationId);
+  return Boolean(normalized && evidenceIndex.correlationIds.has(normalized));
+}
+
+function hasOfficeClaimAuditAgentEvidence(evidenceIndex, agentId) {
+  const normalizedAgentId = normalizeFilterValue(agentId);
+  return Boolean(normalizedAgentId && evidenceIndex.agentIds.has(normalizedAgentId));
 }
 
 function createWorkflowSummary({ incidents = [], interactions = [], timeline = [] }) {

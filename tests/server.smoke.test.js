@@ -1041,6 +1041,55 @@ test('GET /office/operations exposes the active queue with agent_id, state, seve
   });
 });
 
+test('GET /office/claim-audit returns aggregate evidence-backed counts only', async (t) => {
+  const { baseUrl, store } = await createHarness(t);
+
+  await store.appendEvent(
+    createEvent({
+      eventId: 'evt_http_claim_audit_backed',
+      ts: '2026-03-09T18:04:30.000Z',
+      agentId: 'app-engineering',
+      actorId: 'team-lead',
+      eventType: 'peer_watch_alert_raised',
+      currentState: 'blocked',
+      activeTask: 'Audit HTTP claim surface',
+      location: 'review-zone',
+      summary: 'token=http-claim-audit-secret /tmp/http-claim-audit',
+      severity: 'red',
+      correlationId: 'corr-http-claim-audit',
+      counterpartyAgentIds: ['protocol-engineering'],
+      evidenceRefs: ['/tmp/http-claim-audit.md'],
+      sourceKind: 'controller_event'
+    })
+  );
+
+  const response = await requestJson(
+    `${baseUrl}/office/claim-audit?agent_id=app-engineering&surface=incident&limit=1`
+  );
+  assert.equal(response.response.status, 200);
+  assert.deepEqual(response.body, {
+    items: [
+      {
+        surface: 'incident',
+        claim_count: 1,
+        evidence_backed_count: 1,
+        missing_evidence_count: 0,
+        safe_kind_buckets: { peer_watch_alert: 1, handoff: 0, reboot: 0 }
+      }
+    ]
+  });
+
+  const serialized = JSON.stringify(response.body);
+  assert.equal(serialized.includes('/tmp/http-claim-audit'), false);
+  assert.equal(serialized.includes('token=http-claim-audit-secret'), false);
+  assert.equal(serialized.includes('evt_http_claim_audit'), false);
+  assert.equal(serialized.includes('corr-http-claim-audit'), false);
+
+  const unknownSurface = await requestJson(`${baseUrl}/office/claim-audit?surface=tmux://secret`);
+  assert.equal(unknownSurface.response.status, 200);
+  assert.deepEqual(unknownSurface.body, { items: [] });
+});
+
 test('POST writes append records and projection endpoints query them', async (t) => {
   const { baseUrl, storeFile } = await createHarness(t);
 

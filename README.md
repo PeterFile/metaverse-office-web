@@ -180,6 +180,7 @@ Optional env:
 - `GET /runtime/source-gaps/trend?evidence_id=&agent_id=&source_kind=&evidence_role=&output_candidate=&source_status=&collector_snapshot_id=&correlation_id=&mapped=&observed_since=&observed_until=&collected_since=&collected_until=&newest_first=&bucket=&limit=`
 - `GET /office/overview`
 - `GET /office/operations?limit=&state=&agent_id=&severity=`
+- `GET /office/claim-audit?agent_id=&surface=&limit=`
 - `GET /timeline?window=&event_id=&agent_id=&event_type=&severity=&source_kind=&evidence_ref=&correlation_id=&limit=`
 - `GET /accountability/replay?event_id=&evidence_id=&evidence_ref=&correlation_id=&agent_id=&source_kind=&artifact_kind=&limit=&window=`
 - `GET /accountability/replay/checkpoint-summary`
@@ -211,6 +212,13 @@ Optional env:
 - queue items reuse the existing projection plus `reported_severity`, `derived_staleness`, and `effective_severity` from the overview logic
 - `correlation_id` and `latest_event` come from the latest event for that agent when one exists; heartbeats do not fabricate them
 - summary fields describe the returned queue slice: `item_count`, `blocked_count`, `reboot_recommended_count`, `state_buckets`, and `severity_buckets`
+
+### Office claim audit notes
+- `GET /office/claim-audit` is a read-only aggregate over replayed office, agent, incident, and status claims
+- response shape is `{ "items": [{ "surface": string, "claim_count": number, "evidence_backed_count": number, "missing_evidence_count": number, "safe_kind_buckets": object }] }`
+- supported surfaces are `office`, `agent`, `incident`, and `status`; optional `surface` exact-filters those safe labels, and unknown surfaces return an empty `items` array
+- optional `agent_id` narrows the source claims without echoing the supplied value; optional `limit` caps source claims per surface before counting
+- evidence backing is derived only from replayed evidence refs and persisted evidence records; the route does not return raw summaries, refs, agent ids, incident ids, event ids, correlation ids, incident text, degraded reason arrays, severity/liveness upgrades, task dispatch, writes, or control-plane state
 
 ### Agent detail read-model notes
 - `GET /agents/:id` returns the current agent projection plus `latest_heartbeat`

@@ -2230,6 +2230,56 @@ describe('DetailsPanel selected-agent workflow lifecycle', () => {
     expect(onInspectSelectedAgentEvidenceRecord).toHaveBeenCalledWith('output-1');
   });
 
+  it('renders previous and next evidence controls from bounded ledger order with safe labels', async () => {
+    const user = userEvent.setup();
+    const onInspectSelectedAgentEvidenceRecord = vi.fn();
+    const selectedAgentEvidenceLedger = buildSelectedAgentEvidenceLedger();
+    selectedAgentEvidenceLedger.outputEvidence.items[0] = {
+      ...selectedAgentEvidenceLedger.outputEvidence.items[0],
+      evidenceId: 'output-with-a-very-long-secret-token-that-must-not-render'
+    };
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          activeHubCategory: 'evidence',
+          selectedAgentDrilldownTab: 'evidence',
+          selectedAgentEvidenceLedger,
+          selectedAgentEvidenceLedgerState: 'ready',
+          selectedAgentEvidenceRecord: buildEvidenceRecord({ evidence_id: 'presence-1' }),
+          selectedAgentEvidenceRecordId: 'presence-1',
+          selectedAgentEvidenceRecordState: 'ready',
+          onInspectSelectedAgentEvidenceRecord
+        })}
+      />
+    );
+
+    const section = screen.getByRole('heading', { name: 'Evidence Record Detail' }).closest('section');
+    expect(section).not.toBeNull();
+    expect(within(section!).getByLabelText('Selected evidence bounded ledger stepper')).toBeVisible();
+    expect(within(section!).getByText('Ledger position · 2 of 4')).toBeVisible();
+    expect(
+      within(section!).getByRole('button', {
+        name: 'Previous evidence record at ledger position 1 of 4'
+      })
+    ).toBeVisible();
+    expect(
+      within(section!).queryByRole('button', { name: /secret-token|must-not-render|output-with-a-very-long/ })
+    ).not.toBeInTheDocument();
+    expect(section!).not.toHaveTextContent('secret-token');
+    expect(section!).not.toHaveTextContent('must-not-render');
+
+    await user.click(
+      within(section!).getByRole('button', {
+        name: 'Next evidence record at ledger position 3 of 4'
+      })
+    );
+
+    expect(onInspectSelectedAgentEvidenceRecord).toHaveBeenCalledWith('degraded-1');
+    expect(within(section!).getByText('Source context · not loaded')).toBeVisible();
+    expect(section!).not.toHaveTextContent('Evidence Source Context');
+  });
+
   it('renders selected-agent Evidence Record detail provenance anchors as compact bounded fields without metadata', () => {
     render(
       <DetailsPanel

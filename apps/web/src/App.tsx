@@ -1338,6 +1338,15 @@ function AppInner() {
   const sourceGapFocusRequestIdRef = useRef(0);
   const wasHubOpenRef = useRef(false);
 
+  const clearSelectedAgentEvidenceReplayWindowRequest = useCallback(() => {
+    evidenceReplayWindowRequestIdRef.current += 1;
+    evidenceReplayWindowAbortControllerRef.current?.abort();
+    evidenceReplayWindowAbortControllerRef.current = null;
+    setSelectedAgentEvidenceReplayWindow(null);
+    setSelectedAgentEvidenceReplayWindowError(null);
+    setSelectedAgentEvidenceReplayWindowState('idle');
+  }, []);
+
   const clearSelectedAgentEvidenceRecordDetail = useCallback(() => {
     evidenceRecordDetailRequestIdRef.current += 1;
     evidenceRecordDetailAbortControllerRef.current?.abort();
@@ -1345,9 +1354,9 @@ function AppInner() {
     evidenceSourceContextRequestIdRef.current += 1;
     evidenceSourceContextAbortControllerRef.current?.abort();
     evidenceSourceContextAbortControllerRef.current = null;
-    evidenceReplayWindowRequestIdRef.current += 1;
-    evidenceReplayWindowAbortControllerRef.current?.abort();
-    evidenceReplayWindowAbortControllerRef.current = null;
+    clearSelectedAgentEvidenceReplayWindowRequest();
+    setReplayCheckpointFocus(null);
+    setSelectedAgentReplayEvidenceId(null);
     setSelectedAgentEvidenceRecord(null);
     setSelectedAgentEvidenceRecordId(null);
     setSelectedAgentEvidenceRecordError(null);
@@ -1361,10 +1370,7 @@ function AppInner() {
     setSelectedAgentEvidenceSourceContext(null);
     setSelectedAgentEvidenceSourceContextError(null);
     setSelectedAgentEvidenceSourceContextState('idle');
-    setSelectedAgentEvidenceReplayWindow(null);
-    setSelectedAgentEvidenceReplayWindowError(null);
-    setSelectedAgentEvidenceReplayWindowState('idle');
-  }, []);
+  }, [clearSelectedAgentEvidenceReplayWindowRequest]);
 
   const overviewResource = usePolledResource({
     load: (signal) => fetchOfficeOverview(signal),
@@ -2386,6 +2392,9 @@ function AppInner() {
     setSelectedAgentEvidenceSourceContext(null);
     setSelectedAgentEvidenceSourceContextError(null);
     setSelectedAgentEvidenceSourceContextState('idle');
+    clearSelectedAgentEvidenceReplayWindowRequest();
+    setReplayCheckpointFocus(null);
+    setSelectedAgentReplayEvidenceId(null);
 
     void fetchEvidenceRecord(evidenceId, { signal: controller.signal })
       .then((record) => {
@@ -2459,7 +2468,7 @@ function AppInner() {
         setSelectedAgentEvidenceCheckpointLogError(formatUnknownError(error));
         setSelectedAgentEvidenceCheckpointLogState('error');
       });
-  }, []);
+  }, [clearSelectedAgentEvidenceReplayWindowRequest]);
 
   const handleInspectSelectedAgentEvidenceSourceContext = useCallback((evidenceId: string) => {
     const requestId = evidenceSourceContextRequestIdRef.current + 1;
@@ -2623,9 +2632,10 @@ function AppInner() {
   ]);
 
   const closeHub = useCallback(() => {
+    clearSelectedAgentEvidenceRecordDetail();
     setHubOpen(false);
     setSourceGapFocusIntent(null);
-  }, []);
+  }, [clearSelectedAgentEvidenceRecordDetail]);
 
   const openHubCategory = useCallback(
     (category: HubCategory) => {

@@ -286,6 +286,46 @@ const CONTROLLER_SNAPSHOT_SCHEMA_FIELDS = Object.freeze({
 });
 const CONTROLLER_SNAPSHOT_SCHEMA_WRITE_BOUNDARY =
   'read-only controller snapshot schema catalog; does not inspect snapshots, collect, read runtime sources, append records, or expose control-plane actions';
+const STORAGE_SCHEMA_ROUTES = Object.freeze([
+  Object.freeze({
+    name: 'replay_manifest',
+    path: '/storage/replay-manifest',
+    supported_filters: Object.freeze([])
+  }),
+  Object.freeze({
+    name: 'index_health',
+    path: '/storage/index-health',
+    supported_filters: Object.freeze([])
+  })
+]);
+const STORAGE_SCHEMA_RESPONSE_FIELDS = Object.freeze({
+  replay_manifest: Object.freeze([
+    'record_count',
+    'record_kind_buckets',
+    'evidence_summary',
+    'canonical_record_hash'
+  ]),
+  index_health: Object.freeze([
+    'backend',
+    'status',
+    'record_count',
+    'record_index_count',
+    'record_evidence_ref_count',
+    'record_index_drift_count',
+    'record_evidence_ref_drift_count',
+    'evidence_query_probe_count',
+    'evidence_query_probe_drift_count',
+    'evidence_query_probe_status',
+    'sidecar_status',
+    'record_kind_buckets',
+    'latest_record_ts'
+  ])
+});
+const STORAGE_SCHEMA_BACKENDS = Object.freeze(['jsonl', 'sqlite']);
+const STORAGE_SCHEMA_STATUSES = Object.freeze(['ok', 'degraded']);
+const STORAGE_SCHEMA_INDEX_STATUSES = Object.freeze(['complete', 'stale', 'not_applicable']);
+const STORAGE_SCHEMA_WRITE_BOUNDARY =
+  'read-only storage schema catalog; does not inspect replayed rows, read sqlite files, append records, or expose control-plane actions';
 const execFileAsync = promisify(execFile);
 const SEVERITY_RANK = Object.freeze({
   normal: 0,
@@ -1140,6 +1180,27 @@ class PrototypeStore {
       records: this.records,
       recordLog: this.recordLog
     });
+  }
+
+  getStorageSchema() {
+    return {
+      routes: STORAGE_SCHEMA_ROUTES.map((route) => ({
+        name: route.name,
+        path: route.path,
+        supported_filters: [...route.supported_filters]
+      })),
+      response_fields: Object.fromEntries(
+        Object.entries(STORAGE_SCHEMA_RESPONSE_FIELDS).map(([routeName, fields]) => [
+          routeName,
+          [...fields]
+        ])
+      ),
+      backends: [...STORAGE_SCHEMA_BACKENDS],
+      statuses: [...STORAGE_SCHEMA_STATUSES],
+      sidecar_statuses: [...STORAGE_SCHEMA_INDEX_STATUSES],
+      evidence_query_probe_statuses: [...STORAGE_SCHEMA_INDEX_STATUSES],
+      route_write_boundary: STORAGE_SCHEMA_WRITE_BOUNDARY
+    };
   }
 
   listReplayCheckpointLog(filters = {}) {

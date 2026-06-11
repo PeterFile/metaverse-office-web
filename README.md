@@ -184,6 +184,7 @@ Optional env:
 - `GET /accountability/replay?event_id=&evidence_id=&evidence_ref=&correlation_id=&agent_id=&source_kind=&artifact_kind=&limit=&window=`
 - `GET /accountability/replay/checkpoint-summary`
 - `GET /accountability/replay/checkpoint-log?limit=&record_kind=&evidence_id=&collector_snapshot_id=&correlation_id=&source_kind=`
+- `GET /storage/schema`
 - `GET /storage/replay-manifest`
 - `GET /storage/index-health`
 - `GET /peer-watch/alerts?status=&target_agent_id=&agent_id=&watcher_agent_id=&observer_agent_id=&correlation_id=&severity=&limit=`
@@ -276,6 +277,7 @@ Optional env:
 - the route does not add a write path, storage table, command dispatch path, or collector filesystem/tmux read
 - `GET /accountability/replay/checkpoint-summary` returns a sanitized append-order checkpoint over replayed records, with record/count buckets and latest bounded anchors for events, heartbeats, evidence records, and collector snapshots; it does not return evidence record ids derived from raw refs, raw evidence refs, paths, summaries, metadata, payloads, degraded reasons, or trigger collection, tmux/filesystem reads, append-only writes, or control-plane actions
 - `GET /accountability/replay/checkpoint-log?limit=&record_kind=&evidence_id=&collector_snapshot_id=&correlation_id=&source_kind=` returns newest append-order checkpoint rows as `{ "items": [{ "append_index": number, "record_kind": string, "checkpoint": object|null }] }`; optional non-blank `record_kind`, `evidence_id`, `collector_snapshot_id`, `correlation_id`, and `source_kind` exact-match replayed records before limit, unknown values return empty `items`, and rows use the same sanitized event, heartbeat, evidence-record, and collector-snapshot checkpoint shapes as the summary and omit raw evidence ids, refs, paths, payloads, metadata, degraded reasons, collector reads, writes, and control-plane actions
+- `GET /storage/schema` returns a static storage-route catalog with route names, top-level response field names, backend/status enum metadata, and the read/write boundary; it does not inspect replayed rows, sqlite files, runtime inputs, ids, refs, paths, hash values, payloads, secrets, or run writes/migrations
 - `GET /storage/index-health` returns sanitized backend, canonical record counts, sidecar counts, drift counts, read-only evidence query probe count/drift/status, additive bounded `health_reason_codes`, sidecar status, record-kind buckets, and latest safe record timestamp; JSONL and SQLite `ok` return empty reason codes, while SQLite stale, unreadable, or query-probe-drifting sidecars report `degraded/stale` with only stable path-free codes such as `sidecar_drift`, `evidence_query_probe_drift`, or `sidecar_unavailable`, without exposing local paths, stderr, evidence ids/refs, filter values, payloads, metadata, or running writes/migrations
 
 ### Peer-watch alert query notes

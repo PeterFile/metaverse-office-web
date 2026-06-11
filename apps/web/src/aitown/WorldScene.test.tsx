@@ -418,6 +418,22 @@ async function settleViewportClampLayoutMicrotasks() {
   });
 }
 
+async function waitForSelectedAgentViewportCenterX(selectedAgent: SceneAgent | undefined) {
+  expect(selectedAgent).toBeDefined();
+
+  await waitFor(() => {
+    const inspection = readViewportInspector()?.read();
+    expect(inspection).toBeDefined();
+
+    const scale = inspection?.scale ?? 1;
+    const rightPadding = inspection?.clampPadding.right ?? 0;
+    const expectedCenterX =
+      (selectedAgent?.position.x ?? 0) + rightPadding / (scale * 2);
+
+    expect(readViewportCenter().x).toBeCloseTo(expectedCenterX, 4);
+  });
+}
+
 function setResponsiveShellChromeRects({
   host,
   toolbar,
@@ -2696,6 +2712,7 @@ describe('WorldScene watch overlay caption gating', () => {
         right: 0
       });
     });
+    await waitForSelectedAgentViewportCenterX(selectedAgent);
 
     const initialCenter = readViewportCenter();
     fireEvent.pointerDown(host as HTMLDivElement, {
@@ -5996,6 +6013,7 @@ describe('WorldScene watch overlay caption gating', () => {
         }
       });
     });
+    await waitForSelectedAgentViewportCenterX(selectedAgent);
 
     const initialCenter = readViewportCenter();
     fireEvent.pointerDown(host as HTMLDivElement, {

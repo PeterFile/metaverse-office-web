@@ -537,6 +537,60 @@ test('fails closed for unreadable task evidence files without path leakage', asy
   assertNoLeaks(result);
 });
 
+test('runtime input too large task evidence file fails closed without leaks', async () => {
+  const { root, filePath } = await writeTempEvidenceFile(
+    'oversized.jsonl',
+    `${' '.repeat(1024 * 1024 + 1)}${LEAK_CANARIES[6]}`
+  );
+
+  const result = await taskEvidenceSource.taskEvidenceFileReaderFrom({ filePath }).readEvidenceCandidates();
+
+  assert.deepEqual(result, {
+    candidates: [],
+    rejected: [
+      {
+        status: 'invalid',
+        index: null,
+        missing_fields: ['file'],
+        error: 'task evidence file is too large'
+      }
+    ]
+  });
+  assert.equal(JSON.stringify(result).includes(root), false);
+  assert.equal(JSON.stringify(result).includes(path.basename(filePath)), false);
+  assertNoLeaks(result);
+});
+
+test('runtime input too many task evidence records fails closed without leaks', async () => {
+  const { root, filePath } = await writeTempEvidenceFile(
+    'too-many.json',
+    JSON.stringify(
+      Array.from({ length: 1001 }, (_, index) => ({
+        task_ref: `TASK-${index + 1}`,
+        source_kind: 'kanban_fixture',
+        observed_at: '2026-05-20T01:00:00.000Z',
+        correlation_id: `corr-${index + 1}`
+      }))
+    )
+  );
+
+  const result = await taskEvidenceSource.taskEvidenceFileReaderFrom({ filePath }).readEvidenceCandidates();
+
+  assert.deepEqual(result, {
+    candidates: [],
+    rejected: [
+      {
+        status: 'invalid',
+        index: null,
+        missing_fields: ['file'],
+        error: 'task evidence input has too many records'
+      }
+    ]
+  });
+  assert.equal(JSON.stringify(result).includes(root), false);
+  assertNoLeaks(result);
+});
+
 test('fails closed for unsafe optional identifiers in task evidence files', async () => {
   const { root, filePath } = await writeTempEvidenceFile(
     'unsafe.jsonl',

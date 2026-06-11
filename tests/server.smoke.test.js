@@ -6029,6 +6029,53 @@ test('collector snapshot rejects unsafe task evidence file paths before append',
   await assert.rejects(() => readFile(storeFile, 'utf8'), { code: 'ENOENT' });
 });
 
+test('collector snapshot returns invalid_runtime_evidence_input for too large task runtime input before append', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'metaverse-office-task-evidence-cap-'));
+  const validFile = path.join(root, '01-valid.jsonl');
+  const oversizedFile = path.join(root, '02-oversized.jsonl');
+  await writeFile(
+    validFile,
+    `${JSON.stringify({
+      task_ref: 'TASK-411',
+      source_kind: 'kanban_fixture',
+      observed_at: '2026-05-20T01:00:00.000Z',
+      correlation_id: 'corr-task-411',
+      agent_id: 'app-engineering'
+    })}\n`
+  );
+  await writeFile(oversizedFile, `${' '.repeat(1024 * 1024 + 1)}raw payload snippet should never escape`);
+
+  const taskEvidenceReader = taskEvidencePathsReaderFrom({ inputPaths: [validFile, oversizedFile] });
+  const controllerSnapshotCollector = createControllerSnapshotCollector({
+    agents: [SEED_AGENTS.find((agent) => agent.agent_id === 'app-engineering')],
+    readPathStat: async () => null,
+    listTmuxPanes: async () => [],
+    readTaskEvidenceCandidates: () => taskEvidenceReader.readEvidenceCandidates()
+  });
+  const storeFile = path.join(root, 'prototype-store.jsonl');
+  const store = await createPrototypeStore({ filePath: storeFile });
+  const beforeCounts = getAppendCounts(store);
+
+  const collected = await requestJsonDirect({
+    url: '/collectors/controller-snapshot',
+    store,
+    controllerSnapshotCollector,
+    method: 'POST',
+    headers: {
+      'x-actor-id': 'team-lead'
+    }
+  });
+
+  assert.equal(collected.response.status, 422);
+  assert.equal(collected.body.error, 'invalid_runtime_evidence_input');
+  assert.match(collected.body.details, /Invalid task evidence input: 1 rejected task evidence record/);
+  assert.equal(collected.body.details.includes(root), false);
+  assert.equal(collected.body.details.includes(path.basename(oversizedFile)), false);
+  assert.equal(collected.body.details.includes('raw payload snippet'), false);
+  assertNoPartialCollectorAppend(store, beforeCounts);
+  await assert.rejects(() => readFile(storeFile, 'utf8'), { code: 'ENOENT' });
+});
+
 test('collector snapshot error redaction hides unexpected internal failures before append', async (t) => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'metaverse-office-collector-error-'));
   const controllerSnapshotCollector = {
@@ -6127,6 +6174,51 @@ test('collector snapshot rejects invalid Hermes runtime inputs before append', a
   assert.equal(collected.body.details.includes(root), false);
   assert.equal(collected.body.details.includes(sourcesDir), false);
   assert.equal(collected.body.details.includes(invalidFile), false);
+  assertNoPartialCollectorAppend(store, beforeCounts);
+  await assert.rejects(() => readFile(storeFile, 'utf8'), { code: 'ENOENT' });
+});
+
+test('collector snapshot returns invalid_runtime_evidence_input for too many Hermes runtime records before append', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'metaverse-office-hermes-runtime-cap-'));
+  const runtimeFile = path.join(root, 'too-many-runtime-facts.json');
+  await writeFile(
+    runtimeFile,
+    JSON.stringify(
+      Array.from({ length: 1001 }, (_, index) => ({
+        source_kind: 'hermes_profile',
+        agent_id: 'app-engineering',
+        profile_id: `profile-${index + 1}`,
+        evidence_ref: `hermes://profile/profile-${index + 1}`
+      }))
+    )
+  );
+
+  const controllerSnapshotCollector = createControllerSnapshotCollector({
+    agents: [SEED_AGENTS.find((agent) => agent.agent_id === 'app-engineering')],
+    readPathStat: async () => null,
+    listTmuxPanes: async () => [],
+    readHermesRuntimeSources: createHermesRuntimeSourcesReader({ inputPaths: [runtimeFile] })
+  });
+  const storeFile = path.join(root, 'prototype-store.jsonl');
+  const store = await createPrototypeStore({ filePath: storeFile });
+  const beforeCounts = getAppendCounts(store);
+
+  const collected = await requestJsonDirect({
+    url: '/collectors/controller-snapshot',
+    store,
+    controllerSnapshotCollector,
+    method: 'POST',
+    headers: {
+      'x-actor-id': 'team-lead'
+    }
+  });
+
+  assert.equal(collected.response.status, 422);
+  assert.equal(collected.body.error, 'invalid_runtime_evidence_input');
+  assert.match(collected.body.details, /Hermes runtime source input 1 has too many records/);
+  assert.equal(collected.body.details.includes(root), false);
+  assert.equal(collected.body.details.includes(path.basename(runtimeFile)), false);
+  assert.equal(collected.body.details.includes('hermes://'), false);
   assertNoPartialCollectorAppend(store, beforeCounts);
   await assert.rejects(() => readFile(storeFile, 'utf8'), { code: 'ENOENT' });
 });

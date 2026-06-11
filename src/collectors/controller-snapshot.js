@@ -20,6 +20,8 @@ const EVIDENCE_SOURCE_KINDS = Object.freeze([
   'hermes_session',
   'task_evidence'
 ]);
+const MAX_RUNTIME_EVIDENCE_FILE_BYTES = 1024 * 1024;
+const MAX_RUNTIME_EVIDENCE_RECORDS_PER_COLLECTION = 1000;
 const COMMAND_STATE_MAP = Object.freeze({
   cat: 'researching',
   git: 'reviewing',
@@ -1259,13 +1261,16 @@ function createHermesRuntimeSourcesFileReader({ filePath }) {
   }
 
   return async function readHermesRuntimeSourcesFile() {
-    const content = await readFile(sourceFilePath, 'utf8').catch((error) =>
-      throwHermesRuntimeSourceIoError('Hermes runtime sources file', 'read', error)
+    const content = await readBoundedHermesRuntimeSourceFile(
+      sourceFilePath,
+      'Hermes runtime sources file'
     );
-    return parseHermesRuntimeSourcesFile(content, 'Hermes runtime sources file', {
+    const facts = parseHermesRuntimeSourcesFile(content, 'Hermes runtime sources file', {
       source_input_ordinal: 1,
       source_file_ordinal: 1
     });
+    assertHermesRuntimeSourceRecordCount(0, facts.length, 'Hermes runtime sources file');
+    return facts;
   };
 }
 
@@ -1284,16 +1289,15 @@ function createHermesRuntimeSourcesReader({ inputPaths }) {
       const sourceInputLabel = `Hermes runtime source input ${sourcePathIndex + 1}`;
       for (const filePath of await listHermesRuntimeSourceFiles(sourcePath, sourceInputLabel)) {
         const sourceFileOrdinal = sourceFileIndex + 1;
-        const sourceFileLabel = `Hermes runtime source file ${sourceFileOrdinal}`;
         const sourceParseLabel = `Hermes runtime source input ${sourceFileOrdinal}`;
-        const content = await readHermesRuntimeSourceFile(filePath, sourceFileLabel);
+        const content = await readHermesRuntimeSourceFile(filePath, sourceParseLabel);
+        const parsedFacts = parseHermesRuntimeSourcesFile(content, sourceParseLabel, {
+          source_input_ordinal: sourcePathIndex + 1,
+          source_file_ordinal: sourceFileOrdinal
+        });
+        assertHermesRuntimeSourceRecordCount(facts.length, parsedFacts.length, sourceParseLabel);
         sourceFileIndex += 1;
-        facts.push(
-          ...parseHermesRuntimeSourcesFile(content, sourceParseLabel, {
-            source_input_ordinal: sourcePathIndex + 1,
-            source_file_ordinal: sourceFileOrdinal
-          })
-        );
+        facts.push(...parsedFacts);
       }
     }
 
@@ -1319,9 +1323,39 @@ async function listHermesRuntimeSourceFiles(sourcePath, sourceInputLabel) {
 }
 
 async function readHermesRuntimeSourceFile(filePath, sourceFileLabel) {
+  return readBoundedHermesRuntimeSourceFile(filePath, sourceFileLabel);
+}
+
+async function readBoundedHermesRuntimeSourceFile(filePath, sourceFileLabel) {
+  let sourceStat;
+  try {
+    sourceStat = await stat(filePath);
+  } catch (error) {
+    throwHermesRuntimeSourceReadError(sourceFileLabel, error);
+  }
+
+  if (!sourceStat.isFile()) {
+    throwHermesRuntimeSourceReadError(sourceFileLabel, { code: 'EINVAL' });
+  }
+
+  if (sourceStat.size > MAX_RUNTIME_EVIDENCE_FILE_BYTES) {
+    throw new Error(`${sourceFileLabel} is too large`);
+  }
+
   return readFile(filePath, 'utf8').catch((error) =>
-    throwHermesRuntimeSourceIoError(sourceFileLabel, 'read', error)
+    throwHermesRuntimeSourceReadError(sourceFileLabel, error)
   );
+}
+
+function assertHermesRuntimeSourceRecordCount(existingCount, newCount, sourceFileLabel) {
+  if (existingCount + newCount > MAX_RUNTIME_EVIDENCE_RECORDS_PER_COLLECTION) {
+    throw new Error(`${sourceFileLabel} has too many records`);
+  }
+}
+
+function throwHermesRuntimeSourceReadError(sourceLabel, error) {
+  const code = sanitizeText(error?.code) || 'IO_ERROR';
+  throw new Error(`${sourceLabel} could not be read: ${code}`);
 }
 
 function throwHermesRuntimeSourceIoError(sourceLabel, operation, error) {

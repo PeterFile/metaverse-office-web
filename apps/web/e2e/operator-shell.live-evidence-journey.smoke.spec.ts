@@ -1,5 +1,7 @@
 import { expect, test, type Locator, type Page, type Request, type Route } from '@playwright/test';
 
+import { resolveViewportEdgeDragDelta } from '../scripts/viewport-reachability';
+
 const evidenceCoverage = {
   evidence_ref_count: 1,
   covered_agent_count: 1,
@@ -548,6 +550,76 @@ async function readViewportState(page: Page) {
   return page.evaluate(() => window.__AITOWN_VIEWPORT__?.read() ?? null);
 }
 
+type ViewportState = NonNullable<Awaited<ReturnType<typeof readViewportState>>>;
+
+function resolveViewportRightAllowance(state: ViewportState) {
+  const scale = Math.max(state.scale ?? 1, 0.0001);
+  return (state.clampPadding?.right ?? 0) / scale;
+}
+
+function resolveViewportTargetTop(state: ViewportState) {
+  const scale = Math.max(state.scale ?? 1, 0.0001);
+  const topAllowance = (state.clampPadding?.top ?? 0) / scale;
+  return topAllowance === 0 ? 0 : -topAllowance;
+}
+
+async function expectViewportAtRightEdge(page: Page, label: string) {
+  await expect
+    .poll(async () => {
+      const state = await readViewportState(page);
+      if (!state) {
+        return false;
+      }
+
+      const rightAllowance = resolveViewportRightAllowance(state);
+      return (
+        state.left >= -0.5 &&
+        state.right <= state.worldWidth + rightAllowance + 0.5 &&
+        state.right >= state.worldWidth + rightAllowance - 0.5
+      );
+    }, `${label} should settle on the right world edge`)
+    .toBe(true);
+
+  const state = await readViewportState(page);
+  expect(state).not.toBeNull();
+  return state!;
+}
+
+async function expectViewportAtTopLeftEdge(page: Page, label: string) {
+  await expect
+    .poll(async () => {
+      const state = await readViewportState(page);
+      if (!state) {
+        return false;
+      }
+
+      const targetTop = resolveViewportTargetTop(state);
+      return (
+        state.left >= -0.5 &&
+        state.left <= 0.5 &&
+        state.top <= targetTop + 0.5
+      );
+    }, `${label} should settle on the top-left world edge`)
+    .toBe(true);
+
+  const state = await readViewportState(page);
+  expect(state).not.toBeNull();
+  return state!;
+}
+
+async function dragViewportFromDefaultWorldLane(page: Page, deltaX: number, deltaY: number) {
+  const worldRect = await readRect(page.locator('.aitown-world__host'));
+  const start = {
+    x: worldRect.left + worldRect.width * 0.425,
+    y: worldRect.top + worldRect.height * 0.5
+  };
+
+  await page.mouse.move(start.x, start.y);
+  await page.mouse.down();
+  await page.mouse.move(start.x + deltaX, start.y + deltaY, { steps: 16 });
+  await page.mouse.up();
+}
+
 async function moveViewportCenter(page: Page, point: { x: number; y: number }) {
   await page.evaluate(({ x, y }) => window.__AITOWN_VIEWPORT__?.moveCenter(x, y), point);
 }
@@ -902,6 +974,66 @@ test.describe('operator shell live evidence journey smoke', () => {
     } finally {
       page.off('request', handleRequest);
     }
+  });
+
+  test('@journey @evidence-live keeps live evidence controls from blocking default viewport edge drag', async ({
+    page
+  }) => {
+    await installLiveEvidenceFixtures(page);
+    await page.goto('/');
+    await expect(page.locator('.aitown-world__host canvas')).toBeVisible();
+    await page.waitForFunction(() => Boolean(window.__AITOWN_VIEWPORT__));
+
+    const signals = page.getByRole('region', { name: 'Office HUD signals' });
+    await signals.locator('summary').click();
+
+    const evidenceFocus = page.getByRole('region', { name: 'Evidence coverage focus' });
+    const sourceGapFocus = page.getByRole('region', { name: 'Source gap focus' });
+    await expect(evidenceFocus).toBeVisible();
+    await expect(sourceGapFocus).toBeVisible();
+    await expect(page.getByRole('dialog', { name: 'Hub' })).toHaveCount(0);
+
+    const initial = await readViewportState(page);
+    expect(initial).not.toBeNull();
+
+    const worldRect = await readRect(page.locator('.aitown-world__host'));
+    const dragStart = {
+      x: worldRect.left + worldRect.width * 0.425,
+      y: worldRect.top + worldRect.height * 0.5
+    };
+    const hitTarget = await page.evaluate(({ x, y }) => {
+      const target = document.elementFromPoint(x, y);
+      return {
+        insideWorld: Boolean(target?.closest('.aitown-world__host')),
+        insideLiveEvidenceControls: Boolean(
+          target?.closest(
+            '[aria-label="Office HUD signals"], [aria-label="Evidence coverage focus"], [aria-label="Source gap focus"]'
+          )
+        ),
+        insideButton: Boolean(target?.closest('button')),
+        tagName: target?.tagName ?? null,
+        className: target instanceof HTMLElement ? target.className : null
+      };
+    }, dragStart);
+    expect(hitTarget.insideWorld, `default drag lane should hit the world: ${JSON.stringify(hitTarget)}`).toBe(true);
+    expect(
+      hitTarget.insideLiveEvidenceControls,
+      `Live Evidence controls should not cover the default drag lane: ${JSON.stringify(hitTarget)}`
+    ).toBe(false);
+    expect(hitTarget.insideButton, `default drag lane should not start on a control: ${JSON.stringify(hitTarget)}`).toBe(
+      false
+    );
+
+    const rightDrag = resolveViewportEdgeDragDelta(initial!, 'right');
+    expect(Math.abs(rightDrag.deltaX), 'default viewport should have right edge pan budget').toBeGreaterThan(40);
+    await dragViewportFromDefaultWorldLane(page, rightDrag.deltaX, rightDrag.deltaY);
+
+    const rightEdge = await expectViewportAtRightEdge(page, 'Live Evidence controls-present viewport');
+    const topLeftDrag = resolveViewportEdgeDragDelta(rightEdge, 'top-left');
+    expect(Math.abs(topLeftDrag.deltaX), 'right edge should allow return to the left edge').toBeGreaterThan(40);
+    await dragViewportFromDefaultWorldLane(page, topLeftDrag.deltaX, topLeftDrag.deltaY);
+
+    await expectViewportAtTopLeftEdge(page, 'Live Evidence controls-present viewport');
   });
 
   test('@journey @evidence-live replays inspected evidence by evidence id only after explicit CTAs', async ({

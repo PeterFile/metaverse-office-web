@@ -28,8 +28,8 @@ const SOURCE_KIND_LABELS: Record<string, string> = {
   peer_watch: 'Peer watch',
   peer_watch_alert: 'Peer watch alert',
   workflow_interaction: 'Workflow interaction',
-  workspace_file: 'Workspace evidence',
-  workspace_root: 'Workspace evidence',
+  workspace_file: 'Local evidence',
+  workspace_root: 'Local evidence',
 };
 
 const DEGRADED_REASON_LABELS: Record<string, string> = {

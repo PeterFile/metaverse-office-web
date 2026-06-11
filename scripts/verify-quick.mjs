@@ -12,6 +12,7 @@ function usage() {
   console.error("  pnpm verify:quick -- --focused-files <web-package-relative-test> [...]");
   console.error("  pnpm verify:quick -- --changed");
   console.error("  pnpm verify:quick -- --since=<ref>");
+  console.error("  add --plan or --dry-run to print the routed commands without running them");
   console.error("  docs: git diff --check");
   console.error("  backend: docs + pnpm backend:test");
   console.error("  web-api: docs + focused API Vitest + pnpm web:typecheck");
@@ -91,9 +92,11 @@ export function listChangedFiles({ cwd = process.cwd(), since = null } = {}) {
 
 export function parseVerifyQuickArgs(args = []) {
   const forwardedArgs = args[0] === "--" ? args.slice(1) : [...args];
-  const laneArgs = forwardedArgs.filter((arg) => arg.startsWith("--lane="));
-  const changedArgs = forwardedArgs.filter((arg) => arg === "--changed");
-  const sinceArgs = forwardedArgs.filter((arg) => arg.startsWith("--since="));
+  const planOnly = forwardedArgs.some((arg) => arg === "--plan" || arg === "--dry-run");
+  const routableArgs = forwardedArgs.filter((arg) => arg !== "--plan" && arg !== "--dry-run");
+  const laneArgs = routableArgs.filter((arg) => arg.startsWith("--lane="));
+  const changedArgs = routableArgs.filter((arg) => arg === "--changed");
+  const sinceArgs = routableArgs.filter((arg) => arg.startsWith("--since="));
   const focusedFiles = [];
   let hasFocusedFilesFlag = false;
 
@@ -107,8 +110,8 @@ export function parseVerifyQuickArgs(args = []) {
     throw new Error("Expected at most one --since value");
   }
 
-  for (let index = 0; index < forwardedArgs.length; index += 1) {
-    const arg = forwardedArgs[index];
+  for (let index = 0; index < routableArgs.length; index += 1) {
+    const arg = routableArgs[index];
 
     if (arg.startsWith("--focused-files=")) {
       hasFocusedFilesFlag = true;
@@ -121,7 +124,7 @@ export function parseVerifyQuickArgs(args = []) {
     }
 
     hasFocusedFilesFlag = true;
-    for (const fileArg of forwardedArgs.slice(index + 1)) {
+    for (const fileArg of routableArgs.slice(index + 1)) {
       if (fileArg.startsWith("--")) {
         throw new Error("--focused-files only accepts explicit test file paths after the flag");
       }
@@ -147,22 +150,22 @@ export function parseVerifyQuickArgs(args = []) {
   }
 
   if (hasFocusedFilesFlag) {
-    return { mode: "focused-files", focusedFiles };
+    return { mode: "focused-files", focusedFiles, ...(planOnly ? { planOnly: true } : {}) };
   }
 
   if (changedArgs.length > 0) {
-    return { mode: "changed", since: null };
+    return { mode: "changed", since: null, ...(planOnly ? { planOnly: true } : {}) };
   }
 
   if (since) {
-    return { mode: "changed", since };
+    return { mode: "changed", since, ...(planOnly ? { planOnly: true } : {}) };
   }
 
   if (!lanes.has(lane)) {
     throw new Error("Unknown or missing verify:quick lane");
   }
 
-  return { mode: "lane", lane };
+  return { mode: "lane", lane, ...(planOnly ? { planOnly: true } : {}) };
 }
 
 function isWebTestPath(testPath) {
@@ -388,9 +391,11 @@ export function resolveVerifyQuickSteps(parsedArgs, options = {}) {
 }
 
 export async function main(cliArgs = process.argv.slice(2)) {
+  let parsedArgs;
   let plan;
   try {
-    plan = resolveVerifyQuickSteps(parseVerifyQuickArgs(cliArgs));
+    parsedArgs = parseVerifyQuickArgs(cliArgs);
+    plan = resolveVerifyQuickSteps(parsedArgs);
   } catch (error) {
     usage();
     console.error(`[verify:quick] ${error.message}`);
@@ -399,11 +404,22 @@ export async function main(cliArgs = process.argv.slice(2)) {
 
   if (plan.mode === "focused-files") {
     console.error(`[verify:quick] focused-files=${plan.focusedFiles.length}`);
+    if (parsedArgs.planOnly) {
+      console.error(`[verify:quick] focused-file-list=${plan.focusedFiles.join(", ")}`);
+    }
   } else {
     console.error(`[verify:quick] lane=${plan.lane}`);
     if (plan.lane === "ui" && plan.existingWebTests.length === 0) {
       console.error("[verify:quick] no focused UI tests found; running typecheck only");
     }
+  }
+
+  if (parsedArgs.planOnly) {
+    for (const [command, args] of plan.steps) {
+      console.error(`[verify:quick] plan: ${formatCommand(command, args)}`);
+    }
+    console.error(`[verify:quick] dry-run: ${plan.steps.length} steps`);
+    return;
   }
 
   const startedAt = Date.now();

@@ -5,6 +5,7 @@ import {
   buildSelectedAgentEvidenceLedger,
   selectSelectedAgentEvidenceLedgerSourceContextGroups
 } from './selectedAgentEvidenceLedger';
+import { expectNoForbiddenPublicUiText } from './test/publicLeakSentinel';
 import type { EvidenceRecord, EvidenceRefRollup } from './types';
 
 function evidenceRecord(overrides: Partial<EvidenceRecord>): EvidenceRecord {
@@ -407,9 +408,7 @@ describe('buildSelectedAgentEvidenceLedger', () => {
         sourceStatusBuckets: [{ key: 'observed', count: 1 }]
       }
     ]);
-    expect(JSON.stringify(model.proofCompassRows)).not.toMatch(
-      /profile-prod|private-token|metadata|dispatch|token|webhook|hermes-session|tmux-pane/i
-    );
+    expectNoForbiddenPublicUiText(model.proofCompassRows);
   });
 
   it('treats unmapped tmux records as degraded/unmapped evidence, not agent output', () => {
@@ -620,29 +619,7 @@ describe('buildSelectedAgentEvidenceProofCompassRows', () => {
       }
     ]);
 
-    const rendered = JSON.stringify(rows);
-    expect(rendered).not.toContain('/tmp');
-    expect(rendered).not.toContain('/Users');
-    expect(rendered).not.toContain('tmux://');
-    expect(rendered).not.toContain('hermes://');
-    expect(rendered).not.toContain('session://');
-    expect(rendered).not.toContain('profile://');
-    expect(rendered).not.toContain('tmux-pane');
-    expect(rendered).not.toContain('hermes-session');
-    expect(rendered).not.toContain('profile-prod');
-    expect(rendered).not.toContain('session-prod');
-    expect(rendered).not.toContain('~/');
-    expect(rendered).not.toContain('file://');
-    expect(rendered).not.toContain('http://');
-    expect(rendered).not.toContain('https://');
-    expect(rendered).not.toContain('token');
-    expect(rendered).not.toContain('webhook');
-    expect(rendered).not.toContain('secret');
-    expect(rendered).not.toContain('payload');
-    expect(rendered).not.toContain('control-plane');
-    expect(rendered).not.toContain('C:\\\\Builds');
-    expect(rendered).not.toContain('/var/log');
-    expect(rendered).not.toContain('alice');
+    expectNoForbiddenPublicUiText(rows);
   });
 });
 

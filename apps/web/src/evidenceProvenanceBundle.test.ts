@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { buildEvidenceProvenanceProof } from './evidenceProvenanceBundle';
+import { expectNoForbiddenPublicUiText } from './test/publicLeakSentinel';
 import type { EvidenceProvenanceBundle } from './types';
 
 describe('buildEvidenceProvenanceProof', () => {
@@ -164,6 +165,82 @@ describe('buildEvidenceProvenanceProof', () => {
     expect(output).not.toContain('sk-live-1234567890abcdef');
     expect(output).not.toContain('evidence_ref');
     expect(output).not.toContain('payload');
+    expectNoForbiddenPublicUiText(proof);
+  });
+
+  it('redacts hostile provenance anchor ids and routes before public proof output', () => {
+    const proof = buildEvidenceProvenanceProof({
+      evidence_id: 'evidence-route-claim-complete-assign',
+      source_summary: {
+        kind: 'hermes://session/private',
+        status: 'dispatch',
+        role: 'webhook',
+        output_candidate: false,
+        mapped: true,
+        time: {
+          observed_at: null,
+          collected_at: null
+        }
+      },
+      record: {
+        observed_at: null,
+        collected_at: null,
+        agent_id: 'profile-prod',
+        source_kind: 'hermes://profile/private',
+        evidence_role: 'payload',
+        source_status: 'control-plane',
+        output_candidate: false,
+        collector_snapshot_id: 'collector-route-token',
+        correlation_id: 'corr-assign',
+        unmapped: false
+      },
+      anchors: {
+        snapshot: {
+          collector_snapshot_id: 'collector-route-token',
+          route: '/collectors/dispatch/route?path=/Users/cwp/private&token=sk-live-1234567890abcdef'
+        },
+        source: {
+          evidence_id: 'source-claim-complete',
+          source_kind: 'hermes://profile/private',
+          evidence_role: 'payload',
+          source_status: 'control-plane',
+          route: '/evidence-records/source-claim-complete'
+        },
+        replay: {
+          correlation_id: 'session-prod',
+          route: '/accountability/replay?correlation_id=session-prod'
+        }
+      }
+    } as unknown as EvidenceProvenanceBundle);
+
+    expect(proof).toMatchObject({
+      evidenceId: '[redacted]',
+      sourceSummary: {
+        kind: null,
+        status: null,
+        role: null,
+        outputCandidate: false,
+        mapped: true,
+        time: {
+          observedAt: null,
+          collectedAt: null
+        }
+      },
+      record: {
+        observedAt: null,
+        collectedAt: null,
+        agentId: null,
+        sourceKind: '[redacted]',
+        evidenceRole: null,
+        sourceStatus: null,
+        outputCandidate: false,
+        collectorSnapshotId: '[redacted]',
+        correlationId: null,
+        unmapped: false
+      },
+      anchors: []
+    });
+    expectNoForbiddenPublicUiText(proof);
   });
 
   it('uses evidence_id for replay proof anchors when correlation_id is absent', () => {

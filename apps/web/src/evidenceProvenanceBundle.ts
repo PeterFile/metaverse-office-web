@@ -40,8 +40,13 @@ export interface EvidenceProvenanceProof {
 const REDACTED = '[redacted]';
 const MAX_SAFE_VALUE_LENGTH = 512;
 const SECRET_LIKE_PATTERN =
-  /\b(?:sk|xox[baprs]|gh[pousr])-[A-Za-z0-9_-]{8,}\b|(?:token|secret|password)\s*[:=]/i;
-const LOCAL_REF_PATTERN = /(?:^|[\s"'=])(?:\/Users\/|\/tmp\/|[A-Za-z]:\\|tmux:\/\/)/i;
+  /\b(?:sk|xox[baprs]|gh[pousr])-[A-Za-z0-9_-]{8,}\b|\b(?:access[_-]?token|api[_-]?key|secret|password|credential|bearer|token)(?:\b|\s*[:=])/i;
+const LOCAL_REF_PATTERN =
+  /(?:^|[\s"'=])(?:file:\/\/\/?|~\/|\/(?:Users|Volumes|tmp|private|var|home)\/|[A-Za-z]:[\\/])/i;
+const RUNTIME_REF_PATTERN =
+  /\b(?:tmux|hermes|session|profile):\/\/|\b(?:session|profile)(?:[_:/-][A-Za-z0-9][A-Za-z0-9._:/-]*)/i;
+const CONTROL_PLANE_TEXT_PATTERN =
+  /\b(?:payload|webhooks?|control[-_ ]?plane|dispatch|route|claims?|complete|assign(?:ment)?)\b/i;
 
 export function buildEvidenceProvenanceProof(
   bundle: EvidenceProvenanceBundle | null
@@ -162,7 +167,9 @@ function isUnsafeValue(value: string): boolean {
   return (
     SECRET_LIKE_PATTERN.test(value) ||
     SECRET_LIKE_PATTERN.test(decodedValue) ||
-    LOCAL_REF_PATTERN.test(decodedValue)
+    LOCAL_REF_PATTERN.test(decodedValue) ||
+    RUNTIME_REF_PATTERN.test(decodedValue) ||
+    CONTROL_PLANE_TEXT_PATTERN.test(decodedValue)
   );
 }
 

@@ -908,6 +908,19 @@ test('prototype store exposes deterministic sanitized storage replay manifest', 
       evidence_record: 3,
       collector_snapshot: 1
     },
+    runtime_gap_summary: {
+      total_count: 1,
+      mapped_count: 1,
+      unmapped_count: 0,
+      source_kind_buckets: {
+        workspace_file: 1
+      },
+      source_status_buckets: {
+        degraded: 1
+      },
+      latest_observed_at: '2026-03-09T18:05:20.000Z',
+      latest_collected_at: '2026-03-09T18:06:00.000Z'
+    },
     evidence_summary: {
       evidence_record_count: 3,
       source_kind_buckets: {
@@ -952,6 +965,7 @@ test('prototype store exposes deterministic sanitized storage replay manifest', 
 
   const makeRawManifestStore = async ({
     rawKind,
+    unsafeSourceKind,
     evidenceRef,
     tmuxRef,
     metadataValue,
@@ -981,7 +995,7 @@ test('prototype store exposes deterministic sanitized storage replay manifest', 
           observed_at: '2026-03-09T18:07:10.000Z',
           collected_at: '2026-03-09T18:07:20.000Z',
           agent_id: 'app-engineering',
-          source_kind: 'workspace_file',
+          source_kind: unsafeSourceKind,
           evidence_role: 'agent_output',
           source_status: 'degraded',
           output_candidate: true,
@@ -1026,6 +1040,7 @@ test('prototype store exposes deterministic sanitized storage replay manifest', 
 
   const unsafeA = await makeRawManifestStore({
     rawKind: '/tmp/manifest-kind-a',
+    unsafeSourceKind: '/tmp/manifest-source-kind/secret',
     evidenceRef: '/tmp/manifest-a/outbox.md',
     tmuxRef: 'tmux://manifest-a/0.1',
     metadataValue: 'metadata-a',
@@ -1036,6 +1051,7 @@ test('prototype store exposes deterministic sanitized storage replay manifest', 
   });
   const unsafeB = await makeRawManifestStore({
     rawKind: 'tmux://manifest-kind-b/0.1',
+    unsafeSourceKind: '/tmp/manifest-source-kind/secret',
     evidenceRef: '/tmp/manifest-b/outbox.md',
     tmuxRef: 'tmux://manifest-b/0.1',
     metadataValue: 'metadata-b',
@@ -1054,10 +1070,10 @@ test('prototype store exposes deterministic sanitized storage replay manifest', 
   assert.deepEqual(unsafeManifestA.evidence_summary, {
     evidence_record_count: 1,
     source_kind_buckets: {
-      workspace_file: 1
+      unknown: 1
     },
     source_category_buckets: {
-      workspace: 1
+      unknown: 1
     },
     evidence_role_buckets: {
       agent_output: 1
@@ -1067,6 +1083,19 @@ test('prototype store exposes deterministic sanitized storage replay manifest', 
     },
     output_candidate_count: 1,
     unmapped_count: 0,
+    latest_observed_at: '2026-03-09T18:07:10.000Z',
+    latest_collected_at: '2026-03-09T18:07:20.000Z'
+  });
+  assert.deepEqual(unsafeManifestA.runtime_gap_summary, {
+    total_count: 1,
+    mapped_count: 1,
+    unmapped_count: 0,
+    source_kind_buckets: {
+      unknown: 1
+    },
+    source_status_buckets: {
+      degraded: 1
+    },
     latest_observed_at: '2026-03-09T18:07:10.000Z',
     latest_collected_at: '2026-03-09T18:07:20.000Z'
   });
@@ -3631,6 +3660,22 @@ test('prototype store summarizes runtime source gaps before limit truncation', a
   assert.equal(unmappedSummary.total_count, 1);
   assert.equal(unmappedSummary.mapped_count, 0);
   assert.equal(unmappedSummary.unmapped_count, 1);
+
+  assert.deepEqual(store.getStorageReplayManifest().runtime_gap_summary, {
+    total_count: summary.total_count,
+    mapped_count: summary.mapped_count,
+    unmapped_count: summary.unmapped_count,
+    source_kind_buckets: {
+      workspace_file: 1,
+      tmux_observation: 1
+    },
+    source_status_buckets: {
+      observed: 1,
+      degraded: 1
+    },
+    latest_observed_at: summary.last_observed_at,
+    latest_collected_at: summary.last_collected_at
+  });
 });
 
 test('prototype store trends runtime source gaps with safe count buckets only', async () => {

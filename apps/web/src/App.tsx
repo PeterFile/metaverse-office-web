@@ -4181,6 +4181,8 @@ function AppInner() {
               selectedAgentEvidenceReplayWindow={selectedAgentEvidenceReplayWindow}
               selectedAgentEvidenceReplayWindowError={selectedAgentEvidenceReplayWindowError}
               selectedAgentEvidenceReplayWindowState={selectedAgentEvidenceReplayWindowState}
+              selectedAgentEvidenceGlance={selectedAgentEvidenceGlance}
+              selectedAgentSourceMatrix={selectedAgentSourceMatrix}
               selectedAgentEvidenceLedger={selectedAgentEvidenceLedger}
               selectedAgentEvidenceLedgerError={selectedAgentEvidenceLedgerError}
               selectedAgentEvidenceLedgerState={selectedAgentEvidenceLedgerState}

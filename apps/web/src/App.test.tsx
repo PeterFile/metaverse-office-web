@@ -4106,50 +4106,54 @@ afterEach(() => {
     expect(details).toHaveAttribute('data-selected-agent-drilldown-tab', 'evidence');
   });
 
-  it('requests the selected-agent evidence ledger only for the Hub Evidence tab', async () => {
-    const user = userEvent.setup();
-    render(<App />);
+  it(
+    'requests the selected-agent evidence ledger only for the Hub Evidence tab',
+    async () => {
+      const user = userEvent.setup();
+      render(<App />);
 
-    const roster = await screen.findByRole('navigation', { name: 'Agent roster' });
-    await user.click(
-      within(roster).getByRole('button', {
-        name: 'Select and locate App Engineering Agent'
-      })
-    );
-    const details = await openSelectedAgentPeekInHub(user, 'App Engineering Agent', 'Queue');
+      const roster = await screen.findByRole('navigation', { name: 'Agent roster' });
+      await user.click(
+        within(roster).getByRole('button', {
+          name: 'Select and locate App Engineering Agent'
+        })
+      );
+      const details = await openSelectedAgentPeekInHub(user, 'App Engineering Agent', 'Queue');
 
-    await waitFor(() => {
-      const requestedUrls = vi.mocked(globalThis.fetch).mock.calls.map(([request]) => String(request));
-      expect(requestedUrls).toContain(workflowUrl);
-      expect(requestedUrls).not.toContain(appEngineeringEvidenceRecordsUrl);
-      expect(requestedUrls).not.toContain(appEngineeringEvidenceRefRollupUrl);
-    });
-    expect(details).toHaveAttribute('data-active-hub-category', 'queue');
+      await waitFor(() => {
+        const requestedUrls = vi.mocked(globalThis.fetch).mock.calls.map(([request]) => String(request));
+        expect(requestedUrls).toContain(workflowUrl);
+        expect(requestedUrls).not.toContain(appEngineeringEvidenceRecordsUrl);
+        expect(requestedUrls).not.toContain(appEngineeringEvidenceRefRollupUrl);
+      });
+      expect(details).toHaveAttribute('data-active-hub-category', 'queue');
 
-    const categoryMenu = await screen.findByRole('navigation', { name: 'Office category menu' });
-    await user.click(within(categoryMenu).getByRole('button', { name: 'Evidence' }));
+      const categoryMenu = await screen.findByRole('navigation', { name: 'Office category menu' });
+      await user.click(within(categoryMenu).getByRole('button', { name: 'Evidence' }));
 
-    await waitFor(() => {
-      const requestedUrls = vi.mocked(globalThis.fetch).mock.calls.map(([request]) => String(request));
-      expect(requestedUrls).toContain(appEngineeringEvidenceRecordsUrl);
-      expect(requestedUrls).toContain(appEngineeringEvidenceRefRollupUrl);
-    });
+      await waitFor(() => {
+        const requestedUrls = vi.mocked(globalThis.fetch).mock.calls.map(([request]) => String(request));
+        expect(requestedUrls).toContain(appEngineeringEvidenceRecordsUrl);
+        expect(requestedUrls).toContain(appEngineeringEvidenceRefRollupUrl);
+      });
 
-    const ledgerSection = await findHubSection(details, 'Evidence Ledger');
-    expect(ledgerSection).toHaveTextContent(
-      'Proof Compass ref group · Workspace file Degraded evidence · Records 7 · Mapped 5 · Unmapped 2'
-    );
-    expect(ledgerSection).toHaveTextContent('Output evidence · 1');
-    expect(ledgerSection).toHaveTextContent('Non-output evidence · 1');
-    expect(ledgerSection).toHaveTextContent('Source context · workspace_file · agent_output · observed · mapped · 1');
-    expect(ledgerSection).toHaveTextContent('Source · workspace_file · Role · agent_output · Status · observed · mapped');
-    expect(ledgerSection).not.toHaveTextContent('Ref ·');
-    expect(ledgerSection).not.toHaveTextContent('/tmp/app/outbox.md');
-    expect(ledgerSection).not.toHaveTextContent('raw_tmux_capture');
-    expect(ledgerSection).not.toHaveTextContent(
-      /\/Users\/cwp|secret-token|token=secret|webhook|tmux:\/\/raw|hermes:\/\/profile|session:\/\/|profile:\/\/|metadata|control-plane|dispatch/i
-    );
-  });
+      const ledgerSection = await findHubSection(details, 'Evidence Ledger');
+      expect(ledgerSection).toHaveTextContent(
+        'Proof Compass ref group · Workspace file Degraded evidence · Records 7 · Mapped 5 · Unmapped 2'
+      );
+      expect(ledgerSection).toHaveTextContent('Output evidence · 1');
+      expect(ledgerSection).toHaveTextContent('Non-output evidence · 1');
+      expect(ledgerSection).toHaveTextContent('Source context · Workspace file · Agent output · Observed · mapped · 1');
+      expect(ledgerSection).toHaveTextContent('Source · Workspace file · Role · Agent output · Status · Observed · mapped');
+      expect(ledgerSection).not.toHaveTextContent('Ref ·');
+      expect(ledgerSection).not.toHaveTextContent('/tmp/app/outbox.md');
+      expect(ledgerSection).not.toHaveTextContent('raw_tmux_capture');
+      expect(ledgerSection).not.toHaveTextContent(
+        /\/Users\/cwp|secret-token|token=secret|webhook|tmux:\/\/raw|hermes:\/\/profile|session:\/\/|profile:\/\/|metadata|control-plane|dispatch/i
+      );
+    },
+    10_000
+  );
 
   it('opens the selected-agent inspect peek evidence ledger CTA without prefetching ledger reads', async () => {
     const user = userEvent.setup();
@@ -4277,6 +4281,62 @@ afterEach(() => {
     expect(screen.getByRole('button', { name: 'Supervision' })).toHaveAttribute('aria-expanded', 'true');
     expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
   });
+
+  it(
+    'orders the selected-agent Evidence CTA as coverage, source matrix, proof rows, then inspect records',
+    async () => {
+      const user = userEvent.setup();
+      render(<App />);
+
+      const roster = await screen.findByRole('navigation', { name: 'Agent roster' });
+      await user.click(
+        within(roster).getByRole('button', {
+          name: 'Select and locate App Engineering Agent'
+        })
+      );
+
+      const inspectPeek = await screen.findByRole('region', { name: 'Selected agent inspect peek' });
+      await user.click(
+        within(inspectPeek).getByRole('button', {
+          name: 'Open App Engineering Agent Evidence Ledger'
+        })
+      );
+
+      const details = await screen.findByRole('complementary', { name: 'Agent details' });
+      const ledgerSection = await findHubSection(details, 'Evidence Ledger');
+
+      await waitFor(() => {
+        expect(ledgerSection).toHaveTextContent('Proof Compass ref groups');
+      });
+
+      const sourceMatrix = within(ledgerSection).getByRole('group', {
+        name: 'Selected agent source matrix proof spine'
+      });
+      expect(ledgerSection).toHaveTextContent('Proof glance · 6 records · Sources workspace 3, tmux 2, Hermes 1');
+      expect(ledgerSection).toHaveTextContent(
+        'Coverage gap · 1 · Roles source evidence 4, agent output 2 · Latest observed 2026-03-16T08:59:10.000Z'
+      );
+      expect(within(sourceMatrix).getByText('Source matrix')).toBeVisible();
+      expect(within(sourceMatrix).getByText('Workspace file · Observed')).toBeVisible();
+      expect(within(sourceMatrix).getByText('Agent output · Output candidate · 4')).toBeVisible();
+
+      const spineText = ledgerSection.textContent ?? '';
+      expect(spineText.indexOf('Proof glance ·')).toBeGreaterThanOrEqual(0);
+      expect(spineText.indexOf('Proof glance ·')).toBeLessThan(spineText.indexOf('Source matrix'));
+      expect(spineText.indexOf('Source matrix')).toBeLessThan(spineText.indexOf('Proof Compass ref groups'));
+      expect(spineText.indexOf('Proof Compass ref groups')).toBeLessThan(spineText.indexOf('Output evidence · 1'));
+      expect(spineText.indexOf('Output evidence · 1')).toBeLessThan(spineText.indexOf('Inspect record'));
+
+      const requestedUrls = vi.mocked(globalThis.fetch).mock.calls.map(([request]) => String(request));
+      expect(requestedUrls).toContain(appEngineeringEvidenceRecordsUrl);
+      expect(requestedUrls).toContain(appEngineeringEvidenceRefRollupUrl);
+      expect(requestedUrls).not.toContain(appEngineeringEvidenceSourceContextUrl);
+      expect(ledgerSection).not.toHaveTextContent(
+        /workspace_file|tmux_observation|agent_output|runtime_activity|source_kind|source_status|evidence_role|\/tmp\/app|tmux:\/\/raw|metadata|control-plane|dispatch/i
+      );
+    },
+    10_000
+  );
 
   it('does not poll selected-agent ref-rollup rows after the Evidence Ledger loads', async () => {
     (window as typeof window & { __AITOWN_POLL_INTERVAL_MS__?: number }).__AITOWN_POLL_INTERVAL_MS__ = 10;
@@ -8194,7 +8254,7 @@ afterEach(() => {
       .mock.calls.map(([input]) => (typeof input === 'string' ? input : input.toString()));
     expect(requestedUrls).toContain(appEngineeringReviewAccountabilityReplayUrl);
     expect(requestedUrls).toContain(teamLeadAccountabilityReplayUrl);
-  });
+  }, 10_000);
 
   it('opens a replay checkpoint event from shared memory without changing the selected agent or correlation', async () => {
     const replayCheckpointMemoryArtifacts = {

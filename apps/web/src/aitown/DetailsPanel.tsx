@@ -46,6 +46,8 @@ import {
 } from './accountabilitySignals';
 import { deriveAccountabilityReplayAuditVerdict } from './accountabilityReplayAudit';
 import { deriveAgentDetailEvidenceFacets } from './agentDetailEvidenceFacets';
+import type { SelectedAgentEvidenceProofCapsule } from './selectedAgentEvidenceGlance';
+import type { SelectedAgentSourceMatrixViewModel } from './selectedAgentSourceMatrix';
 import {
   deriveCollectorItemSourceDrilldownGroups,
   deriveCollectorItemSourceHealthFacts,
@@ -163,6 +165,8 @@ type DetailsPanelProps = {
   selectedAgentEvidenceReplayWindow: EvidenceReplayWindow | null;
   selectedAgentEvidenceReplayWindowError: string | null;
   selectedAgentEvidenceReplayWindowState: LoadState;
+  selectedAgentEvidenceGlance?: SelectedAgentEvidenceProofCapsule | null;
+  selectedAgentSourceMatrix?: SelectedAgentSourceMatrixViewModel | null;
   selectedAgentEvidenceLedger: SelectedAgentEvidenceLedgerModel | null;
   selectedAgentEvidenceLedgerError: string | null;
   selectedAgentEvidenceLedgerState: LoadState;
@@ -1362,6 +1366,60 @@ function formatEvidenceLedgerRef(value: string) {
   return formatBoundedEvidenceLedgerToken(normalized);
 }
 
+function renderSelectedAgentEvidenceProofSpineSummary(
+  proofCapsule: SelectedAgentEvidenceProofCapsule | null | undefined,
+  sourceMatrix: SelectedAgentSourceMatrixViewModel | null | undefined
+) {
+  const shouldRenderSourceMatrix =
+    sourceMatrix !== null &&
+    sourceMatrix !== undefined &&
+    (sourceMatrix.status !== 'empty' || sourceMatrix.selectedAgentId !== null);
+
+  if (!proofCapsule && !shouldRenderSourceMatrix) {
+    return null;
+  }
+
+  return (
+    <li className="aitown-record">
+      <strong>Read-only proof spine</strong>
+      {proofCapsule ? (
+        <span role="group" aria-label="Selected agent coverage proof spine">
+          {proofCapsule.map((line) => (
+            <span key={line}>{line}</span>
+          ))}
+        </span>
+      ) : null}
+      {shouldRenderSourceMatrix ? renderSelectedAgentSourceMatrixProofSpine(sourceMatrix) : null}
+    </li>
+  );
+}
+
+function renderSelectedAgentSourceMatrixProofSpine(sourceMatrix: SelectedAgentSourceMatrixViewModel) {
+  return (
+    <span
+      className="aitown-selected-agent-peek__source-matrix"
+      role="group"
+      aria-label="Selected agent source matrix proof spine"
+    >
+      <span className="aitown-selected-agent-peek__source-matrix-label">{sourceMatrix.statusLabel}</span>
+      {sourceMatrix.status === 'ready' ? null : <span>{sourceMatrix.detailLabel}</span>}
+      {sourceMatrix.rows.map((row) => (
+        <span
+          key={`${row.source}:${row.status}:${row.role}:${row.output}:${row.count}:${row.latest_at ?? 'unknown'}`}
+          className="aitown-selected-agent-peek__source-matrix-row"
+        >
+          <strong>{`${row.source} · ${row.status}`}</strong>
+          <span>{`${row.role} · ${row.output} · ${row.count}`}</span>
+          <span>{`Latest · ${row.latest_at ?? 'unknown'}`}</span>
+        </span>
+      ))}
+      {sourceMatrix.unmappedSummary.totalCount > 0 ? (
+        <span>{`Unmapped evidence · ${sourceMatrix.unmappedSummary.totalCount} separate`}</span>
+      ) : null}
+    </span>
+  );
+}
+
 function renderSelectedAgentEvidenceProofCompass(model: SelectedAgentEvidenceLedgerModel) {
   if (model.isEmpty) {
     return null;
@@ -1486,19 +1544,27 @@ function focusSelectedAgentEvidenceLedgerGroup(key: SelectedAgentEvidenceLedgerB
 }
 
 function renderSelectedAgentEvidenceSourceContextGroup(group: SelectedAgentEvidenceLedgerSourceContextGroup) {
+  const sourceKind = formatSelectedEvidenceSourceKindLabel(group.sourceKind);
+  const evidenceRole = formatSelectedEvidenceRoleLabel(group.evidenceRole);
+  const sourceStatus = formatSelectedEvidenceStatusLabel(group.sourceStatus);
+
   return (
     <span
       key={`${group.sourceKind}:${group.evidenceRole ?? 'none'}:${group.sourceStatus ?? 'none'}:${group.mapped ? 'mapped' : 'unmapped'}`}
     >
-      {`Source context · ${group.sourceKind} · ${group.evidenceRole ?? 'unclassified'} · ${group.sourceStatus ?? 'unknown'} · ${group.mapped ? 'mapped' : 'unmapped'} · ${group.totalCount} · Observed ${renderTimestamp(group.observedAt, 'No observed timestamp')} · Collected ${renderTimestamp(group.collectedAt, 'No collected timestamp')}`}
+      {`Source context · ${sourceKind} · ${evidenceRole} · ${sourceStatus} · ${group.mapped ? 'mapped' : 'unmapped'} · ${group.totalCount} · Observed ${renderTimestamp(group.observedAt, 'No observed timestamp')} · Collected ${renderTimestamp(group.collectedAt, 'No collected timestamp')}`}
     </span>
   );
 }
 
 function renderSelectedAgentEvidenceSourceRefGroup(group: SelectedAgentEvidenceLedgerSourceRefGroup) {
+  const sourceKind = formatSelectedEvidenceSourceKindLabel(group.sourceKind);
+  const evidenceRole = formatSelectedEvidenceRoleLabel(group.evidenceRole);
+  const sourceStatus = formatSelectedEvidenceStatusLabel(group.sourceStatus);
+
   return (
     <span key={`${group.sourceKind}:${group.evidenceRole ?? 'none'}:${group.sourceStatus ?? 'none'}`}>
-      {`Ref rollup · ${group.sourceKind} · ${group.evidenceRole ?? 'unclassified'} · ${group.sourceStatus ?? 'unknown'} · refs available · ${group.totalCount}`}
+      {`Ref rollup · ${sourceKind} · ${evidenceRole} · ${sourceStatus} · refs available · ${group.totalCount}`}
     </span>
   );
 }
@@ -1528,10 +1594,13 @@ function renderSelectedAgentEvidenceLedgerItem(
 ) {
   const mapped = item.agentId !== null && item.evidenceRole !== 'runtime_unmapped';
   const evidenceId = formatBoundedEvidenceLedgerToken(item.evidenceId);
+  const sourceKind = formatSelectedEvidenceSourceKindLabel(item.sourceKind);
+  const evidenceRole = formatSelectedEvidenceRoleLabel(item.evidenceRole);
+  const sourceStatus = formatSelectedEvidenceStatusLabel(item.sourceStatus);
 
   return (
     <Fragment key={item.evidenceId}>
-      <span>{`Source · ${item.sourceKind} · Role · ${item.evidenceRole ?? 'unclassified'} · Status · ${item.sourceStatus ?? 'unknown'} · ${mapped ? 'mapped' : 'unmapped'} · Observed · ${renderTimestamp(item.observedAt, 'No observed timestamp')} · Collected · ${renderTimestamp(item.collectedAt, 'No collected timestamp')}`}</span>
+      <span>{`Source · ${sourceKind} · Role · ${evidenceRole} · Status · ${sourceStatus} · ${mapped ? 'mapped' : 'unmapped'} · Observed · ${renderTimestamp(item.observedAt, 'No observed timestamp')} · Collected · ${renderTimestamp(item.collectedAt, 'No collected timestamp')}`}</span>
       <button
         type="button"
         className="aitown-link-button"
@@ -1696,9 +1765,29 @@ const SELECTED_EVIDENCE_REPLAY_WINDOW_RECORD_KIND_LABELS: Record<string, string>
   unknown: 'record'
 };
 
-function formatSelectedEvidenceSourceContextLabel(value: unknown, labels: Readonly<Record<string, string>>) {
+function formatSelectedEvidenceLabel(
+  value: unknown,
+  labels: Readonly<Record<string, string>>,
+  fallback: string
+) {
   const normalized = typeof value === 'string' ? value.trim() : '';
-  return normalized && Object.prototype.hasOwnProperty.call(labels, normalized) ? labels[normalized] : 'Unknown';
+  return normalized && Object.prototype.hasOwnProperty.call(labels, normalized) ? labels[normalized] : fallback;
+}
+
+function formatSelectedEvidenceSourceContextLabel(value: unknown, labels: Readonly<Record<string, string>>) {
+  return formatSelectedEvidenceLabel(value, labels, 'Unknown');
+}
+
+function formatSelectedEvidenceSourceKindLabel(value: unknown) {
+  return formatSelectedEvidenceLabel(value, SELECTED_EVIDENCE_SOURCE_CONTEXT_KIND_LABELS, 'Unknown');
+}
+
+function formatSelectedEvidenceRoleLabel(value: unknown) {
+  return formatSelectedEvidenceLabel(value, SELECTED_EVIDENCE_SOURCE_CONTEXT_ROLE_LABELS, 'Unclassified');
+}
+
+function formatSelectedEvidenceStatusLabel(value: unknown) {
+  return formatSelectedEvidenceLabel(value, SELECTED_EVIDENCE_SOURCE_CONTEXT_STATUS_LABELS, 'Unknown');
 }
 
 function formatSelectedEvidenceReplayWindowRecordKind(value: unknown) {
@@ -4974,6 +5063,8 @@ export function DetailsPanel({
   selectedAgentEvidenceReplayWindow,
   selectedAgentEvidenceReplayWindowError,
   selectedAgentEvidenceReplayWindowState,
+  selectedAgentEvidenceGlance = null,
+  selectedAgentSourceMatrix = null,
   selectedAgentEvidenceLedger,
   selectedAgentEvidenceLedgerError,
   selectedAgentEvidenceLedgerState,
@@ -6806,6 +6897,7 @@ export function DetailsPanel({
           ) : null}
           {selectedAgentEvidenceLedger ? (
             <>
+              {renderSelectedAgentEvidenceProofSpineSummary(selectedAgentEvidenceGlance, selectedAgentSourceMatrix)}
               {renderSelectedAgentEvidenceProofCompass(selectedAgentEvidenceLedger)}
               {renderSelectedAgentEvidenceLedgerGroup(
                 'output',

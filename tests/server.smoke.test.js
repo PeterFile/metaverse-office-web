@@ -7039,6 +7039,106 @@ test('GET /collectors/controller-snapshot/summary projects requested snapshot id
   assert.equal(await readFile(storeFile, 'utf8'), fileBeforeRead);
 });
 
+test('GET /collectors/controller-snapshot/append-proof returns latest collector append proof read-only', async () => {
+  let collectCount = 0;
+  const controllerSnapshotCollector = {
+    async collectSnapshot() {
+      collectCount += 1;
+      throw new Error('GET append proof must not collect');
+    }
+  };
+  const root = await mkdtemp(path.join(os.tmpdir(), 'metaverse-office-append-proof-'));
+  const storeFile = path.join(root, 'prototype-store.jsonl');
+  const store = await createPrototypeStore({ filePath: storeFile });
+  const firstReport = createRouteParityCollectorReport();
+  const secondReport = createRouteParityCollectorReport();
+  secondReport.collected_at = '2026-03-09T18:07:00.000Z';
+  secondReport.items[0].workspace_observations = [];
+  secondReport.items[0].source_health.workspace_files.status = 'observed';
+  secondReport.items[0].source_health.workspace_files.degraded_reasons = [];
+
+  await store.appendCollectorReport(firstReport);
+  await store.appendCollectorReport(secondReport);
+  const fileBeforeRead = await readFile(storeFile, 'utf8');
+  const countsBeforeRead = store.getCounts();
+
+  const latest = await requestJsonDirect({
+    url: '/collectors/controller-snapshot/append-proof',
+    store,
+    controllerSnapshotCollector
+  });
+  assert.equal(latest.response.status, 200);
+  assert.deepEqual(latest.body.item, {
+    has_snapshot: true,
+    snapshot_append_index: 16,
+    evidence_record_count: 4,
+    first_evidence_append_index: 12,
+    last_evidence_append_index: 15,
+    ordering_status: 'ordered',
+    source_kind_buckets: {
+      workspace_root: 2,
+      workspace_file: 0,
+      tmux_observation: 2,
+      hermes_profile: 0,
+      hermes_session: 0,
+      kanban_fixture: 0,
+      linear_fixture: 0,
+      slack_fixture: 0,
+      task_fixture: 0
+    },
+    evidence_role_buckets: {
+      workspace_presence: 2,
+      inbound_task: 0,
+      agent_output: 0,
+      agent_plan: 0,
+      runtime_activity: 1,
+      runtime_presence: 0,
+      runtime_unmapped: 1,
+      task_reference: 0
+    },
+    source_status_buckets: {
+      observed: 3,
+      degraded: 0,
+      missing: 1,
+      error: 0
+    },
+    output_candidate_buckets: { true: 1, false: 3 },
+    mapped_buckets: { mapped: 3, unmapped: 1 }
+  });
+  assert.equal(JSON.stringify(latest.body).includes('collector-snapshot:'), false);
+  assert.equal(JSON.stringify(latest.body).includes('/tmp/route-parity'), false);
+  assert.equal(JSON.stringify(latest.body).includes('tmux://'), false);
+  assert.equal(JSON.stringify(latest.body).includes('degraded_reasons'), false);
+
+  const historical = await requestJsonDirect({
+    url:
+      '/collectors/controller-snapshot/append-proof?collector_snapshot_id=' +
+      encodeURIComponent('collector-snapshot:2026-03-09T18:06:00.000Z'),
+    store,
+    controllerSnapshotCollector
+  });
+  assert.equal(historical.response.status, 200);
+  assert.equal(historical.body.item.snapshot_append_index, 10);
+  assert.equal(historical.body.item.evidence_record_count, 6);
+  assert.equal(historical.body.item.first_evidence_append_index, 4);
+  assert.equal(historical.body.item.last_evidence_append_index, 9);
+
+  const unknown = await requestJsonDirect({
+    url:
+      '/collectors/controller-snapshot/append-proof?collector_snapshot_id=' +
+      encodeURIComponent('/tmp/route-parity-token-sk-live'),
+    store,
+    controllerSnapshotCollector
+  });
+  assert.equal(unknown.response.status, 200);
+  assert.equal(unknown.body.item.has_snapshot, false);
+  assert.equal(unknown.body.item.ordering_status, 'missing_snapshot');
+  assert.equal(unknown.text.includes('/tmp/route-parity-token-sk-live'), false);
+  assert.equal(collectCount, 0);
+  assert.deepEqual(store.getCounts(), countsBeforeRead);
+  assert.equal(await readFile(storeFile, 'utf8'), fileBeforeRead);
+});
+
 test('GET /collectors/controller-snapshot/diff projects compact read-only snapshot deltas', async (t) => {
   const { baseUrl, store, storeFile } = await createHarness(t);
   const firstReport = createRouteParityCollectorReport();
@@ -7877,7 +7977,7 @@ test('GET /collectors/controller-snapshot/schema exposes static catalog without 
   });
   assert.deepEqual(
     response.body.item.routes.map((route) => route.name),
-    ['latest', 'summary', 'evidence_coverage', 'source_health', 'history', 'diff']
+    ['latest', 'summary', 'append_proof', 'evidence_coverage', 'source_health', 'history', 'diff']
   );
   assert.deepEqual(response.body.item.source_kinds, [
     'workspace_root',
@@ -7918,6 +8018,19 @@ test('GET /collectors/controller-snapshot/schema exposes static catalog without 
     'source_kind_buckets',
     'source_health_buckets',
     'runtime_source_evidence'
+  ]);
+  assert.deepEqual(response.body.item.snapshot_fields.append_proof, [
+    'has_snapshot',
+    'snapshot_append_index',
+    'evidence_record_count',
+    'first_evidence_append_index',
+    'last_evidence_append_index',
+    'ordering_status',
+    'source_kind_buckets',
+    'evidence_role_buckets',
+    'source_status_buckets',
+    'output_candidate_buckets',
+    'mapped_buckets'
   ]);
   assert.deepEqual(response.body.item.snapshot_fields.history, [
     'total_count',

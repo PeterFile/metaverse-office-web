@@ -5951,6 +5951,129 @@ describe('WorldScene watch overlay caption gating', () => {
     });
   });
 
+  it('preserves selected-agent manual world position while the Hub opens and closes', async () => {
+    appInitMock.mockReset().mockResolvedValue(undefined);
+    vi.mocked(loadAiTownAssets).mockResolvedValue(makeAssets());
+
+    const scene = {
+      ...makeWideSelectedAgentScene(),
+      watchEdges: []
+    };
+    const selectedAgent = scene.agents.find((agent) => agent.agentId === scene.selectedAgentId);
+    const onSelectAgent = vi.fn();
+    const { container, rerender } = render(
+      <main className="aitown-shell">
+        <section className="aitown-panel aitown-panel--game">
+          <div className="aitown-panel__toolbar">Toolbar</div>
+          <WorldScene scene={scene} onSelectAgent={onSelectAgent} />
+        </section>
+      </main>
+    );
+
+    const host = container.querySelector('.aitown-world__host');
+    const toolbar = container.querySelector('.aitown-panel__toolbar');
+
+    expect(selectedAgent).toBeDefined();
+    expect(host).toBeInstanceOf(HTMLDivElement);
+    expect(toolbar).toBeInstanceOf(HTMLElement);
+
+    (host as HTMLDivElement).setPointerCapture = vi.fn();
+    (host as HTMLDivElement).releasePointerCapture = vi.fn();
+    (host as HTMLDivElement).hasPointerCapture = vi.fn(() => true);
+    setElementRect(host as HTMLDivElement, { left: 0, top: 0, width: 1000, height: 800 });
+    setElementRect(toolbar as HTMLElement, { left: 0, top: 0, width: 1000, height: 56 });
+
+    await waitFor(() => {
+      expect(readViewportInspector()?.read()).toMatchObject({
+        selectedAgent: {
+          agentId: selectedAgent?.agentId,
+          x: selectedAgent?.position.x,
+          y: selectedAgent?.position.y
+        },
+        clampPadding: {
+          top: 56,
+          right: 0
+        }
+      });
+    });
+
+    const initialCenter = readViewportCenter();
+    fireEvent.pointerDown(host as HTMLDivElement, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      button: 0,
+      buttons: 1,
+      clientX: 500,
+      clientY: 320
+    });
+    fireEvent.pointerMove(host as HTMLDivElement, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      buttons: 1,
+      clientX: 430,
+      clientY: 320
+    });
+    fireEvent.pointerUp(host as HTMLDivElement, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      button: 0,
+      clientX: 430,
+      clientY: 320
+    });
+
+    const manualCenter = readViewportCenter();
+    expect(manualCenter.x).not.toBeCloseTo(initialCenter.x, 4);
+
+    rerender(
+      <main className="aitown-shell">
+        <section className="aitown-panel aitown-panel--game">
+          <div className="aitown-panel__toolbar">Toolbar</div>
+          <WorldScene scene={scene} onSelectAgent={onSelectAgent} />
+        </section>
+        <aside className="aitown-hub-sheet">Hub summary</aside>
+      </main>
+    );
+
+    const hubSheet = container.querySelector('.aitown-hub-sheet');
+    expect(hubSheet).toBeInstanceOf(HTMLElement);
+    setElementRect(hubSheet as HTMLElement, { left: 680, top: 0, width: 320, height: 800 });
+
+    await waitFor(() => {
+      expect(readViewportInspector()?.read().clampPadding).toEqual({
+        top: 56,
+        right: 320
+      });
+      const hubOpenCenter = readViewportCenter();
+      expect(hubOpenCenter.x).toBeCloseTo(manualCenter.x, 4);
+      expect(hubOpenCenter.y).toBeCloseTo(manualCenter.y, 4);
+    });
+
+    rerender(
+      <main className="aitown-shell">
+        <section className="aitown-panel aitown-panel--game">
+          <div className="aitown-panel__toolbar">Toolbar</div>
+          <WorldScene scene={scene} onSelectAgent={onSelectAgent} />
+        </section>
+      </main>
+    );
+
+    await waitFor(() => {
+      expect(readViewportInspector()?.read().clampPadding).toEqual({
+        top: 56,
+        right: 0
+      });
+      const hubClosedCenter = readViewportCenter();
+      expect(hubClosedCenter.x).toBeCloseTo(manualCenter.x, 4);
+      expect(hubClosedCenter.y).toBeCloseTo(manualCenter.y, 4);
+      expect(readViewportInspector()?.read().selectedAgent).toEqual({
+        agentId: selectedAgent?.agentId,
+        x: selectedAgent?.position.x,
+        y: selectedAgent?.position.y
+      });
+    });
+    expect(onSelectAgent).not.toHaveBeenCalled();
+  });
+
   it('resyncs clamp padding when mounted shell chrome text expands existing padding contributors', async () => {
     appInitMock.mockReset().mockResolvedValue(undefined);
     vi.mocked(loadAiTownAssets).mockResolvedValue(makeAssets());

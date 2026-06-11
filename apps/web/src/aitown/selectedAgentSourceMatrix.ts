@@ -63,10 +63,10 @@ const SOURCE_KIND_LABELS: Record<string, string> = {
   tmux_observation: 'Tmux observation',
   hermes_profile: 'Hermes profile',
   hermes_session: 'Hermes session',
-  kanban_fixture: 'Kanban fixture',
-  linear_fixture: 'Linear fixture',
-  slack_fixture: 'Slack fixture',
-  task_fixture: 'Task fixture'
+  kanban_fixture: 'Tool evidence',
+  linear_fixture: 'Tool evidence',
+  slack_fixture: 'Tool evidence',
+  task_fixture: 'Linked evidence'
 };
 const SOURCE_STATUS_LABELS: Record<string, string> = {
   observed: 'Observed',

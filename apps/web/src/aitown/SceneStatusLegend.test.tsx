@@ -461,8 +461,16 @@ describe('SceneStatusLegend', () => {
 
   it('bounds legend signal lists and redacts hostile zone and backfill labels from text and aria', async () => {
     const canaries = [
+      '../private/session.json',
+      'github_pat_scene_status_canary',
+      'xoxb-scene-status-canary',
+      'task://scene-status/raw-ref',
+      'payload=scene-status-canary',
+      'metadata=scene-status-canary',
       '/Users/alice/private/session.json',
+      '/Volumes/scene-status/private.json',
       'tmux://session/secret-pane',
+      'hermes://session/secret-runner',
       'https://hooks.example.invalid/services/token',
       'webhook_payload_token',
       'control-plane-admin',
@@ -473,28 +481,30 @@ describe('SceneStatusLegend', () => {
     for (let index = 0; index < 5; index += 1) {
       const agentId = `agent-${index}`;
       const zoneId = `zone-${index}`;
+      const zoneCanary = canaries[index % 3];
+      const backfillCanary = canaries[index + 3] ?? canaries[canaries.length - 1];
       agents.set(
         agentId,
         makeWorldAgent({
           agent_id: agentId,
-          display_name: index === 0 ? `A Agent ${canaries[0]}` : `Safe Agent ${index}`,
+          display_name: `Backfill Agent ${backfillCanary}`,
           zone: zoneId,
           severity: 'red',
           phase: 'blocked',
           runtime_evidence: {
             source: 'incident_feed_backfill',
-            degraded_reasons: index === 0 ? [canaries[3], 'workflow partial'] : ['workflow partial'],
+            degraded_reasons: index === 0 ? [canaries[11], 'workflow partial'] : ['workflow partial'],
             incident_ids: [`inc-${index}`],
             source_kinds: ['controller_event'],
-            correlation_ids: [canaries[4]],
-            evidence_refs: [canaries[1], canaries[2]],
+            correlation_ids: [canaries[12]],
+            evidence_refs: [canaries[8], canaries[9], canaries[10]],
           },
         })
       );
       zones.push(
         makeZoneSnapshot({
           zone_id: zoneId,
-          label: index === 0 ? `A Zone ${canaries[0]}` : `Safe Zone ${index}`,
+          label: `Zone ${zoneCanary}`,
           occupant_ids: [agentId],
         })
       );

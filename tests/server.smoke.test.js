@@ -6821,6 +6821,27 @@ test('GET /runtime/source-gaps returns compact gap and unmapped evidence read-on
   const unknownTransitionSummary = await requestJson(
     `${baseUrl}/runtime/source-gaps/transition-summary?source_kind=token%3Dsource-gap-secret&lifecycle_state=token%3Dsource-gap-secret&newest_first=true&limit=1`
   );
+  const emptyFilterQuery = new URLSearchParams({
+    agent_id: 'missing-source-gap-agent',
+    source_kind: 'tmux://source-gap-empty-source/0.0',
+    source_status: 'token=source-gap-empty-status',
+    observed_since: '2026-03-09T19:00:00.000Z',
+    collected_since: '2026-03-09T19:00:00.000Z',
+    newest_first: 'true',
+    limit: '2'
+  });
+  const emptyList = await requestJson(`${baseUrl}/runtime/source-gaps?${emptyFilterQuery}`);
+  const emptySummary = await requestJson(
+    `${baseUrl}/runtime/source-gaps/summary?${emptyFilterQuery}`
+  );
+  const emptyAgentSummary = await requestJson(
+    `${baseUrl}/runtime/source-gaps/agent-summary?${emptyFilterQuery}`
+  );
+  const emptyTrend = await requestJson(`${baseUrl}/runtime/source-gaps/trend?${emptyFilterQuery}`);
+  emptyFilterQuery.set('lifecycle_state', 'token=source-gap-empty-lifecycle');
+  const emptyLifecycle = await requestJson(
+    `${baseUrl}/runtime/source-gaps/lifecycle?${emptyFilterQuery}`
+  );
 
   assert.equal(response.response.status, 200);
   assert.deepEqual(
@@ -7031,6 +7052,90 @@ test('GET /runtime/source-gaps returns compact gap and unmapped evidence read-on
   assert.equal(unknownTransitionSummary.body.item.latest_collected_at, null);
   assert.equal(JSON.stringify(unknownLifecycle.body).includes('source-gap-secret'), false);
   assert.equal(JSON.stringify(unknownTransitionSummary.body).includes('source-gap-secret'), false);
+  assert.equal(emptyList.response.status, 200);
+  assert.deepEqual(emptyList.body, { items: [] });
+  assert.equal(emptySummary.response.status, 200);
+  assert.deepEqual(emptySummary.body.item, {
+    total_count: 0,
+    returned_limit: 2,
+    mapped_count: 0,
+    unmapped_count: 0,
+    output_candidate_buckets: {
+      true: 0,
+      false: 0
+    },
+    source_kind_buckets: {
+      workspace_root: 0,
+      workspace_file: 0,
+      tmux_observation: 0,
+      hermes_profile: 0,
+      hermes_session: 0,
+      kanban_fixture: 0,
+      linear_fixture: 0,
+      slack_fixture: 0,
+      task_fixture: 0
+    },
+    evidence_role_buckets: {
+      workspace_presence: 0,
+      inbound_task: 0,
+      agent_output: 0,
+      agent_plan: 0,
+      runtime_activity: 0,
+      runtime_presence: 0,
+      runtime_unmapped: 0,
+      task_reference: 0
+    },
+    source_status_buckets: {
+      observed: 0,
+      degraded: 0,
+      missing: 0,
+      error: 0
+    },
+    collector_snapshot_id_buckets: {},
+    first_observed_at: null,
+    last_observed_at: null,
+    first_collected_at: null,
+    last_collected_at: null
+  });
+  assert.equal(emptyAgentSummary.response.status, 200);
+  assert.deepEqual(emptyAgentSummary.body.item, {
+    total_count: 0,
+    total_groups: 0,
+    returned_limit: 2,
+    groups: []
+  });
+  assert.equal(emptyTrend.response.status, 200);
+  assert.deepEqual(emptyTrend.body.item, {
+    bucket: 'hour',
+    total_count: 0,
+    total_buckets: 0,
+    returned_limit: 2,
+    buckets: []
+  });
+  assert.equal(emptyLifecycle.response.status, 200);
+  assert.deepEqual(emptyLifecycle.body.item, {
+    total_count: 0,
+    total_groups: 0,
+    returned_limit: 2,
+    groups: []
+  });
+  const emptySerialized = JSON.stringify({
+    list: emptyList.body,
+    summary: emptySummary.body,
+    agent_summary: emptyAgentSummary.body,
+    trend: emptyTrend.body,
+    lifecycle: emptyLifecycle.body
+  });
+  for (const canary of [
+    '/tmp/source-gaps',
+    'tmux://5-web3-app-engineering/0.1',
+    'missing-source-gap-agent',
+    'tmux://source-gap-empty-source/0.0',
+    'token=source-gap-empty-status',
+    'token=source-gap-empty-lifecycle'
+  ]) {
+    assert.equal(emptySerialized.includes(canary), false, `leaked canary: ${canary}`);
+  }
   assert.equal(collectCount, 0);
   assert.equal(store.getLatestCollectorReport(), latestBeforeRead);
   assert.equal(await readFile(storeFile, 'utf8'), fileBeforeRead);

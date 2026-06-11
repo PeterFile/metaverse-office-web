@@ -4903,6 +4903,7 @@ async function projectStorageIndexHealth({ records, recordLog }) {
     evidence_query_probe_count: null,
     evidence_query_probe_drift_count: null,
     evidence_query_probe_status: 'not_applicable',
+    health_reason_codes: [],
     sidecar_status: 'not_applicable',
     record_kind_buckets: createRecordKindBuckets(records),
     latest_record_ts: getLatestPublicRecordTimestamp(records)
@@ -4922,12 +4923,20 @@ async function projectStorageIndexHealth({ records, recordLog }) {
       (sum, indexRecord) => sum + indexRecord.evidence_refs.length,
       0
     );
-    const complete =
+    const sidecarComplete =
       counts.record_index_count === records.length &&
       counts.record_evidence_ref_count === expectedEvidenceRefCount &&
       counts.record_index_drift_count === 0 &&
-      counts.record_evidence_ref_drift_count === 0 &&
-      queryProbeCounts.evidence_query_probe_drift_count === 0;
+      counts.record_evidence_ref_drift_count === 0;
+    const queryProbeComplete = queryProbeCounts.evidence_query_probe_drift_count === 0;
+    const healthReasonCodes = [];
+    if (!sidecarComplete) {
+      healthReasonCodes.push('sidecar_drift');
+    }
+    if (!queryProbeComplete) {
+      healthReasonCodes.push('evidence_query_probe_drift');
+    }
+    const complete = sidecarComplete && queryProbeComplete;
 
     return {
       ...base,
@@ -4939,6 +4948,7 @@ async function projectStorageIndexHealth({ records, recordLog }) {
       evidence_query_probe_drift_count: queryProbeCounts.evidence_query_probe_drift_count,
       evidence_query_probe_status:
         queryProbeCounts.evidence_query_probe_drift_count === 0 ? 'complete' : 'stale',
+      health_reason_codes: healthReasonCodes,
       sidecar_status: complete ? 'complete' : 'stale',
       status: complete ? 'ok' : 'degraded'
     };
@@ -4947,6 +4957,7 @@ async function projectStorageIndexHealth({ records, recordLog }) {
       ...base,
       status: 'degraded',
       evidence_query_probe_status: 'stale',
+      health_reason_codes: ['sidecar_unavailable'],
       sidecar_status: 'stale'
     };
   }

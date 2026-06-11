@@ -8142,6 +8142,7 @@ test('GET evidence and source read routes keep JSONL and SQLite parity', async (
       evidence_query_probe_count: null,
       evidence_query_probe_drift_count: null,
       evidence_query_probe_status: 'not_applicable',
+      health_reason_codes: [],
       sidecar_status: 'not_applicable',
       record_kind_buckets: {
         event: 2,
@@ -8164,6 +8165,7 @@ test('GET evidence and source read routes keep JSONL and SQLite parity', async (
       evidence_query_probe_count: 16,
       evidence_query_probe_drift_count: 0,
       evidence_query_probe_status: 'complete',
+      health_reason_codes: [],
       sidecar_status: 'complete',
       record_kind_buckets: {
         event: 2,
@@ -8415,6 +8417,7 @@ test('GET /storage/index-health is sanitized and read-only', async (t) => {
       evidence_query_probe_count: null,
       evidence_query_probe_drift_count: null,
       evidence_query_probe_status: 'not_applicable',
+      health_reason_codes: [],
       sidecar_status: 'not_applicable',
       record_kind_buckets: {
         event: 2,

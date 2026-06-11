@@ -44,6 +44,9 @@ const TASK_EVIDENCE_SOURCE_KINDS = new Set([
   'slack_fixture',
   'task_fixture'
 ]);
+const RUNTIME_SOURCE_GAP_TRANSITION_SOURCE_KINDS = Object.freeze(
+  EVIDENCE_RECORD_SOURCE_KINDS.filter((sourceKind) => !TASK_EVIDENCE_SOURCE_KINDS.has(sourceKind))
+);
 const SAFE_TASK_EVIDENCE_VALUE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/;
 const TASK_EVIDENCE_WARNING_CODES = new Set(['agent_id suppressed']);
 const UNSAFE_TASK_EVIDENCE_VALUE_PATTERNS = Object.freeze([
@@ -1440,6 +1443,22 @@ class PrototypeStore {
   }
 
   getRuntimeSourceGapLifecycle(filters = {}) {
+    const { lifecycleGroups, limit } = this.#selectRuntimeSourceGapLifecycleGroups(filters);
+
+    return {
+      total_count: lifecycleGroups.reduce((total, group) => total + group.record_count, 0),
+      total_groups: lifecycleGroups.length,
+      returned_limit: limit,
+      groups: lifecycleGroups.slice(0, limit)
+    };
+  }
+
+  getRuntimeSourceGapTransitionSummary(filters = {}) {
+    const { lifecycleGroups, limit } = this.#selectRuntimeSourceGapLifecycleGroups(filters);
+    return summarizeRuntimeSourceGapTransitions(lifecycleGroups, limit);
+  }
+
+  #selectRuntimeSourceGapLifecycleGroups(filters = {}) {
     const { records, limit, newestFirst } = this.#filterEvidenceRecords(filters);
     const lifecycleState = normalizeFilterValue(filters.lifecycle_state);
     const groups = new Map();
@@ -1472,12 +1491,7 @@ class PrototypeStore {
           : compareRuntimeSourceGapLifecycleGroups(left, right)
       );
 
-    return {
-      total_count: lifecycleGroups.reduce((total, group) => total + group.record_count, 0),
-      total_groups: lifecycleGroups.length,
-      returned_limit: limit,
-      groups: lifecycleGroups.slice(0, limit)
-    };
+    return { lifecycleGroups, limit };
   }
 
   getRuntimeSourceGapTrend(filters = {}) {
@@ -3395,6 +3409,79 @@ function deriveRuntimeSourceGapLifecycleState(recordsByRecency) {
   return previousRecord && RUNTIME_SOURCE_GAP_STATUSES.includes(previousRecord.source_status)
     ? 'continuing'
     : 'opened';
+}
+
+function summarizeRuntimeSourceGapTransitions(lifecycleGroups, limit) {
+  const summary = {
+    total_records: 0,
+    total_groups: lifecycleGroups.length,
+    returned_limit: limit,
+    lifecycle_state_buckets: createRuntimeSourceGapTransitionBuckets(
+      RUNTIME_SOURCE_GAP_LIFECYCLE_STATES
+    ),
+    source_kind_buckets: createRuntimeSourceGapTransitionBuckets(
+      RUNTIME_SOURCE_GAP_TRANSITION_SOURCE_KINDS
+    ),
+    source_status_buckets: createRuntimeSourceGapTransitionBuckets(
+      EVIDENCE_RECORD_SOURCE_STATUSES
+    ),
+    mapped_state_buckets: createRuntimeSourceGapTransitionBuckets(['mapped', 'unmapped']),
+    latest_observed_at: null,
+    latest_collected_at: null
+  };
+
+  for (const group of lifecycleGroups) {
+    summary.total_records += group.record_count;
+    incrementRuntimeSourceGapTransitionBucket(
+      summary.lifecycle_state_buckets,
+      group.lifecycle_state,
+      group.record_count
+    );
+    incrementRuntimeSourceGapTransitionBucket(
+      summary.source_kind_buckets,
+      group.source_kind,
+      group.record_count
+    );
+    incrementRuntimeSourceGapTransitionBucket(
+      summary.mapped_state_buckets,
+      group.agent_id === null ? 'unmapped' : 'mapped',
+      group.record_count
+    );
+
+    for (const [status, recordCount] of Object.entries(group.source_status_buckets)) {
+      incrementRuntimeSourceGapTransitionBucket(
+        summary.source_status_buckets,
+        status,
+        recordCount
+      );
+    }
+
+    summary.latest_observed_at = getLatestEvidenceRecordIsoValue(
+      summary.latest_observed_at,
+      group.last_observed_at
+    );
+    summary.latest_collected_at = getLatestEvidenceRecordIsoValue(
+      summary.latest_collected_at,
+      group.last_collected_at
+    );
+  }
+
+  return summary;
+}
+
+function createRuntimeSourceGapTransitionBuckets(keys) {
+  return Object.fromEntries(
+    keys.map((key) => [key, { group_count: 0, record_count: 0 }])
+  );
+}
+
+function incrementRuntimeSourceGapTransitionBucket(buckets, key, recordCount) {
+  if (!Object.hasOwn(buckets, key) || !Number.isSafeInteger(recordCount) || recordCount < 1) {
+    return;
+  }
+
+  buckets[key].group_count += 1;
+  buckets[key].record_count += recordCount;
 }
 
 function compareRuntimeSourceGapLifecycleGroupsByRecency(left, right) {

@@ -6762,11 +6762,20 @@ test('GET /runtime/source-gaps returns compact gap and unmapped evidence read-on
   const lifecycle = await requestJson(
     `${baseUrl}/runtime/source-gaps/lifecycle?newest_first=true&limit=1`
   );
+  const transitionSummary = await requestJson(
+    `${baseUrl}/runtime/source-gaps/transition-summary?newest_first=true&limit=1`
+  );
   const observedLifecycle = await requestJson(
     `${baseUrl}/runtime/source-gaps/lifecycle?lifecycle_state=observed_unmapped&newest_first=true&limit=1`
   );
+  const observedTransitionSummary = await requestJson(
+    `${baseUrl}/runtime/source-gaps/transition-summary?lifecycle_state=observed_unmapped&newest_first=true&limit=1`
+  );
   const unknownLifecycle = await requestJson(
     `${baseUrl}/runtime/source-gaps/lifecycle?lifecycle_state=token%3Dsource-gap-secret&newest_first=true&limit=1`
+  );
+  const unknownTransitionSummary = await requestJson(
+    `${baseUrl}/runtime/source-gaps/transition-summary?source_kind=token%3Dsource-gap-secret&lifecycle_state=token%3Dsource-gap-secret&newest_first=true&limit=1`
   );
 
   assert.equal(response.response.status, 200);
@@ -6905,6 +6914,49 @@ test('GET /runtime/source-gaps returns compact gap and unmapped evidence read-on
   assert.equal(JSON.stringify(lifecycle.body).includes('collector_snapshot_id'), false);
   assert.equal(JSON.stringify(lifecycle.body).includes('metadata'), false);
   assert.equal(JSON.stringify(lifecycle.body).includes('degraded_reasons'), false);
+  assert.equal(transitionSummary.response.status, 200);
+  assert.deepEqual(transitionSummary.body.item, {
+    total_records: 2,
+    total_groups: 2,
+    returned_limit: 1,
+    lifecycle_state_buckets: {
+      opened: { group_count: 1, record_count: 1 },
+      continuing: { group_count: 0, record_count: 0 },
+      resolved: { group_count: 0, record_count: 0 },
+      observed_unmapped: { group_count: 1, record_count: 1 }
+    },
+    source_kind_buckets: {
+      workspace_root: { group_count: 0, record_count: 0 },
+      workspace_file: { group_count: 1, record_count: 1 },
+      tmux_observation: { group_count: 1, record_count: 1 },
+      hermes_profile: { group_count: 0, record_count: 0 },
+      hermes_session: { group_count: 0, record_count: 0 }
+    },
+    source_status_buckets: {
+      observed: { group_count: 1, record_count: 1 },
+      degraded: { group_count: 1, record_count: 1 },
+      missing: { group_count: 0, record_count: 0 },
+      error: { group_count: 0, record_count: 0 }
+    },
+    mapped_state_buckets: {
+      mapped: { group_count: 1, record_count: 1 },
+      unmapped: { group_count: 1, record_count: 1 }
+    },
+    latest_observed_at: '2026-03-09T18:05:50.000Z',
+    latest_collected_at: '2026-03-09T18:06:00.000Z'
+  });
+  assert.equal(JSON.stringify(transitionSummary.body).includes('/tmp/source-gaps'), false);
+  assert.equal(JSON.stringify(transitionSummary.body).includes('tmux://'), false);
+  assert.equal(JSON.stringify(transitionSummary.body).includes('agent_id'), false);
+  assert.equal(JSON.stringify(transitionSummary.body).includes('evidence_id'), false);
+  assert.equal(JSON.stringify(transitionSummary.body).includes('evidence_ref'), false);
+  assert.equal(JSON.stringify(transitionSummary.body).includes('collector_snapshot_id'), false);
+  assert.equal(JSON.stringify(transitionSummary.body).includes('metadata'), false);
+  assert.equal(JSON.stringify(transitionSummary.body).includes('degraded_reasons'), false);
+  assert.equal(JSON.stringify(transitionSummary.body).includes('current_status'), false);
+  assert.equal(JSON.stringify(transitionSummary.body).includes('snapshot_count'), false);
+  assert.equal(JSON.stringify(transitionSummary.body).includes('task_reference'), false);
+  assert.equal(JSON.stringify(transitionSummary.body).includes('task_fixture'), false);
   assert.equal(observedLifecycle.response.status, 200);
   assert.deepEqual(observedLifecycle.body.item, {
     total_count: 1,
@@ -6912,6 +6964,15 @@ test('GET /runtime/source-gaps returns compact gap and unmapped evidence read-on
     returned_limit: 1,
     groups: lifecycle.body.item.groups
   });
+  assert.equal(observedTransitionSummary.response.status, 200);
+  assert.deepEqual(observedTransitionSummary.body.item.lifecycle_state_buckets, {
+    opened: { group_count: 0, record_count: 0 },
+    continuing: { group_count: 0, record_count: 0 },
+    resolved: { group_count: 0, record_count: 0 },
+    observed_unmapped: { group_count: 1, record_count: 1 }
+  });
+  assert.equal(observedTransitionSummary.body.item.total_records, 1);
+  assert.equal(observedTransitionSummary.body.item.total_groups, 1);
   assert.equal(unknownLifecycle.response.status, 200);
   assert.deepEqual(unknownLifecycle.body.item, {
     total_count: 0,
@@ -6919,7 +6980,13 @@ test('GET /runtime/source-gaps returns compact gap and unmapped evidence read-on
     returned_limit: 1,
     groups: []
   });
+  assert.equal(unknownTransitionSummary.response.status, 200);
+  assert.equal(unknownTransitionSummary.body.item.total_records, 0);
+  assert.equal(unknownTransitionSummary.body.item.total_groups, 0);
+  assert.equal(unknownTransitionSummary.body.item.latest_observed_at, null);
+  assert.equal(unknownTransitionSummary.body.item.latest_collected_at, null);
   assert.equal(JSON.stringify(unknownLifecycle.body).includes('source-gap-secret'), false);
+  assert.equal(JSON.stringify(unknownTransitionSummary.body).includes('source-gap-secret'), false);
   assert.equal(collectCount, 0);
   assert.equal(store.getLatestCollectorReport(), latestBeforeRead);
   assert.equal(await readFile(storeFile, 'utf8'), fileBeforeRead);
@@ -7208,6 +7275,47 @@ test('GET /runtime/source-gaps/lifecycle passes lifecycle_state as a read-only f
     total_groups: 0,
     returned_limit: 1,
     groups: []
+  });
+});
+
+test('GET /runtime/source-gaps/transition-summary passes lifecycle filters read-only', async () => {
+  let receivedFilters = null;
+  const store = {
+    getRuntimeSourceGapTransitionSummary(filters) {
+      receivedFilters = filters;
+      return {
+        total_records: 0,
+        total_groups: 0,
+        returned_limit: 1,
+        lifecycle_state_buckets: {},
+        source_kind_buckets: {},
+        source_status_buckets: {},
+        mapped_state_buckets: {},
+        latest_observed_at: null,
+        latest_collected_at: null
+      };
+    }
+  };
+
+  const response = await requestJsonDirect({
+    url: '/runtime/source-gaps/transition-summary?lifecycle_state=resolved&newest_first=true&limit=1',
+    store
+  });
+
+  assert.equal(response.response.status, 200);
+  assert.equal(receivedFilters.lifecycle_state, 'resolved');
+  assert.equal(receivedFilters.newest_first, 'true');
+  assert.equal(receivedFilters.limit, '1');
+  assert.deepEqual(response.body.item, {
+    total_records: 0,
+    total_groups: 0,
+    returned_limit: 1,
+    lifecycle_state_buckets: {},
+    source_kind_buckets: {},
+    source_status_buckets: {},
+    mapped_state_buckets: {},
+    latest_observed_at: null,
+    latest_collected_at: null
   });
 });
 
@@ -9252,6 +9360,7 @@ test('GET safe-route leak regression matrix stays redacted and read-pure under h
     `/runtime/source-gaps/summary?newest_first=true&limit=2&${ignoredCanaryQuery}`,
     `/runtime/source-gaps/agent-summary?newest_first=true&limit=2&${ignoredCanaryQuery}`,
     `/runtime/source-gaps/lifecycle?newest_first=true&limit=2&${ignoredCanaryQuery}`,
+    `/runtime/source-gaps/transition-summary?newest_first=true&limit=2&${ignoredCanaryQuery}`,
     `/runtime/source-gaps/trend?newest_first=true&limit=2&${ignoredCanaryQuery}`,
     `/agents/evidence-spine/summary?newest_first=true&limit=2&${ignoredCanaryQuery}`,
     `/agents/evidence-spine/source-matrix?newest_first=true&limit=2&${ignoredCanaryQuery}`,

@@ -278,6 +278,7 @@ const CONTROLLER_SNAPSHOT_SCHEMA_FIELDS = Object.freeze({
     'to_collected_at',
     'summary_delta',
     'source_health_delta',
+    'runtime_source_evidence_delta',
     'agent_change_count',
     'returned_limit',
     'agent_changes'
@@ -6278,6 +6279,7 @@ function projectCollectorSnapshotDiff(reports = [], filters = {}) {
       source_kind_buckets: subtractBuckets(toHealth.source_kind_buckets, fromHealth.source_kind_buckets),
       status_buckets: subtractBuckets(toHealth.status_buckets, fromHealth.status_buckets)
     },
+    runtime_source_evidence_delta: createRuntimeSourceEvidenceDelta(fromReport, toReport),
     agent_change_count: agentChanges.length,
     returned_limit: limit,
     agent_changes: agentChanges.slice(0, limit)
@@ -6313,6 +6315,20 @@ function createCollectorSnapshotSummaryDelta(fromReport, toReport) {
     'workspace_observed_count',
     'reboot_recommended_count'
   ].map((field) => [field, normalizeCount(toSummary[field]) - normalizeCount(fromSummary[field])]));
+}
+
+function createRuntimeSourceEvidenceDelta(fromReport, toReport) {
+  const fromCounts = summarizeRuntimeSourceEvidenceCounts(fromReport.runtime_source_evidence);
+  const toCounts = summarizeRuntimeSourceEvidenceCounts(toReport.runtime_source_evidence);
+
+  return {
+    unmapped_tmux_session_count_delta:
+      toCounts.unmapped_tmux_session_count - fromCounts.unmapped_tmux_session_count,
+    unmapped_hermes_source_count_delta:
+      toCounts.unmapped_hermes_source_count - fromCounts.unmapped_hermes_source_count,
+    unmapped_task_evidence_count_delta:
+      toCounts.unmapped_task_evidence_count - fromCounts.unmapped_task_evidence_count
+  };
 }
 
 function createCollectorSnapshotDiffHealthAggregate(report) {

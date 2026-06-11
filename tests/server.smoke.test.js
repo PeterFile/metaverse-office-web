@@ -6559,6 +6559,42 @@ test('GET /collectors/controller-snapshot/diff projects compact read-only snapsh
   const secondReport = {
     ...secondBase,
     collected_at: '2026-03-09T18:11:00.000Z',
+    runtime_source_evidence: {
+      unmapped_tmux_sessions: [
+        ...(secondBase.runtime_source_evidence.unmapped_tmux_sessions || []),
+        {
+          session_name: 'route-runtime-delta-secret',
+          pane_refs: ['tmux://route-runtime-delta-secret/0.0'],
+          observed_count: 1,
+          status: 'observed',
+          last_observed_at: '2026-03-09T18:10:50.000Z',
+          degraded_reasons: ['route-runtime-delta-reason']
+        }
+      ],
+      unmapped_hermes_sources: [
+        {
+          source_kind: 'hermes_session',
+          evidence_ref: 'hermes://route-runtime-delta-secret',
+          profile_id: 'route-runtime-delta-profile-secret',
+          session_ref: 'route-runtime-delta-session-secret',
+          observed_at: '2026-03-09T18:10:45.000Z',
+          status: 'observed',
+          degraded_reasons: ['route-runtime-delta-reason'],
+          metadata: {
+            token: 'route-runtime-delta-token'
+          }
+        }
+      ],
+      unmapped_task_evidence: [
+        {
+          task_ref: 'TASK-ROUTE-DELTA',
+          source_kind: 'kanban_fixture',
+          status: 'observed',
+          observed_at: '2026-03-09T18:10:55.000Z',
+          correlation_id: 'corr-route-runtime-delta'
+        }
+      ]
+    },
     items: secondBase.items.map((item) =>
       item.agent_id === 'app-engineering'
         ? {
@@ -6594,6 +6630,11 @@ test('GET /collectors/controller-snapshot/diff projects compact read-only snapsh
   assert.equal(diff.response.status, 200);
   assert.equal(diff.body.item.from_collector_snapshot_id, 'collector-snapshot:2026-03-09T18:06:00.000Z');
   assert.equal(diff.body.item.to_collector_snapshot_id, 'collector-snapshot:2026-03-09T18:11:00.000Z');
+  assert.deepEqual(diff.body.item.runtime_source_evidence_delta, {
+    unmapped_tmux_session_count_delta: 1,
+    unmapped_hermes_source_count_delta: 1,
+    unmapped_task_evidence_count_delta: 1
+  });
   assert.deepEqual(diff.body.item.agent_changes, [
     {
       agent_id: 'app-engineering',
@@ -6611,6 +6652,9 @@ test('GET /collectors/controller-snapshot/diff projects compact read-only snapsh
   assert.equal(JSON.stringify(diff.body).includes('tmux://'), false);
   assert.equal(JSON.stringify(diff.body).includes('evidence_refs'), false);
   assert.equal(JSON.stringify(diff.body).includes('metadata'), false);
+  assert.equal(JSON.stringify(diff.body).includes('runtime-delta-secret'), false);
+  assert.equal(JSON.stringify(diff.body).includes('degraded_reasons'), false);
+  assert.equal(JSON.stringify(diff.body).includes('token'), false);
   assert.deepEqual(store.getCounts(), beforeCounts);
   assert.equal(await readFile(storeFile, 'utf8'), beforeRead);
 });

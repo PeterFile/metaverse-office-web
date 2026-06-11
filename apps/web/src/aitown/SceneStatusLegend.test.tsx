@@ -459,6 +459,73 @@ describe('SceneStatusLegend', () => {
     expect(serializedLegend).not.toMatch(/C:\\Users|file:\/\/|https?:\/\//i);
   });
 
+  it('bounds legend signal lists and redacts hostile zone and backfill labels from text and aria', async () => {
+    const canaries = [
+      '/Users/alice/private/session.json',
+      'tmux://session/secret-pane',
+      'https://hooks.example.invalid/services/token',
+      'webhook_payload_token',
+      'control-plane-admin',
+    ];
+    const agents = new Map<string, WorldAgent>();
+    const zones: ZoneSnapshot[] = [];
+
+    for (let index = 0; index < 5; index += 1) {
+      const agentId = `agent-${index}`;
+      const zoneId = `zone-${index}`;
+      agents.set(
+        agentId,
+        makeWorldAgent({
+          agent_id: agentId,
+          display_name: index === 0 ? `A Agent ${canaries[0]}` : `Safe Agent ${index}`,
+          zone: zoneId,
+          severity: 'red',
+          phase: 'blocked',
+          runtime_evidence: {
+            source: 'incident_feed_backfill',
+            degraded_reasons: index === 0 ? [canaries[3], 'workflow partial'] : ['workflow partial'],
+            incident_ids: [`inc-${index}`],
+            source_kinds: ['controller_event'],
+            correlation_ids: [canaries[4]],
+            evidence_refs: [canaries[1], canaries[2]],
+          },
+        })
+      );
+      zones.push(
+        makeZoneSnapshot({
+          zone_id: zoneId,
+          label: index === 0 ? `A Zone ${canaries[0]}` : `Safe Zone ${index}`,
+          occupant_ids: [agentId],
+        })
+      );
+    }
+
+    const { container } = renderLegend(makeWorldState({ agents, zones }), vi.fn());
+
+    const hotZoneList = await screen.findByRole('list', { name: 'Hot zones legend' });
+    const hotZoneItems = within(hotZoneList).getAllByRole('listitem');
+    const dataQualityList = await screen.findByRole('list', { name: 'Data quality legend' });
+    const dataQualityItems = within(dataQualityList).getAllByRole('listitem');
+
+    expect(hotZoneItems).toHaveLength(4);
+    expect(dataQualityItems).toHaveLength(4);
+    expect(within(hotZoneList).getByText('+2 more hot zones')).toBeVisible();
+    expect(within(dataQualityList).getByText('+2 more backfill signals')).toBeVisible();
+    expect(container).toHaveTextContent('World zone');
+    expect(container).toHaveTextContent('Backfill agent');
+
+    const visibleAndAria = [
+      container.textContent ?? '',
+      ...Array.from(container.querySelectorAll('[aria-label]')).map(
+        (element) => element.getAttribute('aria-label') ?? ''
+      ),
+    ].join(' ');
+
+    for (const canary of canaries) {
+      expect(visibleAndAria).not.toContain(canary);
+    }
+  });
+
   it('renders bounded incident evidence overflow copy with correct plurals', async () => {
     const world = makeWorldState({
       incidents: [

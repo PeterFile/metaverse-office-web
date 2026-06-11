@@ -1852,6 +1852,7 @@ function AppInner() {
     [hubOpen, overviewResource.data?.agents, runtimeSourceGapsResource.data, selectedAgentId]
   );
   const sourceGapQueueTotal = runtimeSourceGapsSummaryResource.data?.total_count ?? sourceGapChips.length;
+  const sourceGapChipOverflowCount = Math.max(0, sourceGapQueueTotal - sourceGapChips.length);
   const hudReadModelsVisible = !hubOpen && selectedAgentId === null;
   const evidenceCoverageReadModelStatus = hudReadModelsVisible
     ? resolveEvidenceCoverageReadModelStatus(
@@ -3783,6 +3784,11 @@ function AppInner() {
                             </span>
                           )
                         )}
+                        {sourceGapChipOverflowCount > 0 ? (
+                          <span className="aitown-focus-chip aitown-focus-chip--source-gap aitown-focus-chip--readonly">
+                            <strong>{`+${sourceGapChipOverflowCount} more`}</strong>
+                          </span>
+                        ) : null}
                       </span>
                     </section>
                   ) : null}

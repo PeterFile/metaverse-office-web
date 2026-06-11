@@ -5455,6 +5455,114 @@ afterEach(() => {
     }
   });
 
+  it('keeps HUD source-gap chips bounded and redacts hostile display labels, roles, and aria', async () => {
+    const user = userEvent.setup();
+    const canaries = [
+      '/Users/cwp/private/source-gap.md',
+      'tmux://source-gap-pane',
+      'https://hooks.example.test/source-gap-token',
+      'webhook_payload_token',
+      'control-plane-dispatch'
+    ];
+    const hostileOverview = {
+      ...overviewFixture,
+      agents: overviewFixture.agents.map((agent) =>
+        agent.agent_id === 'growth-revenue'
+          ? { ...agent, display_name: `Growth ${canaries[0]}` }
+          : agent
+      )
+    };
+    const sourceGapItems = [
+      {
+        ...growthRevenueRuntimeSourceGapsFixture.items[0],
+        source_status: 'error',
+        evidence_role: `webhook_url=${canaries[2]}`,
+        collector_snapshot_id: canaries[1],
+        correlation_id: canaries[3],
+        degraded_reasons: [canaries[4]]
+      },
+      {
+        ...growthRevenueRuntimeSourceGapsFixture.items[0],
+        agent_id: 'app-engineering',
+        source_kind: 'tmux_session',
+        source_status: 'missing',
+        evidence_role: 'runtime_activity',
+        output_candidate: false
+      },
+      {
+        ...growthRevenueRuntimeSourceGapsFixture.items[0],
+        agent_id: 'app-engineering',
+        source_kind: 'hermes_session',
+        source_status: 'degraded',
+        evidence_role: 'source_evidence',
+        output_candidate: false
+      },
+      {
+        ...growthRevenueRuntimeSourceGapsFixture.items[0],
+        agent_id: 'team-lead',
+        source_kind: 'workspace_root',
+        source_status: 'degraded',
+        evidence_role: 'workspace_presence',
+        output_candidate: false
+      },
+      {
+        ...growthRevenueRuntimeSourceGapsFixture.items[0],
+        agent_id: null,
+        source_kind: 'hermes_profile',
+        source_status: 'observed',
+        evidence_role: 'runtime_source',
+        output_candidate: false,
+        unmapped: true
+      }
+    ];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString();
+
+      if (url === '/office/overview') {
+        return jsonResponse(hostileOverview);
+      }
+
+      if (url === runtimeSourceGapsUrl) {
+        return jsonResponse({ items: sourceGapItems });
+      }
+
+      if (url === runtimeSourceGapsSummaryUrl) {
+        return jsonResponse({
+          item: {
+            ...growthRevenueRuntimeSourceGapsSummaryFixture,
+            total_count: 5,
+            returned_limit: 3
+          }
+        });
+      }
+
+      return resolveTestFetchResponse(url);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<App />);
+
+    await waitFor(() => expect(fetchMock.mock.calls.map(([request]) => String(request))).toContain(runtimeSourceGapsUrl));
+    const signals = await openHudSignals(user);
+    const sourceGapFocus = await within(signals).findByRole('region', { name: 'Source gap focus' });
+    const sourceGapButtons = within(sourceGapFocus).getAllByRole('button', {
+      name: /Open source gap supervision/
+    });
+    const sourceGapAria = Array.from(sourceGapFocus.querySelectorAll('[aria-label]'))
+      .map((element) => element.getAttribute('aria-label') ?? '')
+      .join(' ');
+
+    expect(sourceGapButtons).toHaveLength(3);
+    expect(within(sourceGapFocus).getByText('+2 more')).toBeVisible();
+    expect(sourceGapFocus).toHaveTextContent('Mapped agent');
+    expect(sourceGapFocus).toHaveTextContent('source evidence · output candidate');
+
+    for (const canary of canaries) {
+      expect(sourceGapFocus).not.toHaveTextContent(canary);
+      expect(sourceGapAria).not.toContain(canary);
+    }
+  });
+
   it('selects and focuses mapped world source-gap pins without opening Hub or prefetching evidence records', async () => {
     const user = userEvent.setup();
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {

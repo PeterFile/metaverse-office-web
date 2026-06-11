@@ -12,6 +12,16 @@ type RectSnapshot = {
   height: number;
 };
 
+const RAW_OPERATOR_REF_PATTERNS = [
+  { label: 'local path', source: String.raw`(?:^|[\s(["'])/(?:tmp|Users|Volumes|workspace|private|var)(?:/[^\s<>"')]+)+` },
+  { label: 'runtime scheme', source: String.raw`\b(?:tmux|hermes|session|profile)://\S+` },
+  { label: 'tmux session ref', source: String.raw`\b\d+-web3-[a-z0-9-]+(?:/\d+(?:\.\d+)?)?\b` },
+  { label: 'profile ref', source: String.raw`\bprofile-[a-z0-9][a-z0-9-]*\b` },
+  { label: 'token ref', source: String.raw`\b(?:session-token|token[_:-]?[a-z0-9]{6,}|sk-[a-z0-9]{10,}|xox[abprs]-[a-z0-9-]+)\b` },
+  { label: 'webhook ref', source: String.raw`\b(?:webhook[_:-]?[a-z0-9-]*|hooks\.slack\.com|discord(?:app)?\.com/api/webhooks)\b` },
+  { label: 'control-plane ref', source: String.raw`\bcontrol-plane(?:[:/][^\s]+)?\b` }
+] as const;
+
 async function readRect(locator: Locator): Promise<RectSnapshot> {
   return locator.evaluate((element) => {
     const rect = element.getBoundingClientRect();
@@ -159,6 +169,112 @@ async function expectLocatorInsideViewport(page: Page, locator: Locator, label: 
   expect(rect.bottom, `${label} should not overflow viewport bottom`).toBeLessThanOrEqual(viewport!.height + epsilon);
 }
 
+async function expectPrimaryDragLaneMostlyReachable(
+  page: Page,
+  worldHost: Locator,
+  label: string,
+  maxBlockedRatio = 0.25
+) {
+  const worldRect = await readRect(worldHost);
+  const dragLane = resolvePrimaryDragLane(worldRect);
+  const hitStats = await page.evaluate((lane) => {
+    const columns = 7;
+    const rows = 5;
+    const blockedSamples: Array<{
+      x: number;
+      y: number;
+      tagName: string | null;
+      className: string | null;
+    }> = [];
+
+    for (let row = 0; row < rows; row += 1) {
+      for (let column = 0; column < columns; column += 1) {
+        const x = lane.left + (lane.width * (column + 0.5)) / columns;
+        const y = lane.top + (lane.height * (row + 0.5)) / rows;
+        const target = document.elementFromPoint(x, y);
+
+        if (!target?.closest('.aitown-world__host')) {
+          blockedSamples.push({
+            x,
+            y,
+            tagName: target?.tagName ?? null,
+            className: target instanceof HTMLElement ? target.className : null
+          });
+        }
+      }
+    }
+
+    return {
+      blockedRatio: blockedSamples.length / (columns * rows),
+      blockedSamples: blockedSamples.slice(0, 4)
+    };
+  }, dragLane);
+
+  expect(
+    hitStats.blockedRatio,
+    `${label} should leave the primary world drag lane reachable: ${JSON.stringify(hitStats.blockedSamples)}`
+  ).toBeLessThanOrEqual(maxBlockedRatio);
+}
+
+async function expectOverlayCombinationViewportGuard(
+  page: Page,
+  worldHost: Locator,
+  overlays: Array<{ locator: Locator; label: string }>,
+  label: string
+) {
+  for (const overlay of overlays) {
+    await expect(overlay.locator, `${overlay.label} should be visible`).toBeVisible();
+    await expectLocatorInsideViewport(page, overlay.locator, overlay.label);
+  }
+
+  await expectPrimaryDragLaneMostlyReachable(page, worldHost, label);
+}
+
+async function expectVisibleTextHasNoRawOperatorRefs(locator: Locator, label: string) {
+  const violations = await locator.evaluate((element, patternDefs) => {
+    const patterns = patternDefs.map((pattern) => ({
+      label: pattern.label,
+      regex: new RegExp(pattern.source, 'i')
+    }));
+    const visibleTextNodes: string[] = [];
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const text = node.textContent?.replace(/\s+/g, ' ').trim();
+      const parent = node.parentElement;
+
+      if (!text || !parent) {
+        continue;
+      }
+
+      const style = getComputedStyle(parent);
+      if (style.display === 'none' || style.visibility === 'hidden') {
+        continue;
+      }
+
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      const hasVisibleBox = Array.from(range.getClientRects()).some((rect) => rect.width > 0 && rect.height > 0);
+      range.detach();
+
+      if (hasVisibleBox) {
+        visibleTextNodes.push(text);
+      }
+    }
+
+    return visibleTextNodes.flatMap((text) =>
+      patterns
+        .filter((pattern) => pattern.regex.test(text))
+        .map((pattern) => ({
+          pattern: pattern.label,
+          text: text.slice(0, 160)
+        }))
+    );
+  }, RAW_OPERATOR_REF_PATTERNS);
+
+  expect(violations, `${label} visible text should not expose raw operator refs`).toEqual([]);
+}
+
 async function expectCanvasDragMovesViewport(page: Page) {
   const canvas = page.locator('.aitown-world__host canvas');
   await expect(canvas).toBeVisible();
@@ -263,10 +379,14 @@ test.describe('operator shell layout visual smoke', () => {
     await page.goto('/');
 
     const worldHost = page.locator('.aitown-world__host');
+    const canvas = worldHost.locator('canvas');
     await expect(worldHost).toBeVisible();
+    await expect(canvas).toBeVisible();
     await page.waitForFunction(() => Boolean(window.__AITOWN_VIEWPORT__));
     await expect(page.getByRole('dialog', { name: 'Hub' })).toHaveCount(0);
     await expect(page.getByRole('region', { name: 'Selected agent inspect peek' })).toHaveCount(0);
+    await expectPrimaryDragLaneMostlyReachable(page, worldHost, 'default Hub-closed world');
+    await expectVisibleTextHasNoRawOperatorRefs(page.locator('body'), 'default Hub-closed world');
 
     const initial = await waitForViewportSettle(page);
     expectViewportWithinHorizontalWorldBounds(initial, 'default viewport');
@@ -699,6 +819,17 @@ test.describe('operator shell layout visual smoke', () => {
     await expect(hermesSessionGapChip).not.toContainText('hermes://');
     await expect(hermesSessionGapChip).not.toContainText('profile-app-engineering');
     await expect(hermesSessionGapChip).not.toContainText('5-web3-app-engineering');
+    await expectOverlayCombinationViewportGuard(
+      page,
+      worldHost,
+      [
+        { locator: collectorSnapshotChip, label: 'collector freshness chip' },
+        { locator: signals, label: 'opened HUD signals overlay' },
+        { locator: sourceGapFocus, label: 'source-gap focus overlay' }
+      ],
+      'collector freshness/source-gap overlay combination'
+    );
+    await expectVisibleTextHasNoRawOperatorRefs(signals, 'opened HUD signals overlay');
 
     const before = await readViewportState(page);
     expect(before).not.toBeNull();
@@ -1109,11 +1240,18 @@ test.describe('operator shell layout visual smoke', () => {
     await expect(inspectPeek).toBeVisible();
     await expect(ledgerCta).toBeVisible();
     await expect(inspectPeek.getByText(/Proof glance · \d+ records? · Sources/)).toBeVisible();
+    await expectOverlayCombinationViewportGuard(
+      page,
+      page.locator('.aitown-world__host'),
+      [{ locator: inspectPeek, label: 'selected-agent proof peek' }],
+      'selected-agent proof peek overlay combination'
+    );
     const proofCapsuleText = await inspectPeek.innerText();
     expect(
       proofCapsuleText,
       'Hub-closed proof capsule should summarize evidence without raw refs or runtime payloads'
     ).not.toMatch(/\/tmp\/|tmux:\/\/|hermes:\/\/|\b\d+-web3-[a-z0-9-]+\b|profile-[a-z0-9-]+/i);
+    await expectVisibleTextHasNoRawOperatorRefs(inspectPeek, 'selected-agent proof peek');
     expect(evidenceRecordRequests, 'Hub-closed inspect peek should not prefetch evidence records').toEqual([]);
     expect(evidenceRefRollupRequests, 'Hub-closed inspect peek should not prefetch ref-rollup rows').toEqual([]);
 

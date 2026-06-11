@@ -8546,6 +8546,7 @@ test('GET /evidence-records lists stored evidence records read-only with exact f
   assert.equal(response.body.items[0].source_kind, 'workspace_file');
   assert.equal(response.body.items[0].evidence_role, 'agent_output');
   assert.equal(response.body.items[0].output_candidate, true);
+  assert.equal(Number.isSafeInteger(response.body.items[0].append_index), true);
 
   const evidenceId = response.body.items[0].evidence_id;
   const exactEvidenceId = await requestJson(
@@ -8559,6 +8560,7 @@ test('GET /evidence-records lists stored evidence records read-only with exact f
   const detail = await requestJson(`${baseUrl}/evidence-records/${encodeURIComponent(evidenceId)}`);
   assert.equal(detail.response.status, 200);
   assert.deepEqual(detail.body, { item: response.body.items[0] });
+  assert.equal(detail.body.item.append_index, response.body.items[0].append_index);
 
   const provenanceBundle = await requestJson(
     `${baseUrl}/evidence-records/${encodeURIComponent(evidenceId)}/provenance-bundle`
@@ -8644,6 +8646,11 @@ test('GET /evidence-records lists stored evidence records read-only with exact f
   assert.equal(unknownDetail.body.error, 'not_found');
   assert.equal(unknownDetail.body.details, 'unknown evidence record');
 
+  const hostileUnknownDetail = await requestJson(
+    `${baseUrl}/evidence-records/${encodeURIComponent('/tmp/hostile-token-evidence')}`
+  );
+  assertPublic404DoesNotExposeCanary(hostileUnknownDetail, '/tmp/hostile-token-evidence');
+
   const substringEvidenceId = await requestJson(
     `${baseUrl}/evidence-records?evidence_id=${encodeURIComponent(evidenceId.slice(0, -2))}&limit=10`
   );
@@ -8681,6 +8688,7 @@ test('GET /evidence-records lists stored evidence records read-only with exact f
   assert.deepEqual(unmapped.body.items, [
     {
       evidence_id: unmapped.body.items[0].evidence_id,
+      append_index: unmapped.body.items[0].append_index,
       observed_at: '2026-03-09T18:05:50.000Z',
       collected_at: '2026-03-09T18:06:00.000Z',
       agent_id: null,

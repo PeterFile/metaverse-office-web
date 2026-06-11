@@ -4323,6 +4323,12 @@ afterEach(() => {
     );
 
     const inspectPeek = await screen.findByRole('region', { name: 'Selected agent inspect peek' });
+    const closedSourceMatrix = within(inspectPeek).queryByRole('region', {
+      name: 'Selected agent source matrix peek'
+    });
+    expect(closedSourceMatrix).not.toBeNull();
+    expect(closedSourceMatrix).not.toBeVisible();
+    await user.click(within(inspectPeek).getByText('Source details'));
     const sourceMatrix = await within(inspectPeek).findByRole('region', {
       name: 'Selected agent source matrix peek'
     });
@@ -4381,6 +4387,7 @@ afterEach(() => {
     );
 
     let inspectPeek = await screen.findByRole('region', { name: 'Selected agent inspect peek' });
+    await user.click(within(inspectPeek).getByText('Source details'));
     let sourceMatrix = await within(inspectPeek).findByRole('region', {
       name: 'Selected agent source matrix peek'
     });
@@ -4422,6 +4429,7 @@ afterEach(() => {
     );
 
     inspectPeek = await screen.findByRole('region', { name: 'Selected agent inspect peek' });
+    await user.click(within(inspectPeek).getByText('Source details'));
     sourceMatrix = await within(inspectPeek).findByRole('region', {
       name: 'Selected agent source matrix peek'
     });
@@ -4465,6 +4473,7 @@ afterEach(() => {
     );
 
     const inspectPeek = await screen.findByRole('region', { name: 'Selected agent inspect peek' });
+    await user.click(within(inspectPeek).getByText('Source details'));
     const sourceMatrix = await within(inspectPeek).findByRole('region', {
       name: 'Selected agent source matrix peek'
     });

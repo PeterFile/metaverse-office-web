@@ -10,6 +10,7 @@ import type {
   CorrelationDrilldown,
   EvidenceProvenanceBundle,
   EvidenceRecord,
+  EvidenceReplayWindow,
   EvidenceSourceContext,
   MemoryArtifactIndex,
   OfficeAgent,
@@ -1057,6 +1058,62 @@ function buildEvidenceSourceContext(overrides: Partial<EvidenceSourceContext> = 
         }
       ]
     },
+    ...overrides
+  };
+}
+
+function buildEvidenceReplayWindow(overrides: Partial<EvidenceReplayWindow> = {}): EvidenceReplayWindow {
+  return {
+    center: {
+      append_index: 21,
+      evidence_id: 'output-1',
+      source_summary: {
+        kind: 'workspace_file',
+        status: 'observed',
+        role: 'agent_output',
+        output_candidate: true,
+        mapped: true,
+        time: {
+          observed_at: '2026-03-16T08:58:00.000Z',
+          collected_at: '2026-03-16T08:59:00.000Z'
+        }
+      },
+      record: {
+        observed_at: '2026-03-16T08:58:00.000Z',
+        collected_at: '2026-03-16T08:59:00.000Z',
+        agent_id: 'app-engineering',
+        source_kind: 'workspace_file',
+        evidence_role: 'agent_output',
+        source_status: 'observed',
+        output_candidate: true,
+        unmapped: false
+      }
+    },
+    window: { before: 2, after: 2 },
+    before: [
+      {
+        append_index: 19,
+        record_kind: 'event',
+        checkpoint: {
+          ts: '2026-03-16T08:56:00.000Z',
+          agent_id: 'app-engineering',
+          source_kind: '/tmp/replay-window-secret tmux://raw-replay-window',
+          source_status: 'metadata token=secret',
+          evidence_role: 'control-plane route'
+        }
+      }
+    ],
+    after: [
+      {
+        append_index: 22,
+        record_kind: 'collector_snapshot',
+        checkpoint: {
+          collected_at: '2026-03-16T08:59:00.000Z',
+          actor_id: 'team-lead',
+          item_count: 1
+        }
+      }
+    ],
     ...overrides
   };
 }
@@ -4695,6 +4752,36 @@ describe('DetailsPanel accountability signals', () => {
     expect(within(proofLadderRecord!).getByText('Query anchor · agent_id app-engineering, evidence_id output-1')).toBeVisible();
     expect(proofLadderRecord!).not.toHaveTextContent('/evidence/replay.md');
     expect(proofLadderRecord!).not.toHaveTextContent('tmux://');
+  });
+
+  it('shows selected evidence replay window with a safe Back to Evidence action', async () => {
+    const user = userEvent.setup();
+    const onBackToSelectedAgentEvidenceRecord = vi.fn();
+
+    render(
+      <DetailsPanel
+        {...buildProps({
+          selectedAgentDrilldownTab: 'replay',
+          selectedAgentEvidenceReplayWindow: buildEvidenceReplayWindow(),
+          selectedAgentEvidenceReplayWindowError: null,
+          selectedAgentEvidenceReplayWindowState: 'ready',
+          onBackToSelectedAgentEvidenceRecord
+        })}
+      />
+    );
+
+    const section = screen.getByRole('region', { name: 'Selected evidence replay window' });
+    expect(within(section).getByRole('heading', { name: 'Selected Evidence Replay Window' })).toBeVisible();
+    expect(within(section).getByText('Center · Workspace file · Agent output · Observed')).toBeVisible();
+    expect(within(section).getByText('Bounds · before 2 · after 2')).toBeVisible();
+    expect(within(section).getByRole('button', { name: 'Back to Evidence' })).toBeVisible();
+    expect(section).not.toHaveTextContent(
+      /\/tmp\/replay-window-secret|webhook|https:\/\/hooks|token|metadata|evidence_refs|tmux:\/\/|hermes:\/\/|session|profile|control-plane|dispatch|route/i
+    );
+
+    await user.click(within(section).getByRole('button', { name: 'Back to Evidence' }));
+
+    expect(onBackToSelectedAgentEvidenceRecord).toHaveBeenCalledTimes(1);
   });
 
   it('shows selected evidence replay proof scope first-fold with a safe Back to Evidence action', async () => {

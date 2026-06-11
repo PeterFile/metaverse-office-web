@@ -5,6 +5,7 @@ const { createControllerSnapshotCollector } = require('./collectors/controller-s
 
 const INTERNAL_ERROR_DETAIL = 'internal_error';
 const MAX_PUBLIC_ERROR_DETAIL_LENGTH = 200;
+const MAX_WRITE_JSON_BODY_BYTES = 256 * 1024;
 
 function getSourceEvidenceQuery(searchParams, { sourceStatusAlias = false } = {}) {
   const sourceStatus = searchParams.get('source_status');
@@ -900,10 +901,35 @@ function getActorId(req) {
 }
 
 async function readJsonBody(req) {
+  const declaredContentLength = getDeclaredContentLength(req);
+  if (declaredContentLength !== null && declaredContentLength > MAX_WRITE_JSON_BODY_BYTES) {
+    if (typeof req.resume === 'function') {
+      req.resume();
+    }
+    throw createRequestBodyTooLargeError();
+  }
+
   const chunks = [];
+  let totalBytes = 0;
+  let bodyTooLarge = false;
 
   for await (const chunk of req) {
-    chunks.push(chunk);
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    totalBytes += buffer.length;
+
+    if (totalBytes > MAX_WRITE_JSON_BODY_BYTES) {
+      bodyTooLarge = true;
+      chunks.length = 0;
+      continue;
+    }
+
+    if (!bodyTooLarge) {
+      chunks.push(buffer);
+    }
+  }
+
+  if (bodyTooLarge) {
+    throw createRequestBodyTooLargeError();
   }
 
   const body = Buffer.concat(chunks).toString('utf8');
@@ -919,6 +945,24 @@ async function readJsonBody(req) {
     error.publicDetails = 'invalid_json';
     throw error;
   }
+}
+
+function getDeclaredContentLength(req) {
+  const value = req.headers['content-length'];
+  const header = Array.isArray(value) ? value[0] : value;
+  if (typeof header !== 'string' || !/^\d+$/.test(header.trim())) {
+    return null;
+  }
+
+  return Number(header);
+}
+
+function createRequestBodyTooLargeError() {
+  const error = new Error('request_body_too_large');
+  error.statusCode = 413;
+  error.publicMessage = 'request_body_too_large';
+  error.publicDetails = 'request_body_too_large';
+  return error;
 }
 
 function formatPublicError(error) {
@@ -1054,6 +1098,7 @@ function sendJson(res, statusCode, payload) {
 }
 
 module.exports = {
+  MAX_WRITE_JSON_BODY_BYTES,
   createAppServer,
   formatPublicError,
   handleRequest,

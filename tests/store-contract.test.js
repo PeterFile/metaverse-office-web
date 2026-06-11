@@ -3340,6 +3340,138 @@ test('prototype store drops unsafe provenance source summary enum values', async
   }
 });
 
+test('prototype store audits evidence projection safety with count-only pre-limit counters', async () => {
+  const storeFile = await createStoreFile();
+  const unsafeSourceKind = '/tmp/projection-audit/source-kind-token';
+  const unsafeSourceStatus = 'token=projection-audit-status';
+  const unsafeEvidenceRole = 'tmux://projection-audit-role/0.0';
+  const unsafeObservedAt = '/tmp/projection-audit/observed-token';
+  const unsafeCollectedAt = 'https://hooks.slack.com/services/projection-audit-time';
+  const unsafeEvidenceRef = '/tmp/projection-audit/evidence.md';
+  const unsafeInputProof = 'https://hooks.slack.com/services/projection-audit-proof';
+
+  await writeFile(
+    storeFile,
+    [
+      {
+        kind: 'evidence_record',
+        payload: {
+          evidence_id: 'ev_projection_audit_safe',
+          observed_at: '2026-03-09T18:05:00.000Z',
+          collected_at: '2026-03-09T18:06:00.000Z',
+          agent_id: 'app-engineering',
+          source_kind: 'workspace_file',
+          evidence_ref: '/tmp/projection-audit/safe.md',
+          evidence_role: 'agent_output',
+          source_status: 'observed',
+          output_candidate: true,
+          collector_snapshot_id: 'collector-snapshot:2026-03-09T18:06:00.000Z',
+          correlation_id: 'corr-projection-audit-safe',
+          degraded_reasons: [],
+          metadata: {
+            source_provenance: {
+              source_format: 'json_array',
+              source_index: 0,
+              source_input_ordinal: 1,
+              source_file_ordinal: 1
+            }
+          }
+        }
+      },
+      {
+        kind: 'evidence_record',
+        payload: {
+          evidence_id: 'ev_projection_audit_unsafe',
+          observed_at: unsafeObservedAt,
+          collected_at: unsafeCollectedAt,
+          agent_id: null,
+          source_kind: unsafeSourceKind,
+          evidence_ref: unsafeEvidenceRef,
+          evidence_role: unsafeEvidenceRole,
+          source_status: unsafeSourceStatus,
+          output_candidate: false,
+          collector_snapshot_id: 'collector-snapshot:2026-03-09T18:07:00.000Z',
+          correlation_id: 'corr-projection-audit-unsafe',
+          degraded_reasons: [unsafeSourceStatus],
+          metadata: {
+            source_provenance: {
+              source_format: unsafeInputProof,
+              source_index: 0
+            },
+            payload: 'token=projection-audit-payload'
+          }
+        }
+      },
+      {
+        kind: 'evidence_record',
+        payload: {
+          evidence_id: 'ev_projection_audit_missing_proof',
+          observed_at: '2026-03-09T18:08:00.000Z',
+          collected_at: '2026-03-09T18:09:00.000Z',
+          agent_id: null,
+          source_kind: 'tmux_observation',
+          evidence_ref: 'tmux://projection-audit/0.0',
+          evidence_role: 'runtime_unmapped',
+          source_status: 'observed',
+          output_candidate: false,
+          collector_snapshot_id: 'collector-snapshot:2026-03-09T18:09:00.000Z',
+          correlation_id: 'corr-projection-audit-missing-proof',
+          degraded_reasons: [],
+          metadata: {}
+        }
+      }
+    ].map((record) => JSON.stringify(record)).join('\n') + '\n',
+    'utf8'
+  );
+
+  const store = await createPrototypeStore({ filePath: storeFile });
+  const audit = store.getEvidenceProjectionAudit({ limit: '1' });
+
+  assert.deepEqual(audit, {
+    total_count: 3,
+    returned_limit: 1,
+    input_proof_count: 1,
+    missing_input_proof_count: 2,
+    unknown_source_kind_count: 1,
+    unknown_evidence_role_count: 1,
+    unknown_source_status_count: 1,
+    invalid_observed_at_count: 1,
+    invalid_collected_at_count: 1
+  });
+
+  const observedOnly = store.getEvidenceProjectionAudit({
+    source_status: 'observed',
+    limit: '1'
+  });
+  assert.deepEqual(observedOnly, {
+    total_count: 2,
+    returned_limit: 1,
+    input_proof_count: 1,
+    missing_input_proof_count: 1,
+    unknown_source_kind_count: 0,
+    unknown_evidence_role_count: 0,
+    unknown_source_status_count: 0,
+    invalid_observed_at_count: 0,
+    invalid_collected_at_count: 0
+  });
+
+  const serializedAudit = JSON.stringify(audit);
+  for (const canary of [
+    unsafeSourceKind,
+    unsafeSourceStatus,
+    unsafeEvidenceRole,
+    unsafeObservedAt,
+    unsafeCollectedAt,
+    unsafeEvidenceRef,
+    unsafeInputProof,
+    'ev_projection_audit_unsafe',
+    'token=projection-audit-payload',
+    'tmux://projection-audit'
+  ]) {
+    assert.equal(serializedAudit.includes(canary), false, canary);
+  }
+});
+
 test('prototype store summarizes runtime source gaps before limit truncation', async () => {
   const storeFile = await createStoreFile();
   const store = await createPrototypeStore({ filePath: storeFile });

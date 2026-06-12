@@ -1282,6 +1282,10 @@ class PrototypeStore {
     return projectStorageReplayManifest(this.records);
   }
 
+  getStorageReplayBoundaryManifest() {
+    return projectStorageReplayBoundaryManifest(this.records);
+  }
+
   async getStorageIndexHealth() {
     return projectStorageIndexHealth({
       records: this.records,
@@ -5354,6 +5358,32 @@ function projectStorageReplayManifest(records) {
     canonical_record_hash: createHash('sha256')
       .update(stableStringify(canonicalRecords))
       .digest('hex')
+  };
+}
+
+function projectStorageReplayBoundaryManifest(records) {
+  const manifest = projectStorageReplayManifest(records);
+
+  return {
+    record_count: manifest.record_count,
+    append_order_bounds: projectStorageReplayAppendOrderBounds(manifest.record_count),
+    canonical_record_hash: manifest.canonical_record_hash
+  };
+}
+
+function projectStorageReplayAppendOrderBounds(recordCount) {
+  const firstAppendIndex = recordCount > 0 ? 1 : null;
+  const lastAppendIndex = recordCount > 0 ? recordCount : null;
+  const expectedRecordCount =
+    firstAppendIndex === null || lastAppendIndex === null
+      ? 0
+      : lastAppendIndex - firstAppendIndex + 1;
+
+  return {
+    first_append_index: firstAppendIndex,
+    last_append_index: lastAppendIndex,
+    expected_record_count: expectedRecordCount,
+    count_consistent: expectedRecordCount === recordCount
   };
 }
 

@@ -1174,6 +1174,19 @@ test('prototype store exposes deterministic sanitized storage replay manifest', 
   const reloadedStore = await createPrototypeStore({ filePath: storeFile });
   assert.deepEqual(reloadedStore.getStorageReplayManifest(), manifest);
 
+  const boundaryManifest = store.getStorageReplayBoundaryManifest();
+  assert.deepEqual(boundaryManifest, {
+    record_count: 9,
+    append_order_bounds: {
+      first_append_index: 1,
+      last_append_index: 9,
+      expected_record_count: 9,
+      count_consistent: true
+    },
+    canonical_record_hash: manifest.canonical_record_hash
+  });
+  assert.deepEqual(reloadedStore.getStorageReplayBoundaryManifest(), boundaryManifest);
+
   const makeRawManifestStore = async ({
     rawKind,
     unsafeSourceKind,
@@ -1327,6 +1340,21 @@ test('prototype store exposes deterministic sanitized storage replay manifest', 
   assert.equal(unsafeSerialized.includes('evidence_ref'), false);
   assert.equal(unsafeSerialized.includes('payload'), false);
   assert.equal(unsafeSerialized.includes('degraded_reasons'), false);
+});
+
+test('prototype store exposes stable empty storage replay boundary manifest', async () => {
+  const store = await createPrototypeStore({ filePath: await createStoreFile() });
+
+  assert.deepEqual(store.getStorageReplayBoundaryManifest(), {
+    record_count: 0,
+    append_order_bounds: {
+      first_append_index: null,
+      last_append_index: null,
+      expected_record_count: 0,
+      count_consistent: true
+    },
+    canonical_record_hash: '4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945'
+  });
 });
 
 test('JSONL prototype store reports storage index-health as not applicable', async () => {

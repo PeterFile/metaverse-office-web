@@ -395,6 +395,8 @@ test('JSONL and SQLite stores replay evidence read models with parity', async (t
   const sqliteProjection = projectParityReadModels(sqliteReloaded, root);
   const jsonlManifest = jsonlReloaded.getStorageReplayManifest();
   const sqliteManifest = sqliteReloaded.getStorageReplayManifest();
+  const jsonlBoundaryManifest = jsonlReloaded.getStorageReplayBoundaryManifest();
+  const sqliteBoundaryManifest = sqliteReloaded.getStorageReplayBoundaryManifest();
   const jsonlIndexHealth = await jsonlReloaded.getStorageIndexHealth();
   const sqliteIndexHealth = await sqliteReloaded.getStorageIndexHealth();
 
@@ -408,6 +410,17 @@ test('JSONL and SQLite stores replay evidence read models with parity', async (t
     jsonlProjection.selectedEvidenceRecord.append_index
   );
   assert.deepEqual(sqliteManifest, jsonlManifest);
+  assert.deepEqual(sqliteBoundaryManifest, jsonlBoundaryManifest);
+  assert.deepEqual(jsonlBoundaryManifest, {
+    record_count: 20,
+    append_order_bounds: {
+      first_append_index: 1,
+      last_append_index: 20,
+      expected_record_count: 20,
+      count_consistent: true
+    },
+    canonical_record_hash: jsonlManifest.canonical_record_hash
+  });
   assert.deepEqual(
     {
       ...jsonlIndexHealth,

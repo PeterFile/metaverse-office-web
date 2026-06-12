@@ -3285,6 +3285,7 @@ afterEach(() => {
 
     expect(pulse).toBeVisible();
     expect(pulse).toHaveTextContent('Fresh');
+    expect(pulse).toHaveTextContent('Collected · 2026-03-16T09:01:00.000Z');
     expect(pulse).toHaveTextContent('2 agents · 2 heartbeats');
     expect(pulse).toHaveTextContent('6 observed · 0 source gaps');
     expect(pulse).toHaveTextContent('3 refs · all covered');
@@ -3383,6 +3384,7 @@ afterEach(() => {
       name: 'Open collector snapshot supervision summary: No snapshot'
     });
     expect(chip).toHaveTextContent('No snapshot');
+    expect(chip).toHaveTextContent('Collected · No snapshot');
     expect(chip).toHaveTextContent('0 agents · 0 heartbeats');
     expect(chip).toHaveTextContent('0 refs · no coverage');
     expect(screen.queryByRole('dialog', { name: 'Hub' })).not.toBeInTheDocument();

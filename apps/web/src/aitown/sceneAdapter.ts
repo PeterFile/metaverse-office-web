@@ -331,7 +331,13 @@ export function adaptWorldToScene(
                 label: evidenceInspection.label,
                 occupantCount: evidenceInspection.occupant_count,
                 evidenceBackedAgentCount: evidenceInspection.evidence_backed_agent_count,
-                sourceHealthStatus: evidenceInspection.source_health_status
+                sourceHealthStatus: evidenceInspection.source_health_status,
+                occupantProofSummaries: evidenceInspection.occupant_proof_summaries.map((occupant) => ({
+                  displayName: occupant.display_name,
+                  evidenceBacked: occupant.evidence_backed,
+                  sourceHealthStatus: occupant.source_health_status
+                })),
+                occupantProofOverflowCount: evidenceInspection.occupant_proof_overflow_count
               }
             }
           }

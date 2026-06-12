@@ -101,6 +101,12 @@ export interface SceneZone {
       occupantCount: number;
       evidenceBackedAgentCount: number | null;
       sourceHealthStatus: Exclude<CollectorSourceHealthStatus, 'observed'> | null;
+      occupantProofSummaries: Array<{
+        displayName: string;
+        evidenceBacked: boolean;
+        sourceHealthStatus: Exclude<CollectorSourceHealthStatus, 'observed'> | null;
+      }>;
+      occupantProofOverflowCount: number;
     };
   };
 }

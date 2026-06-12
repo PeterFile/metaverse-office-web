@@ -939,6 +939,7 @@ describe('selectZoneEvidenceInspections', () => {
           'backed',
           makeWorldAgent({
             agent_id: 'backed',
+            display_name: 'Backed Operator',
             zone: 'review-zone',
             severity: 'yellow',
             runtime_evidence: {
@@ -956,6 +957,7 @@ describe('selectZoneEvidenceInspections', () => {
           'gap',
           makeWorldAgent({
             agent_id: 'gap',
+            display_name: 'Gap Operator',
             zone: 'review-zone',
             runtime_evidence: { source: 'overview_only', degraded_reasons: [], incident_ids: [], source_kinds: [], correlation_ids: [], evidence_refs: [] },
             source_evidence_health_status: 'error',
@@ -965,13 +967,54 @@ describe('selectZoneEvidenceInspections', () => {
           'unbacked',
           makeWorldAgent({
             agent_id: 'unbacked',
+            display_name: 'Unbacked Operator',
             zone: 'quiet-alert-zone',
             open_alert_count: 1,
           }),
         ],
+        [
+          'overflow',
+          makeWorldAgent({
+            agent_id: 'overflow',
+            display_name: 'Overflow Operator',
+            zone: 'review-zone',
+            severity: 'yellow',
+            runtime_evidence: {
+              source: 'workflow',
+              degraded_reasons: [],
+              incident_ids: [],
+              source_kinds: [],
+              correlation_ids: [],
+              evidence_refs: ['tmux://session/0.1'],
+            },
+            source_evidence_health_status: 'missing',
+          }),
+        ],
+        [
+          'hidden',
+          makeWorldAgent({
+            agent_id: 'hidden',
+            display_name: 'Hidden Operator',
+            zone: 'review-zone',
+            severity: 'yellow',
+            runtime_evidence: {
+              source: 'workflow',
+              degraded_reasons: [],
+              incident_ids: [],
+              source_kinds: [],
+              correlation_ids: [],
+              evidence_refs: ['/private/tmp/hidden.md'],
+            },
+          }),
+        ],
       ]),
       zones: [
-        makeZoneSnapshot({ zone_id: 'review-zone', label: 'Review Zone', kind: 'shared', occupant_ids: ['backed', 'gap'] }),
+        makeZoneSnapshot({
+          zone_id: 'review-zone',
+          label: 'Review Zone',
+          kind: 'shared',
+          occupant_ids: ['backed', 'gap', 'overflow', 'hidden'],
+        }),
         makeZoneSnapshot({ zone_id: 'quiet-alert-zone', label: 'Quiet Alert Zone', kind: 'shared', occupant_ids: ['unbacked'] }),
       ],
     });
@@ -980,9 +1023,27 @@ describe('selectZoneEvidenceInspections', () => {
       {
         zone_id: 'review-zone',
         label: 'Review Zone',
-        occupant_count: 2,
-        evidence_backed_agent_count: 1,
+        occupant_count: 4,
+        evidence_backed_agent_count: 3,
         source_health_status: 'error',
+        occupant_proof_summaries: [
+          {
+            display_name: 'Backed Operator',
+            evidence_backed: true,
+            source_health_status: 'degraded',
+          },
+          {
+            display_name: 'Gap Operator',
+            evidence_backed: false,
+            source_health_status: 'error',
+          },
+          {
+            display_name: 'Overflow Operator',
+            evidence_backed: true,
+            source_health_status: 'missing',
+          },
+        ],
+        occupant_proof_overflow_count: 1,
       },
       {
         zone_id: 'quiet-alert-zone',
@@ -990,6 +1051,14 @@ describe('selectZoneEvidenceInspections', () => {
         occupant_count: 1,
         evidence_backed_agent_count: null,
         source_health_status: null,
+        occupant_proof_summaries: [
+          {
+            display_name: 'Unbacked Operator',
+            evidence_backed: false,
+            source_health_status: null,
+          },
+        ],
+        occupant_proof_overflow_count: 0,
       },
     ]);
   });

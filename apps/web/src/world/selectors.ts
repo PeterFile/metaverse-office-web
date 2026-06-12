@@ -40,6 +40,7 @@ const HOT_ZONE_LIMIT = 3;
 const INCIDENT_EVIDENCE_LIMIT = 3;
 const INCIDENT_EVIDENCE_REF_LIMIT = 3;
 const INCIDENT_COUNTERPARTY_LIMIT = 3;
+const ZONE_OCCUPANT_PROOF_LIMIT = 3;
 
 export interface HotZoneSummary {
   zone_id: string;
@@ -62,6 +63,14 @@ export interface ZoneEvidenceInspectionSummary {
   label: string;
   occupant_count: number;
   evidence_backed_agent_count: number | null;
+  source_health_status: NonNullable<WorldAgent['source_evidence_health_status']> | null;
+  occupant_proof_summaries: ZoneOccupantProofSummary[];
+  occupant_proof_overflow_count: number;
+}
+
+export interface ZoneOccupantProofSummary {
+  display_name: string;
+  evidence_backed: boolean;
   source_health_status: NonNullable<WorldAgent['source_evidence_health_status']> | null;
 }
 
@@ -527,6 +536,8 @@ export function selectZoneEvidenceInspections(
       occupant_count: occupants.length,
       evidence_backed_agent_count: countEvidenceBackedAgents(occupants),
       source_health_status: selectWorstSourceHealthStatus(occupants),
+      occupant_proof_summaries: selectZoneOccupantProofSummaries(occupants),
+      occupant_proof_overflow_count: Math.max(0, occupants.length - ZONE_OCCUPANT_PROOF_LIMIT),
     };
   });
 }
@@ -550,17 +561,28 @@ function countEvidenceBackedAgents(occupants: WorldAgent[]): number | null {
   let count = 0;
 
   for (const occupant of occupants) {
-    const evidence = occupant.runtime_evidence;
-    if (!evidence) {
+    if (!occupant.runtime_evidence) {
       return null;
     }
 
-    if (uniqueTrimmedStrings(evidence.evidence_refs).length > 0) {
+    if (isEvidenceBackedAgent(occupant)) {
       count += 1;
     }
   }
 
   return count;
+}
+
+function isEvidenceBackedAgent(agent: WorldAgent): boolean {
+  return uniqueTrimmedStrings(agent.runtime_evidence?.evidence_refs ?? []).length > 0;
+}
+
+function selectZoneOccupantProofSummaries(occupants: WorldAgent[]): ZoneOccupantProofSummary[] {
+  return occupants.slice(0, ZONE_OCCUPANT_PROOF_LIMIT).map((occupant) => ({
+    display_name: occupant.display_name,
+    evidence_backed: isEvidenceBackedAgent(occupant),
+    source_health_status: occupant.source_evidence_health_status ?? null,
+  }));
 }
 
 function selectWorstSourceHealthStatus(

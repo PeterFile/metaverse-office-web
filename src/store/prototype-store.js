@@ -95,6 +95,16 @@ const EVIDENCE_RECORD_BOOLEAN_FILTERS = Object.freeze([
   'mapped',
   'newest_first'
 ]);
+const SQLITE_EVIDENCE_PREFILTER_SUPPORTED_FILTERS = new Set([
+  'agent_id',
+  'source_kind',
+  'evidence_role',
+  'source_status',
+  'output_candidate',
+  'mapped',
+  'newest_first',
+  'limit'
+]);
 const ACCOUNTABILITY_REPLAY_SUPPORTED_ANCHORS = Object.freeze([
   'event_id',
   'evidence_id',
@@ -546,6 +556,9 @@ class SqliteRecordLog {
   constructor({ sqliteFilePath, sqliteBinPath = 'sqlite3' }) {
     this.filePath = sqliteFilePath;
     this.sqliteBinPath = sqliteBinPath;
+    this.evidenceQuerySidecarStatus = 'not_loaded';
+    this.evidenceQuerySidecarRows = [];
+    this.loadedRecordCount = 0;
   }
 
   async loadRecords() {
@@ -556,10 +569,12 @@ class SqliteRecordLog {
       'SELECT kind,payload_json FROM records ORDER BY seq;'
     ]);
     const rows = stdout.trim() ? JSON.parse(stdout) : [];
-    return rows.map((row) => ({
+    const records = rows.map((row) => ({
       kind: row.kind,
       payload: JSON.parse(row.payload_json)
     }));
+    await this.#loadEvidenceQuerySidecar(records);
+    return records;
   }
 
   async appendRecord(record) {
@@ -587,6 +602,53 @@ class SqliteRecordLog {
     statements.push('COMMIT;');
 
     await this.#exec([this.filePath, statements.join(' ')]);
+    this.#appendEvidenceQuerySidecarRows(records);
+  }
+
+  getEvidenceQueryCandidateSeqs(filters = {}) {
+    if (
+      this.evidenceQuerySidecarStatus !== 'complete' ||
+      !canUseSqliteEvidencePrefilter(filters)
+    ) {
+      return null;
+    }
+
+    const agentId = normalizeFilterValue(filters.agent_id);
+    const sourceKind = normalizeFilterValue(filters.source_kind);
+    const evidenceRole = normalizeFilterValue(filters.evidence_role);
+    const sourceStatus = normalizeFilterValue(filters.source_status);
+    const outputCandidate = normalizeOptionalBoolean(filters.output_candidate);
+    const mapped = normalizeOptionalBoolean(filters.mapped);
+    const candidateSeqs = [];
+
+    for (const row of this.evidenceQuerySidecarRows) {
+      if (agentId && row.agent_id !== agentId) {
+        continue;
+      }
+      if (sourceKind && row.source_kind !== sourceKind) {
+        continue;
+      }
+      if (evidenceRole && row.evidence_role !== evidenceRole) {
+        continue;
+      }
+      if (sourceStatus && row.source_status !== sourceStatus) {
+        continue;
+      }
+      if (outputCandidate !== null && row.output_candidate !== outputCandidate) {
+        continue;
+      }
+      if (
+        mapped !== null &&
+        (mapped
+          ? !(typeof row.agent_id === 'string' && row.agent_id.length > 0)
+          : row.agent_id !== null)
+      ) {
+        continue;
+      }
+      candidateSeqs.push(row.seq);
+    }
+
+    return candidateSeqs;
   }
 
   async getStorageIndexCounts(expectedIndexes = []) {
@@ -632,6 +694,71 @@ class SqliteRecordLog {
       evidence_query_probe_count: probes.length,
       evidence_query_probe_drift_count: driftCount
     };
+  }
+
+  async #loadEvidenceQuerySidecar(records) {
+    this.loadedRecordCount = records.length;
+    this.evidenceQuerySidecarStatus = 'stale';
+    this.evidenceQuerySidecarRows = [];
+
+    try {
+      const expectedIndexes = records.map(createSqliteRecordIndex);
+      const counts = await this.getStorageIndexCounts(expectedIndexes);
+      const queryProbeCounts = await this.getEvidenceQueryProbeCounts(
+        createEvidenceQueryParityProbes(records)
+      );
+      const expectedEvidenceRefCount = expectedIndexes.reduce(
+        (sum, indexRecord) => sum + indexRecord.evidence_refs.length,
+        0
+      );
+      const complete =
+        counts.record_index_count === records.length &&
+        counts.record_evidence_ref_count === expectedEvidenceRefCount &&
+        counts.record_index_drift_count === 0 &&
+        counts.record_evidence_ref_drift_count === 0 &&
+        queryProbeCounts.evidence_query_probe_drift_count === 0;
+
+      if (!complete) {
+        return;
+      }
+
+      const { stdout } = await this.#exec([
+        '-readonly',
+        this.filePath,
+        '-json',
+        [
+          'SELECT seq,agent_id,source_kind,evidence_role,source_status,output_candidate',
+          'FROM record_index',
+          "WHERE kind = 'evidence_record'",
+          'ORDER BY seq;'
+        ].join(' ')
+      ]);
+      const rows = stdout.trim() ? JSON.parse(stdout) : [];
+      this.evidenceQuerySidecarRows = rows
+        .map(normalizeSqliteEvidenceQuerySidecarRow)
+        .filter(Boolean);
+      this.evidenceQuerySidecarStatus = 'complete';
+    } catch {
+      this.evidenceQuerySidecarStatus = 'stale';
+      this.evidenceQuerySidecarRows = [];
+    }
+  }
+
+  #appendEvidenceQuerySidecarRows(records) {
+    if (this.evidenceQuerySidecarStatus !== 'complete') {
+      this.loadedRecordCount += records.length;
+      return;
+    }
+
+    for (const record of records) {
+      this.loadedRecordCount += 1;
+      if (record.kind !== EVIDENCE_RECORD_KIND) {
+        continue;
+      }
+      this.evidenceQuerySidecarRows.push(
+        createEvidenceQuerySidecarRow(this.loadedRecordCount, createSqliteRecordIndex(record))
+      );
+    }
   }
 
   async #countRecordIndexDrift(expectedIndexes) {
@@ -1025,6 +1152,62 @@ function createSqliteRecordIndex(record) {
   };
 }
 
+function createEvidenceQuerySidecarRow(seq, index) {
+  return {
+    seq,
+    agent_id: index.agent_id,
+    source_kind: index.source_kind,
+    evidence_role: index.evidence_role,
+    source_status: index.source_status,
+    output_candidate: index.output_candidate
+  };
+}
+
+function normalizeSqliteEvidenceQuerySidecarRow(row) {
+  if (!row || !Number.isSafeInteger(row.seq)) {
+    return null;
+  }
+
+  return {
+    seq: row.seq,
+    agent_id: row.agent_id ?? null,
+    source_kind: row.source_kind ?? null,
+    evidence_role: row.evidence_role ?? null,
+    source_status: row.source_status ?? null,
+    output_candidate:
+      row.output_candidate === null || row.output_candidate === undefined
+        ? null
+        : row.output_candidate === 1
+  };
+}
+
+function canUseSqliteEvidencePrefilter(filters = {}) {
+  let hasPrefilterDimension = false;
+
+  for (const [key, value] of Object.entries(filters)) {
+    if (SQLITE_EVIDENCE_PREFILTER_SUPPORTED_FILTERS.has(key)) {
+      continue;
+    }
+    if (normalizeFilterValue(value)) {
+      return false;
+    }
+  }
+
+  for (const key of ['agent_id', 'source_kind', 'evidence_role', 'source_status']) {
+    if (normalizeFilterValue(filters[key])) {
+      hasPrefilterDimension = true;
+    }
+  }
+  if (normalizeOptionalBoolean(filters.output_candidate) !== null) {
+    hasPrefilterDimension = true;
+  }
+  if (normalizeOptionalBoolean(filters.mapped) !== null) {
+    hasPrefilterDimension = true;
+  }
+
+  return hasPrefilterDimension;
+}
+
 function sqliteRecordIndexFieldsMatch(row, expected) {
   const fields = [
     'kind',
@@ -1108,6 +1291,7 @@ class PrototypeStore {
     this.events = [];
     this.heartbeats = [];
     this.evidenceRecords = [];
+    this.evidenceRecordsByAppendSeq = new Map();
     this.collectorReports = [];
     this.latestCollectorReport = null;
   }
@@ -1117,6 +1301,7 @@ class PrototypeStore {
     this.events = [];
     this.heartbeats = [];
     this.evidenceRecords = [];
+    this.evidenceRecordsByAppendSeq = new Map();
     this.collectorReports = [];
     this.latestCollectorReport = null;
 
@@ -1230,6 +1415,7 @@ class PrototypeStore {
 
   #applyRecord(record) {
     this.records.push(record);
+    const appendSeq = this.records.length;
 
     if (record.kind === 'event') {
       this.events.push(record.payload);
@@ -1243,6 +1429,7 @@ class PrototypeStore {
 
     if (record.kind === EVIDENCE_RECORD_KIND) {
       this.evidenceRecords.push(record.payload);
+      this.evidenceRecordsByAppendSeq.set(appendSeq, record.payload);
       return;
     }
 
@@ -1961,11 +2148,35 @@ class PrototypeStore {
   }
 
   #filterEvidenceRecords(filters = {}) {
+    const candidateRecords = this.#getEvidencePrefilterCandidateRecords(filters);
     return filterEvidenceRecords(
-      this.evidenceRecords,
+      candidateRecords || this.evidenceRecords,
       filters,
       this.#createEvidenceRecordAppendIndexLookup()
     );
+  }
+
+  #getEvidencePrefilterCandidateRecords(filters) {
+    if (
+      !canUseSqliteEvidencePrefilter(filters) ||
+      typeof this.recordLog.getEvidenceQueryCandidateSeqs !== 'function'
+    ) {
+      return null;
+    }
+
+    const candidateSeqs = this.recordLog.getEvidenceQueryCandidateSeqs(filters);
+    if (!Array.isArray(candidateSeqs)) {
+      return null;
+    }
+
+    const records = [];
+    for (const seq of candidateSeqs) {
+      const record = this.evidenceRecordsByAppendSeq.get(seq);
+      if (record) {
+        records.push(record);
+      }
+    }
+    return records;
   }
 
   #cloneEvidenceRecordWithAppendIndex(record) {

@@ -26,6 +26,7 @@ import type {
   EvidenceRecord,
   EvidenceRefRollup,
   EvidenceRefRollupResponse,
+  EvidenceRecordsSchema,
   EvidenceRecordsResponse,
   IncidentFeedResponse,
   MemoryArtifactIndex,
@@ -43,6 +44,8 @@ import type {
   RuntimeSourceGapLifecycleResponse,
   RuntimeSourceGapsSummaryResponse,
   RuntimeSourceGapsResponse,
+  SchemaCatalogLimit,
+  SchemaCatalogResponse,
   StorageIndexHealth,
   StorageIndexHealthResponse,
   StorageReplayManifest,
@@ -65,6 +68,51 @@ const SAFE_PROBLEM_DETAIL_PATTERN =
   /^(?:limit must be positive|invalid [A-Za-z][A-Za-z0-9 _-]{0,80}|unknown (?:agent|correlation|evidence record|collector snapshot)(?: [A-Za-z][A-Za-z0-9-]{0,63})?|[A-Za-z][A-Za-z0-9 -]{0,100} (?:failed|unavailable)|workflow failed for [A-Za-z][A-Za-z0-9-]{0,63})$/;
 const UNSAFE_PROBLEM_DETAIL_PATTERN =
   /(?:\b(?:[a-z][a-z0-9+.-]*:\/\/|[a-z][a-z0-9+.-]{0,31}:\s*\S|www\.)|(?:^|[\s([{'"`])(?:\/|~\/|\.{1,2}\/|\.{2}(?:$|[\\/])|[A-Za-z]:[^\s]*)|[<>\\]|(?:^|[^A-Za-z0-9])(?:access[-_ ]?keys?|api[-_ ]?keys?|authorization|bearer|cookies?|credentials?|javascript|jwt|oauth|passwords?|passwds?|private[-_ ]?keys?|secrets?|ssh[-_ ]?keys?|script|tokens?|webhooks?|payloads?|control[-_ ]plane|sessions?|profiles?|tmux|hermes|protocols?|paths?|urls?)(?:$|[^A-Za-z0-9]))/i;
+const SCHEMA_LIMIT: SchemaCatalogLimit = { default: 50, max: 200 };
+const EVIDENCE_RECORDS_SCHEMA: EvidenceRecordsSchema = {
+  source_kinds: [
+    'workspace_root',
+    'workspace_file',
+    'tmux_observation',
+    'hermes_profile',
+    'hermes_session',
+    'task_evidence'
+  ],
+  evidence_roles: [
+    'workspace_presence',
+    'inbound_task',
+    'agent_output',
+    'agent_plan',
+    'runtime_activity',
+    'runtime_presence',
+    'runtime_unmapped',
+    'task_reference'
+  ],
+  source_statuses: ['observed', 'degraded', 'missing', 'error'],
+  supported_filters: [
+    'evidence_id',
+    'agent_id',
+    'source_kind',
+    'evidence_role',
+    'output_candidate',
+    'evidence_ref',
+    'source_status',
+    'collector_snapshot_id',
+    'correlation_id',
+    'mapped',
+    'observed_since',
+    'observed_until',
+    'collected_since',
+    'collected_until',
+    'newest_first',
+    'limit'
+  ],
+  boolean_filters: ['mapped', 'output_candidate', 'newest_first'],
+  limit: SCHEMA_LIMIT,
+  route_write_boundary: 'read-only evidence-record schema catalog'
+};
+const UNSAFE_SCHEMA_TEXT_PATTERN =
+  /(?:\b(?:[a-z][a-z0-9+.-]*:\/\/|www\.)|(?:^|[\s([{'"`])(?:\/|~\/|\.{1,2}\/|\.{2}(?:$|[\\/])|[A-Za-z]:[^\s]*)|[<>\\]|(?:^|[^A-Za-z0-9])(?:access[-_ ]?keys?|api[-_ ]?keys?|authorization|bearer|cookies?|credentials?|javascript|jwt|oauth|passwords?|passwds?|private[-_ ]?keys?|secrets?|ssh[-_ ]?keys?|script|tokens?|webhooks?|payloads?)(?:$|[^A-Za-z0-9]))/i;
 
 type RuntimeSourceGapFilterOptions = {
   agentId?: string | null;
@@ -180,6 +228,68 @@ async function parseJson<T>(response: Response): Promise<T> {
   }
 
   return body as T;
+}
+
+function normalizeEvidenceRecordsSchema(value: unknown): EvidenceRecordsSchema {
+  const item = asSchemaObject(value);
+  return {
+    source_kinds: readAllowedSchemaStrings(item.source_kinds, EVIDENCE_RECORDS_SCHEMA.source_kinds),
+    evidence_roles: readAllowedSchemaStrings(
+      item.evidence_roles,
+      EVIDENCE_RECORDS_SCHEMA.evidence_roles
+    ),
+    source_statuses: readAllowedSchemaStrings(
+      item.source_statuses,
+      EVIDENCE_RECORDS_SCHEMA.source_statuses
+    ),
+    supported_filters: readAllowedSchemaStrings(
+      item.supported_filters,
+      EVIDENCE_RECORDS_SCHEMA.supported_filters
+    ),
+    boolean_filters: readAllowedSchemaStrings(
+      item.boolean_filters,
+      EVIDENCE_RECORDS_SCHEMA.boolean_filters
+    ),
+    limit: readSchemaLimit(item.limit),
+    route_write_boundary: EVIDENCE_RECORDS_SCHEMA.route_write_boundary
+  };
+}
+
+function readAllowedSchemaStrings(value: unknown, allowed: string[]): string[] {
+  if (!Array.isArray(value)) {
+    return [...allowed];
+  }
+
+  const allowedValues = new Set(allowed);
+  const result = value.filter(
+    (item): item is string =>
+      typeof item === 'string' && allowedValues.has(item) && !UNSAFE_SCHEMA_TEXT_PATTERN.test(item)
+  );
+  return result.length > 0 ? result : [...allowed];
+}
+
+function readSchemaLimit(value: unknown): SchemaCatalogLimit {
+  const item = asSchemaObject(value);
+  const defaultLimit = typeof item.default === 'number' ? Math.trunc(item.default) : NaN;
+  const maxLimit = typeof item.max === 'number' ? Math.trunc(item.max) : NaN;
+
+  if (
+    !Number.isSafeInteger(defaultLimit) ||
+    !Number.isSafeInteger(maxLimit) ||
+    defaultLimit < 1 ||
+    maxLimit < defaultLimit ||
+    maxLimit > SCHEMA_LIMIT.max
+  ) {
+    return { ...SCHEMA_LIMIT };
+  }
+
+  return { default: defaultLimit, max: maxLimit };
+}
+
+function asSchemaObject(value: unknown): Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
 }
 
 function getProblemCode(error: unknown): string | null {
@@ -411,6 +521,16 @@ export async function fetchEvidenceRecords(
   });
   const body = await parseJson<EvidenceRecordsResponse>(response);
   return body.items;
+}
+
+export async function fetchEvidenceRecordsSchema(
+  options: { signal?: AbortSignal } = {}
+): Promise<EvidenceRecordsSchema> {
+  const response = await fetch(resolveApiUrl('/evidence-records/schema'), {
+    signal: options.signal
+  });
+  const body = await parseJson<SchemaCatalogResponse<unknown>>(response);
+  return normalizeEvidenceRecordsSchema(body.item);
 }
 
 export async function fetchEvidenceRefRollup(

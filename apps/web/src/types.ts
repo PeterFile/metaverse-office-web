@@ -367,6 +367,25 @@ export interface CollectorSnapshotSafeSummaryResponse {
   item: CollectorSnapshotSafeSummary;
 }
 
+export interface SchemaCatalogLimit {
+  default: number;
+  max: number;
+}
+
+export interface EvidenceRecordsSchema {
+  source_kinds: string[];
+  evidence_roles: string[];
+  source_statuses: string[];
+  supported_filters: string[];
+  boolean_filters: string[];
+  limit: SchemaCatalogLimit;
+  route_write_boundary: string;
+}
+
+export interface SchemaCatalogResponse<T> {
+  item: T;
+}
+
 export interface EvidenceRecord {
   evidence_id: string;
   observed_at: string | null;

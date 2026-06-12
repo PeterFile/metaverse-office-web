@@ -272,16 +272,23 @@ describe('adaptWorldToScene', () => {
     );
   });
 
-  it('attaches neutral passive zone evidence floors without severity or count encodings', () => {
+  it('attaches inspectable zone evidence floors with only compact safe aggregates', () => {
     const scene = adaptWorldToScene(world, 'app-engineering');
     const meetingZone = scene.zones.find((zone) => zone.zoneId === 'meeting-zone');
     const leadDesk = scene.zones.find((zone) => zone.zoneId === 'lead-desk');
 
     expect(meetingZone?.evidenceFloor).toEqual({
-      present: true
+      present: true,
+      inspection: {
+        label: 'Meeting Zone',
+        occupantCount: 1,
+        evidenceBackedAgentCount: null,
+        sourceHealthStatus: null
+      }
     });
     expect(meetingZone?.evidenceFloor).not.toHaveProperty('highestSeverity');
-    expect(meetingZone?.evidenceFloor).not.toHaveProperty('occupantCount');
+    expect(meetingZone?.evidenceFloor).not.toHaveProperty('evidenceRefs');
+    expect(meetingZone?.evidenceFloor).not.toHaveProperty('rawRefs');
     expect(meetingZone?.evidenceFloor).not.toHaveProperty('signalCount');
     expect(leadDesk?.evidenceFloor).toBeUndefined();
     expect(scene.agents.find((agent) => agent.agentId === 'app-engineering')).toMatchObject({

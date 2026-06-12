@@ -70,6 +70,12 @@ const AGENT_EVIDENCE_CUE_LABELS = {
   unavailable: 'UNK'
 } as const;
 
+const ZONE_SOURCE_HEALTH_LABELS = {
+  degraded: 'Degraded',
+  missing: 'Missing',
+  error: 'Error'
+} as const;
+
 const nameLabelStyle = new TextStyle({
   fontFamily: '"VCR OSD Mono", monospace',
   fontSize: 8,
@@ -954,7 +960,11 @@ function createSourceGapPin(
   return container;
 }
 
-function createZoneEvidenceFloor(zone: SceneZone, tileDim: number) {
+function createZoneEvidenceFloor(
+  zone: SceneZone,
+  tileDim: number,
+  onInspectZone: (zoneId: string) => void
+) {
   if (!zone.evidenceFloor) {
     return null;
   }
@@ -965,8 +975,14 @@ function createZoneEvidenceFloor(zone: SceneZone, tileDim: number) {
   const radiusX = tileDim * radiusScale;
   const radiusY = tileDim * 0.52;
 
-  container.eventMode = 'none';
+  container.eventMode = 'static';
+  container.cursor = 'pointer';
+  container.hitArea = new Rectangle(-radiusX, -radiusY, radiusX * 2, radiusY * 2);
   container.position.set(zone.anchor.x * tileDim, zone.anchor.y * tileDim);
+  container.on('pointertap', (event) => {
+    event.stopPropagation();
+    onInspectZone(zone.zoneId);
+  });
   marker.ellipse(0, 0, radiusX, radiusY).fill({
     color: ZONE_EVIDENCE_FLOOR_COLOR,
     alpha: 0.08
@@ -981,12 +997,15 @@ function createZoneEvidenceFloor(zone: SceneZone, tileDim: number) {
   return container;
 }
 
-function createZoneEvidenceFloorOverlay(scene: AiTownSceneModel) {
+function createZoneEvidenceFloorOverlay(
+  scene: AiTownSceneModel,
+  onInspectZone: (zoneId: string) => void
+) {
   const container = new Container();
   container.eventMode = 'none';
 
   for (const zone of scene.zones) {
-    const floor = createZoneEvidenceFloor(zone, scene.map.tileDim);
+    const floor = createZoneEvidenceFloor(zone, scene.map.tileDim, onInspectZone);
     if (floor) {
       container.addChild(floor);
     }
@@ -1611,12 +1630,21 @@ export default function WorldScene({
   const initialMapId = scene.map.id ?? sceneMaps[0]?.id ?? 'legacy-map';
   const [activeMapId, setActiveMapId] = useState(initialMapId);
   const [agentPresenceById, setAgentPresenceById] = useState<Record<string, AgentPresenceOverride>>({});
+  const [inspectedZoneId, setInspectedZoneId] = useState<string | null>(null);
   const activeMap = sceneMaps.find((map) => map.id === activeMapId) ?? sceneMaps[0] ?? scene.map;
   const activeGateways = (scene.gateways ?? []).filter((gateway) => gateway.fromMapId === activeMap.id);
   const fallbackMapId = scene.map.id ?? sceneMaps[0]?.id ?? 'legacy-map';
   const renderScene = useMemo(
     () => buildCurrentMapScene(scene, activeMap, fallbackMapId, agentPresenceById),
     [activeMap, agentPresenceById, fallbackMapId, scene]
+  );
+  const inspectableZones = useMemo(
+    () => renderScene.zones.filter((zone) => zone.evidenceFloor),
+    [renderScene.zones]
+  );
+  const inspectedZone = useMemo(
+    () => inspectableZones.find((zone) => zone.zoneId === inspectedZoneId) ?? null,
+    [inspectableZones, inspectedZoneId]
   );
   const hostRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<Application | null>(null);
@@ -1903,6 +1931,12 @@ export default function WorldScene({
   useEffect(() => {
     onSelectSourceGapPinRef.current = onSelectSourceGapPin;
   }, [onSelectSourceGapPin]);
+
+  useEffect(() => {
+    if (inspectedZoneId && !inspectedZone) {
+      setInspectedZoneId(null);
+    }
+  }, [inspectedZone, inspectedZoneId]);
 
   useLayoutEffect(() => {
     const previousSelectedAgentId = lastSelectionAgentIdRef.current;
@@ -2752,7 +2786,7 @@ export default function WorldScene({
       const correlationParticipantIds = new Set(sceneForRender.correlationParticipantAgentIds);
       const sourceGapPinPayloadById = new Map((scene.sourceGapPins ?? []).map((pin) => [pin.pinId, pin]));
 
-      const zoneEvidenceFloorOverlay = createZoneEvidenceFloorOverlay(sceneForRender);
+      const zoneEvidenceFloorOverlay = createZoneEvidenceFloorOverlay(sceneForRender, setInspectedZoneId);
       if (zoneEvidenceFloorOverlay) {
         zoneLayer.addChild(zoneEvidenceFloorOverlay);
       }
@@ -2878,9 +2912,60 @@ export default function WorldScene({
     };
   }, [ready, renderScene]);
 
+  const inspectedZoneInspection = inspectedZone?.evidenceFloor?.inspection ?? null;
+
   return (
     <div className="aitown-world__canvas">
       <div ref={hostRef} className="aitown-world__host" />
+      {ready && inspectableZones.length > 0 ? (
+        <div className="aitown-zone-inspector" role="group" aria-label="Evidence zones">
+          {inspectableZones.map((zone) => (
+            <button
+              key={zone.zoneId}
+              type="button"
+              className={`aitown-zone-inspector__button${inspectedZoneId === zone.zoneId ? ' is-active' : ''}`}
+              aria-label={`Inspect evidence zone ${zone.evidenceFloor!.inspection.label}`}
+              aria-pressed={inspectedZoneId === zone.zoneId}
+              onClick={() => setInspectedZoneId(zone.zoneId)}
+              onFocus={() => setInspectedZoneId(zone.zoneId)}
+            >
+              <span aria-hidden="true" />
+            </button>
+          ))}
+        </div>
+      ) : null}
+      {ready && inspectedZoneInspection ? (
+        <section
+          className="aitown-zone-card"
+          aria-label={`${inspectedZoneInspection.label} evidence zone card`}
+        >
+          <header className="aitown-zone-card__header">
+            <strong>{inspectedZoneInspection.label}</strong>
+          </header>
+          <dl className="aitown-zone-card__facts">
+            <div>
+              <dt>Occupants</dt>
+              <dd>{inspectedZoneInspection.occupantCount}</dd>
+            </div>
+            <div>
+              <dt>Evidence-backed agents</dt>
+              <dd>
+                {inspectedZoneInspection.evidenceBackedAgentCount === null
+                  ? 'Insufficient evidence'
+                  : inspectedZoneInspection.evidenceBackedAgentCount}
+              </dd>
+            </div>
+            <div>
+              <dt>Worst source health</dt>
+              <dd>
+                {inspectedZoneInspection.sourceHealthStatus
+                  ? ZONE_SOURCE_HEALTH_LABELS[inspectedZoneInspection.sourceHealthStatus]
+                  : 'Insufficient evidence'}
+              </dd>
+            </div>
+          </dl>
+        </section>
+      ) : null}
       {showMapGatewayControls ? (
         <section className="aitown-map-gateways" aria-label="Map gateways">
           <p className="aitown-map-gateways__caption">

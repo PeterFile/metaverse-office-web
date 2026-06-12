@@ -13,6 +13,7 @@ import {
   selectRuntimeEvidenceAccountabilitySummary,
   selectWatchEdgeRisk,
   selectZoneEvidenceFloors,
+  selectZoneEvidenceInspections,
 } from './selectors';
 import type { WatchEdgeSnapshot, WorldAgent, WorldState, ZoneSnapshot } from './types';
 
@@ -925,6 +926,70 @@ describe('selectZoneEvidenceFloors', () => {
       {
         zone_id: 'review-zone',
         label: 'Review Zone',
+      },
+    ]);
+  });
+});
+
+describe('selectZoneEvidenceInspections', () => {
+  it('projects compact zone-card aggregates and unavailable facts without raw provenance', () => {
+    const world = makeWorldState({
+      agents: new Map([
+        [
+          'backed',
+          makeWorldAgent({
+            agent_id: 'backed',
+            zone: 'review-zone',
+            severity: 'yellow',
+            runtime_evidence: {
+              source: 'workflow',
+              degraded_reasons: [],
+              incident_ids: [],
+              source_kinds: [],
+              correlation_ids: [],
+              evidence_refs: ['/tmp/secret.md'],
+            },
+            source_evidence_health_status: 'degraded',
+          }),
+        ],
+        [
+          'gap',
+          makeWorldAgent({
+            agent_id: 'gap',
+            zone: 'review-zone',
+            runtime_evidence: { source: 'overview_only', degraded_reasons: [], incident_ids: [], source_kinds: [], correlation_ids: [], evidence_refs: [] },
+            source_evidence_health_status: 'error',
+          }),
+        ],
+        [
+          'unbacked',
+          makeWorldAgent({
+            agent_id: 'unbacked',
+            zone: 'quiet-alert-zone',
+            open_alert_count: 1,
+          }),
+        ],
+      ]),
+      zones: [
+        makeZoneSnapshot({ zone_id: 'review-zone', label: 'Review Zone', kind: 'shared', occupant_ids: ['backed', 'gap'] }),
+        makeZoneSnapshot({ zone_id: 'quiet-alert-zone', label: 'Quiet Alert Zone', kind: 'shared', occupant_ids: ['unbacked'] }),
+      ],
+    });
+
+    expect(selectZoneEvidenceInspections(world)).toEqual([
+      {
+        zone_id: 'review-zone',
+        label: 'Review Zone',
+        occupant_count: 2,
+        evidence_backed_agent_count: 1,
+        source_health_status: 'error',
+      },
+      {
+        zone_id: 'quiet-alert-zone',
+        label: 'Quiet Alert Zone',
+        occupant_count: 1,
+        evidence_backed_agent_count: null,
+        source_health_status: null,
       },
     ]);
   });

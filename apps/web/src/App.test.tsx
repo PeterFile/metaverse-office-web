@@ -10,7 +10,8 @@ vi.mock('./aitown/WorldScene', () => ({
     resetViewSignal = 0,
     agentFocusRequest = null,
     zoneFocusRequest = null,
-    showActiveCorrelationOverlay = true
+    showActiveCorrelationOverlay = true,
+    selectedAgentProofGlance = null
   }: {
     scene: {
       selectedAgentId: string | null;
@@ -57,6 +58,7 @@ vi.mock('./aitown/WorldScene', () => ({
     agentFocusRequest?: { agentId: string; requestId: number } | null;
     zoneFocusRequest?: { zoneId: string; requestId: number } | null;
     showActiveCorrelationOverlay?: boolean;
+    selectedAgentProofGlance?: readonly string[] | null;
   }) {
     const labelByAgentId = new Map(scene.agents.map((agent) => [agent.agentId, agent.displayName]));
 
@@ -80,6 +82,13 @@ vi.mock('./aitown/WorldScene', () => ({
             .map((agent) => `${agent.agentId}:${agent.sourceEvidenceHealthStatus}`)
             .join(',')}
         </output>
+        {selectedAgentProofGlance ? (
+          <section aria-label="Selected agent proof lens">
+            {selectedAgentProofGlance.map((line) => (
+              <span key={line}>{line}</span>
+            ))}
+          </section>
+        ) : null}
         {showActiveCorrelationOverlay && scene.activeCorrelationId ? (
           <section aria-label="Active correlation">{scene.activeCorrelationId}</section>
         ) : null}
@@ -4340,6 +4349,54 @@ afterEach(() => {
     },
     10_000
   );
+
+  it('shows the selected-agent proof lens in the world only while Hub is closed without lazy evidence reads', async () => {
+    setNavigatorUserAgent('VitestBrowser');
+    const user = userEvent.setup();
+    render(<App />);
+
+    const roster = await screen.findByRole('navigation', { name: 'Agent roster' });
+    await user.click(
+      within(roster).getByRole('button', {
+        name: 'Select and locate App Engineering Agent'
+      })
+    );
+
+    const proofLens = await screen.findByRole('region', { name: 'Selected agent proof lens' });
+    expect(within(proofLens).getByText('Proof glance · 6 records · Sources workspace 3, tmux 2, Hermes 1')).toBeVisible();
+    expect(
+      within(proofLens).getByText(
+        'Coverage gap · 1 · Roles source evidence 4, agent output 2 · Latest observed 2026-03-16T08:59:10.000Z'
+      )
+    ).toBeVisible();
+    expect(within(proofLens).queryAllByText(/^(Proof glance|Coverage gap)/)).toHaveLength(2);
+    expect(proofLens).not.toHaveTextContent(
+      /\/Users\/cwp|\/tmp\/|secret-token|token=secret|webhook|tmux:\/\/|hermes:\/\/|session:\/\/|profile:\/\/|metadata|control-plane|dispatch/i
+    );
+
+    await act(async () => {});
+    let requestedUrls = vi.mocked(globalThis.fetch).mock.calls.map(([request]) => String(request));
+    expect(requestedUrls).toContain(evidenceSpineSummaryUrl);
+    expect(requestedUrls.some((url) => url.startsWith('/evidence-records'))).toBe(false);
+    expect(requestedUrls.some((url) => url.includes('ref-rollup'))).toBe(false);
+    expect(requestedUrls.some((url) => url.includes('source-context'))).toBe(false);
+    expect(requestedUrls.some((url) => url.includes('replay-window'))).toBe(false);
+
+    await user.click(await screen.findByRole('button', { name: 'Queue' }));
+    expect(await screen.findByRole('dialog', { name: 'Hub' })).toBeVisible();
+    expect(screen.queryByRole('region', { name: 'Selected agent proof lens' })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Close panel' }));
+    expect(await screen.findByRole('region', { name: 'Selected agent proof lens' })).toBeVisible();
+
+    await user.click(screen.getByRole('button', { name: 'Clear Selection' }));
+    expect(screen.queryByRole('region', { name: 'Selected agent proof lens' })).not.toBeInTheDocument();
+
+    requestedUrls = vi.mocked(globalThis.fetch).mock.calls.map(([request]) => String(request));
+    expect(requestedUrls.some((url) => url.includes('ref-rollup'))).toBe(false);
+    expect(requestedUrls.some((url) => url.includes('source-context'))).toBe(false);
+    expect(requestedUrls.some((url) => url.includes('replay-window'))).toBe(false);
+  });
 
   it('does not poll selected-agent ref-rollup rows after the Evidence Ledger loads', async () => {
     (window as typeof window & { __AITOWN_POLL_INTERVAL_MS__?: number }).__AITOWN_POLL_INTERVAL_MS__ = 10;

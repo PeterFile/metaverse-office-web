@@ -1643,6 +1643,47 @@ button {
   line-height: 1.3;
 }
 
+.aitown-world-proof-lens {
+  position: absolute;
+  right: 18px;
+  bottom: calc(var(--aitown-category-bar-reserve) + 18px);
+  z-index: 5;
+  display: grid;
+  gap: 3px;
+  width: min(340px, calc(100% - 36px));
+  padding: 8px 10px 9px;
+  border-style: solid;
+  border-width: var(--aitown-token-border);
+  border-image-source: url('/ai-town/assets/ui/box.svg');
+  border-image-repeat: stretch;
+  border-image-slice: 12.5%;
+  background: rgba(18, 36, 38, 0.9);
+  color: #e7faf5;
+  pointer-events: none;
+}
+
+.aitown-watch-overlay + .aitown-world-proof-lens {
+  bottom: max(calc(var(--aitown-category-bar-reserve) + 18px), calc(min(36dvh, 280px) + 32px));
+}
+
+.aitown-world-proof-lens__label {
+  color: #8be9d5;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.aitown-world-proof-lens__line {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+  color: #d8eadf;
+  font-size: 0.76rem;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
 .aitown-panel--details {
   display: flex;
   min-width: 0;

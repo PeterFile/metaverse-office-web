@@ -10504,6 +10504,84 @@ test('read-only GET route boundary matrix non-echoes hostile ids and stays colle
   assert.equal(collectCount, 0);
 });
 
+test('GET accountability replay schema is static, ignores query, and preserves replay routes', async (t) => {
+  let collectCount = 0;
+  const controllerSnapshotCollector = {
+    async collectSnapshot() {
+      collectCount += 1;
+      throw new Error('GET accountability replay schema must not collect');
+    }
+  };
+  const { baseUrl, store, storeFile } = await createHarness(t, { controllerSnapshotCollector });
+
+  await store.appendEvent(createEvent({
+    eventId: 'evt_accountability_schema_canary',
+    ts: '2026-03-09T18:04:00.000Z',
+    agentId: 'app-engineering',
+    eventType: 'review_started',
+    currentState: 'reviewing',
+    activeTask: 'Review accountability schema',
+    summary: 'Replay schema canary event',
+    correlationId: 'corr-accountability-schema-canary',
+    evidenceRefs: SAFE_ROUTE_HOSTILE_CANARIES,
+    sourceKind: 'controller_event'
+  }));
+
+  const before = {
+    recordCount: store.records.length,
+    counts: store.getCounts(),
+    checkpoint: store.getReplayCheckpointSummary(),
+    file: await readFile(storeFile, 'utf8')
+  };
+  const hostileQuery = [
+    `event_id=${encodeURIComponent('evt_accountability_schema_canary')}`,
+    `evidence_ref=${encodeURIComponent(SAFE_ROUTE_HOSTILE_CANARIES.join(' '))}`,
+    `correlation_id=${encodeURIComponent('corr-accountability-schema-canary')}`,
+    'limit=999',
+    'window=999h'
+  ].join('&');
+
+  const clean = await requestJson(`${baseUrl}/accountability/replay/schema`);
+  const hostile = await requestJson(`${baseUrl}/accountability/replay/schema?${hostileQuery}`);
+
+  assert.equal(clean.response.status, 200);
+  assert.equal(hostile.response.status, 200);
+  assert.deepEqual(hostile.body, clean.body);
+  assert.deepEqual(clean.body.item.routes.map((route) => route.path), [
+    '/accountability/replay',
+    '/accountability/replay/checkpoint-summary',
+    '/accountability/replay/checkpoint-log'
+  ]);
+  assert.deepEqual(clean.body.item.bounds, {
+    limit: {
+      default: 10,
+      max: 200
+    },
+    window: {
+      default: '60m',
+      format: 'Nm|Nh'
+    }
+  });
+  assertNoSafeRouteCanaries(clean.body, '/accountability/replay/schema');
+  assert.equal(JSON.stringify(clean.body).includes('evt_accountability_schema_canary'), false);
+  assert.equal(JSON.stringify(clean.body).includes('corr-accountability-schema-canary'), false);
+  assert.equal(store.records.length, before.recordCount);
+  assert.deepEqual(store.getCounts(), before.counts);
+  assert.deepEqual(store.getReplayCheckpointSummary(), before.checkpoint);
+  assert.equal(await readFile(storeFile, 'utf8'), before.file);
+
+  const replay = await requestJson(
+    `${baseUrl}/accountability/replay?event_id=evt_accountability_schema_canary&limit=5&window=60m`
+  );
+  assert.equal(replay.response.status, 200);
+  assert.equal(replay.body.events.length, 1);
+
+  const checkpoint = await requestJson(`${baseUrl}/accountability/replay/checkpoint-summary`);
+  assert.equal(checkpoint.response.status, 200);
+  assert.equal(checkpoint.body.item.record_count, before.checkpoint.record_count);
+  assert.equal(collectCount, 0);
+});
+
 test('GET safe-route leak regression matrix stays redacted and read-pure under hostile canaries', async (t) => {
   let collectCount = 0;
   const controllerSnapshotCollector = {

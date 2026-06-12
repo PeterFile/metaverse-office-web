@@ -9486,6 +9486,15 @@ test('GET evidence and source read routes keep JSONL and SQLite parity', async (
           degraded: 2,
           missing: 1
         },
+        input_provenance_manifest: {
+          source_kind_buckets: {},
+          source_format_buckets: {
+            json_array: 0,
+            jsonl: 0
+          },
+          source_input_ordinal_buckets: {},
+          source_file_ordinal_buckets: {}
+        },
         output_candidate_count: 2,
         unmapped_count: 1,
         latest_observed_at: '<timestamp>',
@@ -10341,6 +10350,113 @@ test('GET input-proof summary is read-only and exposes only proof count buckets'
     'evidence_ref',
     'metadata',
     'degraded_reasons',
+    'hermes://',
+    'input-proof-profile-secret',
+    'input-proof-session-secret',
+    'token=input-proof-secret'
+  ]) {
+    assert.equal(serialized.includes(unsafeFragment), false, unsafeFragment);
+  }
+});
+
+test('GET storage replay manifest exposes only abstract collector input provenance counts', async () => {
+  const store = await createDirectStore();
+  await store.appendCollectorReport({
+    collected_at: '2026-03-09T18:06:00.000Z',
+    actor_id: 'team-lead',
+    summary: {
+      agent_count: 1,
+      heartbeat_count: 0,
+      tmux_observed_count: 0,
+      workspace_observed_count: 0,
+      reboot_recommended_count: 0
+    },
+    evidence_coverage: {
+      evidence_ref_count: 1,
+      covered_agent_count: 1,
+      low_confidence_agent_ids: [],
+      source_kind_buckets: {
+        hermes_profile: 1
+      },
+      agent_items: [
+        {
+          agent_id: 'app-engineering',
+          evidence_ref_count: 1,
+          source_kinds: ['hermes_profile'],
+          latest_evidence_at: '2026-03-09T18:05:30.000Z',
+          confidence_level: 'high'
+        }
+      ]
+    },
+    items: [
+      {
+        agent_id: 'app-engineering',
+        evidence_refs: ['hermes://profile/input-proof-secret'],
+        hermes_runtime_observations: [
+          {
+            source_kind: 'hermes_profile',
+            evidence_ref: 'hermes://profile/input-proof-secret',
+            profile_id: 'input-proof-profile-secret',
+            session_ref: 'input-proof-session-secret',
+            status: 'observed',
+            observed_at: '2026-03-09T18:05:30.000Z',
+            source_provenance: {
+              source_format: 'json_array',
+              source_index: 0,
+              source_input_ordinal: 2,
+              source_file_ordinal: 3,
+              payload: 'token=input-proof-secret'
+            }
+          }
+        ],
+        source_health: {}
+      }
+    ]
+  });
+  const before = {
+    recordCount: store.records.length,
+    counts: store.getCounts(),
+    checkpoint: store.getReplayCheckpointSummary()
+  };
+
+  const result = await requestJsonDirect({
+    url: '/storage/replay-manifest',
+    store
+  });
+  assert.equal(result.response.status, 200);
+  assert.deepEqual(result.body.item.evidence_summary.input_provenance_manifest, {
+    source_kind_buckets: {
+      hermes_profile: 1
+    },
+    source_format_buckets: {
+      json_array: 1,
+      jsonl: 0
+    },
+    source_input_ordinal_buckets: {
+      '2': 1
+    },
+    source_file_ordinal_buckets: {
+      '3': 1
+    }
+  });
+  assert.deepEqual(
+    {
+      recordCount: store.records.length,
+      counts: store.getCounts(),
+      checkpoint: store.getReplayCheckpointSummary()
+    },
+    before
+  );
+
+  const serialized = JSON.stringify(result.body);
+  for (const unsafeFragment of [
+    'evidence_id',
+    'evidence_ref',
+    'metadata',
+    'source_provenance',
+    'degraded_reasons',
+    'source_index',
+    'line_buckets',
     'hermes://',
     'input-proof-profile-secret',
     'input-proof-session-secret',

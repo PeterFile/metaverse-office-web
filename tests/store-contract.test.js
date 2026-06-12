@@ -1152,6 +1152,15 @@ test('prototype store exposes deterministic sanitized storage replay manifest', 
         observed: 2,
         degraded: 1
       },
+      input_provenance_manifest: {
+        source_kind_buckets: {},
+        source_format_buckets: {
+          json_array: 0,
+          jsonl: 0
+        },
+        source_input_ordinal_buckets: {},
+        source_file_ordinal_buckets: {}
+      },
       output_candidate_count: 2,
       unmapped_count: 0,
       latest_observed_at: '2026-03-09T18:05:30.000Z',
@@ -1304,6 +1313,15 @@ test('prototype store exposes deterministic sanitized storage replay manifest', 
     },
     source_status_buckets: {
       degraded: 1
+    },
+    input_provenance_manifest: {
+      source_kind_buckets: {},
+      source_format_buckets: {
+        json_array: 0,
+        jsonl: 0
+      },
+      source_input_ordinal_buckets: {},
+      source_file_ordinal_buckets: {}
     },
     output_candidate_count: 1,
     unmapped_count: 0,

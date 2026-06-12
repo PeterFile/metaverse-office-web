@@ -5446,6 +5446,7 @@ function projectStorageReplayManifestEvidenceSummary(records) {
     source_category_buckets: {},
     evidence_role_buckets: {},
     source_status_buckets: {},
+    input_provenance_manifest: createEmptyStorageReplayInputProvenanceManifest(),
     output_candidate_count: 0,
     unmapped_count: 0,
     latest_observed_at: null,
@@ -5470,6 +5471,7 @@ function projectStorageReplayManifestEvidenceSummary(records) {
       summary.source_status_buckets,
       projectKnownEvidenceValue(record.source_status, EVIDENCE_RECORD_SOURCE_STATUSES) || 'unknown'
     );
+    addStorageReplayInputProvenance(summary.input_provenance_manifest, record, sourceKind);
     if (record.output_candidate === true) {
       summary.output_candidate_count += 1;
     }
@@ -5529,6 +5531,41 @@ function projectStorageReplayManifestRuntimeGapSummary(records) {
   }
 
   return summary;
+}
+
+function createEmptyStorageReplayInputProvenanceManifest() {
+  return {
+    source_kind_buckets: {},
+    source_format_buckets: {
+      json_array: 0,
+      jsonl: 0
+    },
+    source_input_ordinal_buckets: {},
+    source_file_ordinal_buckets: {}
+  };
+}
+
+function addStorageReplayInputProvenance(manifest, record, sourceKind) {
+  const inputProof = projectEvidenceInputProof(record);
+  if (!inputProof) {
+    return;
+  }
+
+  incrementBucket(manifest.source_kind_buckets, sourceKind);
+  incrementKnownBucket(manifest.source_format_buckets, inputProof.source_format);
+
+  if (Number.isSafeInteger(inputProof.source_input_ordinal)) {
+    incrementBucket(
+      manifest.source_input_ordinal_buckets,
+      String(inputProof.source_input_ordinal)
+    );
+  }
+  if (Number.isSafeInteger(inputProof.source_file_ordinal)) {
+    incrementBucket(
+      manifest.source_file_ordinal_buckets,
+      String(inputProof.source_file_ordinal)
+    );
+  }
 }
 
 function projectStorageReplayManifestSourceCategory(sourceKind) {

@@ -618,7 +618,12 @@ class SqliteRecordLog {
 
     for (const probe of probes) {
       const actualCount = await this.#countEvidenceQueryProbe(probe.filters);
-      if (actualCount !== probe.expected_count) {
+      let drifted = actualCount !== probe.expected_count;
+      if (!drifted && Array.isArray(probe.expected_evidence_ids)) {
+        const actualIds = await this.#listEvidenceQueryProbeIds(probe.filters);
+        drifted = !arraysEqual(actualIds, probe.expected_evidence_ids);
+      }
+      if (drifted) {
         driftCount += 1;
       }
     }
@@ -696,6 +701,39 @@ class SqliteRecordLog {
   }
 
   async #countEvidenceQueryProbe(filters) {
+    const { from, where } = this.#createEvidenceQueryProbeSqlParts(filters);
+    const { stdout } = await this.#exec([
+      '-readonly',
+      this.filePath,
+      '-json',
+      `SELECT COUNT(*) AS count FROM ${from} WHERE ${where.join(' AND ')};`
+    ]);
+    const rows = stdout.trim() ? JSON.parse(stdout) : [];
+    return Number.isSafeInteger(rows[0]?.count) ? rows[0].count : 0;
+  }
+
+  async #listEvidenceQueryProbeIds(filters) {
+    const { from, where } = this.#createEvidenceQueryProbeSqlParts(filters, {
+      includeEvidenceRefs: true
+    });
+    const orderBy = this.#createEvidenceQueryProbeOrderBy(filters);
+    const { stdout } = await this.#exec([
+      '-readonly',
+      this.filePath,
+      '-json',
+      [
+        'SELECT record_index.evidence_id',
+        `FROM ${from}`,
+        `WHERE ${where.join(' AND ')}`,
+        `ORDER BY ${orderBy.join(', ')}`,
+        `LIMIT ${parseLimit(filters.limit)};`
+      ].join(' ')
+    ]);
+    const rows = stdout.trim() ? JSON.parse(stdout) : [];
+    return rows.map((row) => row.evidence_id ?? null);
+  }
+
+  #createEvidenceQueryProbeSqlParts(filters, { includeEvidenceRefs = false } = {}) {
     const evidenceRef = normalizeFilterValue(filters.evidence_ref);
     const where = ["record_index.kind = 'evidence_record'"];
 
@@ -740,20 +778,31 @@ class SqliteRecordLog {
       where.push(`record_evidence_refs.evidence_ref = ${sqlText(evidenceRef)}`);
     }
 
-    const from = evidenceRef
+    const from = evidenceRef || includeEvidenceRefs
       ? [
           'record_index',
-          'JOIN record_evidence_refs ON record_evidence_refs.seq = record_index.seq'
+          'LEFT JOIN record_evidence_refs ON record_evidence_refs.seq = record_index.seq'
         ].join(' ')
       : 'record_index';
-    const { stdout } = await this.#exec([
-      '-readonly',
-      this.filePath,
-      '-json',
-      `SELECT COUNT(*) AS count FROM ${from} WHERE ${where.join(' AND ')};`
-    ]);
-    const rows = stdout.trim() ? JSON.parse(stdout) : [];
-    return Number.isSafeInteger(rows[0]?.count) ? rows[0].count : 0;
+    return { from, where };
+  }
+
+  #createEvidenceQueryProbeOrderBy(filters) {
+    if (normalizeOptionalBoolean(filters.newest_first) !== true) {
+      return ['record_index.seq ASC'];
+    }
+
+    return [
+      'COALESCE(julianday(record_index.observed_at), 0) DESC',
+      'COALESCE(julianday(record_index.collected_at), 0) DESC',
+      "COALESCE(record_index.evidence_id, '') ASC",
+      "COALESCE(record_index.collector_snapshot_id, '') ASC",
+      "COALESCE(record_index.agent_id, '') ASC",
+      "COALESCE(record_index.source_kind, '') ASC",
+      "COALESCE(record_evidence_refs.evidence_ref, '') ASC",
+      "COALESCE(record_index.evidence_role, '') ASC",
+      "COALESCE(record_index.correlation_id, '') ASC"
+    ];
   }
 
   async #ensureReady() {
@@ -5634,9 +5683,30 @@ function createEvidenceQueryParityProbes(records) {
     });
   }
 
+  if (evidenceRecords.length > 0) {
+    probes.push({
+      newest_first: 'true',
+      limit: '1'
+    });
+  }
+  if (outputRecord) {
+    probes.push({
+      mapped: 'true',
+      output_candidate: 'true',
+      source_kind: outputRecord.source_kind,
+      evidence_role: outputRecord.evidence_role,
+      source_status: outputRecord.source_status,
+      newest_first: 'true',
+      limit: '1'
+    });
+  }
+
   return probes.map((filters) => ({
     filters,
-    expected_count: countEvidenceRecordsForProbe(evidenceRecords, filters)
+    expected_count: countEvidenceRecordsForProbe(evidenceRecords, filters),
+    expected_evidence_ids: shouldProbeEvidenceIdOrder(filters)
+      ? listEvidenceRecordIdsForProbe(evidenceRecords, filters)
+      : null
   }));
 }
 
@@ -5649,6 +5719,21 @@ function addFirstEvidenceProbeValue(probes, records, field) {
 
 function countEvidenceRecordsForProbe(records, filters) {
   return filterEvidenceRecords(records, filters).records.length;
+}
+
+function listEvidenceRecordIdsForProbe(records, filters) {
+  const filtered = filterEvidenceRecords(records, filters);
+  const orderedRecords = filtered.newestFirst
+    ? filtered.records.slice().sort(compareEvidenceRecordRecency)
+    : filtered.records;
+
+  return orderedRecords
+    .slice(0, filtered.limit)
+    .map((record) => record.evidence_id ?? null);
+}
+
+function shouldProbeEvidenceIdOrder(filters) {
+  return normalizeOptionalBoolean(filters.newest_first) === true;
 }
 
 function filterEvidenceRecords(evidenceRecords, filters = {}, getAppendIndex = null) {
@@ -7505,6 +7590,10 @@ function compareStringsAsc(left, right) {
   }
 
   return 0;
+}
+
+function arraysEqual(left, right) {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
 function normalizeOptionalBoolean(value) {

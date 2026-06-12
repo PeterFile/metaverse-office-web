@@ -163,7 +163,9 @@ describe('deriveSelectedAgentEvidenceGlance', () => {
           source_kind_buckets: {
             workspace_file: 3,
             '/Users/cwp/private/token.md': 2,
-            'hermes://session/private': 1
+            '/tmp/private/session-token.md': 1,
+            'hermes://session/private': 1,
+            'https://hooks.example.invalid/webhook-token': 4
           },
           evidence_role_buckets: {
             source_evidence: 4,
@@ -199,11 +201,13 @@ describe('deriveSelectedAgentEvidenceGlance', () => {
     const serialized = JSON.stringify(glance);
 
     expect(glance).toEqual([
-      'Proof glance · 9 records · Sources Workspace evidence 3, Unknown 3',
+      'Proof glance · 9 records · Sources Workspace evidence 3, Unknown 8',
       'Coverage gap · 3 · Roles source evidence 4, Unknown 10 · Latest observed 2026-03-09T18:04:45.000Z'
     ]);
     expectNoForbiddenPublicUiText(glance);
-    expect(serialized).not.toContain('metadata');
+    expect(serialized).not.toMatch(
+      /\/Users\/cwp|\/tmp|https?:\/\/|hermes|tmux|profile|session|token|webhook|metadata|raw-evidence-ref|control-plane/i
+    );
   });
 
   it('shows missing summary rows as unavailable coverage gaps without fabricated activity', () => {

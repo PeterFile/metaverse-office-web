@@ -13186,6 +13186,9 @@ describe('DetailsPanel workflow peer-watch alerts', () => {
       expect(visibleText).not.toContain(rawRef);
       expect(ariaLabels).not.toContain(rawRef);
     }
+    expect(`${visibleText}\n${ariaLabels}`).not.toMatch(
+      /\/tmp|file:\/\/|https?:\/\/|tmux:\/\/|hermes:\/\/|session:\/\/|profile:\/\/|token|webhook|control-plane/i
+    );
     const redactedLocalEvidenceButtons = within(interactionRecord!).getAllByRole('button', {
       name: 'Jump to shared memory artifact local evidence'
     });

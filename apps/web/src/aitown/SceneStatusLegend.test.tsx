@@ -390,8 +390,11 @@ describe('SceneStatusLegend', () => {
       'tmux://session/secret-pane',
       'HermesProfileToken',
       '/Users/alice/private/session.json',
+      '/tmp/alice/private/session-token.json',
       'C:\\Users\\alice\\private\\session.json',
       'file:///Users/alice/private/session.json',
+      'hermes://session/private',
+      'session://operator/private',
       'https://hooks.example.invalid/services/token',
       'http://metadata.example.invalid/token',
       'webhook_payload_token',
@@ -406,11 +409,11 @@ describe('SceneStatusLegend', () => {
           makeWorldAgent({
             runtime_evidence: {
               source: 'incident_feed_backfill',
-              degraded_reasons: [canaries[7], 'workflow partial'],
+              degraded_reasons: [canaries[9], 'workflow partial'],
               incident_ids: ['inc-secret'],
               source_kinds: [canaries[1]],
               correlation_ids: [canaries[8]],
-              evidence_refs: [canaries[0], canaries[2], canaries[3], canaries[4], canaries[5], canaries[6]],
+              evidence_refs: [canaries[0], canaries[2], canaries[3], canaries[4], canaries[5], canaries[6], canaries[7], canaries[8]],
             },
           }),
         ],
@@ -420,21 +423,21 @@ describe('SceneStatusLegend', () => {
         workflow_agent_ids: ['app-engineering'],
         incident_feed_available: false,
         last_overview_at: '2026-03-14T09:55:00Z',
-        degraded_reasons: [canaries[9]],
+        degraded_reasons: [canaries[12]],
       },
       incidents: [
         {
-          incident_id: canaries[8],
+          incident_id: canaries[10],
           kind: 'peer_watch_alert',
           agent_id: 'app-engineering',
           actor_id: canaries[1],
           severity: 'red',
-          status: canaries[10],
+          status: canaries[13],
           summary: 'Hostile provenance',
           ts: '2026-03-14T10:00:00Z',
-          correlation_id: canaries[9],
-          source_kind: canaries[7],
-          evidence_refs: [canaries[0], canaries[2], canaries[4], canaries[5], canaries[6]],
+          correlation_id: canaries[11],
+          source_kind: canaries[9],
+          evidence_refs: [canaries[0], canaries[2], canaries[3], canaries[5], canaries[6], canaries[7], canaries[8]],
           counterparty_agent_ids: [canaries[1]],
         },
       ],
@@ -449,14 +452,14 @@ describe('SceneStatusLegend', () => {
     expect(within(incidentEvidenceList).getByText(/Unknown source/)).toBeVisible();
     expect(within(dataQualityList).getAllByText(/Unknown source/)).toHaveLength(1);
     expect(serializedLegend).toContain('Unknown evidence gap');
-    expect(serializedLegend).toContain('6 evidence refs');
-    expect(serializedLegend).toContain('5 evidence refs');
+    expect(serializedLegend).toContain('8 evidence refs');
+    expect(serializedLegend).toContain('7 evidence refs');
 
     for (const canary of canaries) {
       expect(serializedLegend).not.toContain(canary);
     }
     expect(serializedLegend).not.toMatch(/tmux|Hermes|session|profile|webhook|token|payload|control-plane/i);
-    expect(serializedLegend).not.toMatch(/C:\\Users|file:\/\/|https?:\/\//i);
+    expect(serializedLegend).not.toMatch(/\/tmp|C:\\Users|file:\/\/|https?:\/\//i);
   });
 
   it('bounds legend signal lists and redacts hostile zone and backfill labels from text and aria', async () => {

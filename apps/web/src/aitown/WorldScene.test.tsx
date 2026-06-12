@@ -1441,6 +1441,18 @@ describe('WorldScene watch overlay caption gating', () => {
     appInitMock.mockReset().mockResolvedValue(undefined);
     vi.mocked(loadAiTownAssets).mockResolvedValue(makeAssets());
     const onSelectSourceGapPin = vi.fn();
+    const rawCanaries = [
+      '/Users/cwp/private/source-gap-token.md',
+      '/tmp/source-gap-token.md',
+      'tmux://source-gap-pane/0.1',
+      'hermes://session/source-gap',
+      'profile://source-gap',
+      'session://source-gap',
+      'token=source-gap-secret',
+      'https://hooks.example.invalid/source-gap-webhook-token',
+      'raw-evidence-ref://source-gap',
+      'control-plane dispatch'
+    ];
     const scene = {
       ...makeScene(),
       sourceGapPins: [
@@ -1451,10 +1463,10 @@ describe('WorldScene watch overlay caption gating', () => {
           isMapped: true,
           sourceDrilldownGroupKey: 'workspace',
           sourceKind: 'workspace_files',
-          sourceLabel: 'Workspace files',
+          sourceLabel: `${rawCanaries[0]} ${rawCanaries[1]} ${rawCanaries[4]}`,
           status: 'degraded',
-          lifecycleLabel: 'Current gap',
-          observedAtLabel: 'Observed 2026-03-16T08:59:30.000Z',
+          lifecycleLabel: `${rawCanaries[6]} ${rawCanaries[8]}`,
+          observedAtLabel: rawCanaries[9],
           position: { x: 160, y: 120 }
         },
         {
@@ -1463,10 +1475,10 @@ describe('WorldScene watch overlay caption gating', () => {
           displayName: 'Unmapped runtime source',
           isMapped: false,
           sourceKind: 'tmux_session',
-          sourceLabel: 'Tmux session',
+          sourceLabel: rawCanaries[2],
           status: 'observed',
-          lifecycleLabel: 'Unmapped observed',
-          observedAtLabel: 'Observed 2026-03-16T08:58:30.000Z',
+          lifecycleLabel: rawCanaries[3],
+          observedAtLabel: `${rawCanaries[5]} ${rawCanaries[7]}`,
           position: { x: 220, y: 180 }
         }
       ]
@@ -1487,6 +1499,13 @@ describe('WorldScene watch overlay caption gating', () => {
     const textLabels = collectPixiTextLabels(appInstances.at(-1)?.stage);
     expect(textLabels.filter((label) => label === 'SRC GAP')).toHaveLength(1);
     expect(textLabels.filter((label) => label === 'UNMAPPED SRC')).toHaveLength(1);
+    const serializedTextLabels = textLabels.join(' ');
+    for (const canary of rawCanaries) {
+      expect(serializedTextLabels).not.toContain(canary);
+    }
+    expect(serializedTextLabels).not.toMatch(
+      /\/Users\/cwp|\/tmp|tmux:\/\/|hermes:\/\/|profile:\/\/|session:\/\/|token=|webhook|raw-evidence-ref|control-plane|dispatch/i
+    );
 
     const unmappedPinText = findPixiTextNode(appInstances.at(-1)?.stage, 'UNMAPPED SRC');
     expect(unmappedPinText?.eventMode).toBeUndefined();

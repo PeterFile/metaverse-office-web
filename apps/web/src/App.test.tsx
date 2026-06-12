@@ -5444,6 +5444,12 @@ afterEach(() => {
     const user = userEvent.setup();
     const leakCanaries = [
       '/Users/cwp/private/live-evidence-secret.md',
+      '/tmp/live-evidence-secret.md',
+      'tmux://live-evidence-pane/0.1',
+      'hermes://session/live-evidence',
+      'profile://live-evidence',
+      'session://live-evidence',
+      '6-web3-growth-revenue',
       'token=live-evidence-secret',
       '/control-plane/dispatch'
     ];
@@ -5473,7 +5479,7 @@ afterEach(() => {
               {
                 agent_id: 'growth-revenue',
                 workspace_root: leakCanaries[0],
-                session_ref: '6-web3-growth-revenue',
+                session_ref: leakCanaries[6],
                 source_health: {
                   workspace_files: {
                     status: 'degraded',
@@ -5486,7 +5492,18 @@ afterEach(() => {
                   }
                 },
                 evidence_ref_count: 3,
-                evidence_refs: ['/tmp/launch-note.md', leakCanaries[1], leakCanaries[2]],
+                evidence_refs: [
+                  '/tmp/launch-note.md',
+                  leakCanaries[1],
+                  leakCanaries[2],
+                  leakCanaries[3],
+                  leakCanaries[4],
+                  leakCanaries[5],
+                  leakCanaries[7],
+                  leakCanaries[8],
+                  leakCanaries[9],
+                  leakCanaries[10]
+                ],
                 latest_evidence_at: '2026-03-16T08:58:40.000Z'
               }
             ],
@@ -5533,7 +5550,7 @@ afterEach(() => {
                       },
                       tmux_session: {
                         status: 'observed',
-                        expected_session_ref: '6-web3-growth-revenue',
+                        expected_session_ref: leakCanaries[6],
                         observed_count: 1,
                         last_observed_at: '2026-03-16T08:58:40.000Z',
                         degraded_reasons: []
@@ -5617,8 +5634,9 @@ afterEach(() => {
     await waitFor(() => expect(document.activeElement).toBe(workspaceGroup));
     expect(tmuxGroup).not.toBeNull();
     expect(tmuxGroup).not.toHaveAttribute('data-source-gap-focus');
+    const sourceGapContextText = sourceGapContext.textContent ?? '';
     for (const canary of leakCanaries) {
-      expect(document.body).not.toHaveTextContent(canary);
+      expect(sourceGapContextText).not.toContain(canary);
     }
   });
 
@@ -5881,10 +5899,13 @@ afterEach(() => {
       'collector-snapshot:source-gap-raw',
       'corr-source-gap-raw',
       '/Users/cwp/private/source-gap.md',
+      '/tmp/source-gap-token.md',
       'tmux://source-gap-pane',
       'hermes://source-gap-profile',
+      'profile://source-gap-profile',
+      'session://source-gap-session',
       'token=source-gap-secret',
-      'https://example.invalid/source-gap'
+      'https://hooks.example.invalid/source-gap-webhook-token'
     ];
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = typeof input === 'string' ? input : input.toString();

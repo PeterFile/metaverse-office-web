@@ -13,6 +13,7 @@ const {
   createHermesRuntimeSourcesFileReader
 } = require('../src/collectors/controller-snapshot');
 const { SEED_AGENTS } = require('../src/domain');
+const { createRuntimeInputInventory } = require('../src/index');
 const {
   MAX_WRITE_JSON_BODY_BYTES,
   createAppServer,
@@ -40,7 +41,8 @@ async function createHarness(t, options = {}) {
     store,
     now: options.now || (() => '2026-03-09T18:05:00.000Z'),
     controllerSnapshotCollector: options.controllerSnapshotCollector,
-    allowedOrigins: options.allowedOrigins
+    allowedOrigins: options.allowedOrigins,
+    runtimeInputInventory: options.runtimeInputInventory
   });
 
   await new Promise((resolve) => {
@@ -8255,6 +8257,84 @@ test('GET /runtime/source-gaps/schema exposes static catalog without reading sou
   assert.equal(await readFile(storeFile, 'utf8'), fileBeforeRead);
 });
 
+test('GET /runtime/input-inventory exposes bounded config state without reading inputs', async (t) => {
+  let collectCount = 0;
+  const controllerSnapshotCollector = {
+    async collectSnapshot() {
+      collectCount += 1;
+      throw new Error('GET /runtime/input-inventory must not collect');
+    }
+  };
+  const runtimeInputInventory = createRuntimeInputInventory({
+    hermesRuntimeSourcesFile: '/tmp/runtime-input-secret/legacy-hermes.jsonl',
+    hermesRuntimeSourcesPaths: [
+      '/tmp/runtime-input-secret/current-hermes-a.jsonl',
+      '/tmp/runtime-input-secret/current-hermes-dir'
+    ],
+    taskEvidenceFile: '/tmp/runtime-input-secret/legacy-task.jsonl',
+    taskEvidencePaths: ['/tmp/runtime-input-secret/current-task.jsonl']
+  });
+  const { baseUrl, store, storeFile } = await createHarness(t, {
+    controllerSnapshotCollector,
+    runtimeInputInventory
+  });
+  await writeFile(storeFile, '');
+  const before = {
+    counts: store.getCounts(),
+    file: await readFile(storeFile, 'utf8')
+  };
+
+  const response = await requestJson(
+    `${baseUrl}/runtime/input-inventory?token=/tmp/runtime-input-secret&payload=<script>`
+  );
+
+  assert.equal(response.response.status, 200);
+  assert.deepEqual(response.body, {
+    item: {
+      hermes_runtime_sources: {
+        enabled: true,
+        mode: 'paths',
+        configured_input_count: 2
+      },
+      task_evidence_sources: {
+        enabled: true,
+        mode: 'paths',
+        configured_input_count: 1
+      }
+    }
+  });
+
+  const serialized = JSON.stringify(response.body);
+  for (const forbidden of [
+    '/tmp/runtime-input-secret',
+    'legacy-hermes.jsonl',
+    'current-hermes-a.jsonl',
+    'current-hermes-dir',
+    'legacy-task.jsonl',
+    'current-task.jsonl',
+    'METAVERSE_OFFICE_HERMES_RUNTIME_SOURCES_PATHS',
+    'METAVERSE_OFFICE_HERMES_RUNTIME_SOURCES_FILE',
+    'METAVERSE_OFFICE_TASK_EVIDENCE_PATHS',
+    'METAVERSE_OFFICE_TASK_EVIDENCE_FILE',
+    'tmux://',
+    'hermes://',
+    'session://',
+    'profile://',
+    'token=',
+    'payload',
+    'dispatch',
+    'routing',
+    'orchestration',
+    'liveness',
+    'productivity'
+  ]) {
+    assert.equal(serialized.includes(forbidden), false, forbidden);
+  }
+  assert.deepEqual(store.getCounts(), before.counts);
+  assert.equal(await readFile(storeFile, 'utf8'), before.file);
+  assert.equal(collectCount, 0);
+});
+
 test('GET static schema and aggregate routes are not swallowed by dynamic detail fallbacks', async () => {
   const calls = [];
   const responseFor = (method) => {
@@ -10509,6 +10589,7 @@ test('GET read route purity matrix leaves replay records and checkpoints unchang
     '/storage/replay-manifest',
     '/storage/index-health',
     '/storage/schema',
+    '/runtime/input-inventory',
     '/runtime/source-gaps?newest_first=true&limit=10',
     '/runtime/source-gaps/schema',
     '/runtime/source-gaps/summary?newest_first=true&limit=1',
@@ -10846,6 +10927,7 @@ test('GET safe-route leak regression matrix stays redacted and read-pure under h
     `/runtime/source-gaps/lifecycle?newest_first=true&limit=2&${hostileInputQuery}`,
     `/runtime/source-gaps/transition-summary?newest_first=true&limit=2&${hostileInputQuery}`,
     `/runtime/source-gaps/trend?newest_first=true&limit=2&${hostileInputQuery}`,
+    `/runtime/input-inventory?${hostileInputQuery}`,
     `/agents/evidence-spine/schema?${hostileInputQuery}`,
     `/agents/evidence-spine/summary?newest_first=true&limit=2&${hostileInputQuery}`,
     `/agents/evidence-spine/source-matrix?newest_first=true&limit=2&${hostileInputQuery}`,

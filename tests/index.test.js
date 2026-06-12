@@ -5,6 +5,7 @@ const path = require('node:path');
 const test = require('node:test');
 
 const {
+  createRuntimeInputInventory,
   createHermesRuntimeSourcesOptions,
   createTaskEvidenceOptions,
   parseDelimitedEnvPaths
@@ -15,6 +16,104 @@ test('parseDelimitedEnvPaths trims blanks using the platform delimiter', () => {
     parseDelimitedEnvPaths(['  /runtime/one  ', '', ' /runtime/two '].join(path.delimiter)),
     ['/runtime/one', '/runtime/two']
   );
+});
+
+test('runtime input inventory reports unset file paths and precedence without leaking values', () => {
+  const cases = [
+    {
+      options: {},
+      expected: {
+        hermes_runtime_sources: {
+          enabled: false,
+          mode: 'unset',
+          configured_input_count: 0
+        },
+        task_evidence_sources: {
+          enabled: false,
+          mode: 'unset',
+          configured_input_count: 0
+        }
+      }
+    },
+    {
+      options: {
+        hermesRuntimeSourcesFile: '/tmp/runtime-secret/hermes-runtime.jsonl',
+        taskEvidenceFile: '/tmp/runtime-secret/task-evidence.jsonl'
+      },
+      expected: {
+        hermes_runtime_sources: {
+          enabled: true,
+          mode: 'file',
+          configured_input_count: 1
+        },
+        task_evidence_sources: {
+          enabled: true,
+          mode: 'file',
+          configured_input_count: 1
+        }
+      }
+    },
+    {
+      options: {
+        hermesRuntimeSourcesPaths: [
+          '/tmp/runtime-secret/hermes-a.jsonl',
+          '/tmp/runtime-secret/hermes-dir'
+        ],
+        taskEvidencePaths: ['/tmp/runtime-secret/task-dir']
+      },
+      expected: {
+        hermes_runtime_sources: {
+          enabled: true,
+          mode: 'paths',
+          configured_input_count: 2
+        },
+        task_evidence_sources: {
+          enabled: true,
+          mode: 'paths',
+          configured_input_count: 1
+        }
+      }
+    },
+    {
+      options: {
+        hermesRuntimeSourcesFile: '/tmp/runtime-secret/legacy-hermes.jsonl',
+        hermesRuntimeSourcesPaths: ['/tmp/runtime-secret/current-hermes.jsonl'],
+        taskEvidenceFile: '/tmp/runtime-secret/legacy-task.jsonl',
+        taskEvidencePaths: [
+          '/tmp/runtime-secret/current-task-a.jsonl',
+          '/tmp/runtime-secret/current-task-b.jsonl'
+        ]
+      },
+      expected: {
+        hermes_runtime_sources: {
+          enabled: true,
+          mode: 'paths',
+          configured_input_count: 1
+        },
+        task_evidence_sources: {
+          enabled: true,
+          mode: 'paths',
+          configured_input_count: 2
+        }
+      }
+    }
+  ];
+
+  for (const testCase of cases) {
+    const inventory = createRuntimeInputInventory(testCase.options);
+
+    assert.deepEqual(inventory, testCase.expected);
+    const serialized = JSON.stringify(inventory);
+    for (const forbidden of [
+      '/tmp/runtime-secret',
+      'hermes-runtime.jsonl',
+      'task-evidence.jsonl',
+      'legacy-hermes.jsonl',
+      'legacy-task.jsonl'
+    ]) {
+      assert.equal(serialized.includes(forbidden), false, forbidden);
+    }
+  }
 });
 
 test('Hermes runtime source PATHS take precedence over legacy FILE', async () => {

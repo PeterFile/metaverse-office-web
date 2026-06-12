@@ -431,6 +431,13 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
     return;
   }
 
+  if (method === 'GET' && pathname === '/incidents/evidence-audit/schema') {
+    sendJson(res, 200, {
+      item: store.getIncidentEvidenceAuditSchema()
+    });
+    return;
+  }
+
   if (method === 'GET' && pathname === '/incidents') {
     sendJson(res, 200, {
       items: store.listIncidents({

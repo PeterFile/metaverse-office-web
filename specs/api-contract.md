@@ -56,6 +56,7 @@ This is the current API/read-model contract for Metaverse Office Web. It grew ou
 - `GET /storage/replay-manifest`
 - `GET /storage/index-health`
 - `GET /peer-watch/alerts?status=&target_agent_id=&agent_id=&watcher_agent_id=&observer_agent_id=&correlation_id=&severity=&limit=`
+- `GET /incidents/evidence-audit/schema`
 - `GET /incidents?kind=&agent_id=&severity=&status=&correlation_id=&limit=&window=`
 - `GET /correlations/:correlation_id?limit=&window=`
 - `GET /memory/artifacts?limit=&window=&agent_id=&correlation_id=&artifact_ref=&event_type=&severity=&source_kind=&artifact_kind=`
@@ -439,6 +440,7 @@ This is the current API/read-model contract for Metaverse Office Web. It grew ou
 - each alert item exposes `alert_id`, `target_agent_id`, `observer_agent_id`, `watcher_agent_ids`, `status`, `current_state`, `active_task`, `severity`, `summary`, `evidence_refs`, `evidence_count`, `correlation_id`, `source_kind`, and `metadata`
 
 ## Incident feed query semantics
+- `GET /incidents/evidence-audit/schema` is a local-only read-only static contract catalog for incident evidence-audit clients/tests; it returns `{ "item": { "supported_filters": ["kind", "agent_id", "severity", "status", "window", "limit"], "audit_buckets": ["evidence_backed", "insufficient_evidence"], "count_fields": ["total_count", "evidence_backed_count", "insufficient_evidence_count"], "accountability_gap_semantics": string[], "limit": { "default": 50, "max": 200 }, "route_write_boundary": string } }`, ignores query filters, catalogs only the audit concepts needed to distinguish evidence-backed from insufficient-evidence incident claims, treats missing evidence as an accountability gap only, and never inspects incident rows, collects, reads runtime sources, appends records, changes severity/status/lifecycle, infers liveness/productivity, or returns incident ids, event ids, evidence ids/refs, correlation ids, summaries, payloads, metadata, local paths, tmux/Hermes/session/profile refs, tokens, webhooks, or control-plane actions
 - `GET /incidents` is read-only and normalizes existing peer-watch alert, handoff, and reboot read models into one operator feed
 - supported `kind` values are `peer_watch_alert`, `handoff`, and `reboot`
 - supported filters are `kind`, `agent_id`, `severity`, `status`, `correlation_id`, `limit`, and `window`

@@ -191,6 +191,7 @@ Optional env:
 - `GET /storage/replay-manifest`
 - `GET /storage/index-health`
 - `GET /peer-watch/alerts?status=&target_agent_id=&agent_id=&watcher_agent_id=&observer_agent_id=&correlation_id=&severity=&limit=`
+- `GET /incidents/evidence-audit/schema`
 - `GET /incidents?kind=&agent_id=&severity=&status=&correlation_id=&limit=&window=`
 - `GET /correlations/:correlation_id?limit=&window=`
 - `GET /memory/artifacts?limit=&window=&agent_id=&correlation_id=&artifact_ref=&event_type=&severity=&source_kind=&artifact_kind=`
@@ -297,6 +298,7 @@ Optional env:
 - `status=open` returns only currently unresolved alerts; omit `status` to inspect the full alert event history
 
 ### Incident feed notes
+- `GET /incidents/evidence-audit/schema` is a static read-only catalog for incident evidence-audit concepts; it exposes only `supported_filters` (`kind`, `agent_id`, `severity`, `status`, `window`, `limit`), `audit_buckets` (`evidence_backed`, `insufficient_evidence`), count field names, gap semantics, and limit metadata without reading incident rows or returning ids, refs, correlation ids, summaries, payloads, metadata, paths, runtime refs, or control-plane strings.
 - `GET /incidents` is a read-only operator feed derived from existing peer-watch alert, handoff, and reboot read models
 - supported `kind` values are `peer_watch_alert`, `handoff`, and `reboot`
 - supported filters are `kind`, `agent_id`, `severity`, `status`, `correlation_id`, `limit`, and `window`

@@ -7938,6 +7938,71 @@ test('GET /agents/evidence-spine/schema read route purity does not inspect spine
   assert.equal(await readFile(storeFile, 'utf8'), fileBeforeRead);
 });
 
+test('GET /incidents/evidence-audit/schema exposes static catalog without reading incidents', async () => {
+  let collectCount = 0;
+  const controllerSnapshotCollector = {
+    async collectSnapshot() {
+      collectCount += 1;
+      throw new Error('GET /incidents/evidence-audit/schema must not collect');
+    }
+  };
+  const root = await mkdtemp(path.join(os.tmpdir(), 'metaverse-office-incident-audit-schema-'));
+  const storeFile = path.join(root, 'prototype-store.jsonl');
+  const store = await createPrototypeStore({ filePath: storeFile });
+
+  await store.appendEvent(createEvent({
+    eventId: 'evt_incident_audit_route_secret',
+    ts: '2026-03-09T18:04:00.000Z',
+    agentId: 'app-engineering',
+    eventType: 'peer_watch_alert_raised',
+    currentState: 'blocked',
+    activeTask: 'Audit incident evidence',
+    summary: 'Incident evidence-audit schema must not echo this summary',
+    severity: 'orange',
+    correlationId: 'corr-incident-audit-route-secret',
+    evidenceRefs: ['/tmp/incident-audit-route-secret.md', 'tmux://incident-audit-route-secret/0.1']
+  }));
+  const fileBeforeRead = await readFile(storeFile, 'utf8');
+  store.listIncidents = () => {
+    throw new Error('schema route must not read incident rows');
+  };
+
+  const response = await requestJsonDirect({
+    url: '/incidents/evidence-audit/schema?token=/tmp/incident-audit-route-secret&correlation_id=<script>',
+    store,
+    controllerSnapshotCollector
+  });
+  assert.equal(response.response.status, 200);
+  assert.deepEqual(response.body.item.audit_buckets, [
+    'evidence_backed',
+    'insufficient_evidence'
+  ]);
+  assert.deepEqual(response.body.item.count_fields, [
+    'total_count',
+    'evidence_backed_count',
+    'insufficient_evidence_count'
+  ]);
+  assert.deepEqual(response.body.item.accountability_gap_semantics, [
+    'insufficient evidence is an accountability gap only',
+    'audit buckets do not change incident severity or lifecycle',
+    'audit buckets do not infer liveness or productivity'
+  ]);
+  const serialized = JSON.stringify(response.body);
+  assert.equal(serialized.includes('/tmp/'), false);
+  assert.equal(serialized.includes('<script>'), false);
+  assert.equal(serialized.includes('tmux://'), false);
+  assert.equal(serialized.includes('evt_incident_audit_route_secret'), false);
+  assert.equal(serialized.includes('corr-incident-audit-route-secret'), false);
+  assert.equal(serialized.includes('Incident evidence-audit schema must not echo'), false);
+  assert.equal(serialized.includes('evidence_ref'), false);
+  assert.equal(serialized.includes('event_id'), false);
+  assert.equal(serialized.includes('incident_id'), false);
+  assert.equal(serialized.includes('correlation_id'), false);
+  assert.equal(serialized.includes('summary'), false);
+  assert.equal(collectCount, 0);
+  assert.equal(await readFile(storeFile, 'utf8'), fileBeforeRead);
+});
+
 test('GET /collectors/controller-snapshot/schema exposes static catalog without reading snapshots', async () => {
   let collectCount = 0;
   const controllerSnapshotCollector = {

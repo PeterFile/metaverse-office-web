@@ -2997,6 +2997,63 @@ test('agents evidence-spine schema exposes only static safe contract metadata', 
   assert.equal(serialized.includes('evidence_id'), false);
 });
 
+test('incident evidence-audit schema exposes only static safe contract metadata', async () => {
+  const storeFile = await createStoreFile();
+  const store = await createPrototypeStore({ filePath: storeFile });
+
+  await store.appendEvent({
+    ...createEvent(),
+    event_id: 'evt_incident_audit_schema_secret',
+    event_type: 'peer_watch_alert_raised',
+    summary: 'Incident audit schema must not echo this summary',
+    correlation_id: 'corr-incident-audit-secret',
+    evidence_refs: ['/tmp/incident-audit-secret.md', 'tmux://incident-audit-secret/0.1']
+  });
+
+  const schema = store.getIncidentEvidenceAuditSchema();
+  assert.deepEqual(schema.limit, {
+    default: 50,
+    max: 200
+  });
+  assert.deepEqual(schema.supported_filters, [
+    'kind',
+    'agent_id',
+    'severity',
+    'status',
+    'window',
+    'limit'
+  ]);
+  assert.deepEqual(schema.audit_buckets, ['evidence_backed', 'insufficient_evidence']);
+  assert.deepEqual(schema.count_fields, [
+    'total_count',
+    'evidence_backed_count',
+    'insufficient_evidence_count'
+  ]);
+  assert.deepEqual(schema.accountability_gap_semantics, [
+    'insufficient evidence is an accountability gap only',
+    'audit buckets do not change incident severity or lifecycle',
+    'audit buckets do not infer liveness or productivity'
+  ]);
+  assert.equal(
+    schema.route_write_boundary,
+    'read-only incident evidence-audit schema catalog; does not inspect incident rows, collect, read runtime sources, append records, change lifecycle, or infer severity, liveness, or productivity'
+  );
+
+  const serialized = JSON.stringify(schema);
+  assert.equal(serialized.includes('/tmp/incident-audit-secret'), false);
+  assert.equal(serialized.includes('tmux://'), false);
+  assert.equal(serialized.includes('evt_incident_audit_schema_secret'), false);
+  assert.equal(serialized.includes('corr-incident-audit-secret'), false);
+  assert.equal(serialized.includes('Incident audit schema must not echo'), false);
+  assert.equal(serialized.includes('evidence_ref'), false);
+  assert.equal(serialized.includes('evidence_id'), false);
+  assert.equal(serialized.includes('event_id'), false);
+  assert.equal(serialized.includes('incident_id'), false);
+  assert.equal(serialized.includes('correlation_id'), false);
+  assert.equal(serialized.includes('summary'), false);
+  assert.equal(serialized.includes('metadata'), false);
+});
+
 test('collector snapshot schema exposes static safe route catalog metadata', async () => {
   const storeFile = await createStoreFile();
   const store = await createPrototypeStore({ filePath: storeFile });

@@ -3159,12 +3159,24 @@ function createAccountabilityReplayAudit({
 
   return {
     evidence_id_status: evidenceIdStatus,
+    ...(evidenceIdStatus === 'unknown_evidence_id'
+      ? { disclosure: createUnknownEvidenceDisclosure() }
+      : {}),
     event_count: events.length,
     interaction_count: interactions.length,
     artifact_count: memoryArtifacts.length,
     ledger_entry_count: ledger.length,
     anchor_event_count: anchorEventIds.length,
     anchor_event_ids: anchorEventIds
+  };
+}
+
+function createUnknownEvidenceDisclosure() {
+  return {
+    decision: 'deny',
+    reason_code: 'unknown_evidence',
+    mapping: 'unknown',
+    freshness: 'unknown'
   };
 }
 

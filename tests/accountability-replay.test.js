@@ -359,6 +359,12 @@ test('GET /accountability/replay returns an empty no-echo bundle for unknown hos
     if (params.has('evidence_id')) {
       assert.deepEqual(body.replay_audit, {
         evidence_id_status: 'unknown_evidence_id',
+        disclosure: {
+          decision: 'deny',
+          reason_code: 'unknown_evidence',
+          mapping: 'unknown',
+          freshness: 'unknown'
+        },
         event_count: 0,
         interaction_count: 0,
         artifact_count: 0,

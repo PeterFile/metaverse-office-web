@@ -719,12 +719,7 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
       sendJson(res, 404, {
         error: 'not_found',
         details: 'unknown evidence record',
-        disclosure: {
-          decision: 'deny',
-          reason_code: 'unknown_evidence',
-          mapping: 'unknown',
-          freshness: 'unknown'
-        }
+        disclosure: createUnknownEvidenceDisclosure()
       });
       return;
     }
@@ -745,7 +740,8 @@ async function handleRequest({ req, res, store, now, controllerSnapshotCollector
     if (!replayWindow) {
       sendJson(res, 404, {
         error: 'not_found',
-        details: 'unknown evidence record'
+        details: 'unknown evidence record',
+        disclosure: createUnknownEvidenceDisclosure()
       });
       return;
     }
@@ -900,6 +896,15 @@ function getSearchValue(searchParams, name) {
 
   const trimmedValue = value.trim();
   return trimmedValue.length > 0 ? trimmedValue : null;
+}
+
+function createUnknownEvidenceDisclosure() {
+  return {
+    decision: 'deny',
+    reason_code: 'unknown_evidence',
+    mapping: 'unknown',
+    freshness: 'unknown'
+  };
 }
 
 function getActorId(req) {

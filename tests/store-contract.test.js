@@ -2083,6 +2083,125 @@ test('input-proof summary only exposes bounded proof counts and ordinal buckets'
   });
 });
 
+test('runtime input evidence watermark aggregates only replayed input metadata', async () => {
+  const storeFile = await createStoreFile();
+  const hermesRecord = {
+    evidence_id: 'ev_watermark_hermes',
+    observed_at: '2026-05-20T01:02:00.000Z',
+    collected_at: '2026-05-20T01:04:00.000Z',
+    agent_id: 'app-engineering',
+    source_kind: 'hermes_session',
+    evidence_ref: 'hermes://session/watermark-secret-session',
+    evidence_role: 'runtime_presence',
+    source_status: 'observed',
+    output_candidate: false,
+    collector_snapshot_id: 'collector-snapshot:2026-05-20T01:04:00.000Z',
+    correlation_id: 'collector-snapshot:2026-05-20T01:04:00.000Z',
+    degraded_reasons: ['raw degraded reason'],
+    metadata: {
+      session_ref: 'watermark-secret-session',
+      local_path: '/tmp/runtime-watermark-secret',
+      source_provenance: {
+        source_format: 'jsonl',
+        source_index: 1,
+        line: 2,
+        source_input_ordinal: 3,
+        source_file_ordinal: 1,
+        raw_path: '/tmp/runtime-watermark-secret/hermes.jsonl'
+      }
+    }
+  };
+  const taskRecord = {
+    ...hermesRecord,
+    evidence_id: 'ev_watermark_task',
+    observed_at: '2026-05-20T01:03:00.000Z',
+    collected_at: '2026-05-20T01:05:00.000Z',
+    agent_id: null,
+    source_kind: 'kanban_fixture',
+    evidence_ref: 'task://kanban_fixture/watermark-task-secret',
+    evidence_role: 'task_reference',
+    collector_snapshot_id: 'collector-snapshot:2026-05-20T01:05:00.000Z',
+    correlation_id: 'collector-snapshot:2026-05-20T01:05:00.000Z',
+    metadata: {
+      task_ref: 'watermark-task-secret',
+      source_provenance: {
+        source_format: 'json_array',
+        source_index: 0,
+        source_input_ordinal: 5,
+        source_file_ordinal: 2,
+        payload: 'token=runtime-watermark-secret'
+      }
+    }
+  };
+  const ignoredWorkspaceRecord = {
+    ...hermesRecord,
+    evidence_id: 'ev_watermark_workspace_ignored',
+    source_kind: 'workspace_file',
+    evidence_ref: '/tmp/runtime-watermark-secret/outbox.md',
+    metadata: {
+      source_provenance: {
+        source_format: 'jsonl',
+        source_index: 9,
+        line: 10,
+        source_input_ordinal: 99,
+        source_file_ordinal: 99
+      }
+    }
+  };
+
+  await writeFile(
+    storeFile,
+    [hermesRecord, taskRecord, ignoredWorkspaceRecord]
+      .map((payload) => JSON.stringify({ kind: 'evidence_record', payload }))
+      .join('\n') + '\n'
+  );
+
+  const store = await createPrototypeStore({ filePath: storeFile });
+  const watermark = store.getRuntimeInputEvidenceWatermark();
+
+  assert.deepEqual(watermark, {
+    input_evidence_count: 2,
+    source_family_buckets: {
+      hermes_runtime_sources: 1,
+      task_evidence_sources: 1
+    },
+    source_kind_buckets: {
+      hermes_profile: 0,
+      hermes_session: 1,
+      kanban_fixture: 1,
+      linear_fixture: 0,
+      slack_fixture: 0,
+      task_fixture: 0
+    },
+    latest_collected_at: '2026-05-20T01:05:00.000Z',
+    latest_observed_at: '2026-05-20T01:03:00.000Z',
+    max_source_input_ordinal: 5,
+    max_source_file_ordinal: 2,
+    source_format_buckets: {
+      json_array: 1,
+      jsonl: 1
+    }
+  });
+
+  const serialized = JSON.stringify(watermark);
+  for (const unsafeFragment of [
+    'evidence_id',
+    'evidence_ref',
+    'metadata',
+    'degraded_reasons',
+    '/tmp/runtime-watermark-secret',
+    'hermes://',
+    'task://',
+    'watermark-secret-session',
+    'watermark-task-secret',
+    'token=runtime-watermark-secret',
+    'workspace_file',
+    '99'
+  ]) {
+    assert.equal(serialized.includes(unsafeFragment), false, unsafeFragment);
+  }
+});
+
 test('prototype store does not expose half collector snapshots when a derived append fails', async () => {
   const recordLog = new FailingCollectorBatchRecordLog({ failOnKind: 'evidence_record' });
   const store = new PrototypeStore({

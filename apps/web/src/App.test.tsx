@@ -14006,7 +14006,9 @@ afterEach(() => {
 
     const exactArtifactRecord = within(memorySection!).getByText('Ref · /tmp/missing.md').closest('li');
     expect(exactArtifactRecord).not.toBeNull();
-    expect(document.activeElement).toBe(exactArtifactRecord);
+    await waitFor(() => {
+      expect(document.activeElement).toBe(exactArtifactRecord);
+    });
     expect(within(details).getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
     expect(within(correlationSection!).getByText('corr-app-review')).toBeVisible();
 

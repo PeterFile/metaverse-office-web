@@ -17,11 +17,11 @@ export type SelectedAgentEvidenceGlanceInput = {
 export type SelectedAgentEvidenceProofCapsule = [string] | [string, string];
 
 const SOURCE_KIND_LABELS: Record<CollectorEvidenceCoverageSourceKind, string> = {
-  workspace_file: 'workspace',
-  workspace_root: 'workspace',
-  tmux_observation: 'tmux',
-  hermes_profile: 'Hermes',
-  hermes_session: 'Hermes'
+  workspace_file: 'Workspace evidence',
+  workspace_root: 'Workspace evidence',
+  tmux_observation: 'Runtime evidence',
+  hermes_profile: 'Runtime evidence',
+  hermes_session: 'Runtime evidence'
 };
 const SAFE_SOURCE_KIND_LABELS: Record<string, string> = {
   ...SOURCE_KIND_LABELS
@@ -58,10 +58,10 @@ export function deriveSelectedAgentEvidenceGlance({
       (candidate) => candidate.agent_id === agentId
     );
     if (!row) {
-      return ['Proof glance · 0 records · Sources unavailable', 'Coverage gap · loaded snapshot has no row'];
+      return ['Proof glance · 0 records · Sources unavailable', 'Coverage gap · selected-agent coverage unavailable'];
     }
     if (row.status === 'uncovered_in_snapshot') {
-      return ['Proof glance · 0 records · Sources unavailable', 'Coverage gap · uncovered in loaded snapshot'];
+      return ['Proof glance · 0 records · Sources unavailable', 'Coverage gap · selected-agent evidence insufficient'];
     }
 
     return [
@@ -80,8 +80,8 @@ export function deriveSelectedAgentEvidenceGlance({
   }
 
   return [
-    `Proof glance · ${renderEvidenceRefCount(sourceHealthItem.evidence_ref_count)} · Source-health snapshot`,
-    `Coverage source-health only · Latest observed ${sourceHealthItem.latest_evidence_at ?? 'unavailable'}`
+    `Proof glance · ${renderEvidenceRefCount(sourceHealthItem.evidence_ref_count)} · Sources unavailable`,
+    `Coverage limited summary · Latest observed ${sourceHealthItem.latest_evidence_at ?? 'unavailable'}`
   ];
 }
 

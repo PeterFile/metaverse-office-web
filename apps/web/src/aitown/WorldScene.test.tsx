@@ -2704,7 +2704,7 @@ describe('WorldScene watch overlay caption gating', () => {
         scene={scene}
         onSelectAgent={vi.fn()}
         selectedAgentProofGlance={[
-          'Proof glance · 6 records · Sources workspace 3, tmux 2',
+          'Proof glance · 6 records · Sources Runtime evidence 2, Workspace evidence 3',
           'Coverage gap · 1 · Roles source evidence 4',
           'Ignored extra line'
         ]}
@@ -2713,7 +2713,9 @@ describe('WorldScene watch overlay caption gating', () => {
 
     const lens = await screen.findByRole('region', { name: 'Selected agent proof lens' });
     expect(within(lens).getByText('Proof lens')).toBeVisible();
-    expect(within(lens).getByText('Proof glance · 6 records · Sources workspace 3, tmux 2')).toBeVisible();
+    expect(
+      within(lens).getByText('Proof glance · 6 records · Sources Runtime evidence 2, Workspace evidence 3')
+    ).toBeVisible();
     expect(within(lens).getByText('Coverage gap · 1 · Roles source evidence 4')).toBeVisible();
     expect(within(lens).queryByText('Ignored extra line')).not.toBeInTheDocument();
     expect(within(lens).queryAllByText(/^(Proof glance|Coverage gap)/)).toHaveLength(2);
@@ -2722,7 +2724,7 @@ describe('WorldScene watch overlay caption gating', () => {
       <WorldScene
         scene={{ ...scene, selectedAgentId: 'missing-agent' }}
         onSelectAgent={vi.fn()}
-        selectedAgentProofGlance={['Proof glance · 6 records · Sources workspace 3']}
+        selectedAgentProofGlance={['Proof glance · 6 records · Sources Workspace evidence 3']}
       />
     );
 

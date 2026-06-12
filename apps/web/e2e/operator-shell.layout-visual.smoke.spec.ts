@@ -734,7 +734,7 @@ test.describe('operator shell layout visual smoke', () => {
     const evidenceFocus = page.getByRole('region', { name: 'Evidence coverage focus' });
     const sourceGapFocus = page.getByRole('region', { name: 'Source gap focus' });
     const collectorSnapshotChip = page.getByRole('button', {
-      name: 'Open collector snapshot supervision summary: Snapshot available'
+      name: 'Open collector snapshot supervision summary: Degraded'
     });
     const evidenceFocusHead = evidenceFocus.locator('.aitown-panel__evidence-focus__head');
     const evidenceFocusChip = evidenceFocus.getByRole('button', {
@@ -755,12 +755,12 @@ test.describe('operator shell layout visual smoke', () => {
     await expect(collectorSnapshotChip).toBeVisible();
     await expect(collectorSnapshotChip).toContainText('1 agents · 1 heartbeats');
     await expect(collectorSnapshotChip).toContainText('1 observed · 3 source gaps');
-    await expect(collectorSnapshotChip).toContainText('Collected · 2026-03-16T09:01:00.000Z');
+    await expect(collectorSnapshotChip).toContainText('1 refs · 1 coverage gap');
     await expect(collectorSnapshotChip).not.toContainText('/tmp/app-engineering');
     await expect(collectorSnapshotChip).not.toContainText('5-web3-app-engineering');
     await expect(collectorSnapshotChip).not.toContainText('hermes://');
     await expect(signalsSummary.getByText('Signals', { exact: true })).toBeVisible();
-    await expect(signalsSummary.locator('.aitown-panel__topline-copy')).toContainText('Snapshot · Snapshot available');
+    await expect(signalsSummary.locator('.aitown-panel__topline-copy')).toContainText('Snapshot · Degraded');
     await expect(signalsSummary.locator('.aitown-panel__topline-copy')).toContainText('Evidence · 6');
     await expect(signalsSummary.getByText(/Source gaps · 3/)).toBeVisible();
     await expect(evidenceFocus).toBeHidden();

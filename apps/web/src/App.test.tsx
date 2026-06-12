@@ -3212,23 +3212,24 @@ afterEach(() => {
     expect(screen.queryByRole('button', { name: 'Open Hub' })).not.toBeInTheDocument();
   });
 
-  it('renders a compact collector snapshot summary chip from the safe summary route', async () => {
+  it('renders a compact collector freshness pulse from the safe summary route', async () => {
     const user = userEvent.setup();
     render(<App />);
 
     const chip = await screen.findByRole(
       'button',
       {
-        name: 'Open collector snapshot supervision summary: Snapshot available'
+        name: 'Open collector snapshot supervision summary: Degraded'
       },
       { timeout: 5_000 }
     );
 
     expect(chip).toBeVisible();
-    expect(chip).toHaveTextContent('Snapshot available');
+    expect(chip).toHaveTextContent('Collector freshness');
+    expect(chip).toHaveTextContent('Degraded');
     expect(chip).toHaveTextContent('2 agents · 2 heartbeats');
     expect(chip).toHaveTextContent('4 observed · 2 source gaps');
-    expect(chip).toHaveTextContent('Collected · 2026-03-16T09:01:00.000Z');
+    expect(chip).toHaveTextContent('3 refs · 1 coverage gap');
     expect(chip).not.toHaveTextContent('/tmp');
     expect(chip).not.toHaveTextContent('tmux://');
     expect(chip).not.toHaveTextContent('5-web3-app-engineering');
@@ -3243,6 +3244,107 @@ afterEach(() => {
     expect(screen.getByRole('button', { name: 'Supervision' })).toHaveAttribute('aria-expanded', 'true');
     const details = await screen.findByRole('complementary', { name: 'Agent details' });
     expect(within(details).getByRole('heading', { name: 'Collector Supervision' })).toBeVisible();
+  });
+
+  it('renders collector freshness pulse state and safe aggregate copy', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString();
+
+      if (url === collectorSnapshotSummaryUrl) {
+        return jsonResponse({
+          item: {
+            ...collectorSnapshotSummaryFixture,
+            source_health_buckets: {
+              ...collectorSnapshotSummaryFixture.source_health_buckets,
+              status_buckets: {
+                observed: 6,
+                degraded: 0,
+                missing: 0,
+                error: 0
+              }
+            },
+            low_confidence_agent_count: 0,
+            collector_snapshot_id: 'collector-20260316-with-access_token-that-must-not-render',
+            actor_ids: ['team-lead'],
+            evidence_refs: ['/tmp/unsafe-evidence.md'],
+            degraded_reason_arrays: ['tmux://5-web3-app-engineering/0.1'],
+            payload: { webhook: 'https://hooks.example.invalid/raw-payload' }
+          }
+        });
+      }
+
+      return resolveTestFetchResponse(url);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<App />);
+
+    const pulse = await screen.findByRole('button', {
+      name: 'Open collector snapshot supervision summary: Fresh'
+    });
+
+    expect(pulse).toBeVisible();
+    expect(pulse).toHaveTextContent('Fresh');
+    expect(pulse).toHaveTextContent('2 agents · 2 heartbeats');
+    expect(pulse).toHaveTextContent('6 observed · 0 source gaps');
+    expect(pulse).toHaveTextContent('3 refs · all covered');
+    expect(pulse.getAttribute('aria-label')).not.toContain('collector-20260316');
+    expect(pulse.getAttribute('aria-label')).not.toContain('/tmp');
+    expect(pulse.getAttribute('aria-label')).not.toContain('tmux://');
+    expect(pulse).not.toHaveTextContent('collector-20260316');
+    expect(pulse).not.toHaveTextContent('/tmp');
+    expect(pulse).not.toHaveTextContent('team-lead');
+    expect(pulse).not.toHaveTextContent('hooks.example.invalid');
+  });
+
+  it('renders coverage-gap freshness pulse state from safe coverage counts', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString();
+
+      if (url === collectorSnapshotSummaryUrl) {
+        return jsonResponse({
+          item: {
+            ...collectorSnapshotSummaryFixture,
+            covered_agent_count: 1,
+            low_confidence_agent_count: 1,
+            source_health_buckets: {
+              ...collectorSnapshotSummaryFixture.source_health_buckets,
+              status_buckets: {
+                observed: 6,
+                degraded: 0,
+                missing: 0,
+                error: 0
+              }
+            }
+          }
+        });
+      }
+
+      return resolveTestFetchResponse(url);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<App />);
+
+    const pulse = await screen.findByRole('button', {
+      name: 'Open collector snapshot supervision summary: Coverage gap'
+    });
+
+    expect(pulse).toHaveTextContent('Coverage gap');
+    expect(pulse).toHaveTextContent('6 observed · 0 source gaps');
+    expect(pulse).toHaveTextContent('3 refs · 2 coverage gaps');
+  });
+
+  it('renders degraded freshness pulse state when source health is unstable', async () => {
+    render(<App />);
+
+    const pulse = await screen.findByRole('button', {
+      name: 'Open collector snapshot supervision summary: Degraded'
+    });
+
+    expect(pulse).toHaveTextContent('Degraded');
+    expect(pulse).toHaveTextContent('4 observed · 2 source gaps');
+    expect(pulse).toHaveTextContent('3 refs · 1 coverage gap');
   });
 
   it('shows no-snapshot state in the collector summary chip without opening the Hub by default', async () => {
@@ -3282,7 +3384,7 @@ afterEach(() => {
     });
     expect(chip).toHaveTextContent('No snapshot');
     expect(chip).toHaveTextContent('0 agents · 0 heartbeats');
-    expect(chip).toHaveTextContent('Collected · none');
+    expect(chip).toHaveTextContent('0 refs · no coverage');
     expect(screen.queryByRole('dialog', { name: 'Hub' })).not.toBeInTheDocument();
   });
 

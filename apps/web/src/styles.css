@@ -610,12 +610,13 @@ button {
 .aitown-collector-summary-chip {
   pointer-events: auto;
   display: grid;
-  flex: 0 1 214px;
+  grid-template-columns: auto minmax(0, 1fr);
+  flex: 0 1 176px;
   align-self: flex-start;
-  min-width: 172px;
-  max-width: min(214px, 28vw);
-  gap: 2px;
-  padding: 6px 9px 8px;
+  min-width: 154px;
+  max-width: min(176px, 24vw);
+  gap: 6px;
+  padding: 5px 8px 6px;
   border-style: solid;
   border-width: var(--aitown-token-border);
   border-image-source: url('/ai-town/assets/ui/box.svg');
@@ -627,6 +628,23 @@ button {
   font: inherit;
   text-align: left;
   backdrop-filter: blur(8px);
+}
+
+.aitown-collector-summary-chip__pulse {
+  width: 8px;
+  height: 8px;
+  margin-top: 4px;
+  border-radius: 999px;
+  background: #8be9d5;
+  box-shadow: 0 0 0 2px rgba(139, 233, 213, 0.14);
+}
+
+.aitown-collector-summary-chip__meta {
+  display: contents;
+}
+
+.aitown-collector-summary-chip__meta > * {
+  grid-column: 2;
 }
 
 .aitown-collector-summary-chip:hover,
@@ -660,6 +678,23 @@ button {
 .aitown-collector-summary-chip--loading,
 .aitown-collector-summary-chip--unavailable {
   background: rgba(39, 24, 33, 0.82);
+}
+
+.aitown-collector-summary-chip--degraded .aitown-collector-summary-chip__pulse {
+  background: #ff9551;
+  box-shadow: 0 0 0 2px rgba(255, 149, 81, 0.16);
+}
+
+.aitown-collector-summary-chip--coverage-gap .aitown-collector-summary-chip__pulse {
+  background: #f8d34b;
+  box-shadow: 0 0 0 2px rgba(248, 211, 75, 0.16);
+}
+
+.aitown-collector-summary-chip--empty .aitown-collector-summary-chip__pulse,
+.aitown-collector-summary-chip--loading .aitown-collector-summary-chip__pulse,
+.aitown-collector-summary-chip--unavailable .aitown-collector-summary-chip__pulse {
+  background: #d6c596;
+  box-shadow: 0 0 0 2px rgba(214, 197, 150, 0.14);
 }
 
 .aitown-panel__topline-copy {

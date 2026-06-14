@@ -91,6 +91,11 @@ const EVIDENCE_MAPPING_DECISIONS = Object.freeze([
   'unknown'
 ]);
 const SEEDED_AGENT_IDS = new Set(SEED_AGENTS.map((agent) => agent.agent_id));
+const SUMMARY_UNKNOWN_BUCKET = 'unknown';
+const SAFE_SUMMARY_COLLECTOR_SNAPSHOT_ID_PATTERN =
+  /^collector-snapshot:(?:\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z|unknown)$/;
+const SAFE_SUMMARY_TASK_EVIDENCE_ID_PATTERN =
+  /^task-evidence:[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/;
 const EVIDENCE_RECORD_SUPPORTED_FILTERS = Object.freeze([
   'evidence_id',
   'agent_id',
@@ -1854,11 +1859,26 @@ class PrototypeStore {
       }
 
       summary.output_candidate_buckets[String(record.output_candidate === true)] += 1;
-      incrementBucket(summary.source_kind_buckets, record.source_kind);
-      incrementBucket(summary.evidence_role_buckets, record.evidence_role);
-      incrementBucket(summary.source_status_buckets, record.source_status);
+      incrementAllowedOrUnknownBucket(
+        summary.source_kind_buckets,
+        record.source_kind,
+        EVIDENCE_RECORD_SOURCE_KINDS
+      );
+      incrementAllowedOrUnknownBucket(
+        summary.evidence_role_buckets,
+        record.evidence_role,
+        EVIDENCE_RECORD_ROLES
+      );
+      incrementAllowedOrUnknownBucket(
+        summary.source_status_buckets,
+        record.source_status,
+        EVIDENCE_RECORD_SOURCE_STATUSES
+      );
       incrementKnownBucket(summary.mapping_decision_buckets, getEvidenceMappingDecision(record));
-      incrementBucket(summary.collector_snapshot_id_buckets, record.collector_snapshot_id);
+      incrementSafeSummaryIdBucket(
+        summary.collector_snapshot_id_buckets,
+        record.collector_snapshot_id
+      );
       summary.first_observed_at = getEarliestEvidenceRecordIsoValue(
         summary.first_observed_at,
         record.observed_at
@@ -2073,11 +2093,26 @@ class PrototypeStore {
       }
 
       summary.output_candidate_buckets[String(record.output_candidate === true)] += 1;
-      incrementBucket(summary.source_kind_buckets, record.source_kind);
-      incrementBucket(summary.evidence_role_buckets, record.evidence_role);
-      incrementBucket(summary.source_status_buckets, record.source_status);
+      incrementAllowedOrUnknownBucket(
+        summary.source_kind_buckets,
+        record.source_kind,
+        EVIDENCE_RECORD_SOURCE_KINDS
+      );
+      incrementAllowedOrUnknownBucket(
+        summary.evidence_role_buckets,
+        record.evidence_role,
+        EVIDENCE_RECORD_ROLES
+      );
+      incrementAllowedOrUnknownBucket(
+        summary.source_status_buckets,
+        record.source_status,
+        EVIDENCE_RECORD_SOURCE_STATUSES
+      );
       incrementKnownBucket(summary.mapping_decision_buckets, getEvidenceMappingDecision(record));
-      incrementBucket(summary.collector_snapshot_id_buckets, record.collector_snapshot_id);
+      incrementSafeSummaryIdBucket(
+        summary.collector_snapshot_id_buckets,
+        record.collector_snapshot_id
+      );
       summary.first_observed_at = getEarliestEvidenceRecordIsoValue(
         summary.first_observed_at,
         record.observed_at
@@ -3707,6 +3742,29 @@ function incrementKnownBucket(buckets, key) {
   }
 
   buckets[key] += 1;
+}
+
+function incrementAllowedOrUnknownBucket(buckets, key, allowedKeys) {
+  if (typeof key !== 'string' || key.length === 0) {
+    return;
+  }
+
+  incrementBucket(buckets, allowedKeys.includes(key) ? key : SUMMARY_UNKNOWN_BUCKET);
+}
+
+function incrementSafeSummaryIdBucket(buckets, key) {
+  if (typeof key !== 'string' || key.length === 0) {
+    return;
+  }
+
+  incrementBucket(buckets, isSafeSummaryIdBucketKey(key) ? key : SUMMARY_UNKNOWN_BUCKET);
+}
+
+function isSafeSummaryIdBucketKey(key) {
+  return (
+    SAFE_SUMMARY_COLLECTOR_SNAPSHOT_ID_PATTERN.test(key) ||
+    SAFE_SUMMARY_TASK_EVIDENCE_ID_PATTERN.test(key)
+  );
 }
 
 function createZeroBuckets(keys) {

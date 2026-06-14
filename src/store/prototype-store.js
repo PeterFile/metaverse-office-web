@@ -266,6 +266,21 @@ const RUNTIME_SOURCE_GAP_LIFECYCLE_STATES = Object.freeze([
   'resolved',
   'observed_unmapped'
 ]);
+const RUNTIME_SOURCE_GAP_REASON_CODES = Object.freeze([
+  'missing_workspace_root',
+  'missing_workspace_file',
+  'tmux_session_missing',
+  'tmux_pane_dead',
+  'hermes_profile_missing',
+  'hermes_session_missing',
+  'duplicate_runtime_mapping',
+  'unsafe_runtime_mapping',
+  'source_permission_denied',
+  'source_error',
+  'source_missing',
+  'source_degraded',
+  'unknown'
+]);
 const RUNTIME_SOURCE_GAP_SCHEMA_WRITE_BOUNDARY =
   'read-only runtime source-gap schema catalog; does not collect, read runtime sources, append records, or expose control-plane actions';
 const CONTROLLER_SNAPSHOT_SCHEMA_SOURCE_KINDS = Object.freeze([
@@ -1665,6 +1680,7 @@ class PrototypeStore {
       source_statuses: [...EVIDENCE_RECORD_SOURCE_STATUSES],
       source_gap_statuses: [...RUNTIME_SOURCE_GAP_STATUSES],
       mapping_decisions: [...EVIDENCE_MAPPING_DECISIONS],
+      reason_codes: [...RUNTIME_SOURCE_GAP_REASON_CODES],
       supported_filters: [...RUNTIME_SOURCE_GAP_SUPPORTED_FILTERS],
       boolean_filters: [...EVIDENCE_RECORD_BOOLEAN_FILTERS],
       lifecycle_states: [...RUNTIME_SOURCE_GAP_LIFECYCLE_STATES],
@@ -1857,6 +1873,29 @@ class PrototypeStore {
         summary.last_collected_at,
         record.collected_at
       );
+    }
+
+    return summary;
+  }
+
+  getRuntimeSourceGapReasonSummary(filters = {}) {
+    const { records, limit } = this.#filterEvidenceRecords(filters);
+    const gapRecords = records.filter(isRuntimeSourceGapReasonRecord);
+    const summary = {
+      total_count: gapRecords.length,
+      returned_limit: limit,
+      reason_code_buckets: createZeroBuckets(RUNTIME_SOURCE_GAP_REASON_CODES),
+      source_kind_buckets: createZeroBuckets(EVIDENCE_RECORD_SOURCE_KINDS),
+      source_status_buckets: createZeroBuckets(RUNTIME_SOURCE_GAP_STATUSES)
+    };
+
+    for (const record of gapRecords) {
+      incrementKnownBucket(
+        summary.reason_code_buckets,
+        deriveRuntimeSourceGapReasonCode(record)
+      );
+      incrementKnownBucket(summary.source_kind_buckets, record.source_kind);
+      incrementKnownBucket(summary.source_status_buckets, record.source_status);
     }
 
     return summary;
@@ -6626,6 +6665,69 @@ function isRuntimeSourceGapRecord(record) {
     record.agent_id === null &&
     record.evidence_role === 'runtime_unmapped'
   );
+}
+
+function isRuntimeSourceGapReasonRecord(record) {
+  return (
+    !(record.evidence_role === 'task_reference' && TASK_EVIDENCE_SOURCE_KINDS.has(record.source_kind)) &&
+    RUNTIME_SOURCE_GAP_STATUSES.includes(record.source_status)
+  );
+}
+
+function deriveRuntimeSourceGapReasonCode(record) {
+  for (const reason of Array.isArray(record.degraded_reasons) ? record.degraded_reasons : []) {
+    const reasonCode = classifyRuntimeSourceGapReason(reason);
+    if (reasonCode) {
+      return reasonCode;
+    }
+  }
+
+  if (record.source_status === 'error') {
+    return 'source_error';
+  }
+  if (record.source_status === 'missing') {
+    return 'source_missing';
+  }
+  if (record.source_status === 'degraded') {
+    return 'source_degraded';
+  }
+  return 'unknown';
+}
+
+function classifyRuntimeSourceGapReason(reason) {
+  if (typeof reason !== 'string') {
+    return null;
+  }
+
+  const normalized = reason.toLowerCase();
+  if (normalized.includes('missing workspace file')) {
+    return 'missing_workspace_file';
+  }
+  if (normalized.includes('workspace root not observed')) {
+    return 'missing_workspace_root';
+  }
+  if (normalized.includes('tmux session not observed')) {
+    return 'tmux_session_missing';
+  }
+  if (normalized.includes('tmux pane marked dead')) {
+    return 'tmux_pane_dead';
+  }
+  if (normalized.includes('hermes profile not observed')) {
+    return 'hermes_profile_missing';
+  }
+  if (normalized.includes('hermes session not observed')) {
+    return 'hermes_session_missing';
+  }
+  if (normalized.includes('duplicate mapping')) {
+    return 'duplicate_runtime_mapping';
+  }
+  if (normalized.includes('unsafe') && normalized.includes('mapping')) {
+    return 'unsafe_runtime_mapping';
+  }
+  if (normalized.includes('permission denied')) {
+    return 'source_permission_denied';
+  }
+  return null;
 }
 
 function projectRuntimeSourceGapRecord(record) {

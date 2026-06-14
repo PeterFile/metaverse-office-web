@@ -4675,6 +4675,57 @@ test('prototype store keeps unknown runtime source-gap filters empty and redacte
   }
 });
 
+test('prototype store summarizes source-gap reason buckets without raw reasons', async () => {
+  const storeFile = await createStoreFile();
+  const store = await createPrototypeStore({ filePath: storeFile });
+  const report = createCollectorReport();
+  report.items[0].source_health.tmux_session.status = 'missing';
+  report.items[0].source_health.tmux_session.degraded_reasons = [
+    'tmux session not observed',
+    'token=source-gap-reason-secret'
+  ];
+
+  await store.appendCollectorReport({
+    ...report,
+    runtime_source_evidence: {
+      unmapped_tmux_sessions: [
+        {
+          session_name: 'unmapped-session',
+          pane_refs: ['tmux://unmapped-session/0.0'],
+          observed_count: 1,
+          status: 'observed',
+          last_observed_at: '2026-03-09T18:05:50.000Z',
+          degraded_reasons: ['token=source-gap-reason-secret']
+        }
+      ]
+    }
+  });
+
+  const summary = store.getRuntimeSourceGapReasonSummary({ newest_first: 'true', limit: '1' });
+
+  assert.equal(summary.total_count, 2);
+  assert.equal(summary.returned_limit, 1);
+  assert.equal(summary.reason_code_buckets.missing_workspace_file, 1);
+  assert.equal(summary.reason_code_buckets.tmux_session_missing, 1);
+  assert.equal(summary.source_kind_buckets.workspace_file, 1);
+  assert.equal(summary.source_kind_buckets.tmux_observation, 1);
+  assert.equal(summary.source_status_buckets.degraded, 1);
+  assert.equal(summary.source_status_buckets.missing, 1);
+  assert.equal(
+    store.getRuntimeSourceGapReasonSummary({ source_kind: 'workspace_file' }).total_count,
+    1
+  );
+  assert.equal(store.getRuntimeSourceGapReasonSummary({ mapped: 'false' }).total_count, 0);
+
+  const serializedSummary = JSON.stringify(summary);
+  assert.equal(serializedSummary.includes('token=source-gap-reason-secret'), false);
+  assert.equal(serializedSummary.includes('tmux://unmapped-session'), false);
+  assert.equal(serializedSummary.includes('evidence_id'), false);
+  assert.equal(serializedSummary.includes('evidence_ref'), false);
+  assert.equal(serializedSummary.includes('metadata'), false);
+  assert.equal(serializedSummary.includes('degraded_reasons'), false);
+});
+
 test('prototype store trends runtime source gaps with safe count buckets only', async () => {
   const storeFile = await createStoreFile();
   const store = await createPrototypeStore({ filePath: storeFile });

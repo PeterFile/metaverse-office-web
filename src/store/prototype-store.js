@@ -78,6 +78,17 @@ const EVIDENCE_RECORD_ROLES = Object.freeze([
   'task_reference'
 ]);
 const EVIDENCE_RECORD_SOURCE_STATUSES = Object.freeze(['observed', 'degraded', 'missing', 'error']);
+const EVIDENCE_MAPPING_DECISIONS = Object.freeze([
+  'mapped',
+  'unmapped_unknown',
+  'non_seeded_agent',
+  'duplicate_source',
+  'shared_ref',
+  'unsafe_identifier',
+  'missing_expected_source',
+  'read_error',
+  'unknown'
+]);
 const EVIDENCE_RECORD_SUPPORTED_FILTERS = Object.freeze([
   'evidence_id',
   'agent_id',
@@ -1603,6 +1614,7 @@ class PrototypeStore {
       source_kinds: [...EVIDENCE_RECORD_SOURCE_KINDS],
       evidence_roles: [...EVIDENCE_RECORD_ROLES],
       source_statuses: [...EVIDENCE_RECORD_SOURCE_STATUSES],
+      mapping_decisions: [...EVIDENCE_MAPPING_DECISIONS],
       supported_filters: [...EVIDENCE_RECORD_SUPPORTED_FILTERS],
       boolean_filters: [...EVIDENCE_RECORD_BOOLEAN_FILTERS],
       limit: {
@@ -1618,6 +1630,7 @@ class PrototypeStore {
       source_kinds: [...EVIDENCE_RECORD_SOURCE_KINDS],
       evidence_roles: [...EVIDENCE_RECORD_ROLES],
       source_statuses: [...EVIDENCE_RECORD_SOURCE_STATUSES],
+      mapping_decisions: [...EVIDENCE_MAPPING_DECISIONS],
       supported_filters: [...AGENTS_EVIDENCE_SPINE_SUPPORTED_FILTERS],
       boolean_filters: [...EVIDENCE_RECORD_BOOLEAN_FILTERS],
       surfaces: [...AGENTS_EVIDENCE_SPINE_SURFACES],
@@ -1651,6 +1664,7 @@ class PrototypeStore {
       evidence_roles: [...EVIDENCE_RECORD_ROLES],
       source_statuses: [...EVIDENCE_RECORD_SOURCE_STATUSES],
       source_gap_statuses: [...RUNTIME_SOURCE_GAP_STATUSES],
+      mapping_decisions: [...EVIDENCE_MAPPING_DECISIONS],
       supported_filters: [...RUNTIME_SOURCE_GAP_SUPPORTED_FILTERS],
       boolean_filters: [...EVIDENCE_RECORD_BOOLEAN_FILTERS],
       lifecycle_states: [...RUNTIME_SOURCE_GAP_LIFECYCLE_STATES],
@@ -1806,6 +1820,7 @@ class PrototypeStore {
       source_kind_buckets: createZeroBuckets(EVIDENCE_RECORD_SOURCE_KINDS),
       evidence_role_buckets: createZeroBuckets(EVIDENCE_RECORD_ROLES),
       source_status_buckets: createZeroBuckets(EVIDENCE_RECORD_SOURCE_STATUSES),
+      mapping_decision_buckets: createZeroBuckets(EVIDENCE_MAPPING_DECISIONS),
       collector_snapshot_id_buckets: {},
       first_observed_at: null,
       last_observed_at: null,
@@ -1824,6 +1839,7 @@ class PrototypeStore {
       incrementBucket(summary.source_kind_buckets, record.source_kind);
       incrementBucket(summary.evidence_role_buckets, record.evidence_role);
       incrementBucket(summary.source_status_buckets, record.source_status);
+      incrementKnownBucket(summary.mapping_decision_buckets, getEvidenceMappingDecision(record));
       incrementBucket(summary.collector_snapshot_id_buckets, record.collector_snapshot_id);
       summary.first_observed_at = getEarliestEvidenceRecordIsoValue(
         summary.first_observed_at,
@@ -1854,6 +1870,7 @@ class PrototypeStore {
       incrementKnownBucket(facets.source_kind_buckets, record.source_kind);
       incrementKnownBucket(facets.evidence_role_buckets, record.evidence_role);
       incrementKnownBucket(facets.source_status_buckets, record.source_status);
+      incrementKnownBucket(facets.mapping_decision_buckets, getEvidenceMappingDecision(record));
       facets.output_candidate_buckets[String(record.output_candidate === true)] += 1;
 
       if (typeof record.agent_id === 'string' && record.agent_id.length > 0) {
@@ -1999,6 +2016,7 @@ class PrototypeStore {
       source_kind_buckets: createZeroBuckets(EVIDENCE_RECORD_SOURCE_KINDS),
       evidence_role_buckets: createZeroBuckets(EVIDENCE_RECORD_ROLES),
       source_status_buckets: createZeroBuckets(EVIDENCE_RECORD_SOURCE_STATUSES),
+      mapping_decision_buckets: createZeroBuckets(EVIDENCE_MAPPING_DECISIONS),
       collector_snapshot_id_buckets: {},
       first_observed_at: null,
       last_observed_at: null,
@@ -2017,6 +2035,7 @@ class PrototypeStore {
       incrementBucket(summary.source_kind_buckets, record.source_kind);
       incrementBucket(summary.evidence_role_buckets, record.evidence_role);
       incrementBucket(summary.source_status_buckets, record.source_status);
+      incrementKnownBucket(summary.mapping_decision_buckets, getEvidenceMappingDecision(record));
       incrementBucket(summary.collector_snapshot_id_buckets, record.collector_snapshot_id);
       summary.first_observed_at = getEarliestEvidenceRecordIsoValue(
         summary.first_observed_at,
@@ -3660,6 +3679,7 @@ function createEmptyEvidenceRecordFacets(limit) {
     source_kind_buckets: createZeroBuckets(EVIDENCE_RECORD_SOURCE_KINDS),
     evidence_role_buckets: createZeroBuckets(EVIDENCE_RECORD_ROLES),
     source_status_buckets: createZeroBuckets(EVIDENCE_RECORD_SOURCE_STATUSES),
+    mapping_decision_buckets: createZeroBuckets(EVIDENCE_MAPPING_DECISIONS),
     output_candidate_buckets: {
       true: 0,
       false: 0
@@ -5173,6 +5193,13 @@ function createCollectorEvidenceRecords(report = {}) {
     if (!record.evidence_ref || !record.source_kind) {
       return;
     }
+    const degradedReasons = normalizeStringValues(record.degraded_reasons);
+    const normalizedRecord = {
+      ...record,
+      agent_id: record.agent_id || null,
+      source_status: record.source_status || null,
+      degraded_reasons: degradedReasons
+    };
 
     const dedupeKey = [
       record.agent_id || '',
@@ -5196,15 +5223,16 @@ function createCollectorEvidenceRecords(report = {}) {
       }),
       observed_at: record.observed_at || null,
       collected_at: collectedAt,
-      agent_id: record.agent_id || null,
+      agent_id: normalizedRecord.agent_id,
       source_kind: record.source_kind,
       evidence_ref: record.evidence_ref,
       evidence_role: record.evidence_role || null,
-      source_status: record.source_status || null,
+      source_status: normalizedRecord.source_status,
       output_candidate: Boolean(record.output_candidate),
       collector_snapshot_id: collectorSnapshotId,
       correlation_id: record.correlation_id || collectorSnapshotId,
-      degraded_reasons: normalizeStringValues(record.degraded_reasons),
+      mapping_decision: getEvidenceMappingDecision(normalizedRecord),
+      degraded_reasons: degradedReasons,
       metadata: record.metadata || {}
     });
   };
@@ -5395,6 +5423,7 @@ function createCollectorEvidenceRecords(report = {}) {
         evidence_role: 'runtime_unmapped',
         source_status: session.status || 'observed',
         output_candidate: false,
+        mapping_decision: session.mapping_decision || 'non_seeded_agent',
         degraded_reasons: session.degraded_reasons,
         metadata: {
           session_name: session.session_name || null,
@@ -5424,6 +5453,7 @@ function createCollectorEvidenceRecords(report = {}) {
       evidence_role: 'runtime_unmapped',
       source_status: source.status || 'observed',
       output_candidate: false,
+      mapping_decision: source.mapping_decision,
       degraded_reasons: source.degraded_reasons,
       dedupe_disambiguator: ['unmapped_hermes_source', sourceIndex],
       metadata: createHermesEvidenceRecordMetadata({
@@ -5453,6 +5483,7 @@ function createCollectorEvidenceRecords(report = {}) {
       source_status: taskEvidence.status,
       output_candidate: false,
       correlation_id: taskEvidence.correlation_id,
+      mapping_decision: taskEvidence.mapping_decision,
       degraded_reasons: taskEvidence.warnings,
       dedupe_disambiguator: ['unmapped_task_evidence', sourceIndex, taskEvidence.correlation_id || ''],
       metadata: createTaskEvidenceRecordMetadata({
@@ -5515,6 +5546,7 @@ function normalizeTaskEvidenceObservation(observation) {
     evidence_ref: `task://${sourceKind}/${taskRef}`,
     fact_id: normalizeTaskEvidenceValue(observation.fact_id),
     source_index: Number.isSafeInteger(observation.source_index) ? observation.source_index : null,
+    mapping_decision: normalizeEvidenceMappingDecision(observation.mapping_decision),
     warnings: normalizeTaskEvidenceWarnings(observation.warnings || observation.degraded_reasons),
     source_provenance: normalizeHermesSourceProvenance(observation.source_provenance)
   };
@@ -5657,6 +5689,7 @@ function createEvidenceRecordId({ collectorSnapshotId, agentId, sourceKind, evid
 function cloneEvidenceRecord(record, appendIndex = null) {
   const clone = {
     ...record,
+    mapping_decision: getEvidenceMappingDecision(record),
     degraded_reasons: Array.isArray(record.degraded_reasons) ? record.degraded_reasons.slice() : [],
     metadata: record.metadata && typeof record.metadata === 'object' ? { ...record.metadata } : {}
   };
@@ -5666,6 +5699,43 @@ function cloneEvidenceRecord(record, appendIndex = null) {
   }
 
   return clone;
+}
+
+function getEvidenceMappingDecision(record = {}) {
+  return normalizeEvidenceMappingDecision(record.mapping_decision) || deriveEvidenceMappingDecision(record);
+}
+
+function normalizeEvidenceMappingDecision(value) {
+  return EVIDENCE_MAPPING_DECISIONS.includes(value) ? value : null;
+}
+
+function deriveEvidenceMappingDecision(record = {}) {
+  if (record.source_status === 'missing') {
+    return 'missing_expected_source';
+  }
+
+  if (record.source_status === 'error') {
+    return 'read_error';
+  }
+
+  const degradedReasons = normalizeStringValues(record.degraded_reasons);
+  if (degradedReasons.includes('agent_id suppressed')) {
+    return 'unsafe_identifier';
+  }
+
+  if (record.agent_id === null) {
+    return record.evidence_role === 'runtime_unmapped' && record.source_kind === 'tmux_observation'
+      ? 'non_seeded_agent'
+      : 'unmapped_unknown';
+  }
+
+  if (typeof record.agent_id === 'string' && record.agent_id.length > 0) {
+    return SEED_AGENTS.some((agent) => agent.agent_id === record.agent_id)
+      ? 'mapped'
+      : 'non_seeded_agent';
+  }
+
+  return 'unknown';
 }
 
 function projectReplayCheckpointSummary({
@@ -5744,6 +5814,7 @@ function projectStorageReplayManifestEvidenceSummary(records) {
     source_category_buckets: {},
     evidence_role_buckets: {},
     source_status_buckets: {},
+    mapping_decision_buckets: {},
     input_provenance_manifest: createEmptyStorageReplayInputProvenanceManifest(),
     output_candidate_count: 0,
     unmapped_count: 0,
@@ -5769,6 +5840,7 @@ function projectStorageReplayManifestEvidenceSummary(records) {
       summary.source_status_buckets,
       projectKnownEvidenceValue(record.source_status, EVIDENCE_RECORD_SOURCE_STATUSES) || 'unknown'
     );
+    incrementBucket(summary.mapping_decision_buckets, getEvidenceMappingDecision(record));
     addStorageReplayInputProvenance(summary.input_provenance_manifest, record, sourceKind);
     if (record.output_candidate === true) {
       summary.output_candidate_count += 1;
@@ -7600,7 +7672,8 @@ function cloneUnmappedTmuxSessions(sessions, filters = {}) {
     .map((session) => ({
       status: normalizeSourceHealthStatus(session.status) || 'observed',
       observed_count: normalizeCount(session.observed_count),
-      last_observed_at: normalizeCollectorTimestamp(session.last_observed_at) || null
+      last_observed_at: normalizeCollectorTimestamp(session.last_observed_at) || null,
+      mapping_decision: normalizeEvidenceMappingDecision(session.mapping_decision) || 'non_seeded_agent'
     }))
     .filter((session) => !filters.status || session.status === filters.status);
 }
@@ -7625,9 +7698,14 @@ function summarizeUnmappedTaskEvidence(sources, filters = {}) {
       source_kind: taskEvidence.source_kind,
       status: taskEvidence.status,
       observed_count: 0,
-      latest_observed_at: null
+      latest_observed_at: null,
+      mapping_decision_buckets: createZeroBuckets(EVIDENCE_MAPPING_DECISIONS)
     };
     existing.observed_count += 1;
+    incrementKnownBucket(
+      existing.mapping_decision_buckets,
+      taskEvidence.mapping_decision || 'unmapped_unknown'
+    );
     existing.latest_observed_at = maxCollectorIsoTimestamp([
       existing.latest_observed_at,
       taskEvidence.observed_at
@@ -7674,7 +7752,9 @@ function cloneRuntimeSourceEvidence(runtimeSourceEvidence = {}, filters = {}) {
               status: normalizeSourceHealthStatus(source.status),
               observed_count: normalizeCount(source.observed_count),
               last_observed_at:
-                normalizeCollectorTimestamp(source.last_observed_at || source.observed_at) || null
+                normalizeCollectorTimestamp(source.last_observed_at || source.observed_at) || null,
+              mapping_decision:
+                normalizeEvidenceMappingDecision(source.mapping_decision) || 'unmapped_unknown'
             }))
             .filter((source) => matchesRuntimeSourceEvidenceFilters(source, filters))
         }

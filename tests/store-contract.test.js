@@ -27,6 +27,21 @@ async function execSqlite(sqliteFilePath, sql) {
   return execFileAsync('sqlite3', [sqliteFilePath, sql]);
 }
 
+function createMappingDecisionBuckets(overrides = {}) {
+  return {
+    mapped: 0,
+    unmapped_unknown: 0,
+    non_seeded_agent: 0,
+    duplicate_source: 0,
+    shared_ref: 0,
+    unsafe_identifier: 0,
+    missing_expected_source: 0,
+    read_error: 0,
+    unknown: 0,
+    ...overrides
+  };
+}
+
 function createEvent() {
   return {
     event_id: 'evt_store_contract_review_started',
@@ -1152,6 +1167,9 @@ test('prototype store exposes deterministic sanitized storage replay manifest', 
         observed: 2,
         degraded: 1
       },
+      mapping_decision_buckets: {
+        mapped: 3
+      },
       input_provenance_manifest: {
         source_kind_buckets: {},
         source_format_buckets: {
@@ -1313,6 +1331,9 @@ test('prototype store exposes deterministic sanitized storage replay manifest', 
     },
     source_status_buckets: {
       degraded: 1
+    },
+    mapping_decision_buckets: {
+      mapped: 1
     },
     input_provenance_manifest: {
       source_kind_buckets: {},
@@ -1925,7 +1946,14 @@ test('JSONL prototype store replays canonical task evidence records as read-only
   const records = store.listEvidenceRecords({ source_kind: 'kanban_fixture' });
 
   assert.equal(Object.hasOwn(taskEvidence.records[0], 'append_index'), false);
-  assert.deepEqual(records, [{ ...taskEvidence.records[0], append_index: 1 }]);
+  assert.deepEqual(
+    records,
+    taskEvidence.records.map((record, index) => ({
+      ...record,
+      append_index: index + 1,
+      mapping_decision: 'mapped'
+    }))
+  );
   assert.deepEqual(store.getCounts(), {
     agent_count: 7,
     event_count: 0,
@@ -1967,6 +1995,7 @@ test('JSONL prototype store replays canonical task evidence records as read-only
       missing: 0,
       error: 0
     },
+    mapping_decision_buckets: createMappingDecisionBuckets({ mapped: 1 }),
     collector_snapshot_id_buckets: {
       'task-evidence:2026-05-20T01:04:00.000Z': 1
     },
@@ -2319,7 +2348,8 @@ test('prototype store persists Hermes runtime source facts as read-only evidence
         source_kind: 'hermes_profile',
         status: 'observed',
         observed_count: 0,
-        last_observed_at: '2026-03-09T18:06:40.000Z'
+        last_observed_at: '2026-03-09T18:06:40.000Z',
+        mapping_decision: 'unmapped_unknown'
       }
     ]
   );
@@ -2530,7 +2560,8 @@ test('prototype store persists task evidence observations as bounded read-only e
       source_kind: 'linear_fixture',
       status: 'observed',
       observed_count: 1,
-      latest_observed_at: '2026-05-20T01:01:00.000Z'
+      latest_observed_at: '2026-05-20T01:01:00.000Z',
+      mapping_decision_buckets: createMappingDecisionBuckets({ unmapped_unknown: 1 })
     }
   ]);
   assert.deepEqual(
@@ -2541,7 +2572,8 @@ test('prototype store persists task evidence observations as bounded read-only e
         source_kind: 'linear_fixture',
         status: 'observed',
         observed_count: 1,
-        latest_observed_at: '2026-05-20T01:01:00.000Z'
+        latest_observed_at: '2026-05-20T01:01:00.000Z',
+        mapping_decision_buckets: createMappingDecisionBuckets({ unmapped_unknown: 1 })
       }
     ]
   );
@@ -2997,6 +3029,102 @@ test('JSONL prototype store filters evidence records by mapped agent presence', 
   assert.deepEqual(store.listEvidenceRecords({ mapped: 'false', agent_id: 'app-engineering' }), []);
   assert.equal(store.listEvidenceRecords({ mapped: '', limit: 2 }).length, 2);
   assert.equal(store.listEvidenceRecords({ mapped: 'maybe', limit: 2 }).length, 2);
+});
+
+test('prototype store exposes safe mapping decision code counts for mixed evidence', async () => {
+  const storeFile = await createStoreFile();
+  const store = await createPrototypeStore({ filePath: storeFile });
+  const report = createCollectorReport();
+  report.items[0].workspace_source_records = [
+    {
+      kind: 'workspace_file',
+      path: '/tmp/store-contract/inbox.md',
+      file_name: 'inbox.md',
+      status: 'missing'
+    },
+    {
+      kind: 'workspace_file',
+      path: '/tmp/store-contract/todo.md',
+      file_name: 'todo.md',
+      status: 'error',
+      error: 'permission denied'
+    }
+  ];
+  report.runtime_source_evidence = {
+    unmapped_tmux_sessions: [
+      {
+        session_name: 'unmapped-session',
+        pane_refs: ['tmux://unmapped-session/0.0'],
+        observed_count: 1,
+        status: 'observed',
+        last_observed_at: '2026-03-09T18:05:50.000Z',
+        degraded_reasons: ['token=secret']
+      }
+    ]
+  };
+
+  await store.appendCollectorReport(report);
+
+  assert.deepEqual(
+    store.listEvidenceRecords({ output_candidate: 'false' }).map((record) => [
+      record.source_kind,
+      record.evidence_role,
+      record.source_status,
+      record.mapping_decision
+    ]),
+    [
+      ['workspace_root', 'workspace_presence', 'observed', 'mapped'],
+      ['workspace_file', 'inbound_task', 'missing', 'missing_expected_source'],
+      ['workspace_file', 'agent_plan', 'error', 'read_error'],
+      ['tmux_observation', 'runtime_unmapped', 'observed', 'non_seeded_agent']
+    ]
+  );
+  assert.deepEqual(store.getEvidenceRecordsSummary({ output_candidate: 'false' }).mapping_decision_buckets, {
+    mapped: 1,
+    unmapped_unknown: 0,
+    non_seeded_agent: 1,
+    duplicate_source: 0,
+    shared_ref: 0,
+    unsafe_identifier: 0,
+    missing_expected_source: 1,
+    read_error: 1,
+    unknown: 0
+  });
+  assert.deepEqual(store.getEvidenceRecordFacets({ output_candidate: 'false' }).mapping_decision_buckets, {
+    mapped: 1,
+    unmapped_unknown: 0,
+    non_seeded_agent: 1,
+    duplicate_source: 0,
+    shared_ref: 0,
+    unsafe_identifier: 0,
+    missing_expected_source: 1,
+    read_error: 1,
+    unknown: 0
+  });
+  assert.deepEqual(
+    store.getRuntimeSourceGapsSummary({ output_candidate: 'false' }).mapping_decision_buckets,
+    {
+      mapped: 0,
+      unmapped_unknown: 0,
+      non_seeded_agent: 1,
+      duplicate_source: 0,
+      shared_ref: 0,
+      unsafe_identifier: 0,
+      missing_expected_source: 1,
+      read_error: 1,
+      unknown: 0
+    }
+  );
+
+  const serialized = JSON.stringify({
+    summary: store.getEvidenceRecordsSummary({ output_candidate: 'false' }),
+    facets: store.getEvidenceRecordFacets({ output_candidate: 'false' }),
+    source_gaps: store.getRuntimeSourceGapsSummary({ output_candidate: 'false' })
+  });
+  assert.equal(serialized.includes('/tmp/store-contract'), false);
+  assert.equal(serialized.includes('tmux://unmapped-session'), false);
+  assert.equal(serialized.includes('token=secret'), false);
+  assert.equal(serialized.includes('permission denied'), false);
 });
 
 test('evidence-records schema exposes only static safe contract metadata', async () => {
@@ -3592,6 +3720,10 @@ test('prototype store summarizes evidence records with list filter semantics bef
       missing: 0,
       error: 0
     },
+    mapping_decision_buckets: createMappingDecisionBuckets({
+      mapped: 1,
+      non_seeded_agent: 1
+    }),
     collector_snapshot_id_buckets: {
       'collector-snapshot:2026-03-09T18:06:00.000Z': 2
     },
@@ -3637,6 +3769,7 @@ test('prototype store summarizes evidence records with list filter semantics bef
       missing: 0,
       error: 0
     },
+    mapping_decision_buckets: createMappingDecisionBuckets(),
     collector_snapshot_id_buckets: {},
     first_observed_at: null,
     last_observed_at: null,
@@ -3700,6 +3833,10 @@ test('prototype store returns safe evidence facet buckets before limit truncatio
       missing: 0,
       error: 0
     },
+    mapping_decision_buckets: createMappingDecisionBuckets({
+      mapped: 1,
+      non_seeded_agent: 1
+    }),
     output_candidate_buckets: {
       true: 0,
       false: 2
@@ -3758,6 +3895,7 @@ test('prototype store returns safe evidence facet buckets before limit truncatio
         missing: 0,
         error: 0
       },
+      mapping_decision_buckets: createMappingDecisionBuckets(),
       output_candidate_buckets: {
         true: 0,
         false: 0
@@ -4488,6 +4626,7 @@ test('prototype store keeps unknown runtime source-gap filters empty and redacte
       missing: 0,
       error: 0
     },
+    mapping_decision_buckets: createMappingDecisionBuckets(),
     collector_snapshot_id_buckets: {},
     first_observed_at: null,
     last_observed_at: null,

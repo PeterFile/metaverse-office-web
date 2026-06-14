@@ -552,6 +552,7 @@ function createRuntimeSourceEvidence({
       session_name: sessionName,
       observed_count: observations.length,
       last_observed_at: maxIsoTimestamp(observations.map((pane) => pane.pane_activity_at)),
+      mapping_decision: 'non_seeded_agent',
       pane_refs: observations
         .map((pane) => pane.artifact_ref || deriveTmuxArtifactRef(pane))
         .filter(Boolean)
@@ -1225,7 +1226,7 @@ function groupTaskEvidenceCandidates({ readResult, agents, collectedAt }) {
 
 function createTaskEvidenceObservationFromRecord(record, { agentId }) {
   const metadata = record.metadata && typeof record.metadata === 'object' ? record.metadata : {};
-  return {
+  const observation = {
     status: record.source_status || 'observed',
     task_ref: metadata.task_ref,
     source_kind: record.source_kind,
@@ -1238,6 +1239,20 @@ function createTaskEvidenceObservationFromRecord(record, { agentId }) {
     ...(metadata.source_provenance ? { source_provenance: metadata.source_provenance } : {}),
     ...(record.degraded_reasons.length > 0 ? { warnings: record.degraded_reasons.slice() } : {})
   };
+
+  if (!agentId) {
+    observation.mapping_decision = deriveTaskEvidenceMappingDecision(record);
+  }
+
+  return observation;
+}
+
+function deriveTaskEvidenceMappingDecision(record) {
+  if (normalizeHermesDegradedReasons(record.degraded_reasons).includes('agent_id suppressed')) {
+    return 'unsafe_identifier';
+  }
+
+  return record.agent_id ? 'non_seeded_agent' : 'unmapped_unknown';
 }
 
 function createTaskEvidenceReadError(rejected) {
@@ -1526,7 +1541,9 @@ function groupHermesRuntimeSources({ facts, agents, enabled }) {
       continue;
     }
 
+    const hasSharedRef = mappedFacts.some((fact) => unsafeEvidenceRefFacts.has(fact));
     const reason = createHermesUnsafeMappingReason(sourceKind);
+    const mappingDecision = hasSharedRef ? 'shared_ref' : 'duplicate_source';
     appendMappedHermesFact(
       healthFactsByAgentId,
       agentId,
@@ -1539,7 +1556,7 @@ function groupHermesRuntimeSources({ facts, agents, enabled }) {
     );
 
     for (const fact of mappedFacts) {
-      unmappedFacts.push(createUnsafeUnmappedHermesSourceFact(fact, reason));
+      unmappedFacts.push(createUnsafeUnmappedHermesSourceFact(fact, reason, mappingDecision));
     }
   }
 
@@ -1877,17 +1894,23 @@ function createUnmappedHermesSourceFact(fact) {
     session_ref: fact.session_ref,
     observed_at: fact.last_observed_at,
     status: fact.status,
+    mapping_decision: deriveUnmappedHermesMappingDecision(fact),
     degraded_reasons: fact.degraded_reasons.slice(),
     ...(fact.source_provenance ? { source_provenance: fact.source_provenance } : {})
   };
 }
 
-function createUnsafeUnmappedHermesSourceFact(fact, reason) {
+function createUnsafeUnmappedHermesSourceFact(fact, reason, mappingDecision) {
   return {
     ...createUnmappedHermesSourceFact(fact),
     status: 'degraded',
+    mapping_decision: mappingDecision,
     degraded_reasons: [reason]
   };
+}
+
+function deriveUnmappedHermesMappingDecision(fact) {
+  return fact.agent_id || fact.session_ref ? 'non_seeded_agent' : 'unmapped_unknown';
 }
 
 function compareHermesRuntimeObservation(left, right) {

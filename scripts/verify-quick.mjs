@@ -375,7 +375,7 @@ export function resolveVerifyQuickSteps(parsedArgs, options = {}) {
 
   if (routedArgs.mode === "focused-files") {
     const focusedFiles = normalizeFocusedWebTestPaths(routedArgs.focusedFiles, { cwd });
-    return {
+    const plan = {
       mode: "focused-files",
       focusedFiles,
       steps: [
@@ -383,6 +383,13 @@ export function resolveVerifyQuickSteps(parsedArgs, options = {}) {
         ["pnpm", ["--filter", "@metaverse-office/web", "exec", "vitest", "run", ...focusedFiles]],
       ],
     };
+
+    if (parsedArgs.mode === "changed") {
+      plan.changed = true;
+      plan.since = parsedArgs.since;
+    }
+
+    return plan;
   }
 
   const plan = {
@@ -400,6 +407,23 @@ export function resolveVerifyQuickSteps(parsedArgs, options = {}) {
   return plan;
 }
 
+export function formatVerifyQuickPlanSummary(plan) {
+  const selectedLine = plan.mode === "focused-files"
+    ? `[verify:quick] selected ${plan.changed ? "changed-files route=focused-files " : ""}focused-files=${plan.focusedFiles.length} steps=${plan.steps.length}`
+    : `[verify:quick] selected ${plan.changed ? "changed-files route=lane " : ""}lane=${plan.lane} steps=${plan.steps.length}`;
+
+  const lines = [selectedLine];
+  if (plan.mode === "lane" && plan.lane === "ui" && plan.existingWebTests.length === 0) {
+    lines.push("[verify:quick] no focused UI tests found; running typecheck only");
+  }
+
+  return lines.concat(
+    plan.steps.map(([command, args], index) =>
+      `[verify:quick] plan ${index + 1}/${plan.steps.length}: ${formatCommand(command, args)}`,
+    ),
+  );
+}
+
 export async function main(cliArgs = process.argv.slice(2)) {
   let parsedArgs;
   let plan;
@@ -412,6 +436,10 @@ export async function main(cliArgs = process.argv.slice(2)) {
     process.exit(1);
   }
 
+  for (const line of formatVerifyQuickPlanSummary(plan)) {
+    console.error(line);
+  }
+
   if (plan.mode === "focused-files") {
     console.error(`[verify:quick] focused-files=${plan.focusedFiles.length}`);
     if (parsedArgs.planOnly) {
@@ -419,9 +447,6 @@ export async function main(cliArgs = process.argv.slice(2)) {
     }
   } else {
     console.error(`[verify:quick] lane=${plan.lane}`);
-    if (plan.lane === "ui" && plan.existingWebTests.length === 0) {
-      console.error("[verify:quick] no focused UI tests found; running typecheck only");
-    }
   }
 
   if (parsedArgs.planOnly) {

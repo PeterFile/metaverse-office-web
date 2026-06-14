@@ -6694,8 +6694,8 @@ export function DetailsPanel({
               <span>{`Watch graph alignment · ${selectedCollectorWatchGraphAlignment}`}</span>
               <span>{`Workspace observations · ${selectedCollectorItem.workspace_observations.length}`}</span>
               <span>{`Tmux observations · ${selectedCollectorItem.tmux_observations.length}`}</span>
-              <span>{`Workspace root · ${selectedCollectorItem.workspace_root}`}</span>
-              <span>{`Session · ${selectedCollectorItem.session_ref}`}</span>
+              <span>{`Workspace root · ${selectedCollectorItem.workspace_root ? 'configured' : 'unavailable'}`}</span>
+              <span>{`Runtime session · ${selectedCollectorItem.session_ref ? 'configured' : 'unavailable'}`}</span>
               <span>
                 Evidence ·{' '}
                 {renderSharedMemoryEvidenceRefs({
@@ -6703,7 +6703,9 @@ export function DetailsPanel({
                   sharedMemoryArtifactRefs,
                   onJump: sharedMemoryEvidenceJump.onJump,
                   jumpAriaLabelPrefix: 'Jump to collector evidence ref',
-                  allowExactFallback: sharedMemoryEvidenceJump.allowExactFallback
+                  allowExactFallback: sharedMemoryEvidenceJump.allowExactFallback,
+                  formatLabel: formatPublicEvidenceRefLabel,
+                  formatAriaLabel: formatPublicEvidenceRefAriaLabel
                 })}
               </span>
             </li>

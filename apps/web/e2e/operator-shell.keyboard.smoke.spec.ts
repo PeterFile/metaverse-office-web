@@ -4792,14 +4792,14 @@ test.describe('operator shell smoke', () => {
       has: page.getByRole('heading', { name: 'Collector Observation' })
     });
     const evidenceJumpButton = collectorObservationSection.getByRole('button', {
-      name: 'Jump to collector evidence ref /tmp/revenue-handoff.md'
+      name: 'Jump to collector evidence ref local evidence'
     });
     const focusedSharedMemoryRecord = detailsPanel.locator('li[data-shared-memory-target]:focus');
 
     await expect(detailsPanel.getByRole('heading', { name: 'App Engineering Agent' })).toBeVisible();
     await selectSelectedAgentDrilldownTabIfPresent(page, detailsPanel, 'Evidence');
     await expect(evidenceJumpButton).toBeVisible();
-    await focusHubControlWithTab(page, evidenceJumpButton, 'Jump to collector evidence ref /tmp/revenue-handoff.md', {
+    await focusHubControlWithTab(page, evidenceJumpButton, 'Jump to collector evidence ref local evidence', {
       detailsPanel,
       selectedAgentDrilldownTab: 'Evidence'
     });

@@ -24,6 +24,7 @@ const {
 const COLLECTOR_ALERT_SOURCE = 'controller_snapshot';
 const COLLECTOR_SNAPSHOT_RECORD_KIND = 'collector_snapshot';
 const EVIDENCE_RECORD_KIND = 'evidence_record';
+const EVIDENCE_REF_ROLLUP_UNKNOWN_AGENT_BUCKET = 'unknown';
 const INBOUND_WORKSPACE_FILES = new Set(['inbox.md']);
 const AGENT_OUTPUT_WORKSPACE_ROLES = new Set(['agent_output', 'agent_plan']);
 const NON_OUTPUT_WORKSPACE_ROLES = new Set(['inbound_task', 'workspace_presence']);
@@ -89,6 +90,7 @@ const EVIDENCE_MAPPING_DECISIONS = Object.freeze([
   'read_error',
   'unknown'
 ]);
+const SEEDED_AGENT_IDS = new Set(SEED_AGENTS.map((agent) => agent.agent_id));
 const EVIDENCE_RECORD_SUPPORTED_FILTERS = Object.freeze([
   'evidence_id',
   'agent_id',
@@ -2230,7 +2232,7 @@ class PrototypeStore {
 
       if (typeof record.agent_id === 'string' && record.agent_id.length > 0) {
         group.mapped_count += 1;
-        incrementBucket(group.agent_id_buckets, record.agent_id);
+        incrementBucket(group.agent_id_buckets, evidenceRefRollupAgentBucket(record.agent_id));
       } else if (record.agent_id === null) {
         group.unmapped_count += 1;
         incrementBucket(group.agent_id_buckets, 'unmapped');
@@ -4033,6 +4035,18 @@ function sortEvidenceRefRollupBuckets(group) {
     source_kind_buckets: sortBucketKeys(group.source_kind_buckets),
     source_status_buckets: sortBucketKeys(group.source_status_buckets)
   };
+}
+
+function evidenceRefRollupAgentBucket(agentId) {
+  if (agentId === 'unmapped') {
+    return 'unmapped';
+  }
+
+  if (SEEDED_AGENT_IDS.has(agentId)) {
+    return agentId;
+  }
+
+  return EVIDENCE_REF_ROLLUP_UNKNOWN_AGENT_BUCKET;
 }
 
 function projectSafeEvidenceRefRollupGroup(group, index) {

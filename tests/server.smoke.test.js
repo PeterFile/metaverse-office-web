@@ -9665,6 +9665,95 @@ test('GET /evidence-records lists stored evidence records read-only with exact f
   assert.equal(await readFile(storeFile, 'utf8'), fileBeforeRead);
 });
 
+test('GET evidence ref rollup redacts hostile agent buckets', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'metaverse-office-ref-rollup-agent-'));
+  const storeFile = path.join(root, 'prototype-store.jsonl');
+  const unsafeRef = '/tmp/ref-rollup-agent-route.md?token=ref-rollup-agent-route-token';
+  const unsafeSourceKind = '/tmp/ref-rollup-agent-route-source-kind';
+  const unsafeSourceStatus = 'token=ref-rollup-agent-route-status';
+  const hostileAgentIds = [
+    '/tmp/ref-rollup-agent-route-id',
+    'token=ref-rollup-agent-route-secret',
+    'tmux://ref-rollup-agent-route/0.1',
+    'hermes://profile/ref-rollup-agent-route',
+    'webhook-ref-rollup-agent-route',
+    'control-plane://ref-rollup-agent-route'
+  ];
+  const agentIds = ['app-engineering', null, 'unmapped', ...hostileAgentIds];
+
+  await writeFile(
+    storeFile,
+    agentIds
+      .map((agentId, index) =>
+        JSON.stringify({
+          kind: 'evidence_record',
+          payload: {
+            evidence_id: `ev_ref_rollup_route_hostile_agent_${index}`,
+            agent_id: agentId,
+            source_kind: index < 3 ? 'workspace_file' : unsafeSourceKind,
+            evidence_role: 'agent_output',
+            evidence_ref: unsafeRef,
+            source_status: index < 3 ? 'observed' : unsafeSourceStatus,
+            output_candidate: true,
+            observed_at: '2026-03-09T18:06:40.000Z',
+            collected_at: '2026-03-09T18:07:00.000Z',
+            collector_snapshot_id: 'collector-snapshot:2026-03-09T18:07:00.000Z',
+            correlation_id: 'collector-snapshot:2026-03-09T18:07:00.000Z',
+            degraded_reasons: [],
+            metadata: {}
+          }
+        })
+      )
+      .join('\n') + '\n'
+  );
+
+  const store = await createPrototypeStore({ filePath: storeFile });
+  const response = await requestJsonDirect({
+    url: '/evidence-records/ref-rollup?limit=10',
+    store
+  });
+
+  assert.equal(response.response.status, 200);
+  assert.deepEqual(response.body.item, {
+    total_count: 9,
+    total_groups: 1,
+    returned_limit: 10,
+    groups: [
+      {
+        evidence_ref: null,
+        evidence_ref_key: 'ref_group_001',
+        evidence_ref_label: 'workspace_file observed evidence',
+        record_count: 9,
+        mapped_count: 8,
+        unmapped_count: 1,
+        agent_id_buckets: {
+          'app-engineering': 1,
+          unknown: 6,
+          unmapped: 2
+        },
+        source_kind_buckets: {
+          workspace_file: 3
+        },
+        source_status_buckets: {
+          observed: 3
+        }
+      }
+    ]
+  });
+
+  const serialized = JSON.stringify(response.body);
+  for (const canary of [
+    unsafeRef,
+    unsafeSourceKind,
+    unsafeSourceStatus,
+    ...hostileAgentIds,
+    'ref-rollup-agent-route-token',
+    'ref-rollup-agent-route-secret'
+  ]) {
+    assert.equal(serialized.includes(canary), false, `leaked canary: ${canary}`);
+  }
+});
+
 test('GET evidence and source read routes keep JSONL and SQLite parity', async (t) => {
   if (!(await hasSqlite3())) {
     t.skip('sqlite3 binary not found; SQLite route parity smoke skipped explicitly');

@@ -8,6 +8,7 @@ import type {
   RuntimeSourceGapLifecycle,
   RuntimeSourceGapLifecycleGroup
 } from '../types';
+import { formatEvidenceRoleLabel } from '../evidenceEnumLabels';
 
 import { safeVisibleText } from './safeVisibleText';
 
@@ -189,16 +190,6 @@ const RUNTIME_SOURCE_KIND_MAP: Record<string, DisplayedSourceGapKind> = {
   tmux_session: 'tmux_session',
   hermes_profile: 'hermes_profile',
   hermes_session: 'hermes_session'
-};
-
-const EVIDENCE_ROLE_LABELS: Record<string, string> = {
-  agent_output: 'agent output',
-  agent_plan: 'agent plan',
-  runtime_activity: 'runtime activity',
-  runtime_source: 'runtime source',
-  source_evidence: 'source evidence',
-  workspace_presence: 'workspace presence',
-  workspace_snapshot: 'workspace snapshot'
 };
 
 const UNMAPPED_EVIDENCE_POCKET_SOURCE_RANK: Record<UnmappedEvidencePocketSourceLabel, number> = {
@@ -1039,12 +1030,7 @@ function renderRuntimeSourceGapDetail(gap: RuntimeSourceGap) {
 }
 
 function renderEvidenceRoleLabel(evidenceRole: string | null) {
-  const normalized = evidenceRole?.trim();
-  if (!normalized) {
-    return 'source evidence';
-  }
-
-  return safeVisibleText(EVIDENCE_ROLE_LABELS[normalized] ?? normalized.replace(/_/g, ' '), 'source evidence');
+  return evidenceRole ? formatEvidenceRoleLabel(evidenceRole, 'source-gap') : 'source evidence';
 }
 
 function renderSourceGapDisplayName(displayName: string | null | undefined) {

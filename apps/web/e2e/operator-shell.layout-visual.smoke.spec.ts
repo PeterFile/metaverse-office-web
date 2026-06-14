@@ -1433,11 +1433,11 @@ test.describe('operator shell layout visual smoke', () => {
       'Snapshot anchor · collector-snapshot:2026-03-10T23:59:40.000Z'
     );
     await expect(detailSection).toContainText('Source anchor ·');
-    await expect(detailSection).toContainText('workspace_file · agent_output · unknown');
+    await expect(detailSection).toContainText('Workspace file · Agent output · Unknown');
     await expect(detailSection).toContainText('Replay anchor · collector-snapshot:2026-03-10T23:59:40.000Z');
     await expect(detailSection).toContainText('Checkpoint proof');
     await expect(detailSection).toContainText(
-      '#87 · evidence_record · workspace_file · agent_output · unknown · output candidate · collector-snapshot:2026-03-10T23:59:40.000Z · 2026-03-10T23:59:40.000Z'
+      '#87 · evidence_record · Workspace file · Agent output · Unknown · output candidate · collector-snapshot:2026-03-10T23:59:40.000Z · 2026-03-10T23:59:40.000Z'
     );
     await expect(detailSection).not.toContainText('/collectors/controller-snapshot');
     await expect(detailSection).not.toContainText('/accountability/replay');

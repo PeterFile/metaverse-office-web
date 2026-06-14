@@ -1,4 +1,9 @@
 import type { AgentEvidenceSourceMatrix, AgentEvidenceSourceMatrixRow } from '../types';
+import {
+  formatEvidenceRoleLabel,
+  formatEvidenceSourceKindLabel,
+  formatEvidenceSourceStatusLabel
+} from '../evidenceEnumLabels';
 
 export type SelectedAgentSourceMatrixLoadState = 'idle' | 'loading' | 'ready' | 'error';
 export type SelectedAgentSourceMatrixStatus = 'loading' | 'error' | 'empty' | 'ready' | 'last-good';
@@ -35,55 +40,6 @@ export type SelectedAgentSourceMatrixOptions = {
 
 const DEFAULT_MAX_ROWS = 5;
 const DEFAULT_MAX_UNMAPPED_ROWS = 3;
-const SAFE_SOURCE_KINDS = new Set([
-  'workspace_root',
-  'workspace_file',
-  'tmux_observation',
-  'hermes_profile',
-  'hermes_session',
-  'kanban_fixture',
-  'linear_fixture',
-  'slack_fixture',
-  'task_fixture'
-]);
-const SAFE_SOURCE_STATUSES = new Set(['observed', 'degraded', 'missing', 'error']);
-const SAFE_EVIDENCE_ROLES = new Set([
-  'workspace_presence',
-  'inbound_task',
-  'agent_output',
-  'agent_plan',
-  'runtime_activity',
-  'runtime_presence',
-  'runtime_unmapped',
-  'task_reference'
-]);
-const SOURCE_KIND_LABELS: Record<string, string> = {
-  workspace_root: 'Workspace root',
-  workspace_file: 'Workspace file',
-  tmux_observation: 'Tmux observation',
-  hermes_profile: 'Hermes profile',
-  hermes_session: 'Hermes session',
-  kanban_fixture: 'Tool evidence',
-  linear_fixture: 'Tool evidence',
-  slack_fixture: 'Tool evidence',
-  task_fixture: 'Linked evidence'
-};
-const SOURCE_STATUS_LABELS: Record<string, string> = {
-  observed: 'Observed',
-  degraded: 'Degraded',
-  missing: 'Missing',
-  error: 'Error'
-};
-const EVIDENCE_ROLE_LABELS: Record<string, string> = {
-  workspace_presence: 'Workspace presence',
-  inbound_task: 'Inbound task',
-  agent_output: 'Agent output',
-  agent_plan: 'Agent plan',
-  runtime_activity: 'Runtime activity',
-  runtime_presence: 'Runtime presence',
-  runtime_unmapped: 'Runtime unmapped',
-  task_reference: 'Task reference'
-};
 
 export function deriveSelectedAgentSourceMatrixViewModel(
   matrix: AgentEvidenceSourceMatrix | null | undefined,
@@ -215,9 +171,9 @@ function normalizeRows(
 
 function toDisplayRow(row: AgentEvidenceSourceMatrixRow): SelectedAgentSourceMatrixDisplayRow {
   return {
-    source: projectAllowedLabel(row.source_kind, SAFE_SOURCE_KINDS, SOURCE_KIND_LABELS),
-    status: renderBucket(row.source_status_buckets, SAFE_SOURCE_STATUSES, SOURCE_STATUS_LABELS),
-    role: renderBucket(row.evidence_role_buckets, SAFE_EVIDENCE_ROLES, EVIDENCE_ROLE_LABELS),
+    source: formatEvidenceSourceKindLabel(row.source_kind, 'matrix'),
+    status: renderBucket(row.source_status_buckets, formatEvidenceSourceStatusLabel),
+    role: renderBucket(row.evidence_role_buckets, formatEvidenceRoleLabel),
     output: renderOutputBucket(row.output_candidate_buckets),
     count: Math.max(0, row.evidence_count),
     latest_at: normalizeString(row.latest_observed_at) ?? normalizeString(row.latest_collected_at)
@@ -250,25 +206,15 @@ function compareNullableTimestamp(left: string | null, right: string | null) {
 
 function renderBucket(
   buckets: Record<string, number>,
-  allowedLabels: ReadonlySet<string>,
-  displayLabels: Readonly<Record<string, string>>
+  formatLabel: (value: unknown) => string
 ): string {
   const winner = Object.entries(buckets)
-    .map(([key, count]) => [projectAllowedLabel(key, allowedLabels, displayLabels), count] as const)
+    .map(([key, count]) => [formatLabel(key), count] as const)
     .filter(([, count]) => count > 0)
     .sort(([leftKey, leftCount], [rightKey, rightCount]) => rightCount - leftCount || leftKey.localeCompare(rightKey))
     .at(0);
 
   return winner ? winner[0] : 'Unknown';
-}
-
-function projectAllowedLabel(
-  value: unknown,
-  allowedLabels: ReadonlySet<string>,
-  displayLabels: Readonly<Record<string, string>>
-): string {
-  const normalized = normalizeString(value);
-  return normalized !== null && allowedLabels.has(normalized) ? (displayLabels[normalized] ?? normalized) : 'Unknown';
 }
 
 function renderOutputBucket(buckets: Record<'true' | 'false', number>): string {

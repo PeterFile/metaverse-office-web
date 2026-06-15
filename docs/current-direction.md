@@ -1,6 +1,6 @@
 # Current Direction: Live Evidence Spine
 
-Updated: 2026-06-15T09:42:28+08:00
+Updated: 2026-06-16T00:12:05+08:00
 
 ## Product vision
 
@@ -85,6 +85,19 @@ Scored route guardrails for current Live Evidence Spine hardening:
 | World interaction guard | Keep evidence controls from blocking default AI Town drag and edge navigation. | Real browser smoke proves default left/right/top-left drag remains available with evidence controls present. | `pnpm web:test:browser-smoke:live-evidence -- --grep '@journey @evidence-live'` |
 
 These objectives are durable for the milestone because they define product and verification boundaries. Per-lane progress, run status, blockers, and PR queues still belong in Slack, Linear, or controller/runtime systems, not new markdown files.
+
+Current parallel execution split for this milestone:
+
+| Lane | Scoreable target | Small-PR boundary | Fastest feedback |
+| --- | --- | --- | --- |
+| Storage contract closure | `/storage/index-health` and its schema/docs expose the same bounded, path-free health reason contract across JSONL and SQLite modes. | One storage-health contract slice; no UI changes. | `pnpm verify:quick -- --lane=backend` |
+| Runtime gap lifecycle | Runtime source-gap transition/reason summaries keep mapped/unmapped, record/group, and zero-shape semantics explicit without raw refs or productivity claims. | One runtime source-gap route family; no collector rewrites unless required by tests. | `pnpm verify:quick -- --lane=backend` |
+| Evidence projection audit | Persisted evidence safety is provable with count-only audits that keep hostile enums, refs, timestamps, input proof, and payloads as counters, not public strings. | One projection/read-model slice; no browser UI changes. | `pnpm verify:quick -- --lane=backend` |
+| Runtime input watermark | Hermes/task runtime input provenance remains replayed, aggregate, ordinal-only, and path-free while giving operators a useful evidence freshness waterline. | One runtime input read-model slice; no live file expansion at request time. | `pnpm verify:quick -- --lane=backend` |
+| World-first source-gap entry | A world pin or mapped evidence focus keeps the operator in AI Town first, with Hub/drilldown opened only after explicit evidence/replay CTAs. | One AI Town interaction slice; no API shape changes. | `pnpm verify:quick -- --focused-files src/App.test.tsx src/aitown/DetailsPanel.test.tsx` |
+| Evidence proof chain | Selected evidence can move through safe ledger, source-context, and replay-window proof surfaces without leaking raw refs or prefetching broad dumps. | One selected-evidence UI slice; no backend writes. | `pnpm verify:quick -- --focused-files src/App.test.tsx src/aitown/DetailsPanel.test.tsx` |
+| World interaction guard | Evidence controls do not block default AI Town drag, edge navigation, or visual acceptance. | Prefer smoke/test-only PR; production fix only if the smoke exposes a real hit-target bug. | `pnpm web:test:browser-smoke:live-evidence -- --grep '@journey @evidence-live'` |
+| Feedback and PR size | Dense iteration stays fast and reviewable without renaming required checks or pretending narrow tests replace full CI. | Tooling/test slice only; preserve required check semantics. | `pnpm verify:quick -- --plan --changed` plus `pnpm pr:size` |
 
 ## Documentation discipline
 

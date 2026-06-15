@@ -37,7 +37,17 @@ test("reports over-cap cross-layer diffs without product scoring", () => {
   assert.equal(summary.scope, "cross-layer");
   assert.deepEqual(summary.overCapReasons, ["net-loc"]);
   assert.match(output, /advisory only/i);
+  assert.match(output, /split the PR or document why/i);
   assert.doesNotMatch(output, /product fit|contract correctness/i);
+});
+
+test("reports under-cap diffs as advisory without hiding required CI", () => {
+  const summary = summarizeNumstat("3\t1\tsrc/server.js\n", { maxFiles: 5, maxNetLoc: 250 });
+  const output = renderSummary(summary, "base");
+
+  assert.equal(summary.capStatus, "under-cap");
+  assert.match(output, /still run required CI/i);
+  assert.match(output, /advisory only/i);
 });
 
 test("collects committed diff totals from a temporary git fixture", () => {

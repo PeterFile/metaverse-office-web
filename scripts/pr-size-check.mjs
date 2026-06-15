@@ -92,6 +92,14 @@ function cap(current, max) {
   return `${current}/${max} ${Number(current) > max ? "over" : "ok"}`;
 }
 
+function guidanceFor(summary) {
+  if (summary.capStatus === "over-cap") {
+    return "split the PR or document why it must stay together.";
+  }
+
+  return "still run required CI and manual semantic review.";
+}
+
 export function renderSummary(s, baseRef) {
   const net = s.netLoc > 0 ? `+${s.netLoc}` : String(s.netLoc);
   return [
@@ -103,7 +111,8 @@ export function renderSummary(s, baseRef) {
     `net LOC: ${cap(net, s.maxNetLoc)}`,
     `scope: ${s.scope}${s.layers.length ? ` (${s.layers.join(", ")})` : ""}`,
     `cap status: ${s.capStatus}${s.overCapReasons.length ? ` (${s.overCapReasons.join(", ")})` : ""}`,
-    "note: advisory only; manual semantic review is still required.",
+    `guidance: ${guidanceFor(s)}`,
+    "note: advisory only; not a required check result or product score.",
   ].join("\n");
 }
 

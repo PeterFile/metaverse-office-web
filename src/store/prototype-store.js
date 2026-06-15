@@ -458,6 +458,7 @@ const STORAGE_SCHEMA_RESPONSE_FIELDS = Object.freeze({
     'evidence_query_probe_count',
     'evidence_query_probe_drift_count',
     'evidence_query_probe_status',
+    'health_reason_codes',
     'sidecar_status',
     'record_kind_buckets',
     'latest_record_ts'
@@ -466,6 +467,14 @@ const STORAGE_SCHEMA_RESPONSE_FIELDS = Object.freeze({
 const STORAGE_SCHEMA_BACKENDS = Object.freeze(['jsonl', 'sqlite']);
 const STORAGE_SCHEMA_STATUSES = Object.freeze(['ok', 'degraded']);
 const STORAGE_SCHEMA_INDEX_STATUSES = Object.freeze(['complete', 'stale', 'not_applicable']);
+const STORAGE_INDEX_HEALTH_REASON_CODE = Object.freeze({
+  sidecarDrift: 'sidecar_drift',
+  evidenceQueryProbeDrift: 'evidence_query_probe_drift',
+  sidecarUnavailable: 'sidecar_unavailable'
+});
+const STORAGE_INDEX_HEALTH_REASON_CODES = Object.freeze(
+  Object.values(STORAGE_INDEX_HEALTH_REASON_CODE)
+);
 const STORAGE_SCHEMA_WRITE_BOUNDARY =
   'read-only storage schema catalog; does not inspect replayed rows, read sqlite files, append records, or expose control-plane actions';
 const execFileAsync = promisify(execFile);
@@ -1587,6 +1596,7 @@ class PrototypeStore {
       statuses: [...STORAGE_SCHEMA_STATUSES],
       sidecar_statuses: [...STORAGE_SCHEMA_INDEX_STATUSES],
       evidence_query_probe_statuses: [...STORAGE_SCHEMA_INDEX_STATUSES],
+      health_reason_codes: [...STORAGE_INDEX_HEALTH_REASON_CODES],
       route_write_boundary: STORAGE_SCHEMA_WRITE_BOUNDARY
     };
   }
@@ -6111,10 +6121,10 @@ async function projectStorageIndexHealth({ records, recordLog }) {
     const queryProbeComplete = queryProbeCounts.evidence_query_probe_drift_count === 0;
     const healthReasonCodes = [];
     if (!sidecarComplete) {
-      healthReasonCodes.push('sidecar_drift');
+      healthReasonCodes.push(STORAGE_INDEX_HEALTH_REASON_CODE.sidecarDrift);
     }
     if (!queryProbeComplete) {
-      healthReasonCodes.push('evidence_query_probe_drift');
+      healthReasonCodes.push(STORAGE_INDEX_HEALTH_REASON_CODE.evidenceQueryProbeDrift);
     }
     const complete = sidecarComplete && queryProbeComplete;
 
@@ -6137,7 +6147,7 @@ async function projectStorageIndexHealth({ records, recordLog }) {
       ...base,
       status: 'degraded',
       evidence_query_probe_status: 'stale',
-      health_reason_codes: ['sidecar_unavailable'],
+      health_reason_codes: [STORAGE_INDEX_HEALTH_REASON_CODE.sidecarUnavailable],
       sidecar_status: 'stale'
     };
   }

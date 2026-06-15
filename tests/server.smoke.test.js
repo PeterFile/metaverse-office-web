@@ -8487,6 +8487,14 @@ test('GET /runtime/input-evidence-watermark returns replayed evidence metadata w
       latest_observed_at: '2026-05-20T01:03:00.000Z',
       max_source_input_ordinal: 7,
       max_source_file_ordinal: 3,
+      source_input_ordinal_buckets: {
+        '2': 1,
+        '7': 1
+      },
+      source_file_ordinal_buckets: {
+        '1': 1,
+        '3': 1
+      },
       source_format_buckets: {
         json_array: 1,
         jsonl: 1
@@ -8506,7 +8514,11 @@ test('GET /runtime/input-evidence-watermark returns replayed evidence metadata w
     'task://',
     'route-watermark-secret',
     'route-watermark-task-secret',
-    'token='
+    'token=',
+    '"source_index"',
+    'source_index_buckets',
+    '"line"',
+    'line_buckets'
   ]) {
     assert.equal(serialized.includes(unsafeFragment), false, unsafeFragment);
   }
@@ -10909,6 +10921,7 @@ test('GET read route purity matrix leaves replay records and checkpoints unchang
     '/storage/index-health',
     '/storage/schema',
     '/runtime/input-inventory',
+    '/runtime/input-evidence-watermark',
     '/runtime/source-gaps?newest_first=true&limit=10',
     '/runtime/source-gaps/schema',
     '/runtime/source-gaps/summary?newest_first=true&limit=1',
@@ -11040,6 +11053,7 @@ test('read-only GET route boundary matrix non-echoes hostile ids and stays colle
     ['source-gaps agent-summary route', '/runtime/source-gaps/agent-summary?agent_id=app-engineering&limit=1', 'getRuntimeSourceGapAgentSummary'],
     ['source-gaps lifecycle route', '/runtime/source-gaps/lifecycle?agent_id=app-engineering&limit=1', 'getRuntimeSourceGapLifecycle'],
     ['source-gaps trend route', '/runtime/source-gaps/trend?agent_id=app-engineering&limit=1', 'getRuntimeSourceGapTrend'],
+    ['runtime input-evidence watermark route', '/runtime/input-evidence-watermark?limit=1', 'getRuntimeInputEvidenceWatermark'],
     [
       'source-context route',
       `/evidence-records/${encodeURIComponent(safeRecord.evidence_id)}/source-context`,
@@ -11249,6 +11263,7 @@ test('GET safe-route leak regression matrix stays redacted and read-pure under h
     `/runtime/source-gaps/transition-summary?newest_first=true&limit=2&${hostileInputQuery}`,
     `/runtime/source-gaps/trend?newest_first=true&limit=2&${hostileInputQuery}`,
     `/runtime/input-inventory?${hostileInputQuery}`,
+    `/runtime/input-evidence-watermark?${hostileInputQuery}`,
     `/agents/evidence-spine/schema?${hostileInputQuery}`,
     `/agents/evidence-spine/summary?newest_first=true&limit=2&${hostileInputQuery}`,
     `/agents/evidence-spine/source-matrix?newest_first=true&limit=2&${hostileInputQuery}`,

@@ -2206,6 +2206,14 @@ test('runtime input evidence watermark aggregates only replayed input metadata',
     latest_observed_at: '2026-05-20T01:03:00.000Z',
     max_source_input_ordinal: 5,
     max_source_file_ordinal: 2,
+    source_input_ordinal_buckets: {
+      '3': 1,
+      '5': 1
+    },
+    source_file_ordinal_buckets: {
+      '1': 1,
+      '2': 1
+    },
     source_format_buckets: {
       json_array: 1,
       jsonl: 1
@@ -2225,10 +2233,44 @@ test('runtime input evidence watermark aggregates only replayed input metadata',
     'watermark-task-secret',
     'token=runtime-watermark-secret',
     'workspace_file',
-    '99'
+    '99',
+    '"source_index"',
+    'source_index_buckets',
+    '"line"',
+    'line_buckets'
   ]) {
     assert.equal(serialized.includes(unsafeFragment), false, unsafeFragment);
   }
+
+  const emptyStoreFile = await createStoreFile();
+  await writeFile(emptyStoreFile, '');
+  const emptyStore = await createPrototypeStore({ filePath: emptyStoreFile });
+
+  assert.deepEqual(emptyStore.getRuntimeInputEvidenceWatermark(), {
+    input_evidence_count: 0,
+    source_family_buckets: {
+      hermes_runtime_sources: 0,
+      task_evidence_sources: 0
+    },
+    source_kind_buckets: {
+      hermes_profile: 0,
+      hermes_session: 0,
+      kanban_fixture: 0,
+      linear_fixture: 0,
+      slack_fixture: 0,
+      task_fixture: 0
+    },
+    latest_collected_at: null,
+    latest_observed_at: null,
+    max_source_input_ordinal: null,
+    max_source_file_ordinal: null,
+    source_input_ordinal_buckets: {},
+    source_file_ordinal_buckets: {},
+    source_format_buckets: {
+      json_array: 0,
+      jsonl: 0
+    }
+  });
 });
 
 test('prototype store does not expose half collector snapshots when a derived append fails', async () => {

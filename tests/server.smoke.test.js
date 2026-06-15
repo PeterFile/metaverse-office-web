@@ -8818,6 +8818,7 @@ test('GET /evidence-records/projection-audit returns count-only safety counters 
       returned_limit: 1,
       input_proof_count: 1,
       missing_input_proof_count: 2,
+      invalid_input_proof_count: 1,
       unknown_source_kind_count: 1,
       unknown_evidence_role_count: 1,
       unknown_source_status_count: 1,
@@ -10093,6 +10094,16 @@ test('GET evidence and source read routes keep JSONL and SQLite parity', async (
   assert.equal(jsonlFacets.item.returned_limit, 1);
   assert.equal(JSON.stringify(jsonlFacets).includes('/tmp/route-parity'), false);
   assert.equal(JSON.stringify(jsonlFacets).includes('tmux://'), false);
+
+  const [jsonlProjectionAudit, sqliteProjectionAudit] = await parityRequest(
+    '/evidence-records/projection-audit?mapped=true&output_candidate=true&newest_first=true&limit=1'
+  );
+  assert.deepEqual(sqliteProjectionAudit, jsonlProjectionAudit);
+  assert.equal(jsonlProjectionAudit.item.total_count, 2);
+  assert.equal(jsonlProjectionAudit.item.returned_limit, 1);
+  assert.equal(jsonlProjectionAudit.item.invalid_input_proof_count, 0);
+  assert.equal(JSON.stringify(jsonlProjectionAudit).includes('/tmp/route-parity'), false);
+  assert.equal(JSON.stringify(jsonlProjectionAudit).includes('tmux://'), false);
 
   const [jsonlRefRollup, sqliteRefRollup] = await parityRequest(
     '/evidence-records/ref-rollup?mapped=true&output_candidate=true&limit=2'

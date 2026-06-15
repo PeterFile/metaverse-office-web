@@ -2175,6 +2175,7 @@ class PrototypeStore {
 
     for (const record of records) {
       const sourceFields = projectEvidenceSourceFields(record);
+      const inputProof = projectEvidenceInputProof(record);
 
       if (!sourceFields.kind) {
         audit.unknown_source_kind_count += 1;
@@ -2191,10 +2192,13 @@ class PrototypeStore {
       if (hasInvalidEvidenceProjectionTimestamp(record.collected_at)) {
         audit.invalid_collected_at_count += 1;
       }
-      if (projectEvidenceInputProof(record)) {
+      if (inputProof) {
         audit.input_proof_count += 1;
       } else {
         audit.missing_input_proof_count += 1;
+        if (hasEvidenceInputProofCandidate(record)) {
+          audit.invalid_input_proof_count += 1;
+        }
       }
     }
 
@@ -3817,6 +3821,7 @@ function createEmptyEvidenceProjectionAudit(totalCount, limit) {
     returned_limit: limit,
     input_proof_count: 0,
     missing_input_proof_count: 0,
+    invalid_input_proof_count: 0,
     unknown_source_kind_count: 0,
     unknown_evidence_role_count: 0,
     unknown_source_status_count: 0,
@@ -6624,6 +6629,15 @@ function projectEvidenceSourceContextGapItem(item) {
 
 function projectEvidenceInputProof(record) {
   return normalizeHermesSourceProvenance(record?.metadata?.source_provenance);
+}
+
+function hasEvidenceInputProofCandidate(record) {
+  return (
+    record?.metadata &&
+    typeof record.metadata === 'object' &&
+    !Array.isArray(record.metadata) &&
+    Object.hasOwn(record.metadata, 'source_provenance')
+  );
 }
 
 function projectEvidenceSourceFields(record) {

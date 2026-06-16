@@ -19,6 +19,14 @@ test("parses base and caps", () => {
   });
 });
 
+test("ignores npm script argument separator", () => {
+  assert.deepEqual(parseArgs(["--", "--base=origin/master"]), {
+    baseRef: "origin/master",
+    maxFiles: 5,
+    maxNetLoc: 250,
+  });
+});
+
 test("summarizes under-cap and docs-only diffs", () => {
   const summary = summarizeNumstat("10\t4\tsrc/index.js\n2\t3\tREADME.md\n");
   assert.equal(summary.changedFiles, 2);

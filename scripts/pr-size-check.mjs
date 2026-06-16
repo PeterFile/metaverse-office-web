@@ -15,6 +15,7 @@ export function parseArgs(args = []) {
 
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i];
+    if (arg === "--") continue;
     if (arg === "--base") out.baseRef = args[++i] ?? "";
     else if (arg.startsWith("--base=")) out.baseRef = arg.slice(7);
     else if (arg.startsWith("--max-files=")) out.maxFiles = toInt(arg.slice(12), "--max-files");

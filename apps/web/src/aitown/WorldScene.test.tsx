@@ -1044,6 +1044,14 @@ describe('WorldScene watch overlay caption gating', () => {
 
     await screen.findByText('Map A');
 
+    await waitFor(() => {
+      const [agentSprite] = readAgentSprites();
+
+      expect(readAgentSprites()).toHaveLength(1);
+      expect(agentSprite?.x).toBe(1120);
+      expect(agentSprite?.y).toBe(520);
+    });
+
     act(() => {
       const ticker = appInstances.at(-1)?.ticker;
 

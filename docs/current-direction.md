@@ -1,6 +1,6 @@
-# Current Direction: Live Evidence Spine
+# Current Direction: Architecture Roadmap
 
-Updated: 2026-06-16T00:12:05+08:00
+Updated: 2026-06-17T11:35:10+08:00
 
 ## Product vision
 
@@ -55,49 +55,33 @@ This project is not a flashy dashboard, not a manual task-dispatch UI, and not a
 - Selected-agent ref-rollup Proof Compass rows must be requested only after the Evidence CTA and must project response groups through safe labels/counts plus allowlisted source/status buckets; raw evidence refs, unsafe bucket keys, paths, tokens, webhooks, metadata, and control-plane-shaped strings remain internal.
 - Explicit selected-evidence replay-window UI must be loaded only after the `Replay this evidence` CTA, not prefetched or polled, and must project record kinds plus source kind/role/status values through safe labels before rendering center/bounds/adjacent-row copy.
 
-## Next milestone
+## Rolling architecture roadmap
 
-`Live Evidence Spine` is the next product milestone.
+This document is the durable architecture roadmap, not a single-milestone parking lot. `Live Evidence Spine` is now the evidence foundation layer, not the whole project direction. Future work must advance several architecture routes in parallel so the product moves toward an AI company operating system instead of repeatedly hardening one evidence subsystem.
 
-Goal: connect the current read models and AI Town UI to real Hermes team runtime facts, then persist those facts with stronger query, replay, and provenance guarantees.
+Planning window: two weeks. Each window must select one primary route plus at least two secondary routes from the table below. The same primary route must not repeat in the next window unless the document states a concrete blocker, exit criterion, or production regression that justifies it. Live Evidence work may continue only when it unblocks another route, fixes a real contract/runtime failure, or closes a bounded foundation gap; it must not monopolize the queue by default.
 
-Current implementation stage: the project has moved beyond the archived Phase 1 scaffold into Live Evidence Spine hardening. Master already has evidence-record/runtime-source read models, opt-in Hermes/task evidence ingestion boundaries, JSONL replay plus opt-in SQLite append-only storage with sidecar health checks, source-gap lifecycle/transition summaries, selected-agent evidence/provenance/source-context/replay UI surfaces, and `verify:quick` feedback-loop support. The remaining milestone work is to harden real-runtime ingestion and structured-store guarantees without making this repo a task-dispatch, profile-routing, worker-orchestration, or Kanban control plane.
+Active architecture routes:
 
-Minimum target outcomes:
+| Route | Product objective | Scoreable next target | Exit / rotation rule | Fastest useful gate |
+| --- | --- | --- | --- | --- |
+| Operator World / AI Town | Make the default world read as a real operating company before opening Hub or evidence panels. | Default view exposes active teams, locations, and inspectable work context; left/right drag stays immediate; no black edge; key information is spatial or lightweight popover-first. | Rotate after one merged world-behavior or visual-acceptance slice unless a browser smoke regression blocks release. | `pnpm web:test:browser-smoke:live-evidence -- --grep '@journey'` plus targeted visual/unit tests |
+| Real Runtime Presence | Connect Hermes/tmux/session/profile facts to the seven-agent company model as live presence, not fabricated productivity. | At least one live runtime input path updates visible agent presence/degraded state with explicit source ownership and safe missing-source behavior. | Rotate after a real source is visible end-to-end; residual ingestion hardening goes to the foundation route. | `pnpm verify:quick -- --lane=backend` plus one world/UI focused gate |
+| Replay / Accountability Loop | Let an operator start from a world claim and trace to evidence, replay, and responsibility without dumping raw provenance. | One visible claim supports world -> evidence -> replay -> accountability return path with bounded labels and no prefetch dump. | Rotate after one full loop is visible; follow-up proof hardening must name the route it unblocks. | `pnpm verify:quick -- --focused-files src/App.test.tsx src/aitown/DetailsPanel.test.tsx` |
+| Company Operating Model | Express the canonical seven-agent company as teams, roles, rooms, and work streams without adding dispatch controls. | The UI makes team responsibilities, current focus, and cross-agent dependencies legible from the world/roster. | Rotate after a role/team model slice lands; do not use more evidence counters as a substitute. | `pnpm verify:quick -- --focused-files src/App.test.tsx src/aitown/WorldScene.test.tsx` |
+| Structured Evidence Foundation | Keep storage, evidence-record, source-gap, and label-firewall contracts reliable as shared infrastructure. | Only bounded contract gaps, migration safety, leak prevention, and query guarantees that unblock another route. | No more than one foundation PR per two product-route PRs unless a release-blocking regression exists. | `pnpm verify:quick -- --lane=backend` or exact focused route tests |
+| Delivery Feedback System | Keep multi-agent delivery dense, reviewable, and measurable without oversized PR stacks or slow feedback. | `verify:quick`, PR size checks, route scorecards, and CI lanes explain what changed and what was not validated. | Rotate after tooling improves a real delivery bottleneck; do not create process-only work without a product route consumer. | `pnpm --filter @metaverse-office/web exec vitest run scripts/verify-quick.test.ts` plus `pnpm pr:size` |
 
-1. Ingest real Hermes runtime facts from profiles, sessions, opt-in runtime source files, tmux panes, workspace artifacts, and explicitly integrated task evidence sources as evidence records.
-2. Map live Hermes agents/profiles to the office actor model without fabricating activity when a source is missing or degraded.
-3. Keep the product boundary observability-first: no task dispatch, claim/complete controls, profile routing, or worker orchestration in this repo unless this document and the API contract are updated first.
-4. Finish structured append-only store hardening. JSONL remains the default replay path and SQLite is already opt-in; the remaining work is to make indexed query/replay/provenance guarantees stronger without changing canonical append semantics or silently falling back when SQLite is misconfigured.
-5. Preserve replayability: service restart must rebuild the same projection from persisted events, and each visible incident or status claim must point back to concrete evidence.
-6. Keep AI Town as the primary operator surface, with Hub/drilldown views used for evidence inspection rather than dumping every fact into a side panel.
+Current two-week focus starts now:
 
-Scored route guardrails for current Live Evidence Spine hardening:
+| Priority | Route | Scoreable target | Small-PR boundary | Fastest feedback |
+| --- | --- | --- | --- | --- |
+| Primary | Operator World / AI Town | Make world-first source-gap/evidence entry land from AI Town without forcing another Hub dump. | Finish the existing world-source-gap entry slice; no API shape changes. | `pnpm verify:quick -- --focused-files src/App.test.tsx src/aitown/DetailsPanel.test.tsx` |
+| Secondary | Real Runtime Presence | Prove one real Hermes/tmux/session source can affect visible presence/degraded state safely. | One ingestion-to-projection slice; no task dispatch, profile routing, or Kanban writes. | `pnpm verify:quick -- --lane=backend` plus one UI focused test |
+| Secondary | Company Operating Model | Make canonical roles/work streams legible in the world/roster without side-panel overload. | One world/roster model slice; no broad Hub redesign. | `pnpm verify:quick -- --focused-files src/App.test.tsx src/aitown/WorldScene.test.tsx` |
+| Support | Structured Evidence Foundation | Accept only evidence/storage fixes required by the above routes or release-blocking regressions. | One contract bug per PR; no foundation-only batch queue. | Exact affected `verify:quick` lane |
 
-| Route | Objective | Scoreable done checklist | Fastest useful gate |
-| --- | --- | --- | --- |
-| Storage health | Keep SQLite/index-health degradation explainable with bounded reason codes. | Reason codes are additive, stable, path-free, stderr-free, and distinguish ok, JSONL not-applicable, stale sidecar, unavailable sidecar, and query-probe drift. | `pnpm verify:quick -- --lane=backend` |
-| Evidence projection | Keep count-only proof that persisted evidence projects safely without leaking invalid enum, timestamp, input-proof, ref, or payload samples. | Audit output is aggregate-only, filter-compatible, read-only, and keeps hostile stored values as counters, not public strings. | `pnpm verify:quick -- --lane=backend` |
-| Runtime gaps | Keep source-gap lifecycle transitions summarized as counts without agent productivity, severity, degraded-reason, or raw-ref semantics. | `GET /runtime/source-gaps/transition-summary` separates group and record counts, preserves mapped/unmapped boundaries, and returns zero safe shapes for unknown filters. | `pnpm verify:quick -- --lane=backend` |
-| Feedback loop | Keep dense iteration short without changing required check names or pretending narrow tests replace full CI. | `verify:quick` can explain the planned lane quickly, helper-only paths can route to exact tests, and cross-layer ambiguity still fails closed. | `pnpm --filter @metaverse-office/web exec vitest run scripts/verify-quick.test.ts` |
-| Public label firewall | Keep forbidden public UI strings caught before browser smoke. | Unit-level guards cover local paths, relative traversal, tmux/Hermes/profile/session refs, `task://` raw refs, token-shaped strings such as `github_pat`, `xox`, and `token=`, webhooks, raw metadata/payload canaries, and control-plane verbs while leaving raw refs internal. | `pnpm verify:quick -- --focused-files src/selectedAgentEvidenceLedger.test.ts src/evidenceProvenanceBundle.test.ts` |
-| World-first evidence flow | Keep operators able to jump from an inspected mapped evidence record back to the world without opening another evidence dump. | Mapped evidence can focus the existing world target; unmapped evidence stays bounded and passive; no new fetch, no raw evidence labels, no Hub dumping. | `pnpm verify:quick -- --focused-files src/App.test.tsx src/aitown/DetailsPanel.test.tsx` |
-| World interaction guard | Keep evidence controls from blocking default AI Town drag and edge navigation. | Real browser smoke proves default left/right/top-left drag remains available with evidence controls present. | `pnpm web:test:browser-smoke:live-evidence -- --grep '@journey @evidence-live'` |
-
-These objectives are durable for the milestone because they define product and verification boundaries. Per-lane progress, run status, blockers, and PR queues still belong in Slack, Linear, or controller/runtime systems, not new markdown files.
-
-Current parallel execution split for this milestone:
-
-| Lane | Scoreable target | Small-PR boundary | Fastest feedback |
-| --- | --- | --- | --- |
-| Storage contract closure | `/storage/index-health` and its schema/docs expose the same bounded, path-free health reason contract across JSONL and SQLite modes. | One storage-health contract slice; no UI changes. | `pnpm verify:quick -- --lane=backend` |
-| Runtime gap lifecycle | Runtime source-gap transition/reason summaries keep mapped/unmapped, record/group, and zero-shape semantics explicit without raw refs or productivity claims. | One runtime source-gap route family; no collector rewrites unless required by tests. | `pnpm verify:quick -- --lane=backend` |
-| Evidence projection audit | Persisted evidence safety is provable with count-only audits that keep hostile enums, refs, timestamps, input proof, and payloads as counters, not public strings. | One projection/read-model slice; no browser UI changes. | `pnpm verify:quick -- --lane=backend` |
-| Runtime input watermark | Hermes/task runtime input provenance remains replayed, aggregate, ordinal-only, and path-free while giving operators a useful evidence freshness waterline. | One runtime input read-model slice; no live file expansion at request time. | `pnpm verify:quick -- --lane=backend` |
-| World-first source-gap entry | A world pin or mapped evidence focus keeps the operator in AI Town first, with Hub/drilldown opened only after explicit evidence/replay CTAs. | One AI Town interaction slice; no API shape changes. | `pnpm verify:quick -- --focused-files src/App.test.tsx src/aitown/DetailsPanel.test.tsx` |
-| Evidence proof chain | Selected evidence can move through safe ledger, source-context, and replay-window proof surfaces without leaking raw refs or prefetching broad dumps. | One selected-evidence UI slice; no backend writes. | `pnpm verify:quick -- --focused-files src/App.test.tsx src/aitown/DetailsPanel.test.tsx` |
-| World interaction guard | Evidence controls do not block default AI Town drag, edge navigation, or visual acceptance. | Prefer smoke/test-only PR; production fix only if the smoke exposes a real hit-target bug. | `pnpm web:test:browser-smoke:live-evidence -- --grep '@journey @evidence-live'` |
-| Feedback and PR size | Dense iteration stays fast and reviewable without renaming required checks or pretending narrow tests replace full CI. | Tooling/test slice only; preserve required check semantics. | `pnpm verify:quick -- --plan --changed` plus `pnpm pr:size` |
+Progress tracking rule: per-lane progress, run status, blockers, and PR queues belong in Slack, Linear, or controller/runtime systems, not new markdown files. This document records durable route boundaries, active rotation, and scoreable targets only.
 
 ## Documentation discipline
 
@@ -108,21 +92,22 @@ Every future PR that changes one of these areas must update docs in the same PR:
 - Runtime ingestion from Hermes, tmux, sessions, Kanban, or workspaces: update this document with source ownership, provenance, and degradation behavior.
 - Frontend operator workflow, Hub category semantics, world projection, evidence/replay affordances, or request surfaces: update README and the relevant ADR/plan docs.
 - Milestone completion or product direction changes: update this document first, then any historical references that could mislead future agents.
+- Architecture route changes: update the active route table, two-week focus, and rotation/exit rule in this document instead of creating a new temporary roadmap file.
 
 Historical `phase1-*` documents remain useful implementation records. They are not the current roadmap. If a future agent uses a Phase 1 file as authority without checking `docs/current-direction.md`, that is a process bug.
 
 ## Delivery gate
 
-Every Live Evidence Spine delivery should be small enough to review and score against this 100-point gate:
+Every architecture-route delivery should be small enough to review and score against this 100-point gate:
 
-- Product fit (20): preserves the evidence-first operator-world boundary and does not add dashboard, Kanban, or control-plane product semantics.
+- Product fit (20): advances the AI company operating-system vision and preserves the operator-world boundary without adding dashboard, Kanban, or control-plane product semantics.
 - Scope control (15): ships the smallest coherent slice, with no unrelated route, API, storage, UI, or roadmap churn.
 - Contract integrity (20): keeps API/storage/event semantics explicit, backward-compatible, and documented in the same PR when they change.
 - Tests and verification (20): includes focused automated coverage or a documented narrow verification path that proves the evidence claim.
-- Documentation durability (15): updates persistent direction/spec/runbook docs when behavior changes, without creating temporary progress markdown.
+- Documentation durability (15): updates persistent direction/spec/runbook docs when behavior or route focus changes, without creating temporary progress markdown or pinning the roadmap to one direction indefinitely.
 - Delivery risk (10): keeps PR size, migration risk, rollout assumptions, and degraded-source behavior obvious to reviewers.
 
-Hard-fail any delivery that adds control-plane/task dispatch semantics, leaks raw refs/paths/tokens, fabricates liveness or productivity, is oversized for review, or changes semantics without matching documentation.
+Hard-fail any delivery that adds control-plane/task dispatch semantics, leaks raw refs/paths/tokens, fabricates liveness or productivity, is oversized for review, changes semantics without matching documentation, or keeps future work locked to one route without an explicit rotation exception.
 
 Transient progress belongs in Slack, Linear, or the controller/runtime systems that own that state. Do not add new markdown files for progress logs, temporary roadmaps, or status dumps.
 
@@ -133,3 +118,4 @@ Transient progress belongs in Slack, Linear, or the controller/runtime systems t
 - Do not represent decorative animation as real work.
 - Do not introduce token/onchain mechanics without a fresh direction/spec update.
 - Do not replace evidence-backed read models with markdown status dumps.
+- Do not let foundation/evidence hardening consume the roadmap when product-world, runtime-presence, replay/accountability, and company-operating-model routes have no meaningful shipped slice in the same planning window.

@@ -91,6 +91,7 @@ pnpm verify:quick -- --changed
 pnpm verify:quick -- --since=origin/master
 pnpm verify:quick -- --plan --changed
 pnpm verify:quick -- --dry-run --focused-files src/App.test.tsx
+pnpm pr:size -- --base=origin/master
 pnpm backend:start
 ```
 
@@ -103,6 +104,8 @@ pnpm backend:start
 Add `--plan` or `--dry-run` to any `verify:quick` route to print the selected lane or focused test files plus the exact commands that would run, then exit without executing them. Plan mode keeps the same conservative routing: unknown, cross-layer, or unsafe focused paths still fail nonzero.
 
 Before running commands, `verify:quick` prints the selected lane or focused-file route, explicit focused files when applicable, and the planned step list so agents can catch wrong-lane retries early. After running, it prints strict command-step passed/failed/total counts; these are verification command counts, not product scores.
+
+`pnpm pr:size -- --base=<ref>` prints the advisory PR size caps (default 5 files and 250 net LOC), changed layers, and next-step guidance. It is not a required check result, product score, or CI substitute; over-cap output means split the PR or document why it must stay together.
 
 `pnpm web:test:browser-smoke` runs the Playwright smoke bundle from the repository root (currently the keyboard, active-queue, and layout-visual smokes), starts its own hermetic read-only backend seeded under `./.tmp/browser-smoke`, starts its own Vite shell on ephemeral localhost ports, and passes the resolved base URL into Playwright so stale orphaned processes do not block startup.
 

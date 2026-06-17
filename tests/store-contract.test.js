@@ -4823,6 +4823,14 @@ test('prototype store summarizes source-gap reason buckets without raw reasons',
   assert.equal(summary.source_kind_buckets.tmux_observation, 1);
   assert.equal(summary.source_status_buckets.degraded, 1);
   assert.equal(summary.source_status_buckets.missing, 1);
+  assert.deepEqual(summary.mapped_state_buckets, { mapped: 2, unmapped: 0 });
+  assert.deepEqual(
+    summary.mapping_decision_buckets,
+    createMappingDecisionBuckets({
+      mapped: 1,
+      missing_expected_source: 1
+    })
+  );
   assert.equal(
     store.getRuntimeSourceGapReasonSummary({ source_kind: 'workspace_file' }).total_count,
     1
@@ -4836,6 +4844,102 @@ test('prototype store summarizes source-gap reason buckets without raw reasons',
   assert.equal(serializedSummary.includes('evidence_ref'), false);
   assert.equal(serializedSummary.includes('metadata'), false);
   assert.equal(serializedSummary.includes('degraded_reasons'), false);
+});
+
+test('prototype store summarizes Hermes runtime mapping failures as bounded codes only', async () => {
+  const storeFile = await createStoreFile();
+  const unsafeRef = 'hermes://profile/token=reason-summary-secret';
+  const unsafeSessionRef = 'hermes://session/session-ref-secret';
+  const unsafeReason = 'Unsafe Hermes runtime mapping token=reason-summary-secret';
+  const records = [
+    {
+      evidence_id: 'ev_reason_duplicate_runtime_mapping',
+      observed_at: '2026-06-07T01:00:00.000Z',
+      collected_at: '2026-06-07T01:01:00.000Z',
+      agent_id: null,
+      source_kind: 'hermes_profile',
+      evidence_ref: unsafeRef,
+      evidence_role: 'runtime_unmapped',
+      source_status: 'degraded',
+      output_candidate: false,
+      collector_snapshot_id: 'collector-snapshot:2026-06-07T01:01:00.000Z',
+      correlation_id: 'collector-snapshot:2026-06-07T01:01:00.000Z',
+      mapping_decision: 'duplicate_source',
+      degraded_reasons: ['Hermes profile duplicate mapping'],
+      metadata: { profile_id: 'raw-profile-secret', payload: unsafeRef }
+    },
+    {
+      evidence_id: 'ev_reason_shared_runtime_mapping',
+      observed_at: '2026-06-07T01:02:00.000Z',
+      collected_at: '2026-06-07T01:03:00.000Z',
+      agent_id: null,
+      source_kind: 'hermes_session',
+      evidence_ref: unsafeSessionRef,
+      evidence_role: 'runtime_unmapped',
+      source_status: 'degraded',
+      output_candidate: false,
+      collector_snapshot_id: 'collector-snapshot:2026-06-07T01:03:00.000Z',
+      correlation_id: 'collector-snapshot:2026-06-07T01:03:00.000Z',
+      mapping_decision: 'shared_ref',
+      degraded_reasons: ['Hermes session duplicate mapping'],
+      metadata: { session_ref: 'session-ref-secret', payload: unsafeSessionRef }
+    },
+    {
+      evidence_id: 'ev_reason_unsafe_runtime_mapping',
+      observed_at: '2026-06-07T01:04:00.000Z',
+      collected_at: '2026-06-07T01:05:00.000Z',
+      agent_id: null,
+      source_kind: 'hermes_profile',
+      evidence_ref: 'hermes://profile/unsafe-identifier',
+      evidence_role: 'runtime_unmapped',
+      source_status: 'degraded',
+      output_candidate: false,
+      collector_snapshot_id: 'collector-snapshot:2026-06-07T01:05:00.000Z',
+      correlation_id: 'collector-snapshot:2026-06-07T01:05:00.000Z',
+      mapping_decision: 'unsafe_identifier',
+      degraded_reasons: [unsafeReason],
+      metadata: { profile_id: 'unsafe-identifier', payload: unsafeReason }
+    }
+  ];
+  await writeFile(
+    storeFile,
+    records.map((payload) => JSON.stringify({ kind: 'evidence_record', payload })).join('\n') + '\n'
+  );
+
+  const store = await createPrototypeStore({ filePath: storeFile });
+  const summary = store.getRuntimeSourceGapReasonSummary({ limit: '1' });
+
+  assert.equal(summary.total_count, 3);
+  assert.equal(summary.returned_limit, 1);
+  assert.equal(summary.reason_code_buckets.duplicate_runtime_mapping, 2);
+  assert.equal(summary.reason_code_buckets.unsafe_runtime_mapping, 1);
+  assert.deepEqual(summary.mapped_state_buckets, { mapped: 0, unmapped: 3 });
+  assert.deepEqual(
+    summary.mapping_decision_buckets,
+    createMappingDecisionBuckets({
+      duplicate_source: 1,
+      shared_ref: 1,
+      unsafe_identifier: 1
+    })
+  );
+
+  const serialized = JSON.stringify(summary);
+  for (const unsafeFragment of [
+    unsafeRef,
+    unsafeSessionRef,
+    unsafeReason,
+    'raw-profile-secret',
+    'session-ref-secret',
+    'token=',
+    'hermes://',
+    'payload',
+    'metadata',
+    'degraded_reasons',
+    'profile_id',
+    'session_ref'
+  ]) {
+    assert.equal(serialized.includes(unsafeFragment), false, unsafeFragment);
+  }
 });
 
 test('prototype store trends runtime source gaps with safe count buckets only', async () => {

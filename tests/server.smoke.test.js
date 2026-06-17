@@ -7503,6 +7503,18 @@ test('GET /runtime/source-gaps returns compact gap, reason buckets, and unmapped
   assert.equal(reasonSummary.body.item.reason_code_buckets.missing_workspace_file, 1);
   assert.equal(reasonSummary.body.item.source_kind_buckets.workspace_file, 1);
   assert.equal(reasonSummary.body.item.source_status_buckets.degraded, 1);
+  assert.deepEqual(reasonSummary.body.item.mapped_state_buckets, { mapped: 1, unmapped: 0 });
+  assert.deepEqual(reasonSummary.body.item.mapping_decision_buckets, {
+    mapped: 1,
+    unmapped_unknown: 0,
+    non_seeded_agent: 0,
+    duplicate_source: 0,
+    shared_ref: 0,
+    unsafe_identifier: 0,
+    missing_expected_source: 0,
+    read_error: 0,
+    unknown: 0
+  });
   assert.equal(JSON.stringify(reasonSummary.body).includes('/tmp/source-gaps'), false);
   assert.equal(JSON.stringify(reasonSummary.body).includes('tmux://'), false);
   assert.equal(JSON.stringify(reasonSummary.body).includes('evidence_id'), false);

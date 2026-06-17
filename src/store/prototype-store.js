@@ -1918,7 +1918,12 @@ class PrototypeStore {
       returned_limit: limit,
       reason_code_buckets: createZeroBuckets(RUNTIME_SOURCE_GAP_REASON_CODES),
       source_kind_buckets: createZeroBuckets(EVIDENCE_RECORD_SOURCE_KINDS),
-      source_status_buckets: createZeroBuckets(RUNTIME_SOURCE_GAP_STATUSES)
+      source_status_buckets: createZeroBuckets(RUNTIME_SOURCE_GAP_STATUSES),
+      mapped_state_buckets: {
+        mapped: 0,
+        unmapped: 0
+      },
+      mapping_decision_buckets: createZeroBuckets(EVIDENCE_MAPPING_DECISIONS)
     };
 
     for (const record of gapRecords) {
@@ -1928,6 +1933,12 @@ class PrototypeStore {
       );
       incrementKnownBucket(summary.source_kind_buckets, record.source_kind);
       incrementKnownBucket(summary.source_status_buckets, record.source_status);
+      if (typeof record.agent_id === 'string' && record.agent_id.length > 0) {
+        summary.mapped_state_buckets.mapped += 1;
+      } else if (record.agent_id === null) {
+        summary.mapped_state_buckets.unmapped += 1;
+      }
+      incrementKnownBucket(summary.mapping_decision_buckets, getEvidenceMappingDecision(record));
     }
 
     return summary;

@@ -591,6 +591,19 @@ async function expectViewportAtRightEdge(page: Page, label: string) {
   return state!;
 }
 
+function expectWorldRightEdgeVisible(state: ViewportState, label: string) {
+  const rightChromeInset = state.clampPadding?.right ?? 0;
+  const worldSpan = Math.max(state.right - state.left, Number.EPSILON);
+  const projectedRight = ((state.worldWidth - state.left) / worldSpan) * state.screenWidth;
+
+  expect(projectedRight, `${label} should show the world right edge before right-side chrome`).toBeGreaterThanOrEqual(
+    state.screenWidth - rightChromeInset - 1
+  );
+  expect(projectedRight, `${label} should keep the world right edge inside the viewport`).toBeLessThanOrEqual(
+    state.screenWidth + 1
+  );
+}
+
 async function expectViewportAtTopLeftEdge(page: Page, label: string) {
   await expect
     .poll(async () => {
@@ -611,6 +624,14 @@ async function expectViewportAtTopLeftEdge(page: Page, label: string) {
   const state = await readViewportState(page);
   expect(state).not.toBeNull();
   return state!;
+}
+
+function expectWorldLeftEdgeVisible(state: ViewportState, label: string) {
+  const worldSpan = Math.max(state.right - state.left, Number.EPSILON);
+  const projectedLeft = ((0 - state.left) / worldSpan) * state.screenWidth;
+
+  expect(projectedLeft, `${label} should keep the world left edge inside the viewport`).toBeGreaterThanOrEqual(-1);
+  expect(projectedLeft, `${label} should not hide the world left edge offscreen`).toBeLessThanOrEqual(1);
 }
 
 async function dragViewportFromDefaultWorldLane(page: Page, deltaX: number, deltaY: number) {
@@ -996,9 +1017,27 @@ test.describe('operator shell live evidence journey smoke', () => {
     await expect(evidenceFocus).toBeVisible();
     await expect(sourceGapFocus).toBeVisible();
     await expect(page.getByRole('dialog', { name: 'Hub' })).toHaveCount(0);
+    await expect(signals, 'Live Evidence controls should not expose raw refs on the public HUD surface').not.toContainText(
+      visibleProofRawRefPattern
+    );
+    await expect(
+      evidenceFocus,
+      'evidence focus should not expose raw refs on the public HUD surface'
+    ).not.toContainText(visibleProofRawRefPattern);
+    await expect(
+      sourceGapFocus,
+      'source-gap focus should not expose raw refs on the public HUD surface'
+    ).not.toContainText(visibleProofRawRefPattern);
 
     const initial = await readViewportState(page);
     expect(initial).not.toBeNull();
+    expect(initial!.left, 'default Live Evidence viewport should not expose a black left gutter').toBeGreaterThanOrEqual(
+      -0.5
+    );
+    expect(
+      Math.abs(resolveViewportEdgeDragDelta(initial!, 'top-left').deltaX),
+      'default viewport should have left edge pan budget'
+    ).toBeGreaterThan(40);
 
     const worldRect = await readRect(page.locator('.aitown-world__host'));
     const dragStart = {
@@ -1033,11 +1072,13 @@ test.describe('operator shell live evidence journey smoke', () => {
     await dragViewportFromDefaultWorldLane(page, rightDrag.deltaX, rightDrag.deltaY);
 
     const rightEdge = await expectViewportAtRightEdge(page, 'Live Evidence controls-present viewport');
+    expectWorldRightEdgeVisible(rightEdge, 'Live Evidence controls-present viewport');
     const topLeftDrag = resolveViewportEdgeDragDelta(rightEdge, 'top-left');
     expect(Math.abs(topLeftDrag.deltaX), 'right edge should allow return to the left edge').toBeGreaterThan(40);
     await dragViewportFromDefaultWorldLane(page, topLeftDrag.deltaX, topLeftDrag.deltaY);
 
-    await expectViewportAtTopLeftEdge(page, 'Live Evidence controls-present viewport');
+    const leftEdge = await expectViewportAtTopLeftEdge(page, 'Live Evidence controls-present viewport');
+    expectWorldLeftEdgeVisible(leftEdge, 'Live Evidence controls-present viewport');
   });
 
   test('@journey @evidence-live replays inspected evidence by evidence id only after explicit CTAs', async ({

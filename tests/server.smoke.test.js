@@ -7876,10 +7876,19 @@ test('GET /storage/schema exposes static catalog without reading storage rows', 
     'evidence_summary',
     'canonical_record_hash'
   ]);
+  assert.equal(
+    response.body.item.response_fields.index_health.includes('health_reason_codes'),
+    true
+  );
   assert.deepEqual(response.body.item.backends, ['jsonl', 'sqlite']);
   assert.deepEqual(response.body.item.statuses, ['ok', 'degraded']);
   assert.equal(response.body.item.sidecar_statuses.includes('stale'), true);
   assert.equal(response.body.item.evidence_query_probe_statuses.includes('complete'), true);
+  assert.deepEqual(response.body.item.health_reason_codes, [
+    'sidecar_drift',
+    'evidence_query_probe_drift',
+    'sidecar_unavailable'
+  ]);
   const serialized = JSON.stringify(response.body);
   assert.equal(serialized.includes('/tmp/storage-secret'), false);
   assert.equal(serialized.includes('<script>'), false);

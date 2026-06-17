@@ -3221,26 +3221,17 @@ test('storage schema exposes only static safe route catalog metadata', async () 
       'evidence_summary',
       'canonical_record_hash'
     ],
-    index_health: [
-      'backend',
-      'status',
-      'record_count',
-      'record_index_count',
-      'record_evidence_ref_count',
-      'record_index_drift_count',
-      'record_evidence_ref_drift_count',
-      'evidence_query_probe_count',
-      'evidence_query_probe_drift_count',
-      'evidence_query_probe_status',
-      'sidecar_status',
-      'record_kind_buckets',
-      'latest_record_ts'
-    ]
+    index_health: Object.keys(await store.getStorageIndexHealth())
   });
   assert.deepEqual(schema.backends, ['jsonl', 'sqlite']);
   assert.deepEqual(schema.statuses, ['ok', 'degraded']);
   assert.deepEqual(schema.sidecar_statuses, ['complete', 'stale', 'not_applicable']);
   assert.deepEqual(schema.evidence_query_probe_statuses, ['complete', 'stale', 'not_applicable']);
+  assert.deepEqual(schema.health_reason_codes, [
+    'sidecar_drift',
+    'evidence_query_probe_drift',
+    'sidecar_unavailable'
+  ]);
   assert.equal(
     schema.route_write_boundary,
     'read-only storage schema catalog; does not inspect replayed rows, read sqlite files, append records, or expose control-plane actions'
@@ -3256,6 +3247,9 @@ test('storage schema exposes only static safe route catalog metadata', async () 
   assert.equal(serialized.includes('degraded_reasons'), false);
   for (const forbidden of ['hermes://', 'session://', 'profile://', 'webhook', 'payload', 'token']) {
     assert.equal(serialized.toLowerCase().includes(forbidden), false, forbidden);
+  }
+  for (const reasonCode of schema.health_reason_codes) {
+    assert.equal(/^[a-z_]{1,64}$/.test(reasonCode), true, reasonCode);
   }
 });
 

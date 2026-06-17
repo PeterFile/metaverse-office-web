@@ -56,6 +56,7 @@ const RUNTIME_INPUT_SOURCE_KINDS = Object.freeze([
   ...RUNTIME_INPUT_SOURCE_FAMILIES.hermes_runtime_sources,
   ...RUNTIME_INPUT_SOURCE_FAMILIES.task_evidence_sources
 ]);
+const RUNTIME_INPUT_WATERMARK_ORDINAL_BUCKET_LIMIT = 16;
 const SAFE_TASK_EVIDENCE_VALUE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/;
 const TASK_EVIDENCE_WARNING_CODES = new Set(['agent_id suppressed']);
 const UNSAFE_TASK_EVIDENCE_VALUE_PATTERNS = Object.freeze([
@@ -2260,9 +2261,31 @@ class PrototypeStore {
         watermark.max_source_file_ordinal,
         inputProof.source_file_ordinal
       );
+      if (Number.isSafeInteger(inputProof.source_input_ordinal)) {
+        incrementBucket(
+          watermark.source_input_ordinal_buckets,
+          String(inputProof.source_input_ordinal)
+        );
+      }
+      if (Number.isSafeInteger(inputProof.source_file_ordinal)) {
+        incrementBucket(
+          watermark.source_file_ordinal_buckets,
+          String(inputProof.source_file_ordinal)
+        );
+      }
     }
 
-    return watermark;
+    return {
+      ...watermark,
+      source_input_ordinal_buckets: sortNumericBucketKeys(
+        watermark.source_input_ordinal_buckets,
+        RUNTIME_INPUT_WATERMARK_ORDINAL_BUCKET_LIMIT
+      ),
+      source_file_ordinal_buckets: sortNumericBucketKeys(
+        watermark.source_file_ordinal_buckets,
+        RUNTIME_INPUT_WATERMARK_ORDINAL_BUCKET_LIMIT
+      )
+    };
   }
 
   getEvidenceRefRollup(filters = {}) {
@@ -3876,6 +3899,8 @@ function createEmptyRuntimeInputEvidenceWatermark() {
     latest_observed_at: null,
     max_source_input_ordinal: null,
     max_source_file_ordinal: null,
+    source_input_ordinal_buckets: {},
+    source_file_ordinal_buckets: {},
     source_format_buckets: {
       json_array: 0,
       jsonl: 0

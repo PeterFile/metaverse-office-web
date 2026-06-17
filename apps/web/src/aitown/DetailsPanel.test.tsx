@@ -5089,6 +5089,56 @@ describe('DetailsPanel accountability signals', () => {
     expect(onBackToSelectedAgentEvidenceRecord).toHaveBeenCalledTimes(1);
   });
 
+  it('redacts raw refs from selected evidence replay bundle errors', () => {
+    const sensitiveError =
+      'request req-123 evidence_id output-1 token sk-liveabcdef path /Users/cwp/private/evidence.md tmux://session/window /control-plane/dispatch webhook https://hooks.example.test/secret-token';
+    const replayBundle = buildAccountabilityReplayBundle({
+      query: {
+        agent_id: 'app-engineering',
+        evidence_id: 'output-1',
+        limit: 10,
+        window: '60m'
+      }
+    });
+    const { rerender } = render(
+      <DetailsPanel
+        {...buildProps({
+          selectedAgentDrilldownTab: 'replay',
+          selectedAgentAccountabilityReplay: null,
+          selectedAgentAccountabilityReplayError: sensitiveError,
+          selectedAgentAccountabilityReplayState: 'error'
+        })}
+      />
+    );
+
+    let section = screen.getByRole('heading', { name: 'Replay Bundle' }).closest('section');
+    expect(section).not.toBeNull();
+    let errorRecord = within(section!).getByText(/Unable to load replay bundle\./).closest('li');
+    expect(errorRecord).not.toBeNull();
+    expect(errorRecord!).not.toHaveTextContent(
+      /req-123|output-1|evidence_id|sk-live|\/Users\/cwp|evidence\.md|tmux:\/\/|control-plane|dispatch|webhook|hooks\.example|secret-token/
+    );
+
+    rerender(
+      <DetailsPanel
+        {...buildProps({
+          selectedAgentDrilldownTab: 'replay',
+          selectedAgentAccountabilityReplay: replayBundle,
+          selectedAgentAccountabilityReplayError: sensitiveError,
+          selectedAgentAccountabilityReplayState: 'ready'
+        })}
+      />
+    );
+
+    section = screen.getByRole('heading', { name: 'Replay Bundle' }).closest('section');
+    expect(section).not.toBeNull();
+    errorRecord = within(section!).getByText(/Showing last replay bundle snapshot\./).closest('li');
+    expect(errorRecord).not.toBeNull();
+    expect(errorRecord!).not.toHaveTextContent(
+      /req-123|sk-live|\/Users\/cwp|evidence\.md|tmux:\/\/|control-plane|dispatch|webhook|hooks\.example|secret-token/
+    );
+  });
+
   it('renders empty replay proof ladder as unavailable without inventing anchors', () => {
     const replayBundle = buildAccountabilityReplayBundle();
 

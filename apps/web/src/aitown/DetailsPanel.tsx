@@ -3743,8 +3743,12 @@ function renderSelectedAgentReplayBundleSection({
   onOpenReplayCheckpoint?: (eventId: string) => void;
   onBackToSelectedAgentEvidenceRecord?: () => void;
 }) {
+  const replayEvidenceId = replayBundle?.query.evidence_id ?? null;
+  const sanitizedReplayBundleError = replayBundleError
+    ? formatEvidenceReadModelError(replayBundleError, replayEvidenceId)
+    : null;
   const replayBundleWarning =
-    replayBundleError && replayBundle ? `Showing last replay bundle snapshot. ${replayBundleError}` : null;
+    sanitizedReplayBundleError && replayBundle ? `Showing last replay bundle snapshot. ${sanitizedReplayBundleError}` : null;
   const replayBundleSharedMemoryArtifactRefs = replayBundle
     ? buildReplayBundleSharedMemoryArtifactRefs(replayBundle, sharedMemoryArtifactRefs)
     : sharedMemoryArtifactRefs;
@@ -3757,8 +3761,8 @@ function renderSelectedAgentReplayBundleSection({
         {replayBundleState === 'loading' && !replayBundle ? (
           <li className="aitown-record">Loading replay bundle...</li>
         ) : null}
-        {replayBundleError && !replayBundle ? (
-          <li className="aitown-record">{`Unable to load replay bundle. ${replayBundleError}`}</li>
+        {sanitizedReplayBundleError && !replayBundle ? (
+          <li className="aitown-record">{`Unable to load replay bundle. ${sanitizedReplayBundleError}`}</li>
         ) : null}
         {replayBundleWarning ? <li className="aitown-record">{replayBundleWarning}</li> : null}
         {replayBundle ? (

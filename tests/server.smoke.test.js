@@ -7914,6 +7914,91 @@ test('GET /storage/schema exposes static catalog without reading storage rows', 
   assert.equal(await readFile(storeFile, 'utf8'), fileBeforeRead);
 });
 
+test('GET /runtime/agent-census/schema exposes static catalog without runtime reads', async () => {
+  let collectCount = 0;
+  const controllerSnapshotCollector = {
+    async collectSnapshot() {
+      collectCount += 1;
+      throw new Error('GET /runtime/agent-census/schema must not collect');
+    }
+  };
+  const root = await mkdtemp(path.join(os.tmpdir(), 'metaverse-office-agent-census-schema-'));
+  const storeFile = path.join(root, 'prototype-store.jsonl');
+  const store = await createPrototypeStore({ filePath: storeFile });
+
+  await store.appendCollectorReport(createRouteParityCollectorReport());
+  const fileBeforeRead = await readFile(storeFile, 'utf8');
+  store.listAgents = () => {
+    throw new Error('schema route must not list agents');
+  };
+  store.getLatestCollectorReport = () => {
+    throw new Error('schema route must not read latest snapshot');
+  };
+  store.listRuntimeSourceGaps = () => {
+    throw new Error('schema route must not read source gaps');
+  };
+
+  const response = await requestJsonDirect({
+    url: '/runtime/agent-census/schema?token=/tmp/census-secret&action=dispatch&profile_ref=<script>',
+    store,
+    controllerSnapshotCollector
+  });
+  assert.equal(response.response.status, 200);
+  assert.deepEqual(
+    response.body.item.routes.map((route) => route.path),
+    ['/runtime/agent-census/schema']
+  );
+  assert.deepEqual(response.body.item.routes[0].supported_filters, []);
+  assert.deepEqual(response.body.item.response_fields.schema, [
+    'routes',
+    'response_fields',
+    'count_sources',
+    'agent_states',
+    'identity_fields',
+    'fallback_semantics',
+    'degraded_semantics',
+    'route_write_boundary'
+  ]);
+  assert.deepEqual(response.body.item.count_sources, [
+    'runtime_discovered',
+    'seed_roster_fallback'
+  ]);
+  assert.equal(response.body.item.agent_states.includes('degraded'), true);
+  assert.equal(response.body.item.agent_states.includes('fallback'), true);
+  assert.deepEqual(response.body.item.identity_fields, [
+    'public_agent_id',
+    'display_name',
+    'role',
+    'room',
+    'state'
+  ]);
+  assert.equal(
+    response.body.item.fallback_semantics.includes('schema route does not determine current count'),
+    true
+  );
+  assert.equal(
+    response.body.item.route_write_boundary,
+    'read-only runtime agent census schema catalog; does not inspect replayed rows, read runtime inputs, append records, infer liveness/productivity, or expose write/action semantics'
+  );
+
+  const serialized = JSON.stringify(response.body);
+  assert.equal(serialized.includes('/tmp/'), false);
+  assert.equal(serialized.includes('<script>'), false);
+  assert.equal(serialized.includes('tmux://'), false);
+  assert.equal(serialized.includes('hermes://'), false);
+  assert.equal(serialized.includes('session://'), false);
+  assert.equal(serialized.includes('profile://'), false);
+  assert.equal(serialized.includes('collector-snapshot:'), false);
+  assert.equal(serialized.includes('metadata'), false);
+  assert.equal(serialized.includes('payload'), false);
+  assert.equal(serialized.includes('token'), false);
+  assert.equal(serialized.includes('webhook'), false);
+  assert.equal(serialized.includes('dispatch'), false);
+  assert.equal(serialized.includes('control-plane'), false);
+  assert.equal(collectCount, 0);
+  assert.equal(await readFile(storeFile, 'utf8'), fileBeforeRead);
+});
+
 test('GET /agents/evidence-spine/schema read route purity does not inspect spine rows', async () => {
   let collectCount = 0;
   const controllerSnapshotCollector = {
@@ -8573,6 +8658,7 @@ test('GET static schema and aggregate routes are not swallowed by dynamic detail
     getRuntimeSourceGapAgentSummary: () => responseFor('getRuntimeSourceGapAgentSummary'),
     getRuntimeSourceGapLifecycle: () => responseFor('getRuntimeSourceGapLifecycle'),
     getRuntimeSourceGapTrend: () => responseFor('getRuntimeSourceGapTrend'),
+    getRuntimeAgentCensusSchema: () => responseFor('getRuntimeAgentCensusSchema'),
     getAgentsEvidenceSpineSchema: () => responseFor('getAgentsEvidenceSpineSchema'),
     getAgentEvidenceSpineSummary: () => responseFor('getAgentEvidenceSpineSummary'),
     getAgentEvidenceSourceStatusMatrix: () => responseFor('getAgentEvidenceSourceStatusMatrix'),
@@ -8606,6 +8692,7 @@ test('GET static schema and aggregate routes are not swallowed by dynamic detail
     ['/runtime/source-gaps/agent-summary', 'getRuntimeSourceGapAgentSummary'],
     ['/runtime/source-gaps/lifecycle', 'getRuntimeSourceGapLifecycle'],
     ['/runtime/source-gaps/trend', 'getRuntimeSourceGapTrend'],
+    ['/runtime/agent-census/schema', 'getRuntimeAgentCensusSchema'],
     ['/agents/evidence-spine/schema', 'getAgentsEvidenceSpineSchema'],
     ['/agents/evidence-spine/summary', 'getAgentEvidenceSpineSummary'],
     ['/agents/evidence-spine/source-matrix', 'getAgentEvidenceSourceStatusMatrix'],
@@ -8671,6 +8758,7 @@ test('GET schema and summary routes ignore runtime inputs without appending or e
     `/agents/evidence-spine/schema?${query}`,
     `/collectors/controller-snapshot/schema?collector_snapshot_id=${unknownSnapshot}&${query}`,
     `/runtime/source-gaps/schema?${query}`,
+    `/runtime/agent-census/schema?${query}`,
     `/agents/evidence-spine/summary?source_kind=workspace_file&limit=1&${query}`,
     `/runtime/source-gaps/summary?source_kind=workspace_file&limit=1&${query}`,
     `/collectors/controller-snapshot/summary?collector_snapshot_id=${unknownSnapshot}&${query}`
@@ -10954,6 +11042,7 @@ test('GET read route purity matrix leaves replay records and checkpoints unchang
     '/storage/schema',
     '/runtime/input-inventory',
     '/runtime/input-evidence-watermark',
+    '/runtime/agent-census/schema',
     '/runtime/source-gaps?newest_first=true&limit=10',
     '/runtime/source-gaps/schema',
     '/runtime/source-gaps/summary?newest_first=true&limit=1',
@@ -11080,6 +11169,7 @@ test('read-only GET route boundary matrix non-echoes hostile ids and stays colle
       404
     ],
     ['inventory route: runtime source-gaps schema', '/runtime/source-gaps/schema?limit=1', 'getRuntimeSourceGapsSchema'],
+    ['inventory route: runtime agent-census schema', '/runtime/agent-census/schema?limit=1', 'getRuntimeAgentCensusSchema'],
     ['source-gaps list route', '/runtime/source-gaps?agent_id=app-engineering&limit=1', 'listRuntimeSourceGaps', () => safeList],
     ['source-gaps summary route', '/runtime/source-gaps/summary?agent_id=app-engineering&limit=1', 'getRuntimeSourceGapsSummary'],
     ['source-gaps agent-summary route', '/runtime/source-gaps/agent-summary?agent_id=app-engineering&limit=1', 'getRuntimeSourceGapAgentSummary'],
@@ -11294,6 +11384,7 @@ test('GET safe-route leak regression matrix stays redacted and read-pure under h
     `/runtime/source-gaps/lifecycle?newest_first=true&limit=2&${hostileInputQuery}`,
     `/runtime/source-gaps/transition-summary?newest_first=true&limit=2&${hostileInputQuery}`,
     `/runtime/source-gaps/trend?newest_first=true&limit=2&${hostileInputQuery}`,
+    `/runtime/agent-census/schema?${hostileInputQuery}`,
     `/runtime/input-inventory?${hostileInputQuery}`,
     `/runtime/input-evidence-watermark?${hostileInputQuery}`,
     `/agents/evidence-spine/schema?${hostileInputQuery}`,

@@ -291,6 +291,53 @@ const RUNTIME_SOURCE_GAP_REASON_CODES = Object.freeze([
 ]);
 const RUNTIME_SOURCE_GAP_SCHEMA_WRITE_BOUNDARY =
   'read-only runtime source-gap schema catalog; does not collect, read runtime sources, append records, or expose control-plane actions';
+const RUNTIME_AGENT_CENSUS_SCHEMA_ROUTES = Object.freeze([
+  Object.freeze({
+    name: 'schema',
+    path: '/runtime/agent-census/schema',
+    supported_filters: Object.freeze([])
+  })
+]);
+const RUNTIME_AGENT_CENSUS_SCHEMA_RESPONSE_FIELDS = Object.freeze({
+  schema: Object.freeze([
+    'routes',
+    'response_fields',
+    'count_sources',
+    'agent_states',
+    'identity_fields',
+    'fallback_semantics',
+    'degraded_semantics',
+    'route_write_boundary'
+  ])
+});
+const RUNTIME_AGENT_CENSUS_COUNT_SOURCES = Object.freeze([
+  'runtime_discovered',
+  'seed_roster_fallback'
+]);
+const RUNTIME_AGENT_CENSUS_AGENT_STATES = Object.freeze([
+  'discovered',
+  'fallback',
+  'degraded',
+  'unknown'
+]);
+const RUNTIME_AGENT_CENSUS_IDENTITY_FIELDS = Object.freeze([
+  'public_agent_id',
+  'display_name',
+  'role',
+  'room',
+  'state'
+]);
+const RUNTIME_AGENT_CENSUS_FALLBACK_SEMANTICS = Object.freeze([
+  'runtime discovery owns current agent count when replayed runtime evidence is available',
+  'seed roster is compatibility fallback only',
+  'schema route does not determine current count'
+]);
+const RUNTIME_AGENT_CENSUS_DEGRADED_SEMANTICS = Object.freeze([
+  'missing or unsafe runtime sources remain explicit degraded or unknown states',
+  'degraded states do not infer liveness or productivity'
+]);
+const RUNTIME_AGENT_CENSUS_SCHEMA_WRITE_BOUNDARY =
+  'read-only runtime agent census schema catalog; does not inspect replayed rows, read runtime inputs, append records, infer liveness/productivity, or expose write/action semantics';
 const CONTROLLER_SNAPSHOT_SCHEMA_SOURCE_KINDS = Object.freeze([
   'workspace_root',
   'workspace_file',
@@ -1708,6 +1755,28 @@ class PrototypeStore {
         max: 200
       },
       route_write_boundary: RUNTIME_SOURCE_GAP_SCHEMA_WRITE_BOUNDARY
+    };
+  }
+
+  getRuntimeAgentCensusSchema() {
+    return {
+      routes: RUNTIME_AGENT_CENSUS_SCHEMA_ROUTES.map((route) => ({
+        name: route.name,
+        path: route.path,
+        supported_filters: [...route.supported_filters]
+      })),
+      response_fields: Object.fromEntries(
+        Object.entries(RUNTIME_AGENT_CENSUS_SCHEMA_RESPONSE_FIELDS).map(([routeName, fields]) => [
+          routeName,
+          [...fields]
+        ])
+      ),
+      count_sources: [...RUNTIME_AGENT_CENSUS_COUNT_SOURCES],
+      agent_states: [...RUNTIME_AGENT_CENSUS_AGENT_STATES],
+      identity_fields: [...RUNTIME_AGENT_CENSUS_IDENTITY_FIELDS],
+      fallback_semantics: [...RUNTIME_AGENT_CENSUS_FALLBACK_SEMANTICS],
+      degraded_semantics: [...RUNTIME_AGENT_CENSUS_DEGRADED_SEMANTICS],
+      route_write_boundary: RUNTIME_AGENT_CENSUS_SCHEMA_WRITE_BOUNDARY
     };
   }
 

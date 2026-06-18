@@ -447,6 +447,13 @@ async function handleRequest({
     return;
   }
 
+  if (method === 'GET' && pathname === '/runtime/agent-census/schema') {
+    sendJson(res, 200, {
+      item: store.getRuntimeAgentCensusSchema()
+    });
+    return;
+  }
+
   if (method === 'GET' && pathname === '/peer-watch/alerts') {
     sendJson(res, 200, {
       items: store.listPeerWatchAlerts({

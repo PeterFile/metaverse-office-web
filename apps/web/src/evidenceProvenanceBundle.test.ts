@@ -1,10 +1,139 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildEvidenceProvenanceProof } from './evidenceProvenanceBundle';
+import {
+  buildEvidenceProvenanceProof,
+  buildEvidenceProvenanceVisibleClaimAnchor
+} from './evidenceProvenanceBundle';
 import { expectNoForbiddenPublicUiText } from './test/publicLeakSentinel';
 import type { EvidenceProvenanceBundle } from './types';
 
 describe('buildEvidenceProvenanceProof', () => {
+  it('builds a bounded visible claim anchor that can trace to replay by evidence id', () => {
+    const anchor = buildEvidenceProvenanceVisibleClaimAnchor({
+      evidence_id: 'evidence-record-1',
+      source_summary: {
+        kind: 'workspace_file',
+        status: 'observed',
+        role: 'agent_plan',
+        output_candidate: false,
+        mapped: true,
+        time: {
+          observed_at: '2026-03-09T18:58:30.000Z',
+          collected_at: '2026-03-09T18:59:00.000Z'
+        }
+      },
+      record: {
+        observed_at: '2026-03-09T18:58:30.000Z',
+        collected_at: '2026-03-09T18:59:00.000Z',
+        agent_id: 'app-engineering',
+        source_kind: 'workspace_file',
+        evidence_role: 'agent_plan',
+        source_status: 'observed',
+        output_candidate: false,
+        collector_snapshot_id: 'collector-snapshot:2026-03-09T18:59:00.000Z',
+        correlation_id: null,
+        unmapped: false
+      },
+      anchors: {
+        snapshot: null,
+        source: {
+          evidence_id: 'evidence-record-1',
+          source_kind: 'workspace_file',
+          evidence_role: 'agent_plan',
+          source_status: 'observed',
+          route: '/evidence-records/evidence-record-1'
+        },
+        replay: {
+          evidence_id: 'evidence-record-1',
+          route: '/accountability/replay?evidence_id=evidence-record-1'
+        }
+      }
+    });
+
+    expect(anchor).toEqual({
+      evidenceId: 'evidence-record-1',
+      anchorClass: 'replay_accountability',
+      visible: {
+        label: 'Evidence anchor · evidence-record-1',
+        ariaLabel: 'Trace evidence anchor evidence-record-1'
+      },
+      trace: {
+        evidenceId: 'evidence-record-1',
+        sourceEvidenceId: 'evidence-record-1',
+        replayEvidenceId: 'evidence-record-1',
+        replayCorrelationId: null
+      }
+    });
+  });
+
+  it('keeps hostile ids and raw refs out of visible claim anchor text', () => {
+    const hostileEvidenceId =
+      'tmux://session/window profile://prod /tmp/raw-token-secret.md control-plane dispatch';
+    const anchor = buildEvidenceProvenanceVisibleClaimAnchor({
+      evidence_id: hostileEvidenceId,
+      source_summary: {
+        kind: 'tmux://session/private',
+        status: 'dispatch',
+        role: 'webhook',
+        output_candidate: false,
+        mapped: true,
+        time: {
+          observed_at: null,
+          collected_at: null
+        }
+      },
+      record: {
+        observed_at: null,
+        collected_at: null,
+        agent_id: 'profile-prod',
+        source_kind: 'tmux://session/private',
+        evidence_role: 'payload',
+        source_status: 'control-plane',
+        output_candidate: false,
+        collector_snapshot_id: 'collector-route-token',
+        correlation_id: 'session-prod',
+        unmapped: false
+      },
+      anchors: {
+        snapshot: {
+          collector_snapshot_id: 'collector-route-token',
+          route: '/collectors/dispatch/route?token=sk-live-1234567890abcdef'
+        },
+        source: {
+          evidence_id: hostileEvidenceId,
+          source_kind: 'tmux://session/private',
+          evidence_role: 'payload',
+          source_status: 'control-plane',
+          route: `/evidence-records/${encodeURIComponent(hostileEvidenceId)}`
+        },
+        replay: {
+          evidence_id: hostileEvidenceId,
+          correlation_id: 'session-prod',
+          route: `/accountability/replay?evidence_id=${encodeURIComponent(hostileEvidenceId)}`
+        }
+      }
+    } as EvidenceProvenanceBundle);
+
+    expect(anchor).toMatchObject({
+      evidenceId: hostileEvidenceId,
+      anchorClass: 'unanchored',
+      visible: {
+        label: 'Evidence anchor',
+        ariaLabel: 'Trace evidence anchor'
+      },
+      trace: {
+        evidenceId: hostileEvidenceId,
+        sourceEvidenceId: hostileEvidenceId,
+        replayEvidenceId: hostileEvidenceId,
+        replayCorrelationId: 'session-prod'
+      }
+    });
+    expectNoForbiddenPublicUiText({
+      anchorClass: anchor?.anchorClass,
+      visible: anchor?.visible
+    });
+  });
+
   it('extracts replay-safe anchors in deterministic order', () => {
     const proof = buildEvidenceProvenanceProof({
       evidence_id: 'evidence-record-1',

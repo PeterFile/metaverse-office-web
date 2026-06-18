@@ -9,6 +9,27 @@ export interface EvidenceProvenanceProofAnchor {
   route: string;
 }
 
+export type EvidenceProvenanceVisibleClaimAnchorClass =
+  | 'replay_accountability'
+  | 'source_record'
+  | 'collector_snapshot'
+  | 'unanchored';
+
+export interface EvidenceProvenanceVisibleClaimAnchor {
+  evidenceId: string;
+  anchorClass: EvidenceProvenanceVisibleClaimAnchorClass;
+  visible: {
+    label: string;
+    ariaLabel: string;
+  };
+  trace: {
+    evidenceId: string;
+    sourceEvidenceId: string | null;
+    replayEvidenceId: string | null;
+    replayCorrelationId: string | null;
+  };
+}
+
 export interface EvidenceProvenanceProof {
   evidenceId: string;
   sourceSummary: {
@@ -39,6 +60,7 @@ export interface EvidenceProvenanceProof {
 
 const REDACTED = '[redacted]';
 const MAX_SAFE_VALUE_LENGTH = 512;
+const MAX_VISIBLE_ANCHOR_ID_LENGTH = 48;
 const SECRET_LIKE_PATTERN =
   /\b(?:sk|xox[baprs]|gh[pousr])-[A-Za-z0-9_-]{8,}\b|\b(?:access[_-]?token|api[_-]?key|secret|password|credential|bearer|token)(?:\b|\s*[:=])/i;
 const LOCAL_REF_PATTERN =
@@ -95,6 +117,45 @@ export function buildEvidenceProvenanceProof(
   };
 }
 
+export function buildEvidenceProvenanceVisibleClaimAnchor(
+  bundle: EvidenceProvenanceBundle | null
+): EvidenceProvenanceVisibleClaimAnchor | null {
+  if (!bundle) {
+    return null;
+  }
+
+  const evidenceId = normalizeTraceValue(bundle.evidence_id);
+  if (!evidenceId) {
+    return null;
+  }
+
+  const sourceEvidenceId = normalizeTraceValue(bundle.anchors.source?.evidence_id);
+  const replayEvidenceId = normalizeTraceValue(bundle.anchors.replay?.evidence_id);
+  const replayCorrelationId = normalizeTraceValue(bundle.anchors.replay?.correlation_id);
+  const visibleEvidenceId = toBoundedVisibleAnchorId(evidenceId);
+  const visible = visibleEvidenceId
+    ? {
+        label: `Evidence anchor · ${visibleEvidenceId}`,
+        ariaLabel: `Trace evidence anchor ${visibleEvidenceId}`
+      }
+    : {
+        label: 'Evidence anchor',
+        ariaLabel: 'Trace evidence anchor'
+      };
+
+  return {
+    evidenceId,
+    anchorClass: deriveVisibleClaimAnchorClass(bundle),
+    visible,
+    trace: {
+      evidenceId,
+      sourceEvidenceId,
+      replayEvidenceId,
+      replayCorrelationId
+    }
+  };
+}
+
 function buildSourceSummary(bundle: EvidenceProvenanceBundle): EvidenceProvenanceProof['sourceSummary'] {
   const summary = bundle.source_summary;
   if (!summary) {
@@ -112,6 +173,31 @@ function buildSourceSummary(bundle: EvidenceProvenanceBundle): EvidenceProvenanc
       collectedAt: safeNullableValue(summary.time?.collected_at ?? null)
     }
   };
+}
+
+function deriveVisibleClaimAnchorClass(
+  bundle: EvidenceProvenanceBundle
+): EvidenceProvenanceVisibleClaimAnchorClass {
+  const replay = bundle.anchors.replay;
+  if (
+    replay &&
+    safeRouteValue(replay.route) &&
+    (hasSafeAnchorId(replay.evidence_id) || hasSafeAnchorId(replay.correlation_id))
+  ) {
+    return 'replay_accountability';
+  }
+
+  const source = bundle.anchors.source;
+  if (source && safeRouteValue(source.route) && hasSafeAnchorId(source.evidence_id)) {
+    return 'source_record';
+  }
+
+  const snapshot = bundle.anchors.snapshot;
+  if (snapshot && safeRouteValue(snapshot.route) && hasSafeAnchorId(snapshot.collector_snapshot_id)) {
+    return 'collector_snapshot';
+  }
+
+  return 'unanchored';
 }
 
 function buildAnchor(
@@ -132,6 +218,30 @@ function buildAnchor(
     label,
     route: safeRoute
   };
+}
+
+function normalizeTraceValue(value: string | null | undefined): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const normalized = value.trim();
+  return normalized.length > 0 ? normalized : null;
+}
+
+function hasSafeAnchorId(value: string | null | undefined): boolean {
+  return safeValue(value ?? undefined) !== null;
+}
+
+function toBoundedVisibleAnchorId(value: string): string | null {
+  const safe = safeValue(value);
+  if (!safe) {
+    return null;
+  }
+
+  return safe.length <= MAX_VISIBLE_ANCHOR_ID_LENGTH
+    ? safe
+    : `${safe.slice(0, MAX_VISIBLE_ANCHOR_ID_LENGTH - 3)}...`;
 }
 
 function safeNullableValue(value: string | null): string | null {

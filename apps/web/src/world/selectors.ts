@@ -42,6 +42,20 @@ const INCIDENT_EVIDENCE_REF_LIMIT = 3;
 const INCIDENT_COUNTERPARTY_LIMIT = 3;
 const ZONE_OCCUPANT_PROOF_LIMIT = 3;
 const ZONE_OCCUPANT_PROOF_SOURCES = new Set<RuntimeEvidenceSource>(['workflow', 'incident_feed_backfill']);
+const COMPANY_LABEL_LIMIT = 30;
+const COMPANY_ROSTER_LABEL_LIMIT = 12;
+const UNSAFE_PUBLIC_LABEL_PATTERN =
+  /(?:\b(?:file|https?|tmux|hermes|session|profile):\/\/|(?:^|[\s("'`])(?:\.\.(?:[/\\]|$)|(?:~|\/(?:Users|Volumes|private|var|tmp|home|workspace|mnt)\b)[^\s"'`)]*)|[A-Za-z]:\\|access[_-]?token|token=|secret|webhook|metadata|payload|control-plane|session_ref|profile_id|evidence_refs?)/i;
+
+const COMPANY_SEED_ROSTER_LABELS: Record<string, string> = {
+  'team-lead': 'Lead',
+  'market-intel': 'Intel',
+  'product-pmf': 'PMF',
+  tokenomics: 'Token',
+  'protocol-engineering': 'Protocol',
+  'app-engineering': 'App Eng',
+  'growth-revenue': 'Growth',
+};
 
 export interface HotZoneSummary {
   zone_id: string;
@@ -136,6 +150,23 @@ export interface IncidentEvidenceSummary {
   evidence_ref_overflow_count?: number;
   counterparty_agent_ids: string[];
   counterparty_agent_overflow_count?: number;
+}
+
+export type CompanyOperatingModelAgentSourceState = 'discovered' | 'seed_fallback' | 'degraded_ready' | 'unknown';
+
+export interface CompanyOperatingModelAgent {
+  agent_id: string;
+  source_state: CompanyOperatingModelAgentSourceState;
+  roster_label: string;
+  role_label: string;
+  room_label: string;
+  work_stream_label: string;
+}
+
+export interface CompanyOperatingModel {
+  agent_count: number;
+  source_state_counts: Record<CompanyOperatingModelAgentSourceState, number>;
+  agents: CompanyOperatingModelAgent[];
 }
 
 // ── Single agent ──
@@ -351,6 +382,38 @@ export function selectRuntimeEvidenceAccountabilitySummary(
   return summary;
 }
 
+export function selectCompanyOperatingModel(
+  world: WorldState | null | undefined
+): CompanyOperatingModel {
+  const model: CompanyOperatingModel = {
+    agent_count: 0,
+    source_state_counts: { discovered: 0, seed_fallback: 0, degraded_ready: 0, unknown: 0 },
+    agents: [],
+  };
+  if (!world || world.agents.size === 0) {
+    return model;
+  }
+
+  model.agent_count = world.agents.size;
+  const zoneLabelsById = new Map(world.zones.map((zone) => [zone.zone_id, zone.label || zone.zone_id]));
+
+  for (const [, agent] of world.agents) {
+    const sourceState = selectCompanySourceState(agent);
+    model.source_state_counts[sourceState] += 1;
+    model.agents.push({
+      agent_id: agent.agent_id,
+      source_state: sourceState,
+      roster_label: selectCompanyRosterLabel(agent),
+      role_label: selectCompanyRoleLabel(agent),
+      room_label: selectCompanyRoomLabel(agent, zoneLabelsById),
+      work_stream_label: selectCompanyWorkStreamLabel(agent),
+    });
+  }
+
+  model.agents.sort((left, right) => left.agent_id.localeCompare(right.agent_id));
+  return model;
+}
+
 export function selectIncidentEvidenceSummaries(
   world: WorldState | null | undefined,
   limit = INCIDENT_EVIDENCE_LIMIT
@@ -414,6 +477,82 @@ function createEmptyRuntimeEvidenceAccountabilitySummary(): RuntimeEvidenceAccou
     evidence_refs: [],
     gap_agents: [],
   };
+}
+
+function selectCompanySourceState(agent: WorldAgent): CompanyOperatingModelAgentSourceState {
+  if (agent.runtime_evidence?.source === 'overview_only') {
+    return 'seed_fallback';
+  }
+  if (agent.runtime_evidence?.source === 'incident_feed_backfill' || agent.source_evidence_health_status) {
+    return 'degraded_ready';
+  }
+  if (agent.runtime_evidence?.source === 'workflow') {
+    return 'discovered';
+  }
+  return 'unknown';
+}
+
+function selectCompanyRosterLabel(agent: WorldAgent): string {
+  const configured = COMPANY_SEED_ROSTER_LABELS[agent.agent_id];
+  if (configured) {
+    return configured;
+  }
+
+  const source = stripAgentSuffix(agent.display_name) || agent.agent_id;
+  if (UNSAFE_PUBLIC_LABEL_PATTERN.test(source)) {
+    return 'Agent';
+  }
+
+  const tokens = source.split(/[\s_-]+/).filter(Boolean);
+  const [firstToken = 'Agent', secondToken] = tokens;
+  const label = secondToken
+    ? `${firstToken.slice(0, 8)} ${secondToken.slice(0, 3)}`
+    : firstToken.slice(0, 10);
+
+  return normalizePublicLabel(label, 'Agent', COMPANY_ROSTER_LABEL_LIMIT);
+}
+
+function selectCompanyRoleLabel(agent: WorldAgent): string {
+  const roleKey = `${agent.agent_id} ${agent.display_name}`.toLowerCase();
+  if (agent.kind === 'lead' || roleKey.includes('lead')) return 'Lead';
+  if (roleKey.includes('protocol')) return 'Protocol Eng';
+  if (roleKey.includes('tokenomics')) return 'Tokenomics';
+  if (roleKey.includes('market')) return 'Market Intel';
+  if (roleKey.includes('product') || roleKey.includes('pmf')) return 'Product PMF';
+  if (roleKey.includes('growth')) return 'Growth';
+  if (roleKey.includes('app')) return 'App Eng';
+  return 'Operator';
+}
+
+function selectCompanyRoomLabel(agent: WorldAgent, zoneLabelsById: Map<string, string>): string {
+  const label = zoneLabelsById.get(agent.zone) ?? titleizeIdentifier(agent.zone);
+  return normalizePublicLabel(label, 'Room');
+}
+
+function selectCompanyWorkStreamLabel(agent: WorldAgent): string {
+  return normalizePublicLabel(titleizeIdentifier(stripAgentSuffix(agent.display_name) || agent.agent_id), 'Work stream');
+}
+
+function stripAgentSuffix(value: string): string {
+  return value.trim().replace(/\s+agent$/i, '').trim();
+}
+
+function titleizeIdentifier(value: string): string {
+  return value
+    .trim()
+    .split(/[\s_-]+/)
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
+
+function normalizePublicLabel(value: string, fallback: string, limit = COMPANY_LABEL_LIMIT): string {
+  const normalized = value.trim().replace(/\s+/g, ' ');
+  if (!normalized || UNSAFE_PUBLIC_LABEL_PATTERN.test(normalized)) {
+    return fallback;
+  }
+
+  return normalized.length > limit ? normalized.slice(0, limit) : normalized;
 }
 
 function uniqueTrimmedStrings(values: Array<string | null | undefined>): string[] {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { deriveSelectedAgentSourceMatrixViewModel } from './selectedAgentSourceMatrix';
+import { expectNoForbiddenPublicUiText } from '../test/publicLeakSentinel';
 import type { AgentEvidenceSourceMatrix } from '../types';
 
 const sourceMatrix: AgentEvidenceSourceMatrix = {
@@ -132,7 +133,7 @@ describe('deriveSelectedAgentSourceMatrixViewModel', () => {
       detailLabel: 'Refresh failed; showing the last loaded selected-agent source rows.',
       rows: [
         expect.objectContaining({
-          source: 'Tmux observation',
+          source: 'Runtime evidence',
           status: 'Observed'
         })
       ]
@@ -140,19 +141,19 @@ describe('deriveSelectedAgentSourceMatrixViewModel', () => {
   });
 
   it('returns bounded safe rows for the selected agent with stable ordering', () => {
-    expect(
-      deriveSelectedAgentSourceMatrixViewModel(sourceMatrix, 'app-engineering', {
-        maxRows: 2,
-        maxUnmappedRows: 1
-      })
-    ).toEqual({
+    const model = deriveSelectedAgentSourceMatrixViewModel(sourceMatrix, 'app-engineering', {
+      maxRows: 2,
+      maxUnmappedRows: 1
+    });
+
+    expect(model).toEqual({
       status: 'ready',
       statusLabel: 'Source matrix',
       detailLabel: 'Selected-agent source rows loaded.',
       selectedAgentId: 'app-engineering',
       rows: [
         {
-          source: 'Tmux observation',
+          source: 'Runtime evidence',
           status: 'Observed',
           role: 'Agent output',
           output: 'Output candidate',
@@ -160,7 +161,7 @@ describe('deriveSelectedAgentSourceMatrixViewModel', () => {
           latest_at: '2026-03-09T18:04:50.000Z'
         },
         {
-          source: 'Workspace file',
+          source: 'Workspace evidence',
           status: 'Observed',
           role: 'Agent plan',
           output: 'Supporting evidence',
@@ -172,7 +173,7 @@ describe('deriveSelectedAgentSourceMatrixViewModel', () => {
         totalCount: 3,
         rows: [
           {
-            source: 'Hermes profile',
+            source: 'Runtime evidence',
             status: 'Observed',
             role: 'Unknown',
             output: 'Supporting evidence',
@@ -182,6 +183,7 @@ describe('deriveSelectedAgentSourceMatrixViewModel', () => {
         ]
       }
     });
+    expectNoForbiddenPublicUiText(model);
   });
 
   it('keeps unmapped evidence separate from selected-agent rows', () => {
@@ -190,7 +192,7 @@ describe('deriveSelectedAgentSourceMatrixViewModel', () => {
     expect(model.status).toBe('ready');
     expect(model.rows).toEqual([
       {
-        source: 'Workspace file',
+        source: 'Workspace evidence',
         status: 'Observed',
         role: 'Unknown',
         output: 'Supporting evidence',
@@ -199,7 +201,7 @@ describe('deriveSelectedAgentSourceMatrixViewModel', () => {
       }
     ]);
     expect(model.unmappedSummary.totalCount).toBe(3);
-    expect(model.unmappedSummary.rows.map((row) => row.source)).toEqual(['Hermes profile', 'Workspace root']);
+    expect(model.unmappedSummary.rows.map((row) => row.source)).toEqual(['Runtime evidence', 'Workspace evidence']);
   });
 
   it('returns an empty selected-agent state for missing or unknown selected agents', () => {
@@ -226,7 +228,7 @@ describe('deriveSelectedAgentSourceMatrixViewModel', () => {
     });
 
     expect(model.rows.at(-1)).toEqual({
-      source: 'Hermes session',
+      source: 'Runtime evidence',
       status: 'Unknown',
       role: 'Unknown',
       output: 'Unknown',

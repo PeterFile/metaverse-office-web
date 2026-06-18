@@ -30,11 +30,13 @@ const LEDGER_SOURCE_KIND_LABELS: Record<string, string> = {
 };
 
 const MATRIX_SOURCE_KIND_LABELS: Record<string, string> = {
-  workspace_root: 'Workspace root',
-  workspace_file: 'Workspace file',
-  tmux_observation: 'Tmux observation',
-  hermes_profile: 'Hermes profile',
-  hermes_session: 'Hermes session',
+  workspace_root: 'Workspace evidence',
+  workspace_file: 'Workspace evidence',
+  workspace_files: 'Workspace evidence',
+  tmux_observation: 'Runtime evidence',
+  tmux_session: 'Runtime evidence',
+  hermes_profile: 'Runtime evidence',
+  hermes_session: 'Runtime evidence',
   kanban_fixture: 'Tool evidence',
   linear_fixture: 'Tool evidence',
   slack_fixture: 'Tool evidence',

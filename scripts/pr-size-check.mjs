@@ -56,6 +56,7 @@ export function parseNumstat(text = "") {
 
 export function summarizeNumstat(text, { maxFiles = DEFAULT_MAX_FILES, maxNetLoc = DEFAULT_MAX_NET_LOC } = {}) {
   const files = parseNumstat(text);
+  const filePaths = files.map((f) => f.filePath).sort();
   const additions = files.reduce((sum, f) => sum + f.additions, 0);
   const deletions = files.reduce((sum, f) => sum + f.deletions, 0);
   const netLoc = additions - deletions;
@@ -63,6 +64,7 @@ export function summarizeNumstat(text, { maxFiles = DEFAULT_MAX_FILES, maxNetLoc
   const overCapReasons = [files.length > maxFiles && "files", netLoc > maxNetLoc && "net-loc"].filter(Boolean);
   return {
     changedFiles: files.length,
+    filePaths,
     additions,
     deletions,
     netLoc,
@@ -107,6 +109,7 @@ export function renderSummary(s, baseRef) {
     "PR size advisory",
     `base ref: ${baseRef}`,
     `changed files: ${cap(s.changedFiles, s.maxFiles)}`,
+    ...s.filePaths.map((filePath, index) => `file ${index + 1}/${s.filePaths.length}: ${filePath}`),
     `additions: ${s.additions}`,
     `deletions: ${s.deletions}`,
     `net LOC: ${cap(net, s.maxNetLoc)}`,

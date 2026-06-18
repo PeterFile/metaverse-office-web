@@ -1,6 +1,6 @@
 # Current Direction: Architecture Roadmap
 
-Updated: 2026-06-17T11:35:10+08:00
+Updated: 2026-06-18T16:07:15+08:00
 
 ## Product vision
 
@@ -74,14 +74,18 @@ Active architecture routes:
 | Structured Evidence Foundation | Keep storage, evidence-record, source-gap, and label-firewall contracts reliable as shared infrastructure. | Only bounded contract gaps, migration safety, leak prevention, and query guarantees that unblock another route. | No more than one foundation PR per two product-route PRs unless a release-blocking regression exists. | `pnpm verify:quick -- --lane=backend` or exact focused route tests |
 | Delivery Feedback System | Keep multi-agent delivery dense, reviewable, and measurable without oversized PR stacks or slow feedback. | `verify:quick`, PR size checks, route scorecards, and CI lanes explain what changed and what was not validated. | Rotate after tooling improves a real delivery bottleneck; do not create process-only work without a product route consumer. | `pnpm --filter @metaverse-office/web exec vitest run scripts/verify-quick.test.ts` plus `pnpm pr:size` |
 
-Current fast-rotation focus starts now:
+Current dense fast-rotation wave (`20260618-dense-r1`) starts now. This wave is deliberately wider than a three-lane batch: it uses a small durable scorecard root plus independent and shallow-stacked Codex worktrees, but every lane must stay small enough for one reviewable PR.
 
-| Priority | Route | Scoreable target | Small-PR boundary | Fastest feedback |
-| --- | --- | --- | --- | --- |
-| Primary | Operator World / AI Town | Make world-first source-gap/evidence entry land from AI Town without forcing another Hub dump. | Finish the existing world-source-gap entry slice; no API shape changes. | `pnpm verify:quick -- --focused-files src/App.test.tsx src/aitown/DetailsPanel.test.tsx` |
-| Secondary | Real Runtime Presence | Prove one real Hermes/tmux/session source can produce a runtime agent census and affect visible presence/degraded state safely. | One ingestion-to-projection slice; no task dispatch, profile routing, or Kanban writes. | `pnpm verify:quick -- --lane=backend` plus one UI focused test |
-| Secondary | Company Operating Model | Make discovered agent count plus roles/work streams legible in the world/roster without side-panel overload. | One world/roster model slice; no broad Hub redesign. | `pnpm verify:quick -- --focused-files src/App.test.tsx src/aitown/WorldScene.test.tsx` |
-| Support | Structured Evidence Foundation | Accept only evidence/storage fixes required by the above routes or release-blocking regressions. | One contract bug per PR; no foundation-only batch queue. | Exact affected `verify:quick` lane |
+| Priority | Route | Scoreable target | Checklist | Small-PR boundary | Fastest feedback |
+| --- | --- | --- | --- | --- | --- |
+| Primary | Operator World / AI Town | Make world-first source-gap/evidence entry land from AI Town without forcing another Hub dump. | AI Town entry visible; source-gap/evidence context opens from world or lightweight inspect surface; no right-Hub dump; safe public labels only. | One UI affordance slice; no backend API shape changes. | `pnpm verify:quick -- --lane=ui-source-gap` or focused `DetailsPanel`/`WorldScene` tests |
+| Secondary | Real Runtime Presence | Prove a runtime agent census can represent the currently running Hermes/tmux/session company shape safely. | Current count is explicit; seed roster is marked fallback only; unknown/degraded agents remain visible as safe states; no paths/session/profile refs leak. | One contract/read-model slice first, then a typed web-client child if needed; no task dispatch, profile routing, or Kanban writes. | `pnpm verify:quick -- --lane=backend` plus one web-api focused gate for client children |
+| Secondary | Company Operating Model | Make discovered agent count, roles, rooms, and work streams legible in the world/roster without side-panel overload. | Roster/world distinguishes discovered vs fallback actors; team/room/focus labels are bounded; key information is spatial or popover-first; no broad Hub redesign. | One selector/projector/model slice before broad `App.tsx` integration. | `pnpm verify:quick -- --focused-files src/world/selectors.test.ts src/aitown/sceneAdapter.test.ts src/aitown/WorldScene.test.tsx` |
+| Secondary | Replay / Accountability Loop | Let one visible world/runtime claim trace to evidence, replay, and accountability without dumping raw provenance. | Claim has a bounded evidence anchor; replay loads only after CTA; accountability return path is visible; hostile/unknown anchors do not echo input. | One helper/API or one UI path per PR, stacked only when the child needs the parent contract. | `pnpm verify:quick -- --focused-files src/App.test.tsx src/aitown/DetailsPanel.test.tsx` or exact backend replay tests |
+| Support | Structured Evidence Foundation | Accept only evidence/storage/label-firewall fixes required by the product routes or release-blocking regressions. | Fix names the product route it unblocks; no foundation-only queue; no raw refs/paths/tokens/control strings in public output. | One contract bug per PR. | Exact affected `verify:quick` lane |
+| Support | Delivery Feedback System | Keep the dense Codex conveyor measurable without turning process work into product progress. | `verify:quick` route is explicit; `pr:size` explains split guidance; scorecard reports validation commands, not fake product scores. | Tooling-only PR only when it shortens the current wave feedback loop. | `pnpm --filter @metaverse-office/web exec vitest run scripts/verify-quick.test.ts` plus `pnpm pr:size -- --base=<base>` |
+
+Wave scoring rule: each PR candidate must score at least 85/100 against the delivery gate below, stay within the advisory PR size cap (`pnpm pr:size -- --base=<intended-base>`), and record the fastest passing validation command in its PR/status update. A 75-84 score must be split or repaired before PR. Below 75 is not a PR candidate.
 
 Progress tracking rule: per-lane progress, run status, blockers, and PR queues belong in Slack, Linear, or controller/runtime systems, not new markdown files. This document records durable route boundaries, active rotation, and scoreable targets only.
 

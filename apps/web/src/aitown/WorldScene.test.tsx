@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { type ComponentType } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { expectNoForbiddenPublicUiText } from '../test/publicLeakSentinel';
 import type { AiTownAssets } from './assetLoader';
 import type { AiTownLayeredMapData, AiTownSceneModel, SceneAgent } from './types';
 import type { ViewportInspector } from './viewport';
@@ -2726,6 +2727,7 @@ describe('WorldScene watch overlay caption gating', () => {
     vi.mocked(loadAiTownAssets).mockResolvedValue(makeAssets());
 
     const scene = makeScene();
+    const rawIgnoredLine = '/tmp/proof-token.md tmux://raw-session session://raw token=secret webhook control-plane dispatch';
     const { rerender } = render(
       <WorldScene
         scene={scene}
@@ -2733,7 +2735,7 @@ describe('WorldScene watch overlay caption gating', () => {
         selectedAgentProofGlance={[
           'Proof glance · 6 records · Sources Runtime evidence 2, Workspace evidence 3',
           'Coverage gap · 1 · Roles source evidence 4',
-          'Ignored extra line'
+          rawIgnoredLine
         ]}
       />
     );
@@ -2744,8 +2746,9 @@ describe('WorldScene watch overlay caption gating', () => {
       within(lens).getByText('Proof glance · 6 records · Sources Runtime evidence 2, Workspace evidence 3')
     ).toBeVisible();
     expect(within(lens).getByText('Coverage gap · 1 · Roles source evidence 4')).toBeVisible();
-    expect(within(lens).queryByText('Ignored extra line')).not.toBeInTheDocument();
+    expect(within(lens).queryByText(rawIgnoredLine)).not.toBeInTheDocument();
     expect(within(lens).queryAllByText(/^(Proof glance|Coverage gap)/)).toHaveLength(2);
+    expectNoForbiddenPublicUiText(lens.textContent);
 
     rerender(
       <WorldScene

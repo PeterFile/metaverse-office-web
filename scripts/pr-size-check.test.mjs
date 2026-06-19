@@ -30,6 +30,7 @@ test("ignores npm script argument separator", () => {
 test("summarizes under-cap and docs-only diffs", () => {
   const summary = summarizeNumstat("10\t4\tsrc/index.js\n2\t3\tREADME.md\n");
   assert.equal(summary.changedFiles, 2);
+  assert.deepEqual(summary.filePaths, ["README.md", "src/index.js"]);
   assert.equal(summary.additions, 12);
   assert.equal(summary.deletions, 7);
   assert.equal(summary.netLoc, 5);
@@ -44,6 +45,8 @@ test("reports over-cap cross-layer diffs without product scoring", () => {
   const output = renderSummary(summary, "base");
   assert.equal(summary.scope, "cross-layer");
   assert.deepEqual(summary.overCapReasons, ["net-loc"]);
+  assert.match(output, /file 1\/2: apps\/web\/src\/App\.tsx/);
+  assert.match(output, /file 2\/2: src\/server\.js/);
   assert.match(output, /advisory only/i);
   assert.match(output, /split the PR or document why/i);
   assert.doesNotMatch(output, /product fit|contract correctness/i);

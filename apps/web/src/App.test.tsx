@@ -4437,7 +4437,7 @@ afterEach(() => {
         'Coverage gap · 1 · Roles source evidence 4, agent output 2 · Latest observed 2026-03-16T08:59:10.000Z'
       );
       expect(within(sourceMatrix).getByText('Source matrix')).toBeVisible();
-      expect(within(sourceMatrix).getByText('Workspace file · Observed')).toBeVisible();
+      expect(within(sourceMatrix).getByText('Workspace evidence · Observed')).toBeVisible();
       expect(within(sourceMatrix).getByText('Agent output · Output candidate · 4')).toBeVisible();
 
       const spineText = ledgerSection.textContent ?? '';
@@ -4622,10 +4622,10 @@ afterEach(() => {
     });
 
     expect(within(sourceMatrix).getByText('Source matrix')).toBeVisible();
-    expect(within(sourceMatrix).getByText('Workspace file · Observed')).toBeVisible();
+    expect(within(sourceMatrix).getByText('Workspace evidence · Observed')).toBeVisible();
     expect(within(sourceMatrix).getByText('Agent output · Output candidate · 4')).toBeVisible();
     expect(within(sourceMatrix).getByText('Latest · 2026-03-16T08:59:10.000Z')).toBeVisible();
-    expect(within(sourceMatrix).getByText('Tmux observation · Degraded')).toBeVisible();
+    expect(within(sourceMatrix).getByText('Runtime evidence · Degraded')).toBeVisible();
     expect(within(sourceMatrix).getByText('Runtime activity · Supporting evidence · 3')).toBeVisible();
     expect(within(sourceMatrix).getByText('Unknown · Unknown')).toBeVisible();
     expect(within(sourceMatrix).getByText('Unknown · Supporting evidence · 2')).toBeVisible();
@@ -4792,7 +4792,7 @@ afterEach(() => {
     });
     expect(await within(sourceMatrix).findByText('Source matrix · Last loaded rows')).toBeVisible();
     expect(within(sourceMatrix).getByText('Refresh failed; showing the last loaded selected-agent source rows.')).toBeVisible();
-    expect(within(sourceMatrix).getByText('Workspace file · Observed')).toBeVisible();
+    expect(within(sourceMatrix).getByText('Workspace evidence · Observed')).toBeVisible();
     expect(sourceMatrix).not.toHaveTextContent(/matrix refresh failed|healthy|productive|live/i);
   });
 

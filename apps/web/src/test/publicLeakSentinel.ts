@@ -10,6 +10,10 @@ const FORBIDDEN_PUBLIC_UI_TEXT_PATTERNS = [
     pattern: /\b(?:tmux|hermes|session|profile):\/\/[^\s"'`,;)]*/i
   },
   {
+    label: 'runtime/company-model vocabulary',
+    pattern: /\b(?:tmux|hermes|session|profile)\b/i
+  },
+  {
     label: 'session/profile ref',
     pattern: /\b(?:session|profile)(?:[_:/-][A-Za-z0-9][A-Za-z0-9._:/-]*)/i
   },

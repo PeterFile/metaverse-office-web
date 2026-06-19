@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { DetailsPanel, type HubCategory } from './DetailsPanel';
 import type { SelectedAgentEvidenceLedgerModel } from '../selectedAgentEvidenceLedger';
+import { expectNoForbiddenPublicUiText } from '../test/publicLeakSentinel';
 import type {
   AccountabilityReplayBundle,
   AgentWorkflow,
@@ -10245,8 +10246,47 @@ describe('DetailsPanel accountability signals', () => {
     );
 
     expect(
-      screen.getByText('Source-gap focus · No collector source evidence for app-engineering in snapshot 2026-03-16T09:01:00.000Z.')
+      screen.getByText('Source-gap focus · No collector source evidence for App Engineering Agent in snapshot 2026-03-16T09:01:00.000Z.')
     ).toBeVisible();
+  });
+
+  it('keeps source-gap focus context and empty-state labels public when intent labels are hostile', () => {
+    render(
+      <DetailsPanel
+        {...buildProps({
+          activeHubCategory: 'supervision',
+          selectedAgentDrilldownTab: 'evidence',
+          collectorSnapshot: {
+            ...buildCollectorSnapshot(),
+            collected_at: '2026-03-16T09:01:00.000Z',
+            items: []
+          },
+          sourceGapFocusIntent: {
+            agentId: 'app-engineering',
+            agentLabel: '/tmp/app-engineering token=secret',
+            sourceKind: 'workspace_files',
+            sourceLabel: 'workspace_files /tmp/app-engineering/outbox.md',
+            status: 'degraded',
+            sourceDrilldownGroupKey: 'workspace',
+            requestId: 5
+          }
+        })}
+      />
+    );
+
+    const context = screen.getByRole('region', { name: 'Source gap context' });
+    const emptyState = screen.getByText(
+      'Source-gap focus · No collector source evidence for Selected agent in snapshot 2026-03-16T09:01:00.000Z.'
+    );
+    const serializedPublicLabels = [
+      context.textContent ?? '',
+      emptyState.textContent ?? '',
+      ...Array.from(context.querySelectorAll('[aria-label]')).map((element) => element.getAttribute('aria-label') ?? '')
+    ];
+
+    expect(context).toHaveTextContent('Selected agent');
+    expect(context).toHaveTextContent('Workspace files · degraded');
+    expectNoForbiddenPublicUiText(serializedPublicLabels);
   });
 
   it('keeps the legacy collector supervision surface when evidence coverage is absent', () => {

@@ -62,6 +62,7 @@ import {
   type SourceHealthFact
 } from './sourceHealth';
 import { selectSelectedAgentEvidenceLedgerStepper } from '../selectedAgentEvidenceLedger';
+import { safeVisibleText } from './safeVisibleText';
 import type {
   SelectedAgentEvidenceLedgerGroup,
   SelectedAgentEvidenceLedgerItem,
@@ -223,6 +224,14 @@ export type SourceGapFocusIntent = {
   status: CollectorSourceHealthStatus;
   sourceDrilldownGroupKey: SourceGapDrilldownGroupKey;
   requestId: number;
+};
+
+const SOURCE_GAP_FOCUS_SOURCE_LABELS: Record<DisplayedSourceGapKind, string> = {
+  workspace_root: 'Workspace root',
+  workspace_files: 'Workspace files',
+  tmux_session: 'Tmux session',
+  hermes_profile: 'Hermes profile',
+  hermes_session: 'Hermes session'
 };
 
 type SelectAgentOptions = {
@@ -4918,13 +4927,30 @@ function renderSourceDrilldownGroups(
 }
 
 function renderSourceGapContextBreadcrumb(intent: SourceGapFocusIntent) {
+  const agentLabel = renderSourceGapFocusAgentLabel(intent);
+  const sourceLabel = renderSourceGapFocusSourceLabel(intent);
+
   return (
     <section className="aitown-source-gap-context" role="region" aria-label="Source gap context">
       <span>Source gap</span>
-      <strong>{intent.agentLabel}</strong>
-      <span>{`${intent.sourceLabel} · ${intent.status}`}</span>
+      <strong>{agentLabel}</strong>
+      <span>{`${sourceLabel} · ${intent.status}`}</span>
     </section>
   );
+}
+
+function renderSourceGapFocusEmptyState(intent: SourceGapFocusIntent, collectedAt: string) {
+  return `Source-gap focus · No collector source evidence for ${renderSourceGapFocusAgentLabel(
+    intent
+  )} in snapshot ${collectedAt}.`;
+}
+
+function renderSourceGapFocusAgentLabel(intent: SourceGapFocusIntent) {
+  return safeVisibleText(intent.agentLabel, 'Selected agent');
+}
+
+function renderSourceGapFocusSourceLabel(intent: SourceGapFocusIntent) {
+  return safeVisibleText(intent.sourceLabel, SOURCE_GAP_FOCUS_SOURCE_LABELS[intent.sourceKind]);
 }
 
 function hasSourceHealthGap(facts: SourceHealthFact[]) {
@@ -6671,7 +6697,7 @@ export function DetailsPanel({
                   })
                 : null}
               {activeSourceGapFocusIntent && !selectedCollectorHasFocusedSourceGroup ? (
-                <span>{`Source-gap focus · No collector source evidence for ${activeSourceGapFocusIntent.agentId} in snapshot ${collectorSnapshot.collected_at}.`}</span>
+                <span>{renderSourceGapFocusEmptyState(activeSourceGapFocusIntent, collectorSnapshot.collected_at)}</span>
               ) : null}
               <span>
                 Watch target ·{' '}
@@ -6719,7 +6745,7 @@ export function DetailsPanel({
           ) : null}
           {collectorSnapshot && !selectedCollectorItem && activeSourceGapFocusIntent ? (
             <li className="aitown-record">
-              {`Source-gap focus · No collector source evidence for ${activeSourceGapFocusIntent.agentId} in snapshot ${collectorSnapshot.collected_at}.`}
+              {renderSourceGapFocusEmptyState(activeSourceGapFocusIntent, collectorSnapshot.collected_at)}
             </li>
           ) : null}
           {collectorSnapshot && !selectedCollectorItem ? (

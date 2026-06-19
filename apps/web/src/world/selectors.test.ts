@@ -6,6 +6,7 @@ import {
   selectAgentZoneLabel,
   selectAttentionQueue,
   selectDataQualitySummary,
+  selectCompanyOperatingModel,
   selectGlobalSeverity,
   selectHotZones,
   selectIncidentEvidenceSummaries,
@@ -423,6 +424,102 @@ describe('selectRuntimeEvidenceAccountabilitySummary', () => {
       gap_agents: [],
     });
     expect(selectRuntimeEvidenceAccountabilitySummary(makeWorldState())).toEqual(selectRuntimeEvidenceAccountabilitySummary(null));
+  });
+});
+
+describe('selectCompanyOperatingModel', () => {
+  it('projects a public-safe roster model without treating the seed roster as a ceiling', () => {
+    const evidence = (
+      source: NonNullable<WorldAgent['runtime_evidence']>['source']
+    ): NonNullable<WorldAgent['runtime_evidence']> => ({
+      source,
+      degraded_reasons: source === 'incident_feed_backfill' ? ['workflow partial'] : [],
+      incident_ids: [],
+      source_kinds: [],
+      correlation_ids: [],
+      evidence_refs: [],
+    });
+    const agents = new Map<string, WorldAgent>([
+      ['team-lead', makeWorldAgent({ agent_id: 'team-lead', display_name: 'Team Lead', kind: 'lead', runtime_evidence: evidence('workflow') })],
+      ['app-engineering', makeWorldAgent({ runtime_evidence: evidence('overview_only') })],
+      ['growth-revenue', makeWorldAgent({ agent_id: 'growth-revenue', display_name: 'Growth Revenue Agent', runtime_evidence: evidence('incident_feed_backfill') })],
+      ['quality-assurance', makeWorldAgent({ agent_id: 'quality-assurance', display_name: 'Quality Assurance Agent', source_evidence_health_status: 'missing' })],
+      ...Array.from({ length: 4 }, (_, index): [string, WorldAgent] => {
+        const agentId = index === 3 ? 'hostile-label' : `custom-stream-${index + 1}`;
+        return [
+          agentId,
+          makeWorldAgent({
+            agent_id: agentId,
+            display_name:
+              index === 3
+                ? 'Sensitive /tmp/private token=secret webhook payload Agent'
+                : `Custom Stream ${index + 1} Agent`,
+            zone: index === 3 ? '/tmp/private-token-room' : `custom-room-${index + 1}`,
+          }),
+        ];
+      }),
+    ]);
+    const world = makeWorldState({
+      agents,
+      zones: [
+        makeZoneSnapshot({
+          zone_id: 'desk-app-engineering',
+          label: 'App Engineering Desk',
+          kind: 'desk',
+          occupant_ids: ['app-engineering'],
+        }),
+      ],
+    });
+
+    const model = selectCompanyOperatingModel(world);
+    const byId = new Map(model.agents.map((agent) => [agent.agent_id, agent]));
+
+    expect(model.agent_count).toBe(8);
+    expect(model.agents).toHaveLength(8);
+    expect(model.source_state_counts).toEqual({
+      discovered: 1,
+      seed_fallback: 1,
+      degraded_ready: 2,
+      unknown: 4,
+    });
+    expect(byId.get('app-engineering')).toMatchObject({
+      source_state: 'seed_fallback',
+      roster_label: 'App Eng',
+      room_label: 'App Engineering Desk',
+      work_stream_label: 'App Engineering',
+    });
+    expect(byId.get('growth-revenue')).toMatchObject({
+      source_state: 'degraded_ready',
+      roster_label: 'Growth',
+      work_stream_label: 'Growth Revenue',
+    });
+    expect(byId.get('quality-assurance')).toMatchObject({
+      source_state: 'degraded_ready',
+      roster_label: 'Quality Ass',
+      role_label: 'Operator',
+    });
+    const hostile = byId.get('hostile-label')!;
+    expect(hostile).toMatchObject({
+      source_state: 'unknown',
+      roster_label: 'Agent',
+      room_label: 'Room',
+      work_stream_label: 'Work stream',
+    });
+    expect(hostile.roster_label.length).toBeLessThanOrEqual(12);
+    expect(JSON.stringify(model)).not.toMatch(/\/tmp|token|webhook|payload|secret/i);
+  });
+
+  it('returns an empty operating model when world is absent', () => {
+    expect(selectCompanyOperatingModel(null)).toEqual({
+      agent_count: 0,
+      source_state_counts: {
+        discovered: 0,
+        seed_fallback: 0,
+        degraded_ready: 0,
+        unknown: 0,
+      },
+      agents: [],
+    });
   });
 });
 
